@@ -6,6 +6,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.28.3...rattler_conda_types-v0.29.0) - 2024-11-04
+
+### Added
+
+- use python_site_packages_path field when available for installing noarch: python packages, CEP-17 ([#909](https://github.com/conda/rattler/pull/909))
+- Add `PackageRecord::validate` function ([#911](https://github.com/conda/rattler/pull/911))
+
+### Fixed
+
+- matchspec build / version from brackets and string serialization ([#917](https://github.com/conda/rattler/pull/917))
+
+### Other
+
+- root constraint shouldnt crash ([#916](https://github.com/conda/rattler/pull/916))
+
+## [0.28.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.28.2...rattler_conda_types-v0.28.3) - 2024-10-21
+
+### Other
+
+- updated the following local packages: file_url
+
 ## [0.28.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.28.1...rattler_conda_types-v0.28.2) - 2024-10-07
 
 ### Other

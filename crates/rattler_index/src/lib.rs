@@ -1,11 +1,7 @@
-//! Indexing of packages in a output folder to create up to date repodata.json files
+//! Indexing of packages in a output folder to create up to date repodata.json
+//! files
 #![deny(missing_docs)]
 
-use rattler_conda_types::{
-    package::ArchiveType, package::IndexJson, package::PackageFile, ChannelInfo, PackageRecord,
-    Platform, RepoData,
-};
-use rattler_package_streaming::{read, seek};
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsStr,
@@ -14,6 +10,11 @@ use std::{
 };
 
 use fs_err::File;
+use rattler_conda_types::{
+    package::{ArchiveType, IndexJson, PackageFile},
+    ChannelInfo, PackageRecord, Platform, RepoData,
+};
+use rattler_package_streaming::{read, seek};
 use walkdir::WalkDir;
 
 /// Extract the package record from an `index.json` file.
@@ -46,6 +47,7 @@ pub fn package_record_from_index_json<T: Read>(
         license: index.license,
         license_family: index.license_family,
         timestamp: index.timestamp,
+        python_site_packages_path: index.python_site_packages_path,
         legacy_bz2_md5: None,
         legacy_bz2_size: None,
         purls: None,
@@ -56,8 +58,8 @@ pub fn package_record_from_index_json<T: Read>(
 }
 
 /// Extract the package record from a `.tar.bz2` package file.
-/// This function will look for the `info/index.json` file in the conda package and extract the
-/// package record from it.
+/// This function will look for the `info/index.json` file in the conda package
+/// and extract the package record from it.
 pub fn package_record_from_tar_bz2(file: &Path) -> Result<PackageRecord, std::io::Error> {
     let reader = std::fs::File::open(file)?;
     let mut archive = read::stream_tar_bz2(reader);
@@ -75,8 +77,8 @@ pub fn package_record_from_tar_bz2(file: &Path) -> Result<PackageRecord, std::io
 }
 
 /// Extract the package record from a `.conda` package file.
-/// This function will look for the `info/index.json` file in the conda package and extract the
-/// package record from it.
+/// This function will look for the `info/index.json` file in the conda package
+/// and extract the package record from it.
 pub fn package_record_from_conda(file: &Path) -> Result<PackageRecord, std::io::Error> {
     let reader = std::fs::File::open(file)?;
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
@@ -94,9 +96,9 @@ pub fn package_record_from_conda(file: &Path) -> Result<PackageRecord, std::io::
     ))
 }
 
-/// Create a new `repodata.json` for all packages in the given output folder. If `target_platform` is
-/// `Some`, only that specific subdir is indexed. Otherwise indexes all subdirs and creates a
-/// `repodata.json` for each.
+/// Create a new `repodata.json` for all packages in the given output folder. If
+/// `target_platform` is `Some`, only that specific subdir is indexed. Otherwise
+/// indexes all subdirs and creates a `repodata.json` for each.
 pub fn index(
     output_folder: &Path,
     target_platform: Option<&Platform>,
@@ -129,6 +131,10 @@ pub fn index(
     // Always create noarch subdir
     if !output_folder.join("noarch").exists() {
         std::fs::create_dir(output_folder.join("noarch"))?;
+    }
+
+    // Make sure that we index noarch if it is not already indexed
+    if !output_folder.join("noarch/repodata.json").exists() {
         platforms.insert("noarch".to_string());
     }
 

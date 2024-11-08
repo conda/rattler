@@ -7,6 +7,7 @@ from rattler import VersionWithSource
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.package.no_arch_type import NoArchType
 from rattler.package.package_name import PackageName
+from rattler.platform.platform import Platform
 from rattler.rattler import PyRecord
 
 if TYPE_CHECKING:
@@ -30,6 +31,25 @@ class PackageRecord:
     def matches(self, spec: MatchSpec) -> bool:
         """
         Match a [`PackageRecord`] against a [`MatchSpec`].
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import MatchSpec
+        >>> record = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> spec = MatchSpec("pysocks")
+        >>> record.matches(spec)
+        True
+        >>> spec = MatchSpec("pysocks>=1.7")
+        >>> record.matches(spec)
+        True
+        >>> spec = MatchSpec("pysocks<1.7")
+        >>> record.matches(spec)
+        False
+        >>>
+        ```
         """
         return spec.matches(self)
 
@@ -52,6 +72,12 @@ class PackageRecord:
         ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
         ... )
         >>> assert isinstance(record, PackageRecord)
+        >>> record.name
+        PackageName("pysocks")
+        >>> record.version
+        VersionWithSource(version="1.7.1", source="1.7.1")
+        >>> record.build
+        'pyh0701188_6'
         >>>
         ```
         """
@@ -79,6 +105,10 @@ class PackageRecord:
         >>> sorted = PackageRecord.sort_topologically(records)
         >>> sorted[0].name
         PackageName("python_abi")
+        >>> # Verify it's deterministic by sorting again
+        >>> sorted2 = PackageRecord.sort_topologically(records)
+        >>> [str(r) for r in sorted] == [str(r) for r in sorted2]
+        True
         >>>
         ```
         """
@@ -90,20 +120,7 @@ class PackageRecord:
         Converts a list of PackageRecords to a DAG (`networkx.DiGraph`).
         The nodes in the graph are the PackageRecords and the edges are the dependencies.
 
-        Examples
-        --------
-        ```python
-        import rattler
-        import asyncio
-        import networkx as nx
-        from matplotlib import pyplot as plt
-
-        records = asyncio.run(rattler.solve(['main'], ['python'], platforms=['osx-arm64', 'noarch']))
-        graph = rattler.PackageRecord.to_graph(records)
-
-        nx.draw(graph, with_labels=True, font_weight='bold')
-        plt.show()
-        ```
+        Note: Virtual packages (starting with `__`) are skipped.
         """
         if nx is None:
             raise ImportError("networkx is not installed")
@@ -115,9 +132,43 @@ class PackageRecord:
             graph.add_node(record)
             for dep in record.depends:
                 name = dep.split(" ")[0]
+                if name.startswith("__"):
+                    # this is a virtual package, so we just skip it
+                    continue
                 graph.add_edge(record, names_to_records[PackageName(name)])
 
         return graph
+
+    @staticmethod
+    def validate(records: List[PackageRecord]) -> None:
+        """
+        Validate that the given package records are valid w.r.t. 'depends' and 'constrains'.
+
+        This function will return nothing if all records form a valid environment, i.e., all dependencies
+        of each package are satisfied by the other packages in the list.
+        If there is a dependency that is not satisfied, this function will raise an exception.
+
+        Examples
+        --------
+        ```python
+        >>> from os import listdir
+        >>> from os.path import isfile, join
+        >>> from rattler import PrefixRecord
+        >>> from rattler.exceptions import ValidatePackageRecordsException
+        >>> records = [
+        ...     PrefixRecord.from_path(join("../test-data/conda-meta/", f))
+        ...     for f in sorted(listdir("../test-data/conda-meta"))
+        ...     if isfile(join("../test-data/conda-meta", f))
+        ... ]
+        >>> try:
+        ...     PackageRecord.validate(records)
+        ... except ValidatePackageRecordsException as e:
+        ...     print(e)
+        package 'libsqlite=3.40.0=hcfcfb64_0' has dependency 'ucrt >=10.0.20348.0', which is not in the environment
+        >>>
+        ```
+        """
+        return PyRecord.validate(records)
 
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> PackageRecord:
@@ -130,6 +181,75 @@ class PackageRecord:
         record = cls.__new__(cls)
         record._record = py_record
         return record
+
+    def __init__(
+        self,
+        name: str | PackageName,
+        version: str | VersionWithSource,
+        build: str,
+        build_number: int,
+        subdir: str | Platform,
+        arch: Optional[str],
+        platform: Optional[str],
+        noarch: Optional[NoArchType] = None,
+        depends: Optional[List[str]] = None,
+        constrains: Optional[List[str]] = None,
+        sha256: Optional[bytes] = None,
+        md5: Optional[bytes] = None,
+        size: Optional[int] = None,
+        features: Optional[List[str]] = None,
+        legacy_bz2_md5: Optional[bytes] = None,
+        legacy_bz2_size: Optional[int] = None,
+        license: Optional[str] = None,
+        license_family: Optional[str] = None,
+        python_site_packages_path: Optional[str] = None,
+    ) -> None:
+        # Convert Platform to str
+        if isinstance(subdir, Platform):
+            arch = str(subdir.arch)
+            platform = subdir.only_platform
+            subdir = str(subdir)
+
+        # convert str to PackageName
+        if isinstance(name, str):
+            name = PackageName(name)
+
+        # convert str to VersionWithSource
+        if isinstance(version, str):
+            version = VersionWithSource(version)
+
+        self._record = PyRecord.create(
+            name._name,
+            (version._version, version._source),
+            build,
+            build_number,
+            subdir,
+            arch,
+            platform,
+            noarch,
+            python_site_packages_path,
+        )
+
+        if constrains is not None:
+            self._record.constrains = constrains
+        if depends is not None:
+            self._record.depends = depends
+        if sha256 is not None:
+            self._record.sha256 = sha256
+        if md5 is not None:
+            self._record.md5 = md5
+        if size is not None:
+            self._record.size = size
+        if features is not None:
+            self._record.features = features
+        if legacy_bz2_md5 is not None:
+            self._record.legacy_bz2_md5 = legacy_bz2_md5
+        if legacy_bz2_size is not None:
+            self._record.legacy_bz2_size = legacy_bz2_size
+        if license is not None:
+            self._record.license = license
+        if license_family is not None:
+            self._record.license_family = license_family
 
     @property
     def arch(self) -> Optional[str]:
@@ -145,10 +265,20 @@ class PackageRecord:
         ... )
         >>> record.arch
         'x86_64'
+        >>> record.arch = "arm64"
+        >>> record.arch
+        'arm64'
+        >>> record.arch = None
+        >>> record.arch is None
+        True
         >>>
         ```
         """
         return self._record.arch
+
+    @arch.setter
+    def arch(self, value: Optional[str]) -> None:
+        self._record.arch = value
 
     @property
     def build(self) -> str:
@@ -164,10 +294,17 @@ class PackageRecord:
         ... )
         >>> record.build
         'hcfcfb64_0'
+        >>> record.build = "new_build_1"
+        >>> record.build
+        'new_build_1'
         >>>
         ```
         """
         return self._record.build
+
+    @build.setter
+    def build(self, value: str) -> None:
+        self._record.build = value
 
     @property
     def build_number(self) -> int:
@@ -183,10 +320,17 @@ class PackageRecord:
         ... )
         >>> record.build_number
         0
+        >>> record.build_number = 42
+        >>> record.build_number
+        42
         >>>
         ```
         """
         return self._record.build_number
+
+    @build_number.setter
+    def build_number(self, value: int) -> None:
+        self._record.build_number = value
 
     @property
     def constrains(self) -> List[str]:
@@ -207,10 +351,17 @@ class PackageRecord:
         ... )
         >>> record.constrains
         []
+        >>> record.constrains = ["python >=3.6"]
+        >>> record.constrains
+        ['python >=3.6']
         >>>
         ```
         """
         return self._record.constrains
+
+    @constrains.setter
+    def constrains(self, value: List[str]) -> None:
+        self._record.constrains = value
 
     @property
     def depends(self) -> List[str]:
@@ -226,10 +377,17 @@ class PackageRecord:
         ... )
         >>> record.depends
         ['ucrt >=10.0.20348.0', 'vc >=14.2,<15', 'vs2015_runtime >=14.29.30139']
+        >>> record.depends = ["python >=3.6"]
+        >>> record.depends
+        ['python >=3.6']
         >>>
         ```
         """
         return self._record.depends
+
+    @depends.setter
+    def depends(self, value: List[str]) -> None:
+        self._record.depends = value
 
     @property
     def features(self) -> Optional[str]:
@@ -238,22 +396,85 @@ class PackageRecord:
         sets for the conda solver. This is not supported anymore and
         should not be used. Instead, mutex packages should be used
         to specify mutually exclusive features.
+
+        Examples
+        --------
+        ```python
+        >>> record = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> record.features is None
+        True
+        >>> record.features = "feature1"
+        >>> record.features
+        'feature1'
+        >>> record.features = None
+        >>> record.features is None
+        True
+        >>>
+        ```
         """
         return self._record.features
+
+    @features.setter
+    def features(self, value: Optional[str]) -> None:
+        self._record.features = value
 
     @property
     def legacy_bz2_md5(self) -> Optional[bytes]:
         """
         A deprecated md5 hash.
+
+        Examples
+        --------
+        ```python
+        >>> record = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> record.legacy_bz2_md5 is None
+        True
+        >>> record.legacy_bz2_md5 = bytes.fromhex("2ddbbaf3a82b46ac7214681262e3d746")
+        >>> record.legacy_bz2_md5.hex()
+        '2ddbbaf3a82b46ac7214681262e3d746'
+        >>> record.legacy_bz2_md5 = None
+        >>> record.legacy_bz2_md5 is None
+        True
+        >>>
+        ```
         """
         return self._record.legacy_bz2_md5
+
+    @legacy_bz2_md5.setter
+    def legacy_bz2_md5(self, value: Optional[bytes]) -> None:
+        self._record.legacy_bz2_md5 = value
 
     @property
     def legacy_bz2_size(self) -> Optional[int]:
         """
         A deprecated package archive size.
+
+        Examples
+        --------
+        ```python
+        >>> record = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> record.legacy_bz2_size is None
+        True
+        >>> record.legacy_bz2_size = 42
+        >>> record.legacy_bz2_size
+        42
+        >>> record.legacy_bz2_size = None
+        >>> record.legacy_bz2_size is None
+        True
+        >>>
+        ```
         """
         return self._record.legacy_bz2_size
+
+    @legacy_bz2_size.setter
+    def legacy_bz2_size(self, value: Optional[int]) -> None:
+        self._record.legacy_bz2_size = value
 
     @property
     def license(self) -> Optional[str]:
@@ -269,10 +490,20 @@ class PackageRecord:
         ... )
         >>> record.license
         'Unlicense'
+        >>> record.license = "MIT"
+        >>> record.license
+        'MIT'
+        >>> record.license = None
+        >>> record.license is None
+        True
         >>>
         ```
         """
         return self._record.license
+
+    @license.setter
+    def license(self, value: Optional[str]) -> None:
+        self._record.license = value
 
     @property
     def license_family(self) -> Optional[str]:
@@ -288,11 +519,21 @@ class PackageRecord:
         ... )
         >>> record.license_family
         'MIT'
+        >>> record.license_family = "BSD"
+        >>> record.license_family
+        'BSD'
+        >>> record.license_family = None
+        >>> record.license_family is None
+        True
         >>>
         ```
 
         """
         return self._record.license_family
+
+    @license_family.setter
+    def license_family(self, value: Optional[str]) -> None:
+        self._record.license_family = value
 
     @property
     def md5(self) -> Optional[bytes]:
@@ -308,10 +549,20 @@ class PackageRecord:
         ... )
         >>> record.md5.hex()
         '5e5a97795de72f8cc3baf3d9ea6327a2'
+        >>> record.md5 = bytes.fromhex("2ddbbaf3a82b46ac7214681262e3d746")
+        >>> record.md5.hex()
+        '2ddbbaf3a82b46ac7214681262e3d746'
+        >>> record.md5 = None
+        >>> record.md5 is None
+        True
         >>>
         ```
         """
         return self._record.md5
+
+    @md5.setter
+    def md5(self, value: Optional[bytes]) -> None:
+        self._record.md5 = value
 
     @property
     def name(self) -> PackageName:
@@ -321,19 +572,26 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> from rattler import PrefixRecord
+        >>> from rattler import PrefixRecord, PackageName
         >>> record = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.name
         PackageName("libsqlite")
+        >>> record.name = PackageName("newname")
+        >>> record.name
+        PackageName("newname")
         >>>
         ```
         """
         return PackageName._from_py_package_name(self._record.name)
 
+    @name.setter
+    def name(self, value: PackageName) -> None:
+        self._record.name = value._name
+
     @property
-    def noarch(self) -> Optional[str]:
+    def noarch(self) -> NoArchType:
         """
         The noarch type of the package.
 
@@ -345,20 +603,26 @@ class PackageRecord:
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.noarch
+        NoArchType(None)
         >>> record = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/pip-23.0-pyhd8ed1ab_0.json"
         ... )
         >>> record.noarch
-        'python'
+        NoArchType("python")
+        >>> record.noarch = NoArchType("generic")
+        >>> record.noarch
+        NoArchType("generic")
+        >>> record.noarch = NoArchType(None)
+        >>> record.noarch.none
+        True
         >>>
         ```
         """
-        noarchtype = NoArchType._from_py_no_arch_type(self._record.noarch)
-        if noarchtype.python:
-            return "python"
-        if noarchtype.generic:
-            return "generic"
-        return None
+        return NoArchType._from_py_no_arch_type(self._record.noarch)
+
+    @noarch.setter
+    def noarch(self, value: NoArchType) -> None:
+        self._record.noarch = value._noarch
 
     @property
     def platform(self) -> Optional[str]:
@@ -374,10 +638,20 @@ class PackageRecord:
         ... )
         >>> record.platform
         'win32'
+        >>> record.platform = "linux"
+        >>> record.platform
+        'linux'
+        >>> record.platform = None
+        >>> record.platform is None
+        True
         >>>
         ```
         """
         return self._record.platform
+
+    @platform.setter
+    def platform(self, value: Optional[str]) -> None:
+        self._record.platform = value
 
     @property
     def sha256(self) -> Optional[bytes]:
@@ -393,9 +667,19 @@ class PackageRecord:
         ... )
         >>> record.sha256.hex()
         '4e50b3d90a351c9d47d239d3f90fce4870df2526e4f7fef35203ab3276a6dfc9'
+        >>> record.sha256 = bytes.fromhex("edd7dd24fc070fad8ca690a920d94b6312a376faa96b47c657f9ef5fe5a97dd1")
+        >>> record.sha256.hex()
+        'edd7dd24fc070fad8ca690a920d94b6312a376faa96b47c657f9ef5fe5a97dd1'
+        >>> record.sha256 = None
+        >>> record.sha256 is None
+        True
         >>>
         """
         return self._record.sha256
+
+    @sha256.setter
+    def sha256(self, value: Optional[bytes]) -> None:
+        self._record.sha256 = value
 
     @property
     def size(self) -> Optional[int]:
@@ -411,10 +695,20 @@ class PackageRecord:
         ... )
         >>> record.size
         669941
+        >>> record.size = 42
+        >>> record.size
+        42
+        >>> record.size = None
+        >>> record.size is None
+        True
         >>>
         ```
         """
         return self._record.size
+
+    @size.setter
+    def size(self, value: Optional[int]) -> None:
+        self._record.size = value
 
     @property
     def subdir(self) -> str:
@@ -430,10 +724,17 @@ class PackageRecord:
         ... )
         >>> record.subdir
         'win-64'
+        >>> record.subdir = "linux-64"
+        >>> record.subdir
+        'linux-64'
         >>>
         ```
         """
         return self._record.subdir
+
+    @subdir.setter
+    def subdir(self, value: str) -> None:
+        self._record.subdir = value
 
     @property
     def timestamp(self) -> Optional[datetime.datetime]:
@@ -444,11 +745,19 @@ class PackageRecord:
         --------
         ```python
         >>> from rattler import PrefixRecord
+        >>> import datetime
         >>> record = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.timestamp
         datetime.datetime(2022, 11, 17, 15, 7, 19, 781000, tzinfo=datetime.timezone.utc)
+        >>> new_time = datetime.datetime(2023, 1, 1, tzinfo=datetime.timezone.utc)
+        >>> record.timestamp = new_time
+        >>> record.timestamp
+        datetime.datetime(2023, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)
+        >>> record.timestamp = None
+        >>> record.timestamp is None
+        True
         >>>
         ```
         """
@@ -456,6 +765,13 @@ class PackageRecord:
             return datetime.datetime.fromtimestamp(self._record.timestamp / 1000.0, tz=datetime.timezone.utc)
 
         return self._record.timestamp
+
+    @timestamp.setter
+    def timestamp(self, value: Optional[datetime.datetime]) -> None:
+        if value is not None:
+            self._record.timestamp = int(value.timestamp() * 1000)
+        else:
+            self._record.timestamp = None
 
     @property
     def track_features(self) -> List[str]:
@@ -475,10 +791,17 @@ class PackageRecord:
         ... )
         >>> record.track_features
         []
+        >>> record.track_features = ["feature1", "feature2"]
+        >>> record.track_features
+        ['feature1', 'feature2']
         >>>
         ```
         """
         return self._record.track_features
+
+    @track_features.setter
+    def track_features(self, value: List[str]) -> None:
+        self._record.track_features = value
 
     @property
     def version(self) -> VersionWithSource:
@@ -488,16 +811,65 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> from rattler import PrefixRecord
+        >>> from rattler import PrefixRecord, VersionWithSource
         >>> record = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.version
         VersionWithSource(version="3.40.0", source="3.40.0")
+        >>> record.version = VersionWithSource("1.0.0")
+        >>> record.version
+        VersionWithSource(version="1.0.0", source="1.0.0")
         >>>
         ```
         """
         return VersionWithSource._from_py_version(*self._record.version)
+
+    @version.setter
+    def version(self, value: VersionWithSource) -> None:
+        self._record.version = (value._version, value._source)
+
+    @property
+    def python_site_packages_path(self) -> Optional[str]:
+        """
+        Optionally a path within the environment of the site-packages directory. This field is only
+        present for python interpreter packages.
+        This field was introduced with <https://github.com/conda/ceps/blob/main/cep-17.md>.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/python-3.11.9-h932a869_0_cpython.json"
+        ... )
+        >>> record.python_site_packages_path
+        'lib/python3.11/site-packages'
+        >>>
+        ```
+        """
+        return self._record.python_site_packages_path
+
+    @python_site_packages_path.setter
+    def python_site_packages_path(self, value: Optional[str]) -> None:
+        """
+        Sets the optional path within the environment of the site-packages directory.
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.python_site_packages_path
+        None
+        >>> record.python_site_packages_path = "lib/something"
+        >>> record.python_site_packages_path
+        'lib/something'
+        >>>
+        ```
+        """
+        self._record.set_python_site_packages_path(value)
 
     def __str__(self) -> str:
         """
@@ -532,3 +904,27 @@ class PackageRecord:
         ```
         """
         return f'PackageRecord("{self.__str__()}")'
+
+    def to_json(self) -> str:
+        """
+        Convert the PackageRecord to a JSON string.
+
+        Examples
+        --------
+        ```python
+        >>> import json
+        >>> record = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> json_data = record.to_json()
+        >>> isinstance(json_data, str)
+        True
+        >>> as_dict = json.loads(json_data)
+        >>> as_dict["name"]
+        'pysocks'
+        >>> as_dict["version"]
+        '1.7.1'
+        >>>
+        ```
+        """
+        return self._record.to_json()

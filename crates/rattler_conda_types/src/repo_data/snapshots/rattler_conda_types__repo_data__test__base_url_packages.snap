@@ -1,14 +1,16 @@
 ---
 source: crates/rattler_conda_types/src/repo_data/mod.rs
-assertion_line: 538
 expression: file_urls
 ---
+- channels/dummy/linux-64/xbar-1-xxx.tar.bz2
 - channels/dummy/linux-64/issue_717-2.1-bla_1.tar.bz2
 - channels/dummy/linux-64/bar-1.0-unix_py36h1af98f8_2.tar.bz2
 - channels/dummy/linux-64/foobar-2.0-bla_1.tar.bz2
 - channels/dummy/linux-64/foo-3.0.2-py36h1af98f8_1.conda
 - channels/dummy/linux-64/foo-3.0.2-py36h1af98f8_1.tar.bz2
+- channels/dummy/linux-64/xfoo-2-xxx.tar.bz2
 - channels/dummy/linux-64/foo-4.0.2-py36h1af98f8_2.tar.bz2
+- channels/dummy/linux-64/foo-3.0.2-py36h1af98f8_3.conda
 - channels/dummy/linux-64/bors-1.2.1-bla_1.tar.bz2
 - channels/dummy/linux-64/baz-1.0-unix_py36h1af98f8_2.tar.bz2
 - channels/dummy/linux-64/bors-2.1-bla_1.tar.bz2
@@ -17,5 +19,6 @@ expression: file_urls
 - channels/dummy/linux-64/bors-1.1-bla_1.tar.bz2
 - channels/dummy/linux-64/baz-2.0-unix_py36h1af98f8_2.tar.bz2
 - channels/dummy/linux-64/foobar-2.1-bla_1.tar.bz2
-- channels/dummy/linux-64/cuda-version-12.5-hd4f0392_3.conda
+- channels/dummy/linux-64/xfoo-1-xxx.tar.bz2
 - channels/dummy/linux-64/bors-2.0-bla_1.tar.bz2
+- channels/dummy/linux-64/cuda-version-12.5-hd4f0392_3.conda

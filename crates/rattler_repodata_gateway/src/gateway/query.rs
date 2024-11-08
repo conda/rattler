@@ -43,6 +43,15 @@ pub struct RepoDataQuery {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
+#[derive(Clone)]
+enum SourceSpecs {
+    /// The record is required by the user.
+    Input(Vec<MatchSpec>),
+
+    /// The record is required by a dependency.
+    Transitive,
+}
+
 impl RepoDataQuery {
     /// Constructs a new instance. This should not be called directly, use
     /// [`Gateway::query`] instead.
@@ -108,10 +117,13 @@ impl RepoDataQuery {
                 direct_url_specs.push((spec.clone(), url, name));
             } else if let Some(name) = &spec.name {
                 seen.insert(name.clone());
-                pending_package_specs
+                let pending = pending_package_specs
                     .entry(name.clone())
-                    .or_insert_with(Vec::new)
-                    .push(spec);
+                    .or_insert_with(|| SourceSpecs::Input(vec![]));
+                let SourceSpecs::Input(input_specs) = pending else {
+                    panic!("RootSpecs::Input was overwritten by RootSpecs::Transitive");
+                };
+                input_specs.push(spec);
             }
         }
 
@@ -176,7 +188,7 @@ impl RepoDataQuery {
                         }
                     }
                     // Push the direct url in the first subdir result for channel priority logic.
-                    Ok((0, vec![spec], record))
+                    Ok((0, SourceSpecs::Input(vec![spec]), record))
                 }
                 .boxed(),
             );
@@ -228,9 +240,11 @@ impl RepoDataQuery {
                         // Extract the dependencies from the records and recursively add them to the
                         // list of package names that we need to fetch.
                         for record in records.iter() {
-                            if !request_specs.iter().any(|spec| spec.matches(record)) {
-                                // Do not recurse into records that do not match to root spec.
-                                continue;
+                            if let SourceSpecs::Input(request_specs) = &request_specs {
+                                if !request_specs.iter().any(|spec| spec.matches(record)) {
+                                    // Do not recurse into records that do not match to root spec.
+                                    continue;
+                                }
                             }
                             for dependency in &record.package_record.depends {
                                 // Use only the name for transitive dependencies.
@@ -238,7 +252,7 @@ impl RepoDataQuery {
                                     dependency.split_once(' ').unwrap_or((dependency, "")).0,
                                 );
                                 if seen.insert(dependency_name.clone()) {
-                                    pending_package_specs.insert(dependency_name.clone(), vec![dependency_name.into()]);
+                                    pending_package_specs.insert(dependency_name.clone(), SourceSpecs::Transitive);
                                 }
                             }
                         }
@@ -249,9 +263,11 @@ impl RepoDataQuery {
                         let result = &mut result[result_idx];
 
                         for record in records.iter() {
-                            if !self.recursive && !request_specs.iter().any(|spec| spec.matches(record)) {
-                                // Do not return records that do not match to root spec.
-                                continue;
+                            if let SourceSpecs::Input(request_specs) = &request_specs {
+                                if !request_specs.iter().any(|spec| spec.matches(record)) {
+                                    // Do not return records that do not match to input spec.
+                                    continue;
+                                }
                             }
                             result.len += 1;
                             result.shards.push(Arc::new([record.clone()]));

@@ -107,6 +107,9 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<InputHash<'a>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub python_site_packages_path: Cow<'a, Option<String>>,
 }
 
 #[serde_as]
@@ -183,6 +186,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                     .or(derived.version)
                     .ok_or_else(|| ConversionError::Missing("version".to_string()))?,
                 run_exports: None,
+                python_site_packages_path: value.python_site_packages_path.into_owned(),
             },
             location: value.location,
             file_name: value
@@ -257,6 +261,9 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             track_features: Cow::Borrowed(&value.package_record.track_features),
             license: Cow::Borrowed(&value.package_record.license),
             license_family: Cow::Borrowed(&value.package_record.license_family),
+            python_site_packages_path: Cow::Borrowed(
+                &value.package_record.python_site_packages_path,
+            ),
             input: value.input.as_ref().map(|input| InputHash {
                 hash: input.hash,
                 globs: Cow::Borrowed(&input.globs),

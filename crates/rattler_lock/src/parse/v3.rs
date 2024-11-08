@@ -116,6 +116,7 @@ pub struct CondaLockedPackageV3 {
     pub license: Option<String>,
     pub license_family: Option<String>,
     pub noarch: Option<NoArchType>,
+    pub python_site_packages_path: Option<String>,
     pub size: Option<u64>,
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
@@ -209,6 +210,7 @@ pub fn parse_v3_or_lower(
                             track_features: value.track_features,
                             version: value.version,
                             purls: value.purls.is_empty().not().then_some(value.purls),
+                            python_site_packages_path: value.python_site_packages_path,
                             run_exports: None,
                         },
                         channel: derived.channel,

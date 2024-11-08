@@ -1,11 +1,10 @@
-use std::{borrow::Cow, collections::BTreeSet};
-
 use rattler_conda_types::{
     BuildNumber, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use std::{borrow::Cow, cmp::Ordering, collections::BTreeSet};
 use url::Url;
 
 use crate::utils::derived_fields::derive_arch_and_platform;
@@ -70,6 +69,9 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub file_name: Cow<'a, Option<String>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub python_site_packages_path: Cow<'a, Option<String>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license: Cow<'a, Option<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license_family: Cow<'a, Option<String>>,
@@ -115,10 +117,10 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
                 track_features: value.track_features.into_owned(),
                 version: value.version.into_owned(),
                 run_exports: None,
-
                 // Polyfill the arch and platform fields if they are not present in the lock-file.
                 arch: value.arch.into_owned().or(derived_arch),
                 platform: value.platform.into_owned().or(derived_platform),
+                python_site_packages_path: value.python_site_packages_path.into_owned(),
             },
             file_name: value
                 .file_name

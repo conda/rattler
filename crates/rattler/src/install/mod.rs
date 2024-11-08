@@ -784,7 +784,8 @@ mod test {
 
         // Specify python version
         let python_version =
-            PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), platform).unwrap();
+            PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), None, platform)
+                .unwrap();
 
         // Download and install each layer into an environment.
         let install_driver = InstallDriver::default();

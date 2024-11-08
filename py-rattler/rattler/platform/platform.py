@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Dict, Literal, Tuple
+from typing import Any, Dict, Literal, Tuple, Optional
 
 from rattler.rattler import PyPlatform
 from rattler.platform.arch import Arch
@@ -174,3 +174,18 @@ class Platform(metaclass=PlatformSingleton):
         ```
         """
         return Arch._from_py_arch(self._inner.arch())
+
+    @property
+    def only_platform(self) -> Optional[str]:
+        """
+        Return the platform without the architecture.
+
+        Examples
+        --------
+        ```python
+        >>> Platform("linux-64").only_platform
+        'linux'
+        >>>
+        ```
+        """
+        return self._inner.only_platform

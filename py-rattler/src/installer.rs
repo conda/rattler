@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use pyo3::{pyfunction, PyAny, PyResult, Python};
-use pyo3_asyncio::tokio::future_into_py;
+use pyo3::{pyfunction, Bound, PyAny, PyResult, Python};
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler::{
     install::{IndicatifReporter, Installer},
     package_cache::PackageCache,
@@ -9,24 +9,25 @@ use rattler::{
 use rattler_conda_types::{PrefixRecord, RepoDataRecord};
 
 use crate::{
-    error::PyRattlerError, networking::authenticated_client::PyAuthenticatedClient,
-    platform::PyPlatform, record::PyRecord,
+    error::PyRattlerError, networking::client::PyClientWithMiddleware, platform::PyPlatform,
+    record::PyRecord,
 };
 
 // TODO: Accept functions to report progress
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (records, target_prefix, execute_link_scripts=false, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None))]
 pub fn py_install<'a>(
     py: Python<'a>,
-    records: Vec<&'a PyAny>,
+    records: Vec<Bound<'a, PyAny>>,
     target_prefix: PathBuf,
     execute_link_scripts: bool,
     show_progress: bool,
     platform: Option<PyPlatform>,
-    client: Option<PyAuthenticatedClient>,
+    client: Option<PyClientWithMiddleware>,
     cache_dir: Option<PathBuf>,
-    installed_packages: Option<Vec<&'a PyAny>>,
-) -> PyResult<&'a PyAny> {
+    installed_packages: Option<Vec<Bound<'a, PyAny>>>,
+) -> PyResult<Bound<'a, PyAny>> {
     let dependencies = records
         .into_iter()
         .map(|rdr| PyRecord::try_from(rdr)?.try_into())
