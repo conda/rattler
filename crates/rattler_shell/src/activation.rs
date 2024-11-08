@@ -6,10 +6,10 @@
 use std::{
     collections::HashMap,
     ffi::OsStr,
-    fs,
     path::{Path, PathBuf},
     process::ExitStatus,
 };
+use fs_err as fs;
 
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
