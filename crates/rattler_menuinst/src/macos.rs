@@ -564,7 +564,6 @@ impl MacOSMenu {
 }
 
 pub(crate) fn install_menu_item(
-    prefix: &Path,
     macos_item: MacOS,
     command: MenuItemCommand,
     menu_mode: MenuMode,

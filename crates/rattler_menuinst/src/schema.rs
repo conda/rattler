@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::render::{BaseMenuItemPlaceholders, PlaceholderString};
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct MenuItemNameDict {
@@ -35,17 +37,21 @@ pub struct Platform<T> {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum NameField {
-    Simple(String),
+    Simple(PlaceholderString),
     Complex(NameComplex),
 }
 
 impl NameField {
-    pub fn resolve(&self, env: Environment) -> &str {
+    pub fn resolve(&self, env: Environment, placeholders: &BaseMenuItemPlaceholders) -> String {
         match self {
-            NameField::Simple(name) => name,
+            NameField::Simple(name) => name.resolve(placeholders),
             NameField::Complex(complex_name) => match env {
-                Environment::Base => &complex_name.target_environment_is_base,
-                Environment::NotBase => &complex_name.target_environment_is_not_base,
+                Environment::Base => complex_name
+                    .target_environment_is_base
+                    .resolve(placeholders),
+                Environment::NotBase => complex_name
+                    .target_environment_is_not_base
+                    .resolve(placeholders),
             },
         }
     }
@@ -53,8 +59,8 @@ impl NameField {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NameComplex {
-    pub target_environment_is_base: String,
-    pub target_environment_is_not_base: String,
+    pub target_environment_is_base: PlaceholderString,
+    pub target_environment_is_not_base: PlaceholderString,
 }
 
 pub enum Environment {
@@ -230,7 +236,11 @@ impl MenuItemCommand {
                 .description
                 .unwrap_or_else(|| self.description.clone()),
             command: platform.command.unwrap_or_else(|| self.command.clone()),
-            icon: platform.icon.as_ref().or_else(|| self.icon.as_ref()).cloned(),
+            icon: platform
+                .icon
+                .as_ref()
+                .or_else(|| self.icon.as_ref())
+                .cloned(),
             precommand: platform.precommand.or_else(|| self.precommand.clone()),
             precreate: platform.precreate.or_else(|| self.precreate.clone()),
             working_dir: platform.working_dir.or_else(|| self.working_dir.clone()),
@@ -253,7 +263,10 @@ pub struct MenuInstSchema {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
     use std::path::{Path, PathBuf};
+    use rattler_conda_types::Platform;
+    use crate::render::BaseMenuItemPlaceholders;
 
     pub(crate) fn test_data() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/menuinst")
@@ -296,6 +309,11 @@ mod test {
         let item = schema.menu_items[0].clone();
         let macos_item = item.platforms.osx.clone().unwrap();
         let command = item.command.merge(macos_item.base);
+        let placeholders = BaseMenuItemPlaceholders::new(
+            Path::new("base_prefix"),
+            Path::new("prefix"),
+            Platform::Linux64
+        );
 
         assert_eq!(
             command.name.resolve(super::Environment::Base),
