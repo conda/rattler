@@ -156,22 +156,6 @@
                     ]
                 }
             }
-        },
-        {
-            "platforms": {
-                "win": {
-                    "name": {
-                        "target_environment_is_base": "Reset Spyder 6 ({{ DISTRIBUTION_NAME }}) to default settings",
-                        "target_environment_is_not_base": "Reset Spyder 6 ({{ ENV_NAME }}) to default settings"
-                    },
-                    "description": "Scientific PYthon Development EnviRonment",
-                    "activate": false,
-                    "terminal": false,
-                    "desktop": true,
-                    "app_user_model_id": "spyder-ide.Spyder-6.{{ ENV_NAME }}.Reset",
-                    "command": ["{{ PREFIX }}/Scripts/spyder.exe", "--reset"]
-                }
-            }
         }
     ]
 }

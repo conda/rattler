@@ -299,7 +299,7 @@ mod test {
 
         assert_eq!(
             command.name.resolve(super::Environment::Base),
-            "superspyder 1.2 (base)"
+            "Spyder 6 ({{ DISTRIBUTION_NAME }})"
         );
 
         // let foo = menu_0.platforms.osx.as_ref().unwrap().base.
