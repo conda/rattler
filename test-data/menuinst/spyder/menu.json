@@ -1,23 +1,23 @@
 {
     "$schema": "https://json-schema.org/draft-07/schema",
     "$id": "https://schemas.conda.io/menuinst-1.schema.json",
-    "menu_name": "superspyder",
+    "menu_name": "{{ DISTRIBUTION_NAME }} spyder",
     "menu_items": [
         {
             "name": {
-                "target_environment_is_base": "superspyder 1.2 (base)",
-                "target_environment_is_not_base": "superspyder 1.2 ({{ ENV_NAME }})"
+                "target_environment_is_base": "Spyder 6 ({{ DISTRIBUTION_NAME }})",
+                "target_environment_is_not_base": "Spyder 6 ({{ ENV_NAME }})"
             },
             "description": "Scientific PYthon Development EnviRonment",
-            "icon": "{{ MENU_DIR }}/superspyder.{{ ICON_EXT }}",
+            "icon": "{{ MENU_DIR }}/spyder.{{ ICON_EXT }}",
             "activate": false,
             "terminal": false,
             "command": [""],
             "platforms": {
                 "win": {
                     "desktop": true,
-                    "app_user_model_id": "superspyder-ide.superspyder-__PKG_MAJOR_VER__.{{ ENV_NAME }}",
-                    "command": ["{{ PREFIX }}/Scripts/superspyder.exe", "%*"],
+                    "app_user_model_id": "spyder-ide.Spyder-6.{{ ENV_NAME }}",
+                    "command": ["{{ PREFIX }}/Scripts/spyder.exe", "%*"],
                     "file_extensions": [
                         ".enaml",
                         ".ipy",
@@ -33,7 +33,7 @@
                         "Science"
                     ],
                     "command": ["{{ PREFIX }}/bin/spyder", "%F"],
-                    "StartupWMClass": "Spyder-__PKG_MAJOR_VER__.{{ ENV_NAME }}",
+                    "StartupWMClass": "Spyder-6.{{ ENV_NAME }}",
                     "MimeType": [
                         "text/x-python"
                     ]
@@ -44,15 +44,15 @@
                     "link_in_bundle": {
                         "{{ PREFIX }}/bin/python": "{{ MENU_ITEM_LOCATION }}/Contents/MacOS/python"
                     },
-                    "CFBundleName": "Superspyder __PKG_MAJOR_VER__",
-                    "CFBundleIdentifier": "org.superspyder-ide.Superspyder-__PKG_MAJOR_VER__-__CFBID_ENV__",
-                    "CFBundleVersion": "__PKG_VERSION__",
+                    "CFBundleName": "Spyder 6",
+                    "CFBundleIdentifier": "org.spyder-ide.Spyder-6-.prefix",
+                    "CFBundleVersion": "6.0.2",
                     "CFBundleDocumentTypes": [
                         {
                             "CFBundleTypeName": "text document",
                             "CFBundleTypeRole": "Editor",
                             "LSHandlerRank": "Default",
-                            "CFBundleTypeIconFile": "superspyder.icns",
+                            "CFBundleTypeIconFile": "spyder.icns",
                             "LSItemContentTypes": [
                                 "com.apple.applescript.text",
                                 "com.apple.ascii-property-list",
@@ -154,6 +154,22 @@
                             ]
                         }
                     ]
+                }
+            }
+        },
+        {
+            "platforms": {
+                "win": {
+                    "name": {
+                        "target_environment_is_base": "Reset Spyder 6 ({{ DISTRIBUTION_NAME }}) to default settings",
+                        "target_environment_is_not_base": "Reset Spyder 6 ({{ ENV_NAME }}) to default settings"
+                    },
+                    "description": "Scientific PYthon Development EnviRonment",
+                    "activate": false,
+                    "terminal": false,
+                    "desktop": true,
+                    "app_user_model_id": "spyder-ide.Spyder-6.{{ ENV_NAME }}.Reset",
+                    "command": ["{{ PREFIX }}/Scripts/spyder.exe", "--reset"]
                 }
             }
         }
