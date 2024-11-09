@@ -24,6 +24,7 @@ use crate::MenuMode;
 use crate::{schema::Linux, MenuInstError};
 
 pub struct LinuxMenu {
+    name: String,
     item: Linux,
     directories: Directories,
 }
@@ -70,6 +71,10 @@ impl Directories {
 impl LinuxMenu {
     fn new(item: Linux, mode: MenuMode) -> Self {
         LinuxMenu {
+            name: item
+                .base
+                .get_name(crate::schema::Environment::Base)
+                .to_string(),
             item,
             directories: Directories::new(mode),
         }
@@ -77,7 +82,7 @@ impl LinuxMenu {
 
     fn location(&self) -> PathBuf {
         // TODO: The Python implementation uses one more variable
-        let filename = format!("{}.desktop", self.item.base.name);
+        let filename = format!("{}.desktop", self.name);
         self.directories.desktop_entries_location.join(filename)
     }
 
@@ -151,7 +156,7 @@ impl LinuxMenu {
         writeln!(writer, "[Desktop Entry]")?;
         writeln!(writer, "Type=Application")?;
         writeln!(writer, "Encoding=UTF-8")?;
-        writeln!(writer, "Name={}", self.item.base.name)?;
+        writeln!(writer, "Name={:?}", self.item.base.name)?;
         writeln!(writer, "Exec={}", self.item.base.command.join(" "))?;
         writeln!(
             writer,
