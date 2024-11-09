@@ -161,7 +161,7 @@ pub fn index(output_folder: &Path, target_platform: Option<&Platform>) -> std::i
 
         let mut repodata = RepoData {
             info: Some(ChannelInfo {
-                subdir: platform.clone(),
+                subdir: Some(platform.clone()),
                 base_url: None,
             }),
             packages: HashMap::default(),
