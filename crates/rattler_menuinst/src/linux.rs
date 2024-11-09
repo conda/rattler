@@ -15,17 +15,19 @@ use std::io::Write;
 // // Assuming these are defined elsewhere
 // use crate::utils::{UnixLex, add_xml_child, indent_xml_tree, logged_run, unlink};
 // use crate::base::{Menu, MenuItem, menuitem_defaults};
-
 use std::{fs::File, path::PathBuf};
 
 use rattler_conda_types::Platform;
 
-use crate::MenuMode;
-use crate::{schema::Linux, MenuInstError};
+use crate::{
+    schema::{MenuItemCommand, Linux},
+    MenuInstError, MenuMode,
+};
 
 pub struct LinuxMenu {
     name: String,
     item: Linux,
+    command: MenuItemCommand,
     directories: Directories,
 }
 
@@ -69,13 +71,14 @@ impl Directories {
 }
 
 impl LinuxMenu {
-    fn new(item: Linux, mode: MenuMode) -> Self {
+    fn new(item: Linux, command: MenuItemCommand, mode: MenuMode) -> Self {
         LinuxMenu {
-            name: item
-                .base
-                .get_name(crate::schema::Environment::Base)
+            name: command
+                .name
+                .resolve(crate::schema::Environment::Base)
                 .to_string(),
             item,
+            command,
             directories: Directories::new(mode),
         }
     }
@@ -156,23 +159,23 @@ impl LinuxMenu {
         writeln!(writer, "[Desktop Entry]")?;
         writeln!(writer, "Type=Application")?;
         writeln!(writer, "Encoding=UTF-8")?;
-        writeln!(writer, "Name={:?}", self.item.base.name)?;
-        writeln!(writer, "Exec={}", self.item.base.command.join(" "))?;
+        writeln!(writer, "Name={:?}", self.command.name)?;
+        writeln!(writer, "Exec={}", self.command.command.join(" "))?;
         writeln!(
             writer,
             "Terminal={}",
-            self.item.base.terminal.unwrap_or(false)
+            self.command.terminal.unwrap_or(false)
         )?;
 
-        if let Some(icon) = &self.item.base.icon {
+        if let Some(icon) = &self.command.icon {
             writeln!(writer, "Icon={icon}")?;
         }
 
-        if !self.item.base.description.is_empty() {
-            writeln!(writer, "Comment={}", self.item.base.description)?;
+        if !self.command.description.is_empty() {
+            writeln!(writer, "Comment={}", self.command.description)?;
         }
 
-        if let Some(working_dir) = &self.item.base.working_dir {
+        if let Some(working_dir) = &self.command.working_dir {
             writeln!(writer, "Path={working_dir}")?;
         }
 
@@ -209,8 +212,12 @@ impl LinuxMenu {
     }
 }
 
-pub fn install_menu_item(item: Linux, menu_mode: MenuMode) -> Result<(), MenuInstError> {
-    let menu = LinuxMenu::new(item.clone(), menu_mode);
+pub fn install_menu_item(
+    item: Linux,
+    command: MenuItemCommand,
+    menu_mode: MenuMode,
+) -> Result<(), MenuInstError> {
+    let menu = LinuxMenu::new(item, command, menu_mode);
     menu.install()?;
     println!("{:?}", menu.location());
     println!("{:?}", menu.directories.config_directory);
@@ -238,9 +245,10 @@ pub fn install_menu_item(item: Linux, menu_mode: MenuMode) -> Result<(), MenuIns
 //             (system_config_directory.clone(), system_data_directory.clone())
 //         } else {
 //             (
-//                 PathBuf::from(env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| "~/.config".to_string())),
-//                 PathBuf::from(env::var("XDG_DATA_HOME").unwrap_or_else(|_| "~/.local/share".to_string())),
-//             )
+//                 PathBuf::from(env::var("XDG_CONFIG_HOME").unwrap_or_else(|_|
+// "~/.config".to_string())),
+// PathBuf::from(env::var("XDG_DATA_HOME").unwrap_or_else(|_|
+// "~/.local/share".to_string())),             )
 //         };
 
 //         LinuxMenu {
@@ -248,11 +256,14 @@ pub fn install_menu_item(item: Linux, menu_mode: MenuMode) -> Result<(), MenuIns
 //             mode,
 //             config_directory: config_directory.clone(),
 //             data_directory: data_directory.clone(),
-//             system_menu_config_location: system_config_directory.join("menus").join("applications.menu"),
-//             menu_config_location: config_directory.join("menus").join("applications.menu"),
-//             directory_entry_location: data_directory.join("desktop-directories").join(format!("{}.directory", Self::render(&name, true))),
-//             desktop_entries_location: data_directory.join("applications"),
-//         }
+//             system_menu_config_location:
+// system_config_directory.join("menus").join("applications.menu"),
+// menu_config_location:
+// config_directory.join("menus").join("applications.menu"),
+// directory_entry_location:
+// data_directory.join("desktop-directories").join(format!("{}.directory",
+// Self::render(&name, true))),             desktop_entries_location:
+// data_directory.join("applications"),         }
 //     }
 
 //     pub fn create(&self) -> Vec<PathBuf> {
@@ -270,10 +281,10 @@ pub fn install_menu_item(item: Linux, menu_mode: MenuMode) -> Result<(), MenuIns
 //         for entry in fs::read_dir(&self.desktop_entries_location).unwrap() {
 //             let entry = entry.unwrap();
 //             let file_name = entry.file_name();
-//             if file_name.to_str().unwrap().starts_with(&format!("{}_", Self::render(&self.name, true))) {
-//                 // found one shortcut, so don't remove the name from menu
-//                 return vec![self.directory_entry_location.clone()];
-//             }
+//             if file_name.to_str().unwrap().starts_with(&format!("{}_",
+// Self::render(&self.name, true))) {                 // found one shortcut, so
+// don't remove the name from menu                 return
+// vec![self.directory_entry_location.clone()];             }
 //         }
 //         unlink(&self.directory_entry_location, true);
 //         self.remove_this_menu();
@@ -297,20 +308,21 @@ pub fn install_menu_item(item: Linux, menu_mode: MenuMode) -> Result<(), MenuIns
 //             "[Desktop Entry]\nType=Directory\nEncoding=UTF-8\nName={}",
 //             Self::render(&self.name, false)
 //         );
-//         debug!("Writing directory entry at {:?}", self.directory_entry_location);
-//         fs::write(&self.directory_entry_location, content).unwrap();
-//         self.directory_entry_location.clone()
-//     }
+//         debug!("Writing directory entry at {:?}",
+// self.directory_entry_location);         fs::write(&self.
+// directory_entry_location, content).unwrap();         self.
+// directory_entry_location.clone()     }
 
 //     fn remove_this_menu(&self) {
-//         debug!("Editing {:?} to remove {} config", self.menu_config_location, Self::render(&self.name, false));
-//         let mut doc = Element::parse(fs::read_to_string(&self.menu_config_location).unwrap().as_bytes()).unwrap();
-//         doc.children.retain(|child| {
+//         debug!("Editing {:?} to remove {} config", self.menu_config_location,
+// Self::render(&self.name, false));         let mut doc =
+// Element::parse(fs::read_to_string(&self.menu_config_location).unwrap().
+// as_bytes()).unwrap();         doc.children.retain(|child| {
 //             if let XMLNode::Element(element) = child {
 //                 if element.name == "Menu" {
 //                     if let Some(name_element) = element.get_child("Name") {
-//                         return name_element.get_text() != Some(Self::render(&self.name, false));
-//                     }
+//                         return name_element.get_text() !=
+// Some(Self::render(&self.name, false));                     }
 //                 }
 //             }
 //             true
@@ -319,13 +331,14 @@ pub fn install_menu_item(item: Linux, menu_mode: MenuMode) -> Result<(), MenuIns
 //     }
 
 //     fn has_this_menu(&self) -> bool {
-//         let doc = Element::parse(fs::read_to_string(&self.menu_config_location).unwrap().as_bytes()).unwrap();
-//         doc.children.iter().any(|child| {
+//         let doc =
+// Element::parse(fs::read_to_string(&self.menu_config_location).unwrap().
+// as_bytes()).unwrap();         doc.children.iter().any(|child| {
 //             if let XMLNode::Element(element) = child {
 //                 if element.name == "Menu" {
 //                     if let Some(name_element) = element.get_child("Name") {
-//                         return name_element.get_text() == Some(Self::render(&self.name, false));
-//                     }
+//                         return name_element.get_text() ==
+// Some(Self::render(&self.name, false));                     }
 //                 }
 //             }
 //             false
@@ -333,13 +346,15 @@ pub fn install_menu_item(item: Linux, menu_mode: MenuMode) -> Result<(), MenuIns
 //     }
 
 //     fn add_this_menu(&self) {
-//         debug!("Editing {:?} to add {} config", self.menu_config_location, Self::render(&self.name, false));
-//         let mut doc = Element::parse(fs::read_to_string(&self.menu_config_location).unwrap().as_bytes()).unwrap();
-//         let mut menu_element = Element::new("Menu");
-//         add_xml_child(&mut menu_element, "Name", Self::render(&self.name, false));
-//         add_xml_child(&mut menu_element, "Directory", format!("{}.directory", Self::render(&self.name, true)));
-//         let mut inc_element = Element::new("Include");
-//         add_xml_child(&mut inc_element, "Category", Self::render(&self.name, false));
+//         debug!("Editing {:?} to add {} config", self.menu_config_location,
+// Self::render(&self.name, false));         let mut doc =
+// Element::parse(fs::read_to_string(&self.menu_config_location).unwrap().
+// as_bytes()).unwrap();         let mut menu_element = Element::new("Menu");
+//         add_xml_child(&mut menu_element, "Name", Self::render(&self.name,
+// false));         add_xml_child(&mut menu_element, "Directory",
+// format!("{}.directory", Self::render(&self.name, true)));         let mut
+// inc_element = Element::new("Include");         add_xml_child(&mut
+// inc_element, "Category", Self::render(&self.name, false));
 //         menu_element.children.push(XMLNode::Element(inc_element));
 //         doc.children.push(XMLNode::Element(menu_element));
 //         self.write_menu_file(&doc);
@@ -358,21 +373,23 @@ pub fn install_menu_item(item: Linux, menu_mode: MenuMode) -> Result<(), MenuIns
 //         debug!("Writing {:?}", self.menu_config_location);
 //         indent_xml_tree(doc);
 //         let mut file = File::create(&self.menu_config_location).unwrap();
-//         writeln!(file, r#"<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN""#).unwrap();
-//         writeln!(file, r#" "http://standards.freedesktop.org/menu-spec/menu-1.0.dtd">"#).unwrap();
+//         writeln!(file, r#"<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu
+// 1.0//EN""#).unwrap();         writeln!(file, r#" "http://standards.freedesktop.org/menu-spec/menu-1.0.dtd">"#).unwrap();
 //         doc.write(&mut file).unwrap();
 //         writeln!(file).unwrap();
 //     }
 
 //     fn ensure_menu_file(&self) {
-//         if self.menu_config_location.exists() && !self.menu_config_location.is_file() {
-//             panic!("Menu config location {:?} is not a file!", self.menu_config_location);
-//         }
+//         if self.menu_config_location.exists() &&
+// !self.menu_config_location.is_file() {             panic!("Menu config
+// location {:?} is not a file!", self.menu_config_location);         }
 
 //         if self.menu_config_location.is_file() {
-//             let cur_time = Local::now().format("%Y-%m-%d_%Hh%Mm%S").to_string();
-//             let backup_menu_file = format!("{}.{}", self.menu_config_location.display(), cur_time);
-//             fs::copy(&self.menu_config_location, backup_menu_file).unwrap();
+//             let cur_time =
+// Local::now().format("%Y-%m-%d_%Hh%Mm%S").to_string();             let
+// backup_menu_file = format!("{}.{}", self.menu_config_location.display(),
+// cur_time);             fs::copy(&self.menu_config_location,
+// backup_menu_file).unwrap();
 
 //             if !self.is_valid_menu_file() {
 //                 fs::remove_file(&self.menu_config_location).unwrap();

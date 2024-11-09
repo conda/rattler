@@ -1,7 +1,3 @@
-use crate::{schema::MacOS, slugify, utils, MenuInstError, MenuMode};
-use fs_err as fs;
-use fs_err::File;
-use plist::Value;
 use std::{
     io::{BufWriter, Write},
     os::unix::fs::PermissionsExt,
@@ -9,17 +5,28 @@ use std::{
     process::Command,
 };
 
+use fs_err as fs;
+use fs_err::File;
+use plist::Value;
+
+use crate::{
+    schema::{MacOS, MenuItemCommand},
+    slugify, utils, MenuInstError, MenuMode,
+};
+
 pub struct MacOSMenu {
     name: String,
     prefix: PathBuf,
     item: MacOS,
+    command: MenuItemCommand,
     directories: Directories,
 }
 
 pub struct Directories {
     /// Path to the .app directory defining the menu item
     location: PathBuf,
-    /// Path to the nested .app directory defining the menu item main application
+    /// Path to the nested .app directory defining the menu item main
+    /// application
     nested_location: PathBuf,
 }
 
@@ -61,34 +68,39 @@ impl Directories {
 }
 
 impl MacOSMenu {
-    pub fn new(prefix: &Path, item: MacOS, directories: Directories) -> Self {
+    pub fn new(
+        prefix: &Path,
+        item: MacOS,
+        command: MenuItemCommand,
+        directories: Directories,
+    ) -> Self {
         Self {
-            name: item
-                .base
-                .get_name(crate::schema::Environment::Base)
+            name: command
+                .name
+                .resolve(crate::schema::Environment::Base)
                 .to_string(),
             prefix: prefix.to_path_buf(),
             item,
+            command,
             directories,
         }
     }
 
     /// In macOS, file type and URL protocol associations are handled by the
     /// Apple Events system. When the user opens on a file or URL, the system
-    /// will send an Apple Event to the application that was registered as a handler.
-    /// We need a special launcher to handle these events and pass them to the
-    /// wrapped application in the shortcut.
+    /// will send an Apple Event to the application that was registered as a
+    /// handler. We need a special launcher to handle these events and pass
+    /// them to the wrapped application in the shortcut.
     ///
     /// See:
     /// - <https://developer.apple.com/library/archive/documentation/Carbon/Conceptual/LaunchServicesConcepts/LSCConcepts/LSCConcepts.html>
     /// - The source code at /src/appkit-launcher in this repository
-    ///
     fn needs_appkit_launcher(&self) -> bool {
         self.item.cf_bundle_identifier.is_some() || self.item.cf_bundle_document_types.is_some()
     }
 
     pub fn install_icon(&self) -> Result<(), MenuInstError> {
-        if let Some(icon) = self.item.base.icon.as_ref() {
+        if let Some(icon) = self.command.icon.as_ref() {
             let icon = PathBuf::from(icon);
             let icon_name = icon.file_name().expect("Failed to get icon name");
             let dest = self.directories.resources().join(icon_name);
@@ -156,7 +168,7 @@ impl MacOSMenu {
             Value::String("1.0.0".into()),
         );
 
-        if let Some(icon) = &self.item.base.icon {
+        if let Some(icon) = &self.command.icon {
             // TODO remove unwrap
             let icon_name = Path::new(&icon).file_name().unwrap().to_str().unwrap();
             pl.insert("CFBundleIconFile".into(), Value::String(icon_name.into()));
@@ -235,19 +247,30 @@ impl MacOSMenu {
                 // let mut type_array = Vec::new();
                 // for t in types {
                 //     let mut type_dict = plist::Dictionary::new();
-                //     type_dict.insert("UTTypeConformsTo".into(), Value::Array(t.ut_type_conforms_to.iter().map(|s| Value::String(s.clone())).collect()));
-                //     type_dict.insert("UTTypeDescription".into(), Value::String(t.ut_type_description.clone().unwrap_or_default()));
-                //     type_dict.insert("UTTypeIconFile".into(), Value::String(t.ut_type_icon_file.clone().unwrap_or_default()));
-                //     type_dict.insert("UTTypeIdentifier".into(), Value::String(t.ut_type_identifier.clone()));
-                //     type_dict.insert("UTTypeReferenceURL".into(), Value::String(t.ut_type_reference_url.clone().unwrap_or_default()));
-                //     let mut tag_spec = plist::Dictionary::new();
-                //     for (k, v) in &t.ut_type_tag_specification {
-                //         tag_spec.insert(k.clone(), Value::Array(v.iter().map(|s| Value::String(s.clone())).collect()));
-                //     }
-                //     type_dict.insert("UTTypeTagSpecification".into(), Value::Dictionary(tag_spec));
-                //     type_array.push(Value::Dictionary(type_dict));
-                // }
-                // pl.insert("UTExportedTypeDeclarations".into(), Value::Array(type_array));
+                //     type_dict.insert("UTTypeConformsTo".into(),
+                // Value::Array(t.ut_type_conforms_to.iter().map(|s|
+                // Value::String(s.clone())).collect()));
+                //     type_dict.insert("UTTypeDescription".into(),
+                // Value::String(t.ut_type_description.clone().
+                // unwrap_or_default()));     type_dict.insert("
+                // UTTypeIconFile".into(),
+                // Value::String(t.ut_type_icon_file.clone().
+                // unwrap_or_default()));     type_dict.insert("
+                // UTTypeIdentifier".into(),
+                // Value::String(t.ut_type_identifier.clone()));
+                //     type_dict.insert("UTTypeReferenceURL".into(),
+                // Value::String(t.ut_type_reference_url.clone().
+                // unwrap_or_default()));     let mut tag_spec =
+                // plist::Dictionary::new();     for (k, v) in
+                // &t.ut_type_tag_specification {
+                //         tag_spec.insert(k.clone(),
+                // Value::Array(v.iter().map(|s|
+                // Value::String(s.clone())).collect()));     }
+                //     type_dict.insert("UTTypeTagSpecification".into(),
+                // Value::Dictionary(tag_spec));     type_array.
+                // push(Value::Dictionary(type_dict)); }
+                // pl.insert("UTExportedTypeDeclarations".into(),
+                // Value::Array(type_array));
             });
 
         // self.item
@@ -257,20 +280,26 @@ impl MacOSMenu {
         //         // let mut type_array = Vec::new();
         //         // for t in types {
         //         //     let mut type_dict = plist::Dictionary::new();
-        //         //     type_dict.insert("UTTypeConformsTo".into(), Value::Array(t.ut_type_conforms_to.iter().map(|s| Value::String(s.clone())).collect()));
-        //         //     type_dict.insert("UTTypeDescription".into(), Value::String(t.ut_type_description.clone().unwrap_or_default()));
-        //         //     type_dict.insert("UTTypeIconFile".into(), Value::String(t.ut_type_icon_file.clone().unwrap_or_default()));
-        //         //     type_dict.insert("UTTypeIdentifier".into(), Value::String(t.ut_type_identifier.clone()));
-        //         //     type_dict.insert("UTTypeReferenceURL".into(), Value::String(t.ut_type_reference_url.clone().unwrap_or_default()));
+        //         //     type_dict.insert("UTTypeConformsTo".into(),
+        // Value::Array(t.ut_type_conforms_to.iter().map(|s|
+        // Value::String(s.clone())).collect()));         //
+        // type_dict.insert("UTTypeDescription".into(),
+        // Value::String(t.ut_type_description.clone().unwrap_or_default()));
+        //         //     type_dict.insert("UTTypeIconFile".into(),
+        // Value::String(t.ut_type_icon_file.clone().unwrap_or_default()));
+        //         //     type_dict.insert("UTTypeIdentifier".into(),
+        // Value::String(t.ut_type_identifier.clone()));         //
+        // type_dict.insert("UTTypeReferenceURL".into(),
+        // Value::String(t.ut_type_reference_url.clone().unwrap_or_default()));
         //         //     let mut tag_spec = plist::Dictionary::new();
         //         //     for (k, v) in &t.ut_type_tag_specification {
-        //         //         tag_spec.insert(k.clone(), Value::Array(v.iter().map(|s| Value::String(s.clone())).collect()));
-        //         //     }
-        //         //     type_dict.insert("UTTypeTagSpecification".into(), Value::Dictionary(tag_spec));
-        //         //     type_array.push(Value::Dictionary(type_dict));
-        //         // }
-        //         // pl.insert("UTImportedTypeDeclarations".into(), Value::Array(type_array));
-        //     });
+        //         //         tag_spec.insert(k.clone(), Value::Array(v.iter().map(|s|
+        // Value::String(s.clone())).collect()));         //     }
+        //         //     type_dict.insert("UTTypeTagSpecification".into(),
+        // Value::Dictionary(tag_spec));         //
+        // type_array.push(Value::Dictionary(type_dict));         // }
+        //         // pl.insert("UTImportedTypeDeclarations".into(),
+        // Value::Array(type_array));     });
 
         println!(
             "Writing plist to {}",
@@ -325,7 +354,7 @@ impl MacOSMenu {
     fn command(&self) -> String {
         let mut lines = vec!["#!/bin/sh".to_string()];
 
-        if self.item.base.terminal.unwrap_or(false) {
+        if self.command.terminal.unwrap_or(false) {
             lines.extend_from_slice(&[
                 r#"if [ "${__CFBundleIdentifier:-}" != "com.apple.Terminal" ]; then"#.to_string(),
                 r#"    open -b com.apple.terminal "$0""#.to_string(),
@@ -334,16 +363,16 @@ impl MacOSMenu {
             ]);
         }
 
-        if let Some(working_dir) = &self.item.base.working_dir {
+        if let Some(working_dir) = &self.command.working_dir {
             fs::create_dir_all(working_dir).expect("Failed to create working directory");
             lines.push(format!(r#"cd "{working_dir}""#));
         }
 
-        if let Some(precommand) = &self.item.base.precommand {
+        if let Some(precommand) = &self.command.precommand {
             lines.push(precommand.clone());
         }
 
-        // if self.item.base.activate {
+        // if self.command.activate {
         //     // Assuming these fields exist in your MacOS struct
         //     let conda_exe = &self.item.conda_exe;
         //     let prefix = &self.item.prefix;
@@ -352,16 +381,17 @@ impl MacOSMenu {
         //     } else {
         //         "shell.bash activate"
         //     };
-        //     lines.push(format!(r#"eval "$("{}" {} "{}")""#, conda_exe, activate, prefix));
-        // }
+        //     lines.push(format!(r#"eval "$("{}" {} "{}")""#, conda_exe, activate,
+        // prefix)); }
 
-        lines.push(utils::quote_args(&self.item.base.command).join(" "));
+        lines.push(utils::quote_args(&self.command.command).join(" "));
 
         lines.join("\n")
     }
 
     fn write_appkit_launcher(&self) -> Result<PathBuf, MenuInstError> {
-        // let launcher_path = launcher_path.unwrap_or_else(|| self.default_appkit_launcher_path());
+        // let launcher_path = launcher_path.unwrap_or_else(||
+        // self.default_appkit_launcher_path());
         #[cfg(target_arch = "aarch64")]
         let launcher_bytes = include_bytes!("../data/appkit_launcher_arm64");
         #[cfg(target_arch = "x86_64")]
@@ -536,12 +566,13 @@ impl MacOSMenu {
 pub(crate) fn install_menu_item(
     prefix: &Path,
     macos_item: MacOS,
+    command: MenuItemCommand,
     menu_mode: MenuMode,
 ) -> Result<(), MenuInstError> {
     let bundle_name = macos_item.cf_bundle_name.as_ref().unwrap();
     let directories = Directories::new(menu_mode, bundle_name);
     println!("Installing menu item for {bundle_name}");
-    let menu = MacOSMenu::new(prefix, macos_item, directories);
+    let menu = MacOSMenu::new(prefix, macos_item, command, directories);
     menu.install()
 }
 

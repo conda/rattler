@@ -1,5 +1,6 @@
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
@@ -11,18 +12,24 @@ pub struct MenuItemNameDict {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct BasePlatformSpecific {
-    #[serde(default)]
     pub name: Option<NameField>,
-    #[serde(default)]
-    pub description: String,
+    pub description: Option<String>,
     pub icon: Option<String>,
-    #[serde(default)]
-    pub command: Vec<String>,
+    pub command: Option<Vec<String>>,
     pub working_dir: Option<String>,
     pub precommand: Option<String>,
     pub precreate: Option<String>,
     pub activate: Option<bool>,
     pub terminal: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct Platform<T> {
+    #[serde(flatten)]
+    pub base: BasePlatformSpecific,
+    #[serde(flatten)]
+    pub specific: T,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -32,9 +39,9 @@ pub enum NameField {
     Complex(NameComplex),
 }
 
-impl BasePlatformSpecific {
-    pub fn get_name(&self, env: Environment) -> &str {
-        match self.name.as_ref().unwrap() {
+impl NameField {
+    pub fn resolve(&self, env: Environment) -> &str {
+        match self {
             NameField::Simple(name) => name,
             NameField::Complex(complex_name) => match env {
                 Environment::Base => &complex_name.target_environment_is_base,
@@ -55,45 +62,9 @@ pub enum Environment {
     NotBase,
 }
 
-impl BasePlatformSpecific {
-    pub fn merge_parent(self, parent: &MenuItem) -> Self {
-        let name = if self.name.is_none() {
-            parent.name.clone()
-        } else {
-            self.name.unwrap()
-        };
-
-        let description = if self.description.is_empty() {
-            parent.description.clone()
-        } else {
-            self.description
-        };
-
-        let command = if self.command.is_empty() {
-            parent.command.clone()
-        } else {
-            self.command
-        };
-
-        BasePlatformSpecific {
-            name: Some(name),
-            description,
-            icon: self.icon.or(parent.icon.clone()),
-            command,
-            working_dir: self.working_dir.or(parent.working_dir.clone()),
-            precommand: self.precommand.or(parent.precommand.clone()),
-            precreate: self.precreate.or(parent.precreate.clone()),
-            activate: self.activate.or(parent.activate),
-            terminal: self.terminal.or(parent.terminal),
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Windows {
-    #[serde(flatten)]
-    base: BasePlatformSpecific,
     desktop: Option<bool>,
     quicklaunch: Option<bool>,
     terminal_profile: Option<String>,
@@ -105,8 +76,6 @@ pub struct Windows {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Linux {
-    #[serde(flatten)]
-    pub base: BasePlatformSpecific,
     #[serde(rename = "Categories")]
     pub categories: Option<Vec<String>>,
     #[serde(rename = "DBusActivatable")]
@@ -186,8 +155,6 @@ pub struct UTTypeDeclarationModel {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct MacOS {
-    #[serde(flatten)]
-    pub base: BasePlatformSpecific,
     #[serde(rename = "CFBundleDisplayName")]
     pub cf_bundle_display_name: Option<String>,
     #[serde(rename = "CFBundleIdentifier")]
@@ -228,14 +195,22 @@ pub struct MacOS {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Platforms {
-    pub linux: Option<Linux>,
-    pub osx: Option<MacOS>,
-    pub win: Option<Windows>,
+    pub linux: Option<Platform<Linux>>,
+    pub osx: Option<Platform<MacOS>>,
+    pub win: Option<Platform<Windows>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct MenuItem {
+    #[serde(flatten)]
+    pub command: MenuItemCommand,
+    pub platforms: Platforms,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct MenuItemCommand {
     pub name: NameField,
     pub description: String,
     pub command: Vec<String>,
@@ -245,7 +220,24 @@ pub struct MenuItem {
     pub working_dir: Option<String>,
     pub activate: Option<bool>,
     pub terminal: Option<bool>,
-    pub platforms: Platforms,
+}
+
+impl MenuItemCommand {
+    pub fn merge(&self, platform: BasePlatformSpecific) -> MenuItemCommand {
+        MenuItemCommand {
+            name: platform.name.unwrap_or_else(|| self.name.clone()),
+            description: platform
+                .description
+                .unwrap_or_else(|| self.description.clone()),
+            command: platform.command.unwrap_or_else(|| self.command.clone()),
+            icon: platform.icon.as_ref().or_else(|| self.icon.as_ref()).cloned(),
+            precommand: platform.precommand.or_else(|| self.precommand.clone()),
+            precreate: platform.precreate.or_else(|| self.precreate.clone()),
+            working_dir: platform.working_dir.or_else(|| self.working_dir.clone()),
+            activate: platform.activate.or_else(|| self.activate.clone()),
+            terminal: platform.terminal.or_else(|| self.terminal.clone()),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -262,8 +254,6 @@ pub struct MenuInstSchema {
 #[cfg(test)]
 mod test {
     use std::path::{Path, PathBuf};
-
-    use crate::macos::Directories;
 
     pub(crate) fn test_data() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/menuinst")
@@ -304,16 +294,16 @@ mod test {
         let schema: super::MenuInstSchema = serde_json::from_str(&schema_str).unwrap();
 
         let item = schema.menu_items[0].clone();
-        let mut macos_item = item.platforms.osx.clone().unwrap();
-        let base_item = macos_item.base.merge_parent(&item);
-        macos_item.base = base_item;
+        let macos_item = item.platforms.osx.clone().unwrap();
+        let command = item.command.merge(macos_item.base);
 
         assert_eq!(
-            macos_item.base.get_name(super::Environment::Base),
+            command.name.resolve(super::Environment::Base),
             "superspyder 1.2 (base)"
         );
 
-        // let foo = menu_0.platforms.osx.as_ref().unwrap().base.get_name(super::Environment::Base);
+        // let foo = menu_0.platforms.osx.as_ref().unwrap().base.
+        // get_name(super::Environment::Base);
         insta::assert_debug_snapshot!(schema);
     }
 }

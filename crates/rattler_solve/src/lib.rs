@@ -8,6 +8,7 @@
 pub mod libsolv_c;
 #[cfg(feature = "resolvo")]
 pub mod resolvo;
+// pub mod multi;
 
 use std::fmt;
 
