@@ -20,7 +20,7 @@ use std::{fs::File, path::PathBuf};
 use rattler_conda_types::Platform;
 
 use crate::{
-    schema::{MenuItemCommand, Linux},
+    schema::{Linux, MenuItemCommand},
     MenuInstError, MenuMode,
 };
 

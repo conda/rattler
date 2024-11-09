@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     io::{BufWriter, Write},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
@@ -99,7 +100,39 @@ impl MacOSMenu {
         self.item.cf_bundle_identifier.is_some() || self.item.cf_bundle_document_types.is_some()
     }
 
+    pub fn precreate(&self) -> Result<(), MenuInstError> {
+        for (src, dest) in self
+            .item
+            .link_in_bundle
+            .as_ref()
+            .unwrap_or(&HashMap::new())
+            .iter()
+        {
+            println!("MenuInst: linking {} to {}", src, dest);
+            let rendered_dest = self.directories.location.join(dest);
+            if !rendered_dest.starts_with(&self.directories.location) {
+                return Err(MenuInstError::InstallError(format!(
+                    "'link_in_bundle' destinations MUST be created inside the .app bundle ({}), but it points to '{}'.",
+                    self.directories.location.display(),
+                    rendered_dest.display()
+                )));
+            }
+
+            if let Some(parent) = rendered_dest.parent() {
+                println!("Parent: {}", rendered_dest.display());
+                fs::create_dir_all(parent)?;
+            }
+            println!("Dest: {}", rendered_dest.display());
+            assert!(PathBuf::from(src).exists(), "Source file does not exist");
+
+            fs_err::os::unix::fs::symlink(src, &rendered_dest)?;
+            println!("MenuInst: link finished {} to {}", src, rendered_dest.display());
+        }
+        Ok(())
+    }
+
     pub fn install_icon(&self) -> Result<(), MenuInstError> {
+        println!("Installing icon");
         if let Some(icon) = self.command.icon.as_ref() {
             let icon = PathBuf::from(icon);
             let icon_name = icon.file_name().expect("Failed to get icon name");
@@ -139,8 +172,9 @@ impl MacOSMenu {
 
     fn write_plist_info(&self) -> Result<(), MenuInstError> {
         let name = self.name.clone();
+        println!("Name: {}", name);
         let slugname = slugify(&name);
-
+        println!("Slugname: {}", slugname);
         let shortname = if slugname.len() > 16 {
             // let hashed = format!("{:x}", Sha256::digest(slugname.as_bytes()));
             let hashed = "123456";
@@ -318,8 +352,7 @@ impl MacOSMenu {
         let mut entitlements = plist::Dictionary::new();
         if let Some(entitlements_list) = &self.item.entitlements {
             for e in entitlements_list {
-                let parts: Vec<&str> = e.split('=').collect();
-                entitlements.insert(parts[0].to_string(), Value::String(parts[1].to_string()));
+                entitlements.insert(e.to_string(), Value::Boolean(true));
             }
         } else {
             return Ok(());
@@ -333,7 +366,7 @@ impl MacOSMenu {
         plist::to_writer_xml(writer, &entitlements)?;
 
         // sign the .app directory with the entitlements
-        let _codesign = std::process::Command::new("codesign")
+        let _codesign = Command::new("/usr/bin/codesign")
             .arg("--verbose")
             .arg("--sign")
             .arg("-")
@@ -420,8 +453,10 @@ impl MacOSMenu {
     }
 
     fn write_script(&self, script_path: Option<PathBuf>) -> Result<PathBuf, MenuInstError> {
-        let script_path =
-            script_path.unwrap_or_else(|| self.default_launcher_path().with_extension("script"));
+        let script_path = script_path.unwrap_or_else(|| {
+            PathBuf::from(format!("{}-script", self.default_launcher_path().to_string_lossy()))
+        });
+        
         let mut file = File::create(&script_path)?;
         file.write_all(self.command().as_bytes())?;
         fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))?;
@@ -541,6 +576,7 @@ impl MacOSMenu {
     pub fn install(&self) -> Result<(), MenuInstError> {
         self.directories
             .create_directories(self.needs_appkit_launcher())?;
+        self.precreate()?;
         self.install_icon()?;
         self.write_pkg_info()?;
         self.write_plist_info()?;
@@ -549,14 +585,14 @@ impl MacOSMenu {
         self.write_script(None)?;
         self.write_event_handler(None)?;
         self.maybe_register_with_launchservices(true)?;
-
+        self.sign_with_entitlements()?;
         Ok(())
     }
 
     pub fn remove(&self) -> Result<Vec<PathBuf>, MenuInstError> {
         println!("Removing {}", self.directories.location.display());
         self.maybe_register_with_launchservices(false)?;
-        fs::remove_dir_all(&self.directories.location).unwrap_or_else(|e| {
+        fs_err::remove_dir_all(&self.directories.location).unwrap_or_else(|e| {
             println!("Failed to remove directory: {e}. Ignoring error.");
         });
         Ok(vec![self.directories.location.clone()])
@@ -568,8 +604,8 @@ pub(crate) fn install_menu_item(
     command: MenuItemCommand,
     menu_mode: MenuMode,
 ) -> Result<(), MenuInstError> {
-    let bundle_name = macos_item.cf_bundle_name.as_ref().unwrap();
-    let directories = Directories::new(menu_mode, bundle_name);
+    let bundle_name = format!("{}.app", macos_item.cf_bundle_name.as_ref().unwrap());
+    let directories = Directories::new(menu_mode, &bundle_name);
     println!("Installing menu item for {bundle_name}");
     let menu = MacOSMenu::new(prefix, macos_item, command, directories);
     menu.install()
