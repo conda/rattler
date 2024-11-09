@@ -97,14 +97,13 @@ pub mod test {
     fn test_install_menu_item() {
         println!("Running test_install_menu_item");
         let test_data = crate::test::test_data();
-        let schema_path = test_data.join("mne_menu/menu/menu.json");
+        let schema_path = test_data.join("/Users/wolfv/Programs/rattler/.prefix/Menu/napari-menu.json");
 
         let prefix = schema_path.parent().unwrap().parent().unwrap();
         let prefix = std::fs::canonicalize(prefix).unwrap();
         println!("prefix: {:?}", prefix);
-        let base_prefix = PathBuf::from("/Users/jaidevd/miniconda3");
         let platform = Platform::OsxArm64;
 
-        install_menuitems(&schema_path, &prefix, &base_prefix, platform).unwrap();
+        install_menuitems(&schema_path, &prefix, &prefix, &platform).unwrap();
     }
 }
