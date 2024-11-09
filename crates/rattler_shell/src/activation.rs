@@ -3,13 +3,13 @@
 //! This crate provides helper functions to activate and deactivate virtual
 //! environments.
 
+use fs_err as fs;
 use std::{
     collections::HashMap,
     ffi::OsStr,
     path::{Path, PathBuf},
     process::ExitStatus,
 };
-use fs_err as fs;
 
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
