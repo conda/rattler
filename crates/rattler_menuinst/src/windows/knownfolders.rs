@@ -39,11 +39,20 @@ impl Folders {
         }
     }
 
-    pub fn get_folder_path(&self, key: &str, user_handle: UserHandle) -> Result<PathBuf, FolderError> {
+    pub fn get_folder_path(
+        &self,
+        key: &str,
+        user_handle: UserHandle,
+    ) -> Result<PathBuf, FolderError> {
         self.folder_path(user_handle, true, key)
     }
 
-    fn folder_path(&self, preferred_mode: UserHandle, check_other_mode: bool, key: &str) -> Result<PathBuf, FolderError> {
+    fn folder_path(
+        &self,
+        preferred_mode: UserHandle,
+        check_other_mode: bool,
+        key: &str,
+    ) -> Result<PathBuf, FolderError> {
         let (preferred_folders, other_folders) = match preferred_mode {
             UserHandle::Current => (&self.user_folders, &self.system_folders),
             UserHandle::Common => (&self.system_folders, &self.user_folders),

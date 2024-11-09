@@ -2,7 +2,6 @@ use crate::{schema::MacOS, slugify, utils, MenuInstError, MenuMode};
 use fs_err as fs;
 use fs_err::File;
 use plist::Value;
-use sha1::{Digest, Sha1};
 use std::{
     io::{BufWriter, Write},
     os::unix::fs::PermissionsExt,
@@ -11,6 +10,7 @@ use std::{
 };
 
 pub struct MacOSMenu {
+    name: String,
     prefix: PathBuf,
     item: MacOS,
     directories: Directories,
@@ -63,6 +63,10 @@ impl Directories {
 impl MacOSMenu {
     pub fn new(prefix: &Path, item: MacOS, directories: Directories) -> Self {
         Self {
+            name: item
+                .base
+                .get_name(crate::schema::Environment::Base)
+                .to_string(),
             prefix: prefix.to_path_buf(),
             item,
             directories,
@@ -111,7 +115,7 @@ impl MacOSMenu {
             f.write_all(format!("APPL{short_name}").as_bytes())?;
             Ok(())
         };
-        let short_name = slugify(&self.item.base.name.chars().take(8).collect::<String>());
+        let short_name = slugify(&self.name.chars().take(8).collect::<String>());
 
         create_pkg_info(&self.directories.location, &short_name)?;
         if self.needs_appkit_launcher() {
@@ -122,11 +126,12 @@ impl MacOSMenu {
     }
 
     fn write_plist_info(&self) -> Result<(), MenuInstError> {
-        let name = self.item.base.name.clone();
+        let name = self.name.clone();
         let slugname = slugify(&name);
 
         let shortname = if slugname.len() > 16 {
-            let hashed = format!("{:x}", Sha1::digest(slugname.as_bytes()));
+            // let hashed = format!("{:x}", Sha256::digest(slugname.as_bytes()));
+            let hashed = "123456";
             format!("{}{}", &slugname[..10], &hashed[..6])
         } else {
             slugname.clone()
@@ -158,7 +163,13 @@ impl MacOSMenu {
         }
 
         if self.needs_appkit_launcher() {
-            println!("Writing plist to {}", self.directories.nested_location.join("Contents/Info.plist").display());
+            println!(
+                "Writing plist to {}",
+                self.directories
+                    .nested_location
+                    .join("Contents/Info.plist")
+                    .display()
+            );
             plist::to_file_xml(
                 self.directories.nested_location.join("Contents/Info.plist"),
                 &pl,
@@ -181,13 +192,13 @@ impl MacOSMenu {
             pl.insert("LSBackgroundOnly".into(), Value::Boolean(background_only));
         }
 
-        self.item.ls_environment.as_ref().map(|env| {
+        if let Some(env) = self.item.ls_environment.as_ref() {
             let mut env_dict = plist::Dictionary::new();
             for (k, v) in env {
                 env_dict.insert(k.into(), Value::String(v.into()));
             }
             pl.insert("LSEnvironment".into(), Value::Dictionary(env_dict));
-        });
+        }
 
         if let Some(version) = self.item.ls_minimum_system_version.as_ref() {
             pl.insert(
@@ -239,29 +250,35 @@ impl MacOSMenu {
                 // pl.insert("UTExportedTypeDeclarations".into(), Value::Array(type_array));
             });
 
-        self.item
-            .ut_imported_type_declarations
-            .as_ref()
-            .map(|_types| {
-                // let mut type_array = Vec::new();
-                // for t in types {
-                //     let mut type_dict = plist::Dictionary::new();
-                //     type_dict.insert("UTTypeConformsTo".into(), Value::Array(t.ut_type_conforms_to.iter().map(|s| Value::String(s.clone())).collect()));
-                //     type_dict.insert("UTTypeDescription".into(), Value::String(t.ut_type_description.clone().unwrap_or_default()));
-                //     type_dict.insert("UTTypeIconFile".into(), Value::String(t.ut_type_icon_file.clone().unwrap_or_default()));
-                //     type_dict.insert("UTTypeIdentifier".into(), Value::String(t.ut_type_identifier.clone()));
-                //     type_dict.insert("UTTypeReferenceURL".into(), Value::String(t.ut_type_reference_url.clone().unwrap_or_default()));
-                //     let mut tag_spec = plist::Dictionary::new();
-                //     for (k, v) in &t.ut_type_tag_specification {
-                //         tag_spec.insert(k.clone(), Value::Array(v.iter().map(|s| Value::String(s.clone())).collect()));
-                //     }
-                //     type_dict.insert("UTTypeTagSpecification".into(), Value::Dictionary(tag_spec));
-                //     type_array.push(Value::Dictionary(type_dict));
-                // }
-                // pl.insert("UTImportedTypeDeclarations".into(), Value::Array(type_array));
-            });
+        // self.item
+        //     .ut_imported_type_declarations
+        //     .as_ref()
+        //     .map(|_types| {
+        //         // let mut type_array = Vec::new();
+        //         // for t in types {
+        //         //     let mut type_dict = plist::Dictionary::new();
+        //         //     type_dict.insert("UTTypeConformsTo".into(), Value::Array(t.ut_type_conforms_to.iter().map(|s| Value::String(s.clone())).collect()));
+        //         //     type_dict.insert("UTTypeDescription".into(), Value::String(t.ut_type_description.clone().unwrap_or_default()));
+        //         //     type_dict.insert("UTTypeIconFile".into(), Value::String(t.ut_type_icon_file.clone().unwrap_or_default()));
+        //         //     type_dict.insert("UTTypeIdentifier".into(), Value::String(t.ut_type_identifier.clone()));
+        //         //     type_dict.insert("UTTypeReferenceURL".into(), Value::String(t.ut_type_reference_url.clone().unwrap_or_default()));
+        //         //     let mut tag_spec = plist::Dictionary::new();
+        //         //     for (k, v) in &t.ut_type_tag_specification {
+        //         //         tag_spec.insert(k.clone(), Value::Array(v.iter().map(|s| Value::String(s.clone())).collect()));
+        //         //     }
+        //         //     type_dict.insert("UTTypeTagSpecification".into(), Value::Dictionary(tag_spec));
+        //         //     type_array.push(Value::Dictionary(type_dict));
+        //         // }
+        //         // pl.insert("UTImportedTypeDeclarations".into(), Value::Array(type_array));
+        //     });
 
-        println!("Writing plist to {}", self.directories.location.join("Contents/Info.plist").display());
+        println!(
+            "Writing plist to {}",
+            self.directories
+                .location
+                .join("Contents/Info.plist")
+                .display()
+        );
         plist::to_file_xml(self.directories.location.join("Contents/Info.plist"), &pl)?;
 
         Ok(())
@@ -296,7 +313,7 @@ impl MacOSMenu {
             .arg("--options")
             .arg("runtime")
             .arg("--prefix")
-            .arg(format!("com.{}", slugify(&self.item.base.name)))
+            .arg(format!("com.{}", slugify(&self.name)))
             .arg("--entitlements")
             .arg(&entitlements_file)
             .arg(self.directories.location.to_str().unwrap())
@@ -441,12 +458,12 @@ impl MacOSMenu {
     }
 
     fn default_appkit_launcher_path(&self) -> PathBuf {
-        let name = slugify(&self.item.base.name);
+        let name = slugify(&self.name);
         self.directories.location.join("Contents/MacOS").join(&name)
     }
 
     fn default_launcher_path(&self) -> PathBuf {
-        let name = slugify(&self.item.base.name);
+        let name = slugify(&self.name);
         if self.needs_appkit_launcher() {
             self.directories
                 .nested_location
@@ -463,9 +480,9 @@ impl MacOSMenu {
         }
 
         if register {
-            self.lsregister(&["-R", self.directories.location.to_str().unwrap()])
+            Self::lsregister(&["-R", self.directories.location.to_str().unwrap()])
         } else {
-            self.lsregister(&[
+            Self::lsregister(&[
                 "-R",
                 "-u",
                 "-all",
@@ -474,7 +491,7 @@ impl MacOSMenu {
         }
     }
 
-    fn lsregister(&self, args: &[&str]) -> Result<(), MenuInstError> {
+    fn lsregister(args: &[&str]) -> Result<(), MenuInstError> {
         let exe = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
 
         let output = Command::new(exe).args(args).output().map_err(|e| {
@@ -523,7 +540,7 @@ pub(crate) fn install_menu_item(
 ) -> Result<(), MenuInstError> {
     let bundle_name = macos_item.cf_bundle_name.as_ref().unwrap();
     let directories = Directories::new(menu_mode, bundle_name);
-    println!("Installing menu item for {}", bundle_name);
+    println!("Installing menu item for {bundle_name}");
     let menu = MacOSMenu::new(prefix, macos_item, directories);
     menu.install()
 }

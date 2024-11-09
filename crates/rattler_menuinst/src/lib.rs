@@ -4,10 +4,10 @@ use rattler_conda_types::Platform;
 
 mod linux;
 mod macos;
-#[cfg(target_os = "windows")]
-mod windows;
 mod render;
 mod schema;
+#[cfg(target_os = "windows")]
+mod windows;
 
 pub mod slugify;
 pub use slugify::slugify;

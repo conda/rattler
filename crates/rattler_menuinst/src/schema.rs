@@ -12,7 +12,7 @@ pub struct MenuItemNameDict {
 #[serde(deny_unknown_fields)]
 pub struct BasePlatformSpecific {
     #[serde(default)]
-    pub name: String,
+    pub name: Option<NameField>,
     #[serde(default)]
     pub description: String,
     pub icon: Option<String>,
@@ -25,12 +25,42 @@ pub struct BasePlatformSpecific {
     pub terminal: Option<bool>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum NameField {
+    Simple(String),
+    Complex(NameComplex),
+}
+
+impl BasePlatformSpecific {
+    pub fn get_name(&self, env: Environment) -> &str {
+        match self.name.as_ref().unwrap() {
+            NameField::Simple(name) => name,
+            NameField::Complex(complex_name) => match env {
+                Environment::Base => &complex_name.target_environment_is_base,
+                Environment::NotBase => &complex_name.target_environment_is_not_base,
+            },
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NameComplex {
+    pub target_environment_is_base: String,
+    pub target_environment_is_not_base: String,
+}
+
+pub enum Environment {
+    Base,
+    NotBase,
+}
+
 impl BasePlatformSpecific {
     pub fn merge_parent(self, parent: &MenuItem) -> Self {
-        let name = if self.name.is_empty() {
+        let name = if self.name.is_none() {
             parent.name.clone()
         } else {
-            self.name
+            self.name.unwrap()
         };
 
         let description = if self.description.is_empty() {
@@ -46,7 +76,7 @@ impl BasePlatformSpecific {
         };
 
         BasePlatformSpecific {
-            name,
+            name: Some(name),
             description,
             icon: self.icon.or(parent.icon.clone()),
             command,
@@ -206,7 +236,7 @@ pub struct Platforms {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct MenuItem {
-    pub name: String,
+    pub name: NameField,
     pub description: String,
     pub command: Vec<String>,
     pub icon: Option<String>,
@@ -232,6 +262,8 @@ pub struct MenuInstSchema {
 #[cfg(test)]
 mod test {
     use std::path::{Path, PathBuf};
+
+    use crate::macos::Directories;
 
     pub(crate) fn test_data() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/menuinst")
@@ -261,6 +293,27 @@ mod test {
         let schema_path = test_data.join("gqrx/gqrx-menu.json");
         let schema_str = std::fs::read_to_string(schema_path).unwrap();
         let schema: super::MenuInstSchema = serde_json::from_str(&schema_str).unwrap();
+        insta::assert_debug_snapshot!(schema);
+    }
+
+    #[test]
+    fn test_deserialize_spyder() {
+        let test_data = test_data();
+        let schema_path = test_data.join("spyder/menu.json");
+        let schema_str = std::fs::read_to_string(schema_path).unwrap();
+        let schema: super::MenuInstSchema = serde_json::from_str(&schema_str).unwrap();
+
+        let item = schema.menu_items[0].clone();
+        let mut macos_item = item.platforms.osx.clone().unwrap();
+        let base_item = macos_item.base.merge_parent(&item);
+        macos_item.base = base_item;
+
+        assert_eq!(
+            macos_item.base.get_name(super::Environment::Base),
+            "superspyder 1.2 (base)"
+        );
+
+        // let foo = menu_0.platforms.osx.as_ref().unwrap().base.get_name(super::Environment::Base);
         insta::assert_debug_snapshot!(schema);
     }
 }
