@@ -2,7 +2,9 @@ use std::path::Path;
 
 use rattler_conda_types::Platform;
 
+#[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
 mod macos;
 mod render;
 mod schema;
@@ -11,6 +13,8 @@ mod windows;
 
 pub mod slugify;
 pub use slugify::slugify;
+
+use crate::{render::BaseMenuItemPlaceholders, schema::MenuInstSchema};
 
 pub mod utils;
 
@@ -41,22 +45,35 @@ pub fn install_menuitems(
     file: &Path,
     prefix: &Path,
     base_prefix: &Path,
-    platform: &Platform,
+    platform: Platform,
 ) -> Result<(), MenuInstError> {
-    let placeholders = render::placeholders(base_prefix, prefix, platform);
+    let text = std::fs::read_to_string(file)?;
+    let menu_inst: MenuInstSchema = serde_json::from_str(&text)?;
+    let placeholders = BaseMenuItemPlaceholders::new(base_prefix, prefix, platform);
 
-    let schema = render::render(file, &placeholders)?;
-
-    for item in schema.menu_items {
+    for item in menu_inst.menu_items {
         if platform.is_linux() {
+            #[cfg(target_os = "linux")]
             if let Some(linux_item) = item.platforms.linux {
                 let command = item.command.merge(linux_item.base);
                 linux::install_menu_item(linux_item.specific, command, MenuMode::System)?;
             }
         } else if platform.is_osx() {
+            #[cfg(target_os = "macos")]
             if let Some(macos_item) = item.platforms.osx {
                 let command = item.command.merge(macos_item.base);
                 macos::install_menu_item(prefix, macos_item.specific, command, MenuMode::System)?;
+            }
+        } else if platform.is_windows() {
+            #[cfg(target_os = "windows")]
+            if let Some(windows_item) = item.platforms.win {
+                let command = item.command.merge(windows_item.base);
+                windows::install_menu_item(
+                    prefix,
+                    windows_item.specific,
+                    command,
+                    MenuMode::System,
+                )?;
             }
         }
     }
@@ -88,6 +105,6 @@ pub mod test {
         let base_prefix = PathBuf::from("/Users/jaidevd/miniconda3");
         let platform = Platform::OsxArm64;
 
-        install_menuitems(&schema_path, &prefix, &base_prefix, &platform).unwrap();
+        install_menuitems(&schema_path, &prefix, &base_prefix, platform).unwrap();
     }
 }
