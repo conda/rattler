@@ -163,7 +163,7 @@ pub fn index(
 
         let mut repodata = RepoData {
             info: Some(ChannelInfo {
-                subdir: platform.clone(),
+                subdir: Some(platform.clone()),
                 base_url: None,
             }),
             packages: HashMap::default(),

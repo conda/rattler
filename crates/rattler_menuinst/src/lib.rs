@@ -48,18 +48,16 @@ pub fn install_menuitems(
     let schema = render::render(file, &placeholders)?;
 
     for item in schema.menu_items {
-        if item.platforms.linux.is_some() && platform.is_linux() {
-            let mut linux_item = item.platforms.linux.clone().unwrap();
-            let base_item = linux_item.base.merge_parent(&item);
-            linux_item.base = base_item;
-            linux::install_menu_item(linux_item, MenuMode::System)?;
-        } else if item.platforms.osx.is_some() && platform.is_osx() {
-            let mut macos_item = item.platforms.osx.clone().unwrap();
-            let base_item = macos_item.base.merge_parent(&item);
-            macos_item.base = base_item;
-            macos::install_menu_item(prefix, macos_item, MenuMode::System)?;
-        } else if item.platforms.win.is_some() && platform.is_windows() {
-            // windows::install_menu_item(&item)?;
+        if platform.is_linux() {
+            if let Some(linux_item) = item.platforms.linux {
+                let command = item.command.merge(linux_item.base);
+                linux::install_menu_item(linux_item.specific, command, MenuMode::System)?;
+            }
+        } else if platform.is_osx() {
+            if let Some(macos_item) = item.platforms.osx {
+                let command = item.command.merge(macos_item.base);
+                macos::install_menu_item(prefix, macos_item.specific, command, MenuMode::System)?;
+            }
         }
     }
 
