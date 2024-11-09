@@ -7,7 +7,7 @@ use std::{
 
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::{prefix_record::PathType, PackageRecord, PrefixRecord};
+use rattler_conda_types::{prefix_record::PathType, PackageRecord, Platform, PrefixRecord};
 use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
@@ -221,6 +221,43 @@ impl InstallDriver {
         } else {
             None
         };
+
+        // find all files in `$PREFIX/menu/*.json` and install them with `menuinst`
+        if let Ok(read_dir) = target_prefix.join("menu").read_dir() {
+            for file in read_dir.flatten() {
+                let file = file.path();
+                if file.is_file() && file.extension().map_or(false, |ext| ext == "json") {
+                    tracing::info!("Installing menu item: {:?}", file);
+                    rattler_menuinst::install_menuitems(
+                        &file,
+                        target_prefix,
+                        target_prefix,
+                        &Platform::current(),
+                    )
+                    .unwrap_or_else(|e| {
+                        tracing::warn!("Failed to install menu item: {} (ignored)", e);
+                    });
+                }
+            }
+        }
+
+        // find all files in `$PREFIX/menu/*.json` and install them with `menuinst`
+        if let Ok(read_dir) = target_prefix.join("Menu").read_dir() {
+            for file in read_dir.flatten() {
+                let file = file.path();
+                if file.is_file() && file.extension().map_or(false, |ext| ext == "json") {
+                    rattler_menuinst::install_menuitems(
+                        &file,
+                        target_prefix,
+                        target_prefix,
+                        &Platform::current(),
+                    )
+                    .unwrap_or_else(|e| {
+                        tracing::warn!("Failed to install menu item: {} (ignored)", e);
+                    });
+                }
+            }
+        }
 
         Ok(PostProcessResult {
             post_link_result,
