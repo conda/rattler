@@ -263,7 +263,6 @@ pub struct MenuInstSchema {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
     use std::path::{Path, PathBuf};
     use rattler_conda_types::Platform;
     use crate::render::BaseMenuItemPlaceholders;
@@ -316,7 +315,7 @@ mod test {
         );
 
         assert_eq!(
-            command.name.resolve(super::Environment::Base),
+            command.name.resolve(super::Environment::Base, &placeholders),
             "Spyder 6 ({{ DISTRIBUTION_NAME }})"
         );
 

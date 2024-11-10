@@ -3,7 +3,6 @@
 use rattler_conda_types::Platform;
 use std::{collections::HashMap, path::Path};
 use serde::{Deserialize, Serialize};
-use crate::schema::MenuInstSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -118,8 +117,6 @@ fn replace_placeholders(mut text: String, replacements: &HashMap<String, String>
 
 #[cfg(test)]
 mod test {
-    use std::path::Path;
-
     // use crate::render::render;
 
     // #[test]
