@@ -9,6 +9,11 @@ use std::{
 use fs_err as fs;
 use fs_err::File;
 use plist::Value;
+use rattler_conda_types::Platform;
+use rattler_shell::{
+    activation::{ActivationVariables, Activator},
+    shell,
+};
 
 use crate::{
     render::{resolve, BaseMenuItemPlaceholders, MenuItemPlaceholders},
@@ -435,17 +440,19 @@ impl MacOSMenu {
             lines.push(precommand.resolve(&self.placeholders));
         }
 
-        // if self.command.activate {
-        //     // Assuming these fields exist in your MacOS struct
-        //     let conda_exe = &self.item.conda_exe;
-        //     let prefix = &self.item.prefix;
-        //     let activate = if self.is_micromamba(conda_exe) {
-        //         "shell activate"
-        //     } else {
-        //         "shell.bash activate"
-        //     };
-        //     lines.push(format!(r#"eval "$("{}" {} "{}")""#, conda_exe, activate,
-        // prefix)); }
+        // Run a cached activation
+        if self.command.activate.unwrap_or(false) {
+            // create a bash activation script and emit it into the script
+            let activator =
+                Activator::from_path(&self.prefix, shell::Bash, Platform::current()).unwrap();
+            let activation_env = activator
+                .run_activation(ActivationVariables::default(), None)
+                .unwrap();
+
+            for (k, v) in activation_env {
+                lines.push(format!(r#"export {k}="{v}""#, k = k, v = v));
+            }
+        }
 
         let command = self
             .command
