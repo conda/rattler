@@ -15,12 +15,12 @@ pub struct MenuItemNameDict {
 #[serde(deny_unknown_fields)]
 pub struct BasePlatformSpecific {
     pub name: Option<NameField>,
-    pub description: Option<String>,
+    pub description: Option<PlaceholderString>,
     pub icon: Option<PlaceholderString>,
-    pub command: Option<Vec<String>>,
-    pub working_dir: Option<String>,
-    pub precommand: Option<String>,
-    pub precreate: Option<String>,
+    pub command: Option<Vec<PlaceholderString>>,
+    pub working_dir: Option<PlaceholderString>,
+    pub precommand: Option<PlaceholderString>,
+    pub precreate: Option<PlaceholderString>,
     pub activate: Option<bool>,
     pub terminal: Option<bool>,
 }
@@ -194,7 +194,7 @@ pub struct MacOS {
     #[serde(rename = "UTImportedTypeDeclarations")]
     pub ut_imported_type_declarations: Option<Vec<UTTypeDeclarationModel>>,
     pub entitlements: Option<Vec<String>>,
-    pub link_in_bundle: Option<HashMap<String, String>>,
+    pub link_in_bundle: Option<HashMap<PlaceholderString, PlaceholderString>>,
     pub event_handler: Option<String>,
 }
 
@@ -218,12 +218,12 @@ pub struct MenuItem {
 #[serde(deny_unknown_fields)]
 pub struct MenuItemCommand {
     pub name: NameField,
-    pub description: String,
-    pub command: Vec<String>,
+    pub description: PlaceholderString,
+    pub command: Vec<PlaceholderString>,
     pub icon: Option<PlaceholderString>,
-    pub precommand: Option<String>,
-    pub precreate: Option<String>,
-    pub working_dir: Option<String>,
+    pub precommand: Option<PlaceholderString>,
+    pub precreate: Option<PlaceholderString>,
+    pub working_dir: Option<PlaceholderString>,
     pub activate: Option<bool>,
     pub terminal: Option<bool>,
 }

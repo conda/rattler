@@ -16,6 +16,7 @@ use crate::{
     slugify, utils, MenuInstError, MenuMode,
 };
 
+#[derive(Debug)]
 pub struct MacOSMenu {
     name: String,
     prefix: PathBuf,
@@ -25,6 +26,7 @@ pub struct MacOSMenu {
     placeholders: MenuItemPlaceholders,
 }
 
+#[derive(Debug)]
 pub struct Directories {
     /// Path to the .app directory defining the menu item
     location: PathBuf,
@@ -78,7 +80,6 @@ impl MacOSMenu {
         menu_mode: MenuMode,
         placeholders: &BaseMenuItemPlaceholders,
     ) -> Self {
-
         let name = command
             .name
             .resolve(crate::schema::Environment::Base, placeholders)
@@ -120,8 +121,10 @@ impl MacOSMenu {
             .unwrap_or(&HashMap::new())
             .iter()
         {
-            println!("MenuInst: linking {} to {}", src, dest);
-            let rendered_dest = self.directories.location.join(dest);
+            let src = src.resolve(&self.placeholders);
+            let dest = dest.resolve(&self.placeholders);
+            println!("MenuInst: linking {src} to {dest}");
+            let rendered_dest = self.directories.location.join(&dest);
             if !rendered_dest.starts_with(&self.directories.location) {
                 return Err(MenuInstError::InstallError(format!(
                     "'link_in_bundle' destinations MUST be created inside the .app bundle ({}), but it points to '{}'.",
@@ -135,12 +138,11 @@ impl MacOSMenu {
                 fs::create_dir_all(parent)?;
             }
             println!("Dest: {}", rendered_dest.display());
-            assert!(PathBuf::from(src).exists(), "Source file does not exist");
+            assert!(PathBuf::from(&src).exists(), "Source file does not exist");
 
-            fs_err::os::unix::fs::symlink(src, &rendered_dest)?;
+            fs_err::os::unix::fs::symlink(&src, &rendered_dest)?;
             println!(
-                "MenuInst: link finished {} to {}",
-                src,
+                "MenuInst: link finished {src} to {}",
                 rendered_dest.display()
             );
         }
@@ -423,13 +425,14 @@ impl MacOSMenu {
             ]);
         }
 
-        if let Some(working_dir) = &self.command.working_dir {
-            fs::create_dir_all(working_dir).expect("Failed to create working directory");
-            lines.push(format!(r#"cd "{working_dir}""#));
+        if let Some(working_dir) = self.command.working_dir.as_ref() {
+            let working_dir = working_dir.resolve(&self.placeholders);
+            fs::create_dir_all(&working_dir).expect("Failed to create working directory");
+            lines.push(format!("cd \"{working_dir}\""));
         }
 
         if let Some(precommand) = &self.command.precommand {
-            lines.push(precommand.clone());
+            lines.push(precommand.resolve(&self.placeholders));
         }
 
         // if self.command.activate {
@@ -444,7 +447,12 @@ impl MacOSMenu {
         //     lines.push(format!(r#"eval "$("{}" {} "{}")""#, conda_exe, activate,
         // prefix)); }
 
-        lines.push(utils::quote_args(&self.command.command).join(" "));
+        let command = self
+            .command
+            .command
+            .iter()
+            .map(|s| s.resolve(&self.placeholders));
+        lines.push(utils::quote_args(command).join(" "));
 
         lines.join("\n")
     }
@@ -637,6 +645,7 @@ pub(crate) fn install_menu_item(
     menu_mode: MenuMode,
 ) -> Result<(), MenuInstError> {
     let menu = MacOSMenu::new(prefix, macos_item, command, menu_mode, placeholders);
+    println!("Menu: {:?}", menu);
     menu.install()
 }
 
