@@ -14,7 +14,11 @@ impl PlaceholderString {
     }
 }
 
-pub fn resolve(input: &Option<PlaceholderString>, placeholders: impl AsRef<HashMap<String, String>>, default: &str) -> String {
+pub fn resolve(
+    input: &Option<PlaceholderString>,
+    placeholders: impl AsRef<HashMap<String, String>>,
+    default: &str,
+) -> String {
     match input {
         Some(s) => s.resolve(placeholders),
         None => default.to_string(),
@@ -93,6 +97,7 @@ impl BaseMenuItemPlaceholders {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MenuItemPlaceholders {
     placeholders: HashMap<String, String>,
 }

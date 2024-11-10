@@ -101,9 +101,9 @@ pub mod test {
 
     #[test]
     fn test_install_menu_item() {
-        if std::env::var("INSTALL_MENU_ITEM").is_err() {
-            return;
-        }
+        // if std::env::var("INSTALL_MENU_ITEM").is_err() {
+        //     return;
+        // }
         println!("Running test_install_menu_item");
         let test_data = crate::test::test_data();
         let schema_path =
