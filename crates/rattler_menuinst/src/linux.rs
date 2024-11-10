@@ -163,6 +163,29 @@ impl LinuxMenu {
     //         f.write("\n".join(lines))
     //         f.write("\n")
 
+    fn command(&self) -> String {
+        let mut parts = Vec::new();
+        if let Some(pre_command) = &self.command.precommand {
+            parts.push(pre_command.resolve(&self.placeholders));
+        }
+
+        if self.command.activate.unwrap_or(false) {
+            // TODO implement activation here!
+        }
+
+        let command = self
+            .command
+            .command
+            .iter()
+            .map(|s| s.resolve(&self.placeholders))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        parts.push(command);
+
+        return parts.join(" && ");
+    }
+
     fn create_desktop_entry(&self) -> Result<(), MenuInstError> {
         let file = self.location();
         let writer = File::create(file)?;
@@ -172,16 +195,7 @@ impl LinuxMenu {
         writeln!(writer, "Type=Application")?;
         writeln!(writer, "Encoding=UTF-8")?;
         writeln!(writer, "Name={:?}", self.command.name)?;
-        writeln!(
-            writer,
-            "Exec={}",
-            self.command
-                .command
-                .iter()
-                .map(|s| s.resolve(&self.placeholders))
-                .collect::<Vec<_>>()
-                .join(" ")
-        )?;
+        writeln!(writer, "Exec={}", self.command())?;
         writeln!(
             writer,
             "Terminal={}",
