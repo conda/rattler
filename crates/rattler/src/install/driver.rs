@@ -231,7 +231,7 @@ impl InstallDriver {
                         &file,
                         target_prefix,
                         target_prefix,
-                        &Platform::current(),
+                        Platform::current(),
                     )
                     .unwrap_or_else(|e| {
                         tracing::warn!("Failed to install menu item: {} (ignored)", e);

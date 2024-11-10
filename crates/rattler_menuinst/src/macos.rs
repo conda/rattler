@@ -11,7 +11,9 @@ use fs_err::File;
 use plist::Value;
 
 use crate::{
-    render::BaseMenuItemPlaceholders, schema::{MacOS, MenuItemCommand}, slugify, utils, MenuInstError, MenuMode
+    render::{resolve, BaseMenuItemPlaceholders, MenuItemPlaceholders},
+    schema::{MacOS, MenuItemCommand},
+    slugify, utils, MenuInstError, MenuMode,
 };
 
 pub struct MacOSMenu {
@@ -20,6 +22,7 @@ pub struct MacOSMenu {
     item: MacOS,
     command: MenuItemCommand,
     directories: Directories,
+    placeholders: MenuItemPlaceholders,
 }
 
 pub struct Directories {
@@ -72,18 +75,27 @@ impl MacOSMenu {
         prefix: &Path,
         item: MacOS,
         command: MenuItemCommand,
-        directories: Directories,
+        menu_mode: MenuMode,
         placeholders: &BaseMenuItemPlaceholders,
     ) -> Self {
+
+        let name = command
+            .name
+            .resolve(crate::schema::Environment::Base, placeholders)
+            .to_string();
+
+        let bundle_name = format!("{}.app", name);
+        let directories = Directories::new(menu_mode, &bundle_name);
+        println!("Installing menu item for {bundle_name}");
+
+        let refined_placeholders = placeholders.refine(&directories.location);
         Self {
-            name: command
-                .name
-                .resolve(crate::schema::Environment::Base, placeholders)
-                .to_string(),
+            name,
             prefix: prefix.to_path_buf(),
             item,
             command,
             directories,
+            placeholders: refined_placeholders,
         }
     }
 
@@ -126,7 +138,11 @@ impl MacOSMenu {
             assert!(PathBuf::from(src).exists(), "Source file does not exist");
 
             fs_err::os::unix::fs::symlink(src, &rendered_dest)?;
-            println!("MenuInst: link finished {} to {}", src, rendered_dest.display());
+            println!(
+                "MenuInst: link finished {} to {}",
+                src,
+                rendered_dest.display()
+            );
         }
         Ok(())
     }
@@ -134,7 +150,7 @@ impl MacOSMenu {
     pub fn install_icon(&self) -> Result<(), MenuInstError> {
         println!("Installing icon");
         if let Some(icon) = self.command.icon.as_ref() {
-            let icon = PathBuf::from(icon);
+            let icon = PathBuf::from(icon.resolve(&self.placeholders));
             let icon_name = icon.file_name().expect("Failed to get icon name");
             let dest = self.directories.resources().join(icon_name);
             fs::copy(&icon, &dest)?;
@@ -172,9 +188,7 @@ impl MacOSMenu {
 
     fn write_plist_info(&self) -> Result<(), MenuInstError> {
         let name = self.name.clone();
-        println!("Name: {}", name);
         let slugname = slugify(&name);
-        println!("Slugname: {}", slugname);
         let shortname = if slugname.len() > 16 {
             // let hashed = format!("{:x}", Sha256::digest(slugname.as_bytes()));
             let hashed = "123456";
@@ -184,9 +198,16 @@ impl MacOSMenu {
         };
 
         let mut pl = plist::Dictionary::new();
-        pl.insert("CFBundleName".into(), Value::String(shortname));
-        pl.insert("CFBundleDisplayName".into(), Value::String(name));
+
+        let bundle_name = resolve(&self.item.cf_bundle_name, &self.placeholders, &shortname);
+        pl.insert("CFBundleName".into(), Value::String(bundle_name));
+
+        let display_name = resolve(&self.item.cf_bundle_display_name, &self.placeholders, &name);
+        pl.insert("CFBundleDisplayName".into(), Value::String(display_name));
+
+        // This one is _not_ part of the schema, so we just set it
         pl.insert("CFBundleExecutable".into(), Value::String(slugname.clone()));
+
         pl.insert(
             "CFBundleGetInfoString".into(),
             Value::String(format!("{slugname}-1.0.0")),
@@ -203,9 +224,15 @@ impl MacOSMenu {
         );
 
         if let Some(icon) = &self.command.icon {
-            // TODO remove unwrap
-            let icon_name = Path::new(&icon).file_name().unwrap().to_str().unwrap();
-            pl.insert("CFBundleIconFile".into(), Value::String(icon_name.into()));
+            let resolved_icon = icon.resolve(&self.placeholders);
+            if let Some(icon_name) = Path::new(&resolved_icon)
+                .file_name()
+                .and_then(|name| name.to_str())
+            {
+                pl.insert("CFBundleIconFile".into(), Value::String(icon_name.into()));
+            } else {
+                tracing::warn!("Failed to extract icon name from path: {:?}", resolved_icon);
+            }
         }
 
         if self.needs_appkit_launcher() {
@@ -454,9 +481,12 @@ impl MacOSMenu {
 
     fn write_script(&self, script_path: Option<PathBuf>) -> Result<PathBuf, MenuInstError> {
         let script_path = script_path.unwrap_or_else(|| {
-            PathBuf::from(format!("{}-script", self.default_launcher_path().to_string_lossy()))
+            PathBuf::from(format!(
+                "{}-script",
+                self.default_launcher_path().to_string_lossy()
+            ))
         });
-        
+
         let mut file = File::create(&script_path)?;
         file.write_all(self.command().as_bytes())?;
         fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))?;
@@ -606,11 +636,7 @@ pub(crate) fn install_menu_item(
     placeholders: &BaseMenuItemPlaceholders,
     menu_mode: MenuMode,
 ) -> Result<(), MenuInstError> {
-    let bundle_name = format!("{}.app", macos_item.cf_bundle_name.as_ref().unwrap());
-    let directories = Directories::new(menu_mode, &bundle_name);
-
-    println!("Installing menu item for {bundle_name}");
-    let menu = MacOSMenu::new(prefix, macos_item, command, directories, placeholders);
+    let menu = MacOSMenu::new(prefix, macos_item, command, menu_mode, placeholders);
     menu.install()
 }
 

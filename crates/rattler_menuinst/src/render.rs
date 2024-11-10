@@ -1,10 +1,10 @@
 //! This should take a `serde_json` file, render it with all variables and then load it as a `MenuInst` struct
 
 use rattler_conda_types::Platform;
-use std::{collections::HashMap, path::Path};
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, path::Path};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct PlaceholderString(pub String);
 
@@ -14,14 +14,19 @@ impl PlaceholderString {
     }
 }
 
+pub fn resolve(input: &Option<PlaceholderString>, placeholders: impl AsRef<HashMap<String, String>>, default: &str) -> String {
+    match input {
+        Some(s) => s.resolve(placeholders),
+        None => default.to_string(),
+    }
+}
+
 pub struct BaseMenuItemPlaceholders {
     placeholders: HashMap<String, String>,
 }
 
 impl BaseMenuItemPlaceholders {
-    pub fn new(base_prefix: &Path,
-               prefix: &Path,
-               platform: Platform) -> Self {
+    pub fn new(base_prefix: &Path, prefix: &Path, platform: Platform) -> Self {
         let dist_name = |p: &Path| {
             p.parent()
                 .and_then(|p| p.file_name().map(|s| s.to_string_lossy().to_string()))
@@ -75,17 +80,16 @@ impl BaseMenuItemPlaceholders {
         vars.insert("DISTRIBUTION_NAME".to_string(), dist_name(prefix));
         vars.insert("ENV_NAME".to_string(), dist_name(prefix));
 
-        BaseMenuItemPlaceholders {
-            placeholders: vars,
-        }
+        BaseMenuItemPlaceholders { placeholders: vars }
     }
 
     pub fn refine(&self, menu_item_location: &Path) -> MenuItemPlaceholders {
         let mut vars = self.placeholders.clone();
-        vars.insert("MENU_ITEM_LOCATION".to_string(), menu_item_location.to_string_lossy().to_string());
-        MenuItemPlaceholders {
-            placeholders: vars,
-        }
+        vars.insert(
+            "MENU_ITEM_LOCATION".to_string(),
+            menu_item_location.to_string_lossy().to_string(),
+        );
+        MenuItemPlaceholders { placeholders: vars }
     }
 }
 
