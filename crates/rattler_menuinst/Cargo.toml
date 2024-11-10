@@ -18,6 +18,7 @@ shlex = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 rattler_conda_types = { path = "../rattler_conda_types", default-features = false }
+rattler_shell = { path = "../rattler_shell", default-features = false }
 thiserror = { workspace = true }
 unicode-normalization = { workspace = true }
 regex = { workspace = true }

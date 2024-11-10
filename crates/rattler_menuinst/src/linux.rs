@@ -19,6 +19,7 @@ use std::{fs::File, path::PathBuf};
 
 use rattler_conda_types::Platform;
 
+use crate::render::{BaseMenuItemPlaceholders, MenuItemPlaceholders};
 use crate::{
     schema::{Linux, MenuItemCommand},
     MenuInstError, MenuMode,
@@ -29,6 +30,7 @@ pub struct LinuxMenu {
     item: Linux,
     command: MenuItemCommand,
     directories: Directories,
+    placeholders: MenuItemPlaceholders,
 }
 
 pub struct Directories {
@@ -71,15 +73,25 @@ impl Directories {
 }
 
 impl LinuxMenu {
-    fn new(item: Linux, command: MenuItemCommand, mode: MenuMode) -> Self {
+    fn new(
+        item: Linux,
+        command: MenuItemCommand,
+        placeholders: &BaseMenuItemPlaceholders,
+        mode: MenuMode,
+    ) -> Self {
+        let directories = Directories::new(mode);
+        // TODO unsure if this is the right value for MENU_ITEM_LOCATION
+        let refined_placeholders = placeholders.refine(&directories.system_menu_config_location);
+
         LinuxMenu {
             name: command
                 .name
-                .resolve(crate::schema::Environment::Base)
+                .resolve(crate::schema::Environment::Base, &placeholders)
                 .to_string(),
             item,
             command,
-            directories: Directories::new(mode),
+            directories,
+            placeholders: refined_placeholders,
         }
     }
 
@@ -160,7 +172,16 @@ impl LinuxMenu {
         writeln!(writer, "Type=Application")?;
         writeln!(writer, "Encoding=UTF-8")?;
         writeln!(writer, "Name={:?}", self.command.name)?;
-        writeln!(writer, "Exec={}", self.command.command.join(" "))?;
+        writeln!(
+            writer,
+            "Exec={}",
+            self.command
+                .command
+                .iter()
+                .map(|s| s.resolve(&self.placeholders))
+                .collect::<Vec<_>>()
+                .join(" ")
+        )?;
         writeln!(
             writer,
             "Terminal={}",
@@ -168,14 +189,17 @@ impl LinuxMenu {
         )?;
 
         if let Some(icon) = &self.command.icon {
+            let icon = icon.resolve(&self.placeholders);
             writeln!(writer, "Icon={icon}")?;
         }
 
-        if !self.command.description.is_empty() {
-            writeln!(writer, "Comment={}", self.command.description)?;
+        let description = self.command.description.resolve(&self.placeholders);
+        if !description.is_empty() {
+            writeln!(writer, "Comment={}", description)?;
         }
 
         if let Some(working_dir) = &self.command.working_dir {
+            let working_dir = working_dir.resolve(&self.placeholders);
             writeln!(writer, "Path={working_dir}")?;
         }
 
@@ -203,7 +227,7 @@ impl LinuxMenu {
 
     fn install(&self) -> Result<(), MenuInstError> {
         self.pre_create()?;
-
+        self.create_desktop_entry()?;
         Ok(())
     }
 
@@ -215,9 +239,10 @@ impl LinuxMenu {
 pub fn install_menu_item(
     item: Linux,
     command: MenuItemCommand,
+    placeholders: &BaseMenuItemPlaceholders,
     menu_mode: MenuMode,
 ) -> Result<(), MenuInstError> {
-    let menu = LinuxMenu::new(item, command, menu_mode);
+    let menu = LinuxMenu::new(item, command, placeholders, menu_mode);
     menu.install()?;
     println!("{:?}", menu.location());
     println!("{:?}", menu.directories.config_directory);
@@ -334,42 +359,7 @@ pub fn install_menu_item(
 //         let doc =
 // Element::parse(fs::read_to_string(&self.menu_config_location).unwrap().
 // as_bytes()).unwrap();         doc.children.iter().any(|child| {
-//             if let XMLNode::Element(element) = child {
-//                 if element.name == "Menu" {
-//                     if let Some(name_element) = element.get_child("Name") {
-//                         return name_element.get_text() ==
-// Some(Self::render(&self.name, false));                     }
-//                 }
-//             }
-//             false
-//         })
-//     }
-
-//     fn add_this_menu(&self) {
-//         debug!("Editing {:?} to add {} config", self.menu_config_location,
-// Self::render(&self.name, false));         let mut doc =
-// Element::parse(fs::read_to_string(&self.menu_config_location).unwrap().
-// as_bytes()).unwrap();         let mut menu_element = Element::new("Menu");
-//         add_xml_child(&mut menu_element, "Name", Self::render(&self.name,
-// false));         add_xml_child(&mut menu_element, "Directory",
-// format!("{}.directory", Self::render(&self.name, true)));         let mut
-// inc_element = Element::new("Include");         add_xml_child(&mut
-// inc_element, "Category", Self::render(&self.name, false));
-//         menu_element.children.push(XMLNode::Element(inc_element));
-//         doc.children.push(XMLNode::Element(menu_element));
-//         self.write_menu_file(&doc);
-//     }
-
-//     fn is_valid_menu_file(&self) -> bool {
-//         if let Ok(content) = fs::read_to_string(&self.menu_config_location) {
-//             if let Ok(doc) = Element::parse(content.as_bytes()) {
-//                 return doc.name == "Menu";
-//             }
-//         }
-//         false
-//     }
-
-//     fn write_menu_file(&self, doc: &Element) {
+//             if let XMLNode::Element(element) {
 //         debug!("Writing {:?}", self.menu_config_location);
 //         indent_xml_tree(doc);
 //         let mut file = File::create(&self.menu_config_location).unwrap();
