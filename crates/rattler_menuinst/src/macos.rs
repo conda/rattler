@@ -11,8 +11,7 @@ use fs_err::File;
 use plist::Value;
 
 use crate::{
-    schema::{MacOS, MenuItemCommand},
-    slugify, utils, MenuInstError, MenuMode,
+    render::BaseMenuItemPlaceholders, schema::{MacOS, MenuItemCommand}, slugify, utils, MenuInstError, MenuMode
 };
 
 pub struct MacOSMenu {
@@ -74,11 +73,12 @@ impl MacOSMenu {
         item: MacOS,
         command: MenuItemCommand,
         directories: Directories,
+        placeholders: &BaseMenuItemPlaceholders,
     ) -> Self {
         Self {
             name: command
                 .name
-                .resolve(crate::schema::Environment::Base)
+                .resolve(crate::schema::Environment::Base, placeholders)
                 .to_string(),
             prefix: prefix.to_path_buf(),
             item,
@@ -600,14 +600,17 @@ impl MacOSMenu {
 }
 
 pub(crate) fn install_menu_item(
+    prefix: &Path,
     macos_item: MacOS,
     command: MenuItemCommand,
+    placeholders: &BaseMenuItemPlaceholders,
     menu_mode: MenuMode,
 ) -> Result<(), MenuInstError> {
     let bundle_name = format!("{}.app", macos_item.cf_bundle_name.as_ref().unwrap());
     let directories = Directories::new(menu_mode, &bundle_name);
+
     println!("Installing menu item for {bundle_name}");
-    let menu = MacOSMenu::new(prefix, macos_item, command, directories);
+    let menu = MacOSMenu::new(prefix, macos_item, command, directories, placeholders);
     menu.install()
 }
 
