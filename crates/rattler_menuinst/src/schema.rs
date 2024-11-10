@@ -16,7 +16,7 @@ pub struct MenuItemNameDict {
 pub struct BasePlatformSpecific {
     pub name: Option<NameField>,
     pub description: Option<String>,
-    pub icon: Option<String>,
+    pub icon: Option<PlaceholderString>,
     pub command: Option<Vec<String>>,
     pub working_dir: Option<String>,
     pub precommand: Option<String>,
@@ -117,56 +117,56 @@ pub struct Linux {
 #[serde(deny_unknown_fields)]
 pub struct CFBundleURLTypesModel {
     #[serde(rename = "CFBundleTypeRole")]
-    cf_bundle_type_role: Option<String>,
+    cf_bundle_type_role: Option<PlaceholderString>,
     #[serde(rename = "CFBundleURLSchemes")]
-    cf_bundle_url_schemes: Vec<String>,
+    cf_bundle_url_schemes: Vec<PlaceholderString>,
     #[serde(rename = "CFBundleURLName")]
-    cf_bundle_url_name: Option<String>,
+    cf_bundle_url_name: Option<PlaceholderString>,
     #[serde(rename = "CFBundleURLIconFile")]
-    cf_bundle_url_icon_file: Option<String>,
+    cf_bundle_url_icon_file: Option<PlaceholderString>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct CFBundleDocumentTypesModel {
     #[serde(rename = "CFBundleTypeIconFile")]
-    cf_bundle_type_icon_file: Option<String>,
+    cf_bundle_type_icon_file: Option<PlaceholderString>,
     #[serde(rename = "CFBundleTypeName")]
-    cf_bundle_type_name: String,
+    cf_bundle_type_name: PlaceholderString,
     #[serde(rename = "CFBundleTypeRole")]
-    cf_bundle_type_role: Option<String>,
+    cf_bundle_type_role: Option<PlaceholderString>,
     #[serde(rename = "LSItemContentTypes")]
-    ls_item_content_types: Vec<String>,
+    ls_item_content_types: Vec<PlaceholderString>,
     #[serde(rename = "LSHandlerRank")]
-    ls_handler_rank: String,
+    ls_handler_rank: PlaceholderString,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct UTTypeDeclarationModel {
     #[serde(rename = "UTTypeConformsTo")]
-    ut_type_conforms_to: Vec<String>,
+    ut_type_conforms_to: Vec<PlaceholderString>,
     #[serde(rename = "UTTypeDescription")]
-    ut_type_description: Option<String>,
+    ut_type_description: Option<PlaceholderString>,
     #[serde(rename = "UTTypeIconFile")]
-    ut_type_icon_file: Option<String>,
+    ut_type_icon_file: Option<PlaceholderString>,
     #[serde(rename = "UTTypeIdentifier")]
-    ut_type_identifier: String,
+    ut_type_identifier: PlaceholderString,
     #[serde(rename = "UTTypeReferenceURL")]
-    ut_type_reference_url: Option<String>,
+    ut_type_reference_url: Option<PlaceholderString>,
     #[serde(rename = "UTTypeTagSpecification")]
-    ut_type_tag_specification: HashMap<String, Vec<String>>,
+    ut_type_tag_specification: HashMap<PlaceholderString, Vec<PlaceholderString>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct MacOS {
     #[serde(rename = "CFBundleDisplayName")]
-    pub cf_bundle_display_name: Option<String>,
+    pub cf_bundle_display_name: Option<PlaceholderString>,
     #[serde(rename = "CFBundleIdentifier")]
-    pub cf_bundle_identifier: Option<String>,
+    pub cf_bundle_identifier: Option<PlaceholderString>,
     #[serde(rename = "CFBundleName")]
-    pub cf_bundle_name: Option<String>,
+    pub cf_bundle_name: Option<PlaceholderString>,
     #[serde(rename = "CFBundleSpokenName")]
     pub cf_bundle_spoken_name: Option<String>,
     #[serde(rename = "CFBundleVersion")]
@@ -220,7 +220,7 @@ pub struct MenuItemCommand {
     pub name: NameField,
     pub description: String,
     pub command: Vec<String>,
-    pub icon: Option<String>,
+    pub icon: Option<PlaceholderString>,
     pub precommand: Option<String>,
     pub precreate: Option<String>,
     pub working_dir: Option<String>,
@@ -263,9 +263,9 @@ pub struct MenuInstSchema {
 
 #[cfg(test)]
 mod test {
-    use std::path::{Path, PathBuf};
-    use rattler_conda_types::Platform;
     use crate::render::BaseMenuItemPlaceholders;
+    use rattler_conda_types::Platform;
+    use std::path::{Path, PathBuf};
 
     pub(crate) fn test_data() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/menuinst")
@@ -311,11 +311,13 @@ mod test {
         let placeholders = BaseMenuItemPlaceholders::new(
             Path::new("base_prefix"),
             Path::new("prefix"),
-            Platform::Linux64
+            Platform::Linux64,
         );
 
         assert_eq!(
-            command.name.resolve(super::Environment::Base, &placeholders),
+            command
+                .name
+                .resolve(super::Environment::Base, &placeholders),
             "Spyder 6 ({{ DISTRIBUTION_NAME }})"
         );
 

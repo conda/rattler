@@ -62,7 +62,13 @@ pub fn install_menuitems(
             #[cfg(target_os = "macos")]
             if let Some(macos_item) = item.platforms.osx {
                 let command = item.command.merge(macos_item.base);
-                macos::install_menu_item(prefix, macos_item.specific, command, &placeholders, MenuMode::System)?;
+                macos::install_menu_item(
+                    prefix,
+                    macos_item.specific,
+                    command,
+                    &placeholders,
+                    MenuMode::System,
+                )?;
             }
         } else if platform.is_windows() {
             #[cfg(target_os = "windows")]
@@ -100,7 +106,8 @@ pub mod test {
         }
         println!("Running test_install_menu_item");
         let test_data = crate::test::test_data();
-        let schema_path = test_data.join("/Users/wolfv/Programs/rattler/.prefix/Menu/napari-menu.json");
+        let schema_path =
+            test_data.join("/Users/wolfv/Programs/rattler/.prefix/Menu/napari-menu.json");
 
         let prefix = schema_path.parent().unwrap().parent().unwrap();
         let prefix = std::fs::canonicalize(prefix).unwrap();
