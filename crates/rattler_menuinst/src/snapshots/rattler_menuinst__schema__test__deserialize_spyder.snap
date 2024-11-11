@@ -5,273 +5,528 @@ expression: schema
 MenuInstSchema {
     id: "https://schemas.conda.io/menuinst-1.schema.json",
     schema: "https://json-schema.org/draft-07/schema",
-    menu_name: "superspyder",
+    menu_name: "{{ DISTRIBUTION_NAME }} spyder",
     menu_items: [
         MenuItem {
-            name: Complex(
-                NameComplex {
-                    target_environment_is_base: "superspyder 1.2 (base)",
-                    target_environment_is_not_base: "superspyder 1.2 ({{ ENV_NAME }})",
-                },
-            ),
-            description: "Scientific PYthon Development EnviRonment",
-            command: [
-                "",
-            ],
-            icon: Some(
-                "{{ MENU_DIR }}/superspyder.{{ ICON_EXT }}",
-            ),
-            precommand: None,
-            precreate: None,
-            working_dir: None,
-            activate: Some(
-                false,
-            ),
-            terminal: Some(
-                false,
-            ),
+            command: MenuItemCommand {
+                name: Complex(
+                    NameComplex {
+                        target_environment_is_base: PlaceholderString(
+                            "Spyder 6 ({{ DISTRIBUTION_NAME }})",
+                        ),
+                        target_environment_is_not_base: PlaceholderString(
+                            "Spyder 6 ({{ ENV_NAME }})",
+                        ),
+                    },
+                ),
+                description: PlaceholderString(
+                    "Scientific PYthon Development EnviRonment",
+                ),
+                command: [
+                    PlaceholderString(
+                        "",
+                    ),
+                ],
+                icon: Some(
+                    PlaceholderString(
+                        "{{ MENU_DIR }}/spyder.{{ ICON_EXT }}",
+                    ),
+                ),
+                precommand: None,
+                precreate: None,
+                working_dir: None,
+                activate: Some(
+                    false,
+                ),
+                terminal: Some(
+                    false,
+                ),
+            },
             platforms: Platforms {
                 linux: Some(
-                    Linux {
+                    Platform {
                         base: BasePlatformSpecific {
                             name: None,
-                            description: "",
+                            description: None,
                             icon: None,
-                            command: [
-                                "{{ PREFIX }}/bin/spyder",
-                                "%F",
-                            ],
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "{{ PREFIX }}/bin/spyder",
+                                    ),
+                                    PlaceholderString(
+                                        "%F",
+                                    ),
+                                ],
+                            ),
                             working_dir: None,
                             precommand: None,
                             precreate: None,
                             activate: None,
                             terminal: None,
                         },
-                        categories: Some(
-                            [
-                                "Development",
-                                "Science",
-                            ],
-                        ),
-                        dbus_activatable: None,
-                        generic_name: None,
-                        hidden: None,
-                        implements: None,
-                        keywords: None,
-                        mime_type: Some(
-                            [
-                                "text/x-python",
-                            ],
-                        ),
-                        no_display: None,
-                        not_show_in: None,
-                        only_show_in: None,
-                        prefers_non_default_gpu: None,
-                        startup_notify: None,
-                        startup_wm_class: Some(
-                            "Spyder-__PKG_MAJOR_VER__.{{ ENV_NAME }}",
-                        ),
-                        try_exec: None,
-                        glob_patterns: None,
+                        specific: Linux {
+                            categories: Some(
+                                [
+                                    PlaceholderString(
+                                        "Development",
+                                    ),
+                                    PlaceholderString(
+                                        "Science",
+                                    ),
+                                ],
+                            ),
+                            dbus_activatable: None,
+                            generic_name: None,
+                            hidden: None,
+                            implements: None,
+                            keywords: None,
+                            mime_type: Some(
+                                [
+                                    PlaceholderString(
+                                        "text/x-python",
+                                    ),
+                                ],
+                            ),
+                            no_display: None,
+                            not_show_in: None,
+                            only_show_in: None,
+                            prefers_non_default_gpu: None,
+                            startup_notify: None,
+                            startup_wm_class: Some(
+                                PlaceholderString(
+                                    "Spyder-6.{{ ENV_NAME }}",
+                                ),
+                            ),
+                            try_exec: None,
+                            glob_patterns: None,
+                        },
                     },
                 ),
                 osx: Some(
-                    MacOS {
+                    Platform {
                         base: BasePlatformSpecific {
                             name: None,
-                            description: "",
+                            description: None,
                             icon: None,
-                            command: [
-                                "./python",
-                                "{{ PREFIX }}/bin/spyder",
-                                "$@",
-                            ],
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "./python",
+                                    ),
+                                    PlaceholderString(
+                                        "{{ PREFIX }}/bin/spyder",
+                                    ),
+                                    PlaceholderString(
+                                        "$@",
+                                    ),
+                                ],
+                            ),
                             working_dir: None,
                             precommand: Some(
-                                "pushd \"$(dirname \"$0\")\" &>/dev/null",
+                                PlaceholderString(
+                                    "pushd \"$(dirname \"$0\")\" &>/dev/null",
+                                ),
                             ),
                             precreate: None,
                             activate: None,
                             terminal: None,
                         },
-                        cf_bundle_display_name: None,
-                        cf_bundle_identifier: Some(
-                            "org.superspyder-ide.Superspyder-__PKG_MAJOR_VER__-__CFBID_ENV__",
-                        ),
-                        cf_bundle_name: Some(
-                            "Superspyder __PKG_MAJOR_VER__",
-                        ),
-                        cf_bundle_spoken_name: None,
-                        cf_bundle_version: Some(
-                            "__PKG_VERSION__",
-                        ),
-                        cf_bundle_url_types: None,
-                        cf_bundle_document_types: Some(
-                            [
-                                CFBundleDocumentTypesModel {
-                                    cf_bundle_type_icon_file: Some(
-                                        "superspyder.icns",
+                        specific: MacOS {
+                            cf_bundle_display_name: None,
+                            cf_bundle_identifier: Some(
+                                PlaceholderString(
+                                    "org.spyder-ide.Spyder-6-.prefix",
+                                ),
+                            ),
+                            cf_bundle_name: Some(
+                                PlaceholderString(
+                                    "Spyder 6",
+                                ),
+                            ),
+                            cf_bundle_spoken_name: None,
+                            cf_bundle_version: Some(
+                                PlaceholderString(
+                                    "6.0.2",
+                                ),
+                            ),
+                            cf_bundle_url_types: None,
+                            cf_bundle_document_types: Some(
+                                [
+                                    CFBundleDocumentTypesModel {
+                                        cf_bundle_type_name: PlaceholderString(
+                                            "text document",
+                                        ),
+                                        cf_bundle_type_icon_file: Some(
+                                            PlaceholderString(
+                                                "spyder.icns",
+                                            ),
+                                        ),
+                                        cf_bundle_type_role: Some(
+                                            "Editor",
+                                        ),
+                                        ls_item_content_types: [
+                                            PlaceholderString(
+                                                "com.apple.applescript.text",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.ascii-property-list",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.audio-unit-preset",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.binary-property-list",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.configprofile",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.crashreport",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.dashcode.css",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.dashcode.javascript",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.dashcode.json",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.dashcode.manifest",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.dt.document.ascii-property-list",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.dt.document.script-suite-property-list",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.dt.document.script-terminology-property-list",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.property-list",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.rez-source",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.scripting-definition",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.structured-text",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.traditional-mac-plain-text",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.ada-source",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.apinotes",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.bash-script",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.configsettings",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.csh-script",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.entitlements-property-list",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.fortran-source",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.glsl-source",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.ksh-script",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.lex-source",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.make-script",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.mig-source",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.pascal-source",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.strings-text",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.tcsh-script",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.yacc-source",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xcode.zsh-script",
+                                            ),
+                                            PlaceholderString(
+                                                "com.apple.xml-property-list",
+                                            ),
+                                            PlaceholderString(
+                                                "com.netscape.javascript-source",
+                                            ),
+                                            PlaceholderString(
+                                                "com.scenarist.closed-caption",
+                                            ),
+                                            PlaceholderString(
+                                                "com.sun.java-source",
+                                            ),
+                                            PlaceholderString(
+                                                "com.sun.java-web-start",
+                                            ),
+                                            PlaceholderString(
+                                                "net.daringfireball.markdown",
+                                            ),
+                                            PlaceholderString(
+                                                "org.khronos.glsl-source",
+                                            ),
+                                            PlaceholderString(
+                                                "org.oasis-open.xliff",
+                                            ),
+                                            PlaceholderString(
+                                                "public.ada-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.assembly-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.bash-script",
+                                            ),
+                                            PlaceholderString(
+                                                "public.c-header",
+                                            ),
+                                            PlaceholderString(
+                                                "public.c-plus-plus-header",
+                                            ),
+                                            PlaceholderString(
+                                                "public.c-plus-plus-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.c-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.case-insensitive-text",
+                                            ),
+                                            PlaceholderString(
+                                                "public.comma-separated-values-text",
+                                            ),
+                                            PlaceholderString(
+                                                "public.csh-script",
+                                            ),
+                                            PlaceholderString(
+                                                "public.css",
+                                            ),
+                                            PlaceholderString(
+                                                "public.delimited-values-text",
+                                            ),
+                                            PlaceholderString(
+                                                "public.dylan-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.filename-extension",
+                                            ),
+                                            PlaceholderString(
+                                                "public.fortran-77-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.fortran-90-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.fortran-95-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.fortran-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.html",
+                                            ),
+                                            PlaceholderString(
+                                                "public.json",
+                                            ),
+                                            PlaceholderString(
+                                                "public.ksh-script",
+                                            ),
+                                            PlaceholderString(
+                                                "public.lex-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.log",
+                                            ),
+                                            PlaceholderString(
+                                                "public.m3u-playlist",
+                                            ),
+                                            PlaceholderString(
+                                                "public.make-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.mig-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.mime-type",
+                                            ),
+                                            PlaceholderString(
+                                                "public.module-map",
+                                            ),
+                                            PlaceholderString(
+                                                "public.nasm-assembly-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.objective-c-plus-plus-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.objective-c-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.opencl-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.pascal-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.patch-file",
+                                            ),
+                                            PlaceholderString(
+                                                "public.perl-script",
+                                            ),
+                                            PlaceholderString(
+                                                "public.php-script",
+                                            ),
+                                            PlaceholderString(
+                                                "public.plain-text",
+                                            ),
+                                            PlaceholderString(
+                                                "public.python-script",
+                                            ),
+                                            PlaceholderString(
+                                                "public.rss",
+                                            ),
+                                            PlaceholderString(
+                                                "public.ruby-script",
+                                            ),
+                                            PlaceholderString(
+                                                "public.script",
+                                            ),
+                                            PlaceholderString(
+                                                "public.shell-script",
+                                            ),
+                                            PlaceholderString(
+                                                "public.source-code",
+                                            ),
+                                            PlaceholderString(
+                                                "public.tcsh-script",
+                                            ),
+                                            PlaceholderString(
+                                                "public.text",
+                                            ),
+                                            PlaceholderString(
+                                                "public.utf16-external-plain-text",
+                                            ),
+                                            PlaceholderString(
+                                                "public.utf16-plain-text",
+                                            ),
+                                            PlaceholderString(
+                                                "public.utf8-plain-text",
+                                            ),
+                                            PlaceholderString(
+                                                "public.utf8-tab-separated-values-text",
+                                            ),
+                                            PlaceholderString(
+                                                "public.xhtml",
+                                            ),
+                                            PlaceholderString(
+                                                "public.xml",
+                                            ),
+                                            PlaceholderString(
+                                                "public.yacc-source",
+                                            ),
+                                            PlaceholderString(
+                                                "public.yaml",
+                                            ),
+                                            PlaceholderString(
+                                                "public.zsh-script",
+                                            ),
+                                        ],
+                                        ls_handler_rank: "Default",
+                                    },
+                                ],
+                            ),
+                            ls_application_category_type: None,
+                            ls_background_only: None,
+                            ls_environment: None,
+                            ls_minimum_system_version: None,
+                            ls_multiple_instances_prohibited: None,
+                            ls_requires_native_execution: None,
+                            ut_exported_type_declarations: None,
+                            ut_imported_type_declarations: None,
+                            entitlements: None,
+                            link_in_bundle: Some(
+                                {
+                                    PlaceholderString(
+                                        "{{ PREFIX }}/bin/python",
+                                    ): PlaceholderString(
+                                        "{{ MENU_ITEM_LOCATION }}/Contents/MacOS/python",
                                     ),
-                                    cf_bundle_type_name: "text document",
-                                    cf_bundle_type_role: Some(
-                                        "Editor",
-                                    ),
-                                    ls_item_content_types: [
-                                        "com.apple.applescript.text",
-                                        "com.apple.ascii-property-list",
-                                        "com.apple.audio-unit-preset",
-                                        "com.apple.binary-property-list",
-                                        "com.apple.configprofile",
-                                        "com.apple.crashreport",
-                                        "com.apple.dashcode.css",
-                                        "com.apple.dashcode.javascript",
-                                        "com.apple.dashcode.json",
-                                        "com.apple.dashcode.manifest",
-                                        "com.apple.dt.document.ascii-property-list",
-                                        "com.apple.dt.document.script-suite-property-list",
-                                        "com.apple.dt.document.script-terminology-property-list",
-                                        "com.apple.property-list",
-                                        "com.apple.rez-source",
-                                        "com.apple.scripting-definition",
-                                        "com.apple.structured-text",
-                                        "com.apple.traditional-mac-plain-text",
-                                        "com.apple.xcode.ada-source",
-                                        "com.apple.xcode.apinotes",
-                                        "com.apple.xcode.bash-script",
-                                        "com.apple.xcode.configsettings",
-                                        "com.apple.xcode.csh-script",
-                                        "com.apple.xcode.entitlements-property-list",
-                                        "com.apple.xcode.fortran-source",
-                                        "com.apple.xcode.glsl-source",
-                                        "com.apple.xcode.ksh-script",
-                                        "com.apple.xcode.lex-source",
-                                        "com.apple.xcode.make-script",
-                                        "com.apple.xcode.mig-source",
-                                        "com.apple.xcode.pascal-source",
-                                        "com.apple.xcode.strings-text",
-                                        "com.apple.xcode.tcsh-script",
-                                        "com.apple.xcode.yacc-source",
-                                        "com.apple.xcode.zsh-script",
-                                        "com.apple.xml-property-list",
-                                        "com.netscape.javascript-source",
-                                        "com.scenarist.closed-caption",
-                                        "com.sun.java-source",
-                                        "com.sun.java-web-start",
-                                        "net.daringfireball.markdown",
-                                        "org.khronos.glsl-source",
-                                        "org.oasis-open.xliff",
-                                        "public.ada-source",
-                                        "public.assembly-source",
-                                        "public.bash-script",
-                                        "public.c-header",
-                                        "public.c-plus-plus-header",
-                                        "public.c-plus-plus-source",
-                                        "public.c-source",
-                                        "public.case-insensitive-text",
-                                        "public.comma-separated-values-text",
-                                        "public.csh-script",
-                                        "public.css",
-                                        "public.delimited-values-text",
-                                        "public.dylan-source",
-                                        "public.filename-extension",
-                                        "public.fortran-77-source",
-                                        "public.fortran-90-source",
-                                        "public.fortran-95-source",
-                                        "public.fortran-source",
-                                        "public.html",
-                                        "public.json",
-                                        "public.ksh-script",
-                                        "public.lex-source",
-                                        "public.log",
-                                        "public.m3u-playlist",
-                                        "public.make-source",
-                                        "public.mig-source",
-                                        "public.mime-type",
-                                        "public.module-map",
-                                        "public.nasm-assembly-source",
-                                        "public.objective-c-plus-plus-source",
-                                        "public.objective-c-source",
-                                        "public.opencl-source",
-                                        "public.pascal-source",
-                                        "public.patch-file",
-                                        "public.perl-script",
-                                        "public.php-script",
-                                        "public.plain-text",
-                                        "public.python-script",
-                                        "public.rss",
-                                        "public.ruby-script",
-                                        "public.script",
-                                        "public.shell-script",
-                                        "public.source-code",
-                                        "public.tcsh-script",
-                                        "public.text",
-                                        "public.utf16-external-plain-text",
-                                        "public.utf16-plain-text",
-                                        "public.utf8-plain-text",
-                                        "public.utf8-tab-separated-values-text",
-                                        "public.xhtml",
-                                        "public.xml",
-                                        "public.yacc-source",
-                                        "public.yaml",
-                                        "public.zsh-script",
-                                    ],
-                                    ls_handler_rank: "Default",
                                 },
-                            ],
-                        ),
-                        ls_application_category_type: None,
-                        ls_background_only: None,
-                        ls_environment: None,
-                        ls_minimum_system_version: None,
-                        ls_multiple_instances_prohibited: None,
-                        ls_requires_native_execution: None,
-                        ns_supports_automatic_graphics_switching: None,
-                        ut_exported_type_declarations: None,
-                        ut_imported_type_declarations: None,
-                        entitlements: None,
-                        link_in_bundle: Some(
-                            {
-                                "{{ PREFIX }}/bin/python": "{{ MENU_ITEM_LOCATION }}/Contents/MacOS/python",
-                            },
-                        ),
-                        event_handler: None,
+                            ),
+                            event_handler: None,
+                        },
                     },
                 ),
                 win: Some(
-                    Windows {
+                    Platform {
                         base: BasePlatformSpecific {
                             name: None,
-                            description: "",
+                            description: None,
                             icon: None,
-                            command: [
-                                "{{ PREFIX }}/Scripts/superspyder.exe",
-                                "%*",
-                            ],
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "{{ PREFIX }}/Scripts/spyder.exe",
+                                    ),
+                                    PlaceholderString(
+                                        "%*",
+                                    ),
+                                ],
+                            ),
                             working_dir: None,
                             precommand: None,
                             precreate: None,
                             activate: None,
                             terminal: None,
                         },
-                        desktop: Some(
-                            true,
-                        ),
-                        quicklaunch: None,
-                        terminal_profile: None,
-                        url_protocols: None,
-                        file_extensions: Some(
-                            [
-                                ".enaml",
-                                ".ipy",
-                                ".py",
-                                ".pyi",
-                                ".pyw",
-                                ".pyx",
-                            ],
-                        ),
-                        app_user_model_id: Some(
-                            "superspyder-ide.superspyder-__PKG_MAJOR_VER__.{{ ENV_NAME }}",
-                        ),
+                        specific: Windows {
+                            desktop: Some(
+                                true,
+                            ),
+                            quicklaunch: None,
+                            terminal_profile: None,
+                            url_protocols: None,
+                            file_extensions: Some(
+                                [
+                                    ".enaml",
+                                    ".ipy",
+                                    ".py",
+                                    ".pyi",
+                                    ".pyw",
+                                    ".pyx",
+                                ],
+                            ),
+                            app_user_model_id: Some(
+                                "spyder-ide.Spyder-6.{{ ENV_NAME }}",
+                            ),
+                        },
                     },
                 ),
             },

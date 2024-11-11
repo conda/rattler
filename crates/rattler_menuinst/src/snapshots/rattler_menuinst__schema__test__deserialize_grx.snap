@@ -8,92 +8,126 @@ MenuInstSchema {
     menu_name: "{{ DISTRIBUTION_NAME }}",
     menu_items: [
         MenuItem {
-            name: "gqrx",
-            description: "Software defined radio",
-            command: [
-                "{{ PREFIX }}/Library/bin/gqrx.exe",
-                "--edit",
-            ],
-            icon: Some(
-                "{{ MENU_DIR }}/gqrx.{{ ICON_EXT }}",
-            ),
-            precommand: None,
-            precreate: None,
-            working_dir: None,
-            activate: None,
-            terminal: None,
+            command: MenuItemCommand {
+                name: Simple(
+                    PlaceholderString(
+                        "gqrx",
+                    ),
+                ),
+                description: PlaceholderString(
+                    "Software defined radio",
+                ),
+                command: [
+                    PlaceholderString(
+                        "{{ PREFIX }}/Library/bin/gqrx.exe",
+                    ),
+                    PlaceholderString(
+                        "--edit",
+                    ),
+                ],
+                icon: Some(
+                    PlaceholderString(
+                        "{{ MENU_DIR }}/gqrx.{{ ICON_EXT }}",
+                    ),
+                ),
+                precommand: None,
+                precreate: None,
+                working_dir: None,
+                activate: None,
+                terminal: None,
+            },
             platforms: Platforms {
                 linux: None,
                 osx: None,
                 win: Some(
-                    Windows {
+                    Platform {
                         base: BasePlatformSpecific {
-                            name: "",
-                            description: "",
+                            name: None,
+                            description: None,
                             icon: None,
-                            command: [],
+                            command: None,
                             working_dir: None,
                             precommand: None,
                             precreate: None,
                             activate: None,
                             terminal: None,
                         },
-                        desktop: Some(
-                            false,
-                        ),
-                        quicklaunch: Some(
-                            false,
-                        ),
-                        terminal_profile: None,
-                        url_protocols: None,
-                        file_extensions: None,
-                        app_user_model_id: None,
+                        specific: Windows {
+                            desktop: Some(
+                                false,
+                            ),
+                            quicklaunch: Some(
+                                false,
+                            ),
+                            terminal_profile: None,
+                            url_protocols: None,
+                            file_extensions: None,
+                            app_user_model_id: None,
+                        },
                     },
                 ),
             },
         },
         MenuItem {
-            name: "gqrx [reset]",
-            description: "Software defined radio [reset settings]",
-            command: [
-                "{{ PREFIX }}/Library/bin/gqrx.exe",
-                "--reset",
-                "--edit",
-            ],
-            icon: Some(
-                "{{ MENU_DIR }}/gqrx.{{ ICON_EXT }}",
-            ),
-            precommand: None,
-            precreate: None,
-            working_dir: None,
-            activate: None,
-            terminal: None,
+            command: MenuItemCommand {
+                name: Simple(
+                    PlaceholderString(
+                        "gqrx [reset]",
+                    ),
+                ),
+                description: PlaceholderString(
+                    "Software defined radio [reset settings]",
+                ),
+                command: [
+                    PlaceholderString(
+                        "{{ PREFIX }}/Library/bin/gqrx.exe",
+                    ),
+                    PlaceholderString(
+                        "--reset",
+                    ),
+                    PlaceholderString(
+                        "--edit",
+                    ),
+                ],
+                icon: Some(
+                    PlaceholderString(
+                        "{{ MENU_DIR }}/gqrx.{{ ICON_EXT }}",
+                    ),
+                ),
+                precommand: None,
+                precreate: None,
+                working_dir: None,
+                activate: None,
+                terminal: None,
+            },
             platforms: Platforms {
                 linux: None,
                 osx: None,
                 win: Some(
-                    Windows {
+                    Platform {
                         base: BasePlatformSpecific {
-                            name: "",
-                            description: "",
+                            name: None,
+                            description: None,
                             icon: None,
-                            command: [],
+                            command: None,
                             working_dir: None,
                             precommand: None,
                             precreate: None,
                             activate: None,
                             terminal: None,
                         },
-                        desktop: Some(
-                            false,
-                        ),
-                        quicklaunch: Some(
-                            false,
-                        ),
-                        terminal_profile: None,
-                        url_protocols: None,
-                        file_extensions: None,
-                        app_user_model_id: None,
+                        specific: Windows {
+                            desktop: Some(
+                                false,
+                            ),
+                            quicklaunch: Some(
+                                false,
+                            ),
+                            terminal_profile: None,
+                            url_protocols: None,
+                            file_extensions: None,
+                            app_user_model_id: None,
+                        },
                     },
                 ),
             },

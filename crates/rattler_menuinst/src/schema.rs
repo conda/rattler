@@ -11,17 +11,59 @@ pub struct MenuItemNameDict {
     target_environment_is_not_base: Option<String>,
 }
 
+/// A platform-specific menu item configuration.
+///
+/// This is equivalent to `MenuItem` but without `platforms` field and all fields are optional.
+/// All fields default to `None`.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct BasePlatformSpecific {
+    /// The name of the menu item.
+    ///
+    /// Must be at least 1 character long.
     pub name: Option<NameField>,
+
+    /// A longer description of the menu item.
+    ///
+    /// Displayed in popup messages.
     pub description: Option<PlaceholderString>,
+
+    /// Path to the file representing or containing the icon.
+    ///
+    /// Must be at least 1 character long.
     pub icon: Option<PlaceholderString>,
+
+    /// Command to run with the menu item.
+    ///
+    /// Represented as a list of strings where each string is an argument.
+    /// Must contain at least one item.
     pub command: Option<Vec<PlaceholderString>>,
+
+    /// Working directory for the running process.
+    ///
+    /// Defaults to user directory on each platform.
+    /// Must be at least 1 character long.
     pub working_dir: Option<PlaceholderString>,
+
+    /// Logic to run before the command is executed.
+    ///
+    /// Runs before the env is activated, if applicable.
+    /// Should be simple, preferably single-line.
     pub precommand: Option<PlaceholderString>,
+
+    /// Logic to run before the shortcut is created.
+    ///
+    /// Should be simple, preferably single-line.
     pub precreate: Option<PlaceholderString>,
+
+    /// Whether to activate the target environment before running `command`.
     pub activate: Option<bool>,
+
+    /// Whether to run the program in a terminal/console.
+    ///
+    /// ### Platform-specific behavior
+    /// - Windows: Only has an effect if `activate` is true
+    /// - MacOS: The application will ignore command-line arguments
     pub terminal: Option<bool>,
 }
 
@@ -68,15 +110,50 @@ pub enum Environment {
     NotBase,
 }
 
+/// Windows-specific instructions for menu item configuration.
+/// 
+/// Allows overriding global keys for Windows-specific behavior.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Windows {
-    desktop: Option<bool>,
-    quicklaunch: Option<bool>,
-    terminal_profile: Option<String>,
-    url_protocols: Option<Vec<String>>,
-    file_extensions: Option<Vec<String>>,
-    app_user_model_id: Option<String>,
+    /// Whether to create a desktop icon in addition to the Start Menu item.
+    /// 
+    /// Defaults to `true` in the original implementation.
+    pub desktop: Option<bool>,
+
+    /// Whether to create a quick launch icon in addition to the Start Menu item.
+    /// 
+    /// Defaults to `true` in the original implementation.
+    pub quicklaunch: Option<bool>,
+
+    /// Windows Terminal profile configuration.
+    pub terminal_profile: Option<String>,
+
+    /// URL protocols that will be associated with this program.
+    /// 
+    /// Each protocol must contain no whitespace characters.
+    pub url_protocols: Option<Vec<String>>,
+
+    /// File extensions that will be associated with this program.
+    /// 
+    /// Each extension must start with a dot and contain no whitespace.
+    pub file_extensions: Option<Vec<String>>,
+
+    /// Application User Model ID for Windows 7 and above.
+    /// 
+    /// Used to associate processes, files and windows with a particular application.
+    /// Required when shortcut produces duplicated icons.
+    /// 
+    /// # Format
+    /// - Must contain at least two segments separated by dots
+    /// - Maximum length of 128 characters
+    /// - No whitespace allowed
+    /// 
+    /// # Default
+    /// If not set, defaults to `Menuinst.<name>`
+    /// 
+    /// For more information, see [Microsoft's AppUserModelID documentation](https://learn.microsoft.com/en-us/windows/win32/shell/appids#how-to-form-an-application-defined-appusermodelid)
+    pub app_user_model_id: Option<String>,
 }
 
 /// Linux-specific instructions.
@@ -356,21 +433,65 @@ pub struct MenuItem {
     pub platforms: Platforms,
 }
 
+/// Instructions to create a menu item across operating systems.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct MenuItemCommand {
+    /// The name of the menu item.
+    ///
+    /// Must be at least 1 character long.
     pub name: NameField,
+
+    /// A longer description of the menu item.
+    ///
+    /// Displayed in popup messages.
     pub description: PlaceholderString,
+
+    /// Command to run with the menu item.
+    ///
+    /// Represented as a list of strings where each string is an argument.
+    /// Must contain at least one item.
     pub command: Vec<PlaceholderString>,
+
+    /// Path to the file representing or containing the icon.
+    ///
+    /// Must be at least 1 character long when provided.
     pub icon: Option<PlaceholderString>,
+
+    /// Logic to run before the command is executed.
+    ///
+    /// Should be simple, preferably single-line.
+    /// Runs before the environment is activated, if applicable.
     pub precommand: Option<PlaceholderString>,
+
+    /// Logic to run before the shortcut is created.
+    ///
+    /// Should be simple, preferably single-line.
     pub precreate: Option<PlaceholderString>,
+
+    /// Working directory for the running process.
+    ///
+    /// Defaults to user directory on each platform.
+    /// Must be at least 1 character long when provided.
     pub working_dir: Option<PlaceholderString>,
+
+    /// Whether to activate the target environment before running `command`.
+    ///
+    /// Defaults to `true` in the original implementation.
     pub activate: Option<bool>,
+
+    /// Whether to run the program in a terminal/console.
+    ///
+    /// Defaults to `false` in the original implementation.
+    ///
+    /// # Platform-specific behavior
+    /// - Windows: Only has an effect if `activate` is true
+    /// - MacOS: The application will ignore command-line arguments
     pub terminal: Option<bool>,
 }
 
 impl MenuItemCommand {
+    /// Merge the generic `MenuItemCommand` with a platform-specific `BasePlatformSpecific`.
     pub fn merge(&self, platform: BasePlatformSpecific) -> MenuItemCommand {
         MenuItemCommand {
             name: platform.name.unwrap_or_else(|| self.name.clone()),
@@ -388,14 +509,22 @@ impl MenuItemCommand {
     }
 }
 
+/// Metadata required to create menu items across operating systems with `menuinst`
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct MenuInstSchema {
+    /// Version of the menuinst schema.
     #[serde(rename = "$id")]
     pub id: String,
+
+    /// Standard of the JSON schema we adhere to.
     #[serde(rename = "$schema")]
     pub schema: String,
+
+    /// Name for the category containing the items specified in `menu_items`.
     pub menu_name: String,
+
+    /// List of menu entries to create across main desktop systems.
     pub menu_items: Vec<MenuItem>,
 }
 
@@ -456,7 +585,7 @@ mod test {
             command
                 .name
                 .resolve(super::Environment::Base, &placeholders),
-            "Spyder 6 ({{ DISTRIBUTION_NAME }})"
+            "Spyder 6 (empty)"
         );
 
         // let foo = menu_0.platforms.osx.as_ref().unwrap().base.
