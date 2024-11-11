@@ -3,6 +3,8 @@ use birdcage::{Birdcage, Sandbox};
 use clap::Parser;
 
 pub mod sandbox;
+#[cfg(feature = "tokio")]
+pub mod tokio;
 
 pub use sandbox::{sandboxed_command, Exception};
 

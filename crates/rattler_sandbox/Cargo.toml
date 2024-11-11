@@ -12,3 +12,4 @@ readme.workspace = true
 birdcage = "0.8.1"
 clap = { workspace = true, features = ["derive"] }
 fs-err = "3.0.0"
+tokio = { workspace = true, optional = true, features = ["process"]}
