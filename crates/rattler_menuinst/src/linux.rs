@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tempfile::TempDir;
 
 use rattler_conda_types::Platform;
 use rattler_shell::activation::{ActivationVariables, Activator};
@@ -291,18 +292,18 @@ impl LinuxMenu {
             }
         }
 
-        // if register {
-        //     if let Some(xdg_mime) = which::which("xdg-mime").ok() {
-        //         let mut command = Command::new(xdg_mime);
-        //         command.arg("default").arg(&self.location());
-        //         for mime_type in &mime_types {
-        //             command.arg(mime_type);
-        //         }
-        //         self.logged_run(&mut command)?;
-        //     } else {
-        //         log::debug!("xdg-mime not found, not registering mime types as default.");
-        //     }
-        // }
+        if register {
+            if let Some(xdg_mime) = which::which("xdg-mime").ok() {
+                let mut command = Command::new(xdg_mime);
+                command.arg("default").arg(&self.location());
+                for mime_type in &mime_types {
+                    command.arg(mime_type);
+                }
+                self.logged_run(&mut command)?;
+            } else {
+                tracing::debug!("xdg-mime not found, not registering mime types as default.");
+            }
+        }
 
         // if let Some(update_mime_database) = which::which("update-mime-database").ok() {
         //     let mut command = Command::new(update_mime_database);
@@ -364,57 +365,82 @@ impl LinuxMenu {
             return Ok(xml_path);
         }
 
-        // // Write the XML that binds our current mime type to the glob pattern
-        // let xmlns = "http://www.freedesktop.org/standards/shared-mime-info";
-        // let mut mime_info = Element::new("mime-info");
-        // mime_info.attributes.insert("xmlns".to_string(), xmlns.to_string());
+        // Write the XML that binds our current mime type to the glob pattern
+        let xmlns = "http://www.freedesktop.org/standards/shared-mime-info";
+        let description = format!(
+            "Custom MIME type {mime_type} for '{glob_pattern}' files (registered by menuinst)"
+        );
 
-        // let mut mime_type_tag = Element::new("mime-type");
-        // mime_type_tag.attributes.insert("type".to_string(), mime_type.to_string());
+        let xml = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+    <mime-info xmlns="{}">
+        <mime-type type="{}">
+            <glob pattern="{}"/>
+            <comment>{}</comment>
+        </mime-type>
+    </mime-info>"#,
+            xmlns, mime_type, glob_pattern, description
+        );
 
-        // let mut glob = Element::new("glob");
-        // glob.attributes.insert("pattern".to_string(), glob_pattern.to_string());
-        // mime_type_tag.children.push(XMLNode::Element(glob));
+        let subcommand = if install { "install" } else { "uninstall" };
+        // Install the XML file and register it as default for our app
+        let tmp_dir = TempDir::new()?;
+        let tmp_path = tmp_dir.path().join(xml_path.file_name().unwrap());
+        let mut file = fs::File::create(&tmp_path)?;
+        file.write_all(xml.as_bytes())?;
 
-        // let descr = format!("Custom MIME type {} for '{}' files (registered by menuinst)", mime_type, glob_pattern);
-        // let mut comment = Element::new("comment");
-        // comment.children.push(XMLNode::Text(descr));
-        // mime_type_tag.children.push(XMLNode::Element(comment));
+        let mut command = Command::new("xdg-mime");
+        command
+            .arg(subcommand)
+            .arg("--mode")
+            .arg(&self.menu.mode)
+            .arg("--novendor")
+            .arg(tmp_path);
+        let output = command.output()?;
 
-        // mime_info.children.push(XMLNode::Element(mime_type_tag));
-        // let tree = Element::new("mime-info");
-        // tree.children.push(XMLNode::Element(mime_info));
+        if !output.status.success() {
+            tracing::warn!(
+                "Could not un/register MIME type {} with xdg-mime. Writing to '{}' as a fallback.",
+                mime_type,
+                xml_path.display()
+            );
+            tracing::info!(
+                "xdg-mime stdout output: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+            tracing::info!(
+                "xdg-mime stderr output: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
 
-        // let subcommand = if install { "install" } else { "uninstall" };
-        // // Install the XML file and register it as default for our app
-        // let tmp_dir = TempDir::new()?;
-        // let tmp_path = tmp_dir.path().join(xml_path.file_name().unwrap());
-        // let mut file = fs::File::create(&tmp_path)?;
-        // tree.write(&mut file)?;
-
-        // let mut command = Command::new("xdg-mime");
-        // command.arg(subcommand).arg("--mode").arg(&self.menu.mode).arg("--novendor").arg(tmp_path);
-        // if let Err(_) = self.logged_run(&mut command) {
-        //     log::debug!("Could not un/register MIME type {} with xdg-mime. Writing to '{}' as a fallback.", mime_type, xml_path.display());
-        //     let mut file = fs::File::create(&xml_path)?;
-        //     tree.write(&mut file)?;
-        // }
+            let mut file = fs::File::create(&xml_path)?;
+            file.write_all(xml.as_bytes())?;
+        }
 
         Ok(xml_path)
     }
 
-    //     fn paths(&self) -> Vec<PathBuf> {
-    //         let mut paths = vec![self.location()];
-    //         if let Some(mime_types) = self.command.mime_type.as_ref().map(|s| s.resolve(&self.placeholders)) {
-    //             for mime in mime_types.split(';') {
-    //                 let (xml_path, exists) = self.xml_path_for_mime_type(mime);
-    //                 if exists && fs::read_to_string(&xml_path).unwrap().contains("registered by menuinst") {
-    //                     paths.push(xml_path);
-    //                 }
-    //             }
-    //         }
-    //         paths
-    //    }
+    fn paths(&self) -> Vec<PathBuf> {
+        let mut paths = vec![self.location()];
+        if let Some(mime_types) = self
+            .command
+            .mime_type
+            .as_ref()
+            .map(|s| s.resolve(&self.placeholders))
+        {
+            for mime in mime_types.split(';') {
+                let (xml_path, exists) = self.xml_path_for_mime_type(mime);
+                if exists
+                    && fs::read_to_string(&xml_path)
+                        .unwrap()
+                        .contains("registered by menuinst")
+                {
+                    paths.push(xml_path);
+                }
+            }
+        }
+        paths
+    }
 }
 
 /// Install a menu item on Linux.
