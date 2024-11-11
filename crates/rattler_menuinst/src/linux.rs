@@ -262,6 +262,10 @@ impl LinuxMenu {
     }
 
     fn remove(&self) -> Result<(), MenuInstError> {
+        let paths = self.paths();
+        for path in paths {
+            fs::remove_file(path)?;
+        }
         Ok(())
     }
 
@@ -296,9 +300,9 @@ impl LinuxMenu {
         }
 
         if register {
-            if let Some(xdg_mime) = which::which("xdg-mime").ok() {
+            if let Ok(xdg_mime) = which::which("xdg-mime") {
                 let mut command = Command::new(xdg_mime);
-                command.arg("default").arg(&self.location());
+                command.arg("default").arg(self.location());
                 for mime_type in mime_types {
                     command.arg(mime_type);
                 }
