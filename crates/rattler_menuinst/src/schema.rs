@@ -164,36 +164,37 @@ pub struct CFBundleURLTypesModel {
     /// This key specifies the app's role with respect to the URL.
     /// Can be one of `Editor`, `Viewer`, `Shell`, `None`
     #[serde(rename = "CFBundleTypeRole")]
-    cf_bundle_type_role: Option<PlaceholderString>,
+    pub cf_bundle_type_role: Option<String>,
 
     /// URL schemes / protocols handled by this type (e.g. 'mailto').
     #[serde(rename = "CFBundleURLSchemes")]
-    cf_bundle_url_schemes: Vec<PlaceholderString>,
+    pub cf_bundle_url_schemes: Vec<PlaceholderString>,
 
     /// Abstract name for this URL type. Uniqueness recommended.
     #[serde(rename = "CFBundleURLName")]
-    cf_bundle_url_name: Option<PlaceholderString>,
+    pub cf_bundle_url_name: PlaceholderString,
 
     /// Name of the icon image file (minus the .icns extension).
     #[serde(rename = "CFBundleURLIconFile")]
-    cf_bundle_url_icon_file: Option<PlaceholderString>,
+    pub cf_bundle_url_icon_file: Option<PlaceholderString>,
 }
 
 /// Describes a document type associated with the app.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct CFBundleDocumentTypesModel {
-    /// Name of the icon image file (minus the .icns extension).
-    #[serde(rename = "CFBundleTypeIconFile")]
-    cf_bundle_type_icon_file: Option<PlaceholderString>,
-
     /// Abstract name for this document type. Uniqueness recommended.
     #[serde(rename = "CFBundleTypeName")]
-    cf_bundle_type_name: PlaceholderString,
+    pub cf_bundle_type_name: PlaceholderString,
+
+    /// Name of the icon image file (minus the .icns extension).
+    #[serde(rename = "CFBundleTypeIconFile")]
+    pub cf_bundle_type_icon_file: Option<PlaceholderString>,
 
     /// This key specifies the app's role with respect to the type.
+    /// Can be one of `Editor`, `Viewer`, `Shell`, `None`
     #[serde(rename = "CFBundleTypeRole")]
-    cf_bundle_type_role: Option<PlaceholderString>,
+    pub cf_bundle_type_role: Option<String>,
 
     /// List of UTI (Uniform Type Identifier) strings defining supported file types.
     ///
@@ -204,18 +205,18 @@ pub struct CFBundleDocumentTypesModel {
     /// # Details
     ///
     /// - System-defined UTIs can be found in the [UTI Reference](https://developer.apple.com/library/archive/documentation/Miscellaneous/Reference/UTIRef/Articles/System-DeclaredUniformTypeIdentifiers.html)
-    /// - Custom UTIs can be defined via 'UTExportedTypeDeclarations'
-    /// - UTIs from other apps must be imported via 'UTImportedTypeDeclarations'
+    /// - Custom UTIs can be defined via `UTExportedTypeDeclarations`
+    /// - UTIs from other apps must be imported via `UTImportedTypeDeclarations`
     ///
     /// For more information, see the [Fun with UTIs](https://www.cocoanetics.com/2012/09/fun-with-uti/) guide.
     #[serde(rename = "LSItemContentTypes")]
-    ls_item_content_types: Vec<PlaceholderString>,
+    pub ls_item_content_types: Vec<PlaceholderString>,
 
     /// Determines how Launch Services ranks this app among the apps
     /// that declare themselves editors or viewers of files of this type.
     /// Can be one of `Owner`, `Default` or `Alternate`
     #[serde(rename = "LSHandlerRank")]
-    ls_handler_rank: String, // TODO implement validation
+    pub ls_handler_rank: String, // TODO implement validation
 }
 
 /// A model representing a Uniform Type Identifier (UTI) declaration.
@@ -271,7 +272,7 @@ pub struct MacOS {
     pub cf_bundle_name: Option<PlaceholderString>,
 
     /// Suitable replacement for text-to-speech operations on the app.
-    /// For example, 'my app one two three' instead of 'MyApp123'.    
+    /// For example, "my app one two three" instead of "MyApp123".
     #[serde(rename = "CFBundleSpokenName")]
     pub cf_bundle_spoken_name: Option<String>,
 
