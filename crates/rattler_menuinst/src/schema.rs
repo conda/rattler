@@ -236,11 +236,7 @@ impl MenuItemCommand {
                 .description
                 .unwrap_or_else(|| self.description.clone()),
             command: platform.command.unwrap_or_else(|| self.command.clone()),
-            icon: platform
-                .icon
-                .as_ref()
-                .or(self.icon.as_ref())
-                .cloned(),
+            icon: platform.icon.as_ref().or(self.icon.as_ref()).cloned(),
             precommand: platform.precommand.or_else(|| self.precommand.clone()),
             precreate: platform.precreate.or_else(|| self.precreate.clone()),
             working_dir: platform.working_dir.or_else(|| self.working_dir.clone()),

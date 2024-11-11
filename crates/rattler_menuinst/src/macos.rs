@@ -90,7 +90,7 @@ impl MacOSMenu {
             .resolve(crate::schema::Environment::Base, placeholders)
             .to_string();
 
-        let bundle_name = format!("{}.app", name);
+        let bundle_name = format!("{name}.app");
         let directories = Directories::new(menu_mode, &bundle_name);
         println!("Installing menu item for {bundle_name}");
 
@@ -450,7 +450,7 @@ impl MacOSMenu {
                 .unwrap();
 
             for (k, v) in activation_env {
-                lines.push(format!(r#"export {k}="{v}""#, k = k, v = v));
+                lines.push(format!(r#"export {k}="{v}""#));
             }
         }
 
@@ -652,7 +652,6 @@ pub(crate) fn install_menu_item(
     menu_mode: MenuMode,
 ) -> Result<(), MenuInstError> {
     let menu = MacOSMenu::new(prefix, macos_item, command, menu_mode, placeholders);
-    println!("Menu: {:?}", menu);
     menu.install()
 }
 
