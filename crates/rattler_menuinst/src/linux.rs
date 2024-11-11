@@ -1,9 +1,8 @@
-use std::io::Write;
+use fs_err as fs;
+use fs_err::File;
 use std::collections::HashMap;
 use std::io::Write;
-use fs_err::File;
 use std::path::{Path, PathBuf};
-use fs_err as fs;
 
 use rattler_conda_types::Platform;
 use rattler_shell::activation::{ActivationVariables, Activator};
@@ -307,28 +306,50 @@ impl LinuxMenu {
 
     fn xml_path_for_mime_type(&self, mime_type: &str) -> (PathBuf, bool) {
         let basename = mime_type.replace("/", "-");
-        let xml_files: Vec<PathBuf> = fs::read_dir(self.directories.data_directory.join("mime/applications"))
-            .unwrap()
-            .filter_map(|entry| {
-                let path = entry.unwrap().path();
-                if path.file_name().unwrap().to_str().unwrap().contains(&basename) {
-                    Some(path)
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let xml_files: Vec<PathBuf> =
+            fs::read_dir(self.directories.data_directory.join("mime/applications"))
+                .unwrap()
+                .filter_map(|entry| {
+                    let path = entry.unwrap().path();
+                    if path
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .contains(&basename)
+                    {
+                        Some(path)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
 
         if !xml_files.is_empty() {
             if xml_files.len() > 1 {
-                tracing::debug!("Found multiple files for MIME type {}: {:?}. Returning first.", mime_type, xml_files);
+                tracing::debug!(
+                    "Found multiple files for MIME type {}: {:?}. Returning first.",
+                    mime_type,
+                    xml_files
+                );
             }
             return (xml_files[0].clone(), true);
         }
-        (self.directories.data_directory.join("mime/packages").join(format!("{}.xml", basename)), false)
+        (
+            self.directories
+                .data_directory
+                .join("mime/packages")
+                .join(format!("{basename}.xml")),
+            false,
+        )
     }
 
-    fn glob_pattern_for_mime_type(&self, mime_type: &str, glob_pattern: &str, install: bool) -> Result<PathBuf, MenuInstError> {
+    fn glob_pattern_for_mime_type(
+        &self,
+        mime_type: &str,
+        glob_pattern: &str,
+        install: bool,
+    ) -> Result<PathBuf, MenuInstError> {
         let (xml_path, exists) = self.xml_path_for_mime_type(mime_type);
         if exists {
             return Ok(xml_path);
