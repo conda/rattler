@@ -128,7 +128,9 @@ impl LinuxMenu {
 
         parts.push(command);
 
-        parts.join(" && ")
+        let command = parts.join(" && ");
+
+        format!("bash -c {}", shlex::try_quote(&command).unwrap())
     }
 
     fn resolve_and_join(&self, items: &[PlaceholderString]) -> String {
