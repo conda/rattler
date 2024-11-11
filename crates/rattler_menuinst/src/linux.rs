@@ -23,6 +23,7 @@ pub struct LinuxMenu {
     command: MenuItemCommand,
     directories: Directories,
     placeholders: MenuItemPlaceholders,
+    mode: MenuMode,
 }
 
 pub struct Directories {
@@ -81,6 +82,7 @@ impl LinuxMenu {
             command,
             directories,
             placeholders: refined_placeholders,
+            mode,
         }
     }
 
@@ -296,10 +298,25 @@ impl LinuxMenu {
             if let Some(xdg_mime) = which::which("xdg-mime").ok() {
                 let mut command = Command::new(xdg_mime);
                 command.arg("default").arg(&self.location());
-                for mime_type in &mime_types {
+                for mime_type in mime_types {
                     command.arg(mime_type);
                 }
-                self.logged_run(&mut command)?;
+                let output = command.output()?;
+                if !output.status.success() {
+                    tracing::warn!(
+                        "Could not set MIME type {} as default for {}",
+                        mime_types.join(", "),
+                        self.name
+                    );
+                    tracing::info!(
+                        "xdg-mime stdout output: {}",
+                        String::from_utf8_lossy(&output.stdout)
+                    );
+                    tracing::info!(
+                        "xdg-mime stderr output: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    );
+                }
             } else {
                 tracing::debug!("xdg-mime not found, not registering mime types as default.");
             }
@@ -390,10 +407,15 @@ impl LinuxMenu {
         file.write_all(xml.as_bytes())?;
 
         let mut command = Command::new("xdg-mime");
+        let mode = match self.mode {
+            MenuMode::System => "system",
+            MenuMode::User => "user",
+        };
+
         command
             .arg(subcommand)
             .arg("--mode")
-            .arg(&self.menu.mode)
+            .arg(mode)
             .arg("--novendor")
             .arg(tmp_path);
         let output = command.output()?;
@@ -420,22 +442,26 @@ impl LinuxMenu {
         Ok(xml_path)
     }
 
+    /// All paths that are installed for removal
     fn paths(&self) -> Vec<PathBuf> {
         let mut paths = vec![self.location()];
-        if let Some(mime_types) = self
-            .command
-            .mime_type
-            .as_ref()
-            .map(|s| s.resolve(&self.placeholders))
-        {
-            for mime in mime_types.split(';') {
-                let (xml_path, exists) = self.xml_path_for_mime_type(mime);
-                if exists
-                    && fs::read_to_string(&xml_path)
-                        .unwrap()
-                        .contains("registered by menuinst")
-                {
-                    paths.push(xml_path);
+
+        if let Some(mime_types) = &self.item.mime_type {
+            let resolved = mime_types
+                .iter()
+                .map(|s| s.resolve(&self.placeholders))
+                .collect::<Vec<String>>();
+
+            for mime in resolved {
+                let (xml_path, exists) = self.xml_path_for_mime_type(&mime);
+                if !exists {
+                    continue;
+                }
+
+                if let Ok(content) = fs::read_to_string(&xml_path) {
+                    if content.contains("registered by menuinst") {
+                        paths.push(xml_path);
+                    }
                 }
             }
         }
