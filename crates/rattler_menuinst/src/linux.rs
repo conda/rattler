@@ -383,3 +383,18 @@ impl LinuxMenu {
     //         paths
     //    }
 }
+
+/// Install a menu item on Linux.
+pub fn install_menu_item(
+    prefix: &Path,
+    item: Linux,
+    command: MenuItemCommand,
+    placeholders: &BaseMenuItemPlaceholders,
+    menu_mode: MenuMode,
+) -> Result<(), MenuInstError> {
+    let menu = LinuxMenu::new(prefix, item, command, placeholders, menu_mode);
+    menu.install()?;
+    println!("{:?}", menu.location());
+    println!("{:?}", menu.directories.config_directory);
+    Ok(())
+}
