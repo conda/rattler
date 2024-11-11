@@ -11,7 +11,7 @@ pub use consts::{PACKAGE_CACHE_DIR, REPODATA_CACHE_DIR};
 /// It first checks the environment variable `RATTLER_CACHE_DIR`.
 /// If not set, it falls back to the standard cache directory provided by `dirs::cache_dir()/rattler/cache`.
 pub fn default_cache_dir() -> anyhow::Result<PathBuf> {
-    Ok(std::env::var("RATTLER_CACHE_DIR")
+    std::env::var("RATTLER_CACHE_DIR")
         .map(PathBuf::from)
         .or_else(|_| {
             dirs::cache_dir()
@@ -24,5 +24,5 @@ pub fn default_cache_dir() -> anyhow::Result<PathBuf> {
                     p.push("cache");
                     p
                 })
-        })?)
+        })
 }
