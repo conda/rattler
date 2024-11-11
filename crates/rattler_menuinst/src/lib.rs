@@ -59,7 +59,7 @@ pub fn install_menuitems(
                     linux_item.specific,
                     command,
                     &placeholders,
-                    MenuMode::System,
+                    MenuMode::User,
                 )?;
             }
         } else if platform.is_osx() {

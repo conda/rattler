@@ -1,6 +1,7 @@
+use fs_err::File;
 use std::io::Write;
 use std::path::Path;
-use std::{fs::File, path::PathBuf};
+use std::path::PathBuf;
 
 use rattler_conda_types::Platform;
 use rattler_shell::activation::{ActivationVariables, Activator};
@@ -40,12 +41,8 @@ impl Directories {
             )
         } else {
             (
-                PathBuf::from(
-                    std::env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| "~/.config".to_string()),
-                ),
-                PathBuf::from(
-                    std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| "~/.local/share".to_string()),
-                ),
+                dirs::home_dir().expect("Could not get home dir"),
+                dirs::data_dir().expect("Could not get data dir"),
             )
         };
 
@@ -152,7 +149,7 @@ impl LinuxMenu {
         writeln!(writer, "[Desktop Entry]")?;
         writeln!(writer, "Type=Application")?;
         writeln!(writer, "Encoding=UTF-8")?;
-        writeln!(writer, "Name={:?}", self.command.name)?;
+        writeln!(writer, "Name={}", self.name)?;
         writeln!(writer, "Exec={}", self.command())?;
         writeln!(
             writer,
