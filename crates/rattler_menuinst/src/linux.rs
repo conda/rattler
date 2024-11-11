@@ -256,6 +256,7 @@ impl LinuxMenu {
     fn install(&self) -> Result<(), MenuInstError> {
         self.pre_create()?;
         self.create_desktop_entry()?;
+        self.maybe_register_mime_types(true)?;
         Self::update_desktop_database()?;
         Ok(())
     }
