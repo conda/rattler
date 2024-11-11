@@ -62,8 +62,8 @@ pub struct BasePlatformSpecific {
     /// Whether to run the program in a terminal/console.
     ///
     /// ### Platform-specific behavior
-    /// - Windows: Only has an effect if `activate` is true
-    /// - MacOS: The application will ignore command-line arguments
+    /// - `Windows`: Only has an effect if `activate` is true
+    /// - `MacOS`: The application will ignore command-line arguments
     pub terminal: Option<bool>,
 }
 
@@ -111,18 +111,18 @@ pub enum Environment {
 }
 
 /// Windows-specific instructions for menu item configuration.
-/// 
+///
 /// Allows overriding global keys for Windows-specific behavior.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Windows {
     /// Whether to create a desktop icon in addition to the Start Menu item.
-    /// 
+    ///
     /// Defaults to `true` in the original implementation.
     pub desktop: Option<bool>,
 
     /// Whether to create a quick launch icon in addition to the Start Menu item.
-    /// 
+    ///
     /// Defaults to `true` in the original implementation.
     pub quicklaunch: Option<bool>,
 
@@ -130,28 +130,28 @@ pub struct Windows {
     pub terminal_profile: Option<String>,
 
     /// URL protocols that will be associated with this program.
-    /// 
+    ///
     /// Each protocol must contain no whitespace characters.
     pub url_protocols: Option<Vec<String>>,
 
     /// File extensions that will be associated with this program.
-    /// 
+    ///
     /// Each extension must start with a dot and contain no whitespace.
     pub file_extensions: Option<Vec<String>>,
 
     /// Application User Model ID for Windows 7 and above.
-    /// 
+    ///
     /// Used to associate processes, files and windows with a particular application.
     /// Required when shortcut produces duplicated icons.
-    /// 
+    ///
     /// # Format
     /// - Must contain at least two segments separated by dots
     /// - Maximum length of 128 characters
     /// - No whitespace allowed
-    /// 
+    ///
     /// # Default
     /// If not set, defaults to `Menuinst.<name>`
-    /// 
+    ///
     /// For more information, see [Microsoft's AppUserModelID documentation](https://learn.microsoft.com/en-us/windows/win32/shell/appids#how-to-form-an-application-defined-appusermodelid)
     pub app_user_model_id: Option<String>,
 }
@@ -349,7 +349,7 @@ pub struct MacOS {
     pub cf_bundle_name: Option<PlaceholderString>,
 
     /// Suitable replacement for text-to-speech operations on the app.
-    /// For example, "my app one two three" instead of "MyApp123".
+    /// For example, "my app one two three" instead of `MyApp123`.
     #[serde(rename = "CFBundleSpokenName")]
     pub cf_bundle_spoken_name: Option<String>,
 
@@ -485,8 +485,8 @@ pub struct MenuItemCommand {
     /// Defaults to `false` in the original implementation.
     ///
     /// # Platform-specific behavior
-    /// - Windows: Only has an effect if `activate` is true
-    /// - MacOS: The application will ignore command-line arguments
+    /// - `Windows`: Only has an effect if `activate` is true
+    /// - `MacOS`: The application will ignore command-line arguments
     pub terminal: Option<bool>,
 }
 
