@@ -390,13 +390,12 @@ impl LinuxMenu {
 
         let xml = format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
-    <mime-info xmlns="{}">
-        <mime-type type="{}">
-            <glob pattern="{}"/>
-            <comment>{}</comment>
+    <mime-info xmlns="{xmlns}">
+        <mime-type type="{mime_type}">
+            <glob pattern="{glob_pattern}"/>
+            <comment>{description}</comment>
         </mime-type>
-    </mime-info>"#,
-            xmlns, mime_type, glob_pattern, description
+    </mime-info>"#
         );
 
         let subcommand = if install { "install" } else { "uninstall" };

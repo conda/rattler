@@ -17,7 +17,7 @@ use rattler_shell::{
 
 use crate::{
     render::{resolve, BaseMenuItemPlaceholders, MenuItemPlaceholders},
-    schema::{MacOS, MenuItemCommand},
+    schema::{MacOS, MenuItemCommand, UTTypeDeclarationModel},
     slugify, utils, MenuInstError, MenuMode,
 };
 
@@ -77,6 +77,58 @@ impl Directories {
     }
 }
 
+impl UTTypeDeclarationModel {
+    fn to_plist(&self, placeholders: &MenuItemPlaceholders) -> Value {
+        let mut type_dict = plist::Dictionary::new();
+        type_dict.insert(
+            "UTTypeConformsTo".into(),
+            Value::Array(
+                self.ut_type_conforms_to
+                    .iter()
+                    .map(|s| Value::String(s.resolve(placeholders)))
+                    .collect(),
+            ),
+        );
+        if let Some(desc) = &self.ut_type_description {
+            type_dict.insert(
+                "UTTypeDescription".into(),
+                Value::String(desc.resolve(placeholders)),
+            );
+        }
+        if let Some(icon) = &self.ut_type_icon_file {
+            type_dict.insert(
+                "UTTypeIconFile".into(),
+                Value::String(icon.resolve(placeholders)),
+            );
+        }
+        type_dict.insert(
+            "UTTypeIdentifier".into(),
+            Value::String(self.ut_type_identifier.resolve(placeholders)),
+        );
+        if let Some(url) = &self.ut_type_reference_url {
+            type_dict.insert(
+                "UTTypeReferenceURL".into(),
+                Value::String(url.resolve(placeholders)),
+            );
+        }
+
+        let mut tag_spec = plist::Dictionary::new();
+        for (k, v) in &self.ut_type_tag_specification {
+            tag_spec.insert(
+                k.resolve(placeholders),
+                Value::Array(
+                    v.iter()
+                        .map(|s| Value::String(s.resolve(placeholders)))
+                        .collect(),
+                ),
+            );
+        }
+
+        type_dict.insert("UTTypeTagSpecification".into(), Value::Dictionary(tag_spec));
+        Value::Dictionary(type_dict)
+    }
+}
+
 impl MacOSMenu {
     pub fn new(
         prefix: &Path,
@@ -87,8 +139,7 @@ impl MacOSMenu {
     ) -> Self {
         let name = command
             .name
-            .resolve(crate::schema::Environment::Base, placeholders)
-            .to_string();
+            .resolve(crate::schema::Environment::Base, placeholders);
 
         let bundle_name = format!("{name}.app");
         let directories = Directories::new(menu_mode, &bundle_name);
@@ -216,18 +267,23 @@ impl MacOSMenu {
         pl.insert("CFBundleExecutable".into(), Value::String(slugname.clone()));
 
         pl.insert(
-            "CFBundleGetInfoString".into(),
-            Value::String(format!("{slugname}-1.0.0")),
-        );
-        pl.insert(
             "CFBundleIdentifier".into(),
             Value::String(format!("com.{slugname}")),
         );
         pl.insert("CFBundlePackageType".into(), Value::String("APPL".into()));
-        pl.insert("CFBundleVersion".into(), Value::String("1.0.0".into()));
+
+        let cf_bundle_version = resolve(&self.item.cf_bundle_version, &self.placeholders, "1.0.0");
+        pl.insert(
+            "CFBundleVersion".into(),
+            Value::String(cf_bundle_version.clone()),
+        );
+        pl.insert(
+            "CFBundleGetInfoString".into(),
+            Value::String(format!("{slugname}-{cf_bundle_version}")),
+        );
         pl.insert(
             "CFBundleShortVersionString".into(),
-            Value::String("1.0.0".into()),
+            Value::String(cf_bundle_version),
         );
 
         if let Some(icon) = &self.command.icon {
@@ -301,73 +357,34 @@ impl MacOSMenu {
             );
         }
 
-        if let Some(supports) = self.item.ns_supports_automatic_graphics_switching {
+        // if let Some(supports) = self.item.ns_supports_automatic_graphics_switching {
+        //     pl.insert(
+        //         "NSSupportsAutomaticGraphicsSwitching".into(),
+        //         Value::Boolean(supports),
+        //     );
+        // }
+
+        if let Some(ut_exported_type_declarations) = &self.item.ut_exported_type_declarations {
+            let mut type_array = Vec::new();
+            for ut_type in ut_exported_type_declarations {
+                type_array.push(ut_type.to_plist(&self.placeholders));
+            }
             pl.insert(
-                "NSSupportsAutomaticGraphicsSwitching".into(),
-                Value::Boolean(supports),
+                "UTExportedTypeDeclarations".into(),
+                Value::Array(type_array),
             );
         }
 
-        self.item
-            .ut_exported_type_declarations
-            .as_ref()
-            .map(|_types| {
-                // let mut type_array = Vec::new();
-                // for t in types {
-                //     let mut type_dict = plist::Dictionary::new();
-                //     type_dict.insert("UTTypeConformsTo".into(),
-                // Value::Array(t.ut_type_conforms_to.iter().map(|s|
-                // Value::String(s.clone())).collect()));
-                //     type_dict.insert("UTTypeDescription".into(),
-                // Value::String(t.ut_type_description.clone().
-                // unwrap_or_default()));     type_dict.insert("
-                // UTTypeIconFile".into(),
-                // Value::String(t.ut_type_icon_file.clone().
-                // unwrap_or_default()));     type_dict.insert("
-                // UTTypeIdentifier".into(),
-                // Value::String(t.ut_type_identifier.clone()));
-                //     type_dict.insert("UTTypeReferenceURL".into(),
-                // Value::String(t.ut_type_reference_url.clone().
-                // unwrap_or_default()));     let mut tag_spec =
-                // plist::Dictionary::new();     for (k, v) in
-                // &t.ut_type_tag_specification {
-                //         tag_spec.insert(k.clone(),
-                // Value::Array(v.iter().map(|s|
-                // Value::String(s.clone())).collect()));     }
-                //     type_dict.insert("UTTypeTagSpecification".into(),
-                // Value::Dictionary(tag_spec));     type_array.
-                // push(Value::Dictionary(type_dict)); }
-                // pl.insert("UTExportedTypeDeclarations".into(),
-                // Value::Array(type_array));
-            });
-
-        // self.item
-        //     .ut_imported_type_declarations
-        //     .as_ref()
-        //     .map(|_types| {
-        //         // let mut type_array = Vec::new();
-        //         // for t in types {
-        //         //     let mut type_dict = plist::Dictionary::new();
-        //         //     type_dict.insert("UTTypeConformsTo".into(),
-        // Value::Array(t.ut_type_conforms_to.iter().map(|s|
-        // Value::String(s.clone())).collect()));         //
-        // type_dict.insert("UTTypeDescription".into(),
-        // Value::String(t.ut_type_description.clone().unwrap_or_default()));
-        //         //     type_dict.insert("UTTypeIconFile".into(),
-        // Value::String(t.ut_type_icon_file.clone().unwrap_or_default()));
-        //         //     type_dict.insert("UTTypeIdentifier".into(),
-        // Value::String(t.ut_type_identifier.clone()));         //
-        // type_dict.insert("UTTypeReferenceURL".into(),
-        // Value::String(t.ut_type_reference_url.clone().unwrap_or_default()));
-        //         //     let mut tag_spec = plist::Dictionary::new();
-        //         //     for (k, v) in &t.ut_type_tag_specification {
-        //         //         tag_spec.insert(k.clone(), Value::Array(v.iter().map(|s|
-        // Value::String(s.clone())).collect()));         //     }
-        //         //     type_dict.insert("UTTypeTagSpecification".into(),
-        // Value::Dictionary(tag_spec));         //
-        // type_array.push(Value::Dictionary(type_dict));         // }
-        //         // pl.insert("UTImportedTypeDeclarations".into(),
-        // Value::Array(type_array));     });
+        if let Some(ut_imported_type_declarations) = &self.item.ut_imported_type_declarations {
+            let mut type_array = Vec::new();
+            for ut_type in ut_imported_type_declarations {
+                type_array.push(ut_type.to_plist(&self.placeholders));
+            }
+            pl.insert(
+                "UTImportedTypeDeclarations".into(),
+                Value::Array(type_array),
+            );
+        }
 
         println!(
             "Writing plist to {}",
