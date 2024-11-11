@@ -240,19 +240,6 @@ impl LinuxMenu {
             writeln!(writer, "TryExec={}", try_exec.resolve(&self.placeholders))?;
         }
 
-        // TODO write the rest of the stuff.
-        // for key in menuitem_defaults["platforms"]["linux"]:
-        //     if key in (*menuitem_defaults, "glob_patterns"):
-        //         continue
-        //     value = self.render_key(key)
-        //     if value is None:
-        //         continue
-        //     if isinstance(value, bool):
-        //         value = str(value).lower()
-        //     elif isinstance(value, (list, tuple)):
-        //         value = ";".join(value) + ";"
-        //     lines.append(f"{key}={value}")
-
         Ok(())
     }
 
