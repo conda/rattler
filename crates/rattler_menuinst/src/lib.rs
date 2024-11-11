@@ -55,6 +55,7 @@ pub fn install_menuitems(
             if let Some(linux_item) = item.platforms.linux {
                 let command = item.command.merge(linux_item.base);
                 linux::install_menu_item(
+                    prefix,
                     linux_item.specific,
                     command,
                     &placeholders,
