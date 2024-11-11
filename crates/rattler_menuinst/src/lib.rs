@@ -115,7 +115,7 @@ pub mod test {
 
         let prefix = schema_path.parent().unwrap().parent().unwrap();
         let prefix = std::fs::canonicalize(prefix).unwrap();
-        println!("prefix: {:?}", prefix);
+        println!("prefix: {prefix:?}");
         let platform = Platform::OsxArm64;
 
         install_menuitems(&schema_path, &prefix, &prefix, platform).unwrap();

@@ -73,7 +73,7 @@ impl LinuxMenu {
             prefix: prefix.to_path_buf(),
             name: command
                 .name
-                .resolve(crate::schema::Environment::Base, &placeholders)
+                .resolve(crate::schema::Environment::Base, placeholders)
                 .to_string(),
             item,
             command,
@@ -114,9 +114,9 @@ impl LinuxMenu {
                 .unwrap();
 
             for (k, v) in activation_env {
-                envs.push(format!(r#"{k}="{v}""#, k = k, v = v));
+                envs.push(format!(r#"{k}="{v}""#));
             }
-            println!("Envs: {:?}", envs);
+            println!("Envs: {envs:?}");
         }
 
         let command = self
@@ -129,7 +129,7 @@ impl LinuxMenu {
 
         parts.push(command);
 
-        return parts.join(" && ");
+        parts.join(" && ")
     }
 
     fn resolve_and_join(&self, items: &[PlaceholderString]) -> String {
@@ -164,7 +164,7 @@ impl LinuxMenu {
 
         let description = self.command.description.resolve(&self.placeholders);
         if !description.is_empty() {
-            writeln!(writer, "Comment={}", description)?;
+            writeln!(writer, "Comment={description}")?;
         }
 
         if let Some(working_dir) = &self.command.working_dir {
@@ -178,7 +178,7 @@ impl LinuxMenu {
         }
 
         if let Some(dbus_activatable) = &self.item.dbus_activatable {
-            writeln!(writer, "DBusActivatable={}", dbus_activatable)?;
+            writeln!(writer, "DBusActivatable={dbus_activatable}")?;
         }
 
         if let Some(generic_name) = &self.item.generic_name {
@@ -190,7 +190,7 @@ impl LinuxMenu {
         }
 
         if let Some(hidden) = &self.item.hidden {
-            writeln!(writer, "Hidden={}", hidden)?;
+            writeln!(writer, "Hidden={hidden}")?;
         }
 
         if let Some(implements) = &self.item.implements {
@@ -206,7 +206,7 @@ impl LinuxMenu {
         }
 
         if let Some(no_display) = &self.item.no_display {
-            writeln!(writer, "NoDisplay={}", no_display)?;
+            writeln!(writer, "NoDisplay={no_display}")?;
         }
 
         if let Some(not_show_in) = &self.item.not_show_in {
@@ -218,11 +218,11 @@ impl LinuxMenu {
         }
 
         if let Some(prefers_non_default_gpu) = &self.item.prefers_non_default_gpu {
-            writeln!(writer, "PrefersNonDefaultGPU={}", prefers_non_default_gpu)?;
+            writeln!(writer, "PrefersNonDefaultGPU={prefers_non_default_gpu}")?;
         }
 
         if let Some(startup_notify) = &self.item.startup_notify {
-            writeln!(writer, "StartupNotify={}", startup_notify)?;
+            writeln!(writer, "StartupNotify={startup_notify}")?;
         }
 
         if let Some(startup_wm_class) = &self.item.startup_wm_class {

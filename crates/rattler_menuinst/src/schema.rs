@@ -239,13 +239,13 @@ impl MenuItemCommand {
             icon: platform
                 .icon
                 .as_ref()
-                .or_else(|| self.icon.as_ref())
+                .or(self.icon.as_ref())
                 .cloned(),
             precommand: platform.precommand.or_else(|| self.precommand.clone()),
             precreate: platform.precreate.or_else(|| self.precreate.clone()),
             working_dir: platform.working_dir.or_else(|| self.working_dir.clone()),
-            activate: platform.activate.or_else(|| self.activate.clone()),
-            terminal: platform.terminal.or_else(|| self.terminal.clone()),
+            activate: platform.activate.or(self.activate),
+            terminal: platform.terminal.or(self.terminal),
         }
     }
 }
