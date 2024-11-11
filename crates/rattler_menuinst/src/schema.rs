@@ -83,33 +83,33 @@ pub struct Windows {
 #[serde(deny_unknown_fields)]
 pub struct Linux {
     #[serde(rename = "Categories")]
-    pub categories: Option<Vec<String>>,
+    pub categories: Option<Vec<PlaceholderString>>,
     #[serde(rename = "DBusActivatable")]
     pub dbus_activatable: Option<bool>,
     #[serde(rename = "GenericName")]
-    pub generic_name: Option<String>,
+    pub generic_name: Option<PlaceholderString>,
     #[serde(rename = "Hidden")]
     pub hidden: Option<bool>,
     #[serde(rename = "Implements")]
-    pub implements: Option<Vec<String>>,
+    pub implements: Option<Vec<PlaceholderString>>,
     #[serde(rename = "Keywords")]
-    pub keywords: Option<Vec<String>>,
+    pub keywords: Option<Vec<PlaceholderString>>,
     #[serde(rename = "MimeType")]
-    pub mime_type: Option<Vec<String>>,
+    pub mime_type: Option<Vec<PlaceholderString>>,
     #[serde(rename = "NoDisplay")]
     pub no_display: Option<bool>,
     #[serde(rename = "NotShowIn")]
-    pub not_show_in: Option<Vec<String>>,
+    pub not_show_in: Option<Vec<PlaceholderString>>,
     #[serde(rename = "OnlyShowIn")]
-    pub only_show_in: Option<Vec<String>>,
+    pub only_show_in: Option<Vec<PlaceholderString>>,
     #[serde(rename = "PrefersNonDefaultGPU")]
     pub prefers_non_default_gpu: Option<bool>,
     #[serde(rename = "StartupNotify")]
     pub startup_notify: Option<bool>,
     #[serde(rename = "StartupWMClass")]
-    pub startup_wm_class: Option<String>,
+    pub startup_wm_class: Option<PlaceholderString>,
     #[serde(rename = "TryExec")]
-    pub try_exec: Option<String>,
+    pub try_exec: Option<PlaceholderString>,
     pub glob_patterns: Option<HashMap<String, String>>,
 }
 
