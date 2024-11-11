@@ -17,7 +17,7 @@ use crate::{render::BaseMenuItemPlaceholders, schema::MenuInstSchema};
 
 pub mod utils;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum MenuMode {
     System,
     User,
