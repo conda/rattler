@@ -73,8 +73,7 @@ impl LinuxMenu {
             prefix: prefix.to_path_buf(),
             name: command
                 .name
-                .resolve(crate::schema::Environment::Base, placeholders)
-                .to_string(),
+                .resolve(crate::schema::Environment::Base, placeholders),
             item,
             command,
             directories,
