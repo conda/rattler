@@ -6,7 +6,7 @@ use rattler_conda_types::Platform;
 use rattler_shell::activation::{ActivationVariables, Activator};
 use rattler_shell::shell;
 
-use crate::render::{BaseMenuItemPlaceholders, MenuItemPlaceholders};
+use crate::render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString};
 use crate::{
     schema::{Linux, MenuItemCommand},
     MenuInstError, MenuMode,
@@ -135,6 +135,15 @@ impl LinuxMenu {
         return parts.join(" && ");
     }
 
+    fn resolve_and_join(&self, items: &[PlaceholderString]) -> String {
+        let mut res = String::new();
+        for item in items {
+            res.push_str(&item.resolve(&self.placeholders));
+            res.push(';');
+        }
+        res
+    }
+
     fn create_desktop_entry(&self) -> Result<(), MenuInstError> {
         let file = self.location();
         let writer = File::create(file)?;
@@ -164,6 +173,71 @@ impl LinuxMenu {
         if let Some(working_dir) = &self.command.working_dir {
             let working_dir = working_dir.resolve(&self.placeholders);
             writeln!(writer, "Path={working_dir}")?;
+        }
+
+        // resolve categories and join them with a semicolon
+        if let Some(categories) = &self.item.categories {
+            writeln!(writer, "Categories={}", self.resolve_and_join(categories))?;
+        }
+
+        if let Some(dbus_activatable) = &self.item.dbus_activatable {
+            writeln!(writer, "DBusActivatable={}", dbus_activatable)?;
+        }
+
+        if let Some(generic_name) = &self.item.generic_name {
+            writeln!(
+                writer,
+                "GenericName={}",
+                generic_name.resolve(&self.placeholders)
+            )?;
+        }
+
+        if let Some(hidden) = &self.item.hidden {
+            writeln!(writer, "Hidden={}", hidden)?;
+        }
+
+        if let Some(implements) = &self.item.implements {
+            writeln!(writer, "Implements={}", self.resolve_and_join(implements))?;
+        }
+
+        if let Some(keywords) = &self.item.keywords {
+            writeln!(writer, "Keywords={}", self.resolve_and_join(keywords))?;
+        }
+
+        if let Some(mime_types) = &self.item.mime_type {
+            writeln!(writer, "MimeType={}", self.resolve_and_join(mime_types))?;
+        }
+
+        if let Some(no_display) = &self.item.no_display {
+            writeln!(writer, "NoDisplay={}", no_display)?;
+        }
+
+        if let Some(not_show_in) = &self.item.not_show_in {
+            writeln!(writer, "NotShowIn={}", self.resolve_and_join(not_show_in))?;
+        }
+
+        if let Some(only_show_in) = &self.item.only_show_in {
+            writeln!(writer, "OnlyShowIn={}", self.resolve_and_join(only_show_in))?;
+        }
+
+        if let Some(prefers_non_default_gpu) = &self.item.prefers_non_default_gpu {
+            writeln!(writer, "PrefersNonDefaultGPU={}", prefers_non_default_gpu)?;
+        }
+
+        if let Some(startup_notify) = &self.item.startup_notify {
+            writeln!(writer, "StartupNotify={}", startup_notify)?;
+        }
+
+        if let Some(startup_wm_class) = &self.item.startup_wm_class {
+            writeln!(
+                writer,
+                "StartupWMClass={}",
+                startup_wm_class.resolve(&self.placeholders)
+            )?;
+        }
+
+        if let Some(try_exec) = &self.item.try_exec {
+            writeln!(writer, "TryExec={}", try_exec.resolve(&self.placeholders))?;
         }
 
         // TODO write the rest of the stuff.
@@ -203,18 +277,122 @@ impl LinuxMenu {
     fn remove(&self) -> Result<(), MenuInstError> {
         Ok(())
     }
-}
 
-pub fn install_menu_item(
-    prefix: &Path,
-    item: Linux,
-    command: MenuItemCommand,
-    placeholders: &BaseMenuItemPlaceholders,
-    menu_mode: MenuMode,
-) -> Result<(), MenuInstError> {
-    let menu = LinuxMenu::new(prefix, item, command, placeholders, menu_mode);
-    menu.install()?;
-    println!("{:?}", menu.location());
-    println!("{:?}", menu.directories.config_directory);
-    Ok(())
+    //     fn maybe_register_mime_types(&self, register: bool) -> Result<(), MenuInstError> {
+    //         if let Some(mime_types) = self.command.mime_type.as_ref().map(|s| s.resolve(&self.placeholders)) {
+    //             self.register_mime_types(mime_types.split(';').collect(), register)?;
+    //         }
+    //         Ok(())
+    //     }
+
+    //     fn register_mime_types(&self, mime_types: Vec<&str>, register: bool) -> Result<(), MenuInstError> {
+    //         let glob_patterns: HashMap<String, String> = self.command.glob_patterns.as_ref().map(|s| s.resolve(&self.placeholders)).unwrap_or_default();
+    //         for mime_type in mime_types {
+    //             if let Some(glob_pattern) = glob_patterns.get(mime_type) {
+    //                 self.glob_pattern_for_mime_type(mime_type, glob_pattern, register)?;
+    //             }
+    //         }
+
+    //         if register {
+    //             if let Some(xdg_mime) = which::which("xdg-mime").ok() {
+    //                 let mut command = Command::new(xdg_mime);
+    //                 command.arg("default").arg(&self.location());
+    //                 for mime_type in &mime_types {
+    //                     command.arg(mime_type);
+    //                 }
+    //                 self.logged_run(&mut command)?;
+    //             } else {
+    //                 log::debug!("xdg-mime not found, not registering mime types as default.");
+    //             }
+    //         }
+
+    //         if let Some(update_mime_database) = which::which("update-mime-database").ok() {
+    //             let mut command = Command::new(update_mime_database);
+    //             command.arg("-V").arg(self.menu.data_directory.join("mime"));
+    //             self.logged_run(&mut command)?;
+    //         }
+
+    //         Ok(())
+    //     }
+
+    //     fn xml_path_for_mime_type(&self, mime_type: &str) -> (PathBuf, bool) {
+    //         let basename = mime_type.replace("/", "-");
+    //         let xml_files: Vec<PathBuf> = fs::read_dir(self.menu.data_directory.join("mime/applications"))
+    //             .unwrap()
+    //             .filter_map(|entry| {
+    //                 let path = entry.unwrap().path();
+    //                 if path.file_name().unwrap().to_str().unwrap().contains(&basename) {
+    //                     Some(path)
+    //                 } else {
+    //                     None
+    //                 }
+    //             })
+    //             .collect();
+
+    //         if !xml_files.is_empty() {
+    //             if xml_files.len() > 1 {
+    //                 log::debug!("Found multiple files for MIME type {}: {:?}. Returning first.", mime_type, xml_files);
+    //             }
+    //             return (xml_files[0].clone(), true);
+    //         }
+    //         (self.menu.data_directory.join("mime/packages").join(format!("{}.xml", basename)), false)
+    //     }
+
+    //     fn glob_pattern_for_mime_type(&self, mime_type: &str, glob_pattern: &str, install: bool) -> Result<PathBuf, MenuInstError> {
+    //         let (xml_path, exists) = self.xml_path_for_mime_type(mime_type);
+    //         if exists {
+    //             return Ok(xml_path);
+    //         }
+
+    //         // Write the XML that binds our current mime type to the glob pattern
+    //         let xmlns = "http://www.freedesktop.org/standards/shared-mime-info";
+    //         let mut mime_info = Element::new("mime-info");
+    //         mime_info.attributes.insert("xmlns".to_string(), xmlns.to_string());
+
+    //         let mut mime_type_tag = Element::new("mime-type");
+    //         mime_type_tag.attributes.insert("type".to_string(), mime_type.to_string());
+
+    //         let mut glob = Element::new("glob");
+    //         glob.attributes.insert("pattern".to_string(), glob_pattern.to_string());
+    //         mime_type_tag.children.push(XMLNode::Element(glob));
+
+    //         let descr = format!("Custom MIME type {} for '{}' files (registered by menuinst)", mime_type, glob_pattern);
+    //         let mut comment = Element::new("comment");
+    //         comment.children.push(XMLNode::Text(descr));
+    //         mime_type_tag.children.push(XMLNode::Element(comment));
+
+    //         mime_info.children.push(XMLNode::Element(mime_type_tag));
+    //         let tree = Element::new("mime-info");
+    //         tree.children.push(XMLNode::Element(mime_info));
+
+    //         let subcommand = if install { "install" } else { "uninstall" };
+    //         // Install the XML file and register it as default for our app
+    //         let tmp_dir = TempDir::new()?;
+    //         let tmp_path = tmp_dir.path().join(xml_path.file_name().unwrap());
+    //         let mut file = fs::File::create(&tmp_path)?;
+    //         tree.write(&mut file)?;
+
+    //         let mut command = Command::new("xdg-mime");
+    //         command.arg(subcommand).arg("--mode").arg(&self.menu.mode).arg("--novendor").arg(tmp_path);
+    //         if let Err(_) = self.logged_run(&mut command) {
+    //             log::debug!("Could not un/register MIME type {} with xdg-mime. Writing to '{}' as a fallback.", mime_type, xml_path.display());
+    //             let mut file = fs::File::create(&xml_path)?;
+    //             tree.write(&mut file)?;
+    //         }
+
+    //         Ok(xml_path)
+    //     }
+
+    //     fn paths(&self) -> Vec<PathBuf> {
+    //         let mut paths = vec![self.location()];
+    //         if let Some(mime_types) = self.command.mime_type.as_ref().map(|s| s.resolve(&self.placeholders)) {
+    //             for mime in mime_types.split(';') {
+    //                 let (xml_path, exists) = self.xml_path_for_mime_type(mime);
+    //                 if exists && fs::read_to_string(&xml_path).unwrap().contains("registered by menuinst") {
+    //                     paths.push(xml_path);
+    //                 }
+    //             }
+    //         }
+    //         paths
+    //    }
 }
