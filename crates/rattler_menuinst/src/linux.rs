@@ -3,6 +3,7 @@ use fs_err::File;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use rattler_conda_types::Platform;
 use rattler_shell::activation::{ActivationVariables, Activator};
@@ -242,9 +243,17 @@ impl LinuxMenu {
         Ok(())
     }
 
+    fn update_desktop_database() -> Result<(), MenuInstError> {
+        // We don't care about the output of update-desktop-database
+        let _ = Command::new("update-desktop-database").output();
+
+        Ok(())
+    }
+
     fn install(&self) -> Result<(), MenuInstError> {
         self.pre_create()?;
         self.create_desktop_entry()?;
+        Self::update_desktop_database()?;
         Ok(())
     }
 
