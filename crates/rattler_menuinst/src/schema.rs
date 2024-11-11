@@ -110,7 +110,7 @@ pub struct Linux {
     pub startup_wm_class: Option<PlaceholderString>,
     #[serde(rename = "TryExec")]
     pub try_exec: Option<PlaceholderString>,
-    pub glob_patterns: Option<HashMap<String, String>>,
+    pub glob_patterns: Option<HashMap<PlaceholderString, PlaceholderString>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
