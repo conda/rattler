@@ -17,7 +17,10 @@ use rattler_shell::{
 
 use crate::{
     render::{resolve, BaseMenuItemPlaceholders, MenuItemPlaceholders},
-    schema::{MacOS, MenuItemCommand, UTTypeDeclarationModel},
+    schema::{
+        CFBundleDocumentTypesModel, CFBundleURLTypesModel, MacOS, MenuItemCommand,
+        UTTypeDeclarationModel,
+    },
     slugify, utils, MenuInstError, MenuMode,
 };
 
@@ -129,6 +132,78 @@ impl UTTypeDeclarationModel {
     }
 }
 
+impl CFBundleDocumentTypesModel {
+    fn to_plist(&self, placeholders: &MenuItemPlaceholders) -> Value {
+        let mut type_dict = plist::Dictionary::new();
+        type_dict.insert(
+            "CFBundleTypeName".into(),
+            Value::String(self.cf_bundle_type_name.resolve(placeholders)),
+        );
+
+        if let Some(icon) = &self.cf_bundle_type_icon_file {
+            type_dict.insert(
+                "CFBundleTypeIconFile".into(),
+                Value::String(icon.resolve(placeholders)),
+            );
+        }
+
+        if let Some(role) = &self.cf_bundle_type_role {
+            type_dict.insert("CFBundleTypeRole".into(), Value::String(role.clone()));
+        }
+
+        type_dict.insert(
+            "LSItemContentType".into(),
+            Value::Array(
+                self.ls_item_content_types
+                    .iter()
+                    .map(|s| s.resolve(placeholders).into())
+                    .collect(),
+            ),
+        );
+
+        type_dict.insert(
+            "LSHandlerRank".into(),
+            Value::String(self.ls_handler_rank.clone()),
+        );
+
+        Value::Dictionary(type_dict)
+    }
+}
+
+impl CFBundleURLTypesModel {
+    fn to_plist(&self, placeholders: &MenuItemPlaceholders) -> Value {
+        let mut type_dict = plist::Dictionary::new();
+
+        if let Some(role) = self.cf_bundle_type_role.clone() {
+            type_dict.insert("CFBundleTypeRole".into(), role.into());
+        }
+
+        type_dict.insert(
+            "CFBundleURLSchemes".into(),
+            Value::Array(
+                self.cf_bundle_url_schemes
+                    .iter()
+                    .map(|s| s.resolve(placeholders).into())
+                    .collect(),
+            ),
+        );
+
+        type_dict.insert(
+            "CFBundleURLName".into(),
+            Value::String(self.cf_bundle_url_name.resolve(placeholders)),
+        );
+
+        if let Some(icon) = &self.cf_bundle_url_icon_file {
+            type_dict.insert(
+                "CFBundleURLIconFile".into(),
+                Value::String(icon.resolve(placeholders)),
+            );
+        }
+
+        Value::Dictionary(type_dict)
+    }
+}
+
 impl MacOSMenu {
     pub fn new(
         prefix: &Path,
@@ -206,21 +281,20 @@ impl MacOSMenu {
     }
 
     pub fn install_icon(&self) -> Result<(), MenuInstError> {
-        println!("Installing icon");
         if let Some(icon) = self.command.icon.as_ref() {
             let icon = PathBuf::from(icon.resolve(&self.placeholders));
             let icon_name = icon.file_name().expect("Failed to get icon name");
             let dest = self.directories.resources().join(icon_name);
             fs::copy(&icon, &dest)?;
 
-            println!("Installed icon to {}", dest.display());
+            tracing::info!("Installed icon to {}", dest.display());
 
             if self.needs_appkit_launcher() {
                 let dest = self.directories.nested_resources().join(icon_name);
                 fs::copy(&icon, dest)?;
             }
         } else {
-            println!("No icon to install");
+            tracing::info!("No icon to install");
         }
 
         Ok(())
@@ -249,6 +323,7 @@ impl MacOSMenu {
         let slugname = slugify(&name);
         let shortname = if slugname.len() > 16 {
             // let hashed = format!("{:x}", Sha256::digest(slugname.as_bytes()));
+            // TODO
             let hashed = "123456";
             format!("{}{}", &slugname[..10], &hashed[..6])
         } else {
@@ -296,6 +371,14 @@ impl MacOSMenu {
             } else {
                 tracing::warn!("Failed to extract icon name from path: {:?}", resolved_icon);
             }
+        }
+
+        if let Some(cf_bundle_types_model) = &self.item.cf_bundle_document_types {
+            let mut types_array = Vec::new();
+            for cf_bundle_type in cf_bundle_types_model {
+                types_array.push(cf_bundle_type.to_plist(&self.placeholders));
+            }
+            pl.insert("CFBundleDocumentTypes".into(), Value::Array(types_array));
         }
 
         if self.needs_appkit_launcher() {
