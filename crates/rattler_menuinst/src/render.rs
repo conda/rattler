@@ -48,7 +48,7 @@ impl BaseMenuItemPlaceholders {
             ("PREFIX", prefix.to_path_buf()),
             ("PYTHON", python),
             ("BASE_PYTHON", base_python),
-            ("MENU_DIR", prefix.join("menu")),
+            ("MENU_DIR", prefix.join("Menu")),
             ("HOME", dirs::home_dir().unwrap_or_default()),
         ]);
 
