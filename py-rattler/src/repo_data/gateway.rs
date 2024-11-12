@@ -178,6 +178,7 @@ impl PySourceConfig {
         jlap_enabled: bool,
         zstd_enabled: bool,
         bz2_enabled: bool,
+        sharded_enabled: bool,
         cache_action: Wrap<CacheAction>,
     ) -> Self {
         Self {
@@ -185,6 +186,7 @@ impl PySourceConfig {
                 jlap_enabled,
                 zstd_enabled,
                 bz2_enabled,
+                sharded_enabled,
                 cache_action: cache_action.0,
             },
         }
