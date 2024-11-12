@@ -11,6 +11,7 @@ use rattler_shell::activation::{ActivationVariables, Activator};
 use rattler_shell::shell;
 
 use crate::render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString};
+use crate::slugify;
 use crate::util::run_pre_create_command;
 use crate::{
     schema::{Linux, MenuItemCommand},
@@ -27,15 +28,42 @@ pub struct LinuxMenu {
     mode: MenuMode,
 }
 
+/// Directories used on Linux for menu items
 pub struct Directories {
-    config_directory: PathBuf,
-    data_directory: PathBuf,
-    system_menu_config_location: PathBuf,
-    desktop_entries_location: PathBuf,
+    /// The name of the (parent) menu (in the json defined as `menu_name`)
+    pub menu_name: String,
+
+    /// The name of the current menu item
+    pub name: String,
+
+    /// The data directory for the menu
+    pub data_directory: PathBuf,
+
+    /// The location of the menu configuration file This is the file that is
+    /// used by the system to determine the menu layout It is usually located at
+    /// `~/.config/menus/applications.menu`
+    pub menu_config_location: PathBuf,
+
+    /// The location of the system menu configuration file This is the file that
+    /// is used by the system to determine the menu layout It is usually located
+    /// at `/etc/xdg/menus/applications.menu`
+    pub system_menu_config_location: PathBuf,
+
+    /// The location of the desktop entries This is a directory that contains
+    /// `.desktop` files that describe the applications that are shown in the
+    /// menu It is usually located at `/usr/share/applications` or
+    /// `~/.local/share/applications`
+    pub desktop_entries_location: PathBuf,
+
+    /// The location of the desktop-directories This is a directory that
+    /// contains `.directory` files that describe the directories that are shown
+    /// in the menu It is usually located at `/usr/share/desktop-directories` or
+    /// `~/.local/share/desktop-directories`
+    pub directory_entry_location: PathBuf,
 }
 
 impl Directories {
-    fn new(mode: MenuMode) -> Self {
+    fn new(mode: MenuMode, menu_name: &str, name: &str) -> Self {
         let system_config_directory = PathBuf::from("/etc/xdg/");
         let system_data_directory = PathBuf::from("/usr/share");
 
@@ -46,39 +74,53 @@ impl Directories {
             )
         } else {
             (
-                dirs::home_dir().expect("Could not get home dir"),
+                dirs::config_dir().expect("Could not get config dir"),
                 dirs::data_dir().expect("Could not get data dir"),
             )
         };
 
         Directories {
-            config_directory: config_directory.clone(),
+            menu_name: menu_name.to_string(),
+            name: name.to_string(),
             data_directory: data_directory.clone(),
-            system_menu_config_location: system_config_directory
-                .join("menus")
-                .join("applications.menu"),
+            system_menu_config_location: system_config_directory.join("menus/applications.menu"),
+            menu_config_location: config_directory.join("menus/applications.menu"),
             desktop_entries_location: data_directory.join("applications"),
+            directory_entry_location: data_directory
+                .join(format!("desktop-directories/{}.directory", slugify(name))),
         }
+    }
+
+    pub fn desktop_file(&self) -> PathBuf {
+        self.desktop_entries_location.join(format!(
+            "{}_{}.desktop",
+            slugify(&self.menu_name),
+            slugify(&self.name)
+        ))
     }
 }
 
 impl LinuxMenu {
     fn new(
+        menu_name: &str,
         prefix: &Path,
         item: Linux,
         command: MenuItemCommand,
         placeholders: &BaseMenuItemPlaceholders,
         mode: MenuMode,
     ) -> Self {
-        let directories = Directories::new(mode);
+        let name = command
+            .name
+            .resolve(crate::schema::Environment::Base, placeholders);
+
+        let directories = Directories::new(mode, &menu_name, &name);
+        // This should be the path to the desktop file
         // TODO unsure if this is the right value for MENU_ITEM_LOCATION
-        let refined_placeholders = placeholders.refine(&directories.system_menu_config_location);
+        let refined_placeholders = placeholders.refine(&directories.desktop_file());
 
         LinuxMenu {
+            name,
             prefix: prefix.to_path_buf(),
-            name: command
-                .name
-                .resolve(crate::schema::Environment::Base, placeholders),
             item,
             command,
             directories,
@@ -88,9 +130,7 @@ impl LinuxMenu {
     }
 
     fn location(&self) -> PathBuf {
-        // TODO: The Python implementation uses one more variable
-        let filename = format!("{}.desktop", self.name);
-        self.directories.desktop_entries_location.join(filename)
+        self.directories.desktop_file()
     }
 
     /// Logic to run before the shortcut files are created.
@@ -477,13 +517,14 @@ impl LinuxMenu {
 
 /// Install a menu item on Linux.
 pub fn install_menu_item(
+    menu_name: &str,
     prefix: &Path,
     item: Linux,
     command: MenuItemCommand,
     placeholders: &BaseMenuItemPlaceholders,
     menu_mode: MenuMode,
 ) -> Result<(), MenuInstError> {
-    let menu = LinuxMenu::new(prefix, item, command, placeholders, menu_mode);
+    let menu = LinuxMenu::new(menu_name, prefix, item, command, placeholders, menu_mode);
     menu.install()?;
     Ok(())
 }

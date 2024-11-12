@@ -46,6 +46,7 @@ pub fn install_menuitems(
     prefix: &Path,
     base_prefix: &Path,
     platform: Platform,
+    menu_mode: MenuMode,
 ) -> Result<(), MenuInstError> {
     let text = std::fs::read_to_string(file)?;
     let menu_inst: MenuInstSchema = serde_json::from_str(&text)?;
@@ -56,11 +57,12 @@ pub fn install_menuitems(
             if let Some(linux_item) = item.platforms.linux {
                 let command = item.command.merge(linux_item.base);
                 linux::install_menu_item(
+                    &menu_inst.menu_name,
                     prefix,
                     linux_item.specific,
                     command,
                     &placeholders,
-                    MenuMode::User,
+                    menu_mode,
                 )?;
             }
         } else if platform.is_osx() {
@@ -72,19 +74,14 @@ pub fn install_menuitems(
                     macos_item.specific,
                     command,
                     &placeholders,
-                    MenuMode::System,
+                    menu_mode,
                 )?;
             }
         } else if platform.is_windows() {
             #[cfg(target_os = "windows")]
             if let Some(windows_item) = item.platforms.win {
                 let command = item.command.merge(windows_item.base);
-                windows::install_menu_item(
-                    prefix,
-                    windows_item.specific,
-                    command,
-                    MenuMode::System,
-                )?;
+                windows::install_menu_item(prefix, windows_item.specific, command, menu_mode)?;
             }
         }
     }
@@ -98,7 +95,7 @@ pub mod test {
 
     use rattler_conda_types::Platform;
 
-    use crate::install_menuitems;
+    use crate::{install_menuitems, MenuMode};
 
     pub(crate) fn test_data() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/menuinst")
@@ -117,6 +114,6 @@ pub mod test {
         let prefix = std::fs::canonicalize(prefix).unwrap();
         let platform = Platform::OsxArm64;
 
-        install_menuitems(&schema_path, &prefix, &prefix, platform).unwrap();
+        install_menuitems(&schema_path, &prefix, &prefix, platform, MenuMode::User).unwrap();
     }
 }
