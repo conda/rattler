@@ -474,7 +474,15 @@ impl MacOSMenu {
             );
         }
 
-        println!(
+        if let Some(cf_bundle_url_types) = &self.item.cf_bundle_url_types {
+            let mut url_array = Vec::new();
+            for url_type in cf_bundle_url_types {
+                url_array.push(url_type.to_plist(&self.placeholders));
+            }
+            pl.insert("CFBundleURLTypes".into(), Value::Array(url_array));
+        }
+
+        tracing::info!(
             "Writing plist to {}",
             self.directories
                 .location
