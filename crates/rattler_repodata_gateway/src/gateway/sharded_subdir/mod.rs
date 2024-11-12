@@ -7,7 +7,7 @@ use simple_spawn_blocking::tokio::run_blocking_task;
 use url::Url;
 
 use crate::{
-    fetch::FetchRepoDataError,
+    fetch::{CacheAction, FetchRepoDataError},
     gateway::{error::SubdirNotFoundError, subdir::SubdirClient},
     reporter::ResponseReporterExt,
     GatewayError, Reporter,
@@ -22,6 +22,7 @@ pub struct ShardedSubdir {
     package_base_url: Url,
     sharded_repodata: ShardedRepodata,
     cache_dir: PathBuf,
+    cache_action: CacheAction,
     concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
@@ -31,6 +32,7 @@ impl ShardedSubdir {
         subdir: String,
         client: ClientWithMiddleware,
         cache_dir: PathBuf,
+        cache_action: CacheAction,
         concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, GatewayError> {
@@ -44,6 +46,7 @@ impl ShardedSubdir {
             client.clone(),
             &index_base_url,
             &cache_dir,
+            cache_action,
             concurrent_requests_semaphore.clone(),
             reporter,
         )
@@ -92,6 +95,7 @@ impl ShardedSubdir {
             package_base_url: add_trailing_slash(&package_base_url).into_owned(),
             sharded_repodata,
             cache_dir,
+            cache_action,
             concurrent_requests_semaphore,
         })
     }
@@ -113,21 +117,34 @@ impl SubdirClient for ShardedSubdir {
         let shard_cache_path = self.cache_dir.join(format!("{shard:x}.msgpack"));
 
         // Read the cached shard
-        match tokio::fs::read(&shard_cache_path).await {
-            Ok(cached_bytes) => {
-                // Decode the cached shard
-                return parse_records(
-                    cached_bytes,
-                    self.channel.canonical_name(),
-                    self.package_base_url.clone(),
-                )
-                .await
-                .map(Arc::from);
+        if self.cache_action != CacheAction::NoCache {
+            match tokio::fs::read(&shard_cache_path).await {
+                Ok(cached_bytes) => {
+                    // Decode the cached shard
+                    return parse_records(
+                        cached_bytes,
+                        self.channel.canonical_name(),
+                        self.package_base_url.clone(),
+                    )
+                    .await
+                    .map(Arc::from);
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    // The file is missing from the cache, we need to download
+                    // it.
+                }
+                Err(err) => return Err(FetchRepoDataError::IoError(err).into()),
             }
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                // The file is missing from the cache, we need to download it.
-            }
-            Err(err) => return Err(FetchRepoDataError::IoError(err).into()),
+        }
+
+        if matches!(
+            self.cache_action,
+            CacheAction::UseCacheOnly | CacheAction::ForceCacheOnly
+        ) {
+            return Err(GatewayError::CacheError(format!(
+                "the shard for package '{}' is not in the cache",
+                name.as_source()
+            )));
         }
 
         // Download the shard

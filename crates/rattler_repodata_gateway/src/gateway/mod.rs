@@ -286,32 +286,37 @@ impl GatewayInner {
                     "unsupported file based url".to_string(),
                 ));
             }
-        } else if supports_sharded_repodata(&url) {
-            sharded_subdir::ShardedSubdir::new(
-                channel.clone(),
-                platform.to_string(),
-                self.client.clone(),
-                self.cache.clone(),
-                self.concurrent_requests_semaphore.clone(),
-                reporter.as_deref(),
-            )
-            .await
-            .map(SubdirData::from_client)
         } else if url.scheme() == "http"
             || url.scheme() == "https"
             || url.scheme() == "gcs"
             || url.scheme() == "oci"
         {
-            remote_subdir::RemoteSubdirClient::new(
-                channel.clone(),
-                platform,
-                self.client.clone(),
-                self.cache.clone(),
-                self.channel_config.get(channel).clone(),
-                reporter,
-            )
-            .await
-            .map(SubdirData::from_client)
+            // Check if the channel supports sharded repodata
+            let source_config = self.channel_config.get(channel);
+            if self.channel_config.get(channel).sharded_enabled || force_sharded_repodata(&url) {
+                sharded_subdir::ShardedSubdir::new(
+                    channel.clone(),
+                    platform.to_string(),
+                    self.client.clone(),
+                    self.cache.clone(),
+                    source_config.cache_action,
+                    self.concurrent_requests_semaphore.clone(),
+                    reporter.as_deref(),
+                )
+                .await
+                .map(SubdirData::from_client)
+            } else {
+                remote_subdir::RemoteSubdirClient::new(
+                    channel.clone(),
+                    platform,
+                    self.client.clone(),
+                    self.cache.clone(),
+                    source_config.clone(),
+                    reporter,
+                )
+                .await
+                .map(SubdirData::from_client)
+            }
         } else {
             return Err(GatewayError::UnsupportedUrl(format!(
                 "'{}' is not a supported scheme",
@@ -351,12 +356,9 @@ enum PendingOrFetched<T> {
     Fetched(T),
 }
 
-fn supports_sharded_repodata(url: &Url) -> bool {
-    (url.scheme() == "http" || url.scheme() == "https")
-        && (url.host_str() == Some("fast.prefiks.dev")
-            || url
-                .host_str()
-                .map_or(false, |host| host.ends_with("prefix.dev")))
+fn force_sharded_repodata(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https")
+        && matches!(url.host_str(), Some("fast.prefiks.dev" | "fast.prefix.dev"))
 }
 
 #[cfg(test)]
