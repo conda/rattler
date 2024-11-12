@@ -21,7 +21,9 @@ use crate::{
         CFBundleDocumentTypesModel, CFBundleURLTypesModel, MacOS, MenuItemCommand,
         UTTypeDeclarationModel,
     },
-    slugify, utils, MenuInstError, MenuMode,
+    slugify,
+    util::run_pre_create_command,
+    utils, MenuInstError, MenuMode,
 };
 
 #[derive(Debug)]
@@ -218,7 +220,7 @@ impl MacOSMenu {
 
         let bundle_name = format!("{name}.app");
         let directories = Directories::new(menu_mode, &bundle_name);
-        println!("Installing menu item for {bundle_name}");
+        tracing::info!("Installing menu item for {bundle_name}");
 
         let refined_placeholders = placeholders.refine(&directories.location);
         Self {
@@ -244,7 +246,13 @@ impl MacOSMenu {
         self.item.cf_bundle_identifier.is_some() || self.item.cf_bundle_document_types.is_some()
     }
 
+    // Run pre-create command
     pub fn precreate(&self) -> Result<(), MenuInstError> {
+        if let Some(precreate) = &self.command.precreate {
+            let pre_create_command = precreate.resolve(&self.placeholders);
+            run_pre_create_command(&pre_create_command)?;
+        }
+
         for (src, dest) in self
             .item
             .link_in_bundle
@@ -254,7 +262,6 @@ impl MacOSMenu {
         {
             let src = src.resolve(&self.placeholders);
             let dest = dest.resolve(&self.placeholders);
-            println!("MenuInst: linking {src} to {dest}");
             let rendered_dest = self.directories.location.join(&dest);
             if !rendered_dest.starts_with(&self.directories.location) {
                 return Err(MenuInstError::InstallError(format!(
@@ -265,14 +272,12 @@ impl MacOSMenu {
             }
 
             if let Some(parent) = rendered_dest.parent() {
-                println!("Parent: {}", rendered_dest.display());
                 fs::create_dir_all(parent)?;
             }
-            println!("Dest: {}", rendered_dest.display());
-            assert!(PathBuf::from(&src).exists(), "Source file does not exist");
 
             fs_err::os::unix::fs::symlink(&src, &rendered_dest)?;
-            println!(
+
+            tracing::info!(
                 "MenuInst: link finished {src} to {}",
                 rendered_dest.display()
             );
@@ -382,7 +387,7 @@ impl MacOSMenu {
         }
 
         if self.needs_appkit_launcher() {
-            println!(
+            tracing::debug!(
                 "Writing plist to {}",
                 self.directories
                     .nested_location
