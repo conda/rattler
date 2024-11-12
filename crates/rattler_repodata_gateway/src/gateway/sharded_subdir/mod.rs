@@ -37,7 +37,9 @@ impl ShardedSubdir {
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, GatewayError> {
         // Construct the base url for the shards (e.g. `<channel>/<subdir>`).
-        let index_base_url = add_trailing_slash(channel.base_url())
+        let index_base_url = channel
+            .base_url
+            .url()
             .join(&format!("{subdir}/"))
             .expect("invalid subdir url");
 

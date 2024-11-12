@@ -61,7 +61,7 @@ impl PyGateway {
             default: default_config.into(),
             per_channel: per_channel_config
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k.inner.base_url, v.into()))
                 .collect(),
         };
 

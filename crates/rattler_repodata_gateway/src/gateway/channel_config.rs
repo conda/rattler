@@ -1,6 +1,5 @@
+use rattler_conda_types::CondaUrl;
 use std::collections::HashMap;
-
-use rattler_conda_types::Channel;
 
 use crate::fetch::CacheAction;
 
@@ -49,14 +48,14 @@ pub struct ChannelConfig {
 
     /// Describes per channel properties that influence how the gateway fetches
     /// repodata.
-    pub per_channel: HashMap<Channel, SourceConfig>,
+    pub per_channel: HashMap<CondaUrl, SourceConfig>,
 }
 
 impl ChannelConfig {
     /// Returns the source configuration for the given channel. If the channel
     /// does not have a specific source configuration the default source
     /// configuration will be returned.
-    pub fn get(&self, channel: &Channel) -> &SourceConfig {
+    pub fn get(&self, channel: &CondaUrl) -> &SourceConfig {
         self.per_channel.get(channel).unwrap_or(&self.default)
     }
 }

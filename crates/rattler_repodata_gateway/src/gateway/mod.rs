@@ -143,7 +143,7 @@ impl Gateway {
     /// This method does not clear any on-disk cache.
     pub fn clear_repodata_cache(&self, channel: &Channel, subdirs: SubdirSelection) {
         self.inner.subdirs.retain(|key, _| {
-            key.0.base_url() != channel.base_url() || !subdirs.contains(key.1.as_str())
+            key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str())
         });
     }
 }
@@ -292,8 +292,9 @@ impl GatewayInner {
             || url.scheme() == "oci"
         {
             // Check if the channel supports sharded repodata
-            let source_config = self.channel_config.get(channel);
-            if self.channel_config.get(channel).sharded_enabled || force_sharded_repodata(&url) {
+            let source_config = self.channel_config.get(&channel.base_url);
+            tracing::warn!("{:#?}", source_config);
+            if source_config.sharded_enabled || force_sharded_repodata(&url) {
                 sharded_subdir::ShardedSubdir::new(
                     channel.clone(),
                     platform.to_string(),

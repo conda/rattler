@@ -13,10 +13,11 @@ use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
 
 use super::{ParsePlatformError, Platform};
-use crate::utils::{
-    path::is_path,
-    url::{add_trailing_slash, parse_scheme},
-};
+use crate::utils::{path::is_path, url::parse_scheme};
+
+mod conda_url;
+
+pub use conda_url::CondaUrl;
 
 const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
 
@@ -105,7 +106,7 @@ impl NamedChannelOrUrl {
 
     /// Converts the channel to a base url using the given configuration.
     /// This method ensures that the base url always ends with a `/`.
-    pub fn into_base_url(self, config: &ChannelConfig) -> Result<Url, ParseChannelError> {
+    pub fn into_base_url(self, config: &ChannelConfig) -> Result<CondaUrl, ParseChannelError> {
         let url = match self {
             NamedChannelOrUrl::Name(name) => {
                 let mut base_url = config.channel_alias.clone();
@@ -114,16 +115,17 @@ impl NamedChannelOrUrl {
                         segments.push(segment);
                     }
                 }
-                base_url
+                base_url.into()
             }
-            NamedChannelOrUrl::Url(url) => url,
+            NamedChannelOrUrl::Url(url) => url.into(),
             NamedChannelOrUrl::Path(path) => {
                 let absolute_path = absolute_path(path.as_str(), &config.root_dir)?;
                 directory_path_to_url(absolute_path.to_path())
                     .map_err(|_err| ParseChannelError::InvalidPath(path.to_string()))?
+                    .into()
             }
         };
-        Ok(add_trailing_slash(&url).into_owned())
+        Ok(url)
     }
 
     /// Converts this instance into a channel.
@@ -136,7 +138,8 @@ impl NamedChannelOrUrl {
         let base_url = self.into_base_url(config)?;
         Ok(Channel {
             name,
-            ..Channel::from_url(base_url)
+            base_url,
+            platforms: None,
         })
     }
 }
@@ -189,7 +192,7 @@ pub struct Channel {
     pub platforms: Option<Vec<Platform>>,
 
     /// Base URL of the channel, everything is relative to this url.
-    pub base_url: Url,
+    pub base_url: CondaUrl,
 
     /// The name of the channel
     pub name: Option<String>,
@@ -221,7 +224,7 @@ impl Channel {
                     .map_err(|_err| ParseChannelError::InvalidPath(channel.to_owned()))?;
                 Self {
                     platforms,
-                    base_url: url,
+                    base_url: url.into(),
                     name: Some(channel.to_owned()),
                 }
             }
@@ -252,15 +255,6 @@ impl Channel {
         // Get the path part of the URL but trim the directory suffix
         let path = url.path().trim_end_matches('/');
 
-        // Ensure that the base_url does always ends in a `/`
-        let base_url = if url.path().ends_with('/') {
-            url.clone()
-        } else {
-            let mut url = url.clone();
-            url.set_path(&format!("{path}/"));
-            url
-        };
-
         // Case 1: No path give, channel name is ""
 
         // Case 2: migrated_custom_channels
@@ -268,23 +262,23 @@ impl Channel {
         // Case 4: custom_channels matches
         // Case 5: channel_alias match
 
-        if base_url.has_host() {
+        if url.has_host() {
             // Case 7: Fallback
             let name = path.trim_start_matches('/');
             Self {
                 platforms: None,
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
-                base_url,
+                base_url: url.into(),
             }
         } else {
             // Case 6: non-otherwise-specified file://-type urls
             let name = path
                 .rsplit_once('/')
-                .map_or_else(|| base_url.path(), |(_, path_part)| path_part);
+                .map_or_else(|| path, |(_, path_part)| path_part);
             Self {
                 platforms: None,
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
-                base_url,
+                base_url: url.into(),
             }
         }
     }
@@ -305,7 +299,8 @@ impl Channel {
             base_url: config
                 .channel_alias
                 .join(dir_name.as_ref())
-                .expect("name is not a valid Url"),
+                .expect("name is not a valid Url")
+                .into(),
             name: (!name.is_empty()).then_some(name).map(str::to_owned),
         }
     }
@@ -329,14 +324,14 @@ impl Channel {
         let url = Url::from_directory_path(path).expect("path is a valid url");
         Self {
             platforms: None,
-            base_url: url,
+            base_url: url.into(),
             name: None,
         }
     }
 
     /// Returns the name of the channel
     pub fn name(&self) -> &str {
-        match self.base_url().scheme() {
+        match self.base_url.url().scheme() {
             // The name of the channel is only defined for http and https channels.
             // If the name is not defined we return the base url.
             "https" | "http" => self
@@ -347,17 +342,9 @@ impl Channel {
         }
     }
 
-    /// Returns the base Url of the channel. This does not include the platform
-    /// part.
-    pub fn base_url(&self) -> &Url {
-        &self.base_url
-    }
-
     /// Returns the Urls for the given platform
     pub fn platform_url(&self, platform: Platform) -> Url {
-        self.base_url()
-            .join(&format!("{}/", platform.as_str())) // trailing slash is important here as this signifies a directory
-            .expect("platform is a valid url fragment")
+        self.base_url.platform_url(platform)
     }
 
     /// Returns the Urls for all the supported platforms of this package.
@@ -380,7 +367,7 @@ impl Channel {
 
     /// Returns the canonical name of the channel
     pub fn canonical_name(&self) -> String {
-        self.base_url.clone().redact().to_string()
+        self.base_url.url().clone().redact().to_string()
     }
 }
 
@@ -579,7 +566,7 @@ mod tests {
 
         let channel = Channel::from_str("conda-forge", &config).unwrap();
         assert_eq!(
-            channel.base_url,
+            channel.base_url.url().clone(),
             Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
@@ -596,14 +583,14 @@ mod tests {
         let channel =
             Channel::from_str("https://conda.anaconda.org/conda-forge/", &config).unwrap();
         assert_eq!(
-            channel.base_url,
+            channel.base_url.url().clone(),
             Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
         assert_eq!(channel.name(), "conda-forge");
         assert_eq!(channel.platforms, None);
         assert_eq!(
-            channel.base_url().to_string(),
+            channel.base_url.to_string(),
             "https://conda.anaconda.org/conda-forge/"
         );
 
@@ -622,12 +609,12 @@ mod tests {
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
         assert_eq!(channel.name(), "file:///var/channels/conda-forge/");
         assert_eq!(
-            channel.base_url,
+            channel.base_url.url().clone(),
             Url::from_str("file:///var/channels/conda-forge/").unwrap()
         );
         assert_eq!(channel.platforms, None);
         assert_eq!(
-            channel.base_url().to_string(),
+            channel.base_url.to_string(),
             "file:///var/channels/conda-forge/"
         );
 
@@ -643,7 +630,7 @@ mod tests {
         );
         assert_eq!(channel.platforms, None);
         assert_eq!(
-            channel.base_url().to_file_path().unwrap(),
+            channel.base_url.url().to_file_path().unwrap(),
             current_dir.join("dir/does/not_exist")
         );
     }
@@ -654,7 +641,7 @@ mod tests {
 
         let channel = Channel::from_str("http://localhost:1234", &config).unwrap();
         assert_eq!(
-            channel.base_url,
+            channel.base_url.url().clone(),
             Url::from_str("http://localhost:1234/").unwrap()
         );
         assert_eq!(channel.name, None);
@@ -681,7 +668,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            channel.base_url,
+            channel.base_url.url().clone(),
             Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
@@ -693,7 +680,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            channel.base_url,
+            channel.base_url.url().clone(),
             Url::from_str("https://conda.anaconda.org/pkgs/main/").unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("pkgs/main"));
@@ -701,7 +688,7 @@ mod tests {
 
         let channel = Channel::from_str("conda-forge/label/rust_dev", &config).unwrap();
         assert_eq!(
-            channel.base_url,
+            channel.base_url.url().clone(),
             Url::from_str("https://conda.anaconda.org/conda-forge/label/rust_dev/").unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge/label/rust_dev"));
@@ -785,8 +772,8 @@ mod tests {
 
         for channel_str in test_channels {
             let channel = Channel::from_str(channel_str, &channel_config).unwrap();
-            assert!(channel.base_url().as_str().ends_with('/'));
-            assert!(!channel.base_url().as_str().ends_with("//"));
+            assert!(channel.base_url.as_str().ends_with('/'));
+            assert!(!channel.base_url.as_str().ends_with("//"));
 
             let named_channel = NamedChannelOrUrl::from_str(channel_str).unwrap();
             let base_url = named_channel
@@ -798,8 +785,8 @@ mod tests {
             assert!(!base_url_str.ends_with("//"));
 
             let channel = named_channel.into_channel(&channel_config).unwrap();
-            assert!(channel.base_url().as_str().ends_with('/'));
-            assert!(!channel.base_url().as_str().ends_with("//"));
+            assert!(channel.base_url.as_str().ends_with('/'));
+            assert!(!channel.base_url.as_str().ends_with("//"));
         }
     }
 
@@ -813,14 +800,14 @@ mod tests {
         let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
         assert_eq!(
             &channel.base_url,
-            named.into_channel(&channel_config).unwrap().base_url()
+            &named.into_channel(&channel_config).unwrap().base_url
         );
 
         let named = NamedChannelOrUrl::Name("nvidia/label/cuda-11.8.0".to_string());
         let channel = Channel::from_str("nvidia/label/cuda-11.8.0", &channel_config).unwrap();
         assert_eq!(
-            channel.base_url(),
-            named.into_channel(&channel_config).unwrap().base_url()
+            channel.base_url,
+            named.into_channel(&channel_config).unwrap().base_url
         );
     }
 }

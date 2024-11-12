@@ -234,7 +234,8 @@ impl RepoData {
             records.push(RepoDataRecord {
                 url: compute_package_url(
                     &channel
-                        .base_url()
+                        .base_url
+                        .url()
                         .join(&package_record.subdir)
                         .expect("cannot join channel base_url and subdir"),
                     base_url.as_deref(),
@@ -609,7 +610,7 @@ mod test {
             &ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap()),
         )
         .unwrap();
-        let base_url = channel.base_url().join("linux-64/").unwrap();
+        let base_url = channel.base_url.url().join("linux-64/").unwrap();
         assert_eq!(
             compute_package_url(&base_url, None, "bla.conda").to_string(),
             "https://conda.anaconda.org/conda-forge/linux-64/bla.conda"
