@@ -85,11 +85,11 @@ class Gateway:
     """
 
     def __init__(
-            self,
-            cache_dir: Optional[os.PathLike[str]] = None,
-            default_config: Optional[SourceConfig] = None,
-            per_channel_config: Optional[dict[Channel | str, SourceConfig]] = None,
-            max_concurrent_requests: int = 100,
+        self,
+        cache_dir: Optional[os.PathLike[str]] = None,
+        default_config: Optional[SourceConfig] = None,
+        per_channel_config: Optional[dict[Channel | str, SourceConfig]] = None,
+        max_concurrent_requests: int = 100,
     ) -> None:
         """
         Arguments:
@@ -113,19 +113,18 @@ class Gateway:
             cache_dir=cache_dir,
             default_config=default_config._into_py(),
             per_channel_config={
-                channel._channel if isinstance(channel, Channel) else Channel(
-                    channel)._channel: config._into_py()
+                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel: config._into_py()
                 for channel, config in (per_channel_config or {}).items()
             },
             max_concurrent_requests=max_concurrent_requests,
         )
 
     async def query(
-            self,
-            channels: List[Channel | str],
-            platforms: List[Platform | PlatformLiteral],
-            specs: List[MatchSpec | PackageName | str],
-            recursive: bool = True,
+        self,
+        channels: List[Channel | str],
+        platforms: List[Platform | PlatformLiteral],
+        specs: List[MatchSpec | PackageName | str],
+        recursive: bool = True,
     ) -> List[List[RepoDataRecord]]:
         """Queries the gateway for repodata.
 
@@ -165,24 +164,21 @@ class Gateway:
         """
         py_records = await self._gateway.query(
             channels=[
-                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for
-                channel in channels
+                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
             ],
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
                 for platform in platforms
             ],
-            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True)
-                   for spec in specs],
+            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True) for spec in specs],
             recursive=recursive,
         )
 
         # Convert the records into python objects
-        return [[RepoDataRecord._from_py_record(record) for record in records] for records in
-                py_records]
+        return [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records]
 
     async def names(
-            self, channels: List[Channel | str], platforms: List[Platform | PlatformLiteral]
+        self, channels: List[Channel | str], platforms: List[Platform | PlatformLiteral]
     ) -> List[PackageName]:
         """Queries all the names of packages in a channel.
 
@@ -207,8 +203,7 @@ class Gateway:
 
         py_package_names = await self._gateway.names(
             channels=[
-                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for
-                channel in channels
+                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
             ],
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
@@ -217,11 +212,10 @@ class Gateway:
         )
 
         # Convert the records into python objects
-        return [PackageName._from_py_package_name(package_name) for package_name in
-                py_package_names]
+        return [PackageName._from_py_package_name(package_name) for package_name in py_package_names]
 
     def clear_repodata_cache(
-            self, channel: Channel | str, subdirs: Optional[List[Platform | PlatformLiteral]] = None
+        self, channel: Channel | str, subdirs: Optional[List[Platform | PlatformLiteral]] = None
     ) -> None:
         """
         Clears any in-memory cache for the given channel.
@@ -246,8 +240,7 @@ class Gateway:
         """
         self._gateway.clear_repodata_cache(
             channel._channel if isinstance(channel, Channel) else Channel(channel)._channel,
-            {subdir._inner if isinstance(subdir, Platform) else Platform(subdir)._inner for subdir
-             in subdirs}
+            {subdir._inner if isinstance(subdir, Platform) else Platform(subdir)._inner for subdir in subdirs}
             if subdirs is not None
             else None,
         )
