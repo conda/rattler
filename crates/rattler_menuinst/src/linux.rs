@@ -11,6 +11,7 @@ use rattler_shell::activation::{ActivationVariables, Activator};
 use rattler_shell::shell;
 
 use crate::render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString};
+use crate::util::run_pre_create_command;
 use crate::{
     schema::{Linux, MenuItemCommand},
     MenuInstError, MenuMode,
@@ -94,10 +95,11 @@ impl LinuxMenu {
 
     /// Logic to run before the shortcut files are created.
     fn pre_create(&self) -> Result<(), MenuInstError> {
-        if Platform::current().is_windows() {
-            // TODO: return error
-            return Ok(());
+        if let Some(pre_create_command) = &self.command.precreate {
+            let pre_create_command = pre_create_command.resolve(&self.placeholders);
+            run_pre_create_command(&pre_create_command)?;
         }
+
         Ok(())
     }
 
@@ -120,7 +122,7 @@ impl LinuxMenu {
             for (k, v) in activation_env {
                 envs.push(format!(r#"{k}="{v}""#));
             }
-            println!("Envs: {envs:?}");
+            tracing::debug!("Envs: {envs:?}");
         }
 
         let command = self
@@ -483,7 +485,5 @@ pub fn install_menu_item(
 ) -> Result<(), MenuInstError> {
     let menu = LinuxMenu::new(prefix, item, command, placeholders, menu_mode);
     menu.install()?;
-    println!("{:?}", menu.location());
-    println!("{:?}", menu.directories.config_directory);
     Ok(())
 }

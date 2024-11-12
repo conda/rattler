@@ -7,6 +7,7 @@ mod linux;
 mod macos;
 mod render;
 mod schema;
+mod util;
 #[cfg(target_os = "windows")]
 mod windows;
 
@@ -108,14 +109,12 @@ pub mod test {
         if std::env::var("INSTALL_MENU_ITEM").is_err() {
             return;
         }
-        println!("Running test_install_menu_item");
         let test_data = crate::test::test_data();
         let schema_path =
             test_data.join("/Users/wolfv/Programs/rattler/.prefix/Menu/napari-menu.json");
 
         let prefix = schema_path.parent().unwrap().parent().unwrap();
         let prefix = std::fs::canonicalize(prefix).unwrap();
-        println!("prefix: {prefix:?}");
         let platform = Platform::OsxArm64;
 
         install_menuitems(&schema_path, &prefix, &prefix, platform).unwrap();
