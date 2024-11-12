@@ -232,6 +232,7 @@ impl InstallDriver {
                         target_prefix,
                         target_prefix,
                         Platform::current(),
+                        rattler_menuinst::MenuMode::User,
                     )
                     .unwrap_or_else(|e| {
                         tracing::warn!("Failed to install menu item: {} (ignored)", e);
