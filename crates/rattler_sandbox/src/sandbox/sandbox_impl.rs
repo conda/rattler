@@ -36,3 +36,43 @@ pub fn sandboxed_command(exe: &str, exceptions: &[Exception]) -> Command {
 
     cmd
 }
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsStr;
+
+    use super::*;
+
+    #[test]
+    fn test_sandboxed_command() {
+        let cmd = sandboxed_command(
+            "test",
+            &[
+                Exception::ExecuteAndRead("/bin".into()),
+                Exception::Read("/etc".into()),
+                Exception::ReadAndWrite("/tmp".into()),
+                Exception::Networking,
+            ],
+        );
+
+        let args = cmd.get_args();
+
+        // args to string to compare
+        let args: Vec<&OsStr> = args.collect();
+
+        assert_eq!(
+            args,
+            vec![
+                "__sandbox_trampoline__",
+                "--fs-exec-and-read",
+                "/bin",
+                "--fs-read",
+                "/etc",
+                "--fs-write-and-read",
+                "/tmp",
+                "--network",
+                "test",
+            ]
+        );
+    }
+}
