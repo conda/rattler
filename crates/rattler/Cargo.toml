@@ -33,6 +33,7 @@ memmap2 = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
 rattler_cache = { path = "../rattler_cache", version = "0.2.8", default-features = false }
+rattler_menuinst = { path = "../rattler_menuinst", version = "0.1.0", default-features = false }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.29.0", default-features = false }
 rattler_digest = { path = "../rattler_digest", version = "1.0.3", default-features = false }
 rattler_networking = { path = "../rattler_networking", version = "0.21.5", default-features = false }

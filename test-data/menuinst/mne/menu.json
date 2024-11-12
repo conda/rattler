@@ -1,0 +1,168 @@
+{
+    "$schema": "https://json-schema.org/draft-07/schema",
+    "$id": "https://schemas.conda.io/menuinst-1.schema.json",
+    "menu_name": "MNE-Python (__PKG_VERSION__)",
+    "menu_items": [{
+      "name": "Spyder (MNE)",
+      "description": "The Spyder development environment",
+      "icon": "{{ MENU_DIR }}/spyder.{{ ICON_EXT }}",
+      "command": ["will be overridden in platforms section"],
+      "activate": true,
+      "terminal": false,
+      "platforms": {
+        "win": {
+          "command": [
+            "{{ PYTHONW }}",
+            "{{ SCRIPTS_DIR }}\\spyder-script.py"
+          ],
+          "desktop": false
+        },
+        "linux": {
+          "command": ["spyder"],
+          "Categories": [
+            "Science"
+          ]
+        },
+        "osx": {
+          "command": ["spyder"],
+          "CFBundleName": "Spyder (MNE-Python __PKG_VERSION__)",
+          "CFBundleDisplayName": "Spyder (MNE-Python __PKG_VERSION__)",
+          "CFBundleVersion": "__PKG_VERSION__"
+        }
+      }
+    },
+    {
+      "name": "System Info (MNE)",
+      "description": "Information on the MNE-Python runtime environment",
+      "icon": "{{ MENU_DIR }}/info.{{ ICON_EXT }}",
+      "command": [
+        "{{ PYTHON }}",
+        "{{ MENU_DIR }}/mne_sys_info.py"
+      ],
+      "activate": true,
+      "terminal": true,
+      "platforms": {
+        "win": {
+          "desktop": false
+        },
+        "linux": {
+          "Categories": [
+            "Science"
+          ]
+        },
+        "osx": {
+          "CFBundleName": "System Information (MNE-Python __PKG_VERSION__)",
+          "CFBundleDisplayName": "System Information (MNE-Python __PKG_VERSION__)",
+          "CFBundleVersion": "__PKG_VERSION__"
+        }
+      }
+    },
+    {
+      "name": "Prompt (MNE)",
+      "description": "MNE-Python console prompt",
+      "icon": "{{ MENU_DIR }}/console.{{ ICON_EXT }}",
+      "activate": true,
+      "terminal": true,
+      "command": ["will be overridden in platforms section"],
+      "platforms": {
+        "win": {
+          "command": [
+            "%SystemRoot%\\system32\\cmd.exe",
+            "/K",
+            "{{ MENU_DIR }}\\mne_open_prompt.bat"
+          ],
+          "desktop": false
+        },
+        "linux": {
+          "command": [
+            "exec",
+            "bash",
+            "--init-file",
+            "{{ MENU_DIR }}/mne_open_prompt.sh"
+          ],
+          "Categories": [
+            "Science"
+          ]
+        },
+        "osx": {
+          "command": [
+            "osascript",
+            "{{ MENU_DIR }}/mne_open_prompt.applescript"
+          ],
+          "CFBundleName": "Prompt (MNE-Python __PKG_VERSION__)",
+          "CFBundleDisplayName": "Prompt (MNE-Python __PKG_VERSION__)",
+          "CFBundleVersion": "__PKG_VERSION__"
+        }
+      }
+    },
+    {
+      "name": "Tutorials (MNE)",
+      "description": "MNE-Python online tutorials",
+      "icon": "{{ MENU_DIR }}/web.{{ ICON_EXT }}",
+      "activate": false,
+      "terminal": false,
+      "command": ["will be overridden in platforms section"],
+      "platforms": {
+        "win": {
+          "command": [
+            "%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            "\"start https://mne.tools/stable/auto_tutorials -WindowStyle hidden\""
+          ],
+          "desktop": false
+        },
+        "linux": {
+          "command": [
+            "xdg-open",
+            "https://mne.tools/stable/auto_tutorials/"
+          ],
+          "Categories": [
+            "Science"
+          ]
+        },
+        "osx": {
+          "command": [
+            "open",
+            "https://mne.tools/stable/auto_tutorials/"
+          ],
+          "CFBundleName": "Tutorials (MNE-Python __PKG_VERSION__)",
+          "CFBundleDisplayName": "Tutorials (MNE-Python __PKG_VERSION__)",
+          "CFBundleVersion": "__PKG_VERSION__"
+        }
+      }
+    },
+    {
+      "name": "User Forum (MNE)",
+      "description": "MNE-Python forum for discussions, problem solving, and information exchange",
+      "icon": "{{ MENU_DIR }}/forum.{{ ICON_EXT }}",
+      "activate": false,
+      "terminal": false,
+      "command": ["will be overridden in platforms section"],
+      "platforms": {
+        "win": {
+          "command": [
+            "%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            "\"start https://mne.discourse.group -WindowStyle hidden\""
+          ],
+          "desktop": false
+        },
+        "linux": {
+          "command": [
+            "xdg-open",
+            "https://mne.discourse.group"
+          ],
+          "Categories": [
+            "Science"
+          ]
+        },
+        "osx": {
+          "command": [
+            "open",
+            "https://mne.discourse.group"
+          ],
+          "CFBundleName": "Forum (MNE-Python __PKG_VERSION__)",
+          "CFBundleDisplayName": "Forum (MNE-Python __PKG_VERSION__)",
+          "CFBundleVersion": "__PKG_VERSION__"
+        }
+      }
+    }]
+  }

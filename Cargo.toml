@@ -155,6 +155,7 @@ trybuild = { version = "1.0.101" }
 typed-path = { version = "0.9.3" }
 url = { version = "2.5.2" }
 uuid = { version = "1.11.0", default-features = false }
+unicode-normalization = { version = "0.1.24" }
 walkdir = "2.5.0"
 windows-sys = { version = "0.59.0", default-features = false }
 zip = { version = "2.2.0", default-features = false }
