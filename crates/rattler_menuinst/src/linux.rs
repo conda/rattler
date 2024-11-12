@@ -114,8 +114,6 @@ impl LinuxMenu {
             .resolve(crate::schema::Environment::Base, placeholders);
 
         let directories = Directories::new(mode, &menu_name, &name);
-        // This should be the path to the desktop file
-        // TODO unsure if this is the right value for MENU_ITEM_LOCATION
         let refined_placeholders = placeholders.refine(&directories.desktop_file());
 
         LinuxMenu {
@@ -187,6 +185,20 @@ impl LinuxMenu {
             res.push(';');
         }
         res
+    }
+
+    fn create_directory_entry(&self) -> Result<(), MenuInstError> {
+        let file = &self.directories.directory_entry_location;
+        tracing::info!("Creating directory entry at {:?}", file);
+        let writer = File::create(file)?;
+        let mut writer = std::io::BufWriter::new(writer);
+
+        writeln!(writer, "[Desktop Entry]")?;
+        writeln!(writer, "Type=Directory")?;
+        writeln!(writer, "Encoding=UTF-8")?;
+        writeln!(writer, "Name={}", self.name)?;
+
+        Ok(())
     }
 
     fn create_desktop_entry(&self) -> Result<(), MenuInstError> {

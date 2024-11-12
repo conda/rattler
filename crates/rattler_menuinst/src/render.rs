@@ -87,6 +87,11 @@ impl BaseMenuItemPlaceholders {
         BaseMenuItemPlaceholders { placeholders: vars }
     }
 
+    /// Insert the menu item location into the placeholders
+    /// 
+    /// - On Linux, this is the path to the `.desktop` file
+    /// - On Windows, this is the path to the start menu `.lnk` file
+    /// - On macOS, this is the path to the `.app` bundle
     pub fn refine(&self, menu_item_location: &Path) -> MenuItemPlaceholders {
         let mut vars = self.placeholders.clone();
         vars.insert(
