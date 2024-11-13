@@ -49,7 +49,6 @@ pub use installer::{
 };
 pub use installer::{Installer, InstallerError, Reporter};
 use itertools::Itertools;
-use link::link_file_from_package_file;
 pub use link::{link_file, LinkFileError, LinkMethod};
 pub use python::PythonInfo;
 use rattler_conda_types::{
@@ -57,7 +56,7 @@ use rattler_conda_types::{
     prefix_record::PathsEntry,
     Platform,
 };
-use rattler_package_streaming::seek::read_package_file;
+use rattler_package_streaming::{fs::extract, ExtractError};
 use simple_spawn_blocking::Cancelled;
 use tokio::task::JoinError;
 use tracing::instrument;
@@ -103,6 +102,14 @@ pub enum InstallError {
     /// Failed to create the target directory.
     #[error("failed to create target directory")]
     FailedToCreateTargetDirectory(#[source] std::io::Error),
+
+    /// Failed to create a temporary directory.
+    #[error("failed to create temporary directory")]
+    FailedToCreateTempDirectory(#[source] std::io::Error),
+
+    /// Failed to extract a conda package.
+    #[error("failed to extract conda package")]
+    FailedToExtractPackage(#[source] ExtractError),
 
     /// A noarch package could not be installed because no python version was
     /// specified.
@@ -246,7 +253,7 @@ pub struct InstallOptions {
 
 /// Given a non-extracted conda package (`package_path`), installs its files
 /// to the `target_dir`.
-/// 
+///
 /// Returns a [`PathsEntry`] for every file that was linked into the target
 /// directory. The entries are ordered in the same order as they appear in the
 /// `paths.json` file of the package.
@@ -256,276 +263,10 @@ pub async fn link_package_from_package_file(
     driver: &InstallDriver,
     options: InstallOptions,
 ) -> Result<Vec<PathsEntry>, InstallError> {
-    // TODO: incorporate in link_package function
+    let temp_dir = tempfile::tempdir().map_err(InstallError::FailedToCreateTempDirectory)?;
 
-    // Determine the target prefix for linking
-    let target_prefix = options
-        .target_prefix
-        .as_deref()
-        .unwrap_or(target_dir)
-        .to_str()
-        .ok_or(InstallError::TargetPrefixIsNotUtf8)?
-        .to_owned();
-
-    // Ensure target directory exists
-    tokio::fs::create_dir_all(&target_dir)
-        .await
-        .map_err(InstallError::FailedToCreateTargetDirectory)?;
-
-    // Reuse or read the `paths.json` and `index.json` files from the package
-    // directory
-    let paths_json = read_paths_json_from_package_file(package_path, driver, options.paths_json);
-    let index_json = read_index_json_from_package_file(package_path, driver, options.index_json);
-    let (paths_json, index_json) = tokio::try_join!(paths_json, index_json)?;
-
-    // Error out if this is a noarch python package but the python information is
-    // missing.
-    if index_json.noarch.is_python() && options.python_info.is_none() {
-        return Err(InstallError::MissingPythonInfo);
-    }
-
-    // Parse the `link.json` file and extract entry points from it.
-    let link_json = if index_json.noarch.is_python() {
-        read_link_json_from_package_file(package_path, driver, options.link_json.flatten()).await?
-    } else {
-        None
-    };
-
-    // Determine whether or not we can use symbolic links
-    let (allow_symbolic_links, allow_hard_links) = (false, false);
-    let allow_ref_links = false;
-
-    // Determine the platform to use
-    let platform = options.platform.unwrap_or(Platform::current());
-
-    // compute all path renames
-    let mut final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
-
-    // register all paths in the install driver path registry
-    let clobber_paths = Arc::new(
-        driver
-            .clobber_registry()
-            .register_paths(&index_json, &final_paths),
-    );
-
-    for (_, computed_path) in final_paths.iter_mut() {
-        if let Some(clobber_rename) = clobber_paths.get(computed_path) {
-            *computed_path = clobber_rename.clone();
-        }
-    }
-
-    // Figure out all the directories that we are going to need
-    let mut directories_to_construct = HashSet::new();
-    for (_, computed_path) in final_paths.iter() {
-        let mut current_path = computed_path.parent();
-        while let Some(path) = current_path {
-            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
-                current_path = path.parent();
-            } else {
-                break;
-            }
-        }
-    }
-
-    let directories_target_dir = target_dir.to_path_buf();
-    driver
-        .run_blocking_io_task(move || {
-            for directory in directories_to_construct.into_iter().sorted() {
-                let full_path = directories_target_dir.join(directory);
-                match fs::create_dir(&full_path) {
-                    Ok(_) => (),
-                    Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
-                    Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
-                }
-            }
-            Ok(())
-        })
-        .await?;
-
-    // Wrap the python info in an `Arc` so we can more easily share it with async
-    // tasks.
-    let python_info = options.python_info.map(Arc::new);
-
-    // Start linking all package files in parallel
-    let mut pending_futures = FuturesUnordered::new();
-    let mut number_of_paths_entries = 0;
-    for (entry, computed_path) in final_paths {
-        let package_path = package_path.to_owned();
-        let target_dir = target_dir.to_owned();
-        let target_prefix = target_prefix.clone();
-
-        let clobber_rename = clobber_paths.get(&entry.relative_path).cloned();
-        let install_future = async move {
-            let _permit = driver.acquire_io_permit().await;
-
-            // Spawn a blocking task to link the specific file. We use a blocking task here
-            // because filesystem access is blocking anyway so its more
-            // efficient to group them together in a single blocking call.
-            let cloned_entry = entry.clone();
-            let result = match tokio::task::spawn_blocking(move || {
-                link_file_from_package_file(
-                    &cloned_entry,
-                    computed_path,
-                    &package_path,
-                    &target_dir,
-                    &target_prefix,
-                    allow_symbolic_links && !cloned_entry.no_link,
-                    allow_hard_links && !cloned_entry.no_link,
-                    allow_ref_links && !cloned_entry.no_link,
-                    platform,
-                    options.apple_codesign_behavior,
-                )
-            })
-            .await
-            .map_err(JoinError::try_into_panic)
-            {
-                Ok(Ok(linked_file)) => linked_file,
-                Ok(Err(e)) => {
-                    return Err(InstallError::FailedToLink(entry.relative_path.clone(), e))
-                }
-                Err(Ok(payload)) => std::panic::resume_unwind(payload),
-                Err(Err(_err)) => return Err(InstallError::Cancelled),
-            };
-
-            // Construct a `PathsEntry` from the result of the linking operation
-            let paths_entry = PathsEntry {
-                relative_path: result.relative_path,
-                original_path: if clobber_rename.is_some() {
-                    Some(entry.relative_path)
-                } else {
-                    None
-                },
-                path_type: entry.path_type.into(),
-                no_link: entry.no_link,
-                sha256: entry.sha256,
-                sha256_in_prefix: Some(result.sha256),
-                size_in_bytes: Some(result.file_size),
-                file_mode: match result.method {
-                    LinkMethod::Patched(file_mode) => Some(file_mode),
-                    _ => None,
-                },
-                prefix_placeholder: entry
-                    .prefix_placeholder
-                    .as_ref()
-                    .map(|p| p.placeholder.clone()),
-            };
-
-            Ok(vec![(number_of_paths_entries, paths_entry)])
-        };
-
-        pending_futures.push(install_future.boxed());
-        number_of_paths_entries += 1;
-    }
-
-    // If this package is a noarch python package we also have to create entry
-    // points.
-    //
-    // Be careful with the fact that this code is currently running in parallel with
-    // the linking of individual files.
-    if let Some(link_json) = link_json {
-        // Parse the `link.json` file and extract entry points from it.
-        let entry_points = match link_json.noarch {
-            NoArchLinks::Python(entry_points) => entry_points.entry_points,
-            NoArchLinks::Generic => {
-                unreachable!("we only use link.json for noarch: python packages")
-            }
-        };
-
-        // Get python info
-        let python_info = python_info
-            .clone()
-            .expect("should be safe because its checked above that this contains a value");
-
-        // Create entry points for each listed item. This is different between Windows
-        // and unix because on Windows, two PathEntry's are created whereas on
-        // Linux only one is created.
-        for entry_point in entry_points {
-            let python_info = python_info.clone();
-            let target_dir = target_dir.to_owned();
-            let target_prefix = target_prefix.clone();
-
-            let entry_point_fut = async move {
-                // Acquire an IO permit
-                let _permit = driver.acquire_io_permit().await;
-
-                let entries = if platform.is_windows() {
-                    match create_windows_python_entry_point(
-                        &target_dir,
-                        &target_prefix,
-                        &entry_point,
-                        &python_info,
-                        &platform,
-                    ) {
-                        Ok([a, b]) => vec![
-                            (number_of_paths_entries, a),
-                            (number_of_paths_entries + 1, b),
-                        ],
-                        Err(e) => return Err(InstallError::FailedToCreatePythonEntryPoint(e)),
-                    }
-                } else {
-                    match create_unix_python_entry_point(
-                        &target_dir,
-                        &target_prefix,
-                        &entry_point,
-                        &python_info,
-                    ) {
-                        Ok(a) => vec![(number_of_paths_entries, a)],
-                        Err(e) => return Err(InstallError::FailedToCreatePythonEntryPoint(e)),
-                    }
-                };
-
-                Ok(entries)
-            };
-
-            pending_futures.push(entry_point_fut.boxed());
-            number_of_paths_entries += if platform.is_windows() { 2 } else { 1 };
-        }
-    }
-
-    // Await the result of all the background tasks. The background tasks are
-    // scheduled in order, however, they can complete in any order. This means
-    // we have to reorder them back into their original order. This is achieved
-    // by waiting to add finished results to the result Vec, if the result
-    // before it has not yet finished. To that end we use a `BinaryHeap` as a
-    // priority queue which will buffer up finished results that finished before
-    // their predecessor.
-    //
-    // What makes this loop special is that it also aborts if any of the returned
-    // results indicate a failure.
-    let mut paths = Vec::with_capacity(number_of_paths_entries);
-    let mut out_of_order_queue = BinaryHeap::<OrderWrapper<PathsEntry>>::with_capacity(100);
-    while let Some(link_result) = pending_futures.next().await {
-        for (index, data) in link_result? {
-            if index == paths.len() {
-                // If this is the next element expected in the sorted list, add it immediately.
-                // This basically means the future finished in order.
-                paths.push(data);
-
-                // By adding a finished future we have to check if there might also be another
-                // future that finished earlier and should also now be added to
-                // the result Vec.
-                while let Some(next_output) = out_of_order_queue.peek_mut() {
-                    if next_output.index == paths.len() {
-                        paths.push(PeekMut::pop(next_output).data);
-                    } else {
-                        break;
-                    }
-                }
-            } else {
-                // Otherwise add it to the out-of-order queue. This means that we still have to
-                // wait for another element before we can add the result to the
-                // ordered list.
-                out_of_order_queue.push(OrderWrapper { index, data });
-            }
-        }
-    }
-    debug_assert_eq!(
-        paths.len(),
-        paths.capacity(),
-        "some futures where not added to the result"
-    );
-
-    Ok(paths)
+    extract(package_path, temp_dir.path()).map_err(InstallError::FailedToExtractPackage)?;
+    link_package(temp_dir.path(), target_dir, driver, options).await
 }
 
 /// Given an extracted package archive (`package_dir`), installs its files to
@@ -843,27 +584,6 @@ fn compute_paths(
     final_paths
 }
 
-/// TODO docs
-async fn read_paths_json_from_package_file(
-    package_path: &Path,
-    driver: &InstallDriver,
-    paths_json: Option<PathsJson>,
-) -> Result<PathsJson, InstallError> {
-    if let Some(paths_json) = paths_json {
-        Ok(paths_json)
-    } else {
-        // TODO: unwrap
-        Ok(read_package_file::<PathsJson>(package_path).unwrap())//.map_err(InstallError::FailedToReadPathsJson)
-        // let package_path = package_path.to_owned();
-        // driver
-        //     .run_blocking_io_task(move || {
-        //         PathsJson::from_package_directory_with_deprecated_fallback(&package_path)
-        //             .map_err(InstallError::FailedToReadPathsJson)
-        //     })
-        //     .await
-    }
-}
-
 /// A helper function that reads the `paths.json` file from a package unless it
 /// has already been provided, in which case it is returned immediately.
 async fn read_paths_json(
@@ -882,26 +602,6 @@ async fn read_paths_json(
             })
             .await
     }
-}
-
-/// todo docs
-async fn read_index_json_from_package_file(
-    package_path: &Path,
-    driver: &InstallDriver,
-    index_json: Option<IndexJson>,
-) -> Result<IndexJson, InstallError> {
-    // todo unwrap
-    Ok(read_package_file::<IndexJson>(package_path).unwrap())
-}
-
-/// todo docs
-async fn read_link_json_from_package_file(
-    package_path: &Path,
-    driver: &InstallDriver,
-    index_json: Option<LinkJson>,
-) -> Result<Option<LinkJson>, InstallError> {
-    // todo unwrap
-    Ok(Some(read_package_file::<LinkJson>(package_path).unwrap()))
 }
 
 /// A helper function that reads the `index.json` file from a package unless it
@@ -1049,7 +749,9 @@ mod test {
 
     use crate::{
         get_test_data_dir,
-        install::{link_package, link_package_from_package_file, InstallDriver, InstallOptions, PythonInfo},
+        install::{
+            link_package, link_package_from_package_file, InstallDriver, InstallOptions, PythonInfo,
+        },
         package_cache::PackageCache,
     };
 
@@ -1204,19 +906,24 @@ mod test {
         insta::assert_yaml_snapshot!(paths);
     }
 
+    #[rstest::rstest]
+    #[case(
+        "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda",
+        "25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd"
+    )]
+    #[case(
+        "https://conda.anaconda.org/conda-forge/linux-aarch64/bzip2-1.0.8-hf897c2e_4.tar.bz2",
+        "3aeb6ab92aa0351722497b2d2a735dc20921cf6c60d9196c04b7a2b9ece198d2"
+    )]
     #[tracing_test::traced_test]
     #[tokio::test]
-    async fn test_link_package_from_package_file() {
+    async fn test_link_package_from_package_file(#[case] package_url: &str, #[case] sha256: &str) {
         let environment_dir = tempfile::TempDir::new().unwrap();
 
-        let package_path = tools::download_and_cache_file_async(
-            "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda"
-                .parse()
-                .unwrap(),
-            "25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd",
-        )
-        .await
-        .unwrap();
+        let package_path =
+            tools::download_and_cache_file_async(package_url.parse().unwrap(), sha256)
+                .await
+                .unwrap();
 
         let install_driver = InstallDriver::default();
 
