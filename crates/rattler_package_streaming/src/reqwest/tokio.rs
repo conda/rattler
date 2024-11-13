@@ -164,7 +164,18 @@ pub async fn extract_conda(
             }
             let new_reader =
                 get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
-            crate::tokio::async_read::extract_conda_via_buffering(new_reader, destination).await
+
+            match crate::tokio::async_read::extract_conda_via_buffering(new_reader, destination)
+                .await
+            {
+                Ok(result) => {
+                    if let Some(reporter) = &reporter {
+                        reporter.on_download_complete();
+                    }
+                    Ok(result)
+                }
+                Err(e) => Err(e),
+            }
         }
         Err(e) => Err(e),
     }
