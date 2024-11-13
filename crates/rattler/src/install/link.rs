@@ -6,12 +6,13 @@ use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceho
 use rattler_conda_types::Platform;
 use rattler_digest::Sha256;
 use rattler_digest::{HashingWriter, Sha256Hash};
+use rattler_package_streaming::seek::stream_conda_content;
 use reflink_copy::reflink;
 use regex::Regex;
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Formatter;
-use std::fs::Permissions;
+use std::fs::{File, Permissions};
 use std::io::{ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
@@ -124,6 +125,197 @@ pub struct LinkedFile {
 
     /// The original prefix placeholder that was replaced
     pub prefix_placeholder: Option<String>,
+}
+
+/// Todo: docs
+#[allow(clippy::too_many_arguments)] // TODO: Fix this properly
+pub fn link_file_from_package_file(
+    path_json_entry: &PathsEntry,
+    destination_relative_path: PathBuf,
+    package_path: &Path,
+    target_dir: &Path,
+    target_prefix: &str,
+    allow_symbolic_links: bool,
+    allow_hard_links: bool,
+    allow_ref_links: bool,
+    target_platform: Platform,
+    apple_codesign_behavior: AppleCodeSignBehavior,
+) -> Result<LinkedFile, LinkFileError> {
+    // panic!("Not implemented");
+    let source_path = package_path.join(&path_json_entry.relative_path);
+    // let source_path = package_dir.join(&path_json_entry.relative_path);
+
+    let destination_path = target_dir.join(&destination_relative_path);
+
+    // Temporary variables to store intermediate computations in. If we already computed the file
+    // size or the sha hash we dont have to recompute them at the end of the function.
+    let mut sha256 = None;
+    let mut file_size = path_json_entry.size_in_bytes;
+
+    let link_method = if let Some(PrefixPlaceholder {
+        file_mode,
+        placeholder,
+    }) = path_json_entry.prefix_placeholder.as_ref()
+    {
+        panic!("{:?}", source_path);
+        // Memory map the source file. This provides us with easy access to a continuous stream of
+        // bytes which makes it easier to search for the placeholder prefix.
+        let source = map_or_read_source_file(&source_path)?;
+
+        // Open the destination file
+        let destination = std::fs::File::create(&destination_path)
+            .map_err(LinkFileError::FailedToOpenDestinationFile)?;
+        let mut destination_writer = HashingWriter::<_, rattler_digest::Sha256>::new(destination);
+
+        // Convert back-slashes (\) on windows with forward-slashes (/) to avoid problems with
+        // string escaping. For instance if we replace the prefix in the following text
+        //
+        // ```text
+        // string = "c:\\old_prefix"
+        // ```
+        //
+        // with the path `c:\new_prefix` the text will become:
+        //
+        // ```text
+        // string = "c:\new_prefix"
+        // ```
+        //
+        // In this case the literal string is not properly escape. This is fixed by using
+        // forward-slashes on windows instead.
+        let target_prefix = if target_platform.is_windows() {
+            Cow::Owned(target_prefix.replace('\\', "/"))
+        } else {
+            Cow::Borrowed(target_prefix)
+        };
+
+        // Replace the prefix placeholder in the file with the new placeholder
+        copy_and_replace_placeholders(
+            source.as_ref(),
+            &mut destination_writer,
+            placeholder,
+            &target_prefix,
+            &target_platform,
+            *file_mode,
+        )
+        .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
+
+        let (mut file, current_hash) = destination_writer.finalize();
+
+        // We computed the hash of the file while writing and from the file we can also infer the
+        // size of it.
+        sha256 = Some(current_hash);
+        file_size = file.stream_position().ok();
+
+        // We no longer need the file.
+        drop(file);
+
+        // Copy over filesystem permissions. We do this to ensure that the destination file has the
+        // same permissions as the source file.
+        let metadata = std::fs::symlink_metadata(&source_path)
+            .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+        std::fs::set_permissions(&destination_path, metadata.permissions())
+            .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+
+        // (re)sign the binary if the file is executable
+        if has_executable_permissions(&metadata.permissions())
+            && target_platform == Platform::OsxArm64
+            && *file_mode == FileMode::Binary
+        {
+            // Did the binary actually change?
+            let mut content_changed = false;
+            if let Some(original_hash) = &path_json_entry.sha256 {
+                content_changed = original_hash != &current_hash;
+            }
+
+            // If the binary changed it requires resigning.
+            if content_changed && apple_codesign_behavior != AppleCodeSignBehavior::DoNothing {
+                match codesign(&destination_path) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        if apple_codesign_behavior == AppleCodeSignBehavior::Fail {
+                            return Err(e);
+                        }
+                    }
+                }
+
+                // The file on disk changed from the original file so the hash and file size
+                // also became invalid. Let's recompute them.
+                sha256 = Some(
+                    rattler_digest::compute_file_digest::<Sha256>(&destination_path)
+                        .map_err(LinkFileError::FailedToComputeSha)?,
+                );
+                file_size = Some(
+                    std::fs::symlink_metadata(&destination_path)
+                        .map_err(LinkFileError::FailedToOpenDestinationFile)?
+                        .len(),
+                );
+            }
+        }
+        LinkMethod::Patched(*file_mode)
+    } else if path_json_entry.path_type == PathType::HardLink && allow_ref_links {
+        panic!("reflink {:?}", source_path);
+        reflink_to_destination(&source_path, &destination_path, allow_hard_links)?
+    } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
+        panic!("hardlink {:?}", source_path);
+        hardlink_to_destination(&source_path, &destination_path)?
+    } else if path_json_entry.path_type == PathType::SoftLink && allow_symbolic_links {
+        panic!("symlink {:?}", source_path);
+        symlink_to_destination(&source_path, &destination_path)?
+    } else {
+        copy_to_destination_from_package_file(&package_path, &path_json_entry.relative_path, &destination_path)?
+    };
+
+    // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.
+    let sha256 = if let Some(sha256) = sha256 {
+        sha256
+    } else if link_method == LinkMethod::Softlink {
+        // we hash the content of the symlink file. Note that this behavior is different from
+        // conda or mamba (where the target of the symlink is hashed). However, hashing the target
+        // of the symlink is more tricky in our case as we link everything in parallel and would have to
+        // potentially "wait" for dependencies to be available.
+        // This needs to be taken into account when verifying an installation.
+        let linked_path = destination_path
+            .read_link()
+            .map_err(LinkFileError::FailedToReadSymlink)?;
+        rattler_digest::compute_bytes_digest::<Sha256>(
+            linked_path.as_os_str().to_string_lossy().as_bytes(),
+        )
+    } else if let Some(sha256) = path_json_entry.sha256 {
+        sha256
+    } else if path_json_entry.path_type == PathType::HardLink {
+        rattler_digest::compute_file_digest::<Sha256>(&destination_path)
+            .map_err(LinkFileError::FailedToComputeSha)?
+    } else {
+        // This is either a softlink or a directory.
+        // Computing the hash for a directory is not possible.
+        // This hash is `0000...0000`
+        Sha256Hash::default()
+    };
+
+    // Compute the final file size if we didnt already.
+    let file_size = if let Some(file_size) = file_size {
+        file_size
+    } else if let Some(size_in_bytes) = path_json_entry.size_in_bytes {
+        size_in_bytes
+    } else {
+        let metadata = std::fs::symlink_metadata(&destination_path)
+            .map_err(LinkFileError::FailedToOpenDestinationFile)?;
+        metadata.len()
+    };
+
+    let prefix_placeholder: Option<String> = path_json_entry
+        .prefix_placeholder
+        .as_ref()
+        .map(|p| p.placeholder.clone());
+
+    Ok(LinkedFile {
+        clobbered: false,
+        sha256,
+        file_size,
+        relative_path: destination_relative_path,
+        method: link_method,
+        prefix_placeholder,
+    })
 }
 
 /// Installs a single file from a `package_dir` to the the `target_dir`. Replaces any
@@ -455,6 +647,60 @@ fn symlink_to_destination(
                 return copy_to_destination(source_path, destination_path);
             }
         }
+    }
+}
+
+/// Copy the specified file from the source (or cached) directory. If the file already exists it is
+/// removed and the operation is retried.
+fn copy_to_destination_from_package_file(
+    package_path: &Path,
+    relative_path: &Path,
+    destination_path: &Path,
+) -> Result<LinkMethod, LinkFileError> {
+    // todo: fix unwraps
+    // panic!("{:?} {:?} {:?}", package_path, relative_path, destination_path);
+    // assert file is .conda
+    let f = File::open(package_path).unwrap();
+    let mut archive = stream_conda_content(f).unwrap();
+    let mut entry = archive.entries().unwrap().find(|entry| {
+        entry.as_ref().unwrap().path().unwrap() == relative_path
+    }).unwrap().unwrap();
+
+    // panic!("{:?}", entry.path());
+
+    loop {
+        // todo: or unpack_in?
+        match entry.unpack(destination_path) {
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                // If the file already exists, remove it and try again.
+                std::fs::remove_file(destination_path).map_err(|err| {
+                    LinkFileError::IoError(String::from("removing clobbered file"), err)
+                })?;
+            }
+            Ok(_) => return Ok(LinkMethod::Copy),
+            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),
+        }
+        // match std::fs::copy(entry, destination_path) {
+        //     Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                // If the file already exists, remove it and try again.
+            //     std::fs::remove_file(destination_path).map_err(|err| {
+            //         LinkFileError::IoError(String::from("removing clobbered file"), err)
+            //     })?;
+            // }
+            // Ok(_) => return Ok(LinkMethod::Copy),
+            // Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),
+        // }
+
+        // match std::fs::copy(package_path, destination_path) {
+        //     Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+        //         // If the file already exists, remove it and try again.
+        //         std::fs::remove_file(destination_path).map_err(|err| {
+        //             LinkFileError::IoError(String::from("removing clobbered file"), err)
+        //         })?;
+        //     }
+        //     Ok(_) => return Ok(LinkMethod::Copy),
+        //     Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),
+        // }
     }
 }
 
