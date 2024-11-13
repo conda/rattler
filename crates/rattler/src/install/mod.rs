@@ -917,7 +917,7 @@ mod test {
     )]
     #[tracing_test::traced_test]
     #[tokio::test]
-    async fn test_link_package_from_package_file(#[case] package_url: &str, #[case] sha256: &str) {
+    async fn test_link_package_from_package(#[case] package_url: &str, #[case] sha256: &str) {
         let environment_dir = tempfile::TempDir::new().unwrap();
 
         let package_path =
