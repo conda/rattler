@@ -257,7 +257,7 @@ pub struct InstallOptions {
 /// Returns a [`PathsEntry`] for every file that was linked into the target
 /// directory. The entries are ordered in the same order as they appear in the
 /// `paths.json` file of the package.
-pub async fn link_package_from_package(
+pub async fn link_package_from_archive(
     package_path: &Path,
     target_dir: &Path,
     driver: &InstallDriver,
@@ -750,7 +750,7 @@ mod test {
     use crate::{
         get_test_data_dir,
         install::{
-            link_package, link_package_from_package, InstallDriver, InstallOptions, PythonInfo,
+            link_package, link_package_from_archive, InstallDriver, InstallOptions, PythonInfo,
         },
         package_cache::PackageCache,
     };
@@ -917,7 +917,7 @@ mod test {
     )]
     #[tracing_test::traced_test]
     #[tokio::test]
-    async fn test_link_package_from_package(#[case] package_url: &str, #[case] sha256: &str) {
+    async fn test_link_package_from_archive(#[case] package_url: &str, #[case] sha256: &str) {
         let environment_dir = tempfile::TempDir::new().unwrap();
 
         let package_path =
@@ -928,7 +928,7 @@ mod test {
         let install_driver = InstallDriver::default();
 
         // Link the package
-        let paths = link_package_from_package(
+        let paths = link_package_from_archive(
             &package_path,
             environment_dir.path(),
             &install_driver,
