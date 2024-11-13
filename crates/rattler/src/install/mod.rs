@@ -257,7 +257,7 @@ pub struct InstallOptions {
 /// Returns a [`PathsEntry`] for every file that was linked into the target
 /// directory. The entries are ordered in the same order as they appear in the
 /// `paths.json` file of the package.
-pub async fn link_package_from_package_file(
+pub async fn link_package_from_package(
     package_path: &Path,
     target_dir: &Path,
     driver: &InstallDriver,
@@ -750,7 +750,7 @@ mod test {
     use crate::{
         get_test_data_dir,
         install::{
-            link_package, link_package_from_package_file, InstallDriver, InstallOptions, PythonInfo,
+            link_package, link_package_from_package, InstallDriver, InstallOptions, PythonInfo,
         },
         package_cache::PackageCache,
     };
@@ -928,7 +928,7 @@ mod test {
         let install_driver = InstallDriver::default();
 
         // Link the package
-        let paths = link_package_from_package_file(
+        let paths = link_package_from_package(
             &package_path,
             environment_dir.path(),
             &install_driver,
