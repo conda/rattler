@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.12](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.11...rattler_package_streaming-v0.22.12) - 2024-11-14
+
+### Fixed
+
+- Release downloader lock before re-attempting fallback download  ([#938](https://github.com/conda/rattler/pull/938))
+
 ## [0.22.11](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.10...rattler_package_streaming-v0.22.11) - 2024-11-04
 
 ### Other
