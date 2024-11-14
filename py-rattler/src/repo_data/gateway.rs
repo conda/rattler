@@ -66,7 +66,7 @@ impl PyGateway {
                     let url = Url::parse(&k).map_err(PyRattlerError::from)?;
                     Ok((url, v.into()))
                 })
-                .collect::<Result<_, _>>()?,
+                .collect::<Result<_, PyRattlerError>>()?,
         };
 
         let mut gateway = Gateway::builder()
@@ -178,6 +178,7 @@ impl<'py> FromPyObject<'py> for Wrap<CacheAction> {
 #[pymethods]
 impl PySourceConfig {
     #[new]
+    #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
         jlap_enabled: bool,
         zstd_enabled: bool,

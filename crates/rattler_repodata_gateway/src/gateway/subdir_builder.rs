@@ -61,13 +61,15 @@ impl<'g> SubdirBuilder<'g> {
             let subdir_data = if source_config.sharded_enabled
                 || gateway::force_sharded_repodata(&url)
             {
-                if let Some(client) = self.build_sharded(source_config).await? {
-                    Some(client)
-                } else {
-                    tracing::info!(
+                match self.build_sharded(source_config).await {
+                    Ok(client) => Some(client),
+                    Err(GatewayError::SubdirNotFoundError(_)) => {
+                        tracing::info!(
                             "sharded repodata seems to be missing for {url}, falling back to repodata.json files",
                         );
-                    None
+                        None
+                    }
+                    Err(err) => return Err(err),
                 }
             } else {
                 None
@@ -129,8 +131,8 @@ impl<'g> SubdirBuilder<'g> {
     async fn build_sharded(
         &self,
         source_config: &SourceConfig,
-    ) -> Result<Option<SubdirData>, GatewayError> {
-        let client = match sharded_subdir::ShardedSubdir::new(
+    ) -> Result<SubdirData, GatewayError> {
+        let client = sharded_subdir::ShardedSubdir::new(
             self.channel.clone(),
             self.platform.to_string(),
             self.gateway.client.clone(),
@@ -139,16 +141,9 @@ impl<'g> SubdirBuilder<'g> {
             self.gateway.concurrent_requests_semaphore.clone(),
             self.reporter.as_deref(),
         )
-        .await
-        {
-            Ok(data) => data,
-            Err(GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(_))) => {
-                return Ok(None);
-            }
-            Err(err) => return Err(err),
-        };
+        .await?;
 
-        Ok(Some(SubdirData::from_client(client)))
+        Ok(SubdirData::from_client(client))
     }
 
     async fn build_local(&self, path: &Path) -> Result<SubdirData, GatewayError> {
