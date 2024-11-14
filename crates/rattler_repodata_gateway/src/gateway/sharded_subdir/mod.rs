@@ -155,7 +155,6 @@ impl SubdirClient for ShardedSubdir {
             .join(&format!("{shard:x}.msgpack.zst"))
             .expect("invalid shard url");
 
-
         let shard_request = self
             .client
             .get(shard_url.clone())
