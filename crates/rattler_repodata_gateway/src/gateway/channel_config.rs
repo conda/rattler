@@ -1,5 +1,7 @@
-use rattler_conda_types::CondaUrl;
 use std::collections::HashMap;
+
+use rattler_conda_types::ChannelUrl;
+use url::Url;
 
 use crate::fetch::CacheAction;
 
@@ -46,16 +48,27 @@ pub struct ChannelConfig {
     /// source configuration this configuration will be used.
     pub default: SourceConfig,
 
-    /// Describes per channel properties that influence how the gateway fetches
-    /// repodata.
-    pub per_channel: HashMap<CondaUrl, SourceConfig>,
+    /// Source configuration on a per-URL basis. This URL is used as a prefix,
+    /// so any channel that starts with the URL uses the configuration.
+    /// The configuration with the longest matching prefix is used.
+    pub per_channel: HashMap<Url, SourceConfig>,
 }
 
 impl ChannelConfig {
-    /// Returns the source configuration for the given channel. If the channel
-    /// does not have a specific source configuration the default source
-    /// configuration will be returned.
-    pub fn get(&self, channel: &CondaUrl) -> &SourceConfig {
-        self.per_channel.get(channel).unwrap_or(&self.default)
+    /// Returns the source configuration for the given channel. Locates the
+    /// source configuration that best matches the requested channel.
+    pub fn get(&self, channel: &ChannelUrl) -> &SourceConfig {
+        self.per_channel
+            .iter()
+            .filter_map(|(url, config)| {
+                let key_url = url.as_str().strip_suffix('/').unwrap_or(url.as_str());
+                if channel.as_str().starts_with(key_url) {
+                    Some((key_url.len(), config))
+                } else {
+                    None
+                }
+            })
+            .max_by_key(|(len, _)| *len)
+            .map_or(&self.default, |(_, config)| config)
     }
 }

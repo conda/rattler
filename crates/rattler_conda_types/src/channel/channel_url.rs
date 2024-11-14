@@ -1,9 +1,9 @@
 use std::fmt::{Display, Formatter};
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::Platform;
+use crate::{utils::url_with_trailing_slash::UrlWithTrailingSlash, Platform};
 
 /// Represents a channel base url. This is a wrapper around an url that is
 /// normalized:
@@ -11,11 +11,11 @@ use crate::Platform;
 /// * The URL always contains a trailing `/`.
 ///
 /// This is useful to be able to compare different channels.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct CondaUrl(Url);
+pub struct ChannelUrl(UrlWithTrailingSlash);
 
-impl CondaUrl {
+impl ChannelUrl {
     /// Returns the base Url of the channel.
     pub fn url(&self) -> &Url {
         &self.0
@@ -34,43 +34,26 @@ impl CondaUrl {
     }
 }
 
-impl<'de> Deserialize<'de> for CondaUrl {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let url = Url::deserialize(deserializer)?;
-        Ok(url.into())
-    }
-}
-
-impl From<Url> for CondaUrl {
+impl From<Url> for ChannelUrl {
     fn from(url: Url) -> Self {
-        let path = url.path();
-        if path.ends_with('/') {
-            Self(url)
-        } else {
-            let mut url = url.clone();
-            url.set_path(&format!("{path}/"));
-            Self(url)
-        }
+        Self(UrlWithTrailingSlash::from(url))
     }
 }
 
-impl From<CondaUrl> for Url {
-    fn from(value: CondaUrl) -> Self {
-        value.0
+impl From<ChannelUrl> for Url {
+    fn from(value: ChannelUrl) -> Self {
+        value.0.into()
     }
 }
 
-impl AsRef<Url> for CondaUrl {
+impl AsRef<Url> for ChannelUrl {
     fn as_ref(&self) -> &Url {
         &self.0
     }
 }
 
-impl Display for CondaUrl {
+impl Display for ChannelUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
+        write!(f, "{}", &self.0)
     }
 }

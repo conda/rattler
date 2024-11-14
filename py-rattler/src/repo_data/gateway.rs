@@ -11,6 +11,7 @@ use rattler_repodata_gateway::fetch::CacheAction;
 use rattler_repodata_gateway::{ChannelConfig, Gateway, SourceConfig, SubdirSelection};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use url::Url;
 
 #[pyclass]
 #[repr(transparent)]
@@ -54,15 +55,18 @@ impl PyGateway {
     pub fn new(
         max_concurrent_requests: usize,
         default_config: PySourceConfig,
-        per_channel_config: HashMap<PyChannel, PySourceConfig>,
+        per_channel_config: HashMap<String, PySourceConfig>,
         cache_dir: Option<PathBuf>,
     ) -> PyResult<Self> {
         let channel_config = ChannelConfig {
             default: default_config.into(),
             per_channel: per_channel_config
                 .into_iter()
-                .map(|(k, v)| (k.inner.base_url, v.into()))
-                .collect(),
+                .map(|(k, v)| {
+                    let url = Url::parse(&k).map_err(PyRattlerError::from)?;
+                    Ok((url, v.into()))
+                })
+                .collect::<Result<_, _>>()?,
         };
 
         let mut gateway = Gateway::builder()

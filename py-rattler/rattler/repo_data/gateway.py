@@ -88,7 +88,7 @@ class Gateway:
         self,
         cache_dir: Optional[os.PathLike[str]] = None,
         default_config: Optional[SourceConfig] = None,
-        per_channel_config: Optional[dict[Channel | str, SourceConfig]] = None,
+        per_channel_config: Optional[dict[str, SourceConfig]] = None,
         max_concurrent_requests: int = 100,
     ) -> None:
         """
@@ -96,7 +96,9 @@ class Gateway:
             cache_dir: The directory where the repodata should be cached. If not specified the
                        default cache directory is used.
             default_config: The default configuration for channels.
-            per_channel_config: Per channel configuration.
+            per_channel_config: Source configuration on a per-URL basis. This URL is used as a
+                                prefix, so any channel that starts with the URL uses the configuration.
+                                The configuration with the longest matching prefix is used.
             max_concurrent_requests: The maximum number of concurrent requests that can be made.
 
         Examples

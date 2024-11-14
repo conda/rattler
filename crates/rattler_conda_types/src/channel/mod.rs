@@ -15,9 +15,9 @@ use url::Url;
 use super::{ParsePlatformError, Platform};
 use crate::utils::{path::is_path, url::parse_scheme};
 
-mod conda_url;
+mod channel_url;
 
-pub use conda_url::CondaUrl;
+pub use channel_url::ChannelUrl;
 
 const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
 
@@ -106,7 +106,7 @@ impl NamedChannelOrUrl {
 
     /// Converts the channel to a base url using the given configuration.
     /// This method ensures that the base url always ends with a `/`.
-    pub fn into_base_url(self, config: &ChannelConfig) -> Result<CondaUrl, ParseChannelError> {
+    pub fn into_base_url(self, config: &ChannelConfig) -> Result<ChannelUrl, ParseChannelError> {
         let url = match self {
             NamedChannelOrUrl::Name(name) => {
                 let mut base_url = config.channel_alias.clone();
@@ -192,7 +192,7 @@ pub struct Channel {
     pub platforms: Option<Vec<Platform>>,
 
     /// Base URL of the channel, everything is relative to this url.
-    pub base_url: CondaUrl,
+    pub base_url: ChannelUrl,
 
     /// The name of the channel
     pub name: Option<String>,

@@ -24,7 +24,7 @@ use crate::{
     package::{IndexJson, RunExportsJson},
     utils::{
         serde::{sort_map_alphabetically, DeserializeFromStrUnchecked},
-        url::add_trailing_slash,
+        UrlWithTrailingSlash,
     },
     Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
     ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
@@ -260,7 +260,7 @@ pub fn compute_package_url(
         None => repo_data_base_url.clone(),
         Some(base_url) => match Url::parse(base_url) {
             Err(url::ParseError::RelativeUrlWithoutBase) if !base_url.starts_with('/') => {
-                add_trailing_slash(repo_data_base_url)
+                UrlWithTrailingSlash::from(repo_data_base_url.clone())
                     .join(base_url)
                     .expect("failed to join base_url with channel")
             }
