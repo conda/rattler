@@ -2,8 +2,7 @@ from rattler.lock.lock_file import LockFile
 from rattler.lock.environment import Environment
 from rattler.lock.channel import LockChannel
 from rattler.lock.hash import PackageHashes
-from rattler.lock.package import LockedPackage
-from rattler.lock.pypi import PypiPackageData, PypiPackageEnvironmentData
+from rattler.lock.package import LockedPackage, PypiLockedPackage, CondaLockedPackage, CondaLockedBinaryPackage, CondaLockedSourcePackage
 
 __all__ = [
     "LockFile",
@@ -11,6 +10,8 @@ __all__ = [
     "LockChannel",
     "PackageHashes",
     "LockedPackage",
-    "PypiPackageData",
-    "PypiPackageEnvironmentData",
+    "PypiLockedPackage",
+    "CondaLockedPackage",
+    "CondaLockedBinaryPackage",
+    "CondaLockedSourcePackage",
 ]

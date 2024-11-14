@@ -14,8 +14,8 @@ use url::Url;
 use crate::{
     file_format_version::FileFormatVersion,
     parse::{models::v6, V6},
-    Channel, CondaPackage, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile,
-    LockFileInner, Package, PypiIndexes, PypiPackage, PypiPackageData, PypiPackageEnvironmentData,
+    Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile,
+    LockFileInner, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData,
     UrlOrPath,
 };
 
@@ -88,36 +88,6 @@ impl<'a> From<PackageData<'a>> for SerializablePackageDataV6<'a> {
             PackageData::Conda(p) => Self::Conda(p.into()),
             PackageData::Pypi(p) => Self::Pypi(p.into()),
         }
-    }
-}
-
-impl Serialize for Package {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            Package::Conda(p) => p.serialize(serializer),
-            Package::Pypi(p) => p.serialize(serializer),
-        }
-    }
-}
-
-impl Serialize for CondaPackage {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        SerializablePackageDataV6::Conda(self.package_data().into()).serialize(serializer)
-    }
-}
-
-impl Serialize for PypiPackage {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        SerializablePackageDataV6::Pypi(self.package_data().into()).serialize(serializer)
     }
 }
 

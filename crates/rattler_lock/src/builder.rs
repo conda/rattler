@@ -12,9 +12,52 @@ use rattler_conda_types::Platform;
 
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaPackageData, EnvironmentData,
-    EnvironmentPackageData, LockFile, LockFileInner, Package, PypiIndexes, PypiPackageData,
-    PypiPackageEnvironmentData,
+    EnvironmentPackageData, LockFile, LockFileInner, LockedPackageRef, PypiIndexes,
+    PypiPackageData, PypiPackageEnvironmentData,
 };
+
+/// Information about a single locked package in an environment.
+#[derive(Debug, Clone)]
+pub enum LockedPackage {
+    /// A conda package
+    Conda(CondaPackageData),
+
+    /// A pypi package in an environment
+    Pypi(PypiPackageData, PypiPackageEnvironmentData),
+}
+
+impl From<LockedPackageRef<'_>> for LockedPackage {
+    fn from(value: LockedPackageRef<'_>) -> Self {
+        match value {
+            LockedPackageRef::Conda(data) => LockedPackage::Conda(data.clone()),
+            LockedPackageRef::Pypi(data, env) => LockedPackage::Pypi(data.clone(), env.clone()),
+        }
+    }
+}
+
+impl From<CondaPackageData> for LockedPackage {
+    fn from(value: CondaPackageData) -> Self {
+        LockedPackage::Conda(value)
+    }
+}
+
+impl LockedPackage {
+    /// Returns the conda package data if this is a conda package.
+    pub fn as_conda(&self) -> Option<&CondaPackageData> {
+        match self {
+            LockedPackage::Conda(data) => Some(data),
+            LockedPackage::Pypi(..) => None,
+        }
+    }
+
+    /// Returns the pypi package data if this is a pypi package.
+    pub fn as_pypi(&self) -> Option<(&PypiPackageData, &PypiPackageEnvironmentData)> {
+        match self {
+            LockedPackage::Conda(..) => None,
+            LockedPackage::Pypi(data, env) => Some((data, env)),
+        }
+    }
+}
 
 /// A struct to incrementally build a lock-file.
 #[derive(Default)]
@@ -162,7 +205,7 @@ impl LockFileBuilder {
         mut self,
         environment: impl Into<String>,
         platform: Platform,
-        locked_package: Package,
+        locked_package: LockedPackage,
     ) -> Self {
         self.add_package(environment, platform, locked_package);
         self
@@ -174,18 +217,13 @@ impl LockFileBuilder {
         &mut self,
         environment: impl Into<String>,
         platform: Platform,
-        locked_package: Package,
+        locked_package: LockedPackage,
     ) -> &mut Self {
         match locked_package {
-            Package::Conda(p) => {
-                self.add_conda_package(environment, platform, p.package_data().clone())
+            LockedPackage::Conda(p) => self.add_conda_package(environment, platform, p),
+            LockedPackage::Pypi(data, env_data) => {
+                self.add_pypi_package(environment, platform, data, env_data)
             }
-            Package::Pypi(p) => self.add_pypi_package(
-                environment,
-                platform,
-                p.package_data().clone(),
-                p.environment_data().clone(),
-            ),
         }
     }
 

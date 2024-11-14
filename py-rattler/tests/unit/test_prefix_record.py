@@ -19,7 +19,7 @@ def test_load_prefix_record() -> None:
     assert r.arch == "x86_64"
     assert r.build == "h8ffe710_0"
     assert r.build_number == 0
-    assert r.channel == "https://conda.anaconda.org/conda-forge/win-64"
+    assert r.channel == "https://conda.anaconda.org/conda-forge/win-64/"
     assert len(r.constrains) == 0
     assert len(r.depends) == 2
     assert str(r.extracted_package_dir) == "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\tk-8.6.12-h8ffe710_0"
@@ -86,7 +86,7 @@ def test_create_prefix_record() -> None:
     )
 
     assert repodata_record.url == "https://foobar.com/foobar.tar.bz2"
-    assert repodata_record.channel == "https://foobar.com/win-64"
+    assert repodata_record.channel == "https://foobar.com/win-64/"
     assert repodata_record.file_name == "foobar.tar.bz2"
 
     paths_data = PrefixPaths()

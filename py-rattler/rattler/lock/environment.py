@@ -1,8 +1,7 @@
 from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 from rattler.lock.channel import LockChannel
-from rattler.lock.package import LockedPackage
-from rattler.lock.pypi import PypiPackageData, PypiPackageEnvironmentData
+from rattler.lock.package import LockedPackage, PypiLockedPackage
 from rattler.platform.platform import Platform
 
 from rattler.rattler import PyEnvironment
@@ -73,12 +72,12 @@ class Environment:
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> env.packages(Platform("osx-arm64"))[0]
-        LockedPackage()
+        CondaLockedBinaryPackage()
         >>>
         ```
         """
         if packages := self._env.packages(platform._inner):
-            return [LockedPackage._from_py_lock_package(p) for p in packages]
+            return [LockedPackage._from_py_locked_package(p) for p in packages]
         return None
 
     def packages_by_platform(self) -> Dict[Platform, List[LockedPackage]]:
@@ -98,13 +97,13 @@ class Environment:
         ```
         """
         return {
-            Platform._from_py_platform(platform): [LockedPackage._from_py_lock_package(p) for p in packages]
+            Platform._from_py_platform(platform): [LockedPackage._from_py_locked_package(p) for p in packages]
             for (platform, packages) in self._env.packages_by_platform()
         }
 
     def pypi_packages(
         self,
-    ) -> Dict[Platform, List[Tuple[PypiPackageData, PypiPackageEnvironmentData]]]:
+    ) -> Dict[Platform, List[Tuple[PypiLockedPackage]]]:
         """
         Returns all pypi packages for all platforms.
 
@@ -116,18 +115,13 @@ class Environment:
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
         >>> pypi_packages[Platform("osx-arm64")][0]
-        (PypiPackageData(), PypiPackageEnvironmentData())
+        PypiLockedPackage()
         >>>
         ```
         """
         return {
-            Platform._from_py_platform(platform): [
-                (
-                    PypiPackageData._from_py_pypi_package_data(pkg_data),
-                    PypiPackageEnvironmentData._from_py_pypi_env_data(env_data),
-                )
-                for (pkg_data, env_data) in pypi_tup
-            ]
+            Platform._from_py_platform(platform):
+                [PypiLockedPackage._from_py_locked_package(pypi) for pypi in pypi_tup]
             for (platform, pypi_tup) in self._env.pypi_packages().items()
         }
 
@@ -177,7 +171,7 @@ class Environment:
 
     def pypi_packages_for_platform(
         self, platform: Platform
-    ) -> Optional[List[Tuple[PypiPackageData, PypiPackageEnvironmentData]]]:
+    ) -> Optional[List[Tuple[PypiLockedPackage]]]:
         """
         Returns all the pypi packages and their associated environment data for the specified
         platform. Returns `None` if the platform is not defined for this environment.
@@ -192,17 +186,14 @@ class Environment:
         >>> osx_pypi_pkgs
         [...]
         >>> osx_pypi_pkgs[0]
-        (PypiPackageData(), PypiPackageEnvironmentData())
+        PypiLockedPackage()
         >>>
         ```
         """
         if data := self._env.pypi_packages_for_platform(platform._inner):
             return [
-                (
-                    PypiPackageData._from_py_pypi_package_data(pkg_data),
-                    PypiPackageEnvironmentData._from_py_pypi_env_data(env_data),
-                )
-                for (pkg_data, env_data) in data
+                PypiLockedPackage._from_py_locked_package(pkg)
+                for pkg in data
             ]
         return None
 

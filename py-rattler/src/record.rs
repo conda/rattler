@@ -183,11 +183,12 @@ impl PyRecord {
     }
 
     #[staticmethod]
+    #[pyo3(signature = (package_record, file_name, url, channel=None))]
     pub fn create_repodata_record(
         package_record: PyRecord,
         file_name: PathBuf,
         url: String,
-        channel: String,
+        channel: Option<String>,
     ) -> PyResult<Self> {
         if !package_record.is_package_record() {
             return Err(PyTypeError::new_err(
@@ -199,8 +200,11 @@ impl PyRecord {
             inner: RecordInner::RepoData(RepoDataRecord {
                 package_record: package_record.as_package_record().clone(),
                 file_name: file_name.to_string_lossy().to_string(),
-                url: Url::parse(&url).unwrap(),
-                channel,
+                url: Url::parse(&url).map_err(PyRattlerError::from)?,
+                channel: channel
+                    .map(|channel| Url::parse(&channel).map_err(PyRattlerError::from))
+                    .transpose()?
+                    .map(Into::into),
             }),
         })
     }
@@ -549,13 +553,18 @@ impl PyRecord {
     /// package comes from. This could be a URL but it
     /// could also be a channel name.
     #[getter]
-    pub fn channel(&self) -> PyResult<String> {
-        Ok(self.try_as_repodata_record()?.channel.clone())
+    pub fn channel(&self) -> PyResult<Option<String>> {
+        Ok(self
+            .try_as_repodata_record()?
+            .channel
+            .as_ref()
+            .map(|channel| channel.as_str().to_string()))
     }
 
     #[setter]
     pub fn set_channel(&mut self, channel: String) -> PyResult<()> {
-        self.try_as_repodata_record_mut()?.channel = channel;
+        self.try_as_repodata_record_mut()?.channel =
+            Some(Url::parse(&channel).map_err(PyRattlerError::from)?.into());
         Ok(())
     }
 
