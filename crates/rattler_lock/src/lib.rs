@@ -87,8 +87,7 @@ use std::{
 
 use fxhash::FxHashMap;
 use pep508_rs::{ExtraName, Requirement};
-use rattler_conda_types::{MatchSpec, PackageRecord, Platform, RepoDataRecord};
-use url::Url;
+use rattler_conda_types::{ChannelUrl, MatchSpec, PackageRecord, Platform, RepoDataRecord};
 
 mod builder;
 mod channel;
@@ -359,6 +358,7 @@ impl Environment {
                 Ok((
                     platform,
                     packages
+                        .filter_map(CondaPackageData::as_binary)
                         .map(RepoDataRecord::try_from)
                         .collect::<Result<Vec<_>, ConversionError>>()?,
                 ))
@@ -395,7 +395,12 @@ impl Environment {
         platform: Platform,
     ) -> Result<Option<Vec<RepoDataRecord>>, ConversionError> {
         self.conda_packages_for_platform(platform)
-            .map(|packages| packages.map(RepoDataRecord::try_from).collect())
+            .map(|packages| {
+                packages
+                    .filter_map(CondaPackageData::as_binary)
+                    .map(RepoDataRecord::try_from)
+                    .collect()
+            })
             .transpose()
     }
 
@@ -552,18 +557,20 @@ impl CondaPackage {
 
     /// Returns the package data
     pub fn package_record(&self) -> &PackageRecord {
-        &self.package_data().package_record
+        self.package_data().record()
     }
 
     /// Returns the location of the package, this is the place where the package
     /// can be downloaded from.
     pub fn location(&self) -> &UrlOrPath {
-        &self.package_data().location
+        self.package_data().location()
     }
 
     /// Returns the channel of the package.
-    pub fn channel(&self) -> Option<Url> {
-        self.package_data().channel.clone()
+    pub fn channel(&self) -> Option<&ChannelUrl> {
+        self.package_data()
+            .as_binary()
+            .and_then(|binary| binary.channel.as_ref())
     }
 
     /// Returns true if this package satisfies the given `spec`.
@@ -591,14 +598,6 @@ impl CondaPackage {
 impl AsRef<PackageRecord> for CondaPackage {
     fn as_ref(&self) -> &PackageRecord {
         self.package_record()
-    }
-}
-
-impl TryFrom<CondaPackage> for RepoDataRecord {
-    type Error = ConversionError;
-
-    fn try_from(value: CondaPackage) -> Result<Self, Self::Error> {
-        value.package_data().clone().try_into()
     }
 }
 

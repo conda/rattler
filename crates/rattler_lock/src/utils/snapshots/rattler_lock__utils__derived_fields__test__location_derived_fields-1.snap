@@ -19,6 +19,6 @@ LocationDerivedFields {
         "linux-aarch64",
     ),
     channel: Some(
-        "https://conda.anaconda.org/conda-forge",
+        "https://conda.anaconda.org/conda-forge/",
     ),
 }

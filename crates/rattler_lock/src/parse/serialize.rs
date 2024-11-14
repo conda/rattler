@@ -157,10 +157,10 @@ impl CondaDisambiguityFilter {
 
     fn filter(&self, package: &CondaPackageData, other: &CondaPackageData) -> bool {
         match self {
-            Self::Name => package.package_record.name == other.package_record.name,
-            Self::Version => package.package_record.version == other.package_record.version,
-            Self::Build => package.package_record.build == other.package_record.build,
-            Self::Subdir => package.package_record.subdir == other.package_record.subdir,
+            Self::Name => package.record().name == other.record().name,
+            Self::Version => package.record().version == other.record().version,
+            Self::Build => package.record().build == other.record().build,
+            Self::Subdir => package.record().subdir == other.record().subdir,
         }
     }
 }
@@ -196,7 +196,7 @@ impl<'a> SerializablePackageSelector<'a> {
             .iter()
             .enumerate()
             .filter_map(|(idx, p)| used_conda_packages.contains(&idx).then_some(p))
-            .filter(|p| p.location == package.location)
+            .filter(|p| p.location() == package.location())
             .collect::<Vec<_>>();
 
         // Iterate over other distinguising factors and reduce the set of possible
@@ -229,22 +229,22 @@ impl<'a> SerializablePackageSelector<'a> {
             similar_packages = similar;
             match filter {
                 CondaDisambiguityFilter::Name => {
-                    name = Some(&package.package_record.name);
+                    name = Some(&package.record().name);
                 }
                 CondaDisambiguityFilter::Version => {
-                    version = Some(&package.package_record.version);
+                    version = Some(&package.record().version);
                 }
                 CondaDisambiguityFilter::Build => {
-                    build = Some(package.package_record.build.as_str());
+                    build = Some(package.record().build.as_str());
                 }
                 CondaDisambiguityFilter::Subdir => {
-                    subdir = Some(package.package_record.subdir.as_str());
+                    subdir = Some(package.record().subdir.as_str());
                 }
             }
         }
 
         Self::Conda {
-            conda: &package.location,
+            conda: package.location(),
             name,
             version,
             build,
@@ -437,7 +437,7 @@ pub enum PackageData<'a> {
 impl<'a> PackageData<'a> {
     fn source_name(&self) -> &str {
         match self {
-            PackageData::Conda(p) => p.package_record.name.as_source(),
+            PackageData::Conda(p) => p.record().name.as_source(),
             PackageData::Pypi(p) => p.name.as_ref(),
         }
     }

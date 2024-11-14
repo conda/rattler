@@ -294,7 +294,7 @@ fn parse_records<'i>(
     subdir: &str,
     patch_function: Option<fn(&mut PackageRecord)>,
 ) -> io::Result<Vec<RepoDataRecord>> {
-    let channel_name = channel.canonical_name();
+    let channel_name = channel.base_url.clone();
 
     let package_indices =
         packages.equal_range_by(|(package, _)| package.package.cmp(package_name.as_normalized()));
@@ -315,7 +315,7 @@ fn parse_records<'i>(
                 base_url,
                 key.filename,
             ),
-            channel: channel_name.clone(),
+            channel: Some(channel_name.clone()),
             package_record,
             file_name: key.filename.to_owned(),
         });

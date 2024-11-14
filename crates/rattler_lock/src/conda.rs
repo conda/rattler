@@ -1,16 +1,68 @@
 use std::{cmp::Ordering, hash::Hash};
 
-use rattler_conda_types::{PackageRecord, RepoDataRecord};
+use rattler_conda_types::{ChannelUrl, PackageRecord, RepoDataRecord};
 use rattler_digest::Sha256Hash;
-use url::Url;
 
 use crate::UrlOrPath;
 
-/// A locked conda dependency is just a [`PackageRecord`] with some additional
-/// information on where it came from. It is very similar to a
-/// [`RepoDataRecord`], but it does not explicitly contain the channel name.
+/// A locked conda dependency can be either a binary package or a source
+/// package.
+///
+/// A binary package is a package that is already built and can be installed
+/// directly.
+///
+/// A source package is a package that needs to be built before it can
+/// be installed. Although the source package is not built, it does contain
+/// dependency information through the [`PackageRecord`] struct.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct CondaPackageData {
+pub enum CondaPackageData {
+    /// A binary package. A binary package is identified by looking at the
+    /// location or filename of the package file and seeing if it represents a
+    /// valid binary package name.
+    Binary(CondaBinaryData),
+
+    /// A source package.
+    Source(CondaSourceData),
+}
+
+impl CondaPackageData {
+    /// Returns the location of the package.
+    pub fn location(&self) -> &UrlOrPath {
+        match self {
+            Self::Binary(data) => &data.location,
+            Self::Source(data) => &data.location,
+        }
+    }
+
+    /// Returns the dependency information of the package.
+    pub fn record(&self) -> &PackageRecord {
+        match self {
+            CondaPackageData::Binary(data) => &data.package_record,
+            CondaPackageData::Source(data) => &data.package_record,
+        }
+    }
+
+    /// Returns a reference to the binary representation of this instance if it
+    /// exists.
+    pub fn as_binary(&self) -> Option<&CondaBinaryData> {
+        match self {
+            Self::Binary(data) => Some(data),
+            Self::Source(_) => None,
+        }
+    }
+
+    /// Returns a reference to the source representation of this instance if it
+    /// exists.
+    pub fn as_source(&self) -> Option<&CondaSourceData> {
+        match self {
+            Self::Binary(_) => None,
+            Self::Source(data) => Some(data),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CondaBinaryData {
     /// The package record.
     pub package_record: PackageRecord,
 
@@ -18,13 +70,34 @@ pub struct CondaPackageData {
     pub location: UrlOrPath,
 
     /// The filename of the package.
-    pub file_name: Option<String>,
+    pub file_name: String,
 
-    /// The channel of the package if this cannot be derived from the url.
-    pub channel: Option<Url>,
+    /// The channel of the package.
+    pub channel: Option<ChannelUrl>,
+}
 
-    /// The input hash of the package (only valid for source packages)
+impl From<CondaBinaryData> for CondaPackageData {
+    fn from(value: CondaBinaryData) -> Self {
+        Self::Binary(value)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CondaSourceData {
+    /// The package record.
+    pub package_record: PackageRecord,
+
+    /// The location of the package. This can be a URL or a local path.
+    pub location: UrlOrPath,
+
+    /// The input hash of the package
     pub input: Option<InputHash>,
+}
+
+impl From<CondaSourceData> for CondaPackageData {
+    fn from(value: CondaSourceData) -> Self {
+        Self::Source(value)
+    }
 }
 
 /// A record of input files that were used to define the metadata of the
@@ -40,7 +113,10 @@ pub struct InputHash {
 
 impl AsRef<PackageRecord> for CondaPackageData {
     fn as_ref(&self) -> &PackageRecord {
-        &self.package_record
+        match self {
+            Self::Binary(data) => &data.package_record,
+            Self::Source(data) => &data.package_record,
+        }
     }
 }
 
@@ -52,58 +128,49 @@ impl PartialOrd<Self> for CondaPackageData {
 
 impl Ord for CondaPackageData {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.location
-            .cmp(&other.location)
-            .then_with(|| self.package_record.name.cmp(&other.package_record.name))
-            .then_with(|| {
-                self.package_record
-                    .version
-                    .cmp(&other.package_record.version)
-            })
-            .then_with(|| self.package_record.build.cmp(&other.package_record.build))
-            .then_with(|| self.package_record.subdir.cmp(&other.package_record.subdir))
+        let pkg_a: &PackageRecord = self.as_ref();
+        let pkg_b: &PackageRecord = other.as_ref();
+        let location_a = self.location();
+        let location_b = other.location();
+
+        location_a
+            .cmp(location_b)
+            .then_with(|| pkg_a.name.cmp(&pkg_b.name))
+            .then_with(|| pkg_a.version.cmp(&pkg_b.version))
+            .then_with(|| pkg_a.build.cmp(&pkg_b.build))
+            .then_with(|| pkg_a.subdir.cmp(&pkg_b.subdir))
     }
 }
 
 impl From<RepoDataRecord> for CondaPackageData {
     fn from(value: RepoDataRecord) -> Self {
         let location = UrlOrPath::from(value.url).normalize().into_owned();
-        Self {
+        Self::Binary(CondaBinaryData {
             package_record: value.package_record,
-            file_name: Some(value.file_name),
-            channel: Url::parse(&value.channel).ok(),
+            file_name: value.file_name,
+            channel: value.channel,
             location,
-            input: None,
-        }
+        })
     }
 }
 
-impl TryFrom<&CondaPackageData> for RepoDataRecord {
+impl TryFrom<&CondaBinaryData> for RepoDataRecord {
     type Error = ConversionError;
 
-    fn try_from(value: &CondaPackageData) -> Result<Self, Self::Error> {
+    fn try_from(value: &CondaBinaryData) -> Result<Self, Self::Error> {
         Self::try_from(value.clone())
     }
 }
 
-impl TryFrom<CondaPackageData> for RepoDataRecord {
+impl TryFrom<CondaBinaryData> for RepoDataRecord {
     type Error = ConversionError;
 
-    fn try_from(value: CondaPackageData) -> Result<Self, Self::Error> {
-        // Determine the channel and file name based on the url stored in the record.
-        let channel = value
-            .channel
-            .map_or_else(String::default, |url| url.to_string());
-
-        let file_name = value
-            .file_name
-            .ok_or_else(|| ConversionError::Missing("file name".to_string()))?;
-
+    fn try_from(value: CondaBinaryData) -> Result<Self, Self::Error> {
         Ok(Self {
             package_record: value.package_record,
-            file_name,
+            file_name: value.file_name,
             url: value.location.try_into_url()?,
-            channel,
+            channel: value.channel,
         })
     }
 }

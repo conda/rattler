@@ -15,6 +15,7 @@ use url::Url;
 
 use super::ParseCondaLockError;
 use crate::{
+    conda::CondaBinaryData,
     file_format_version::FileFormatVersion,
     utils::derived_fields::{
         derive_arch_and_platform, derive_build_number_from_build, derive_noarch_type,
@@ -186,8 +187,14 @@ pub fn parse_v3_or_lower(
                     derive_arch_and_platform(derived.subdir.as_deref().unwrap_or(subdir.as_str()));
 
                 let deduplicated_idx = conda_packages
-                    .insert_full(CondaPackageData {
-                        input: None,
+                    .insert_full(CondaPackageData::Binary(CondaBinaryData {
+                        channel: derived
+                            .channel
+                            .unwrap_or_else(|| Url::parse("https://example.com").unwrap().into())
+                            .into(),
+                        file_name: derived.file_name.unwrap_or_else(|| {
+                            format!("{}-{}-{}.conda", value.name, value.version, build)
+                        }),
                         package_record: PackageRecord {
                             arch: value.arch.or(derived_arch),
                             build,
@@ -213,10 +220,8 @@ pub fn parse_v3_or_lower(
                             python_site_packages_path: value.python_site_packages_path,
                             run_exports: None,
                         },
-                        channel: derived.channel,
-                        file_name: derived.file_name,
                         location,
-                    })
+                    }))
                     .0;
 
                 EnvironmentPackageData::Conda(deduplicated_idx)
