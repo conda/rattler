@@ -906,37 +906,39 @@ mod test {
         insta::assert_yaml_snapshot!(paths);
     }
 
-    #[rstest::rstest]
-    #[case(
-        "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda",
-        "25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd"
-    )]
-    #[case(
-        "https://conda.anaconda.org/conda-forge/linux-aarch64/bzip2-1.0.8-hf897c2e_4.tar.bz2",
-        "3aeb6ab92aa0351722497b2d2a735dc20921cf6c60d9196c04b7a2b9ece198d2"
-    )]
     #[tracing_test::traced_test]
     #[tokio::test]
-    async fn test_link_package_from_archive(#[case] package_url: &str, #[case] sha256: &str) {
-        let environment_dir = tempfile::TempDir::new().unwrap();
+    async fn test_link_package_from_archive() {
+        let packages = vec![(
+            "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda",
+            "25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd"
+        ),
+        (
+            "https://conda.anaconda.org/conda-forge/linux-aarch64/bzip2-1.0.8-hf897c2e_4.tar.bz2",
+            "3aeb6ab92aa0351722497b2d2a735dc20921cf6c60d9196c04b7a2b9ece198d2"
+        )];
 
-        let package_path =
-            tools::download_and_cache_file_async(package_url.parse().unwrap(), sha256)
-                .await
-                .unwrap();
+        for (package_url, sha256) in packages {
+            let environment_dir = tempfile::TempDir::new().unwrap();
 
-        let install_driver = InstallDriver::default();
+            let package_path =
+                tools::download_and_cache_file_async(package_url.parse().unwrap(), sha256)
+                    .await
+                    .unwrap();
 
-        // Link the package
-        let paths = link_package_from_archive(
-            &package_path,
-            environment_dir.path(),
-            &install_driver,
-            InstallOptions::default(),
-        )
-        .await
-        .unwrap();
+            let install_driver = InstallDriver::default();
 
-        insta::assert_yaml_snapshot!(paths);
+            // Link the package
+            let paths = link_package_from_archive(
+                &package_path,
+                environment_dir.path(),
+                &install_driver,
+                InstallOptions::default(),
+            )
+            .await
+            .unwrap();
+
+            insta::assert_yaml_snapshot!(paths);
+        }
     }
 }
