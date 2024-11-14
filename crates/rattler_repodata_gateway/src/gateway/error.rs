@@ -47,6 +47,9 @@ pub enum GatewayError {
 
     #[error(transparent)]
     InvalidPackageName(#[from] InvalidPackageNameError),
+
+    #[error("{0}")]
+    CacheError(String),
 }
 
 impl From<Cancelled> for GatewayError {

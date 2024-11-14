@@ -15,8 +15,11 @@ use tokio::{
 };
 use url::Url;
 
-use super::{token::TokenClient, ShardedRepodata};
-use crate::{reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError, Reporter};
+use super::ShardedRepodata;
+use crate::{
+    fetch::CacheAction, reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError,
+    Reporter,
+};
 
 /// Magic number that identifies the cache file format.
 const MAGIC_NUMBER: &[u8] = b"SHARD-CACHE-V1";
@@ -27,8 +30,8 @@ const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
 pub async fn fetch_index(
     client: ClientWithMiddleware,
     channel_base_url: &Url,
-    token_client: &TokenClient,
     cache_dir: &Path,
+    cache_action: CacheAction,
     concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
     reporter: Option<&dyn Reporter>,
 ) -> Result<ShardedRepodata, GatewayError> {
@@ -39,6 +42,8 @@ pub async fn fetch_index(
         response: Response,
         reporter: Option<(&dyn Reporter, usize)>,
     ) -> Result<ShardedRepodata, GatewayError> {
+        let response = response.error_for_status()?;
+
         // Read the bytes of the response
         let response_url = response.url().clone();
         let bytes = response.bytes_with_progress(reporter).await?;
@@ -124,105 +129,118 @@ pub async fn fetch_index(
     let canonical_request = SimpleRequest::get(&canonical_shards_url);
 
     // Try reading the cached file
-    if let Ok(cache_header) = read_cached_index(&mut cache_reader).await {
-        match cache_header
-            .policy
-            .before_request(&canonical_request, SystemTime::now())
-        {
-            BeforeRequest::Fresh(_) => {
+    if cache_action != CacheAction::NoCache {
+        if let Ok(cache_header) = read_cached_index(&mut cache_reader).await {
+            // If we are in cache-only mode we can't fetch the index from the server
+            if cache_action == CacheAction::ForceCacheOnly {
                 if let Ok(shard_index) = read_shard_index_from_reader(&mut cache_reader).await {
-                    tracing::debug!("shard index cache hit");
+                    tracing::debug!("using locally cached shard index for {channel_base_url}");
                     return Ok(shard_index);
                 }
-            }
-            BeforeRequest::Stale {
-                request: state_request,
-                ..
-            } => {
-                // Get the token from the token client
-                let token = token_client.get_token(reporter).await?;
-
-                // Determine the actual URL to use for the request
-                let shards_url = token
-                    .shard_base_url
-                    .as_ref()
-                    .unwrap_or(channel_base_url)
-                    .join(REPODATA_SHARDS_FILENAME)
-                    .expect("invalid shard base url");
-
-                // Construct the actual request that we will send
-                let mut request = client
-                    .get(shards_url.clone())
-                    .headers(state_request.headers().clone())
-                    .build()
-                    .expect("failed to build request for shard index");
-                token.add_to_headers(request.headers_mut());
-
-                // Acquire a permit to do a request
-                let _request_permit = concurrent_requests_semaphore.acquire().await;
-
-                // Send the request
-                let download_reporter = reporter.map(|r| (r, r.on_download_start(&shards_url)));
-                let response = client.execute(request).await?;
-
-                match cache_header.policy.after_response(
-                    &state_request,
-                    &response,
-                    SystemTime::now(),
-                ) {
-                    AfterResponse::NotModified(_policy, _) => {
-                        // The cached file is still valid
-                        match read_shard_index_from_reader(&mut cache_reader).await {
-                            Ok(shard_index) => {
-                                tracing::debug!("shard index cache was not modified");
-                                // If reading the file failed for some reason we'll just fetch it
-                                // again.
-                                return Ok(shard_index);
-                            }
-                            Err(e) => {
-                                tracing::warn!("the cached shard index has been corrupted: {e}");
-                                if let Some((reporter, index)) = download_reporter {
-                                    reporter.on_download_complete(response.url(), index);
-                                }
-                            }
+            } else {
+                match cache_header
+                    .policy
+                    .before_request(&canonical_request, SystemTime::now())
+                {
+                    BeforeRequest::Fresh(_) => {
+                        if let Ok(shard_index) =
+                            read_shard_index_from_reader(&mut cache_reader).await
+                        {
+                            tracing::debug!("shard index cache hit");
+                            return Ok(shard_index);
                         }
                     }
-                    AfterResponse::Modified(policy, _) => {
-                        // Close the old file so we can create a new one.
-                        tracing::debug!("shard index cache has become stale");
-                        return from_response(
-                            cache_reader.into_inner(),
-                            &cache_path,
-                            policy,
-                            response,
-                            download_reporter,
-                        )
-                        .await;
+                    BeforeRequest::Stale {
+                        request: state_request,
+                        ..
+                    } => {
+                        if cache_action == CacheAction::UseCacheOnly {
+                            return Err(GatewayError::CacheError(
+                                format!("the sharded index cache for {channel_base_url} is stale and cache-only mode is enabled"),
+                            ));
+                        }
+
+                        // Determine the actual URL to use for the request
+                        let shards_url = channel_base_url
+                            .join(REPODATA_SHARDS_FILENAME)
+                            .expect("invalid shard base url");
+
+                        // Construct the actual request that we will send
+                        let request = client
+                            .get(shards_url.clone())
+                            .headers(state_request.headers().clone())
+                            .build()
+                            .expect("failed to build request for shard index");
+
+                        // Acquire a permit to do a request
+                        let _request_permit = concurrent_requests_semaphore.acquire().await;
+
+                        // Send the request
+                        let download_reporter =
+                            reporter.map(|r| (r, r.on_download_start(&shards_url)));
+                        let response = client.execute(request).await?;
+
+                        match cache_header.policy.after_response(
+                            &state_request,
+                            &response,
+                            SystemTime::now(),
+                        ) {
+                            AfterResponse::NotModified(_policy, _) => {
+                                // The cached file is still valid
+                                match read_shard_index_from_reader(&mut cache_reader).await {
+                                    Ok(shard_index) => {
+                                        tracing::debug!("shard index cache was not modified");
+                                        // If reading the file failed for some reason we'll just
+                                        // fetch it again.
+                                        return Ok(shard_index);
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            "the cached shard index has been corrupted: {e}"
+                                        );
+                                        if let Some((reporter, index)) = download_reporter {
+                                            reporter.on_download_complete(response.url(), index);
+                                        }
+                                    }
+                                }
+                            }
+                            AfterResponse::Modified(policy, _) => {
+                                // Close the old file so we can create a new one.
+                                tracing::debug!("shard index cache has become stale");
+                                return from_response(
+                                    cache_reader.into_inner(),
+                                    &cache_path,
+                                    policy,
+                                    response,
+                                    download_reporter,
+                                )
+                                .await;
+                            }
+                        }
                     }
                 }
             }
         }
-    };
+    }
+
+    if cache_action == CacheAction::ForceCacheOnly {
+        return Err(GatewayError::CacheError(format!(
+            "the sharded index cache for {channel_base_url} is not available"
+        )));
+    }
 
     tracing::debug!("fetching fresh shard index");
 
-    // Get the token from the token client
-    let token = token_client.get_token(reporter).await?;
-
     // Determine the actual URL to use for the request
-    let shards_url = token
-        .shard_base_url
-        .as_ref()
-        .unwrap_or(channel_base_url)
+    let shards_url = channel_base_url
         .join(REPODATA_SHARDS_FILENAME)
         .expect("invalid shard base url");
 
     // Construct the actual request that we will send
-    let mut request = client
+    let request = client
         .get(shards_url.clone())
         .build()
         .expect("failed to build request for shard index");
-    token.add_to_headers(request.headers_mut());
 
     // Acquire a permit to do a request
     let _request_permit = concurrent_requests_semaphore.acquire().await;

@@ -2901,7 +2901,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.21.19"
+version = "0.21.20"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2957,6 +2957,7 @@ name = "rattler_shell"
 version = "0.22.5"
 dependencies = [
  "enum_dispatch",
+ "fs-err 3.0.0",
  "indexmap 2.6.0",
  "itertools 0.13.0",
  "rattler_conda_types",
@@ -2969,7 +2970,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "chrono",
  "futures",
