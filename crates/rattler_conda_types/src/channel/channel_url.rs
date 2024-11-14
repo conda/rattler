@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -11,7 +11,7 @@ use crate::{utils::url_with_trailing_slash::UrlWithTrailingSlash, Platform};
 /// * The URL always contains a trailing `/`.
 ///
 /// This is useful to be able to compare different channels.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ChannelUrl(UrlWithTrailingSlash);
 
@@ -31,6 +31,12 @@ impl ChannelUrl {
         self.0
             .join(&format!("{}/", platform.as_str())) // trailing slash is important here as this signifies a directory
             .expect("platform is a valid url fragment")
+    }
+}
+
+impl Debug for ChannelUrl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.as_str())
     }
 }
 
