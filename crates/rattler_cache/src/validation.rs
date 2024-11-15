@@ -164,7 +164,7 @@ fn validate_package_hard_link_entry(
     }
 
     // Open the file for reading
-    let mut file = match std::fs::File::open(&path) {
+    let file = match std::fs::File::open(&path) {
         Ok(file) => file,
         Err(e) if e.kind() == ErrorKind::NotFound => {
             return Err(PackageEntryValidationError::NotFound);
