@@ -671,7 +671,10 @@ mod libsolv_c {
             "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_3.conda",
             info.url.to_string()
         );
-        assert_eq!(Some("https://conda.anaconda.org/conda-forge/"), info.channel.as_deref());
+        assert_eq!(
+            Some("https://conda.anaconda.org/conda-forge/"),
+            info.channel.as_deref()
+        );
         assert_eq!("foo", info.package_record.name.as_normalized());
         assert_eq!("linux-64", info.package_record.subdir);
         assert_eq!("3.0.2", info.package_record.version.to_string());
