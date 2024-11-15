@@ -213,7 +213,7 @@ mod test {
                     .unwrap()
             ),
             Some("noarch")
-        )
+        );
     }
 
     #[test]
