@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.21](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.20...rattler_repodata_gateway-v0.21.21) - 2024-11-14
+
+### Other
+
+- enable using sharded repodata for custom channels ([#910](https://github.com/conda/rattler/pull/910))
+
 ## [0.21.20](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.19...rattler_repodata_gateway-v0.21.20) - 2024-11-05
 
 ### Fixed
