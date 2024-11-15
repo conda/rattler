@@ -1,6 +1,7 @@
 use pyo3::{pyclass, pymethods, FromPyObject, PyResult};
 use rattler_networking::{
     mirror_middleware::Mirror, AuthenticationMiddleware, AuthenticationStorage, MirrorMiddleware,
+    OciMiddleware,
 };
 use std::collections::HashMap;
 use url::Url;
@@ -11,6 +12,7 @@ use crate::error::PyRattlerError;
 pub enum PyMiddleware {
     MirrorMiddleware(PyMirrorMiddleware),
     AuthenticationMiddleware(PyAuthenticationMiddleware),
+    OCIMiddleware(PyOCIMiddleware),
 }
 
 #[pyclass]
@@ -70,5 +72,24 @@ impl PyAuthenticationMiddleware {
 impl From<PyAuthenticationMiddleware> for AuthenticationMiddleware {
     fn from(_value: PyAuthenticationMiddleware) -> Self {
         AuthenticationMiddleware::new(AuthenticationStorage::default())
+    }
+}
+
+#[pyclass]
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct PyOCIMiddleware {}
+
+#[pymethods]
+impl PyOCIMiddleware {
+    #[new]
+    pub fn __init__() -> Self {
+        Self {}
+    }
+}
+
+impl From<PyOCIMiddleware> for OciMiddleware {
+    fn from(_value: PyOCIMiddleware) -> Self {
+        OciMiddleware
     }
 }
