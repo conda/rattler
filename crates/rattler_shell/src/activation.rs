@@ -3,10 +3,10 @@
 //! This crate provides helper functions to activate and deactivate virtual
 //! environments.
 
+use fs_err as fs;
 use std::{
     collections::HashMap,
     ffi::OsStr,
-    fs,
     path::{Path, PathBuf},
     process::ExitStatus,
 };

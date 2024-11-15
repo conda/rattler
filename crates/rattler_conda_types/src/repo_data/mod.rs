@@ -24,7 +24,7 @@ use crate::{
     package::{IndexJson, RunExportsJson},
     utils::{
         serde::{sort_map_alphabetically, DeserializeFromStrUnchecked},
-        url::add_trailing_slash,
+        UrlWithTrailingSlash,
     },
     Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
     ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
@@ -234,7 +234,8 @@ impl RepoData {
             records.push(RepoDataRecord {
                 url: compute_package_url(
                     &channel
-                        .base_url()
+                        .base_url
+                        .url()
                         .join(&package_record.subdir)
                         .expect("cannot join channel base_url and subdir"),
                     base_url.as_deref(),
@@ -259,7 +260,7 @@ pub fn compute_package_url(
         None => repo_data_base_url.clone(),
         Some(base_url) => match Url::parse(base_url) {
             Err(url::ParseError::RelativeUrlWithoutBase) if !base_url.starts_with('/') => {
-                add_trailing_slash(repo_data_base_url)
+                UrlWithTrailingSlash::from(repo_data_base_url.clone())
                     .join(base_url)
                     .expect("failed to join base_url with channel")
             }
@@ -609,7 +610,7 @@ mod test {
             &ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap()),
         )
         .unwrap();
-        let base_url = channel.base_url().join("linux-64/").unwrap();
+        let base_url = channel.base_url.url().join("linux-64/").unwrap();
         assert_eq!(
             compute_package_url(&base_url, None, "bla.conda").to_string(),
             "https://conda.anaconda.org/conda-forge/linux-64/bla.conda"

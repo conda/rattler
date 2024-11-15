@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.0...rattler_conda_types-v0.29.1) - 2024-11-14
+
+### Other
+
+- enable using sharded repodata for custom channels ([#910](https://github.com/conda/rattler/pull/910))
+
 ## [0.29.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.28.3...rattler_conda_types-v0.29.0) - 2024-11-04
 
 ### Added

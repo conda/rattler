@@ -309,6 +309,7 @@ fn parse_records<'i>(
             url: compute_package_url(
                 &channel
                     .base_url
+                    .url()
                     .join(&format!("{}/", &package_record.subdir))
                     .expect("failed determine repo_base_url"),
                 base_url,
@@ -477,13 +478,13 @@ mod test {
     use std::path::{Path, PathBuf};
 
     use bytes::Bytes;
+    use fs_err as fs;
     use itertools::Itertools;
     use rattler_conda_types::{Channel, ChannelConfig, PackageName, RepoData, RepoDataRecord};
     use rstest::rstest;
 
     use super::{load_repo_data_recursively, PackageFilename, SparseRepoData};
     use crate::utils::test::fetch_repo_data;
-    use fs_err as fs;
 
     fn test_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
