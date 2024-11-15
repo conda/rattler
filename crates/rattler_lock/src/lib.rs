@@ -116,8 +116,7 @@ pub const DEFAULT_ENVIRONMENT_NAME: &str = "default";
 /// environments.
 ///
 /// The high-level API provided by this type holds internal references to the
-/// data. Its is therefore cheap to clone this type and any type derived from it
-/// (e.g. [`Environment`] or [`Package`]).
+/// data. Its is therefore cheap to clone this type.
 #[derive(Clone, Default, Debug)]
 pub struct LockFile {
     inner: Arc<LockFileInner>,
