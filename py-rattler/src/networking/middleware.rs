@@ -10,9 +10,9 @@ use crate::error::PyRattlerError;
 
 #[derive(FromPyObject)]
 pub enum PyMiddleware {
-    MirrorMiddleware(PyMirrorMiddleware),
-    AuthenticationMiddleware(PyAuthenticationMiddleware),
-    OCIMiddleware(PyOCIMiddleware),
+    Mirror(PyMirrorMiddleware),
+    Authentication(PyAuthenticationMiddleware),
+    Oci(PyOciMiddleware),
 }
 
 #[pyclass]
@@ -78,18 +78,18 @@ impl From<PyAuthenticationMiddleware> for AuthenticationMiddleware {
 #[pyclass]
 #[repr(transparent)]
 #[derive(Clone)]
-pub struct PyOCIMiddleware {}
+pub struct PyOciMiddleware {}
 
 #[pymethods]
-impl PyOCIMiddleware {
+impl PyOciMiddleware {
     #[new]
     pub fn __init__() -> Self {
         Self {}
     }
 }
 
-impl From<PyOCIMiddleware> for OciMiddleware {
-    fn from(_value: PyOCIMiddleware) -> Self {
+impl From<PyOciMiddleware> for OciMiddleware {
+    fn from(_value: PyOciMiddleware) -> Self {
         OciMiddleware
     }
 }

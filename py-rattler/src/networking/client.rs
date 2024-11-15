@@ -20,15 +20,11 @@ impl PyClientWithMiddleware {
         let client = middlewares
             .into_iter()
             .fold(client, |client, middleware| match middleware {
-                PyMiddleware::MirrorMiddleware(middleware) => {
-                    client.with(MirrorMiddleware::from(middleware))
-                }
-                PyMiddleware::AuthenticationMiddleware(middleware) => {
+                PyMiddleware::Mirror(middleware) => client.with(MirrorMiddleware::from(middleware)),
+                PyMiddleware::Authentication(middleware) => {
                     client.with(AuthenticationMiddleware::from(middleware))
                 }
-                PyMiddleware::OCIMiddleware(middleware) => {
-                    client.with(OciMiddleware::from(middleware))
-                }
+                PyMiddleware::Oci(middleware) => client.with(OciMiddleware::from(middleware)),
             });
         let client = client.build();
 

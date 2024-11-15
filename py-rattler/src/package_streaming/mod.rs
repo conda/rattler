@@ -55,7 +55,7 @@ pub fn download_and_extract<'a>(
 ) -> PyResult<Bound<'a, PyAny>> {
     // Parse URL
     let url = Url::parse(&url).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {}", e))
+        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid URL: {e}"))
     })?;
 
     // Convert SHA256 if provided
