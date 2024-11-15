@@ -274,7 +274,7 @@ impl From<Channel> for PyLockChannel {
 impl From<rattler_conda_types::Channel> for PyLockChannel {
     fn from(value: rattler_conda_types::Channel) -> Self {
         Self {
-            inner: Channel::from(value.base_url().to_string()),
+            inner: Channel::from(value.base_url.to_string()),
         }
     }
 }

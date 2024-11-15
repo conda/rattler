@@ -11,6 +11,7 @@ use rattler_repodata_gateway::fetch::CacheAction;
 use rattler_repodata_gateway::{ChannelConfig, Gateway, SourceConfig, SubdirSelection};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use url::Url;
 
 #[pyclass]
 #[repr(transparent)]
@@ -54,15 +55,18 @@ impl PyGateway {
     pub fn new(
         max_concurrent_requests: usize,
         default_config: PySourceConfig,
-        per_channel_config: HashMap<PyChannel, PySourceConfig>,
+        per_channel_config: HashMap<String, PySourceConfig>,
         cache_dir: Option<PathBuf>,
     ) -> PyResult<Self> {
         let channel_config = ChannelConfig {
             default: default_config.into(),
             per_channel: per_channel_config
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
-                .collect(),
+                .map(|(k, v)| {
+                    let url = Url::parse(&k).map_err(PyRattlerError::from)?;
+                    Ok((url, v.into()))
+                })
+                .collect::<Result<_, PyRattlerError>>()?,
         };
 
         let mut gateway = Gateway::builder()
@@ -174,10 +178,12 @@ impl<'py> FromPyObject<'py> for Wrap<CacheAction> {
 #[pymethods]
 impl PySourceConfig {
     #[new]
+    #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
         jlap_enabled: bool,
         zstd_enabled: bool,
         bz2_enabled: bool,
+        sharded_enabled: bool,
         cache_action: Wrap<CacheAction>,
     ) -> Self {
         Self {
@@ -185,6 +191,7 @@ impl PySourceConfig {
                 jlap_enabled,
                 zstd_enabled,
                 bz2_enabled,
+                sharded_enabled,
                 cache_action: cache_action.0,
             },
         }
