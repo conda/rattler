@@ -59,16 +59,19 @@ impl Display for OciAction {
 // [oci://ghcr.io/channel-mirrors/conda-forge]/[osx-arm64/xtensor]
 async fn get_token(url: &OCIUrl, action: OciAction) -> Result<String, OciMiddlewareError> {
     let token_url = url.token_url(action)?;
+    tracing::warn!("OCI Mirror: requesting token from {}", token_url);
 
-    tracing::trace!("OCI Mirror: requesting token from {}", token_url);
+    let response = reqwest::get(token_url).await?;
 
-    let token = reqwest::get(token_url)
-        .await?
-        .json::<OCIToken>()
-        .await?
-        .token;
-
-    Ok(token)
+    if response.status().is_success() {
+        let token = response.json::<OCIToken>().await?;
+        Ok(token.token)
+    } else {
+        tracing::error!("OCI Mirror: failed to get token: {:?}", response);
+        Err(OciMiddlewareError::Reqwest(
+            response.error_for_status().unwrap_err(),
+        ))
+    }
 }
 
 #[derive(Debug)]

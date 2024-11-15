@@ -12,6 +12,7 @@ mod nameless_match_spec;
 mod networking;
 mod no_arch_type;
 mod package_name;
+mod package_streaming;
 mod paths_json;
 mod platform;
 mod prefix_paths;
@@ -153,6 +154,10 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_rattler_version, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_install, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_index, &m).unwrap())?;
+
+    m.add_function(wrap_pyfunction!(package_streaming::extract_tar_bz2, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(package_streaming::extract, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(package_streaming::download_and_extract, &m).unwrap())?;
 
     // Explicit environment specification
     m.add_class::<PyExplicitEnvironmentSpec>()?;
