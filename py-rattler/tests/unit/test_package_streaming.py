@@ -38,13 +38,14 @@ async def test_download_and_extract(tmpdir: Path) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="Github currently requires a PAT to get a token?")
+# @pytest.mark.xfail(reason="Github currently requires a PAT to get a token?")
 async def test_download_from_oci(tmpdir: Path) -> None:
     dest = Path(tmpdir) / "destination"
     # Note: the order of middlewares matters here! The OCI middleware must come after the mirror middleware.
     client = Client(
         [
-            MirrorMiddleware({"https://conda.anaconda.org/conda-forge": ["oci://ghcr.io/channel-mirrors/conda-forge"]}),
+            # TODO somehow these URLs are very susceptible to missing last /
+            MirrorMiddleware({"https://conda.anaconda.org/conda-forge/": ["oci://ghcr.io/channel-mirrors/conda-forge/"]}),
             OciMiddleware(),
         ]
     )
