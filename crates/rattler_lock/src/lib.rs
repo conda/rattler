@@ -237,7 +237,7 @@ impl LockFile {
 /// Information about a specific environment in the lock-file.
 #[derive(Clone, Copy)]
 pub struct Environment<'lock> {
-    inner: &'lock LockFileInner,
+    inner: &'lock Arc<LockFileInner>,
     index: usize,
 }
 
@@ -414,6 +414,40 @@ impl<'lock> Environment<'lock> {
     > {
         self.packages(platform)
             .map(|pkgs| pkgs.filter_map(LockedPackageRef::as_pypi))
+    }
+
+    /// Creates a [`OwnedEnvironment`] from this environment.
+    pub fn to_owned(self) -> OwnedEnvironment {
+        OwnedEnvironment {
+            inner: self.inner.clone(),
+            index: self.index,
+        }
+    }
+}
+
+/// An owned version of an [`Environment`].
+///
+/// Use [`OwnedEnvironment::as_ref`] to get a reference to the environment data.
+#[derive(Clone)]
+pub struct OwnedEnvironment {
+    inner: Arc<LockFileInner>,
+    index: usize,
+}
+
+impl OwnedEnvironment {
+    /// Returns a reference to the environment data.
+    pub fn as_ref(&self) -> Environment<'_> {
+        Environment {
+            inner: &self.inner,
+            index: self.index,
+        }
+    }
+
+    /// Returns the lock-file this environment is part of.
+    pub fn lock_file(&self) -> LockFile {
+        LockFile {
+            inner: self.inner.clone(),
+        }
     }
 }
 

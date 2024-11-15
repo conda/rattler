@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC
-from typing import Optional, Set
+from typing import Optional, Set, List
 
 from rattler import PackageRecord, Version, RepoDataRecord
 
@@ -9,6 +9,10 @@ from rattler.lock.hash import PackageHashes
 
 
 class LockedPackage(ABC):
+    """
+    Base class for any package in a lock file.
+    """
+
     _package: PyLockedPackage
 
     @property
@@ -75,16 +79,14 @@ class LockedPackage(ABC):
         """
         Returns a representation of the LockedPackage.
         """
-        return (f"{type(self).__name__}("
-                f"name={self.name!r},"
-                f"location={self.location!r}"
-                ")")
+        return f"{type(self).__name__}(" f"name={self.name!r}," f"location={self.location!r}" ")"
 
     @classmethod
     def _from_py_locked_package(cls, py_pkg: PyLockedPackage) -> LockedPackage:
         """
         Construct Rattler LockedPackage from FFI PyLockedPackage object.
         """
+        pkg: LockedPackage
         if py_pkg.is_conda_binary:
             pkg = CondaLockedBinaryPackage.__new__(CondaLockedBinaryPackage)
         elif py_pkg.is_conda_source:
@@ -93,13 +95,17 @@ class LockedPackage(ABC):
             pkg = PypiLockedPackage.__new__(PypiLockedPackage)
         else:
             raise TypeError(
-                "Cannot create LockedPackage from PyLockedPackage, the type of the package is not supported.")
+                "Cannot create LockedPackage from PyLockedPackage, the type of the package is not supported."
+            )
 
         pkg._package = py_pkg
         return pkg
 
 
 class CondaLockedPackage(LockedPackage, ABC):
+    """
+    A locked conda package in a lock file.
+    """
 
     @property
     def package_record(self) -> PackageRecord:
@@ -129,6 +135,9 @@ class CondaLockedPackage(LockedPackage, ABC):
 
 
 class PypiLockedPackage(LockedPackage):
+    """
+    A locked PyPI package in a lock file.
+    """
 
     @property
     def version(self) -> str:
@@ -237,31 +246,35 @@ class PypiLockedPackage(LockedPackage):
         """
         return self._package.pypi_satisfies(spec)
 
-    def __repr__(self) -> str:
+    @classmethod
+    def _from_py_locked_package(cls, py_pkg: PyLockedPackage) -> PypiLockedPackage:
         """
-        Returns a representation of the LockedPackage.
+        Construct Rattler LockedPackage from FFI PyLockedPackage object.
         """
-        return "PypiLockedPackage()"
+        if py_pkg.is_pypi:
+            pkg = PypiLockedPackage.__new__(PypiLockedPackage)
+        else:
+            raise TypeError(
+                "Cannot create PypiLockedPackage from PyLockedPackage, the type of the package is not supported."
+            )
+
+        pkg._package = py_pkg
+        return pkg
 
 
 class CondaLockedSourcePackage(CondaLockedPackage):
-    def __repr__(self) -> str:
-        """
-        Returns a representation of the LockedPackage.
-        """
-        return "CondaLockedSourcePackage()"
+    """
+    A locked conda source package in a lock file.
+    """
 
 
 class CondaLockedBinaryPackage(CondaLockedPackage):
+    """
+    A locked conda binary package in a lock file.
+    """
 
     def repo_data_record(self) -> RepoDataRecord:
         """
         Returns the metadata of the package as recorded in the lock-file including location information.
         """
         return RepoDataRecord._from_py_record(self._package.repo_data_record)
-
-    def __repr__(self) -> str:
-        """
-        Returns a representation of the LockedPackage.
-        """
-        return "CondaLockedBinaryPackage()"

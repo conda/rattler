@@ -1,19 +1,19 @@
 use std::{borrow::Cow, io::Write, path::PathBuf, sync::Arc};
 
-use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
-use rattler_conda_types::{
-    Channel, ChannelUrl, PackageName, RepoDataRecord, Shard, ShardedRepodata,
-};
-use reqwest_middleware::ClientWithMiddleware;
-use simple_spawn_blocking::tokio::run_blocking_task;
-use url::Url;
-
 use crate::{
     fetch::{CacheAction, FetchRepoDataError},
     gateway::{error::SubdirNotFoundError, subdir::SubdirClient},
     reporter::ResponseReporterExt,
     GatewayError, Reporter,
 };
+use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
+use rattler_conda_types::{
+    Channel, ChannelUrl, PackageName, RepoDataRecord, Shard, ShardedRepodata,
+};
+use rattler_redaction::Redact;
+use reqwest_middleware::ClientWithMiddleware;
+use simple_spawn_blocking::tokio::run_blocking_task;
+use url::Url;
 
 mod index;
 
@@ -293,7 +293,7 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                 url: base_url
                     .join(&file_name)
                     .expect("filename is not a valid url"),
-                channel: Some(channel_base_url.clone()),
+                channel: Some(channel_base_url.url().clone().redact().to_string()),
                 package_record,
                 file_name,
             })

@@ -273,7 +273,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         if transaction.operations.is_empty() {
             println!("No operations necessary");
         } else {
-            print_transaction(&transaction, &channel_config);
+            print_transaction(&transaction);
         }
 
         return Ok(());
@@ -304,20 +304,17 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
             console::style(console::Emoji("✔", "")).green(),
             install_start.elapsed()
         );
-        print_transaction(&result.transaction, &channel_config);
+        print_transaction(&result.transaction);
     }
 
     Ok(())
 }
 
 /// Prints the operations of the transaction to the console.
-fn print_transaction(
-    transaction: &Transaction<PrefixRecord, RepoDataRecord>,
-    channel_config: &ChannelConfig,
-) {
+fn print_transaction(transaction: &Transaction<PrefixRecord, RepoDataRecord>) {
     let format_record = |r: &RepoDataRecord| {
         let direct_url_print = if let Some(channel) = &r.channel {
-            channel_config.canonical_name(channel.as_ref())
+            channel.clone()
         } else {
             String::new()
         };

@@ -17,6 +17,7 @@ use itertools::Itertools;
 use rattler_conda_types::{
     compute_package_url, Channel, ChannelInfo, PackageName, PackageRecord, RepoDataRecord,
 };
+use rattler_redaction::Redact;
 use serde::{
     de::{Error, MapAccess, Visitor},
     Deserialize, Deserializer,
@@ -315,7 +316,7 @@ fn parse_records<'i>(
                 base_url,
                 key.filename,
             ),
-            channel: Some(channel_name.clone()),
+            channel: Some(channel_name.url().clone().redact().to_string()),
             package_record,
             file_name: key.filename.to_owned(),
         });

@@ -62,7 +62,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub platform: Cow<'a, Option<String>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub channel: Cow<'a, Option<ChannelUrl>>,
+    pub channel: Cow<'a, Option<Url>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub features: Cow<'a, Option<String>>,
@@ -141,6 +141,7 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
             channel: value
                 .channel
                 .into_owned()
+                .map(ChannelUrl::from)
                 .or_else(|| derive_channel_from_location(&location)),
             file_name,
             location,

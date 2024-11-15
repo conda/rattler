@@ -4,16 +4,14 @@ use pep508_rs::Requirement;
 use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
 use rattler_conda_types::RepoDataRecord;
 use rattler_lock::{
-    Channel, CondaPackageData, Environment, LockFile, LockedPackage, PackageHashes,
-    PypiPackageData, PypiPackageEnvironmentData, DEFAULT_ENVIRONMENT_NAME,
+    Channel, CondaPackageData, Environment, LockFile, LockedPackage, OwnedEnvironment,
+    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, DEFAULT_ENVIRONMENT_NAME,
 };
-use self_cell::self_cell;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     path::PathBuf,
     str::FromStr,
 };
-use url::Url;
 
 /// Represents a lock-file for both Conda packages and Pypi packages.
 ///
@@ -103,44 +101,25 @@ impl PyLockFile {
     }
 }
 
-self_cell!(
-    struct EnvironmentRef {
-        owner: LockFile,
-
-        #[covariant]
-        dependent: Environment,
-    }
-);
-
 #[pyclass]
+#[derive(Clone)]
 pub struct PyEnvironment {
-    environment: EnvironmentRef,
-    name: String,
-}
-
-impl Clone for PyEnvironment {
-    fn clone(&self) -> Self {
-        PyEnvironment::from_lock_file_and_name(self.environment.borrow_owner().clone(), &self.name)
-            .unwrap()
-    }
+    environment: OwnedEnvironment,
 }
 
 impl PyEnvironment {
-    fn as_ref(&self) -> &Environment<'_> {
-        self.environment.borrow_dependent()
+    fn as_ref(&self) -> Environment<'_> {
+        self.environment.as_ref()
     }
 
     pub fn from_lock_file_and_name(lock: LockFile, name: &str) -> PyResult<Self> {
-        let environment = EnvironmentRef::try_new(lock, move |lock| {
-            lock.environment(name)
-                .ok_or(PyRattlerError::EnvironmentCreationError(
-                    "Environment creation failed.".into(),
-                ))
-        })?;
-        Ok(Self {
-            environment,
-            name: name.to_string(),
-        })
+        let environment = lock
+            .environment(name)
+            .ok_or(PyRattlerError::EnvironmentCreationError(
+                "Environment creation failed.".into(),
+            ))?
+            .to_owned();
+        Ok(Self { environment })
     }
 }
 
@@ -149,23 +128,17 @@ impl PyEnvironment {
     #[new]
     pub fn new(name: String, req: HashMap<PyPlatform, Vec<PyRecord>>) -> PyResult<Self> {
         let mut lock = LockFile::builder();
-        let mut channels = HashSet::new();
-        for records in req.values() {
-            for record in records {
-                if let Some(channel) = record
-                    .try_as_repodata_record()
-                    .ok()
-                    .and_then(|r| r.channel.as_ref())
-                {
-                    channels.insert(Url::from(channel.clone()));
-                }
-            }
-        }
+        let channels = req
+            .values()
+            .flat_map(|records| {
+                records
+                    .iter()
+                    .filter_map(|r| r.channel().transpose())
+                    .collect::<Vec<PyResult<_>>>()
+            })
+            .collect::<PyResult<HashSet<_>>>()?;
 
-        lock.set_channels(
-            &name,
-            channels.into_iter().map(|url| Channel::from(url.as_str())),
-        );
+        lock.set_channels(&name, channels);
 
         for (platform, records) in req {
             for record in records {
@@ -231,8 +204,8 @@ impl PyEnvironment {
                 let data = data_vec
                     .map(|(pkg_data, pkg_env_data)| {
                         PyLockedPackage::from(LockedPackage::Pypi(
-                            pkg_data.clone().into(),
-                            pkg_env_data.clone().into(),
+                            pkg_data.clone(),
+                            pkg_env_data.clone(),
                         ))
                     })
                     .collect::<Vec<_>>();
@@ -404,7 +377,7 @@ impl PyLockedPackage {
 
     #[getter]
     pub fn pypi_version(&self) -> String {
-        self.as_pypi().version.to_string().into()
+        self.as_pypi().version.to_string()
     }
 
     /// Whether the package is installed in editable mode or not.

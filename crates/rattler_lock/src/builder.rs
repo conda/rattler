@@ -18,6 +18,7 @@ use crate::{
 
 /// Information about a single locked package in an environment.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum LockedPackage {
     /// A conda package
     Conda(CondaPackageData),

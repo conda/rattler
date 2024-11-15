@@ -13,7 +13,7 @@ use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::{
-    package::ArchiveType, ChannelUrl, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
+    package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
     PackageName, PackageRecord, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
 };
 use resolvo::{
@@ -221,7 +221,7 @@ impl<'a> CondaDependencyProvider<'a> {
             .collect::<Vec<_>>();
 
         // Hashmap that maps the package name to the channel it was first found in.
-        let mut package_name_found_in_channel = HashMap::<String, &Option<ChannelUrl>>::new();
+        let mut package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
 
         // Add additional records
         for repo_data in repodata {
@@ -324,7 +324,7 @@ impl<'a> CondaDependencyProvider<'a> {
                     }) {
                         // Check if the spec has a channel, and compare it to the repodata channel
                         if let Some(spec_channel) = &spec.channel {
-                            if record.channel.as_ref() != Some(&spec_channel.base_url) {
+                            if record.channel.as_ref() != Some(&spec_channel.canonical_name()) {
                                 tracing::debug!("Ignoring {} {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), match &record.channel {
                                     Some(channel) => format!("from {}", &channel),
                                     None => "without a channel".to_string(),

@@ -20,8 +20,6 @@ anyhow = "1.0.92"
 chrono = { version = "0.4" }
 futures = "0.3.31"
 
-self_cell = "1.0.4"
-
 rattler = { path = "../crates/rattler", default-features = false, features = ["indicatif"] }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false, features = [
     "sparse",

@@ -84,7 +84,7 @@ fn installed_package(
 ) -> RepoDataRecord {
     RepoDataRecord {
         url: Url::from_str("http://example.com").unwrap(),
-        channel: channel.to_string(),
+        channel: Some(channel.to_string()),
         file_name: "dummy-filename".to_string(),
         package_record: PackageRecord {
             name: name.parse().unwrap(),
@@ -352,7 +352,7 @@ macro_rules! solver_backend_tests {
                 "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_3.conda",
                 info.url.to_string()
             );
-            assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
+            assert_eq!(Some("https://conda.anaconda.org/conda-forge/"), info.channel.as_deref());
             assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("linux-64", info.package_record.subdir);
             assert_eq!("3.0.2", info.package_record.version.to_string());
@@ -867,7 +867,7 @@ mod resolvo {
             // Mocking the rest of the fields
             file_name: url_str.to_string(),
             url: url.clone(),
-            channel: "".to_string(),
+            channel: None,
         }];
 
         // Completely clean solver task, except for the specs and RepoData
@@ -900,7 +900,7 @@ mod resolvo {
             package_record,
             file_name: url_str.to_string(),
             url: Url::from_str("https://false.dont").unwrap(),
-            channel: "".to_string(),
+            channel: None,
         }];
 
         // Completely clean solver task, except for the specs and RepoData
@@ -1155,7 +1155,7 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
     let record = result.iter().find(|record| {
         record.package_record.name.as_normalized() == spec.name.as_ref().unwrap().as_normalized()
     });
-    assert_eq!(record.unwrap().channel, expected_channel.to_string());
+    assert_eq!(record.unwrap().channel, Some(expected_channel.to_string()));
 }
 
 #[test]

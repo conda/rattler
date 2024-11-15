@@ -68,7 +68,7 @@ class RepoDataRecord(PackageRecord):
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.channel
-        'https://conda.anaconda.org/conda-forge/win-64/'
+        'https://conda.anaconda.org/conda-forge/win-64'
         >>>
         ```
         """

@@ -14,9 +14,8 @@ use url::Url;
 use crate::{
     file_format_version::FileFormatVersion,
     parse::{models::v6, V6},
-    Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile,
-    LockFileInner, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData,
-    UrlOrPath,
+    Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
+    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
 };
 
 #[serde_as]

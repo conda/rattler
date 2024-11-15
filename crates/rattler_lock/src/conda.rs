@@ -2,6 +2,7 @@ use std::{cmp::Ordering, hash::Hash};
 
 use rattler_conda_types::{ChannelUrl, PackageRecord, RepoDataRecord};
 use rattler_digest::Sha256Hash;
+use url::Url;
 
 use crate::UrlOrPath;
 
@@ -148,7 +149,10 @@ impl From<RepoDataRecord> for CondaPackageData {
         Self::Binary(CondaBinaryData {
             package_record: value.package_record,
             file_name: value.file_name,
-            channel: value.channel,
+            channel: value
+                .channel
+                .and_then(|channel| Url::parse(&channel).ok())
+                .map(Into::into),
             location,
         })
     }
@@ -170,7 +174,7 @@ impl TryFrom<CondaBinaryData> for RepoDataRecord {
             package_record: value.package_record,
             file_name: value.file_name,
             url: value.location.try_into_url()?,
-            channel: value.channel,
+            channel: value.channel.map(|channel| channel.to_string()),
         })
     }
 }
