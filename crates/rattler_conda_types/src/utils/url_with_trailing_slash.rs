@@ -68,7 +68,10 @@ mod tests {
     fn test_url_with_trailing_slash() {
         let url = Url::parse("http://example.com").unwrap();
         let url_with_trailing_slash = UrlWithTrailingSlash::from(url.clone());
-        assert_eq!(url_with_trailing_slash, UrlWithTrailingSlash::from(url.clone()));
+        assert_eq!(
+            url_with_trailing_slash,
+            UrlWithTrailingSlash::from(url.clone())
+        );
 
         let serialized = serde_json::to_string(&url_with_trailing_slash).unwrap();
         assert_eq!(serialized, "\"http://example.com/\"");
