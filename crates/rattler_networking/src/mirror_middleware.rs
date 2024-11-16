@@ -10,11 +10,13 @@ use reqwest::{Request, Response, ResponseBuilderExt};
 use reqwest_middleware::{Middleware, Next, Result};
 use url::Url;
 
+use crate::url_with_trailing_slash::UrlWithTrailingSlash;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Settings for the specific mirror (e.g. no zstd or bz2 support)
 pub struct Mirror {
     /// The url of this mirror
-    pub url: Url,
+    pub url: UrlWithTrailingSlash,
     /// Disable zstd support (for repodata.json.zst files)
     pub no_zstd: bool,
     /// Disable bz2 support (for repodata.json.bz2 files)
@@ -39,14 +41,14 @@ impl MirrorState {
 
 /// Middleware to handle mirrors
 pub struct MirrorMiddleware {
-    mirror_map: HashMap<Url, Vec<MirrorState>>,
-    sorted_keys: Vec<(String, Url)>,
+    mirror_map: HashMap<UrlWithTrailingSlash, Vec<MirrorState>>,
+    sorted_keys: Vec<(String, UrlWithTrailingSlash)>,
 }
 
 impl MirrorMiddleware {
     /// Create a new `MirrorMiddleware` from a map of mirrors
-    pub fn from_map(mirror_map: HashMap<Url, Vec<Mirror>>) -> Self {
-        let mirror_map: HashMap<Url, Vec<MirrorState>> = mirror_map
+    pub fn from_map(mirror_map: HashMap<UrlWithTrailingSlash, Vec<Mirror>>) -> Self {
+        let mirror_map: HashMap<UrlWithTrailingSlash, Vec<MirrorState>> = mirror_map
             .into_iter()
             .map(|(url, mirrors)| {
                 let mirrors = mirrors
@@ -65,7 +67,7 @@ impl MirrorMiddleware {
             .cloned()
             .sorted_by(|a, b| b.path().len().cmp(&a.path().len()))
             .map(|k| (k.to_string(), k.clone()))
-            .collect::<Vec<(String, Url)>>();
+            .collect::<Vec<(String, UrlWithTrailingSlash)>>();
 
         Self {
             mirror_map,
@@ -75,7 +77,7 @@ impl MirrorMiddleware {
 
     /// Get sorted keys. The keys are sorted by length of the path,
     /// so the longest path comes first.
-    pub fn keys(&self) -> &[(String, Url)] {
+    pub fn keys(&self) -> &[(String, UrlWithTrailingSlash)] {
         &self.sorted_keys
     }
 }

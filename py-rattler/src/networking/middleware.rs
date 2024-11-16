@@ -1,7 +1,7 @@
 use pyo3::{pyclass, pymethods, FromPyObject, PyResult};
 use rattler_networking::{
-    mirror_middleware::Mirror, AuthenticationMiddleware, AuthenticationStorage, MirrorMiddleware,
-    OciMiddleware,
+    mirror_middleware::Mirror, url_with_trailing_slash::UrlWithTrailingSlash,
+    AuthenticationMiddleware, AuthenticationStorage, MirrorMiddleware, OciMiddleware,
 };
 use std::collections::HashMap;
 use url::Url;
@@ -19,7 +19,7 @@ pub enum PyMiddleware {
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyMirrorMiddleware {
-    pub(crate) inner: HashMap<Url, Vec<Mirror>>,
+    pub(crate) inner: HashMap<UrlWithTrailingSlash, Vec<Mirror>>,
 }
 
 #[pymethods]
@@ -34,7 +34,7 @@ impl PyMirrorMiddleware {
                 .map(|url| {
                     Url::parse(&url)
                         .map(|url| Mirror {
-                            url,
+                            url: url.into(),
                             no_zstd: false,
                             no_bz2: false,
                             no_jlap: false,
@@ -43,7 +43,7 @@ impl PyMirrorMiddleware {
                         .map_err(PyRattlerError::from)
                 })
                 .collect::<Result<Vec<Mirror>, PyRattlerError>>()?;
-            map.insert(key, value);
+            map.insert(key.into(), value);
         }
 
         Ok(Self { inner: map })

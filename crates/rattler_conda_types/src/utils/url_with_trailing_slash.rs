@@ -58,3 +58,22 @@ impl Display for UrlWithTrailingSlash {
         write!(f, "{}", &self.0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_url_with_trailing_slash() {
+        let url = Url::parse("http://example.com").unwrap();
+        let url_with_trailing_slash = UrlWithTrailingSlash::from(url.clone());
+        assert_eq!(url_with_trailing_slash, UrlWithTrailingSlash::from(url.clone()));
+
+        let serialized = serde_json::to_string(&url_with_trailing_slash).unwrap();
+        assert_eq!(serialized, "\"http://example.com/\"");
+
+        let deserialized: UrlWithTrailingSlash = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, url_with_trailing_slash);
+    }
+}
