@@ -1,5 +1,5 @@
 from __future__ import annotations
-from rattler.rattler import PyMirrorMiddleware, PyAuthenticationMiddleware, PyOCIMiddleware
+from rattler.rattler import PyMirrorMiddleware, PyAuthenticationMiddleware, PyOciMiddleware
 
 
 class MirrorMiddleware:
@@ -73,7 +73,7 @@ class OciMiddleware:
     """
 
     def __init__(self) -> None:
-        self._middleware = PyOCIMiddleware()
+        self._middleware = PyOciMiddleware()
 
     def __repr__(self) -> str:
         """
