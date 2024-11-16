@@ -47,7 +47,7 @@ async def test_download_from_oci(tmpdir: Path) -> None:
             # TODO somehow these URLs are very susceptible to missing last /
             # Maybe we can use the new ChannelURL type or one of these.
             MirrorMiddleware(
-                {"https://conda.anaconda.org/conda-forge/": ["oci://ghcr.io/channel-mirrors/conda-forge/"]}
+                {"https://conda.anaconda.org/conda-forge": ["oci://ghcr.io/channel-mirrors/conda-forge"]}
             ),
             OciMiddleware(),
         ]
