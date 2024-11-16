@@ -626,7 +626,7 @@ mod test {
         let records = gateway
             .query(
                 vec![Channel::from_url(
-                    Url::parse("https://conda.anaconda.org/conda-forge").unwrap(),
+                    Url::parse("https://conda.anaconda.org/conda-forge").unwrap().into(),
                 )],
                 vec![Platform::Linux64, Platform::NoArch],
                 vec![

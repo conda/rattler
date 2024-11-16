@@ -211,7 +211,7 @@ impl Channel {
             let url = Url::parse(channel)?;
             Channel {
                 platforms,
-                ..Channel::from_url(url)
+                ..Channel::from_url(url.into())
             }
         } else if is_path(channel) {
             #[cfg(target_arch = "wasm32")]
@@ -251,9 +251,9 @@ impl Channel {
     }
 
     /// Constructs a new [`Channel`] from a `Url` and associated platforms.
-    pub fn from_url(url: Url) -> Self {
+    pub fn from_url(url: ChannelUrl) -> Self {
         // Get the path part of the URL but trim the directory suffix
-        let path = url.path().trim_end_matches('/');
+        let path = url.url().path().trim_end_matches('/');
 
         // Case 1: No path give, channel name is ""
 
@@ -262,13 +262,13 @@ impl Channel {
         // Case 4: custom_channels matches
         // Case 5: channel_alias match
 
-        if url.has_host() {
+        if url.url().has_host() {
             // Case 7: Fallback
             let name = path.trim_start_matches('/');
             Self {
                 platforms: None,
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
-                base_url: url.into(),
+                base_url: url,
             }
         } else {
             // Case 6: non-otherwise-specified file://-type urls
@@ -278,7 +278,7 @@ impl Channel {
             Self {
                 platforms: None,
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
-                base_url: url.into(),
+                base_url: url,
             }
         }
     }
