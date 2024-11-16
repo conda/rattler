@@ -19,8 +19,8 @@ def extract_tar_bz2(path: PathLike[str], dest: PathLike[str]) -> Tuple[bytes, by
     return py_extract_tar_bz2(path, dest)
 
 
-def download_and_extract(
+async def download_and_extract(
     client: Client, url: str, dest: PathLike[str], expected_sha: Optional[bytes] = None
 ) -> Tuple[bytes, bytes]:
     """Download a file from a URL and extract it to a destination."""
-    return py_download_and_extract(client._client, url, dest, expected_sha)
+    return await py_download_and_extract(client._client, url, dest, expected_sha)
