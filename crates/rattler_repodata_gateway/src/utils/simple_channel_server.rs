@@ -18,7 +18,7 @@ impl SimpleChannelServer {
 
     #[allow(dead_code)]
     pub fn channel(&self) -> Channel {
-        Channel::from_url(self.url().into())
+        Channel::from_url(self.url())
     }
 }
 

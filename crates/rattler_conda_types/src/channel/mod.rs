@@ -211,7 +211,7 @@ impl Channel {
             let url = Url::parse(channel)?;
             Channel {
                 platforms,
-                ..Channel::from_url(url.into())
+                ..Channel::from_url(url)
             }
         } else if is_path(channel) {
             #[cfg(target_arch = "wasm32")]
@@ -251,8 +251,10 @@ impl Channel {
     }
 
     /// Constructs a new [`Channel`] from a `Url` and associated platforms.
-    pub fn from_url(url: ChannelUrl) -> Self {
+    pub fn from_url(url: impl Into<ChannelUrl>) -> Self {
         // Get the path part of the URL but trim the directory suffix
+        let url: ChannelUrl = url.into();
+
         let path = url.url().path().trim_end_matches('/');
 
         // Case 1: No path give, channel name is ""
