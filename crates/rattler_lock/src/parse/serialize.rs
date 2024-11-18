@@ -437,12 +437,8 @@ impl Serialize for CondaPackageData {
     where
         S: Serializer,
     {
-        SerializablePackageDataV6::Conda(
-            v6::CondaPackageDataModel::try_from(self).expect(
-                "serialization of conda package data into serialization format cannot fail",
-            ),
-        )
-        .serialize(serializer)
+        SerializablePackageDataV6::Conda(v6::CondaPackageDataModel::from(self))
+            .serialize(serializer)
     }
 }
 
@@ -451,11 +447,6 @@ impl Serialize for PypiPackageData {
     where
         S: Serializer,
     {
-        SerializablePackageDataV6::Pypi(
-            v6::PypiPackageDataModel::try_from(self).expect(
-                "serialization of conda package data into serialization format cannot fail",
-            ),
-        )
-        .serialize(serializer)
+        SerializablePackageDataV6::Pypi(v6::PypiPackageDataModel::from(self)).serialize(serializer)
     }
 }
