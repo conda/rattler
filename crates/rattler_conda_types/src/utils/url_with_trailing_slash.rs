@@ -1,6 +1,11 @@
+use std::{
+    fmt::{Display, Formatter},
+    ops::Deref,
+    str::FromStr,
+};
+
+use rattler_redaction::Redact;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::fmt::{Display, Formatter};
-use std::ops::Deref;
 use url::Url;
 
 /// A URL that always has a trailing slash. A trailing slash in a URL has
@@ -47,6 +52,14 @@ impl<'de> Deserialize<'de> for UrlWithTrailingSlash {
     }
 }
 
+impl FromStr for UrlWithTrailingSlash {
+    type Err = url::ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Url::parse(s)?.into())
+    }
+}
+
 impl From<UrlWithTrailingSlash> for Url {
     fn from(value: UrlWithTrailingSlash) -> Self {
         value.0
@@ -56,5 +69,11 @@ impl From<UrlWithTrailingSlash> for Url {
 impl Display for UrlWithTrailingSlash {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", &self.0)
+    }
+}
+
+impl Redact for UrlWithTrailingSlash {
+    fn redact(self) -> Self {
+        UrlWithTrailingSlash(self.0.redact())
     }
 }
