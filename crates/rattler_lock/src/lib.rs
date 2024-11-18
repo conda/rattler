@@ -198,7 +198,7 @@ impl LockFile {
     pub fn environment(&self, name: &str) -> Option<Environment<'_>> {
         let index = *self.inner.environment_lookup.get(name)?;
         Some(Environment {
-            inner: &self.inner,
+            lock_file: self,
             index,
         })
     }
@@ -218,7 +218,7 @@ impl LockFile {
                 (
                     name.as_str(),
                     Environment {
-                        inner: &self.inner,
+                        lock_file: self,
                         index: *index,
                     },
                 )
@@ -234,14 +234,19 @@ impl LockFile {
 /// Information about a specific environment in the lock-file.
 #[derive(Clone, Copy)]
 pub struct Environment<'lock> {
-    inner: &'lock Arc<LockFileInner>,
+    lock_file: &'lock LockFile,
     index: usize,
 }
 
 impl<'lock> Environment<'lock> {
     /// Returns a reference to the internal data structure.
     fn data(&self) -> &'lock EnvironmentData {
-        &self.inner.environments[self.index]
+        &self.lock_file.inner.environments[self.index]
+    }
+
+    /// Returns the lock file to which this environment belongs.
+    pub fn lock_file(&self) -> &'lock LockFile {
+        self.lock_file
     }
 
     /// Returns all the platforms for which we have a locked-down environment.
@@ -279,11 +284,11 @@ impl<'lock> Environment<'lock> {
                 .iter()
                 .map(move |package| match package {
                     EnvironmentPackageData::Conda(data) => {
-                        LockedPackageRef::Conda(&self.inner.conda_packages[*data])
+                        LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
                     }
                     EnvironmentPackageData::Pypi(data, env_data) => LockedPackageRef::Pypi(
-                        &self.inner.pypi_packages[*data],
-                        &self.inner.pypi_environment_package_data[*env_data],
+                        &self.lock_file.inner.pypi_packages[*data],
+                        &self.lock_file.inner.pypi_environment_package_data[*env_data],
                     ),
                 }),
         )
@@ -305,11 +310,11 @@ impl<'lock> Environment<'lock> {
                 *platform,
                 packages.iter().map(move |package| match package {
                     EnvironmentPackageData::Conda(data) => {
-                        LockedPackageRef::Conda(&self.inner.conda_packages[*data])
+                        LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
                     }
                     EnvironmentPackageData::Pypi(data, env_data) => LockedPackageRef::Pypi(
-                        &self.inner.pypi_packages[*data],
-                        &self.inner.pypi_environment_package_data[*env_data],
+                        &self.lock_file.inner.pypi_packages[*data],
+                        &self.lock_file.inner.pypi_environment_package_data[*env_data],
                     ),
                 }),
             )
@@ -330,8 +335,8 @@ impl<'lock> Environment<'lock> {
             let records = packages.iter().filter_map(|package| match package {
                 EnvironmentPackageData::Conda(_) => None,
                 EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Some((
-                    &self.inner.pypi_packages[*pkg_data_idx],
-                    &self.inner.pypi_environment_package_data[*env_data_idx],
+                    &self.lock_file.inner.pypi_packages[*pkg_data_idx],
+                    &self.lock_file.inner.pypi_environment_package_data[*env_data_idx],
                 )),
             });
             (*platform, records)
@@ -416,7 +421,7 @@ impl<'lock> Environment<'lock> {
     /// Creates a [`OwnedEnvironment`] from this environment.
     pub fn to_owned(self) -> OwnedEnvironment {
         OwnedEnvironment {
-            inner: self.inner.clone(),
+            lock_file: self.lock_file.clone(),
             index: self.index,
         }
     }
@@ -427,7 +432,7 @@ impl<'lock> Environment<'lock> {
 /// Use [`OwnedEnvironment::as_ref`] to get a reference to the environment data.
 #[derive(Clone)]
 pub struct OwnedEnvironment {
-    inner: Arc<LockFileInner>,
+    lock_file: LockFile,
     index: usize,
 }
 
@@ -435,16 +440,14 @@ impl OwnedEnvironment {
     /// Returns a reference to the environment data.
     pub fn as_ref(&self) -> Environment<'_> {
         Environment {
-            inner: &self.inner,
+            lock_file: &self.lock_file,
             index: self.index,
         }
     }
 
     /// Returns the lock-file this environment is part of.
     pub fn lock_file(&self) -> LockFile {
-        LockFile {
-            inner: self.inner.clone(),
-        }
+        self.lock_file.clone()
     }
 }
 

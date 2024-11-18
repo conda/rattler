@@ -78,6 +78,7 @@ impl CondaPackageData {
     }
 }
 
+/// Information about a binary conda package stored in the lock-file.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CondaBinaryData {
     /// The package record.
@@ -99,6 +100,7 @@ impl From<CondaBinaryData> for CondaPackageData {
     }
 }
 
+/// Information about a source package stored in the lock-file.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CondaSourceData {
     /// The package record.
