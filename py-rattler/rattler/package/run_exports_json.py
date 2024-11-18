@@ -14,6 +14,49 @@ class RunExportsJson:
 
     _inner: PyRunExportsJson
 
+    def __init__(
+        self,
+        weak: List[str] | None = None,
+        strong: List[str] | None = None,
+        noarch: List[str] | None = None,
+        weak_constrains: List[str] | None = None,
+        strong_constrains: List[str] | None = None,
+    ) -> None:
+        """
+        Create a new RunExportsJson instance.
+
+        Parameters
+        ----------
+        weak : List[str] | None, optional
+            Weak run exports apply a dependency from host to run
+        strong : List[str] | None, optional
+            Strong run exports apply a dependency from build to host and run
+        noarch : List[str] | None, optional
+            Noarch run exports apply a run export only to noarch packages
+        weak_constrains : List[str] | None, optional
+            Weak constrains apply a constrain dependency from host to build, or run to host
+        strong_constrains : List[str] | None, optional
+            Strong constrains apply a constrain dependency from build to host and run
+
+        Examples
+        --------
+        ```python
+        >>> run_exports = RunExportsJson(
+        ...     weak=["weak_dep 1.0"],
+        ...     strong=["strong_dep 2.0"],
+        ...     noarch=["noarch_dep 3.0"],
+        ...     weak_constrains=["weak_constrain 4.0"],
+        ...     strong_constrains=["strong_constrain 5.0"]
+        ... )
+        >>> run_exports
+        RunExportsJson(weak=['weak_dep 1.0'], strong=['strong_dep 2.0'], noarch=['noarch_dep 3.0'], weak_constrains=['weak_constrain 4.0'], strong_constrains=['strong_constrain 5.0'])
+        >>>
+        ```
+        """
+        self._inner = PyRunExportsJson(
+            weak or [], strong or [], noarch or [], weak_constrains or [], strong_constrains or []
+        )
+
     @staticmethod
     def from_package_archive(path: os.PathLike[str]) -> RunExportsJson:
         """
@@ -42,7 +85,7 @@ class RunExportsJson:
         ...     "../test-data/python-3.10.6-h2c4edbf_0_cpython-run_exports.json"
         ... )
         >>> run_exports
-        RunExportsJson()
+        RunExportsJson(weak=['python_abi 3.10.* *_cp310'], strong=[], noarch=['python'], weak_constrains=[], strong_constrains=[])
         >>>
         ```
         """
@@ -97,10 +140,17 @@ class RunExportsJson:
         ... )
         >>> run_exports.weak
         ['python_abi 3.10.* *_cp310']
+        >>> run_exports.weak = ['new_dep 1.0']
+        >>> run_exports.weak
+        ['new_dep 1.0']
         >>>
         ```
         """
         return self._inner.weak
+
+    @weak.setter
+    def weak(self, value: List[str]) -> None:
+        self._inner.weak = value
 
     @property
     def strong(self) -> List[str]:
@@ -115,10 +165,17 @@ class RunExportsJson:
         ... )
         >>> run_exports.strong
         []
+        >>> run_exports.strong = ['strong_dep 2.0']
+        >>> run_exports.strong
+        ['strong_dep 2.0']
         >>>
         ```
         """
         return self._inner.strong
+
+    @strong.setter
+    def strong(self, value: List[str]) -> None:
+        self._inner.strong = value
 
     @property
     def noarch(self) -> List[str]:
@@ -135,10 +192,17 @@ class RunExportsJson:
         ... )
         >>> run_exports.noarch
         ['python']
+        >>> run_exports.noarch = ['noarch_dep 3.0']
+        >>> run_exports.noarch
+        ['noarch_dep 3.0']
         >>>
         ```
         """
         return self._inner.noarch
+
+    @noarch.setter
+    def noarch(self, value: List[str]) -> None:
+        self._inner.noarch = value
 
     @property
     def weak_constrains(self) -> List[str]:
@@ -153,10 +217,17 @@ class RunExportsJson:
         ... )
         >>> run_exports.weak_constrains
         []
+        >>> run_exports.weak_constrains = ['weak_constrain 4.0']
+        >>> run_exports.weak_constrains
+        ['weak_constrain 4.0']
         >>>
         ```
         """
         return self._inner.weak_constrains
+
+    @weak_constrains.setter
+    def weak_constrains(self, value: List[str]) -> None:
+        self._inner.weak_constrains = value
 
     @property
     def strong_constrains(self) -> List[str]:
@@ -171,10 +242,17 @@ class RunExportsJson:
         ... )
         >>> run_exports.strong_constrains
         []
+        >>> run_exports.strong_constrains = ['strong_constrain 5.0']
+        >>> run_exports.strong_constrains
+        ['strong_constrain 5.0']
         >>>
         ```
         """
         return self._inner.strong_constrains
+
+    @strong_constrains.setter
+    def strong_constrains(self, value: List[str]) -> None:
+        self._inner.strong_constrains = value
 
     @classmethod
     def _from_py_run_exports_json(cls, py_run_exports_json: PyRunExportsJson) -> RunExportsJson:
@@ -187,4 +265,4 @@ class RunExportsJson:
         """
         Returns a representation of the RunExportsJson.
         """
-        return "RunExportsJson()"
+        return f"RunExportsJson(weak={self.weak}, strong={self.strong}, noarch={self.noarch}, weak_constrains={self.weak_constrains}, strong_constrains={self.strong_constrains})"
