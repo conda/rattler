@@ -11,9 +11,9 @@ use pep508_rs::ExtraName;
 use rattler_conda_types::Platform;
 
 use crate::{
-    file_format_version::FileFormatVersion, Channel, CondaPackageData, EnvironmentData,
-    EnvironmentPackageData, LockFile, LockFileInner, LockedPackageRef, PypiIndexes,
-    PypiPackageData, PypiPackageEnvironmentData,
+    file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
+    CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
+    LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
 };
 
 /// Information about a single locked package in an environment.
@@ -42,7 +42,30 @@ impl From<CondaPackageData> for LockedPackage {
     }
 }
 
+impl From<(PypiPackageData, PypiPackageEnvironmentData)> for LockedPackage {
+    fn from((data, env): (PypiPackageData, PypiPackageEnvironmentData)) -> Self {
+        LockedPackage::Pypi(data, env)
+    }
+}
+
 impl LockedPackage {
+    /// Returns the name of the package as it occurs in the lock file. This
+    /// might not be the normalized name.
+    pub fn name(&self) -> &str {
+        match self {
+            LockedPackage::Conda(data) => data.record().name.as_source(),
+            LockedPackage::Pypi(data, _) => data.name.as_ref(),
+        }
+    }
+
+    /// Returns the location of the package.
+    pub fn location(&self) -> &UrlOrPath {
+        match self {
+            LockedPackage::Conda(data) => data.location(),
+            LockedPackage::Pypi(data, _) => &data.location,
+        }
+    }
+
     /// Returns the conda package data if this is a conda package.
     pub fn as_conda(&self) -> Option<&CondaPackageData> {
         match self {
@@ -53,6 +76,34 @@ impl LockedPackage {
 
     /// Returns the pypi package data if this is a pypi package.
     pub fn as_pypi(&self) -> Option<(&PypiPackageData, &PypiPackageEnvironmentData)> {
+        match self {
+            LockedPackage::Conda(..) => None,
+            LockedPackage::Pypi(data, env) => Some((data, env)),
+        }
+    }
+
+    /// Returns the package as a binary conda package if this is a binary conda
+    /// package.
+    pub fn as_binary_conda(&self) -> Option<&CondaBinaryData> {
+        self.as_conda().and_then(CondaPackageData::as_binary)
+    }
+
+    /// Returns the package as a source conda package if this is a source conda
+    /// package.
+    pub fn as_source_conda(&self) -> Option<&CondaSourceData> {
+        self.as_conda().and_then(CondaPackageData::as_source)
+    }
+
+    /// Returns the conda package data if this is a conda package.
+    pub fn into_conda(self) -> Option<CondaPackageData> {
+        match self {
+            LockedPackage::Conda(data) => Some(data),
+            LockedPackage::Pypi(..) => None,
+        }
+    }
+
+    /// Returns the pypi package data if this is a pypi package.
+    pub fn into_pypi(self) -> Option<(PypiPackageData, PypiPackageEnvironmentData)> {
         match self {
             LockedPackage::Conda(..) => None,
             LockedPackage::Pypi(data, env) => Some((data, env)),
