@@ -19,6 +19,6 @@ LocationDerivedFields {
         "linux-64",
     ),
     channel: Some(
-        "https://repo.anaconda.com/pkgs/main",
+        "https://repo.anaconda.com/pkgs/main/",
     ),
 }

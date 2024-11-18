@@ -30,6 +30,7 @@ struct DeserializableLockFile<P> {
     _data: PhantomData<P>,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum PackageData {
     Conda(CondaPackageData),
     Pypi(PypiPackageData),
@@ -50,6 +51,7 @@ impl<'de> DeserializeAs<'de, PackageData> for V5 {
     {
         #[derive(Deserialize)]
         #[serde(tag = "kind", rename_all = "snake_case")]
+        #[allow(clippy::large_enum_variant)]
         enum Inner<'d> {
             Conda(models::v5::CondaPackageDataModel<'d>),
             Pypi(models::v5::PypiPackageDataModel<'d>),
@@ -172,7 +174,7 @@ fn parse_from_lock<P>(
     let mut conda_url_lookup: FxHashMap<UrlOrPath, Vec<_>> = FxHashMap::default();
     for (idx, conda_package) in conda_packages.iter().enumerate() {
         conda_url_lookup
-            .entry(conda_package.location.clone())
+            .entry(conda_package.location().clone())
             .or_default()
             .push(idx);
     }
@@ -227,7 +229,7 @@ fn parse_from_lock<P>(
                                                     .iter()
                                                     .find(|&idx| {
                                                         let conda_package = &conda_packages[*idx];
-                                                        conda_package.package_record.subdir.as_str()
+                                                        conda_package.record().subdir.as_str()
                                                             == platform.as_str()
                                                     })
                                                     .or_else(|| all_packages.first())
@@ -235,15 +237,13 @@ fn parse_from_lock<P>(
                                                 all_packages.iter().find(|&idx| {
                                                     let conda_package = &conda_packages[*idx];
                                                     name.as_ref().map_or(true, |name| {
-                                                        name == &conda_package.package_record.name
+                                                        name == &conda_package.record().name
                                                     }) && version.as_ref().map_or(true, |version| {
-                                                        version
-                                                            == &conda_package.package_record.version
+                                                        version == &conda_package.record().version
                                                     }) && build.as_ref().map_or(true, |build| {
-                                                        build == &conda_package.package_record.build
+                                                        build == &conda_package.record().build
                                                     }) && subdir.as_ref().map_or(true, |subdir| {
-                                                        subdir
-                                                            == &conda_package.package_record.subdir
+                                                        subdir == &conda_package.record().subdir
                                                     })
                                                 })
                                             };

@@ -13,7 +13,8 @@ use std::fmt::{Debug, Formatter};
 use std::str::FromStr;
 
 use rattler_conda_types::{
-    package::ArchiveIdentifier, BuildNumber, NoArchType, PackageName, Platform, VersionWithSource,
+    package::ArchiveIdentifier, BuildNumber, ChannelUrl, NoArchType, PackageName, Platform,
+    VersionWithSource,
 };
 use url::Url;
 
@@ -27,7 +28,7 @@ pub(crate) struct LocationDerivedFields {
     pub version: Option<VersionWithSource>,
     pub build: Option<String>,
     pub subdir: Option<String>,
-    pub channel: Option<Url>,
+    pub channel: Option<ChannelUrl>,
 }
 
 impl Debug for LocationDerivedFields {
@@ -38,7 +39,7 @@ impl Debug for LocationDerivedFields {
             .field("version", &self.version.as_ref().map(|s| s.as_str()))
             .field("build", &self.build)
             .field("subdir", &self.subdir)
-            .field("channel", &self.channel.as_ref().map(Url::as_str))
+            .field("channel", &self.channel.as_ref().map(ChannelUrl::as_str))
             .finish()
     }
 }
@@ -78,9 +79,11 @@ impl LocationDerivedFields {
 /// Try to derive the build number from the build string. It is common to append
 /// the build number to the end of the build string.
 pub(crate) fn derive_build_number_from_build(build: &str) -> Option<BuildNumber> {
-    build
+    let (_, trailing_number_str) = build
         .rsplit_once(|c: char| !c.is_ascii_digit())
-        .and_then(|(_, number)| number.parse().ok())
+        .unwrap_or(("", build));
+
+    trailing_number_str.parse().ok()
 }
 
 /// Try to derive the subdir from a common conda URL. This assumes that the URL
@@ -114,18 +117,18 @@ pub fn derive_subdir_from_url(url: &Url) -> Option<&str> {
 /// Channel from url, this is everything before the filename and the subdir
 /// So for example: <https://conda.anaconda.org/conda-forge/> is a channel name
 /// that we parse from something like: <https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda>
-pub(crate) fn derive_channel_from_url(url: &Url) -> Option<Url> {
+pub(crate) fn derive_channel_from_url(url: &Url) -> Option<ChannelUrl> {
     let mut result = url.clone();
 
     // Strip the last two path segments. We assume the first one contains the
     // file_name, and the other the subdirectory.
     result.path_segments_mut().ok()?.pop().pop();
 
-    Some(result)
+    Some(result.into())
 }
 
 /// Returns the channel when deriving it from the location if possible.
-pub(crate) fn derive_channel_from_location(url: &UrlOrPath) -> Option<Url> {
+pub(crate) fn derive_channel_from_location(url: &UrlOrPath) -> Option<ChannelUrl> {
     match url {
         UrlOrPath::Url(url) => derive_channel_from_url(url),
         UrlOrPath::Path(_) => None,
@@ -170,6 +173,7 @@ mod test {
 
     #[test]
     fn test_derive_build_number_from_build() {
+        assert_eq!(derive_build_number_from_build("2"), Some(2));
         assert_eq!(derive_build_number_from_build("1.2.3"), Some(3));
         assert_eq!(derive_build_number_from_build("1.2.3-4"), Some(4));
         assert_eq!(derive_build_number_from_build("py313hb6a6212_1"), Some(1));
@@ -212,12 +216,12 @@ mod test {
                     .unwrap()
             ),
             Some("noarch")
-        )
+        );
     }
 
     #[test]
     fn test_channel_from_url() {
-        assert_eq!(derive_channel_from_url(&Url::parse("https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda").unwrap()), Some(Url::parse("https://conda.anaconda.org/conda-forge").unwrap()));
+        assert_eq!(derive_channel_from_url(&Url::parse("https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda").unwrap()), Some(Url::parse("https://conda.anaconda.org/conda-forge").unwrap().into()));
         assert_eq!(
             derive_channel_from_url(
                 &Url::parse(
@@ -225,21 +229,33 @@ mod test {
                 )
                 .unwrap()
             ),
-            Some(Url::parse("file:///C:/Users/someone/AppData/Local/Temp/.tmpsasJ7b").unwrap())
+            Some(
+                Url::parse("file:///C:/Users/someone/AppData/Local/Temp/.tmpsasJ7b")
+                    .unwrap()
+                    .into()
+            )
         );
         assert_eq!(
             derive_channel_from_url(
                 &Url::parse("https://repo.anaconda.com/pkgs/main/linux-64/package-1.0.0-0.tar.bz2")
                     .unwrap()
             ),
-            Some(Url::parse("https://repo.anaconda.com/pkgs/main").unwrap())
+            Some(
+                Url::parse("https://repo.anaconda.com/pkgs/main")
+                    .unwrap()
+                    .into()
+            )
         );
         assert_eq!(
             derive_channel_from_url(
                 &Url::parse("https://repo.anaconda.com/pkgs/free/noarch/package-1.0.0-0.tar.bz2")
                     .unwrap()
             ),
-            Some(Url::parse("https://repo.anaconda.com/pkgs/free").unwrap())
+            Some(
+                Url::parse("https://repo.anaconda.com/pkgs/free")
+                    .unwrap()
+                    .into()
+            )
         );
     }
 

@@ -129,32 +129,31 @@ impl super::SolverImpl for Solver {
         // 0 and the channel priority map will not be populated as it will
         // not be used.
         let mut highest_priority: i32 = 0;
-        let channel_priority: HashMap<String, i32> =
-            if task.channel_priority == ChannelPriority::Strict {
-                let mut seen_channels = HashSet::new();
-                let mut channel_order: Vec<String> = Vec::new();
-                for channel in repodatas
-                    .iter()
-                    .filter(|&r| !r.records.is_empty())
-                    .map(|r| r.records[0].channel.clone())
-                {
-                    if !seen_channels.contains(&channel) {
-                        channel_order.push(channel.clone());
-                        seen_channels.insert(channel);
-                    }
+        let channel_priority = if task.channel_priority == ChannelPriority::Strict {
+            let mut seen_channels = HashSet::new();
+            let mut channel_order = Vec::new();
+            for channel in repodatas
+                .iter()
+                .filter(|&r| !r.records.is_empty())
+                .map(|r| r.records[0].channel.clone())
+            {
+                if !seen_channels.contains(&channel) {
+                    channel_order.push(channel.clone());
+                    seen_channels.insert(channel);
                 }
-                let mut channel_priority = HashMap::new();
-                for (index, channel) in channel_order.iter().enumerate() {
-                    let reverse_index = channel_order.len() - index;
-                    if index == 0 {
-                        highest_priority = reverse_index as i32;
-                    }
-                    channel_priority.insert(channel.clone(), reverse_index as i32);
+            }
+            let mut channel_priority = HashMap::new();
+            for (index, channel) in channel_order.iter().enumerate() {
+                let reverse_index = channel_order.len() - index;
+                if index == 0 {
+                    highest_priority = reverse_index as i32;
                 }
-                channel_priority
-            } else {
-                HashMap::new()
-            };
+                channel_priority.insert(channel.clone(), reverse_index as i32);
+            }
+            channel_priority
+        } else {
+            HashMap::new()
+        };
 
         // Add virtual packages
         let repo = Repo::new(&pool, "virtual_packages", highest_priority);
@@ -178,7 +177,11 @@ impl super::SolverImpl for Solver {
             } else {
                 0
             };
-            let repo = ManuallyDrop::new(Repo::new(&pool, channel_name, priority));
+            let repo = ManuallyDrop::new(Repo::new(
+                &pool,
+                channel_name.as_ref().map_or("<direct>", String::as_str),
+                priority,
+            ));
 
             if let Some(solv_file) = repodata.solv_file {
                 add_solv_file(&pool, &repo, solv_file);

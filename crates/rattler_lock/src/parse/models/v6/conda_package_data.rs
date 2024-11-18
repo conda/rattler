@@ -1,7 +1,8 @@
 use std::{borrow::Cow, collections::BTreeSet};
 
 use rattler_conda_types::{
-    BuildNumber, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource,
+    package::ArchiveIdentifier, BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord,
+    PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
@@ -10,6 +11,7 @@ use url::Url;
 
 use crate::{
     conda,
+    conda::{CondaBinaryData, CondaSourceData},
     utils::{derived_fields, derived_fields::LocationDerivedFields},
     CondaPackageData, ConversionError, UrlOrPath,
 };
@@ -150,61 +152,81 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
         );
         let (derived_arch, derived_platform) = derived_fields::derive_arch_and_platform(&subdir);
 
-        Ok(Self {
-            input: value.input.map(|input| conda::InputHash {
-                hash: input.hash,
-                globs: input.globs.into_owned(),
-            }),
-            package_record: PackageRecord {
-                build,
-                build_number,
-                constrains: value.constrains.into_owned(),
-                depends: value.depends.into_owned(),
-                features: value.features.into_owned(),
-                legacy_bz2_md5: value.legacy_bz2_md5,
-                legacy_bz2_size: value.legacy_bz2_size.into_owned(),
-                license: value.license.into_owned(),
-                license_family: value.license_family.into_owned(),
-                md5: value.md5,
-                name: value
-                    .name
-                    .map(Cow::into_owned)
-                    .or(derived.name)
-                    .ok_or_else(|| ConversionError::Missing("name".to_string()))?,
-                noarch,
-                arch: value.arch.map_or(derived_arch, Cow::into_owned),
-                platform: value.platform.map_or(derived_platform, Cow::into_owned),
-                purls: value.purls.into_owned(),
-                sha256: value.sha256,
-                size: value.size.into_owned(),
-                subdir,
-                timestamp: value.timestamp,
-                track_features: value.track_features.into_owned(),
-                version: value
-                    .version
-                    .map(Cow::into_owned)
-                    .or(derived.version)
-                    .ok_or_else(|| ConversionError::Missing("version".to_string()))?,
-                run_exports: None,
-                python_site_packages_path: value.python_site_packages_path.into_owned(),
-            },
-            location: value.location,
-            file_name: value
-                .file_name
+        let package_record = PackageRecord {
+            build,
+            build_number,
+            constrains: value.constrains.into_owned(),
+            depends: value.depends.into_owned(),
+            features: value.features.into_owned(),
+            legacy_bz2_md5: value.legacy_bz2_md5,
+            legacy_bz2_size: value.legacy_bz2_size.into_owned(),
+            license: value.license.into_owned(),
+            license_family: value.license_family.into_owned(),
+            md5: value.md5,
+            name: value
+                .name
                 .map(Cow::into_owned)
-                .unwrap_or(derived.file_name),
-            channel: value
-                .channel
+                .or(derived.name)
+                .ok_or_else(|| ConversionError::Missing("name".to_string()))?,
+            noarch,
+            arch: value.arch.map_or(derived_arch, Cow::into_owned),
+            platform: value.platform.map_or(derived_platform, Cow::into_owned),
+            purls: value.purls.into_owned(),
+            sha256: value.sha256,
+            size: value.size.into_owned(),
+            subdir,
+            timestamp: value.timestamp,
+            track_features: value.track_features.into_owned(),
+            version: value
+                .version
                 .map(Cow::into_owned)
-                .unwrap_or(derived.channel),
-        })
+                .or(derived.version)
+                .ok_or_else(|| ConversionError::Missing("version".to_string()))?,
+            run_exports: None,
+            python_site_packages_path: value.python_site_packages_path.into_owned(),
+        };
+
+        if value.location.file_name().map_or(false, |name| {
+            ArchiveIdentifier::try_from_filename(name).is_some()
+        }) {
+            Ok(CondaPackageData::Binary(CondaBinaryData {
+                location: value.location,
+                file_name: value
+                    .file_name
+                    .map(Cow::into_owned)
+                    .unwrap_or(derived.file_name)
+                    .unwrap_or_else(|| {
+                        format!(
+                            "{}-{}-{}.conda",
+                            package_record.name.as_normalized(),
+                            package_record.version,
+                            package_record.build
+                        )
+                    }),
+                channel: value
+                    .channel
+                    .map(Cow::into_owned)
+                    .map(|m| m.map(ChannelUrl::from))
+                    .unwrap_or(derived.channel),
+                package_record,
+            }))
+        } else {
+            Ok(CondaPackageData::Source(CondaSourceData {
+                package_record,
+                location: value.location,
+                input: value.input.map(|input| conda::InputHash {
+                    hash: input.hash,
+                    globs: input.globs.into_owned(),
+                }),
+            }))
+        }
     }
 }
 
 impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
     fn from(value: &'a CondaPackageData) -> Self {
-        let package_record = &value.package_record;
-        let derived = LocationDerivedFields::new(&value.location);
+        let package_record = value.record();
+        let derived = LocationDerivedFields::new(value.location());
         let derived_build_number =
             derived_fields::derive_build_number_from_build(&package_record.build).unwrap_or(0);
         let derived_noarch = derived_fields::derive_noarch_type(
@@ -216,17 +238,19 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
         );
 
         // Polyfill the arch and platform values if they are not present.
-        let arch = value.package_record.arch.clone().or(derived_arch);
-        let platform = value.package_record.platform.clone().or(derived_platform);
+        let arch = package_record.arch.clone().or(derived_arch);
+        let platform = package_record.platform.clone().or(derived_platform);
 
-        let normalized_channel = value
-            .channel
-            .as_ref()
-            .map(strip_trailing_slash)
+        let channel = value.as_binary().and_then(|binary| binary.channel.as_ref());
+        let file_name = value.as_binary().map(|binary| binary.file_name.as_str());
+        let input = value.as_source().and_then(|source| source.input.as_ref());
+
+        let normalized_channel = channel
+            .map(|channel| strip_trailing_slash(channel.as_ref()))
             .map(Cow::into_owned);
 
         Self {
-            location: value.location.clone(),
+            location: value.location().clone(),
             name: (Some(package_record.name.as_source())
                 != derived.name.as_ref().map(PackageName::as_source))
             .then_some(Cow::Borrowed(&package_record.name)),
@@ -242,29 +266,27 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                 .then_some(Cow::Borrowed(&package_record.subdir)),
             noarch: (package_record.noarch != derived_noarch)
                 .then_some(Cow::Borrowed(&package_record.noarch)),
-            channel: (normalized_channel != derived.channel)
+            channel: (channel != derived.channel.as_ref())
                 .then_some(Cow::Owned(normalized_channel)),
-            file_name: (value.file_name.as_deref() != derived.file_name.as_deref())
-                .then_some(Cow::Borrowed(&value.file_name)),
-            purls: Cow::Borrowed(&value.package_record.purls),
-            depends: Cow::Borrowed(&value.package_record.depends),
-            constrains: Cow::Borrowed(&value.package_record.constrains),
-            arch: (value.package_record.arch != arch).then_some(Cow::Owned(arch)),
-            platform: (value.package_record.platform != platform).then_some(Cow::Owned(platform)),
-            md5: value.package_record.md5,
-            legacy_bz2_md5: value.package_record.legacy_bz2_md5,
-            sha256: value.package_record.sha256,
-            size: Cow::Borrowed(&value.package_record.size),
-            legacy_bz2_size: Cow::Borrowed(&value.package_record.legacy_bz2_size),
-            timestamp: value.package_record.timestamp,
-            features: Cow::Borrowed(&value.package_record.features),
-            track_features: Cow::Borrowed(&value.package_record.track_features),
-            license: Cow::Borrowed(&value.package_record.license),
-            license_family: Cow::Borrowed(&value.package_record.license_family),
-            python_site_packages_path: Cow::Borrowed(
-                &value.package_record.python_site_packages_path,
-            ),
-            input: value.input.as_ref().map(|input| InputHash {
+            file_name: (file_name != derived.file_name.as_deref())
+                .then_some(Cow::Owned(file_name.map(ToString::to_string))),
+            purls: Cow::Borrowed(&package_record.purls),
+            depends: Cow::Borrowed(&package_record.depends),
+            constrains: Cow::Borrowed(&package_record.constrains),
+            arch: (package_record.arch != arch).then_some(Cow::Owned(arch)),
+            platform: (package_record.platform != platform).then_some(Cow::Owned(platform)),
+            md5: package_record.md5,
+            legacy_bz2_md5: package_record.legacy_bz2_md5,
+            sha256: package_record.sha256,
+            size: Cow::Borrowed(&package_record.size),
+            legacy_bz2_size: Cow::Borrowed(&package_record.legacy_bz2_size),
+            timestamp: package_record.timestamp,
+            features: Cow::Borrowed(&package_record.features),
+            track_features: Cow::Borrowed(&package_record.track_features),
+            license: Cow::Borrowed(&package_record.license),
+            license_family: Cow::Borrowed(&package_record.license_family),
+            python_site_packages_path: Cow::Borrowed(&package_record.python_site_packages_path),
+            input: input.map(|input| InputHash {
                 hash: input.hash,
                 globs: Cow::Borrowed(&input.globs),
             }),
@@ -274,11 +296,11 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
 
 fn strip_trailing_slash(url: &Url) -> Cow<'_, Url> {
     let path = url.path();
-    if !path.ends_with("/") {
-        Cow::Borrowed(url)
-    } else {
+    if path.ends_with("/") {
         let mut updated_url = url.clone();
         updated_url.set_path(path.trim_end_matches('/'));
         Cow::Owned(updated_url)
+    } else {
+        Cow::Borrowed(url)
     }
 }

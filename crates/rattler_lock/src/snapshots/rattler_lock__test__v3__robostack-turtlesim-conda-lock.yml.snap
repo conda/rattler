@@ -5380,7 +5380,6 @@ packages:
     size: 83198
     timestamp: 1604365687923
   - conda: "https://conda.anaconda.org/conda-forge/win-64/graphite2-1.3.13-1000.tar.bz2"
-    build_number: 1000
     sha256: ed47008df8e57a83f45112985b76ac4339177486bd4d1d1b305d685a832532aa
     md5: 8fc0e04e5c852cadf2cad68b86a906ab
     depends:
@@ -9268,7 +9267,6 @@ packages:
     size: 134235
     timestamp: 1674728465431
   - conda: "https://conda.anaconda.org/conda-forge/win-64/m2w64-gcc-libgfortran-5.3.0-6.tar.bz2"
-    build_number: 6
     sha256: 9de95a7996d5366ae0808eef2acbc63f9b11b874aa42375f55379e6715845dc6
     md5: 066552ac6b907ec6d72c0ddab29050dc
     depends:
@@ -9278,7 +9276,6 @@ packages:
     size: 350687
     timestamp: 1608163451316
   - conda: "https://conda.anaconda.org/conda-forge/win-64/m2w64-gcc-libs-5.3.0-7.tar.bz2"
-    build_number: 7
     sha256: 3bd1ab02b7c89a5b153a17be03b36d833f1517ff2a6a77ead7c4a808b88196aa
     md5: fe759119b8b3bfa720b8762c6fdc35de
     depends:
@@ -9291,7 +9288,6 @@ packages:
     size: 532390
     timestamp: 1608163512830
   - conda: "https://conda.anaconda.org/conda-forge/win-64/m2w64-gcc-libs-core-5.3.0-7.tar.bz2"
-    build_number: 7
     sha256: 58afdfe859ed2e9a9b1cc06bc408720cb2c3a6a132e59d4805b090d7574f4ee0
     md5: 4289d80fb4d272f1f3b56cfe87ac90bd
     depends:
@@ -9302,7 +9298,6 @@ packages:
     size: 219240
     timestamp: 1608163481341
   - conda: "https://conda.anaconda.org/conda-forge/win-64/m2w64-gmp-6.1.0-2.tar.bz2"
-    build_number: 2
     sha256: 7e3cd95f554660de45f8323fca359e904e8d203efaf07a4d311e46d611481ed1
     md5: 53a1c73e1e3d185516d7e3af177596d9
     depends:
@@ -9311,7 +9306,6 @@ packages:
     size: 743501
     timestamp: 1608163782057
   - conda: "https://conda.anaconda.org/conda-forge/win-64/m2w64-libwinpthread-git-5.0.0.4634.697f757-2.tar.bz2"
-    build_number: 2
     sha256: f63a09b2cae7defae0480f1740015d6235f1861afa6fe2e2d3e10bd0d1314ee0
     md5: 774130a326dee16f1ceb05cc687ee4f0
     depends:
@@ -9473,7 +9467,6 @@ packages:
     size: 485496
     timestamp: 1679317436814
   - conda: "https://conda.anaconda.org/conda-forge/win-64/msys2-conda-epoch-20160418-1.tar.bz2"
-    build_number: 1
     sha256: 99358d58d778abee4dca82ad29fb58058571f19b0f86138363c260049d4ac7f1
     md5: b0309b72560df66f71a9d5e34a5efdfa
     size: 3227

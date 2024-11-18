@@ -1,14 +1,18 @@
+use std::{borrow::Cow, collections::BTreeSet};
+
 use rattler_conda_types::{
-    BuildNumber, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource,
+    BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-use std::{borrow::Cow, cmp::Ordering, collections::BTreeSet};
 use url::Url;
 
-use crate::utils::derived_fields::derive_arch_and_platform;
-use crate::{utils::derived_fields::derive_channel_from_location, CondaPackageData, UrlOrPath};
+use crate::{
+    conda::CondaBinaryData,
+    utils::derived_fields::{derive_arch_and_platform, derive_channel_from_location},
+    CondaPackageData, UrlOrPath,
+};
 
 fn is_default<T: Default + Eq>(value: &T) -> bool {
     value == &T::default()
@@ -94,8 +98,20 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
         let subdir = value.subdir.into_owned();
         let (derived_arch, derived_platform) = derive_arch_and_platform(&subdir);
 
-        Self {
-            input: None,
+        let file_name = value
+            .file_name
+            .into_owned()
+            .or_else(|| location.file_name().map(ToString::to_string))
+            .unwrap_or_else(|| {
+                format!(
+                    "{}-{}-{}.conda",
+                    value.name.as_normalized(),
+                    value.version,
+                    value.build
+                )
+            });
+
+        Self::Binary(CondaBinaryData {
             package_record: PackageRecord {
                 build: value.build.into_owned(),
                 build_number: value.build_number,
@@ -122,15 +138,13 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
                 platform: value.platform.into_owned().or(derived_platform),
                 python_site_packages_path: value.python_site_packages_path.into_owned(),
             },
-            file_name: value
-                .file_name
-                .into_owned()
-                .or_else(|| location.file_name().map(ToString::to_string)),
             channel: value
                 .channel
                 .into_owned()
+                .map(ChannelUrl::from)
                 .or_else(|| derive_channel_from_location(&location)),
+            file_name,
             location,
-        }
+        })
     }
 }
