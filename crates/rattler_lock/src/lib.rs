@@ -94,7 +94,7 @@ mod utils;
 
 pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
-pub use conda::{CondaPackageData, ConversionError, InputHash};
+pub use conda::{CondaPackageData, CondaSourceData, CondaBinaryData, ConversionError, InputHash};
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
 pub use parse::ParseCondaLockError;
