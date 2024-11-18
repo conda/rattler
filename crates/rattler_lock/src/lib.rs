@@ -94,7 +94,7 @@ mod utils;
 
 pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
-pub use conda::{CondaPackageData, CondaSourceData, CondaBinaryData, ConversionError, InputHash};
+pub use conda::{CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, InputHash};
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
 pub use parse::ParseCondaLockError;
@@ -102,8 +102,6 @@ pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashab
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
 pub use rattler_conda_types::Matches;
 pub use url_or_path::UrlOrPath;
-
-use crate::conda::{CondaBinaryData, CondaSourceData};
 
 /// The name of the default environment in a [`LockFile`]. This is the
 /// environment name that is used when no explicit environment name is
