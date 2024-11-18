@@ -1,6 +1,8 @@
 use std::{cmp::Ordering, hash::Hash};
 
-use rattler_conda_types::{ChannelUrl, PackageRecord, RepoDataRecord};
+use rattler_conda_types::{
+    ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, RepoDataRecord,
+};
 use rattler_digest::Sha256Hash;
 use url::Url;
 
@@ -207,4 +209,64 @@ pub enum ConversionError {
     /// The location of the conda package cannot be converted to a URL
     #[error(transparent)]
     LocationToUrlConversionError(#[from] file_url::FileURLParseError),
+}
+
+impl CondaPackageData {
+    /// Returns true if this package satisfies the given `spec`.
+    pub fn satisfies(&self, spec: &MatchSpec) -> bool {
+        self.matches(spec)
+    }
+}
+
+impl Matches<MatchSpec> for CondaPackageData {
+    fn matches(&self, spec: &MatchSpec) -> bool {
+        // Check if the name matches
+        if let Some(name) = &spec.name {
+            if name != &self.record().name {
+                return false;
+            }
+        }
+
+        // Check if the channel matches
+        if let Some(channel) = &spec.channel {
+            match self {
+                CondaPackageData::Binary(binary) => {
+                    if let Some(record_channel) = &binary.channel {
+                        if &channel.base_url != record_channel {
+                            return false;
+                        }
+                    }
+                }
+                CondaPackageData::Source(_) => {
+                    return false;
+                }
+            }
+        }
+
+        // Check if the record matches
+        spec.matches(self.record())
+    }
+}
+
+impl Matches<NamelessMatchSpec> for CondaPackageData {
+    fn matches(&self, spec: &NamelessMatchSpec) -> bool {
+        // Check if the channel matches
+        if let Some(channel) = &spec.channel {
+            match self {
+                CondaPackageData::Binary(binary) => {
+                    if let Some(record_channel) = &binary.channel {
+                        if &channel.base_url != record_channel {
+                            return false;
+                        }
+                    }
+                }
+                CondaPackageData::Source(_) => {
+                    return false;
+                }
+            }
+        }
+
+        // Check if the record matches
+        spec.matches(self.record())
+    }
 }
