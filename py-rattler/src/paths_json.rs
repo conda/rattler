@@ -6,7 +6,7 @@ use rattler_conda_types::package::{
 };
 use rattler_package_streaming::seek::read_package_file;
 
-use crate::error::PyRattlerError;
+use crate::{error::PyRattlerError, utils::sha256_from_pybytes};
 
 /// A representation of the `paths.json` file found in package archives.
 ///
@@ -125,10 +125,22 @@ impl PyPathsJson {
             .collect()
     }
 
+    /// Set the paths entries for the package
+    #[setter]
+    pub fn set_paths(&mut self, paths: Vec<PyPathsEntry>) {
+        self.inner.paths = paths.into_iter().map(Into::into).collect();
+    }
+
     /// The version of the file.
     #[getter]
     pub fn paths_version(&self) -> u64 {
         self.inner.paths_version
+    }
+
+    /// Set the paths version
+    #[setter]
+    pub fn set_paths_version(&mut self, version: u64) {
+        self.inner.paths_version = version;
     }
 }
 
@@ -154,10 +166,40 @@ impl From<PyPathsEntry> for PathsEntry {
 
 #[pymethods]
 impl PyPathsEntry {
+    /// Constructor
+    #[new]
+    #[pyo3(signature = (relative_path, no_link, path_type, prefix_placeholder=None, sha256=None, size_in_bytes=None))]
+    pub fn new(
+        relative_path: PathBuf,
+        no_link: bool,
+        path_type: PyPathType,
+        prefix_placeholder: Option<PyPrefixPlaceholder>,
+        sha256: Option<Bound<'_, PyBytes>>,
+        size_in_bytes: Option<u64>,
+    ) -> PyResult<Self> {
+        let sha256 = sha256.map(sha256_from_pybytes).transpose()?;
+        Ok(Self {
+            inner: PathsEntry {
+                relative_path,
+                no_link,
+                path_type: path_type.into(),
+                prefix_placeholder: prefix_placeholder.map(Into::into),
+                sha256,
+                size_in_bytes,
+            },
+        })
+    }
+
     /// The relative path from the root of the package
     #[getter]
     pub fn relative_path(&self) -> PathBuf {
         self.inner.relative_path.clone()
+    }
+
+    /// Set the relative path from the root of the package
+    #[setter]
+    pub fn set_relative_path(&mut self, path: PathBuf) {
+        self.inner.relative_path = path;
     }
 
     /// Whether or not this file should be linked or not when installing the package.
@@ -166,10 +208,22 @@ impl PyPathsEntry {
         self.inner.no_link
     }
 
+    /// Set whether or not this file should be linked when installing the package
+    #[setter]
+    pub fn set_no_link(&mut self, no_link: bool) {
+        self.inner.no_link = no_link;
+    }
+
     /// Determines how to include the file when installing the package
     #[getter]
     pub fn path_type(&self) -> PyPathType {
         self.inner.path_type.into()
+    }
+
+    /// Set how to include the file when installing the package
+    #[setter]
+    pub fn set_path_type(&mut self, path_type: PyPathType) {
+        self.inner.path_type = path_type.into();
     }
 
     /// Optionally the placeholder prefix used in the file. If this value is `None` the prefix is not
@@ -183,6 +237,12 @@ impl PyPathsEntry {
         None
     }
 
+    /// Set the placeholder prefix used in the file
+    #[setter]
+    pub fn set_prefix_placeholder(&mut self, placeholder: Option<PyPrefixPlaceholder>) {
+        self.inner.prefix_placeholder = placeholder.map(Into::into);
+    }
+
     /// A hex representation of the SHA256 hash of the contents of the file.
     /// This entry is only present in version 1 of the paths.json file.
     #[getter]
@@ -190,11 +250,24 @@ impl PyPathsEntry {
         self.inner.sha256.map(|sha| PyBytes::new_bound(py, &sha))
     }
 
+    /// Set the SHA256 hash of the contents of the file
+    #[setter]
+    pub fn set_sha256(&mut self, sha256: Option<Bound<'_, PyBytes>>) -> PyResult<()> {
+        self.inner.sha256 = sha256.map(sha256_from_pybytes).transpose()?;
+        Ok(())
+    }
+
     /// The size of the file in bytes
     /// This entry is only present in version 1 of the paths.json file.
     #[getter]
     pub fn size_in_bytes(&self) -> Option<u64> {
         self.inner.size_in_bytes
+    }
+
+    /// Set the size of the file in bytes
+    #[setter]
+    pub fn set_size_in_bytes(&mut self, size: Option<u64>) {
+        self.inner.size_in_bytes = size;
     }
 }
 
@@ -221,6 +294,25 @@ impl From<PyPathType> for PathType {
 
 #[pymethods]
 impl PyPathType {
+    // Constructor
+    #[new]
+    pub fn new(path_type: &str) -> PyResult<Self> {
+        match path_type {
+            "hardlink" => Ok(Self {
+                inner: PathType::HardLink,
+            }),
+            "softlink" => Ok(Self {
+                inner: PathType::SoftLink,
+            }),
+            "directory" => Ok(Self {
+                inner: PathType::Directory,
+            }),
+            _ => Err(PyValueError::new_err(
+                "path_type must be one of: hardlink, softlink, directory",
+            )),
+        }
+    }
+
     /// The path should be hard linked (the default)
     #[getter]
     pub fn hardlink(&self) -> bool {
@@ -263,6 +355,17 @@ impl From<PyPrefixPlaceholder> for PrefixPlaceholder {
 
 #[pymethods]
 impl PyPrefixPlaceholder {
+    /// Constructor
+    #[new]
+    pub fn new(file_mode: PyFileMode, placeholder: &str) -> PyResult<Self> {
+        Ok(Self {
+            inner: PrefixPlaceholder {
+                file_mode: file_mode.into(),
+                placeholder: placeholder.to_string(),
+            },
+        })
+    }
+
     /// The type of the file, either binary or text. Depending on the type of file either text
     /// replacement is performed or CString replacement.
     #[getter]
@@ -270,11 +373,23 @@ impl PyPrefixPlaceholder {
         self.inner.file_mode.into()
     }
 
+    /// Set the file mode
+    #[setter]
+    pub fn set_file_mode(&mut self, mode: PyFileMode) {
+        self.inner.file_mode = mode.into();
+    }
+
     /// The placeholder prefix used in the file. This is the path of the prefix when the package
     /// was build.
     #[getter]
     pub fn placeholder(&self) -> String {
         self.inner.placeholder.clone()
+    }
+
+    /// Set the placeholder prefix
+    #[setter]
+    pub fn set_placeholder(&mut self, placeholder: String) {
+        self.inner.placeholder = placeholder;
     }
 }
 
