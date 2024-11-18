@@ -1,6 +1,6 @@
 ---
 source: crates/rattler/src/install/mod.rs
-assertion_line: 941
+assertion_line: 940
 expression: paths
 snapshot_kind: text
 ---
