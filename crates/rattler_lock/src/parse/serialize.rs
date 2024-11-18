@@ -431,3 +431,31 @@ impl<'a> Ord for PackageData<'a> {
             })
     }
 }
+
+impl Serialize for CondaPackageData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        SerializablePackageDataV6::Conda(
+            v6::CondaPackageDataModel::try_from(self).expect(
+                "serialization of conda package data into serialization format cannot fail",
+            ),
+        )
+        .serialize(serializer)
+    }
+}
+
+impl Serialize for PypiPackageData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        SerializablePackageDataV6::Pypi(
+            v6::PypiPackageDataModel::try_from(self).expect(
+                "serialization of conda package data into serialization format cannot fail",
+            ),
+        )
+        .serialize(serializer)
+    }
+}
