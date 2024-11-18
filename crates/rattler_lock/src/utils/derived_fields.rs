@@ -79,9 +79,11 @@ impl LocationDerivedFields {
 /// Try to derive the build number from the build string. It is common to append
 /// the build number to the end of the build string.
 pub(crate) fn derive_build_number_from_build(build: &str) -> Option<BuildNumber> {
-    build
+    let (_, trailing_number_str) = build
         .rsplit_once(|c: char| !c.is_ascii_digit())
-        .and_then(|(_, number)| number.parse().ok())
+        .unwrap_or(("", build));
+
+    trailing_number_str.parse().ok()
 }
 
 /// Try to derive the subdir from a common conda URL. This assumes that the URL
@@ -171,6 +173,7 @@ mod test {
 
     #[test]
     fn test_derive_build_number_from_build() {
+        assert_eq!(derive_build_number_from_build("2"), Some(2));
         assert_eq!(derive_build_number_from_build("1.2.3"), Some(3));
         assert_eq!(derive_build_number_from_build("1.2.3-4"), Some(4));
         assert_eq!(derive_build_number_from_build("py313hb6a6212_1"), Some(1));
