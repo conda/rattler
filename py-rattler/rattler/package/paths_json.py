@@ -126,11 +126,18 @@ class PathsJson:
         ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> paths_json.paths
-        [PathsEntry(), ...]
+        [PathsEntry(relative_path="Lib/site-packages/conda-22.9.0-py3.8.egg-info/PKG-INFO", no_link=False, path_type=PathType(hardlink=True), prefix_placeholder="None", sha256="1323efbd9b3abb527b06435392b39de11710eb3a814e87a8174230c8f5a0826a", size_in_bytes=1229), ...]
+        >>> paths_json.paths = [PathsEntry(relative_path="new/path", no_link=True, path_type=PathType("softlink"), prefix_placeholder=None, sha256=None, size_in_bytes=None)]
+        >>> len(paths_json.paths)
+        1
         >>>
         ```
         """
         return [PathsEntry._from_py_paths_entry(path) for path in self._inner.paths]
+
+    @paths.setter
+    def paths(self, paths: List[PathsEntry]) -> None:
+        self._inner.paths = [entry._inner for entry in paths]
 
     @property
     def paths_version(self) -> int:
@@ -145,10 +152,17 @@ class PathsJson:
         ... )
         >>> paths_json.paths_version
         1
+        >>> paths_json.paths_version = 2
+        >>> paths_json.paths_version
+        2
         >>>
         ```
         """
         return self._inner.paths_version
+
+    @paths_version.setter
+    def paths_version(self, version: int) -> None:
+        self._inner.paths_version = version
 
     @classmethod
     def _from_py_paths_json(cls, py_paths_json: PyPathsJson) -> PathsJson:
@@ -171,6 +185,74 @@ class PathsEntry:
 
     _inner: PyPathsEntry
 
+    def __init__(
+        self,
+        relative_path: str,
+        no_link: bool,
+        path_type: PathType,
+        prefix_placeholder: Optional[PrefixPlaceholder],
+        sha256: Optional[bytes],
+        size_in_bytes: Optional[int],
+    ) -> None:
+        """
+        Create a new paths entry.
+
+        Parameters
+        ----------
+        relative_path : str
+            The relative path from the root of the package
+        no_link : bool
+            Whether or not this file should be linked when installing the package
+        path_type : PathType
+            How to include the file when installing the package (hardlink, softlink, or directory)
+        prefix_placeholder : Optional[PrefixPlaceholder]
+            The placeholder prefix used in the file, if any
+        sha256 : Optional[bytes]
+            The SHA256 hash of the file contents (only used in paths.json version 1)
+        size_in_bytes : Optional[int]
+            The size of the file in bytes (only used in paths.json version 1)
+
+        Examples
+        --------
+        ```python
+        >>> # Create a basic file entry
+        >>> entry = PathsEntry(
+        ...     relative_path="lib/file.txt",
+        ...     no_link=False,
+        ...     path_type=PathType("hardlink"),
+        ...     prefix_placeholder=None,
+        ...     sha256=None,
+        ...     size_in_bytes=None
+        ... )
+        >>> entry.relative_path
+        'lib/file.txt'
+        >>> entry.no_link
+        False
+        >>> entry.path_type.hardlink
+        True
+        >>>
+        >>> # Create an entry with prefix placeholder
+        >>> placeholder = PrefixPlaceholder(FileMode("text"), "/old/prefix")
+        >>> sha256 = bytes.fromhex("c609c2f1a8594abf959388e559d76241e51b0216faa7b37f529255eb1fc2c5eb")
+        >>> entry = PathsEntry(
+        ...     relative_path="bin/script",
+        ...     no_link=False,
+        ...     path_type=PathType("hardlink"),
+        ...     prefix_placeholder=placeholder,
+        ...     sha256=sha256,
+        ...     size_in_bytes=1234
+        ... )
+        >>> entry.prefix_placeholder.placeholder
+        '/old/prefix'
+        >>> entry.size_in_bytes
+        1234
+        >>>
+        ```
+        """
+        if prefix_placeholder is not None:
+            prefix_placeholder = prefix_placeholder._inner
+        self._inner = PyPathsEntry(relative_path, no_link, path_type._inner, prefix_placeholder, sha256, size_in_bytes)
+
     @property
     def relative_path(self) -> str:
         """
@@ -185,10 +267,17 @@ class PathsEntry:
         >>> entry = paths_json.paths[0]
         >>> entry.relative_path
         'Lib/site-packages/conda-22.9.0-py3.8.egg-info/PKG-INFO'
+        >>> entry.relative_path = "new/path"
+        >>> entry.relative_path
+        'new/path'
         >>>
         ```
         """
         return self._inner.relative_path
+
+    @relative_path.setter
+    def relative_path(self, path: str) -> None:
+        self._inner.relative_path = path
 
     @property
     def no_link(self) -> bool:
@@ -204,10 +293,17 @@ class PathsEntry:
         >>> entry = paths_json.paths[0]
         >>> entry.no_link
         False
+        >>> entry.no_link = True
+        >>> entry.no_link
+        True
         >>>
         ```
         """
         return self._inner.no_link
+
+    @no_link.setter
+    def no_link(self, no_link: bool) -> None:
+        self._inner.no_link = no_link
 
     @property
     def path_type(self) -> PathType:
@@ -222,11 +318,19 @@ class PathsEntry:
         ... )
         >>> entry = paths_json.paths[0]
         >>> entry.path_type
-        PathType()
+        PathType(hardlink=True)
+        >>> new_type = PathType("softlink")
+        >>> entry.path_type = new_type
+        >>> entry.path_type
+        PathType(softlink=True)
         >>>
         ```
         """
         return PathType._from_py_path_type(self._inner.path_type)
+
+    @path_type.setter
+    def path_type(self, path_type: "PathType") -> None:
+        self._inner.path_type = path_type._inner
 
     @property
     def prefix_placeholder(self) -> Optional[PrefixPlaceholder]:
@@ -242,6 +346,10 @@ class PathsEntry:
         ... )
         >>> entry = paths_json.paths[0]
         >>> entry.prefix_placeholder
+        >>> new_placeholder = PrefixPlaceholder(FileMode("text"), "placeholder")
+        >>> entry.prefix_placeholder = new_placeholder
+        >>> entry.prefix_placeholder
+        PrefixPlaceholder(file_mode=FileMode("text"), placeholder="placeholder")
         >>>
         ```
         """
@@ -249,6 +357,13 @@ class PathsEntry:
             return PrefixPlaceholder._from_py_prefix_placeholder(placeholder)
 
         return None
+
+    @prefix_placeholder.setter
+    def prefix_placeholder(self, placeholder: Optional[PrefixPlaceholder]) -> None:
+        if placeholder is None:
+            self._inner.prefix_placeholder = None
+        else:
+            self._inner.prefix_placeholder = placeholder._inner
 
     @property
     def sha256(self) -> Optional[bytes]:
@@ -265,10 +380,17 @@ class PathsEntry:
         >>> entry = paths_json.paths[0]
         >>> entry.sha256.hex()
         '1323efbd9b3abb527b06435392b39de11710eb3a814e87a8174230c8f5a0826a'
+        >>> entry.sha256 = bytes.fromhex('058016a01bb3845320c81755882a367e03a449c1898a3de4f3ea54112fb3eba4')
+        >>> entry.sha256.hex()
+        '058016a01bb3845320c81755882a367e03a449c1898a3de4f3ea54112fb3eba4'
         >>>
         ```
         """
         return self._inner.sha256
+
+    @sha256.setter
+    def sha256(self, sha: Optional[bytes]) -> None:
+        self._inner.sha256 = sha
 
     @property
     def size_in_bytes(self) -> Optional[int]:
@@ -285,6 +407,9 @@ class PathsEntry:
         >>> entry = paths_json.paths[0]
         >>> entry.size_in_bytes
         1229
+        >>> entry.size_in_bytes = 42
+        >>> entry.size_in_bytes
+        42
         >>>
         ```
         """
@@ -292,6 +417,10 @@ class PathsEntry:
             return size
 
         return None
+
+    @size_in_bytes.setter
+    def size_in_bytes(self, size: Optional[int]) -> None:
+        self._inner.size_in_bytes = size
 
     @classmethod
     def _from_py_paths_entry(cls, py_paths_entry: PyPathsEntry) -> PathsEntry:
@@ -304,7 +433,8 @@ class PathsEntry:
         """
         Returns a representation of the PathsEntry.
         """
-        return "PathsEntry()"
+        sha256_str = self.sha256.hex() if self.sha256 else None
+        return f'PathsEntry(relative_path="{self.relative_path}", no_link={self.no_link}, path_type={self.path_type}, prefix_placeholder="{self.prefix_placeholder}", sha256="{sha256_str}", size_in_bytes={self.size_in_bytes})'
 
 
 class PathType:
@@ -313,6 +443,9 @@ class PathType:
     """
 
     _inner: PyPathType
+
+    def __init__(self, path_type: Literal["hardlink", "softlink", "directory"]) -> None:
+        self._inner = PyPathType(path_type)
 
     @property
     def hardlink(self) -> bool:
@@ -385,7 +518,12 @@ class PathType:
         """
         Returns a representation of the PathType.
         """
-        return "PathType()"
+        if self._inner.hardlink:
+            return "PathType(hardlink=True)"
+        elif self._inner.softlink:
+            return "PathType(softlink=True)"
+        else:
+            return "PathType(directory=True)"
 
 
 class PrefixPlaceholder:
@@ -395,6 +533,28 @@ class PrefixPlaceholder:
     """
 
     _inner: PyPrefixPlaceholder
+
+    def __init__(self, file_mode: FileMode, placeholder: str) -> None:
+        """
+        Create a new prefix placeholder.
+
+        Parameters
+        ----------
+        file_mode: FileMode
+            The file mode of the entry.
+        placeholder: str
+            The placeholder prefix used in the file.
+
+        Examples
+        --------
+        ```python
+        >>> placeholder = PrefixPlaceholder(FileMode("text"), "placeholder")
+        >>> placeholder
+        PrefixPlaceholder(file_mode=FileMode("text"), placeholder="placeholder")
+        >>>
+        ```
+        """
+        self._inner = PyPrefixPlaceholder(file_mode._inner, placeholder)
 
     @property
     def file_mode(self) -> FileMode:
@@ -409,7 +569,7 @@ class PrefixPlaceholder:
         ... )
         >>> entry = paths_json.paths[-1]
         >>> entry.prefix_placeholder.file_mode
-        FileMode()
+        FileMode("text")
         >>>
         ```
         """
@@ -446,7 +606,7 @@ class PrefixPlaceholder:
         """
         Returns a representation of the PrefixPlaceholder.
         """
-        return "PrefixPlaceholder()"
+        return f'PrefixPlaceholder(file_mode={self.file_mode}, placeholder="{self.placeholder}")'
 
 
 class FileMode:
@@ -528,4 +688,9 @@ class FileMode:
         """
         Returns a representation of the FileMode.
         """
-        return "FileMode()"
+        if self.binary:
+            return 'FileMode("binary")'
+        elif self.text:
+            return 'FileMode("text")'
+        else:
+            return "FileMode()"
