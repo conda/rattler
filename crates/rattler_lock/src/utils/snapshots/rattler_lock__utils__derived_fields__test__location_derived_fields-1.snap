@@ -1,0 +1,24 @@
+---
+source: crates/rattler_lock/src/utils/derived_fields.rs
+expression: "https://conda.anaconda.org/conda-forge/linux-aarch64/qt-5.15.8-h803f02a_0.conda"
+---
+LocationDerivedFields {
+    file_name: Some(
+        "qt-5.15.8-h803f02a_0.conda",
+    ),
+    name: Some(
+        "qt",
+    ),
+    version: Some(
+        "5.15.8",
+    ),
+    build: Some(
+        "h803f02a_0",
+    ),
+    subdir: Some(
+        "linux-aarch64",
+    ),
+    channel: Some(
+        "https://conda.anaconda.org/conda-forge/",
+    ),
+}

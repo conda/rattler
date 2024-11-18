@@ -221,7 +221,7 @@ impl<'a> CondaDependencyProvider<'a> {
             .collect::<Vec<_>>();
 
         // Hashmap that maps the package name to the channel it was first found in.
-        let mut package_name_found_in_channel = HashMap::<String, &String>::new();
+        let mut package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
 
         // Add additional records
         for repo_data in repodata {
@@ -324,8 +324,11 @@ impl<'a> CondaDependencyProvider<'a> {
                     }) {
                         // Check if the spec has a channel, and compare it to the repodata channel
                         if let Some(spec_channel) = &spec.channel {
-                            if record.channel != spec_channel.canonical_name() {
-                                tracing::debug!("Ignoring {} from {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), &record.channel);
+                            if record.channel.as_ref() != Some(&spec_channel.canonical_name()) {
+                                tracing::debug!("Ignoring {} {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), match &record.channel {
+                                    Some(channel) => format!("from {}", &channel),
+                                    None => "without a channel".to_string(),
+                                });
                                 // Add record to the excluded with reason of being in the non
                                 // requested channel.
                                 let message = format!(
@@ -353,18 +356,28 @@ impl<'a> CondaDependencyProvider<'a> {
                 ) {
                     // Add the record to the excluded list when it is from a different channel.
                     if first_channel != &&record.channel {
-                        tracing::debug!(
-                            "Ignoring '{}' from '{}' because of strict channel priority.",
-                            &record.package_record.name.as_normalized(),
-                            &record.channel
-                        );
-                        candidates.excluded.push((
-                            solvable_id,
-                            pool.intern_string(format!(
-                                "due to strict channel priority not using this option from: '{}'",
-                                &record.channel
-                            )),
-                        ));
+                        if let Some(channel) = &record.channel {
+                            tracing::debug!(
+                                "Ignoring '{}' from '{}' because of strict channel priority.",
+                                &record.package_record.name.as_normalized(),
+                                channel
+                            );
+                            candidates.excluded.push((
+                                solvable_id,
+                                pool.intern_string(format!(
+                                    "due to strict channel priority not using this option from: '{channel}'",
+                                )),
+                            ));
+                        } else {
+                            tracing::debug!(
+                                "Ignoring '{}' without a channel because of strict channel priority.",
+                                &record.package_record.name.as_normalized(),
+                            );
+                            candidates.excluded.push((
+                                solvable_id,
+                                pool.intern_string("due to strict channel priority not using from an unknown channel".to_string()),
+                            ));
+                        }
                         continue;
                     }
                 } else {

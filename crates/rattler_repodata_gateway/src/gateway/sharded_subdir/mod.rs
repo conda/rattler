@@ -1,17 +1,19 @@
 use std::{borrow::Cow, io::Write, path::PathBuf, sync::Arc};
 
-use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
-use rattler_conda_types::{Channel, PackageName, RepoDataRecord, Shard, ShardedRepodata};
-use reqwest_middleware::ClientWithMiddleware;
-use simple_spawn_blocking::tokio::run_blocking_task;
-use url::Url;
-
 use crate::{
     fetch::{CacheAction, FetchRepoDataError},
     gateway::{error::SubdirNotFoundError, subdir::SubdirClient},
     reporter::ResponseReporterExt,
     GatewayError, Reporter,
 };
+use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
+use rattler_conda_types::{
+    Channel, ChannelUrl, PackageName, RepoDataRecord, Shard, ShardedRepodata,
+};
+use rattler_redaction::Redact;
+use reqwest_middleware::ClientWithMiddleware;
+use simple_spawn_blocking::tokio::run_blocking_task;
+use url::Url;
 
 mod index;
 
@@ -125,7 +127,7 @@ impl SubdirClient for ShardedSubdir {
                     // Decode the cached shard
                     return parse_records(
                         cached_bytes,
-                        self.channel.canonical_name(),
+                        self.channel.base_url.clone(),
                         self.package_base_url.clone(),
                     )
                     .await
@@ -192,7 +194,7 @@ impl SubdirClient for ShardedSubdir {
         // Create a future to parse the records from the shard
         let parse_records_fut = parse_records(
             shard_bytes,
-            self.channel.canonical_name(),
+            self.channel.base_url.clone(),
             self.package_base_url.clone(),
         );
 
@@ -273,7 +275,7 @@ async fn decode_zst_bytes_async<R: AsRef<[u8]> + Send + 'static>(
 
 async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     bytes: R,
-    channel_name: String,
+    channel_base_url: ChannelUrl,
     base_url: Url,
 ) -> Result<Vec<RepoDataRecord>, GatewayError> {
     run_blocking_task(move || {
@@ -291,7 +293,7 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                 url: base_url
                     .join(&file_name)
                     .expect("filename is not a valid url"),
-                channel: channel_name.clone(),
+                channel: Some(channel_base_url.url().clone().redact().to_string()),
                 package_record,
                 file_name,
             })

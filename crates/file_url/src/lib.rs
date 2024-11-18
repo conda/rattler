@@ -9,7 +9,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use thiserror::Error;
 use typed_path::{
-    Utf8TypedComponent, Utf8TypedPath, Utf8UnixComponent, Utf8WindowsComponent, Utf8WindowsPrefix,
+    Utf8TypedComponent, Utf8TypedPath, Utf8TypedPathBuf, Utf8UnixComponent, Utf8WindowsComponent,
+    Utf8WindowsPrefix,
 };
 use url::{Host, Url};
 
@@ -33,14 +34,7 @@ fn is_windows_drive_letter_segment(segment: &str) -> Option<String> {
     None
 }
 
-/// Tries to convert a `file://` based URL to a path.
-///
-/// We assume that any passed URL that represents a path is an absolute path.
-///
-/// [`Url::to_file_path`] has a different code path for Windows and other operating systems, this
-/// can cause URLs to parse perfectly fine on Windows, but fail to parse on Linux. This function
-/// tries to parse the URL as a path on all operating systems.
-pub fn url_to_path(url: &Url) -> Option<PathBuf> {
+fn url_to_path_inner<T: From<String>>(url: &Url) -> Option<T> {
     if url.scheme() != "file" {
         return None;
     }
@@ -77,7 +71,29 @@ pub fn url_to_path(url: &Url) -> Option<PathBuf> {
         }
     }
 
-    Some(PathBuf::from(path))
+    Some(T::from(path))
+}
+
+/// Tries to convert a `file://` based URL to a path.
+///
+/// We assume that any passed URL that represents a path is an absolute path.
+///
+/// [`Url::to_file_path`] has a different code path for Windows and other operating systems, this
+/// can cause URLs to parse perfectly fine on Windows, but fail to parse on Linux. This function
+/// tries to parse the URL as a path on all operating systems.
+pub fn url_to_path(url: &Url) -> Option<PathBuf> {
+    url_to_path_inner(url)
+}
+
+/// Tries to convert a `file://` based URL to a path.
+///
+/// We assume that any passed URL that represents a path is an absolute path.
+///
+/// [`Url::to_file_path`] has a different code path for Windows and other operating systems, this
+/// can cause URLs to parse perfectly fine on Windows, but fail to parse on Linux. This function
+/// tries to parse the URL as a path on all operating systems.
+pub fn url_to_typed_path(url: &Url) -> Option<Utf8TypedPathBuf> {
+    url_to_path_inner(url)
 }
 
 const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
