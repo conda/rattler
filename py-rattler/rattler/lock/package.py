@@ -6,6 +6,7 @@ from rattler import PackageRecord, Version, RepoDataRecord
 
 from rattler.rattler import PyLockedPackage
 from rattler.lock.hash import PackageHashes
+from rattler.match_spec import MatchSpec
 
 
 class LockedPackage(ABC):
@@ -132,6 +133,27 @@ class CondaLockedPackage(LockedPackage, ABC):
         ```
         """
         return Version._from_py_version(self._package.conda_version)
+
+    def satisfies(self, spec: MatchSpec | str) -> bool:
+        """
+        Returns true if this package satisfies the given `spec`.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile, Platform
+        >>> lock_file = LockFile.from_path("../test-data/test.lock")
+        >>> env = lock_file.default_environment()
+        >>> packages = env.packages(Platform("osx-arm64"))
+        >>> packages[0].satisfies("tzdata >=2024a")
+        True
+        >>>
+        ```
+        """
+        if isinstance(spec, str):
+            spec = MatchSpec(spec)
+
+        return self._package.conda_satisfies(spec._match_spec)
 
 
 class PypiLockedPackage(LockedPackage):

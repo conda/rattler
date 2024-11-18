@@ -1,3 +1,4 @@
+use crate::match_spec::PyMatchSpec;
 use crate::version::PyVersion;
 use crate::{error::PyRattlerError, platform::PyPlatform, record::PyRecord};
 use pep508_rs::Requirement;
@@ -437,6 +438,10 @@ impl PyLockedPackage {
         let req = Requirement::from_str(spec)
             .map_err(|e| PyRattlerError::RequirementError(e.to_string()))?;
         Ok(self.as_pypi().satisfies(&req))
+    }
+
+    pub fn conda_satisfies(&self, spec: &PyMatchSpec) -> bool {
+        self.as_conda().satisfies(&spec.inner)
     }
 
     #[getter]
