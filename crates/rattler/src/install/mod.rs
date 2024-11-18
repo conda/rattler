@@ -908,16 +908,18 @@ mod test {
 
     #[rstest::rstest]
     #[case(
+        "ruff",
         "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda",
         "25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd"
     )]
     #[case(
+        "bzip2",
         "https://conda.anaconda.org/conda-forge/linux-aarch64/bzip2-1.0.8-hf897c2e_4.tar.bz2",
         "3aeb6ab92aa0351722497b2d2a735dc20921cf6c60d9196c04b7a2b9ece198d2"
     )]
     #[tracing_test::traced_test]
     #[tokio::test]
-    async fn test_link_package_from_archive(#[case] package_url: &str, #[case] sha256: &str) {
+    async fn test_link_package_from_archive(#[case] package: &str, #[case] package_url: &str, #[case] sha256: &str) {
         let environment_dir = tempfile::TempDir::new().unwrap();
 
         let package_path =
@@ -937,6 +939,6 @@ mod test {
         .await
         .unwrap();
 
-        insta::assert_yaml_snapshot!(paths);
+        insta::assert_yaml_snapshot!(format!("link_package_from_archive-{}", package), paths);
     }
 }
