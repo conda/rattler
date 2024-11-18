@@ -35,7 +35,7 @@ pytorch=*=cuda*:
   name: foo
   version: 1.0.*
   channel:
-    base_url: "https://conda.anaconda.org/conda-forge/"
+    base_url: "https://conda.anaconda.org/conda-forge"
     name: conda-forge
 "conda-forge::foo[version=1.0.*, build_number=\">6\"]":
   name: foo
@@ -44,7 +44,7 @@ pytorch=*=cuda*:
     op: Gt
     rhs: 6
   channel:
-    base_url: "https://conda.anaconda.org/conda-forge/"
+    base_url: "https://conda.anaconda.org/conda-forge"
     name: conda-forge
 python ==2.7.*.*|>=3.6:
   error: "invalid version constraint: regex constraints are not supported"
@@ -57,27 +57,27 @@ python=*:
   name: python
   version: "==3.9"
   channel:
-    base_url: "https://software.repos.intel.com/python/conda/"
+    base_url: "https://software.repos.intel.com/python/conda"
     name: python/conda
 "https://c.com/p/conda/linux-64::python[version=3.9]":
   name: python
   version: "==3.9"
   channel:
-    base_url: "https://c.com/p/conda/"
+    base_url: "https://c.com/p/conda"
     name: p/conda
   subdir: linux-64
 "https://c.com/p/conda::python[version=3.9, subdir=linux-64]":
   name: python
   version: "==3.9"
   channel:
-    base_url: "https://c.com/p/conda/"
+    base_url: "https://c.com/p/conda"
     name: p/conda
   subdir: linux-64
 "conda-forge/linux-32::python[version=3.9, subdir=linux-64]":
   name: python
   version: "==3.9"
   channel:
-    base_url: "https://conda.anaconda.org/conda-forge/"
+    base_url: "https://conda.anaconda.org/conda-forge"
     name: conda-forge
   subdir: linux-64
 "conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]":
@@ -87,20 +87,20 @@ python=*:
     op: Eq
     rhs: 0
   channel:
-    base_url: "https://conda.anaconda.org/conda-forge/"
+    base_url: "https://conda.anaconda.org/conda-forge"
     name: conda-forge
   subdir: linux-64
 "python ==3.9[channel=conda-forge]":
   name: python
   version: "==3.9"
   channel:
-    base_url: "https://conda.anaconda.org/conda-forge/"
+    base_url: "https://conda.anaconda.org/conda-forge"
     name: conda-forge
 "python ==3.9[channel=conda-forge/linux-64]":
   name: python
   version: "==3.9"
   channel:
-    base_url: "https://conda.anaconda.org/conda-forge/"
+    base_url: "https://conda.anaconda.org/conda-forge"
     name: conda-forge
   subdir: linux-64
 rust ~=1.2.3:
@@ -109,24 +109,24 @@ rust ~=1.2.3:
 "~/channel/dir::package":
   name: package
   channel:
-    base_url: "file://<HOME>/channel/dir/"
+    base_url: "file://<HOME>/channel/dir"
     name: ~/channel/dir
 "~\\windows_channel::package":
   error: invalid channel
 "./relative/channel::package":
   name: package
   channel:
-    base_url: "file://<CRATE>/relative/channel/"
+    base_url: "file://<CRATE>/relative/channel"
     name: "./relative/channel"
 "python[channel=https://conda.anaconda.org/python/conda,version=3.9]":
   name: python
   version: "==3.9"
   channel:
-    base_url: "https://conda.anaconda.org/python/conda/"
+    base_url: "https://conda.anaconda.org/python/conda"
     name: python/conda
 "channel/win-64::foobar[channel=conda-forge, subdir=linux-64]":
   name: foobar
   channel:
-    base_url: "https://conda.anaconda.org/conda-forge/"
+    base_url: "https://conda.anaconda.org/conda-forge"
     name: conda-forge
   subdir: linux-64
