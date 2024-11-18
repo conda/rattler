@@ -60,6 +60,22 @@ impl CondaPackageData {
             Self::Source(data) => Some(data),
         }
     }
+
+    /// Returns the binary representation of this instance if it exists.
+    pub fn into_binary(self) -> Option<CondaBinaryData> {
+        match self {
+            Self::Binary(data) => Some(data),
+            Self::Source(_) => None,
+        }
+    }
+
+    /// Returns the source representation of this instance if it exists.
+    pub fn into_source(self) -> Option<CondaSourceData> {
+        match self {
+            Self::Binary(_) => None,
+            Self::Source(data) => Some(data),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
