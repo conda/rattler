@@ -12,6 +12,7 @@ mod nameless_match_spec;
 mod networking;
 mod no_arch_type;
 mod package_name;
+mod package_streaming;
 mod paths_json;
 mod platform;
 mod prefix_paths;
@@ -50,7 +51,7 @@ use lock::{
 use match_spec::PyMatchSpec;
 use meta::get_rattler_version;
 use nameless_match_spec::PyNamelessMatchSpec;
-use networking::middleware::{PyAuthenticationMiddleware, PyMirrorMiddleware};
+use networking::middleware::{PyAuthenticationMiddleware, PyMirrorMiddleware, PyOciMiddleware};
 use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
 use package_name::PyPackageName;
@@ -102,6 +103,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
 
     m.add_class::<PyMirrorMiddleware>()?;
     m.add_class::<PyAuthenticationMiddleware>()?;
+    m.add_class::<PyOciMiddleware>()?;
     m.add_class::<PyClientWithMiddleware>()?;
 
     // Shell activation things
@@ -152,6 +154,10 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_rattler_version, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_install, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_index, &m).unwrap())?;
+
+    m.add_function(wrap_pyfunction!(package_streaming::extract_tar_bz2, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(package_streaming::extract, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(package_streaming::download_and_extract, &m).unwrap())?;
 
     // Explicit environment specification
     m.add_class::<PyExplicitEnvironmentSpec>()?;

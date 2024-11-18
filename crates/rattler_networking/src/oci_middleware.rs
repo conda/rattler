@@ -60,15 +60,18 @@ impl Display for OciAction {
 async fn get_token(url: &OCIUrl, action: OciAction) -> Result<String, OciMiddlewareError> {
     let token_url = url.token_url(action)?;
 
-    tracing::trace!("OCI Mirror: requesting token from {}", token_url);
+    let response = reqwest::get(token_url.clone()).await?;
 
-    let token = reqwest::get(token_url)
-        .await?
-        .json::<OCIToken>()
-        .await?
-        .token;
-
-    Ok(token)
+    match response.error_for_status() {
+        Ok(response) => {
+            let token = response.json::<OCIToken>().await?;
+            Ok(token.token)
+        }
+        Err(e) => {
+            tracing::error!("OCI Mirror: failed to get token with URL: {}", token_url);
+            Err(OciMiddlewareError::Reqwest(e))
+        }
+    }
 }
 
 #[derive(Debug)]

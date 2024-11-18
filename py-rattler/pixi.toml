@@ -25,7 +25,7 @@ patchelf = "~=0.17.2"
 
 [feature.test.dependencies]
 # Python 3.8 is the minimum supported version, so we use that for testing
-python = "3.8.*"
+python = "3.9.*"
 
 ruff = ">=0.3.3,<0.4"
 mypy = "~=1.5.1"
@@ -41,7 +41,7 @@ typer = "*"
 types-networkx = "*"
 
 [feature.test.tasks]
-test = { cmd = "pytest --doctest-modules", depends_on = ["build"] }
+test = { cmd = "pytest --doctest-modules" } #, depends_on = ["build"] }
 fmt-python = "ruff format rattler examples tests"
 fmt-rust = "cargo fmt --all"
 lint-python = "ruff check ."

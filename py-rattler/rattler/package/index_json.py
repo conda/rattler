@@ -6,6 +6,8 @@ from typing import List, Optional
 
 from rattler.package.package_name import PackageName
 from rattler.rattler import PyIndexJson
+from rattler.version.version import Version
+from rattler.version.with_source import VersionWithSource
 
 
 class IndexJson:
@@ -76,6 +78,32 @@ class IndexJson:
         return PyIndexJson.package_path()
 
     @property
+    def version(self) -> Version:
+        """
+        The version of the package.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
+        ... )
+        >>> idx_json.version
+        VersionWithSource(version="22.11.1", source="22.11.1")
+        >>> idx_json.version = VersionWithSource("1.02.3")
+        >>> idx_json.version
+        VersionWithSource(version="1.2.3", source="1.02.3")
+        >>>
+        ```
+        """
+        version, source = self._inner.version
+        return VersionWithSource._from_py_version(version, source)
+
+    @version.setter
+    def version(self, value: VersionWithSource) -> None:
+        self._inner.version = (value._version, value._source)
+
+    @property
     def arch(self) -> Optional[str]:
         """
         Optionally, the architecture the package is build for.
@@ -96,6 +124,10 @@ class IndexJson:
 
         return None
 
+    @arch.setter
+    def arch(self, value: Optional[str]) -> None:
+        self._inner.arch = value
+
     @property
     def build(self) -> str:
         """
@@ -113,6 +145,10 @@ class IndexJson:
         ```
         """
         return self._inner.build
+
+    @build.setter
+    def build(self, value: str) -> None:
+        self._inner.build = value
 
     @property
     def build_number(self) -> int:
@@ -133,6 +169,10 @@ class IndexJson:
         """
         return self._inner.build_number
 
+    @build_number.setter
+    def build_number(self, value: int) -> None:
+        self._inner.build_number = value
+
     @property
     def constrains(self) -> List[str]:
         """
@@ -151,6 +191,10 @@ class IndexJson:
         """
         return self._inner.constrains
 
+    @constrains.setter
+    def constrains(self, value: List[str]) -> None:
+        self._inner.constrains = value
+
     @property
     def depends(self) -> List[str]:
         """
@@ -168,6 +212,10 @@ class IndexJson:
         ```
         """
         return self._inner.depends
+
+    @depends.setter
+    def depends(self, value: List[str]) -> None:
+        self._inner.set_depends(value)
 
     @property
     def features(self) -> Optional[str]:
@@ -191,6 +239,10 @@ class IndexJson:
 
         return None
 
+    @features.setter
+    def features(self, value: Optional[str]) -> None:
+        self._inner.set_features(value)
+
     @property
     def license(self) -> Optional[str]:
         """
@@ -212,6 +264,10 @@ class IndexJson:
 
         return None
 
+    @license.setter
+    def license(self, value: Optional[str]) -> None:
+        self._inner.set_license(value)
+
     @property
     def license_family(self) -> Optional[str]:
         """
@@ -232,6 +288,10 @@ class IndexJson:
 
         return None
 
+    @license_family.setter
+    def license_family(self, value: Optional[str]) -> None:
+        self._inner.set_license_family(value)
+
     @property
     def name(self) -> PackageName:
         """
@@ -245,10 +305,17 @@ class IndexJson:
         ... )
         >>> idx_json.name
         PackageName("conda")
+        >>> idx_json.name = PackageName("rattler")
+        >>> idx_json.name
+        PackageName("rattler")
         >>>
         ```
         """
         return PackageName._from_py_package_name(self._inner.name)
+
+    @name.setter
+    def name(self, value: PackageName) -> None:
+        self._inner.name = value._name
 
     @property
     def platform(self) -> Optional[str]:
@@ -271,6 +338,10 @@ class IndexJson:
 
         return None
 
+    @platform.setter
+    def platform(self, value: Optional[str]) -> None:
+        self._inner.set_platform(value)
+
     @property
     def subdir(self) -> Optional[str]:
         """
@@ -292,6 +363,10 @@ class IndexJson:
 
         return None
 
+    @subdir.setter
+    def subdir(self, value: Optional[str]) -> None:
+        self._inner.set_subdir(value)
+
     @property
     def timestamp(self) -> Optional[datetime.datetime]:
         """
@@ -305,6 +380,9 @@ class IndexJson:
         ... )
         >>> idx_json.timestamp
         datetime.datetime(2022, 12, 7, 23, 45, 42, 50000, tzinfo=datetime.timezone.utc)
+        >>> idx_json.timestamp = datetime.datetime(2021, 1, 1, 1, 1, 1, 50000, tzinfo=datetime.timezone.utc)
+        >>> idx_json.timestamp
+        datetime.datetime(2021, 1, 1, 1, 1, 1, 50000, tzinfo=datetime.timezone.utc)
         >>>
         ```
         """
@@ -312,6 +390,14 @@ class IndexJson:
             return datetime.datetime.fromtimestamp(timestamp / 1000.0, tz=datetime.timezone.utc)
 
         return None
+
+    @timestamp.setter
+    def timestamp(self, value: Optional[datetime.datetime]) -> None:
+        if value is None:
+            self._inner.timestamp = None
+        else:
+            # convert to integer milliseconds
+            self._inner.timestamp = int(value.timestamp() * 1000.0)
 
     @property
     def track_features(self) -> List[str]:
@@ -332,6 +418,10 @@ class IndexJson:
         ```
         """
         return self._inner.track_features
+
+    @track_features.setter
+    def track_features(self, value: List[str]) -> None:
+        self._inner.set_track_features(value)
 
     @classmethod
     def _from_py_index_json(cls, py_index_json: PyIndexJson) -> IndexJson:

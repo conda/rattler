@@ -13,6 +13,7 @@ pub use gcs_middleware::GCSMiddleware;
 
 pub mod authentication_middleware;
 pub mod authentication_storage;
+pub mod url_with_trailing_slash;
 
 pub mod mirror_middleware;
 pub mod oci_middleware;
