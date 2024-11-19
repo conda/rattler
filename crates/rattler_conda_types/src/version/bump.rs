@@ -146,35 +146,67 @@ impl Version {
         // Copy over all the segments and bump the last segment.
         for (idx, segment_iter) in version.segments().enumerate() {
             let segment = segment_iter.segment;
+            let mut segment_components = segment_iter.components().cloned().collect::<ComponentVec>();
 
-            let mut segment_components =
-                segment_iter.components().cloned().collect::<ComponentVec>();
+            // Handle semantic versioning resets
+            match bump_type {
+                VersionBumpType::Major => {
+                    if idx == 0 {
+                        // Increment major version
+                        if let Some(num) = segment_components.iter_mut().find_map(Component::as_number_mut) {
+                            *num += 1;
+                        }
+                    } else if idx <= 2 {
+                        // Reset minor and patch to 0
+                        if let Some(num) = segment_components.iter_mut().find_map(Component::as_number_mut) {
+                            *num = 0;
+                        }
+                    }
+                },
+                VersionBumpType::Minor => {
+                    if idx == 1 {
+                        // Increment minor version
+                        if let Some(num) = segment_components.iter_mut().find_map(Component::as_number_mut) {
+                            *num += 1;
+                        }
+                    } else if idx == 2 {
+                        // Reset patch to 0
+                        if let Some(num) = segment_components.iter_mut().find_map(Component::as_number_mut) {
+                            *num = 0;
+                        }
+                    }
+                },
+                VersionBumpType::Patch => {
+                    if idx == 2 {
+                        // Just increment patch version
+                        if let Some(num) = segment_components.iter_mut().find_map(Component::as_number_mut) {
+                            *num += 1;
+                        }
+                    }
+                },
+                _ => {
+                    // For Last and Segment types, keep original behavior
+                    if segment_to_bump == idx {
+                        let last_numeral_component = segment_components
+                            .iter_mut()
+                            .filter_map(Component::as_number_mut)
+                            .next_back()
+                            .expect("every segment must at least contain a single numeric component");
+                        *last_numeral_component += 1;
 
-            // Determine whether this is the segment that needs to be bumped.
-            let is_segment_to_bump = segment_to_bump == idx;
+                        let last_iden_component = segment_components
+                            .iter_mut()
+                            .filter_map(Component::as_iden_mut)
+                            .next_back();
 
-            // Bump the segment if we need to. Each segment must at least start with a number so this should always work.
-            if is_segment_to_bump {
-                let last_numeral_component = segment_components
-                    .iter_mut()
-                    .filter_map(Component::as_number_mut)
-                    .next_back()
-                    .expect("every segment must at least contain a single numeric component");
-                *last_numeral_component += 1;
-
-                // If the segment ends with an ascii character, make it `a` instead of whatever it says
-                let last_iden_component = segment_components
-                    .iter_mut()
-                    .filter_map(Component::as_iden_mut)
-                    .next_back();
-
-                if let Some(last_iden_component) = last_iden_component {
-                    *last_iden_component = "a".into();
+                        if let Some(last_iden_component) = last_iden_component {
+                            *last_iden_component = "a".into();
+                        }
+                    }
                 }
             }
 
-            let has_implicit_default =
-                segment.has_implicit_default() && segment_components[0] == Component::default();
+            let has_implicit_default = segment.has_implicit_default() && segment_components[0] == Component::default();
             let start_idx = usize::from(has_implicit_default);
 
             let component_count = segment_components.len();
@@ -235,8 +267,8 @@ mod test {
     }
 
     #[rstest]
-    #[case("1.1", "2.1")]
-    #[case("2.1l", "3.1l")]
+    #[case("1.1", "2.0")]
+    #[case("2.1l", "3.0l")]
     #[case("5!1.alpha+3.4", "5!2.alpha+3.4")]
     fn bump_major(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
@@ -250,8 +282,8 @@ mod test {
 
     #[rstest]
     #[case("1.1", "1.2")]
-    #[case("2.1l", "2.2a")]
-    #[case("5!1.alpha+3.4", "5!1.1a+3.4")]
+    #[case("2.1l", "2.2l")]
+    #[case("5!1.alpha+3.4", "5!1.1alpha+3.4")]
     fn bump_minor(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             Version::from_str(input)
@@ -264,8 +296,8 @@ mod test {
 
     #[rstest]
     #[case("1.1.9", "1.1.10")]
-    #[case("2.1l.5alpha", "2.1l.6a")]
-    #[case("5!1.8.alpha+3.4", "5!1.8.1a+3.4")]
+    #[case("2.1l.5alpha", "2.1l.6alpha")]
+    #[case("5!1.8.alpha+3.4", "5!1.8.1alpha+3.4")]
     #[case("1", "1.0.1")]
     #[case("1alpha", "1alpha.0.1")]
     #[case("5!1+3.4", "5!1.0.1+3.4")]
@@ -334,4 +366,55 @@ mod test {
             Version::from_str(expected).unwrap()
         );
     }
+}
+
+#[cfg(test)]
+mod semver_tests {
+
+    use std::str::FromStr;
+
+    use crate::{Version, VersionBumpType};
+
+    #[test]
+    fn test_semantic_version_basic() {
+        // Test major version bump
+        let version = Version::from_str("1.2.3").unwrap();
+        assert_eq!(
+            version.bump(VersionBumpType::Major).unwrap().to_string(),
+            "2.0.0"
+        );
+
+        // Test minor version bump
+        let version = Version::from_str("1.2.3").unwrap();
+        assert_eq!(
+            version.bump(VersionBumpType::Minor).unwrap().to_string(),
+            "1.3.0"
+        );
+
+        // Test patch version bump
+        let version = Version::from_str("1.2.3").unwrap();
+        assert_eq!(
+            version.bump(VersionBumpType::Patch).unwrap().to_string(),
+            "1.2.4"
+        );
+    }
+
+    #[test]
+    fn test_version_reset_behavior() {
+        // Test that major bump resets minor and patch
+        let version = Version::from_str("1.2.3").unwrap();
+        let bumped = version.bump(VersionBumpType::Major).unwrap();
+        assert_eq!(bumped.to_string(), "2.0.0");
+
+        // Test that minor bump resets only patch
+        let version = Version::from_str("1.2.3").unwrap();
+        let bumped = version.bump(VersionBumpType::Minor).unwrap();
+        assert_eq!(bumped.to_string(), "1.3.0");
+
+        // Test that patch bump doesn't reset anything
+        let version = Version::from_str("1.2.3").unwrap();
+        let bumped = version.bump(VersionBumpType::Patch).unwrap();
+        assert_eq!(bumped.to_string(), "1.2.4");
+    }
+
 }
