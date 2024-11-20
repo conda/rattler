@@ -2,6 +2,7 @@
 
 use std::{
     collections::HashSet,
+    ffi::OsString,
     io::ErrorKind,
     path::{Path, PathBuf},
 };
@@ -166,7 +167,13 @@ async fn move_to_trash(target_prefix: &Path, path: &Path) -> Result<(), UnlinkEr
             ))
         }
     }
-    trash_dest.push(format!("{}.rattler_trash", Uuid::new_v4().simple()));
+    let mut new_filename = OsString::new();
+    if let Some(file_name) = path.file_name() {
+        new_filename.push(file_name);
+        new_filename.push(".");
+    }
+    new_filename.push(format!("{}.trash", Uuid::new_v4().simple()));
+    trash_dest.push(new_filename);
     match tokio::fs::rename(path, &trash_dest).await {
         Ok(_) => Ok(()),
         Err(e) => Err(UnlinkError::FailedToMoveFile(
@@ -388,7 +395,7 @@ mod tests {
         let mut count = 0;
         for entry in std::fs::read_dir(trash_dir).unwrap() {
             let entry = entry.unwrap();
-            if entry.path().extension().unwrap() == "rattler_trash" {
+            if entry.path().extension().unwrap() == "trash" {
                 count += 1;
             }
         }
@@ -398,18 +405,19 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn test_unlink_package_in_use() {
+        use itertools::chain;
+        use std::env::{join_paths, split_paths, var_os};
+        use std::io::{BufRead, BufReader};
         use std::process::{Command, Stdio};
-        use tokio::time::{sleep, Duration};
 
         let environment_dir = tempfile::TempDir::new().unwrap();
         let target_prefix = environment_dir.path();
         let trash_dir = target_prefix.join(".trash");
         let files = [
+            ("https://conda.anaconda.org/conda-forge/win-64/bat-0.24.0-ha073cba_1.conda", "65a125b7a6e7fd7e5d4588ee537b5db2c984ed71e4832f7041f691c2cfd73504"),
             ("https://conda.anaconda.org/conda-forge/win-64/ucrt-10.0.22621.0-h57928b3_1.conda", "db8dead3dd30fb1a032737554ce91e2819b43496a0db09927edf01c32b577450"),
             ("https://conda.anaconda.org/conda-forge/win-64/vc-14.3-ha32ba9b_23.conda", "986ddaf8feec2904eac9535a7ddb7acda1a1dfb9482088fdb8129f1595181663"),
             ("https://conda.anaconda.org/conda-forge/win-64/vc14_runtime-14.42.34433-he29a5d6_23.conda", "c483b090c4251a260aba6ff3e83a307bcfb5fb24ad7ced872ab5d02971bd3a49"),
-            ("https://conda.anaconda.org/conda-forge/win-64/vs2015_runtime-14.42.34433-hdffcdeb_23.conda", "568ce8151eaae256f1cef752fc78651ad7a86ff05153cc7a4740b52ae6536118"),
-            ("https://conda.anaconda.org/conda-forge/win-64/xz-5.2.6-h8d14728_0.tar.bz2", "54d9778f75a02723784dc63aff4126ff6e6749ba21d11a6d03c1f4775f269fe0"),
         ];
         let conda_meta_path = target_prefix.join("conda-meta");
         std::fs::create_dir_all(&conda_meta_path).unwrap();
@@ -447,36 +455,55 @@ mod tests {
             prefix_records.push(prefix_record);
         }
 
-        // Start lzmainfo to block deletion of the xz package
-        let lzmainfo_path = environment_dir
-            .path()
-            .join("Library")
-            .join("bin")
-            .join("lzmainfo.exe");
-        let mut cmd = Command::new(&lzmainfo_path);
+        // Start bat to block deletion of the bat package
+        let cmd_path = target_prefix.join("bin").join("bat.exe");
+        let mut cmd = Command::new(&cmd_path);
+        cmd.arg("-p");
         cmd.stdout(Stdio::piped());
         cmd.stdin(Stdio::piped());
-        let mut child = cmd.spawn().expect("failed to spawn lzmainfo");
-        let stdin = child.stdin.take().expect("failed to open stdin");
-        sleep(Duration::from_millis(10)).await;
+        cmd.stderr(Stdio::null());
+        cmd.env(
+            "PATH",
+            join_paths(chain(
+                chain(
+                    [target_prefix.to_path_buf()],
+                    [
+                        "Library/mingw-w64/bin",
+                        "Library/usr/bin",
+                        "Library/bin",
+                        "Scripts",
+                        "bin",
+                    ]
+                    .iter()
+                    .map(|x| target_prefix.join(x)),
+                ),
+                split_paths(&var_os("PATH").unwrap()),
+            ))
+            .unwrap(),
+        );
+        let mut child = cmd.spawn().expect("failed to spawn bat.exe");
+        let mut stdin = child.stdin.take().expect("failed to open stdin");
+        let mut stdout = BufReader::new(child.stdout.take().expect("failed to open stdout"));
+        // Ensure program has started by waiting for it to repeat back to us.
+        let mut line = String::new();
+        stdin.write("abc\n".as_bytes()).unwrap();
+        stdout.read_line(&mut line).unwrap();
 
         // Unlink the package
         assert!(!trash_dir.exists());
-        unlink_package(environment_dir.path(), &prefix_records.last().unwrap())
-            .await
-            .unwrap();
+        let prefix_record = prefix_records.first().unwrap();
+        unlink_package(target_prefix, prefix_record).await.unwrap();
         // Check if the conda-meta file is gone
-        assert!(!conda_meta_path
-            .join(prefix_records.last().unwrap().file_name())
-            .exists());
+        assert!(!conda_meta_path.join(prefix_record.file_name()).exists());
         assert!(trash_dir.exists());
         assert!(count_trash(&trash_dir) > 0);
-        assert!(!lzmainfo_path.exists());
+        assert!(!cmd_path.exists());
         empty_trash(target_prefix).await.unwrap();
         assert!(count_trash(&trash_dir) > 0);
 
         drop(stdin);
-        child.wait().expect("lzmainfo failed");
+        drop(stdout);
+        child.wait().expect("bat failed");
         empty_trash(target_prefix).await.unwrap();
         assert!(count_trash(&trash_dir) == 0);
         assert!(!trash_dir.exists());
@@ -491,13 +518,13 @@ mod tests {
         std::fs::create_dir_all(&trash_path).unwrap();
         {
             let mut file =
-                File::create(trash_path.join(format!("{}.rattler_trash", Uuid::new_v4().simple())))
+                File::create(trash_path.join(format!("{}.trash", Uuid::new_v4().simple())))
                     .unwrap();
             write!(file, "some data").unwrap();
         }
         {
             let mut file =
-                File::create(trash_path.join(format!("{}.rattler_trash", Uuid::new_v4().simple())))
+                File::create(trash_path.join(format!("{}.trash", Uuid::new_v4().simple())))
                     .unwrap();
             write!(file, "some other data").unwrap();
         }
