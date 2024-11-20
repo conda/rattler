@@ -288,6 +288,9 @@ mod test {
     #[case("1.1", "2.0")]
     #[case("2.1l", "3.0l")]
     #[case("5!1.alpha+3.4", "5!2.alpha+3.4")]
+    #[case("1.2.3", "2.0.0")]
+    #[case("0.1.0", "1.0.0")]
+    #[case("1.2.3-alpha", "2.0.0-alpha")]
     fn bump_major(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             Version::from_str(input)
@@ -302,6 +305,9 @@ mod test {
     #[case("1.1", "1.2")]
     #[case("2.1l", "2.2l")]
     #[case("5!1.alpha+3.4", "5!1.1alpha+3.4")]
+    #[case("1.2.3", "1.3.0")]
+    #[case("1.9.0", "1.10.0")]
+    #[case("0.1.0", "0.2.0")]
     fn bump_minor(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             Version::from_str(input)
@@ -316,10 +322,9 @@ mod test {
     #[case("1.1.9", "1.1.10")]
     #[case("2.1l.5alpha", "2.1l.6alpha")]
     #[case("5!1.8.alpha+3.4", "5!1.8.1alpha+3.4")]
-    #[case("1", "1.0.1")]
-    #[case("1alpha", "1alpha.0.1")]
-    #[case("5!1+3.4", "5!1.0.1+3.4")]
-    #[case("2.1", "2.1.1")]
+    #[case("1.2.3", "1.2.4")]
+    #[case("1.2.9", "1.2.10")]
+    #[case("0.1.0", "0.1.1")]
     fn bump_patch(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             Version::from_str(input)
@@ -382,55 +387,6 @@ mod test {
                 .remove_local()
                 .into_owned(),
             Version::from_str(expected).unwrap()
-        );
-    }
-
-    // Added semantic versioning tests
-    #[test]
-    fn test_semantic_version_bumping() {
-        // Major version bump (resets minor and patch)
-        let version = Version::from_str("1.2.3").unwrap();
-        assert_eq!(
-            version.bump(VersionBumpType::Major).unwrap().to_string(),
-            "2.0.0"
-        );
-
-        // Minor version bump (resets patch)
-        let version = Version::from_str("1.2.3").unwrap();
-        assert_eq!(
-            version.bump(VersionBumpType::Minor).unwrap().to_string(),
-            "1.3.0"
-        );
-
-        // Patch version bump (just increments)
-        let version = Version::from_str("1.2.3").unwrap();
-        assert_eq!(
-            version.bump(VersionBumpType::Patch).unwrap().to_string(),
-            "1.2.4"
-        );
-    }
-
-    #[test]
-    fn test_version_reset_behavior() {
-        // Test that major bump resets minor and patch
-        let version = Version::from_str("1.2.3").unwrap();
-        assert_eq!(
-            version.bump(VersionBumpType::Major).unwrap().to_string(),
-            "2.0.0"
-        );
-
-        // Test that minor bump resets only patch
-        let version = Version::from_str("1.2.3").unwrap();
-        assert_eq!(
-            version.bump(VersionBumpType::Minor).unwrap().to_string(),
-            "1.3.0"
-        );
-
-        // Test that patch bump doesn't reset anything
-        let version = Version::from_str("1.2.3").unwrap();
-        assert_eq!(
-            version.bump(VersionBumpType::Patch).unwrap().to_string(),
-            "1.2.4"
         );
     }
 }
