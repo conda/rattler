@@ -5,6 +5,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen]
 #[repr(transparent)]
+#[derive(Eq, PartialEq)]
 pub struct JsVersion {
     inner: Version,
 }
@@ -28,7 +29,7 @@ impl AsRef<Version> for JsVersion {
 }
 
 #[wasm_bindgen]
-pub struct MajorMinor(pub u64, pub u64);
+pub struct MajorMinor(pub usize, pub usize);
 
 #[wasm_bindgen]
 impl JsVersion {
@@ -43,8 +44,8 @@ impl JsVersion {
     }
 
     #[wasm_bindgen(getter)]
-    pub fn epoch(&self) -> Option<u64> {
-        self.as_ref().epoch_opt()
+    pub fn epoch(&self) -> Option<usize> {
+        self.as_ref().epoch_opt().map(|v| v as usize)
     }
 
     #[wasm_bindgen(getter)]
@@ -59,7 +60,7 @@ impl JsVersion {
 
     pub fn as_major_minor(&self) -> Option<MajorMinor> {
         let (major, minor) = self.as_ref().as_major_minor()?;
-        Some(MajorMinor(major, minor))
+        Some(MajorMinor(major as _, minor as _))
     }
 
     pub fn starts_with(&self, other: &Self) -> bool {
@@ -83,7 +84,8 @@ impl JsVersion {
         Some(self.as_ref().with_segments(range)?.into())
     }
 
-    pub fn segment_count(&self) -> usize {
+    #[wasm_bindgen(getter)]
+    pub fn length(&self) -> usize {
         self.as_ref().segment_count()
     }
 
@@ -125,8 +127,7 @@ impl JsVersion {
         self.as_ref().with_alpha().into_owned().into()
     }
 
-    /// Returns a new version where the local segment is removed (e.g. `1.0+local` -> `1.0`)
-    pub fn remove_local(&self) -> Self {
-        self.as_ref().remove_local().into_owned().into()
+    pub fn equals(&self, other: &Self) -> bool {
+        self.as_ref() == other.as_ref()
     }
 }
