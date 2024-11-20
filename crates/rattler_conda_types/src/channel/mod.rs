@@ -9,7 +9,7 @@ use file_url::directory_path_to_url;
 use rattler_redaction::Redact;
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
-use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
+use typed_path::{Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
 
 use super::{ParsePlatformError, Platform};
@@ -215,7 +215,7 @@ impl Channel {
             }
         } else if is_path(channel) {
             #[cfg(target_arch = "wasm32")]
-            return Err(ParseChannelError::InvalidPath(path));
+            return Err(ParseChannelError::InvalidPath(channel.to_string()));
 
             #[cfg(not(target_arch = "wasm32"))]
             {
@@ -313,6 +313,7 @@ impl Channel {
     ///
     /// Panics if the path is not an absolute path or could not be
     /// canonicalized.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn from_directory(path: &Path) -> Self {
         let path = if path.is_absolute() {
             Cow::Borrowed(path)
@@ -466,15 +467,14 @@ fn absolute_path(path_str: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, Pa
     let root_dir_str = root_dir
         .to_str()
         .ok_or_else(|| ParseChannelError::NotUtf8RootDir(root_dir.to_path_buf()))?;
-    let native_root_dir = Utf8NativePathBuf::from(root_dir_str);
-
-    if !native_root_dir.is_absolute() {
+    let typed_root_dir = Utf8TypedPath::from(root_dir_str);
+    if !typed_root_dir.is_absolute() {
         return Err(ParseChannelError::NonAbsoluteRootDir(
             root_dir.to_path_buf(),
         ));
     }
 
-    Ok(native_root_dir.to_typed_path().join(path).normalize())
+    Ok(typed_root_dir.join(path).normalize())
 }
 
 #[cfg(test)]
