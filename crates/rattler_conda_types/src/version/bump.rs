@@ -160,6 +160,14 @@ impl Version {
                         {
                             *num += 1;
                         }
+                        // Change identifier to 'a' if present
+                        if let Some(iden) = segment_components
+                            .iter_mut()
+                            .filter_map(Component::as_iden_mut)
+                            .next_back()
+                        {
+                            *iden = "a".into();
+                        }
                     } else if idx <= 2 {
                         // Reset minor and patch to 0
                         if let Some(num) = segment_components
@@ -191,12 +199,20 @@ impl Version {
                 }
                 VersionBumpType::Patch => {
                     if idx == 2 {
-                        // Just increment patch version
+                        // Increment patch version
                         if let Some(num) = segment_components
                             .iter_mut()
                             .find_map(Component::as_number_mut)
                         {
                             *num += 1;
+                        }
+                        // Change identifier to 'a' if present
+                        if let Some(iden) = segment_components
+                            .iter_mut()
+                            .filter_map(Component::as_iden_mut)
+                            .next_back()
+                        {
+                            *iden = "a".into();
                         }
                     }
                 }
@@ -212,6 +228,7 @@ impl Version {
                             );
                         *last_numeral_component += 1;
 
+                        // If the segment ends with an ascii character, make it `a` instead of whatever it says
                         let last_iden_component = segment_components
                             .iter_mut()
                             .filter_map(Component::as_iden_mut)
@@ -291,6 +308,7 @@ mod test {
     #[case("1.2.3", "2.0.0")]
     #[case("0.1.0", "1.0.0")]
     #[case("1.2.3-alpha", "2.0.0-alpha")]
+    #[case("9d", "10a")]
     fn bump_major(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             Version::from_str(input)
@@ -320,11 +338,12 @@ mod test {
 
     #[rstest]
     #[case("1.1.9", "1.1.10")]
-    #[case("2.1l.5alpha", "2.1l.6alpha")]
-    #[case("5!1.8.alpha+3.4", "5!1.8.1alpha+3.4")]
+    #[case("2.1l.5alpha", "2.1l.6a")]
+    #[case("5!1.8.alpha+3.4", "5!1.8.1a+3.4")]
     #[case("1.2.3", "1.2.4")]
     #[case("1.2.9", "1.2.10")]
     #[case("0.1.0", "0.1.1")]
+    #[case("1.1.1e", "1.1.2a")]
     fn bump_patch(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             Version::from_str(input)
