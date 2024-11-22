@@ -98,8 +98,8 @@ class GCSMiddleware:
     """
     Middleware to work with gcs:// URLs
 
-    Example:
-    ----
+    Examples
+    --------
     ```python
     >>> from rattler.networking import Client
     >>> middleware = GCSMiddleware()
