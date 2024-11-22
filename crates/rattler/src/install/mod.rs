@@ -264,6 +264,7 @@ pub async fn link_package_from_archive(
     options: InstallOptions,
 ) -> Result<Vec<PathsEntry>, InstallError> {
     let temp_dir = tempfile::tempdir().map_err(InstallError::FailedToCreateTempDirectory)?;
+    tracing::debug!("extracting {} to temporary directory {}", package_path.display(), temp_dir.path().display());
 
     extract(package_path, temp_dir.path()).map_err(InstallError::FailedToExtractPackage)?;
     link_package(temp_dir.path(), target_dir, driver, options).await
