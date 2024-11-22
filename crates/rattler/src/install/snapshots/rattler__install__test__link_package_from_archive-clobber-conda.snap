@@ -1,0 +1,11 @@
+---
+source: crates/rattler/src/install/mod.rs
+assertion_line: 937
+expression: paths
+snapshot_kind: text
+---
+- _path: bin/python
+  path_type: hardlink
+  sha256: 9e13091076809d9c845dc484b21ae2ba965895705d7fec77dd51ec3af7e26e31
+  sha256_in_prefix: 9e13091076809d9c845dc484b21ae2ba965895705d7fec77dd51ec3af7e26e31
+  size_in_bytes: 8
