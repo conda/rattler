@@ -101,10 +101,10 @@ class GCSMiddleware:
     Example:
     ----
     ```python
-    >>> from rattler.networking import GcsMiddleware
-    >>> middleware = GcsMiddleware()
+    >>> from rattler.networking import Client
+    >>> middleware = GCSMiddleware()
     >>> middleware
-    GcsMiddleware()
+    GCSMiddleware()
     >>> Client([middleware])
     Client()
     """
