@@ -1,7 +1,7 @@
 import { JsVersion } from "../pkg";
 
 export class Version {
-    private native: JsVersion;
+    native: JsVersion;
 
     /**
      * Constructs a new Version object from a string representation.

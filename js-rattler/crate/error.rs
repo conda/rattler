@@ -1,4 +1,5 @@
 use rattler_conda_types::{ParseVersionError, VersionBumpError, VersionExtendError};
+use rattler_conda_types::version_spec::ParseVersionSpecError;
 use thiserror::Error;
 use wasm_bindgen::JsValue;
 
@@ -10,6 +11,9 @@ pub enum JsError {
     VersionExtendError(#[from] VersionExtendError),
     #[error(transparent)]
     VersionBumpError(#[from] VersionBumpError),
+
+    #[error(transparent)]
+    ParseVersionSpecError(#[from] ParseVersionSpecError),
 }
 
 pub type JsResult<T> = Result<T, JsError>;
@@ -24,6 +28,9 @@ impl From<JsError> for JsValue {
                 JsValue::from_str(&error.to_string())
             }
             JsError::VersionBumpError(error) => {
+                JsValue::from_str(&error.to_string())
+            }
+            JsError::ParseVersionSpecError(error) => {
                 JsValue::from_str(&error.to_string())
             }
         }
