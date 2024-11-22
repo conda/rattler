@@ -1,8 +1,7 @@
 use std::{future::IntoFuture, sync::Arc};
 
 use futures::FutureExt;
-use rattler_cache::package_cache::CacheKey;
-use rattler_cache::package_cache::{PackageCache, PackageCacheError};
+use rattler_cache::package_cache::{CacheKey, PackageCache, PackageCacheError};
 use rattler_conda_types::{
     package::{ArchiveIdentifier, IndexJson, PackageFile},
     ConvertSubdirError, PackageRecord, RepoDataRecord,
@@ -91,8 +90,7 @@ impl DirectUrlQuery {
             // File name is the same as the url.
             file_name: self.url.clone().to_string(),
             url: self.url.clone(),
-            // Fake channel as it is unused in this case.
-            channel: "".to_string(),
+            channel: None,
         }]))
     }
 }

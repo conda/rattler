@@ -159,9 +159,23 @@ pub async fn extract_conda(
             if (zip_error.contains(DATA_DESCRIPTOR_ERROR_MESSAGE)) =>
         {
             tracing::warn!("Failed to stream decompress conda package from '{}' due to the presence of zip data descriptors. Falling back to non streaming decompression", url);
+            if let Some(reporter) = &reporter {
+                reporter.on_download_complete();
+            }
             let new_reader =
                 get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
-            crate::tokio::async_read::extract_conda_via_buffering(new_reader, destination).await
+
+            match crate::tokio::async_read::extract_conda_via_buffering(new_reader, destination)
+                .await
+            {
+                Ok(result) => {
+                    if let Some(reporter) = &reporter {
+                        reporter.on_download_complete();
+                    }
+                    Ok(result)
+                }
+                Err(e) => Err(e),
+            }
         }
         Err(e) => Err(e),
     }

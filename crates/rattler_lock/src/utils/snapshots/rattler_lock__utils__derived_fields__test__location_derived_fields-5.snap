@@ -1,0 +1,20 @@
+---
+source: crates/rattler_lock/src/utils/derived_fields.rs
+expression: fields
+---
+LocationDerivedFields {
+    file_name: Some(
+        "package-1.0.0-0.tar.bz2",
+    ),
+    name: Some(
+        "package",
+    ),
+    version: Some(
+        "1.0.0",
+    ),
+    build: Some(
+        "0",
+    ),
+    subdir: None,
+    channel: None,
+}

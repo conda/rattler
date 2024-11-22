@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.1...rattler_conda_types-v0.29.2) - 2024-11-18
+
+### Added
+
+- channel is serialized without trailing slash ([#948](https://github.com/conda/rattler/pull/948))
+
+### Other
+
+- allow `ChannelUrl` in `Channel::from_url` interface ([#944](https://github.com/conda/rattler/pull/944))
+
+## [0.29.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.0...rattler_conda_types-v0.29.1) - 2024-11-14
+
+### Other
+
+- enable using sharded repodata for custom channels ([#910](https://github.com/conda/rattler/pull/910))
+
 ## [0.29.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.28.3...rattler_conda_types-v0.29.0) - 2024-11-04
 
 ### Added

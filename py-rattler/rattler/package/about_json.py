@@ -103,10 +103,17 @@ class AboutJson:
         >>> about = AboutJson.from_path("../test-data/dummy-about.json")
         >>> about.channels
         ['https://conda.anaconda.org/conda-forge']
+        >>> about.channels = ['https://test.channel']
+        >>> about.channels
+        ['https://test.channel']
         >>>
         ```
         """
         return self._inner.channels
+
+    @channels.setter
+    def channels(self, value: List[str]) -> None:
+        self._inner.channels = value
 
     @property
     def description(self) -> Optional[str]:
@@ -119,6 +126,9 @@ class AboutJson:
         >>> about = AboutJson.from_path("../test-data/dummy-about.json")
         >>> about.description
         'A dummy description.'
+        >>> about.description = 'New description'
+        >>> about.description
+        'New description'
         >>>
         ```
         """
@@ -126,6 +136,10 @@ class AboutJson:
             return description
 
         return None
+
+    @description.setter
+    def description(self, value: Optional[str]) -> None:
+        self._inner.description = value
 
     @property
     def dev_url(self) -> List[str]:
@@ -138,10 +152,17 @@ class AboutJson:
         >>> about = AboutJson.from_path("../test-data/dummy-about.json")
         >>> about.dev_url
         ['https://github.com/conda/rattler']
+        >>> about.dev_url = ['https://test.dev']
+        >>> about.dev_url
+        ['https://test.dev/']
         >>>
         ```
         """
         return self._inner.dev_url
+
+    @dev_url.setter
+    def dev_url(self, value: List[str]) -> None:
+        self._inner.dev_url = value
 
     @property
     def doc_url(self) -> List[str]:
@@ -154,10 +175,17 @@ class AboutJson:
         >>> about = AboutJson.from_path("../test-data/dummy-about.json")
         >>> about.doc_url
         ['https://conda.github.io/rattler/py-rattler/']
+        >>> about.doc_url = ['https://test.docs']
+        >>> about.doc_url
+        ['https://test.docs/']
         >>>
         ```
         """
         return self._inner.doc_url
+
+    @doc_url.setter
+    def doc_url(self, value: List[str]) -> None:
+        self._inner.doc_url = value
 
     @property
     def home(self) -> List[str]:
@@ -170,10 +198,17 @@ class AboutJson:
         >>> about = AboutJson.from_path("../test-data/dummy-about.json")
         >>> about.home
         ['http://github.com/conda/rattler']
+        >>> about.home = ['https://test.home']
+        >>> about.home
+        ['https://test.home/']
         >>>
         ```
         """
         return self._inner.home
+
+    @home.setter
+    def home(self, value: List[str]) -> None:
+        self._inner.home = value
 
     @property
     def license(self) -> Optional[str]:
@@ -186,6 +221,9 @@ class AboutJson:
         >>> about = AboutJson.from_path("../test-data/dummy-about.json")
         >>> about.license
         'BSD-3-Clause'
+        >>> about.license = 'MIT'
+        >>> about.license
+        'MIT'
         >>>
         ```
         """
@@ -193,6 +231,10 @@ class AboutJson:
             return license
 
         return None
+
+    @license.setter
+    def license(self, value: Optional[str]) -> None:
+        self._inner.license = value
 
     @property
     def license_family(self) -> Optional[str]:
@@ -206,6 +248,9 @@ class AboutJson:
         >>> about.license_family
         >>> type(about.license_family)
         <class 'NoneType'>
+        >>> about.license_family = 'BSD'
+        >>> about.license_family
+        'BSD'
         >>>
         ```
         """
@@ -213,6 +258,10 @@ class AboutJson:
             return license_family
 
         return None
+
+    @license_family.setter
+    def license_family(self, value: Optional[str]) -> None:
+        self._inner.license_family = value
 
     @property
     def source_url(self) -> Optional[str]:
@@ -225,6 +274,9 @@ class AboutJson:
         >>> about = AboutJson.from_path("../test-data/dummy-about.json")
         >>> about.source_url
         'https://github.com/conda/rattler'
+        >>> about.source_url = 'https://test.source'
+        >>> about.source_url
+        'https://test.source/'
         >>>
         ```
         """
@@ -232,6 +284,10 @@ class AboutJson:
             return source_url
 
         return None
+
+    @source_url.setter
+    def source_url(self, value: Optional[str]) -> None:
+        self._inner.source_url = value
 
     @property
     def summary(self) -> Optional[str]:
@@ -244,6 +300,9 @@ class AboutJson:
         >>> about = AboutJson.from_path("../test-data/dummy-about.json")
         >>> about.summary
         'A dummy summary.'
+        >>> about.summary = 'New summary'
+        >>> about.summary
+        'New summary'
         >>>
         ```
         """
@@ -251,6 +310,10 @@ class AboutJson:
             return summary
 
         return None
+
+    @summary.setter
+    def summary(self, value: Optional[str]) -> None:
+        self._inner.summary = value
 
     @classmethod
     def _from_py_about_json(cls, py_about_json: PyAboutJson) -> AboutJson:

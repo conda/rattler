@@ -676,7 +676,7 @@ mod tests {
             ),
             file_name: String::from("mamba-1.0-py37_0"),
             url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
-            channel: String::from("mamba"),
+            channel: Some(String::from("mamba")),
         };
         let package_record = repodata_record.clone().package_record;
 

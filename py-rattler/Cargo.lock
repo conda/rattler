@@ -1805,7 +1805,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -2143,6 +2143,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
+name = "ordered-float"
+version = "2.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68f19d67e5a2795c94e73e0bb1cc1a7edeb2e28efd39e2e1c9b7a40c1108b11c"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "ordered-stream"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2472,6 +2481,7 @@ dependencies = [
  "pyo3",
  "pyo3-async-runtimes",
  "pyo3-build-config",
+ "pyo3-file",
  "rattler",
  "rattler_conda_types",
  "rattler_digest",
@@ -2542,6 +2552,15 @@ checksum = "94845622d88ae274d2729fcefc850e63d7a3ddff5e3ce11bd88486db9f1d357d"
 dependencies = [
  "libc",
  "pyo3-build-config",
+]
+
+[[package]]
+name = "pyo3-file"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "488563e2317157edd6e12c3ef23e10363bd079bf8630e3de719e368b4eb02a21"
+dependencies = [
+ "pyo3",
 ]
 
 [[package]]
@@ -2674,7 +2693,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.28.0"
+version = "0.28.1"
 dependencies = [
  "anyhow",
  "console",
@@ -2712,7 +2731,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -2738,7 +2757,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.29.0"
+version = "0.29.1"
 dependencies = [
  "chrono",
  "dirs",
@@ -2787,7 +2806,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.34"
+version = "0.19.35"
 dependencies = [
  "fs-err 3.0.0",
  "rattler_conda_types",
@@ -2800,7 +2819,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.22.29"
+version = "0.22.30"
 dependencies = [
  "chrono",
  "file_url",
@@ -2812,10 +2831,12 @@ dependencies = [
  "rattler_conda_types",
  "rattler_digest",
  "serde",
+ "serde-value",
  "serde_repr",
  "serde_with",
  "serde_yaml",
  "thiserror",
+ "typed-path",
  "url",
 ]
 
@@ -2855,7 +2876,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.11"
+version = "0.22.12"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2890,7 +2911,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.21.19"
+version = "0.21.21"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2943,9 +2964,10 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.22.5"
+version = "0.22.6"
 dependencies = [
  "enum_dispatch",
+ "fs-err 3.0.0",
  "indexmap 2.6.0",
  "itertools 0.13.0",
  "rattler_conda_types",
@@ -2958,7 +2980,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.2.0"
+version = "1.2.2"
 dependencies = [
  "chrono",
  "futures",
@@ -2974,7 +2996,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "1.1.8"
+version = "1.1.9"
 dependencies = [
  "archspec",
  "libloading",
@@ -3370,6 +3392,16 @@ dependencies = [
  "erased-serde",
  "serde",
  "typeid",
+]
+
+[[package]]
+name = "serde-value"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3a1a3341211875ef120e117ea7fd5228530ae7e7036a779fdc9117be6b3282c"
+dependencies = [
+ "ordered-float",
+ "serde",
 ]
 
 [[package]]
@@ -4223,7 +4255,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

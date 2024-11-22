@@ -9,6 +9,7 @@ mod remote_subdir;
 mod repo_data;
 mod sharded_subdir;
 mod subdir;
+mod subdir_builder;
 
 use std::{
     collections::HashSet,
@@ -21,19 +22,17 @@ pub use builder::GatewayBuilder;
 pub use channel_config::{ChannelConfig, SourceConfig};
 use dashmap::{mapref::entry::Entry, DashMap};
 pub use error::GatewayError;
-use file_url::url_to_path;
-use local_subdir::LocalSubdirClient;
 pub use query::{NamesQuery, RepoDataQuery};
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, MatchSpec, Platform};
 pub use repo_data::RepoData;
 use reqwest_middleware::ClientWithMiddleware;
-use subdir::{Subdir, SubdirData};
+use subdir::Subdir;
 use tokio::sync::broadcast;
 use tracing::instrument;
 use url::Url;
 
-use crate::{fetch::FetchRepoDataError, gateway::error::SubdirNotFoundError, Reporter};
+use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 
 /// Central access point for high level queries about
 /// [`rattler_conda_types::RepoDataRecord`]s from different channels.
@@ -143,7 +142,7 @@ impl Gateway {
     /// This method does not clear any on-disk cache.
     pub fn clear_repodata_cache(&self, channel: &Channel, subdirs: SubdirSelection) {
         self.inner.subdirs.retain(|key, _| {
-            key.0.base_url() != channel.base_url() || !subdirs.contains(key.1.as_str())
+            key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str())
         });
     }
 }
@@ -177,7 +176,7 @@ impl GatewayInner {
     /// coalesced, and they will all receive the same subdir. If an error
     /// occurs while creating the subdir all waiting tasks will also return an
     /// error.
-    #[instrument(skip(self, reporter), err)]
+    #[instrument(skip(self, reporter, channel), fields(channel = %channel.base_url), err)]
     async fn get_or_create_subdir(
         &self,
         channel: &Channel,
@@ -271,76 +270,9 @@ impl GatewayInner {
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Subdir, GatewayError> {
-        let url = channel.platform_url(platform);
-        let subdir_data = if url.scheme() == "file" {
-            if let Some(path) = url_to_path(&url) {
-                LocalSubdirClient::from_channel_subdir(
-                    &path.join("repodata.json"),
-                    channel.clone(),
-                    platform.as_str(),
-                )
-                .await
-                .map(SubdirData::from_client)
-            } else {
-                return Err(GatewayError::UnsupportedUrl(
-                    "unsupported file based url".to_string(),
-                ));
-            }
-        } else if supports_sharded_repodata(&url) {
-            sharded_subdir::ShardedSubdir::new(
-                channel.clone(),
-                platform.to_string(),
-                self.client.clone(),
-                self.cache.clone(),
-                self.concurrent_requests_semaphore.clone(),
-                reporter.as_deref(),
-            )
+        SubdirBuilder::new(self, channel.clone(), platform, reporter)
+            .build()
             .await
-            .map(SubdirData::from_client)
-        } else if url.scheme() == "http"
-            || url.scheme() == "https"
-            || url.scheme() == "gcs"
-            || url.scheme() == "oci"
-        {
-            remote_subdir::RemoteSubdirClient::new(
-                channel.clone(),
-                platform,
-                self.client.clone(),
-                self.cache.clone(),
-                self.channel_config.get(channel).clone(),
-                reporter,
-            )
-            .await
-            .map(SubdirData::from_client)
-        } else {
-            return Err(GatewayError::UnsupportedUrl(format!(
-                "'{}' is not a supported scheme",
-                url.scheme()
-            )));
-        };
-
-        match subdir_data {
-            Ok(client) => Ok(Subdir::Found(client)),
-            Err(GatewayError::SubdirNotFoundError(err)) if platform != Platform::NoArch => {
-                // If the subdir was not found and the platform is not `noarch` we assume its
-                // just empty.
-                tracing::info!(
-                    "subdir {} of channel {} was not found, ignoring",
-                    err.subdir,
-                    err.channel.canonical_name()
-                );
-                Ok(Subdir::NotFound)
-            }
-            Err(GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(err))) => {
-                Err(SubdirNotFoundError {
-                    subdir: platform.to_string(),
-                    channel: channel.clone(),
-                    source: err.into(),
-                }
-                .into())
-            }
-            Err(err) => Err(err),
-        }
     }
 }
 
@@ -351,9 +283,9 @@ enum PendingOrFetched<T> {
     Fetched(T),
 }
 
-fn supports_sharded_repodata(url: &Url) -> bool {
-    (url.scheme() == "http" || url.scheme() == "https")
-        && (url.host_str() == Some("fast.prefiks.dev") || url.host_str() == Some("fast.prefix.dev"))
+fn force_sharded_repodata(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https")
+        && matches!(url.host_str(), Some("fast.prefiks.dev" | "fast.prefix.dev"))
 }
 
 #[cfg(test)]

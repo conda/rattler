@@ -1,6 +1,3 @@
-use std::borrow::Cow;
-use url::Url;
-
 /// Parses the schema part of the human-readable channel. Returns the scheme part if it exists.
 pub(crate) fn parse_scheme(channel: &str) -> Option<&str> {
     let scheme_end = channel.find("://")?;
@@ -23,16 +20,5 @@ pub(crate) fn parse_scheme(channel: &str) -> Option<&str> {
         Some(scheme_part)
     } else {
         None
-    }
-}
-
-pub(crate) fn add_trailing_slash(url: &Url) -> Cow<'_, Url> {
-    let path = url.path();
-    if path.ends_with('/') {
-        Cow::Borrowed(url)
-    } else {
-        let mut url = url.clone();
-        url.set_path(&format!("{path}/"));
-        Cow::Owned(url)
     }
 }

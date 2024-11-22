@@ -17,6 +17,7 @@ use itertools::Itertools;
 use rattler_conda_types::{
     compute_package_url, Channel, ChannelInfo, PackageName, PackageRecord, RepoDataRecord,
 };
+use rattler_redaction::Redact;
 use serde::{
     de::{Error, MapAccess, Visitor},
     Deserialize, Deserializer,
@@ -294,7 +295,7 @@ fn parse_records<'i>(
     subdir: &str,
     patch_function: Option<fn(&mut PackageRecord)>,
 ) -> io::Result<Vec<RepoDataRecord>> {
-    let channel_name = channel.canonical_name();
+    let channel_name = channel.base_url.clone();
 
     let package_indices =
         packages.equal_range_by(|(package, _)| package.package.cmp(package_name.as_normalized()));
@@ -309,12 +310,13 @@ fn parse_records<'i>(
             url: compute_package_url(
                 &channel
                     .base_url
+                    .url()
                     .join(&format!("{}/", &package_record.subdir))
                     .expect("failed determine repo_base_url"),
                 base_url,
                 key.filename,
             ),
-            channel: channel_name.clone(),
+            channel: Some(channel_name.url().clone().redact().to_string()),
             package_record,
             file_name: key.filename.to_owned(),
         });
@@ -477,13 +479,13 @@ mod test {
     use std::path::{Path, PathBuf};
 
     use bytes::Bytes;
+    use fs_err as fs;
     use itertools::Itertools;
     use rattler_conda_types::{Channel, ChannelConfig, PackageName, RepoData, RepoDataRecord};
     use rstest::rstest;
 
     use super::{load_repo_data_recursively, PackageFilename, SparseRepoData};
     use crate::utils::test::fetch_repo_data;
-    use fs_err as fs;
 
     fn test_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")

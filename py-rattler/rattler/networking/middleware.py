@@ -1,5 +1,5 @@
 from __future__ import annotations
-from rattler.rattler import PyMirrorMiddleware, PyAuthenticationMiddleware
+from rattler.rattler import PyMirrorMiddleware, PyAuthenticationMiddleware, PyOciMiddleware
 
 
 class MirrorMiddleware:
@@ -41,6 +41,10 @@ class MirrorMiddleware:
 
 
 class AuthenticationMiddleware:
+    """
+    Middleware to handle authentication from keychain
+    """
+
     def __init__(self) -> None:
         self._middleware = PyAuthenticationMiddleware()
 
@@ -55,6 +59,33 @@ class AuthenticationMiddleware:
         >>> middleware = AuthenticationMiddleware()
         >>> middleware
         AuthenticationMiddleware()
+        >>> Client([middleware])
+        Client()
+        >>>
+        ```
+        """
+        return f"{type(self).__name__}()"
+
+
+class OciMiddleware:
+    """
+    Middleware to handle `oci://` URLs
+    """
+
+    def __init__(self) -> None:
+        self._middleware = PyOciMiddleware()
+
+    def __repr__(self) -> str:
+        """
+        Returns a representation of the Middleware
+
+        Examples
+        --------
+        ```python
+        >>> from rattler.networking import Client
+        >>> middleware = OciMiddleware()
+        >>> middleware
+        OciMiddleware()
         >>> Client([middleware])
         Client()
         >>>

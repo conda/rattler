@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.31](https://github.com/conda/rattler/compare/rattler_lock-v0.22.30...rattler_lock-v0.22.31) - 2024-11-18
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.22.30](https://github.com/conda/rattler/compare/rattler_lock-v0.22.29...rattler_lock-v0.22.30) - 2024-11-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [0.22.29](https://github.com/conda/rattler/compare/rattler_lock-v0.22.28...rattler_lock-v0.22.29) - 2024-11-04
 
 ### Added

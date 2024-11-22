@@ -61,7 +61,7 @@ use simple_spawn_blocking::Cancelled;
 use tokio::task::JoinError;
 use tracing::instrument;
 pub use transaction::{Transaction, TransactionError, TransactionOperation};
-pub use unlink::unlink_package;
+pub use unlink::{empty_trash, unlink_package};
 
 use crate::install::entry_point::{
     create_unix_python_entry_point, create_windows_python_entry_point,
@@ -791,7 +791,7 @@ mod test {
         };
 
         test_install_python(
-            packages.filter_map(|p| Some(p.as_conda()?.url().clone())),
+            packages.filter_map(|p| p.as_conda()?.location().as_url().cloned()),
             "conda-lock",
             current_platform,
         )
