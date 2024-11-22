@@ -907,14 +907,8 @@ mod test {
     }
 
     #[rstest::rstest]
-    #[case(
-        "clobber-tar-bz2",
-        "clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2",
-    )]
-    #[case(
-        "clobber-conda",
-        "clobber/clobber-python-0.1.0-cpython.conda",
-    )]
+    #[case("clobber-tar-bz2", "clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2")]
+    #[case("clobber-conda", "clobber/clobber-python-0.1.0-cpython.conda")]
     #[tracing_test::traced_test]
     #[tokio::test]
     async fn test_link_package_from_archive(#[case] package: &str, #[case] package_path: &str) {
