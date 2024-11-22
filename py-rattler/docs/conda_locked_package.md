@@ -1,0 +1,3 @@
+# CondaLockedPackage
+
+::: rattler.lock.CondaLockedPackage

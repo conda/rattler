@@ -674,6 +674,7 @@ class PackageRecord:
         >>> record.sha256 is None
         True
         >>>
+        ````
         """
         return self._record.sha256
 
