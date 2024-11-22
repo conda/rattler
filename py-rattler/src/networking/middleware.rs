@@ -1,7 +1,7 @@
 use pyo3::{pyclass, pymethods, FromPyObject, PyResult};
 use rattler_networking::{
-    mirror_middleware::Mirror, AuthenticationMiddleware, AuthenticationStorage, MirrorMiddleware,
-    OciMiddleware,
+    mirror_middleware::Mirror, AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware,
+    MirrorMiddleware, OciMiddleware,
 };
 use std::collections::HashMap;
 use url::Url;
@@ -13,6 +13,7 @@ pub enum PyMiddleware {
     Mirror(PyMirrorMiddleware),
     Authentication(PyAuthenticationMiddleware),
     Oci(PyOciMiddleware),
+    Gcs(PyGCSMiddleware),
 }
 
 #[pyclass]
@@ -91,5 +92,24 @@ impl PyOciMiddleware {
 impl From<PyOciMiddleware> for OciMiddleware {
     fn from(_value: PyOciMiddleware) -> Self {
         OciMiddleware
+    }
+}
+
+#[pyclass]
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct PyGCSMiddleware {}
+
+#[pymethods]
+impl PyGCSMiddleware {
+    #[new]
+    pub fn __init__() -> Self {
+        Self {}
+    }
+}
+
+impl From<PyGCSMiddleware> for GCSMiddleware {
+    fn from(_value: PyGCSMiddleware) -> Self {
+        GCSMiddleware
     }
 }

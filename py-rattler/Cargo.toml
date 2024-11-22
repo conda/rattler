@@ -11,8 +11,15 @@ crate-type = ["cdylib"]
 
 [features]
 default = ["rustls-tls"]
-native-tls = ["rattler_networking/native-tls", "rattler_repodata_gateway/native-tls"]
-rustls-tls = ["rattler_networking/rustls-tls", "rattler_repodata_gateway/rustls-tls", "reqwest/rustls-tls-native-roots",]
+native-tls = [
+    "rattler_networking/native-tls",
+    "rattler_repodata_gateway/native-tls",
+]
+rustls-tls = [
+    "rattler_networking/rustls-tls",
+    "rattler_repodata_gateway/rustls-tls",
+    "reqwest/rustls-tls-native-roots",
+]
 vendored-openssl = ["openssl", "openssl/vendored"]
 
 [dependencies]
@@ -20,14 +27,18 @@ anyhow = "1.0.92"
 chrono = { version = "0.4" }
 futures = "0.3.31"
 
-rattler = { path = "../crates/rattler", default-features = false, features = ["indicatif"] }
+rattler = { path = "../crates/rattler", default-features = false, features = [
+    "indicatif",
+] }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false, features = [
     "sparse",
     "gateway",
 ] }
 rattler_conda_types = { path = "../crates/rattler_conda_types", default-features = false }
 rattler_digest = { path = "../crates/rattler_digest" }
-rattler_networking = { path = "../crates/rattler_networking", default-features = false }
+rattler_networking = { path = "../crates/rattler_networking", default-features = false, features = [
+    "gcs",
+] }
 rattler_shell = { path = "../crates/rattler_shell", default-features = false }
 rattler_virtual_packages = { path = "../crates/rattler_virtual_packages", default-features = false }
 rattler_solve = { path = "../crates/rattler_solve", default-features = false, features = [
@@ -41,7 +52,7 @@ pyo3 = { version = "0.22.5", features = [
     "extension-module",
     "multiple-pymethods",
     "chrono",
-    "gil-refs"
+    "gil-refs",
 ] }
 pyo3-async-runtimes = { version = "0.22.0", features = ["tokio-runtime"] }
 tokio = { version = "1.41" }

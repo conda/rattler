@@ -68,10 +68,16 @@ pillow = ">=9.4.0"
 docs = { cmd = "mkdocs serve" }
 build-docs = { cmd = "mkdocs build" }
 
+[feature.repl.dependencies]
+ipython = ">=8.29.0,<9"
+[feature.repl.tasks]
+repl = { depends-on = ["build"], cmd = "ipython" }
+
 [environments]
 #build = { features = ["build"], solve-group = "default" }
 test = { features = ["build", "test"], solve-group = "default" }
 docs = ["docs"]
+repl = ["repl"]
 
 [dependencies]
 requests = ">=2.32.3,<2.33"
