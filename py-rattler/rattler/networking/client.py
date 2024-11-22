@@ -1,6 +1,6 @@
 from __future__ import annotations
 from rattler.rattler import PyClientWithMiddleware
-from rattler.networking.middleware import AuthenticationMiddleware, MirrorMiddleware, OciMiddleware
+from rattler.networking.middleware import AuthenticationMiddleware, MirrorMiddleware, OciMiddleware, GCSMiddleware
 
 
 class Client:
@@ -9,7 +9,7 @@ class Client:
     """
 
     def __init__(
-        self, middlewares: list[AuthenticationMiddleware | MirrorMiddleware | OciMiddleware] | None = None
+        self, middlewares: list[AuthenticationMiddleware | MirrorMiddleware | OciMiddleware | GCSMiddleware] | None = None
     ) -> None:
         self._client = PyClientWithMiddleware(
             [middleware._middleware for middleware in middlewares] if middlewares else None

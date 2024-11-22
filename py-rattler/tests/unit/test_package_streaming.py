@@ -65,5 +65,5 @@ async def test_download_from_oci(tmpdir: Path) -> None:
     assert (dest / "site-packages/boltons-24.0.0.dist-info").exists()
 
 
-def test_instantiate_gcs_moddlware() -> None:
+def test_instantiate_gcs_middleware() -> None:
     _client = Client([GCSMiddleware()])
