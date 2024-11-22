@@ -1,5 +1,5 @@
 from __future__ import annotations
-from rattler.rattler import PyMirrorMiddleware, PyAuthenticationMiddleware, PyOciMiddleware
+from rattler.rattler import PyMirrorMiddleware, PyAuthenticationMiddleware, PyOciMiddleware, PyGCSMiddleware
 
 
 class MirrorMiddleware:
@@ -91,4 +91,26 @@ class OciMiddleware:
         >>>
         ```
         """
+        return f"{type(self).__name__}()"
+
+
+class GcsMiddleware:
+    """
+    Middleware to work with gcs:// URLs
+
+    Example:
+    ----
+    ```python
+    >>> from rattler.networking import GcsMiddleware
+    >>> middleware = GcsMiddleware()
+    >>> middleware
+    GcsMiddleware()
+    >>> Client([middleware])
+    Client()
+    """
+
+    def __init__(self):
+        self._middleware = PyGCSMiddleware()
+
+    def __repr__(self):
         return f"{type(self).__name__}()"
