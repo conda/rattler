@@ -94,7 +94,7 @@ class OciMiddleware:
         return f"{type(self).__name__}()"
 
 
-class GcsMiddleware:
+class GCSMiddleware:
     """
     Middleware to work with gcs:// URLs
 

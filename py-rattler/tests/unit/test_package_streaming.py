@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from rattler.networking.middleware import MirrorMiddleware, OciMiddleware
+from rattler.networking.middleware import MirrorMiddleware, OciMiddleware, GCSMiddleware
 from rattler.package_streaming import extract, download_and_extract
 from rattler.networking.client import Client
 
@@ -63,3 +63,7 @@ async def test_download_from_oci(tmpdir: Path) -> None:
     assert (dest / "info" / "index.json").exists()
     assert (dest / "info" / "paths.json").exists()
     assert (dest / "site-packages/boltons-24.0.0.dist-info").exists()
+
+
+def test_instantiate_gcs_moddlware() -> None:
+    _client = Client([GCSMiddleware()])
