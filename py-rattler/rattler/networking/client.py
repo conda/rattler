@@ -9,7 +9,8 @@ class Client:
     """
 
     def __init__(
-        self, middlewares: list[AuthenticationMiddleware | MirrorMiddleware | OciMiddleware | GCSMiddleware] | None = None
+        self,
+        middlewares: list[AuthenticationMiddleware | MirrorMiddleware | OciMiddleware | GCSMiddleware] | None = None,
     ) -> None:
         self._client = PyClientWithMiddleware(
             [middleware._middleware for middleware in middlewares] if middlewares else None
