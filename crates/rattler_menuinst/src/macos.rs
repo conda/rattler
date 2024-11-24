@@ -445,13 +445,6 @@ impl MacOSMenu {
             );
         }
 
-        // if let Some(supports) = self.item.ns_supports_automatic_graphics_switching {
-        //     pl.insert(
-        //         "NSSupportsAutomaticGraphicsSwitching".into(),
-        //         Value::Boolean(supports),
-        //     );
-        // }
-
         if let Some(ut_exported_type_declarations) = &self.item.ut_exported_type_declarations {
             let mut type_array = Vec::new();
             for ut_type in ut_exported_type_declarations {
@@ -646,40 +639,6 @@ impl MacOSMenu {
         Ok(Some(script_path))
     }
 
-    /// Find the launcher in the menuinst data path
-    fn find_launcher(&self) -> Result<PathBuf, MenuInstError> {
-        let launcher_name = format!("osx_launcher_{}", std::env::consts::ARCH);
-        for datapath in utils::menuinst_data_paths(&self.prefix) {
-            let launcher_path = datapath.join(&launcher_name);
-            if launcher_path.is_file()
-                && launcher_path.metadata()?.permissions().mode() & 0o111 != 0
-            {
-                return Ok(launcher_path);
-            }
-        }
-        Err(MenuInstError::InstallError(format!(
-            "Could not find executable launcher for {}",
-            std::env::consts::ARCH
-        )))
-    }
-
-    /// Find the appkit launcher in the menuinst data path
-    fn find_appkit_launcher(&self) -> Result<PathBuf, MenuInstError> {
-        let launcher_name = format!("appkit_launcher_{}", std::env::consts::ARCH);
-        for datapath in utils::menuinst_data_paths(&self.prefix) {
-            let launcher_path = datapath.join(&launcher_name);
-            if launcher_path.is_file()
-                && launcher_path.metadata()?.permissions().mode() & 0o111 != 0
-            {
-                return Ok(launcher_path);
-            }
-        }
-        Err(MenuInstError::InstallError(format!(
-            "Could not find executable appkit launcher for {}",
-            std::env::consts::ARCH
-        )))
-    }
-
     fn default_appkit_launcher_path(&self) -> PathBuf {
         let name = slugify(&self.name);
         self.directories.location.join("Contents/MacOS").join(&name)
@@ -766,6 +725,17 @@ pub(crate) fn install_menu_item(
 ) -> Result<(), MenuInstError> {
     let menu = MacOSMenu::new(prefix, macos_item, command, menu_mode, placeholders);
     menu.install()
+}
+
+pub(crate) fn remove_menu_item(
+    prefix: &Path,
+    macos_item: MacOS,
+    command: MenuItemCommand,
+    placeholders: &BaseMenuItemPlaceholders,
+    menu_mode: MenuMode,
+) -> Result<Vec<PathBuf>, MenuInstError> {
+    let menu = MacOSMenu::new(prefix, macos_item, command, menu_mode, placeholders);
+    menu.remove()
 }
 
 #[cfg(test)]

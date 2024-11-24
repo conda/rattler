@@ -12,7 +12,7 @@ use rattler_shell::shell;
 
 use crate::render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString};
 use crate::slugify;
-use crate::util::run_pre_create_command;
+use crate::util::{log_output, run_pre_create_command};
 use crate::{
     schema::{Linux, MenuItemCommand},
     MenuInstError, MenuMode,
@@ -29,6 +29,7 @@ pub struct LinuxMenu {
 }
 
 /// Directories used on Linux for menu items
+#[allow(unused)]
 pub struct Directories {
     /// The name of the (parent) menu (in the json defined as `menu_name`)
     pub menu_name: String,
@@ -367,25 +368,24 @@ impl LinuxMenu {
                         mime_types.join(", "),
                         self.name
                     );
-                    tracing::info!(
-                        "xdg-mime stdout output: {}",
-                        String::from_utf8_lossy(&output.stdout)
-                    );
-                    tracing::info!(
-                        "xdg-mime stderr output: {}",
-                        String::from_utf8_lossy(&output.stderr)
-                    );
+                    log_output("xdg-mime", output);
                 }
             } else {
                 tracing::debug!("xdg-mime not found, not registering mime types as default.");
             }
         }
 
-        // if let Some(update_mime_database) = which::which("update-mime-database").ok() {
-        //     let mut command = Command::new(update_mime_database);
-        //     command.arg("-V").arg(self.menu.data_directory.join("mime"));
-        //     self.logged_run(&mut command)?;
-        // }
+        if let Some(update_mime_database) = which::which("update-mime-database").ok() {
+            let mut command = Command::new(update_mime_database);
+            command
+                .arg("-V")
+                .arg(self.directories.data_directory.join("mime"));
+            let output = command.output()?;
+            if !output.status.success() {
+                tracing::warn!("Could not update mime database");
+                log_output("update-mime-database", output);
+            }
+        }
 
         Ok(())
     }
@@ -537,6 +537,18 @@ pub fn install_menu_item(
     menu_mode: MenuMode,
 ) -> Result<(), MenuInstError> {
     let menu = LinuxMenu::new(menu_name, prefix, item, command, placeholders, menu_mode);
-    menu.install()?;
-    Ok(())
+    menu.install()
+}
+
+/// Remove a menu item on Linux.
+pub fn remove_menu_item(
+    menu_name: &str,
+    prefix: &Path,
+    item: Linux,
+    command: MenuItemCommand,
+    placeholders: &BaseMenuItemPlaceholders,
+    menu_mode: MenuMode,
+) -> Result<(), MenuInstError> {
+    let menu = LinuxMenu::new(menu_name, prefix, item, command, placeholders, menu_mode);
+    menu.remove()
 }

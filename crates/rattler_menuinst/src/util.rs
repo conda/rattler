@@ -4,6 +4,15 @@ use fs_err as fs;
 
 use crate::MenuInstError;
 
+pub fn log_output(cmd_info: &str, output: std::process::Output) {
+    tracing::info!("{}: status {}", cmd_info, output.status);
+    tracing::info!(
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 pub fn run_pre_create_command(pre_create_command: &str) -> Result<(), MenuInstError> {
     let mut temp_file = tempfile::NamedTempFile::with_suffix(".sh")?;
     temp_file.write_all(pre_create_command.as_bytes())?;
