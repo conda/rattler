@@ -89,6 +89,55 @@ pub fn install_menuitems(
     Ok(())
 }
 
+/// Remove menu items from a given schema file
+pub fn remove_menu_items(
+    file: &Path,
+    prefix: &Path,
+    base_prefix: &Path,
+    platform: Platform,
+    menu_mode: MenuMode,
+) -> Result<(), MenuInstError> {
+    let text = std::fs::read_to_string(file)?;
+    let menu_inst: MenuInstSchema = serde_json::from_str(&text)?;
+    let placeholders = BaseMenuItemPlaceholders::new(base_prefix, prefix, platform);
+
+    for item in menu_inst.menu_items {
+        if platform.is_linux() {
+            if let Some(linux_item) = item.platforms.linux {
+                let command = item.command.merge(linux_item.base);
+                linux::remove_menu_item(
+                    &menu_inst.menu_name,
+                    prefix,
+                    linux_item.specific,
+                    command,
+                    &placeholders,
+                    menu_mode,
+                )?;
+            }
+        } else if platform.is_osx() {
+            #[cfg(target_os = "macos")]
+            if let Some(macos_item) = item.platforms.osx {
+                let command = item.command.merge(macos_item.base);
+                macos::remove_menu_item(
+                    prefix,
+                    macos_item.specific,
+                    command,
+                    &placeholders,
+                    menu_mode,
+                )?;
+            }
+        } else if platform.is_windows() {
+            #[cfg(target_os = "windows")]
+            if let Some(windows_item) = item.platforms.win {
+                let command = item.command.merge(windows_item.base);
+                windows::remove_menu_item(prefix, windows_item.specific, command, menu_mode)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 pub mod test {
     use std::path::{Path, PathBuf};
