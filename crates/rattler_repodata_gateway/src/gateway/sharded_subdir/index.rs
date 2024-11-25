@@ -2,6 +2,7 @@ use std::{path::Path, str::FromStr, sync::Arc, time::SystemTime};
 
 use async_fd_lock::{LockWrite, RwLockWriteGuard};
 use bytes::Bytes;
+use fs_err::tokio as tokio_fs;
 use futures::TryFutureExt;
 use http::{HeaderMap, Method, Uri};
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike};
@@ -100,7 +101,7 @@ pub async fn fetch_index(
 
     // Make sure the cache directory exists
     if let Some(parent) = cache_path.parent() {
-        tokio::fs::create_dir_all(parent).await.map_err(|err| {
+        tokio_fs::create_dir_all(parent).await.map_err(|err| {
             GatewayError::IoError(format!("failed to create '{}'", parent.display()), err)
         })?;
     }

@@ -805,7 +805,7 @@ async fn check_valid_download_target(
     if url.scheme() == "file" {
         // If the url is a file url we can simply check if the file exists.
         let path = url.to_file_path().unwrap();
-        let exists = tokio::fs::metadata(path).await.is_ok();
+        let exists = tokio_fs::metadata(path).await.is_ok();
         tracing::debug!(
             "'{url}' seems to be {}",
             if exists { "available" } else { "unavailable" }
@@ -1021,6 +1021,7 @@ mod test {
     use crate::utils::Encoding;
     use crate::Reporter;
     use assert_matches::assert_matches;
+    use fs_err::tokio as tokio_fs;
     use hex_literal::hex;
     use rattler_networking::AuthenticationMiddleware;
     use reqwest::Client;
@@ -1038,7 +1039,7 @@ mod test {
         encoding: Encoding,
     ) -> Result<(), std::io::Error> {
         // Open the file for writing
-        let mut file = tokio::fs::File::create(destination).await.unwrap();
+        let mut file = tokio_fs::File::create(destination).await.unwrap();
 
         match encoding {
             Encoding::Passthrough => {

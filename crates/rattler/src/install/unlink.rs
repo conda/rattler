@@ -1,5 +1,6 @@
 //! Unlinking packages from an environment.
 
+use fs_err::tokio as tokio_fs;
 use std::{
     collections::HashSet,
     ffi::OsString,
@@ -115,13 +116,13 @@ pub(crate) fn recursively_remove_empty_directories(
 /// Remove files in trash folder that are not currently in use.
 pub async fn empty_trash(target_prefix: &Path) -> Result<(), UnlinkError> {
     let trash_dir = target_prefix.join(".trash");
-    match tokio::fs::read_dir(&trash_dir).await {
+    match tokio_fs::read_dir(&trash_dir).await {
         Ok(mut read_dir) => {
             let mut files_left_in_trash = false;
             while let Some(entry) = read_dir.next_entry().await.map_err(|e| {
                 UnlinkError::FailedToReadDirectory(trash_dir.to_string_lossy().to_string(), e)
             })? {
-                tokio::fs::remove_file(entry.path())
+                tokio_fs::remove_file(entry.path())
                     .await
                     .or_else(|e| match e.kind() {
                         ErrorKind::NotFound => Ok(()),
@@ -136,7 +137,7 @@ pub async fn empty_trash(target_prefix: &Path) -> Result<(), UnlinkError> {
                     })?;
             }
             if !files_left_in_trash {
-                tokio::fs::remove_dir(&trash_dir).await.map_err(|e| {
+                tokio_fs::remove_dir(&trash_dir).await.map_err(|e| {
                     UnlinkError::FailedToDeleteDirectory(trash_dir.to_string_lossy().to_string(), e)
                 })?;
             }
@@ -157,7 +158,7 @@ async fn move_to_trash(target_prefix: &Path, path: &Path) -> Result<(), UnlinkEr
     let mut trash_dest = target_prefix.join(".trash");
     match tokio::fs::try_exists(&trash_dest).await {
         Ok(true) => {}
-        Ok(false) => tokio::fs::create_dir(&trash_dest).await.map_err(|e| {
+        Ok(false) => tokio_fs::create_dir(&trash_dest).await.map_err(|e| {
             UnlinkError::FailedToCreateDirectory(trash_dest.to_string_lossy().to_string(), e)
         })?,
         Err(e) => {
@@ -174,7 +175,7 @@ async fn move_to_trash(target_prefix: &Path, path: &Path) -> Result<(), UnlinkEr
     }
     new_filename.push(format!("{}.trash", Uuid::new_v4().simple()));
     trash_dest.push(new_filename);
-    match tokio::fs::rename(path, &trash_dest).await {
+    match tokio_fs::rename(path, &trash_dest).await {
         Ok(_) => Ok(()),
         Err(e) => Err(UnlinkError::FailedToMoveFile(
             path.to_string_lossy().to_string(),
@@ -192,7 +193,7 @@ pub async fn unlink_package(
     // Remove all entries
     for paths in prefix_record.paths_data.paths.iter() {
         let p = target_prefix.join(&paths.relative_path);
-        match tokio::fs::remove_file(&p).await {
+        match tokio_fs::remove_file(&p).await {
             Ok(_) => {}
             Err(e) => match e.kind() {
                 // Simply ignore if the file is already gone.
@@ -213,11 +214,9 @@ pub async fn unlink_package(
         .join("conda-meta")
         .join(prefix_record.file_name());
 
-    tokio::fs::remove_file(&conda_meta_path)
-        .await
-        .map_err(|e| {
-            UnlinkError::FailedToDeleteFile(conda_meta_path.to_string_lossy().to_string(), e)
-        })?;
+    tokio_fs::remove_file(&conda_meta_path).await.map_err(|e| {
+        UnlinkError::FailedToDeleteFile(conda_meta_path.to_string_lossy().to_string(), e)
+    })?;
 
     Ok(())
 }
