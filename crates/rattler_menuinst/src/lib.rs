@@ -2,6 +2,7 @@ use std::path::Path;
 
 use rattler_conda_types::Platform;
 
+#[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -54,6 +55,7 @@ pub fn install_menuitems(
 
     for item in menu_inst.menu_items {
         if platform.is_linux() {
+            #[cfg(target_os = "linux")]
             if let Some(linux_item) = item.platforms.linux {
                 let command = item.command.merge(linux_item.base);
                 linux::install_menu_item(
@@ -81,7 +83,13 @@ pub fn install_menuitems(
             #[cfg(target_os = "windows")]
             if let Some(windows_item) = item.platforms.win {
                 let command = item.command.merge(windows_item.base);
-                windows::install_menu_item(prefix, windows_item.specific, command, menu_mode)?;
+                windows::install_menu_item(
+                    prefix,
+                    windows_item.specific,
+                    command,
+                    &placeholders,
+                    menu_mode,
+                )?;
             }
         }
     }
@@ -103,6 +111,7 @@ pub fn remove_menu_items(
 
     for item in menu_inst.menu_items {
         if platform.is_linux() {
+            #[cfg(target_os = "linux")]
             if let Some(linux_item) = item.platforms.linux {
                 let command = item.command.merge(linux_item.base);
                 linux::remove_menu_item(
