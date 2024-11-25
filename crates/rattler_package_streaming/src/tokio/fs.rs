@@ -10,7 +10,7 @@ use std::path::Path;
 /// # #[tokio::main]
 /// # async fn main() {
 /// # use std::path::Path;
-/// use rattler_package_streaming::tokio_fs::extract_tar_bz2;
+/// use rattler_package_streaming::tokio::fs::extract_tar_bz2;
 /// let _ = extract_tar_bz2(
 ///     Path::new("conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.tar.bz2"),
 ///     Path::new("/tmp"))
@@ -44,7 +44,7 @@ pub async fn extract_tar_bz2(
 /// # use std::path::Path;
 /// # #[tokio::main]
 /// # async fn main() {
-/// use rattler_package_streaming::tokio_fs::extract_conda;
+/// use rattler_package_streaming::tokio::fs::extract_conda;
 /// let _ = extract_conda(
 ///     Path::new("conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.conda"),
 ///     Path::new("/tmp"))
@@ -79,7 +79,7 @@ pub async fn extract_conda(
 /// # #[tokio::main]
 /// # async fn main() {
 /// # use std::path::Path;
-/// use rattler_package_streaming::tokio_fs::extract;
+/// use rattler_package_streaming::tokio::fs::extract;
 /// let _ = extract(
 ///     Path::new("conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.conda"),
 ///     Path::new("/tmp"))
