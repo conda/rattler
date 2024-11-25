@@ -1,9 +1,3 @@
-use std::{io::Write, os::unix::fs::PermissionsExt, process::Command};
-
-use fs_err as fs;
-
-use crate::MenuInstError;
-
 pub fn log_output(cmd_info: &str, output: std::process::Output) {
     tracing::info!("{}: status {}", cmd_info, output.status);
     tracing::info!(
@@ -13,7 +7,15 @@ pub fn log_output(cmd_info: &str, output: std::process::Output) {
     );
 }
 
+#[cfg(target_family = "unix")]
 pub fn run_pre_create_command(pre_create_command: &str) -> Result<(), MenuInstError> {
+    use os::unix::fs::PermissionsExt;
+    use std::{io::Write, process::Command};
+
+    use fs_err as fs;
+
+    use crate::MenuInstError;
+
     let mut temp_file = tempfile::NamedTempFile::with_suffix(".sh")?;
     temp_file.write_all(pre_create_command.as_bytes())?;
     let temp_path = temp_file.into_temp_path();
