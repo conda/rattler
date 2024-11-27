@@ -5,7 +5,9 @@
 
 use std::{
     collections::{HashSet, VecDeque},
-    fmt, io,
+    fmt,
+    fs::OpenOptions,
+    io,
     marker::PhantomData,
     path::Path,
 };
@@ -26,6 +28,8 @@ use serde_json::value::RawValue;
 use superslice::Ext;
 use thiserror::Error;
 
+use crate::utils::LockedFile;
+
 /// A struct to enable loading records from a `repodata.json` file on demand.
 /// Since most of the time you don't need all the records from the
 /// `repodata.json` this can help provide some significant speedups.
@@ -43,6 +47,9 @@ pub struct SparseRepoData {
     /// A function that can be used to patch the package record after it has
     /// been parsed. This is mainly used to add `pip` to `python` if desired
     patch_record_fn: Option<fn(&mut PackageRecord)>,
+
+    /// memmap2 blocks file from being modified so wrap the repodata file with a lock
+    _lock: Option<LockedFile>,
 }
 
 enum SparseRepoDataInner {
@@ -104,20 +111,38 @@ impl SparseRepoData {
         path: impl AsRef<Path>,
         patch_function: Option<fn(&mut PackageRecord)>,
     ) -> Result<Self, io::Error> {
-        let file = fs::File::open(path.as_ref().to_owned())?;
-        let memory_map = unsafe { memmap2::Mmap::map(&file) }?;
-        Ok(SparseRepoData {
-            inner: SparseRepoDataInner::Memmapped(
-                MemmappedSparseRepoDataInnerTryBuilder {
-                    memory_map,
-                    repo_data_builder: |memory_map| serde_json::from_slice(memory_map.as_ref()),
-                }
-                .try_build()?,
-            ),
-            subdir: subdir.into(),
-            channel,
-            patch_record_fn: patch_function,
-        })
+        if !path.as_ref().exists() {
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("file not found: {:?}", path.as_ref()),
+            ))
+        } else {
+            let lock_file_path = path.as_ref().with_extension("lock");
+            if !lock_file_path.exists() {
+                OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .open(&lock_file_path)?;
+            }
+            let lock_file = LockedFile::open_ro(lock_file_path, "repodata cache")
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            let file = fs::File::open(path.as_ref().to_owned())?;
+            let memory_map = unsafe { memmap2::Mmap::map(&file) }?;
+            Ok(SparseRepoData {
+                inner: SparseRepoDataInner::Memmapped(
+                    MemmappedSparseRepoDataInnerTryBuilder {
+                        memory_map,
+                        repo_data_builder: |memory_map| serde_json::from_slice(memory_map.as_ref()),
+                    }
+                    .try_build()?,
+                ),
+                subdir: subdir.into(),
+                channel,
+                patch_record_fn: patch_function,
+                _lock: Some(lock_file),
+            })
+        }
     }
 
     /// Construct an instance of self from a bytes and a [`Channel`].
@@ -141,6 +166,7 @@ impl SparseRepoData {
             channel,
             subdir: subdir.into(),
             patch_record_fn: patch_function,
+            _lock: None,
         })
     }
 

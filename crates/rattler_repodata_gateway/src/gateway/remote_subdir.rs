@@ -48,9 +48,13 @@ impl RemoteSubdirClient {
             e => GatewayError::FetchRepoDataError(e),
         })?;
 
+        let repo_data_json_path = repodata.repo_data_json_path.clone();
+        // repodata holds onto a file lock for json file that sparse will need
+        drop(repodata);
+
         // Create a new sparse repodata client that can be used to read records from the repodata.
         let sparse = LocalSubdirClient::from_channel_subdir(
-            &repodata.repo_data_json_path,
+            &repo_data_json_path,
             channel.clone(),
             platform.as_str(),
         )

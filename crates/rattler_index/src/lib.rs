@@ -203,6 +203,9 @@ pub fn index(
             };
         }
         let out_file = output_folder.join(platform).join("repodata.json");
+        let lock_file_path = out_file.with_extension("lock");
+        let mut lock = fslock::LockFile::open(&lock_file_path)?;
+        lock.lock_with_pid()?;
         File::create(&out_file)?.write_all(serde_json::to_string_pretty(&repodata)?.as_bytes())?;
     }
 

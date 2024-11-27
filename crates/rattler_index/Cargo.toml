@@ -18,6 +18,7 @@ rattler_package_streaming = { path="../rattler_package_streaming", version = "0.
 serde_json = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
+fslock = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
