@@ -25,7 +25,7 @@ patchelf = "~=0.17.2"
 
 [feature.test.dependencies]
 # Python 3.8 is the minimum supported version, so we use that for testing
-python = "3.8.*"
+python = "3.9.*"
 
 ruff = ">=0.3.3,<0.4"
 mypy = "~=1.5.1"
@@ -68,10 +68,16 @@ pillow = ">=9.4.0"
 docs = { cmd = "mkdocs serve" }
 build-docs = { cmd = "mkdocs build" }
 
+[feature.repl.dependencies]
+ipython = ">=8.29.0,<9"
+[feature.repl.tasks]
+repl = { depends-on = ["build"], cmd = "ipython" }
+
 [environments]
 #build = { features = ["build"], solve-group = "default" }
 test = { features = ["build", "test"], solve-group = "default" }
 docs = ["docs"]
+repl = ["repl"]
 
 [dependencies]
 requests = ">=2.32.3,<2.33"

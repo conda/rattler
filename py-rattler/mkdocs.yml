@@ -102,9 +102,11 @@ nav:
           - LockFile: lock_file.md
           - Environment: environment.md
           - LockedPackage: locked_package.md
+          - CondaLockedPackage: conda_locked_package.md
+          - CondaLockedBinaryPackage: conda_locked_binary_package.md
+          - CondaLockedSourcePackage: conda_locked_source_package.md
+          - PypiLockedPackage: pypi_locked_package.md
           - PackageHashes: package_hashes.md
-          - PypiPackageData: pypi_package_data.md
-          - PypiPackageEnvironmentData: pypi_package_environment_data.md
       - metadata:
           - AboutJson: about_json.md
           - RunExportsJson: run_exports_json.md

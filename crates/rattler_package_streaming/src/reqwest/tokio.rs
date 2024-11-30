@@ -2,6 +2,7 @@
 //! async context.
 
 use crate::{DownloadReporter, ExtractError, ExtractResult};
+use fs_err::tokio as tokio_fs;
 use futures_util::stream::TryStreamExt;
 use rattler_conda_types::package::ArchiveType;
 use rattler_digest::Sha256Hash;
@@ -40,7 +41,7 @@ async fn get_reader(
 
     if url.scheme() == "file" {
         let file =
-            tokio::fs::File::open(url.to_file_path().expect("Could not convert to file path"))
+            tokio_fs::File::open(url.to_file_path().expect("Could not convert to file path"))
                 .await
                 .map_err(ExtractError::IoError)?;
 

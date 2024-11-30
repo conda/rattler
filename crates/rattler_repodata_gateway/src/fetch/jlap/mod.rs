@@ -882,7 +882,7 @@ mod test {
         let cache_repo_data_path = cache_dir.path().join(format!("{cache_key}.json"));
 
         if let Some(content) = cache_repo_data {
-            tokio::fs::write(cache_repo_data_path.clone(), content)
+            tokio_fs::write(cache_repo_data_path.clone(), content)
                 .await
                 .unwrap();
         }
@@ -953,7 +953,7 @@ mod test {
         .unwrap();
 
         // Make assertions
-        let repo_data = tokio::fs::read_to_string(test_env.cache_repo_data)
+        let repo_data = tokio_fs::read_to_string(test_env.cache_repo_data)
             .await
             .unwrap();
 

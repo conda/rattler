@@ -35,8 +35,10 @@ from rattler.lock import (
     LockChannel,
     PackageHashes,
     LockedPackage,
-    PypiPackageData,
-    PypiPackageEnvironmentData,
+    CondaLockedSourcePackage,
+    CondaLockedBinaryPackage,
+    CondaLockedPackage,
+    PypiLockedPackage,
 )
 from rattler.solver import solve, solve_with_sparse_repodata
 
@@ -72,8 +74,10 @@ __all__ = [
     "LockChannel",
     "PackageHashes",
     "LockedPackage",
-    "PypiPackageData",
-    "PypiPackageEnvironmentData",
+    "CondaLockedSourcePackage",
+    "CondaLockedBinaryPackage",
+    "CondaLockedPackage",
+    "PypiLockedPackage",
     "solve",
     "solve_with_sparse_repodata",
     "Platform",

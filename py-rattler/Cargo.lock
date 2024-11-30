@@ -1805,7 +1805,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -2143,6 +2143,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
+name = "ordered-float"
+version = "2.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68f19d67e5a2795c94e73e0bb1cc1a7edeb2e28efd39e2e1c9b7a40c1108b11c"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "ordered-stream"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2472,6 +2481,7 @@ dependencies = [
  "pyo3",
  "pyo3-async-runtimes",
  "pyo3-build-config",
+ "pyo3-file",
  "rattler",
  "rattler_conda_types",
  "rattler_digest",
@@ -2542,6 +2552,15 @@ checksum = "94845622d88ae274d2729fcefc850e63d7a3ddff5e3ce11bd88486db9f1d357d"
 dependencies = [
  "libc",
  "pyo3-build-config",
+]
+
+[[package]]
+name = "pyo3-file"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "488563e2317157edd6e12c3ef23e10363bd079bf8630e3de719e368b4eb02a21"
+dependencies = [
+ "pyo3",
 ]
 
 [[package]]
@@ -2674,7 +2693,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.28.0"
+version = "0.28.3"
 dependencies = [
  "anyhow",
  "console",
@@ -2712,7 +2731,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.2.8"
+version = "0.2.11"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -2738,7 +2757,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.29.0"
+version = "0.29.2"
 dependencies = [
  "chrono",
  "dirs",
@@ -2787,7 +2806,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.34"
+version = "0.19.36"
 dependencies = [
  "fs-err 3.0.0",
  "rattler_conda_types",
@@ -2800,7 +2819,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.22.29"
+version = "0.22.31"
 dependencies = [
  "chrono",
  "file_url",
@@ -2812,10 +2831,12 @@ dependencies = [
  "rattler_conda_types",
  "rattler_digest",
  "serde",
+ "serde-value",
  "serde_repr",
  "serde_with",
  "serde_yaml",
  "thiserror",
+ "typed-path",
  "url",
 ]
 
@@ -2829,7 +2850,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.21.5"
+version = "0.21.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2839,6 +2860,7 @@ dependencies = [
  "fslock",
  "getrandom",
  "google-cloud-auth",
+ "google-cloud-token",
  "http",
  "itertools 0.13.0",
  "keyring",
@@ -2855,7 +2877,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.11"
+version = "0.22.14"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2890,7 +2912,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.21.20"
+version = "0.21.23"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2943,7 +2965,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.22.5"
+version = "0.22.7"
 dependencies = [
  "enum_dispatch",
  "fs-err 3.0.0",
@@ -2959,7 +2981,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.2.1"
+version = "1.2.3"
 dependencies = [
  "chrono",
  "futures",
@@ -2975,7 +2997,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "1.1.8"
+version = "1.1.10"
 dependencies = [
  "archspec",
  "libloading",
@@ -3121,9 +3143,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest-middleware"
-version = "0.3.3"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "562ceb5a604d3f7c885a792d42c199fd8af239d0a51b2fa6a78aafa092452b04"
+checksum = "d1ccd3b55e711f91a9885a2fa6fbbb2e39db1776420b062efc058c6410f7e5e3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3371,6 +3393,16 @@ dependencies = [
  "erased-serde",
  "serde",
  "typeid",
+]
+
+[[package]]
+name = "serde-value"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3a1a3341211875ef120e117ea7fd5228530ae7e7036a779fdc9117be6b3282c"
+dependencies = [
+ "ordered-float",
+ "serde",
 ]
 
 [[package]]
@@ -4224,7 +4256,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

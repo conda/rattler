@@ -1,0 +1,12 @@
+---
+source: crates/rattler_lock/src/utils/derived_fields.rs
+expression: fields
+---
+LocationDerivedFields {
+    file_name: None,
+    name: None,
+    version: None,
+    build: None,
+    subdir: None,
+    channel: None,
+}

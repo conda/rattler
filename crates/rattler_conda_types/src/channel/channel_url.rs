@@ -11,13 +11,13 @@ use crate::{utils::url_with_trailing_slash::UrlWithTrailingSlash, Platform};
 /// * The URL always contains a trailing `/`.
 ///
 /// This is useful to be able to compare different channels.
-#[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Hash, Eq, PartialEq, Deserialize)]
 #[serde(transparent)]
 pub struct ChannelUrl(UrlWithTrailingSlash);
 
 impl ChannelUrl {
     /// Returns the base Url of the channel.
-    pub fn url(&self) -> &Url {
+    pub fn url(&self) -> &UrlWithTrailingSlash {
         &self.0
     }
 
@@ -31,6 +31,19 @@ impl ChannelUrl {
         self.0
             .join(&format!("{}/", platform.as_str())) // trailing slash is important here as this signifies a directory
             .expect("platform is a valid url fragment")
+    }
+}
+
+// Override the behavior of the `Serialize` trait to remove the trailing slash.
+// In code, we want to ensure that a trailing slash is always present but when
+// we serialize the type it can be removed to safe space and make it look better
+// for humans.
+impl Serialize for ChannelUrl {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.as_str().trim_end_matches('/').serialize(serializer)
     }
 }
 

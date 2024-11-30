@@ -1,0 +1,61 @@
+---
+source: crates/rattler_lock/src/lib.rs
+expression: conda_lock
+---
+version: 6
+environments:
+  default:
+    channels:
+      - url: "https://conda.anaconda.org/conda-forge/"
+    packages:
+      linux-64:
+        - conda: "../minimal-project"
+          subdir: linux-64
+      win-64:
+        - conda: "../a-python-project"
+          name: a-python-project
+        - conda: "../a-python-project"
+          name: b-python-project
+        - conda: "../minimal-project"
+          build: first
+          subdir: win-64
+  second:
+    channels:
+      - url: "https://conda.anaconda.org/conda-forge/"
+    packages:
+      win-64:
+        - conda: "../minimal-project"
+          build: second
+packages:
+  - conda: "../a-python-project"
+    name: a-python-project
+    version: "0.1"
+    build: py38
+    subdir: noarch
+  - conda: "../a-python-project"
+    name: b-python-project
+    version: "0.1"
+    build: h398123
+    subdir: noarch
+    noarch: python
+  - conda: "../minimal-project"
+    name: minimal-project
+    version: "0.1"
+    build: first
+    subdir: linux-64
+    depends:
+      - __unix
+  - conda: "../minimal-project"
+    name: minimal-project
+    version: "0.1"
+    build: first
+    subdir: win-64
+    depends:
+      - __win
+  - conda: "../minimal-project"
+    name: minimal-project
+    version: "0.1"
+    build: second
+    subdir: win-64
+    depends:
+      - __win

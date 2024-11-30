@@ -226,7 +226,6 @@ impl RepoData {
     /// given the source of the data.
     pub fn into_repo_data_records(self, channel: &Channel) -> Vec<RepoDataRecord> {
         let mut records = Vec::with_capacity(self.packages.len() + self.conda_packages.len());
-        let channel_name = channel.canonical_name();
         let base_url = self.base_url().map(ToOwned::to_owned);
 
         // Determine the base_url of the channel
@@ -241,7 +240,7 @@ impl RepoData {
                     base_url.as_deref(),
                     &filename,
                 ),
-                channel: channel_name.clone(),
+                channel: Some(channel.base_url.as_str().to_string()),
                 package_record,
                 file_name: filename,
             });

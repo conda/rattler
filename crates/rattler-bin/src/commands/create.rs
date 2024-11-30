@@ -313,10 +313,10 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
 /// Prints the operations of the transaction to the console.
 fn print_transaction(transaction: &Transaction<PrefixRecord, RepoDataRecord>) {
     let format_record = |r: &RepoDataRecord| {
-        let direct_url_print = if r.clone().channel.is_empty() {
-            r.url.as_str()
+        let direct_url_print = if let Some(channel) = &r.channel {
+            channel.clone()
         } else {
-            ""
+            String::new()
         };
 
         format!(

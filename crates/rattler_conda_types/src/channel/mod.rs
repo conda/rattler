@@ -251,9 +251,11 @@ impl Channel {
     }
 
     /// Constructs a new [`Channel`] from a `Url` and associated platforms.
-    pub fn from_url(url: Url) -> Self {
+    pub fn from_url(url: impl Into<ChannelUrl>) -> Self {
         // Get the path part of the URL but trim the directory suffix
-        let path = url.path().trim_end_matches('/');
+        let url: ChannelUrl = url.into();
+
+        let path = url.url().path().trim_end_matches('/');
 
         // Case 1: No path give, channel name is ""
 
@@ -262,13 +264,13 @@ impl Channel {
         // Case 4: custom_channels matches
         // Case 5: channel_alias match
 
-        if url.has_host() {
+        if url.url().has_host() {
             // Case 7: Fallback
             let name = path.trim_start_matches('/');
             Self {
                 platforms: None,
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
-                base_url: url.into(),
+                base_url: url,
             }
         } else {
             // Case 6: non-otherwise-specified file://-type urls
@@ -278,7 +280,7 @@ impl Channel {
             Self {
                 platforms: None,
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
-                base_url: url.into(),
+                base_url: url,
             }
         }
     }
@@ -567,7 +569,7 @@ mod tests {
         let channel = Channel::from_str("conda-forge", &config).unwrap();
         assert_eq!(
             channel.base_url.url().clone(),
-            Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap()
+            "https://conda.anaconda.org/conda-forge/".parse().unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
         assert_eq!(channel.name(), "conda-forge");
@@ -584,7 +586,7 @@ mod tests {
             Channel::from_str("https://conda.anaconda.org/conda-forge/", &config).unwrap();
         assert_eq!(
             channel.base_url.url().clone(),
-            Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap()
+            "https://conda.anaconda.org/conda-forge/".parse().unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
         assert_eq!(channel.name(), "conda-forge");
@@ -610,7 +612,7 @@ mod tests {
         assert_eq!(channel.name(), "file:///var/channels/conda-forge/");
         assert_eq!(
             channel.base_url.url().clone(),
-            Url::from_str("file:///var/channels/conda-forge/").unwrap()
+            "file:///var/channels/conda-forge/".parse().unwrap()
         );
         assert_eq!(channel.platforms, None);
         assert_eq!(
@@ -642,7 +644,7 @@ mod tests {
         let channel = Channel::from_str("http://localhost:1234", &config).unwrap();
         assert_eq!(
             channel.base_url.url().clone(),
-            Url::from_str("http://localhost:1234/").unwrap()
+            "http://localhost:1234/".parse().unwrap()
         );
         assert_eq!(channel.name, None);
         assert_eq!(channel.platforms, None);
@@ -669,7 +671,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             channel.base_url.url().clone(),
-            Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap()
+            "https://conda.anaconda.org/conda-forge/".parse().unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
         assert_eq!(channel.platforms, Some(vec![platform]));
@@ -681,7 +683,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             channel.base_url.url().clone(),
-            Url::from_str("https://conda.anaconda.org/pkgs/main/").unwrap()
+            "https://conda.anaconda.org/pkgs/main/".parse().unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("pkgs/main"));
         assert_eq!(channel.platforms, Some(vec![platform]));
@@ -689,7 +691,9 @@ mod tests {
         let channel = Channel::from_str("conda-forge/label/rust_dev", &config).unwrap();
         assert_eq!(
             channel.base_url.url().clone(),
-            Url::from_str("https://conda.anaconda.org/conda-forge/label/rust_dev/").unwrap()
+            "https://conda.anaconda.org/conda-forge/label/rust_dev/"
+                .parse()
+                .unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge/label/rust_dev"));
     }
@@ -724,7 +728,7 @@ mod tests {
         };
         assert_eq!(
             channel_config
-                .canonical_name(&Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap())
+                .canonical_name(&"https://conda.anaconda.org/conda-forge/".parse().unwrap())
                 .as_str(),
             "conda-forge"
         );

@@ -825,11 +825,11 @@ mod tests {
           build: cpu*
         - version: "==foobar"
           channel:
-            base_url: "https://conda.anaconda.org/conda-forge/"
+            base_url: "https://conda.anaconda.org/conda-forge"
             name: conda-forge
         - version: "==foobar"
           channel:
-            base_url: "https://conda.anaconda.org/conda-forge/"
+            base_url: "https://conda.anaconda.org/conda-forge"
             name: conda-forge
         - version: "*"
           build: foo

@@ -14,6 +14,7 @@ pub use cache_key::CacheKey;
 pub use cache_lock::CacheLock;
 use cache_lock::CacheRwLock;
 use dashmap::DashMap;
+use fs_err::tokio as tokio_fs;
 use futures::TryFutureExt;
 use itertools::Itertools;
 use parking_lot::Mutex;
@@ -309,7 +310,7 @@ where
 
     // Ensure the directory containing the lock-file exists.
     if let Some(root_dir) = lock_file_path.parent() {
-        tokio::fs::create_dir_all(root_dir)
+        tokio_fs::create_dir_all(root_dir)
             .map_err(|e| {
                 PackageCacheError::LockError(
                     format!("failed to create cache directory: '{}", root_dir.display()),

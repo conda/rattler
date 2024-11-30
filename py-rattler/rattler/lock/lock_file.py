@@ -45,8 +45,10 @@ class LockFile:
         Examples
         --------
         ```python
+        >>> import tempfile
         >>> lock_file = LockFile.from_path("./pixi.lock")
-        >>> lock_file.to_path("/tmp/test.lock")
+        >>> with tempfile.NamedTemporaryFile() as fp:
+        ...     lock_file.to_path(fp.name)
         >>>
         ```
         """
@@ -61,7 +63,7 @@ class LockFile:
         ```python
         >>> lock_file = LockFile.from_path("./pixi.lock")
         >>> lock_file.environments()
-        [('default', Environment()), ('docs', Environment()), ('test', Environment())]
+        [('default', Environment()), ('repl', Environment()), ('docs', Environment()), ('test', Environment())]
         >>>
         ```
         """

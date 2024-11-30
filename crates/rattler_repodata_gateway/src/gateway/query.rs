@@ -96,6 +96,11 @@ impl RepoDataQuery {
 
     /// Execute the query and return the resulting repodata records.
     pub async fn execute(self) -> Result<Vec<RepoData>, GatewayError> {
+        // Short circuit if there are no specs
+        if self.specs.is_empty() {
+            return Ok(Vec::default());
+        }
+
         // Collect all the channels and platforms together
         let channels_and_platforms = self
             .channels
@@ -125,6 +130,11 @@ impl RepoDataQuery {
                 };
                 input_specs.push(spec);
             }
+        }
+
+        // Short circuit if there are no channels or platforms specified
+        if direct_url_specs.is_empty() && channels_and_platforms.is_empty() {
+            return Ok(Vec::default());
         }
 
         // Result offset for direct url queries.
