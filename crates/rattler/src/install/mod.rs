@@ -41,6 +41,7 @@ use std::{
 
 pub use apple_codesign::AppleCodeSignBehavior;
 pub use driver::InstallDriver;
+use fs_err::tokio as tokio_fs;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 #[cfg(feature = "indicatif")]
 pub use installer::{
@@ -265,7 +266,7 @@ pub async fn link_package(
         .to_owned();
 
     // Ensure target directory exists
-    tokio::fs::create_dir_all(&target_dir)
+    tokio_fs::create_dir_all(&target_dir)
         .await
         .map_err(InstallError::FailedToCreateTargetDirectory)?;
 
@@ -661,12 +662,12 @@ async fn can_create_symlinks(target_dir: &Path) -> bool {
     let uuid = uuid::Uuid::new_v4();
     let symlink_path = target_dir.join(format!("symtest_{uuid}"));
     #[cfg(windows)]
-    let result = tokio::fs::symlink_file("./", &symlink_path).await;
+    let result = tokio_fs::symlink_file("./", &symlink_path).await;
     #[cfg(unix)]
-    let result = tokio::fs::symlink("./", &symlink_path).await;
+    let result = tokio_fs::symlink("./", &symlink_path).await;
     match result {
         Ok(_) => {
-            if let Err(e) = tokio::fs::remove_file(&symlink_path).await {
+            if let Err(e) = tokio_fs::remove_file(&symlink_path).await {
                 tracing::warn!(
                     "failed to delete temporary file '{}': {e}",
                     symlink_path.display()
@@ -693,7 +694,7 @@ async fn can_create_hardlinks(target_dir: &Path, package_dir: &Path) -> bool {
 #[cfg(unix)]
 async fn paths_have_same_filesystem(a: &Path, b: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
-    match tokio::join!(tokio::fs::metadata(a), tokio::fs::metadata(b)) {
+    match tokio::join!(tokio_fs::metadata(a), tokio_fs::metadata(b)) {
         (Ok(a), Ok(b)) => a.dev() == b.dev(),
         _ => false,
     }

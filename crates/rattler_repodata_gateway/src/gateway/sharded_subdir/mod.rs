@@ -6,6 +6,7 @@ use crate::{
     reporter::ResponseReporterExt,
     GatewayError, Reporter,
 };
+use fs_err::tokio as tokio_fs;
 use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
 use rattler_conda_types::{
     Channel, ChannelUrl, PackageName, RepoDataRecord, Shard, ShardedRepodata,
@@ -88,7 +89,7 @@ impl ShardedSubdir {
 
         // Determine the cache directory and make sure it exists.
         let cache_dir = cache_dir.join("shards-v1");
-        tokio::fs::create_dir_all(&cache_dir)
+        tokio_fs::create_dir_all(&cache_dir)
             .await
             .map_err(FetchRepoDataError::IoError)?;
 
@@ -122,7 +123,7 @@ impl SubdirClient for ShardedSubdir {
 
         // Read the cached shard
         if self.cache_action != CacheAction::NoCache {
-            match tokio::fs::read(&shard_cache_path).await {
+            match tokio_fs::read(&shard_cache_path).await {
                 Ok(cached_bytes) => {
                     // Decode the cached shard
                     return parse_records(
