@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.12](https://github.com/conda/rattler/compare/rattler_cache-v0.2.11...rattler_cache-v0.2.12) - 2024-11-30
+
+### Added
+
+- use `fs-err` also for tokio ([#958](https://github.com/conda/rattler/pull/958))
+
 ## [0.2.11](https://github.com/conda/rattler/compare/rattler_cache-v0.2.10...rattler_cache-v0.2.11) - 2024-11-18
 
 ### Other
