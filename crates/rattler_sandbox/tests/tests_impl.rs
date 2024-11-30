@@ -1,3 +1,9 @@
+#![cfg(any(
+    target_os = "macos",
+    all(target_os = "linux", target_arch = "x86_64"),
+    all(target_os = "linux", target_arch = "aarch64"),
+))]
+
 use libtest_mimic::{Failed, Trial};
 use rattler_sandbox::sandboxed_command;
 
