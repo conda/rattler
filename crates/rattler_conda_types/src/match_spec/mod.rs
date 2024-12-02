@@ -7,7 +7,7 @@ use std::hash::Hash;
 use std::sync::Arc;
 use url::Url;
 
-use crate::Channel;
+use crate::{Channel, NamedChannelOrUrl};
 use crate::ChannelConfig;
 
 pub mod matcher;
@@ -133,7 +133,7 @@ pub struct MatchSpec {
     /// Match the specific filename of the package
     pub file_name: Option<String>,
     /// The channel of the package
-    pub channel: Option<Arc<Channel>>,
+    pub channel: Option<NamedChannelOrUrl>,
     /// The subdir of the channel
     pub subdir: Option<String>,
     /// The namespace of the package (currently not used)
@@ -151,8 +151,7 @@ pub struct MatchSpec {
 impl Display for MatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(channel) = &self.channel {
-            let name = channel.name();
-            write!(f, "{name}")?;
+            write!(f, "{channel}")?;
 
             if let Some(subdir) = &self.subdir {
                 write!(f, "/{subdir}")?;
@@ -256,8 +255,7 @@ pub struct NamelessMatchSpec {
     /// Match the specific filename of the package
     pub file_name: Option<String>,
     /// The channel of the package
-    #[serde(deserialize_with = "deserialize_channel", default)]
-    pub channel: Option<Arc<Channel>>,
+    pub channel: Option<NamedChannelOrUrl>,
     /// The subdir of the channel
     pub subdir: Option<String>,
     /// The namespace of the package (currently not used)
@@ -334,29 +332,6 @@ impl MatchSpec {
             sha256: spec.sha256,
             url: spec.url,
         }
-    }
-}
-
-/// Deserialize channel from string
-/// TODO: This should be refactored so that the front ends are the one setting the channel config,
-/// and rattler only takes care of the url.
-fn deserialize_channel<'de, D>(deserializer: D) -> Result<Option<Arc<Channel>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s: Option<String> = Option::deserialize(deserializer)?;
-
-    match s {
-        Some(str_val) => {
-            let config = ChannelConfig::default_with_root_dir(
-                std::env::current_dir().expect("Could not determine current directory"),
-            );
-
-            Channel::from_str(str_val, &config)
-                .map(|channel| Some(Arc::new(channel)))
-                .map_err(serde::de::Error::custom)
-        }
-        None => Ok(None),
     }
 }
 
