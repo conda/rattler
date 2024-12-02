@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/conda/rattler/compare/file_url-v0.1.7...file_url-v0.2.0) - 2024-11-30
+
+### Added
+
+- merge pixi-build branch ([#950](https://github.com/conda/rattler/pull/950))
+
 ## [0.1.7](https://github.com/conda/rattler/compare/file_url-v0.1.6...file_url-v0.1.7) - 2024-11-04
 
 ### Other

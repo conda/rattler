@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.24](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.23...rattler_repodata_gateway-v0.21.24) - 2024-11-30
+
+### Added
+
+- use `fs-err` also for tokio ([#958](https://github.com/conda/rattler/pull/958))
+
 ## [0.21.23](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.22...rattler_repodata_gateway-v0.21.23) - 2024-11-18
 
 ### Other

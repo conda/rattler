@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.4](https://github.com/conda/rattler/compare/rattler-v0.28.3...rattler-v0.28.4) - 2024-11-30
+
+### Added
+
+- use `fs-err` also for tokio ([#958](https://github.com/conda/rattler/pull/958))
+- Move files to .trash folder if they are in use ([#953](https://github.com/conda/rattler/pull/953))
+- merge pixi-build branch ([#950](https://github.com/conda/rattler/pull/950))
+
 ## [0.28.3](https://github.com/conda/rattler/compare/rattler-v0.28.2...rattler-v0.28.3) - 2024-11-18
 
 ### Other

@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.15](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.14...rattler_package_streaming-v0.22.15) - 2024-11-30
+
+### Added
+
+- use `fs-err` also for tokio ([#958](https://github.com/conda/rattler/pull/958))
+
 ## [0.22.14](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.13...rattler_package_streaming-v0.22.14) - 2024-11-18
 
 ### Other
