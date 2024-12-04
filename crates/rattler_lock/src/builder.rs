@@ -1,19 +1,18 @@
 //! Builder for the creation of lock files.
 
-use std::{
-    collections::{BTreeSet, HashMap},
-    sync::Arc,
-};
-
-use fxhash::FxHashMap;
-use indexmap::{IndexMap, IndexSet};
-use pep508_rs::ExtraName;
-use rattler_conda_types::Platform;
-
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
     CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
+};
+use fxhash::FxHashMap;
+use indexmap::{IndexMap, IndexSet};
+use pep508_rs::ExtraName;
+use rattler_conda_types::{Platform, Version};
+use std::borrow::Cow;
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
 };
 
 /// Information about a single locked package in an environment.
@@ -118,9 +117,29 @@ pub struct LockFileBuilder {
     environments: IndexMap<String, EnvironmentData>,
 
     /// A list of all package metadata stored in the lock file.
-    conda_packages: IndexSet<CondaPackageData>,
+    conda_packages: IndexMap<UniqueCondaIdentifier, CondaPackageData>,
     pypi_packages: IndexSet<PypiPackageData>,
     pypi_runtime_configurations: IndexSet<HashablePypiPackageEnvironmentData>,
+}
+
+/// A unique identifier for a conda package. This is used to deduplicate packages.
+#[derive(Debug, Hash, Eq, PartialEq)]
+struct UniqueCondaIdentifier {
+    location: UrlOrPath,
+    normalized_name: String,
+    version: Version,
+    build: String,
+}
+
+impl<'a> From<&'a CondaPackageData> for UniqueCondaIdentifier {
+    fn from(value: &'a CondaPackageData) -> Self {
+        Self {
+            location: value.location().clone(),
+            normalized_name: value.record().name.as_normalized().to_string(),
+            version: value.record().version.version().clone(),
+            build: value.record().build.clone(),
+        }
+    }
 }
 
 impl LockFileBuilder {
@@ -184,15 +203,25 @@ impl LockFileBuilder {
                 indexes: None,
             });
 
+        let unique_identifier = UniqueCondaIdentifier::from(&locked_package);
+
         // Add the package to the list of packages.
-        let package_idx = self.conda_packages.insert_full(locked_package).0;
+        let entry = self.conda_packages.entry(unique_identifier);
+        let package_idx = entry.index();
+        entry
+            .and_modify(|pkg| {
+                if let Cow::Owned(merged_package) = pkg.merge(&locked_package) {
+                    *pkg = merged_package;
+                }
+            })
+            .or_insert(locked_package);
 
         // Add the package to the environment that it is intended for.
         environment
             .packages
             .entry(platform)
             .or_default()
-            .push(EnvironmentPackageData::Conda(package_idx));
+            .insert(EnvironmentPackageData::Conda(package_idx));
 
         self
     }
@@ -231,7 +260,7 @@ impl LockFileBuilder {
             .packages
             .entry(platform)
             .or_default()
-            .push(EnvironmentPackageData::Pypi(package_idx, runtime_idx));
+            .insert(EnvironmentPackageData::Pypi(package_idx, runtime_idx));
 
         self
     }
@@ -327,7 +356,7 @@ impl LockFileBuilder {
         LockFile {
             inner: Arc::new(LockFileInner {
                 version: FileFormatVersion::LATEST,
-                conda_packages: self.conda_packages.into_iter().collect(),
+                conda_packages: self.conda_packages.into_values().collect(),
                 pypi_packages: self.pypi_packages.into_iter().collect(),
                 pypi_environment_package_data: self
                     .pypi_runtime_configurations
@@ -360,5 +389,75 @@ impl From<PypiPackageEnvironmentData> for HashablePypiPackageEnvironmentData {
         Self {
             extras: value.extras.into_iter().collect(),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{CondaBinaryData, LockFile};
+    use rattler_conda_types::{PackageName, PackageRecord, Platform, Version};
+    use std::collections::BTreeSet;
+    use std::str::FromStr;
+    use url::Url;
+
+    #[test]
+    fn test_merge_records_and_purls() {
+        let record = PackageRecord::new(
+            PackageName::new_unchecked("foobar"),
+            Version::from_str("1.0.0").unwrap(),
+            "build".into(),
+        );
+
+        let lock_file = LockFile::builder()
+            .with_conda_package(
+                "default",
+                Platform::Linux64,
+                CondaBinaryData {
+                    package_record: record.clone(),
+                    location: Url::parse(
+                        "https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2",
+                    )
+                    .unwrap()
+                    .into(),
+                    file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
+                    channel: None,
+                }
+                .into(),
+            )
+            .with_conda_package(
+                "default",
+                Platform::Linux64,
+                CondaBinaryData {
+                    package_record: record.clone(),
+                    location: Url::parse(
+                        "https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2",
+                    )
+                    .unwrap()
+                    .into(),
+                    file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
+                    channel: None,
+                }
+                .into(),
+            )
+            .with_conda_package(
+                "foobar",
+                Platform::Linux64,
+                CondaBinaryData {
+                    package_record: PackageRecord {
+                        purls: Some(BTreeSet::new()),
+                        ..record
+                    },
+                    location: Url::parse(
+                        "https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2",
+                    )
+                    .unwrap()
+                    .into(),
+                    file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
+                    channel: None,
+                }
+                .into(),
+            )
+            .finish();
+        insta::assert_snapshot!(lock_file.render_to_string().unwrap());
     }
 }
