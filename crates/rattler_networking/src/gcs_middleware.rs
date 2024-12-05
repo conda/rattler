@@ -72,22 +72,25 @@ mod tests {
         let key_file = tempfile::NamedTempFile::with_suffix(".json").unwrap();
         std::fs::write(&key_file, credentials).unwrap();
 
-        temp_env::with_vars(
-            [("GOOGLE_APPLICATION_CREDENTIALS", Some(key_file.path()))],
-            || async {
-                let client = reqwest_middleware::ClientBuilder::new(Client::new())
-                    .with(GCSMiddleware)
-                    .build();
+        let prev_value = std::env::var("GOOGLE_APPLICATION_CREDENTIALS").ok();
+        std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", key_file.path());
 
-                let url = "gcs://test-channel/noarch/repodata.json";
-                let response = client.get(url).send().await.unwrap();
-                assert!(response.status().is_success());
+        let client = reqwest_middleware::ClientBuilder::new(Client::new())
+            .with(GCSMiddleware)
+            .build();
 
-                let url = "gcs://test-channel-nonexist/noarch/repodata.json";
-                let response = client.get(url).send().await.unwrap();
-                assert!(response.status().is_client_error());
-            },
-        )
-        .await;
+        let url = "gcs://test-channel/noarch/repodata.json";
+        let response = client.get(url).send().await.unwrap();
+        assert!(response.status().is_success());
+
+        let url = "gcs://test-channel-nonexist/noarch/repodata.json";
+        let response = client.get(url).send().await.unwrap();
+        assert!(response.status().is_client_error());
+
+        if let Some(value) = prev_value {
+            std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", value);
+        } else {
+            std::env::remove_var("GOOGLE_APPLICATION_CREDENTIALS");
+        }
     }
 }
