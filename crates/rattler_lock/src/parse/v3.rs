@@ -138,7 +138,8 @@ pub fn parse_v3_or_lower(
     let mut conda_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_runtime_configs = IndexSet::with_capacity(lock_file.package.len());
-    let mut per_platform: FxHashMap<Platform, Vec<EnvironmentPackageData>> = FxHashMap::default();
+    let mut per_platform: FxHashMap<Platform, IndexSet<EnvironmentPackageData>> =
+        FxHashMap::default();
     for package in lock_file.package {
         let LockedPackageV3 { platform, kind } = package;
 
@@ -245,7 +246,10 @@ pub fn parse_v3_or_lower(
             }
         };
 
-        per_platform.entry(package.platform).or_default().push(pkg);
+        per_platform
+            .entry(package.platform)
+            .or_default()
+            .insert(pkg);
     }
 
     // Construct the default environment

@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     marker::PhantomData,
     sync::Arc,
@@ -6,6 +7,7 @@ use std::{
 
 use fxhash::FxHashMap;
 use indexmap::IndexSet;
+use itertools::Either;
 use pep508_rs::ExtraName;
 use rattler_conda_types::{PackageName, Platform, VersionWithSource};
 use serde::{de::Error, Deserialize, Deserializer};
@@ -219,37 +221,92 @@ fn parse_from_lock<P>(
                                             // older lock-file there can be more than one package
                                             // with the same url. Instead, we should look at the
                                             // subdir to disambiguate.
-                                            let package_index = if file_version
+                                            let package_index: Option<usize> = if file_version
                                                 < FileFormatVersion::V6
                                             {
-                                                // Find the first package that matches the subdir of
-                                                // this environment, or the first package if there
-                                                // is no match.
-                                                all_packages
+                                                // Find the packages that match the subdir of
+                                                // this environment
+                                                let mut all_packages_with_subdir = all_packages
                                                     .iter()
-                                                    .find(|&idx| {
+                                                    .filter(|&idx| {
                                                         let conda_package = &conda_packages[*idx];
                                                         conda_package.record().subdir.as_str()
                                                             == platform.as_str()
                                                     })
-                                                    .or_else(|| all_packages.first())
-                                            } else {
-                                                all_packages.iter().find(|&idx| {
-                                                    let conda_package = &conda_packages[*idx];
-                                                    name.as_ref().map_or(true, |name| {
-                                                        name == &conda_package.record().name
-                                                    }) && version.as_ref().map_or(true, |version| {
-                                                        version == &conda_package.record().version
-                                                    }) && build.as_ref().map_or(true, |build| {
-                                                        build == &conda_package.record().build
-                                                    }) && subdir.as_ref().map_or(true, |subdir| {
-                                                        subdir == &conda_package.record().subdir
+                                                    .peekable();
+
+                                                // If there are no packages for the subdir, use all
+                                                // packages.
+                                                let mut matching_packages =
+                                                    if all_packages_with_subdir.peek().is_some() {
+                                                        Either::Left(all_packages_with_subdir)
+                                                    } else {
+                                                        Either::Right(all_packages.iter())
+                                                    };
+
+                                                // Merge all matching packages.
+                                                if let Some(&first_package_idx) =
+                                                    matching_packages.next()
+                                                {
+                                                    let merged_package = Cow::Borrowed(
+                                                        &conda_packages[first_package_idx],
+                                                    );
+                                                    let package = matching_packages.fold(
+                                                        merged_package,
+                                                        |acc, &next_package_idx| {
+                                                            if let Cow::Owned(merged) = acc.merge(
+                                                                &conda_packages[next_package_idx],
+                                                            ) {
+                                                                Cow::Owned(merged)
+                                                            } else {
+                                                                acc
+                                                            }
+                                                        },
+                                                    );
+                                                    Some(match package {
+                                                        Cow::Borrowed(_) => first_package_idx,
+                                                        Cow::Owned(package) => {
+                                                            conda_packages.push(package);
+                                                            conda_packages.len() - 1
+                                                        }
                                                     })
-                                                })
+                                                } else {
+                                                    None
+                                                }
+                                            } else {
+                                                // Find the package that matches all the fields from
+                                                // the selector.
+                                                all_packages
+                                                    .iter()
+                                                    .find(|&idx| {
+                                                        let conda_package = &conda_packages[*idx];
+                                                        name.as_ref().map_or(true, |name| {
+                                                            name == &conda_package.record().name
+                                                        }) && version.as_ref().map_or(
+                                                            true,
+                                                            |version| {
+                                                                version
+                                                                    == &conda_package
+                                                                        .record()
+                                                                        .version
+                                                            },
+                                                        ) && build.as_ref().map_or(true, |build| {
+                                                            build == &conda_package.record().build
+                                                        }) && subdir.as_ref().map_or(
+                                                            true,
+                                                            |subdir| {
+                                                                subdir
+                                                                    == &conda_package
+                                                                        .record()
+                                                                        .subdir
+                                                            },
+                                                        )
+                                                    })
+                                                    .copied()
                                             };
 
                                             EnvironmentPackageData::Conda(
-                                                package_index.copied().ok_or_else(|| {
+                                                package_index.ok_or_else(|| {
                                                     ParseCondaLockError::MissingPackage(
                                                         environment_name.clone(),
                                                         platform,
