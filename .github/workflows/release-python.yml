@@ -78,12 +78,15 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
-      - name: "Build wheels (rustls-tls)"
+      - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
           args: --release --out dist --no-default-features --features rustls-tls
+        env:
+          # aarch64 build fails, see https://github.com/PyO3/maturin/issues/2110
+          XWIN_VERSION: 16
       - name: "Test wheel"
         if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
