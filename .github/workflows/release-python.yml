@@ -80,18 +80,10 @@ jobs:
           architecture: ${{ matrix.platform.arch }}
       - name: "Build wheels (rustls-tls)"
         uses: PyO3/maturin-action@v1
-        if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
           args: --release --out dist --no-default-features --features rustls-tls
-      - name: "Build wheels (native-tls)"
-        uses: PyO3/maturin-action@v1
-        if: ${{ startsWith(matrix.platform.target, 'aarch64') }}
-        with:
-          working-directory: py-rattler
-          target: ${{ matrix.platform.target }}
-          args: --release --out dist  --no-default-features --features native-tls,vendored-openssl
       - name: "Test wheel"
         if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
