@@ -71,6 +71,11 @@ mod tests {
             return;
         };
 
+        if credentials.is_empty() {
+            eprintln!("Skipping test as GOOGLE_CLOUD_TEST_KEY_JSON is empty");
+            return;
+        }
+
         // We have to set GOOGLE_APPLICATION_CREDENTIALS to the path of the JSON key file
         let key_file = tempfile::NamedTempFile::with_suffix(".json").unwrap();
         std::fs::write(&key_file, credentials).unwrap();
