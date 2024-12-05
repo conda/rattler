@@ -19,4 +19,5 @@ packages:
   arch: x86_64
   platform: linux
   channel: null
-  purls: []
+  purls:
+  - pkg:pypi/foobar@1.0.0

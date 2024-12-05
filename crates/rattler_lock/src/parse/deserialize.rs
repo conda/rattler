@@ -1,3 +1,10 @@
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+    marker::PhantomData,
+    sync::Arc,
+};
+
 use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use itertools::Either;
@@ -6,12 +13,6 @@ use rattler_conda_types::{PackageName, Platform, VersionWithSource};
 use serde::{de::Error, Deserialize, Deserializer};
 use serde_with::{serde_as, DeserializeAs};
 use serde_yaml::Value;
-use std::borrow::Cow;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    marker::PhantomData,
-    sync::Arc,
-};
 
 use crate::{
     file_format_version::FileFormatVersion,
@@ -234,7 +235,8 @@ fn parse_from_lock<P>(
                                                     })
                                                     .peekable();
 
-                                                // If there are no packages for the subdir, use all packages.
+                                                // If there are no packages for the subdir, use all
+                                                // packages.
                                                 let mut matching_packages =
                                                     if all_packages_with_subdir.peek().is_some() {
                                                         Either::Left(all_packages_with_subdir)
@@ -272,6 +274,8 @@ fn parse_from_lock<P>(
                                                     None
                                                 }
                                             } else {
+                                                // Find the package that matches all the fields from
+                                                // the selector.
                                                 all_packages
                                                     .iter()
                                                     .find(|&idx| {

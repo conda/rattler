@@ -174,7 +174,7 @@ impl LockFileBuilder {
     pub fn set_channels(
         &mut self,
         environment: impl Into<String>,
-        channels: impl IntoIterator<Item = impl Into<Channel>>,
+        channels: impl IntoIterator<Item=impl Into<Channel>>,
     ) -> &mut Self {
         self.environments
             .entry(environment.into())
@@ -333,7 +333,7 @@ impl LockFileBuilder {
     pub fn with_channels(
         mut self,
         environment: impl Into<String>,
-        channels: impl IntoIterator<Item = impl Into<Channel>>,
+        channels: impl IntoIterator<Item=impl Into<Channel>>,
     ) -> Self {
         self.set_channels(environment, channels);
         self
@@ -399,7 +399,7 @@ impl From<PypiPackageEnvironmentData> for HashablePypiPackageEnvironmentData {
 
 #[cfg(test)]
 mod test {
-    use std::{collections::BTreeSet, str::FromStr};
+    use std::{str::FromStr};
 
     use rattler_conda_types::{PackageName, PackageRecord, Platform, Version};
     use url::Url;
@@ -417,6 +417,13 @@ mod test {
             )
         };
 
+        let record_with_purls = PackageRecord {
+            purls: Some([
+                "pkg:pypi/foobar@1.0.0".parse().unwrap(),
+            ].into_iter().collect()),
+            ..record.clone()
+        };
+
         let lock_file = LockFile::builder()
             .with_conda_package(
                 "default",
@@ -426,12 +433,12 @@ mod test {
                     location: Url::parse(
                         "https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2",
                     )
-                    .unwrap()
-                    .into(),
+                        .unwrap()
+                        .into(),
                     file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
                     channel: None,
                 }
-                .into(),
+                    .into(),
             )
             .with_conda_package(
                 "default",
@@ -441,30 +448,27 @@ mod test {
                     location: Url::parse(
                         "https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2",
                     )
-                    .unwrap()
-                    .into(),
+                        .unwrap()
+                        .into(),
                     file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
                     channel: None,
                 }
-                .into(),
+                    .into(),
             )
             .with_conda_package(
                 "foobar",
                 Platform::Linux64,
                 CondaBinaryData {
-                    package_record: PackageRecord {
-                        purls: Some(BTreeSet::new()),
-                        ..record
-                    },
+                    package_record: record_with_purls,
                     location: Url::parse(
                         "https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2",
                     )
-                    .unwrap()
-                    .into(),
+                        .unwrap()
+                        .into(),
                     file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
                     channel: None,
                 }
-                .into(),
+                    .into(),
             )
             .finish();
         insta::assert_snapshot!(lock_file.render_to_string().unwrap());
