@@ -125,13 +125,14 @@ pub struct LockFileBuilder {
 }
 
 /// A unique identifier for a conda package. This is used to deduplicate
-/// packages.
+/// packages. This only includes the unique identifying aspects of a package.
 #[derive(Debug, Hash, Eq, PartialEq)]
 struct UniqueCondaIdentifier {
     location: UrlOrPath,
     normalized_name: String,
     version: Version,
     build: String,
+    subdir: String,
 }
 
 impl<'a> From<&'a CondaPackageData> for UniqueCondaIdentifier {
@@ -141,6 +142,7 @@ impl<'a> From<&'a CondaPackageData> for UniqueCondaIdentifier {
             normalized_name: value.record().name.as_normalized().to_string(),
             version: value.record().version.version().clone(),
             build: value.record().build.clone(),
+            subdir: value.record().subdir.clone(),
         }
     }
 }

@@ -1,9 +1,9 @@
+use std::{borrow::Cow, cmp::Ordering, hash::Hash};
+
 use rattler_conda_types::{
     ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, RepoDataRecord,
 };
 use rattler_digest::Sha256Hash;
-use std::borrow::Cow;
-use std::{cmp::Ordering, hash::Hash};
 use url::Url;
 
 use crate::UrlOrPath;
@@ -340,10 +340,25 @@ fn merge_package_record<'a>(
         });
     }
 
-    // If the left package doesn't contain run_exports we merge those from the right one.
+    // If the left package doesn't contain run_exports we merge those from the right
+    // one.
     if left.run_exports.is_none() && right.run_exports.is_some() {
         result = Cow::Owned(PackageRecord {
             run_exports: right.run_exports.clone(),
+            ..result.into_owned()
+        });
+    }
+
+    // Merge hashes if the left package doesn't contain them.
+    if left.md5.is_none() && right.md5.is_some() {
+        result = Cow::Owned(PackageRecord {
+            md5: right.md5.clone(),
+            ..result.into_owned()
+        });
+    }
+    if left.sha256.is_none() && right.sha256.is_some() {
+        result = Cow::Owned(PackageRecord {
+            sha256: right.sha256.clone(),
             ..result.into_owned()
         });
     }
