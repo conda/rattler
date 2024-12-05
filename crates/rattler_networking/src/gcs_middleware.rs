@@ -68,27 +68,32 @@ async fn authenticate_with_google_cloud(mut req: Request) -> MiddlewareResult<Re
 mod tests {
     use super::*;
     use reqwest::Client;
+    use tempfile;
 
     #[tokio::test]
     async fn test_gcs_middleware() {
-        let Ok(credentials) = std::env::var("GOOGLE_CLOUD_TEST_KEY_JSON") else {
-            eprintln!("GOOGLE_CLOUD_TEST_KEY_JSON is not set - skipping test");
-            return;
-        };
+        let credentials = std::env::var("GOOGLE_CLOUD_TEST_KEY_JSON").unwrap();
 
-        // We have to set GOOGLE_APPLICATION_CREDENTIALS to the content of the JSON key file
-        std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", credentials);
+        // We have to set GOOGLE_APPLICATION_CREDENTIALS to the path of the JSON key file
+        let key_file = tempfile::NamedTempFile::with_suffix(".json").unwrap();
+        std::fs::write(&key_file, credentials).unwrap();
 
-        let client = reqwest_middleware::ClientBuilder::new(Client::new())
-            .with(GCSMiddleware)
-            .build();
+        temp_env::with_vars(
+            [("GOOGLE_APPLICATION_CREDENTIALS", Some(key_file.path()))],
+            || async {
+                let client = reqwest_middleware::ClientBuilder::new(Client::new())
+                    .with(GCSMiddleware)
+                    .build();
 
-        let url = "gcs://test-channel/noarch/repodata.json";
-        let response = client.get(url).send().await.unwrap();
-        assert!(response.status().is_success());
+                let url = "gcs://test-channel/noarch/repodata.json";
+                let response = client.get(url).send().await.unwrap();
+                assert!(response.status().is_success());
 
-        let url = "gcs://test-channel-nonexist/noarch/repodata.json";
-        let response = client.get(url).send().await.unwrap();
-        assert!(response.status().is_client_error());
+                let url = "gcs://test-channel-nonexist/noarch/repodata.json";
+                let response = client.get(url).send().await.unwrap();
+                assert!(response.status().is_client_error());
+            },
+        )
+        .await;
     }
 }
