@@ -41,6 +41,7 @@ async fn authenticate_with_google_cloud(mut req: Request) -> MiddlewareResult<Re
         "https://www.googleapis.com/auth/cloud-platform",
         "https://www.googleapis.com/auth/devstorage.read_only",
     ];
+
     let config = Config::default()
         .with_audience(audience)
         .with_scopes(&scopes);
@@ -48,8 +49,7 @@ async fn authenticate_with_google_cloud(mut req: Request) -> MiddlewareResult<Re
     match DefaultTokenSourceProvider::new(config).await {
         Ok(provider) => match provider.token_source().token().await {
             Ok(token) => {
-                let bearer_auth = format!("Bearer {token}");
-                let header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
+                let header_value = reqwest::header::HeaderValue::from_str(&token)
                     .map_err(reqwest_middleware::Error::middleware)?;
                 req.headers_mut()
                     .insert(reqwest::header::AUTHORIZATION, header_value);
@@ -61,5 +61,27 @@ async fn authenticate_with_google_cloud(mut req: Request) -> MiddlewareResult<Re
             ))),
         },
         Err(e) => Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e))),
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use reqwest::Client;
+
+    #[tokio::test]
+    async fn test_gcs_middleware() {
+        let client = reqwest_middleware::ClientBuilder::new(Client::new())
+            .with(GCSMiddleware)
+            .build();
+
+        let url = "gcs://test-channel/noarch/repodata.json";
+        let response = client.get(url).send().await.unwrap();
+        assert!(response.status().is_success());
+
+        let url = "gcs://test-channel-nonexist/noarch/repodata.json";
+        let response = client.get(url).send().await.unwrap();
+        assert!(response.status().is_client_error());
     }
 }
