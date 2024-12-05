@@ -66,7 +66,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_gcs_middleware() {
-        let credentials = std::env::var("GOOGLE_CLOUD_TEST_KEY_JSON").unwrap();
+        let Ok(credentials) = std::env::var("GOOGLE_CLOUD_TEST_KEY_JSON") else {
+            eprintln!("Skipping test as GOOGLE_CLOUD_TEST_KEY_JSON is not set");
+            return;
+        };
 
         // We have to set GOOGLE_APPLICATION_CREDENTIALS to the path of the JSON key file
         let key_file = tempfile::NamedTempFile::with_suffix(".json").unwrap();
