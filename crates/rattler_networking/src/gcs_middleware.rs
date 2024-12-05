@@ -36,15 +36,9 @@ impl Middleware for GCSMiddleware {
 
 /// Auth to GCS
 async fn authenticate_with_google_cloud(mut req: Request) -> MiddlewareResult<Request> {
-    let audience = "https://storage.googleapis.com/";
-    let scopes = [
-        "https://www.googleapis.com/auth/cloud-platform",
-        "https://www.googleapis.com/auth/devstorage.read_only",
-    ];
+    let scopes = ["https://www.googleapis.com/auth/devstorage.read_only"];
 
-    let config = Config::default()
-        .with_audience(audience)
-        .with_scopes(&scopes);
+    let config = Config::default().with_scopes(&scopes);
 
     match DefaultTokenSourceProvider::new(config).await {
         Ok(provider) => match provider.token_source().token().await {
