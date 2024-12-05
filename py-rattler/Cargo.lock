@@ -2694,7 +2694,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.28.4"
+version = "0.28.5"
 dependencies = [
  "anyhow",
  "console",
@@ -2732,7 +2732,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.2.12"
+version = "0.2.13"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -2808,7 +2808,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.37"
+version = "0.20.0"
 dependencies = [
  "fs-err 3.0.0",
  "rattler_conda_types",
@@ -2852,7 +2852,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.21.7"
+version = "0.21.8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2879,7 +2879,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.15"
+version = "0.22.16"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2915,7 +2915,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.21.24"
+version = "0.21.25"
 dependencies = [
  "anyhow",
  "async-compression",
