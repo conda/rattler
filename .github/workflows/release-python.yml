@@ -15,7 +15,7 @@ on:
       # When we change pyproject.toml, we want to ensure that the maturin builds still work
       - py-rattler/pyproject.toml
       # And when we change this workflow itself...
-      - .github/workflows/release-python.yaml
+      - .github/workflows/release-python.yml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -68,8 +68,10 @@ jobs:
             arch: x64
           - target: i686-pc-windows-msvc
             arch: x86
-          - target: aarch64-pc-windows-msvc
-            arch: x64
+#         There are a number of issues with cross compiling ring to windows on aarch64.
+#         For now, we just won't build a wheel, we will revisit this in the future.
+#          - target: aarch64-pc-windows-msvc
+#            arch: x64
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,7 +80,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
-      - name: "Build wheels (rustls-tls)"
+      - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
           working-directory: py-rattler
