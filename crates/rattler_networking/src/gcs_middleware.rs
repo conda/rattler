@@ -71,6 +71,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_gcs_middleware() {
+        let Ok(credentials) = std::env::var("GOOGLE_CLOUD_TEST_KEY_JSON") else {
+            eprintln!("GOOGLE_CLOUD_TEST_KEY_JSON is not set - skipping test");
+            return;
+        };
+
+        // We have to set GOOGLE_APPLICATION_CREDENTIALS to the content of the JSON key file
+        std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", credentials);
+
         let client = reqwest_middleware::ClientBuilder::new(Client::new())
             .with(GCSMiddleware)
             .build();
