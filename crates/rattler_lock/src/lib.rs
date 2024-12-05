@@ -79,6 +79,7 @@
 use std::{collections::HashMap, io::Read, path::Path, str::FromStr, sync::Arc};
 
 use fxhash::FxHashMap;
+use indexmap::IndexSet;
 use rattler_conda_types::{Platform, RepoDataRecord};
 
 mod builder;
@@ -136,7 +137,7 @@ struct LockFileInner {
 /// enum and might contain additional data that is specific to the environment.
 /// For instance different environments might select the same Pypi package but
 /// with different extras.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 enum EnvironmentPackageData {
     Conda(usize),
     Pypi(usize, usize),
@@ -158,7 +159,7 @@ struct EnvironmentData {
 
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
-    packages: FxHashMap<Platform, Vec<EnvironmentPackageData>>,
+    packages: FxHashMap<Platform, IndexSet<EnvironmentPackageData>>,
 }
 
 impl LockFile {
@@ -532,6 +533,7 @@ mod test {
     #[case::v4_pypi_path("v4/path-based-lock.yml")]
     #[case::v4_pypi_absolute_path("v4/absolute-path-lock.yml")]
     #[case::v5_pypi_flat_index("v5/flat-index-lock.yml")]
+    #[case::v5_with_and_without_purl("v5/similar-with-and-without-purl.yml")]
     #[case::v6_conda_source_path("v6/conda-path-lock.yml")]
     #[case::v6_derived_channel("v6/derived-channel-lock.yml")]
     fn test_parse(#[case] file_name: &str) {

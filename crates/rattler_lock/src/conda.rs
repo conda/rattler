@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, hash::Hash};
+use std::{borrow::Cow, cmp::Ordering, hash::Hash};
 
 use rattler_conda_types::{
     ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, RepoDataRecord,
@@ -78,6 +78,27 @@ impl CondaPackageData {
             Self::Source(data) => Some(data),
         }
     }
+
+    /// Performs the best effort merge of two conda packages.
+    /// Some fields in the packages are optional, if one of the packages
+    /// contain an optional field they are merged.
+    pub(crate) fn merge(&self, other: &Self) -> Cow<'_, Self> {
+        match (self, other) {
+            (CondaPackageData::Binary(left), CondaPackageData::Binary(right)) => {
+                if let Cow::Owned(merged) = left.merge(right) {
+                    return Cow::Owned(merged.into());
+                }
+            }
+            (CondaPackageData::Source(left), CondaPackageData::Source(right)) => {
+                if let Cow::Owned(merged) = left.merge(right) {
+                    return Cow::Owned(merged.into());
+                }
+            }
+            _ => {}
+        }
+
+        Cow::Borrowed(self)
+    }
 }
 
 /// Information about a binary conda package stored in the lock-file.
@@ -102,6 +123,23 @@ impl From<CondaBinaryData> for CondaPackageData {
     }
 }
 
+impl CondaBinaryData {
+    pub(crate) fn merge(&self, other: &Self) -> Cow<'_, Self> {
+        if self.location == other.location {
+            if let Cow::Owned(merged) =
+                merge_package_record(&self.package_record, &other.package_record)
+            {
+                return Cow::Owned(Self {
+                    package_record: merged,
+                    ..self.clone()
+                });
+            }
+        }
+
+        Cow::Borrowed(self)
+    }
+}
+
 /// Information about a source package stored in the lock-file.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CondaSourceData {
@@ -118,6 +156,23 @@ pub struct CondaSourceData {
 impl From<CondaSourceData> for CondaPackageData {
     fn from(value: CondaSourceData) -> Self {
         Self::Source(value)
+    }
+}
+
+impl CondaSourceData {
+    pub(crate) fn merge(&self, other: &Self) -> Cow<'_, Self> {
+        if self.location == other.location {
+            if let Cow::Owned(merged) =
+                merge_package_record(&self.package_record, &other.package_record)
+            {
+                return Cow::Owned(Self {
+                    package_record: merged,
+                    ..self.clone()
+                });
+            }
+        }
+
+        Cow::Borrowed(self)
     }
 }
 
@@ -269,4 +324,44 @@ impl Matches<NamelessMatchSpec> for CondaPackageData {
         // Check if the record matches
         spec.matches(self.record())
     }
+}
+
+fn merge_package_record<'a>(
+    left: &'a PackageRecord,
+    right: &PackageRecord,
+) -> Cow<'a, PackageRecord> {
+    let mut result = Cow::Borrowed(left);
+
+    // If the left package doesn't contain purls we merge those from the right one.
+    if left.purls.is_none() && right.purls.is_some() {
+        result = Cow::Owned(PackageRecord {
+            purls: right.purls.clone(),
+            ..result.into_owned()
+        });
+    }
+
+    // If the left package doesn't contain run_exports we merge those from the right
+    // one.
+    if left.run_exports.is_none() && right.run_exports.is_some() {
+        result = Cow::Owned(PackageRecord {
+            run_exports: right.run_exports.clone(),
+            ..result.into_owned()
+        });
+    }
+
+    // Merge hashes if the left package doesn't contain them.
+    if left.md5.is_none() && right.md5.is_some() {
+        result = Cow::Owned(PackageRecord {
+            md5: right.md5,
+            ..result.into_owned()
+        });
+    }
+    if left.sha256.is_none() && right.sha256.is_some() {
+        result = Cow::Owned(PackageRecord {
+            sha256: right.sha256,
+            ..result.into_owned()
+        });
+    }
+
+    result
 }
