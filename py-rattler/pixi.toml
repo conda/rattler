@@ -1,48 +1,27 @@
-[workspace]
-channels = ["conda-forge"]
-platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
-preview = ["pixi-build"]
-
-#
-# Package section
-#
-# This defines the package metadata, build-system and dependencies
-#
-
-[package]
+[project]
 name = "py-rattler"
-version = "0.8.2"
 description = "Add a short description here"
 authors = [
     "Bas Zalmstra <bas@prefix.dev>",
     "Tarun Pratap Singh <pratapsinghtarun9@gmail.com>",
 ]
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 license = "BSD-3-Clause"
 
-[build-system]
-build-backend = { name = "pixi-build-python", version = "*" }
-channels = [
-    "https://prefix.dev/pixi-build-backends",
-    "https://prefix.dev/conda-forge",
-]
-
-[build-backend.pixi-build-python]
-# py-rattler is an arch specific package.
-noarch = false
-
-[host-dependencies]
-maturin = "~=1.7.7"
-rust = "~=1.81.0"
-uv = "*"
-
-[target.linux-64.dependencies]
-patchelf = "~=0.17.2"
+[tasks]
 
 [feature.build.dependencies]
-py-rattler = { path = "." }
+maturin = "~=1.2.2"
+pip = "~=23.2.1"
+rust = "~=1.81.0"
 
+[feature.build.tasks]
+build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
+build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release"
 
-[tasks]
+[feature.build.target.linux-64.dependencies]
+patchelf = "~=0.17.2"
 
 [feature.test.dependencies]
 # Python 3.8 is the minimum supported version, so we use that for testing
@@ -62,14 +41,14 @@ typer = "*"
 types-networkx = "*"
 
 [feature.test.tasks]
-test = { cmd = "pytest --doctest-modules" }
+test = { cmd = "pytest --doctest-modules", depends_on = ["build"] }
 fmt-python = "ruff format rattler examples tests"
 fmt-rust = "cargo fmt --all"
 lint-python = "ruff check ."
 lint-rust = "cargo clippy --all"
 fmt = { depends_on = ["fmt-python", "fmt-rust"] }
 lint = { depends_on = ["type-check", "lint-python", "lint-rust"] }
-type-check = { cmd = "mypy" }
+type-check = { cmd = "mypy", depends_on = ["build"] }
 
 # checks for the CI
 fmt-rust-check = "cargo fmt --all --check"
