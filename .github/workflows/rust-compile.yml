@@ -141,6 +141,8 @@ jobs:
 
       - name: Run tests
         if: ${{ !matrix.skip-tests }}
+        env:
+          GOOGLE_CLOUD_TEST_KEY_JSON: ${{ secrets.GOOGLE_CLOUD_TEST_KEY_JSON }}
         run: >
           cargo nextest run
           --workspace 
