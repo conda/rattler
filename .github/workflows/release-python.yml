@@ -81,7 +81,6 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
-          maturin-version: "1.7.6"  # Pin maturin version to work around aarch64 linker error
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
           args: --release --out dist --no-default-features --features rustls-tls
