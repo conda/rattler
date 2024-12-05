@@ -1,18 +1,20 @@
 //! Builder for the creation of lock files.
 
-use crate::{
-    file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
-    CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
+use std::{
+    borrow::Cow,
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
 };
+
 use fxhash::FxHashMap;
 use indexmap::{IndexMap, IndexSet};
 use pep508_rs::ExtraName;
 use rattler_conda_types::{Platform, Version};
-use std::borrow::Cow;
-use std::{
-    collections::{BTreeSet, HashMap},
-    sync::Arc,
+
+use crate::{
+    file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
+    CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
+    LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
 };
 
 /// Information about a single locked package in an environment.
@@ -122,7 +124,8 @@ pub struct LockFileBuilder {
     pypi_runtime_configurations: IndexSet<HashablePypiPackageEnvironmentData>,
 }
 
-/// A unique identifier for a conda package. This is used to deduplicate packages.
+/// A unique identifier for a conda package. This is used to deduplicate
+/// packages.
 #[derive(Debug, Hash, Eq, PartialEq)]
 struct UniqueCondaIdentifier {
     location: UrlOrPath,
@@ -394,19 +397,23 @@ impl From<PypiPackageEnvironmentData> for HashablePypiPackageEnvironmentData {
 
 #[cfg(test)]
 mod test {
-    use crate::{CondaBinaryData, LockFile};
+    use std::{collections::BTreeSet, str::FromStr};
+
     use rattler_conda_types::{PackageName, PackageRecord, Platform, Version};
-    use std::collections::BTreeSet;
-    use std::str::FromStr;
     use url::Url;
+
+    use crate::{CondaBinaryData, LockFile};
 
     #[test]
     fn test_merge_records_and_purls() {
-        let record = PackageRecord::new(
-            PackageName::new_unchecked("foobar"),
-            Version::from_str("1.0.0").unwrap(),
-            "build".into(),
-        );
+        let record = PackageRecord {
+            subdir: "linux-64".into(),
+            ..PackageRecord::new(
+                PackageName::new_unchecked("foobar"),
+                Version::from_str("1.0.0").unwrap(),
+                "build".into(),
+            )
+        };
 
         let lock_file = LockFile::builder()
             .with_conda_package(
