@@ -64,7 +64,6 @@ async fn authenticate_with_google_cloud(mut req: Request) -> MiddlewareResult<Re
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
