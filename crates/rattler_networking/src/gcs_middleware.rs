@@ -73,6 +73,7 @@ mod tests {
                 return;
             }
         };
+        println!("Running GCS Test");
 
         // We have to set GOOGLE_APPLICATION_CREDENTIALS to the path of the JSON key file
         let key_file = tempfile::NamedTempFile::with_suffix(".json").unwrap();
