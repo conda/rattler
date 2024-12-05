@@ -352,13 +352,13 @@ fn merge_package_record<'a>(
     // Merge hashes if the left package doesn't contain them.
     if left.md5.is_none() && right.md5.is_some() {
         result = Cow::Owned(PackageRecord {
-            md5: right.md5.clone(),
+            md5: right.md5,
             ..result.into_owned()
         });
     }
     if left.sha256.is_none() && right.sha256.is_some() {
         result = Cow::Owned(PackageRecord {
-            sha256: right.sha256.clone(),
+            sha256: right.sha256,
             ..result.into_owned()
         });
     }
