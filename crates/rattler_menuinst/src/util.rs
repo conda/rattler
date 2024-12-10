@@ -8,8 +8,8 @@ pub fn log_output(cmd_info: &str, output: std::process::Output) {
 }
 
 #[cfg(target_family = "unix")]
-pub fn run_pre_create_command(pre_create_command: &str) -> Result<(), MenuInstError> {
-    use os::unix::fs::PermissionsExt;
+pub fn run_pre_create_command(pre_create_command: &str) -> Result<(), crate::MenuInstError> {
+    use std::os::unix::fs::PermissionsExt;
     use std::{io::Write, process::Command};
 
     use fs_err as fs;
