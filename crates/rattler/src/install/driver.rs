@@ -1,6 +1,7 @@
 use std::{
     borrow::Borrow,
     collections::{HashMap, HashSet},
+    ffi::OsStr,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, MutexGuard},
 };
@@ -155,10 +156,11 @@ impl InstallDriver {
         transaction: &Transaction<Old, New>,
         target_prefix: &Path,
     ) -> Result<Option<PrePostLinkResult>, PrePostLinkError> {
+        let mut result = None;
         if self.execute_link_scripts {
             match self.run_pre_unlink_scripts(transaction, target_prefix) {
                 Ok(res) => {
-                    return Ok(Some(res));
+                    result = Some(res);
                 }
                 Err(e) => {
                     tracing::error!("Error running pre-unlink scripts: {:?}", e);
@@ -166,7 +168,29 @@ impl InstallDriver {
             }
         }
 
-        Ok(None)
+        // For all packages that are removed, we need to remove menuinst entries as well
+        for record in transaction.removed_packages().map(Borrow::borrow) {
+            for path in record.paths_data.paths.iter() {
+                if path.relative_path.starts_with("Menu")
+                    && path.relative_path.extension() == Some(OsStr::new("json"))
+                {
+                    match rattler_menuinst::remove_menu_items(
+                        &target_prefix.join(&path.relative_path),
+                        target_prefix,
+                        target_prefix,
+                        Platform::current(),
+                        rattler_menuinst::MenuMode::User,
+                    ) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            tracing::warn!("Failed to remove menu item: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(result)
     }
 
     /// Runs a blocking task that will execute on a separate thread. The task is
