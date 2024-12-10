@@ -112,6 +112,9 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub editable: Option<bool>,
 }
 
 #[serde_as]
@@ -218,6 +221,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                     hash: input.hash,
                     globs: input.globs.into_owned(),
                 }),
+                editable: value.editable.unwrap_or(false),
             }))
         }
     }
@@ -290,6 +294,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                 hash: input.hash,
                 globs: Cow::Borrowed(&input.globs),
             }),
+            editable: value.as_source().map(|s| s.editable),
         }
     }
 }
