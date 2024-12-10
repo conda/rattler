@@ -1,9 +1,15 @@
-use std::{io::Write as _, path::{Path, PathBuf}};
+use std::{
+    io::Write as _,
+    path::{Path, PathBuf},
+};
 
 use knownfolders::UserHandle;
 
 use crate::{
-    render::{BaseMenuItemPlaceholders, MenuItemPlaceholders}, schema::{Environment, MenuItemCommand, Windows}, utils::quote_args, MenuInstError, MenuMode
+    render::{BaseMenuItemPlaceholders, MenuItemPlaceholders},
+    schema::{Environment, MenuItemCommand, Windows},
+    utils::quote_args,
+    MenuInstError, MenuMode,
 };
 
 use fs_err as fs;
@@ -93,7 +99,12 @@ impl WindowsMenu {
             // TODO handle activation
         }
 
-        let args = self.command.command.iter().map(|elem| elem.resolve(&self.placeholders)).collect();
+        let args = self
+            .command
+            .command
+            .iter()
+            .map(|elem| elem.resolve(&self.placeholders))
+            .collect();
         lines.push(lex::quote_args(args).join(" "));
 
         lines.join("\n")
@@ -111,18 +122,17 @@ impl WindowsMenu {
     }
 
     fn write_script(&self, path: Option<PathBuf>) -> Result<(), MenuInstError> {
-        let path = path.unwrap_or_else(|| {
-            self.prefix.join("Menu").join(self.shortcut_filename(None))
-        });
+        let path =
+            path.unwrap_or_else(|| self.prefix.join("Menu").join(self.shortcut_filename(None)));
 
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-    
+
         let mut file = fs::File::create(&path)?;
         file.write_all(self.script_content().as_bytes())?;
-    
-        Ok(())    
+
+        Ok(())
     }
 
     fn build_command(&self, with_arg1: bool) {
@@ -147,7 +157,6 @@ impl WindowsMenu {
     }
 
     fn create_shortcut(&self, link_path: &Path, args: &str) -> Result<(), MenuInstError> {
-        
         // target_path, *arguments = self._process_command()
         // working_dir = self.render_key("working_dir")
         // if working_dir:
