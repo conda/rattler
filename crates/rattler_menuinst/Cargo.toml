@@ -26,6 +26,8 @@ tempfile = { workspace = true }
 fs-err = { workspace = true }
 which = "7.0.0"
 known-folders = "1.2.0"
+quick-xml = "0.37.1"
+chrono = { workspace = true, features = ["clock"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = "0.3.9"

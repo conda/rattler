@@ -1,0 +1,5 @@
+---
+source: crates/rattler_menuinst/src/linux/menu_xml.rs
+expression: res
+---
+<Menu><Name>Applications</Name><MergeFile type="parent">/path/to/system_menu</MergeFile></Menu>

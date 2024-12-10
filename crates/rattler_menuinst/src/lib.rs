@@ -39,6 +39,10 @@ pub enum MenuInstError {
     PlistError(#[from] plist::Error),
     #[error("Failed to sign plist: {0}")]
     SigningFailed(String),
+
+    #[cfg(target_os = "linux")]
+    #[error("Failed to install menu item: {0}")]
+    XmlError(#[from] quick_xml::Error),
 }
 
 // Install menu items from a given schema file
@@ -52,6 +56,11 @@ pub fn install_menuitems(
     let text = std::fs::read_to_string(file)?;
     let menu_inst: MenuInstSchema = serde_json::from_str(&text)?;
     let placeholders = BaseMenuItemPlaceholders::new(base_prefix, prefix, platform);
+
+    // if platform.is_linux() {
+    //     #[cfg(target_os = "linux")]
+    //     linux::install_menu(&menu_inst.menu_name, prefix, menu_mode)?;
+    // }
 
     for item in menu_inst.menu_items {
         if platform.is_linux() {
