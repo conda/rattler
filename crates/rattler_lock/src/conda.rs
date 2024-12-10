@@ -151,6 +151,9 @@ pub struct CondaSourceData {
 
     /// The input hash of the package
     pub input: Option<InputHash>,
+
+    /// Whether the package should be installed in editable mode
+    pub editable: bool,
 }
 
 impl From<CondaSourceData> for CondaPackageData {
