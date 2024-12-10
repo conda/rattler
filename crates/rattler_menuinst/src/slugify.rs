@@ -22,6 +22,7 @@ mod tests {
     #[test]
     fn test_basic_slugify() {
         assert_eq!(slugify("Hello World"), "hello-world");
+        assert_eq!(slugify("Hello, World!"), "hello-world");
     }
 
     #[test]

@@ -107,6 +107,7 @@ pub struct NameComplex {
 
 pub enum Environment {
     Base,
+    #[allow(dead_code)]
     NotBase,
 }
 

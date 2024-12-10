@@ -220,7 +220,7 @@ impl MacOSMenu {
 
         let bundle_name = format!("{name}.app");
         let directories = Directories::new(menu_mode, &bundle_name);
-        tracing::info!("Installing menu item for {bundle_name}");
+        tracing::info!("Editing menu item for {bundle_name}");
 
         let refined_placeholders = placeholders.refine(&directories.location);
         Self {
@@ -707,12 +707,16 @@ impl MacOSMenu {
     }
 
     pub fn remove(&self) -> Result<Vec<PathBuf>, MenuInstError> {
-        println!("Removing {}", self.directories.location.display());
+        tracing::info!("Removing menu item {}", self.directories.location.display());
         self.maybe_register_with_launchservices(false)?;
-        fs_err::remove_dir_all(&self.directories.location).unwrap_or_else(|e| {
-            println!("Failed to remove directory: {e}. Ignoring error.");
-        });
-        Ok(vec![self.directories.location.clone()])
+        if self.directories.location.exists() {
+            fs_err::remove_dir_all(&self.directories.location).unwrap_or_else(|e| {
+                tracing::warn!("Failed to remove directory: {e}. Ignoring error.");
+            });
+            return Ok(vec![self.directories.location.clone()]);
+        } else {
+            return Ok(vec![]);
+        }
     }
 }
 
@@ -736,14 +740,4 @@ pub(crate) fn remove_menu_item(
 ) -> Result<Vec<PathBuf>, MenuInstError> {
     let menu = MacOSMenu::new(prefix, macos_item, command, menu_mode, placeholders);
     menu.remove()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_slugify() {
-        assert_eq!(slugify("Hello, World!"), "hello-world");
-    }
 }
