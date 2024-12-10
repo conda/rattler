@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 pub fn log_output(cmd_info: &str, output: std::process::Output) {
     tracing::info!("{}: status {}", cmd_info, output.status);
     tracing::info!(
