@@ -1,5 +1,6 @@
 use crate::error::PyRattlerError;
 use crate::match_spec::PyMatchSpec;
+use crate::networking::client::PyClientWithMiddleware;
 use crate::package_name::PyPackageName;
 use crate::platform::PyPlatform;
 use crate::record::PyRecord;
@@ -50,13 +51,14 @@ impl<'source> FromPyObject<'source> for Wrap<SubdirSelection> {
 #[pymethods]
 impl PyGateway {
     #[new]
-    #[pyo3(signature = (max_concurrent_requests, default_config, per_channel_config, cache_dir=None)
+    #[pyo3(signature = (max_concurrent_requests, default_config, per_channel_config, cache_dir=None, client=None)
     )]
     pub fn new(
         max_concurrent_requests: usize,
         default_config: PySourceConfig,
         per_channel_config: HashMap<String, PySourceConfig>,
         cache_dir: Option<PathBuf>,
+        client: Option<PyClientWithMiddleware>,
     ) -> PyResult<Self> {
         let channel_config = ChannelConfig {
             default: default_config.into(),
@@ -75,6 +77,10 @@ impl PyGateway {
 
         if let Some(cache_dir) = cache_dir {
             gateway.set_cache_dir(cache_dir);
+        }
+
+        if let Some(client) = client {
+            gateway.set_client(client.into());
         }
 
         Ok(Self {
