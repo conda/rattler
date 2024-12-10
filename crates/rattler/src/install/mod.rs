@@ -57,6 +57,7 @@ use rattler_conda_types::{
     prefix_record::PathsEntry,
     Platform,
 };
+use rattler_package_streaming::{fs::extract, ExtractError};
 use simple_spawn_blocking::Cancelled;
 use tokio::task::JoinError;
 use tracing::instrument;
@@ -102,6 +103,14 @@ pub enum InstallError {
     /// Failed to create the target directory.
     #[error("failed to create target directory")]
     FailedToCreateTargetDirectory(#[source] std::io::Error),
+
+    /// Failed to create a temporary directory.
+    #[error("failed to create temporary directory")]
+    FailedToCreateTempDirectory(#[source] std::io::Error),
+
+    /// Failed to extract a conda package.
+    #[error("failed to extract conda package")]
+    FailedToExtractPackage(#[source] ExtractError),
 
     /// A noarch package could not be installed because no python version was
     /// specified.
@@ -241,6 +250,29 @@ pub struct InstallOptions {
     /// used to sign with an ad-hoc certificate. Ad-hoc signing does not use
     /// an identity at all, and identifies exactly one instance of code.
     pub apple_codesign_behavior: AppleCodeSignBehavior,
+}
+
+/// Given a non-extracted conda package (`package_path`), installs its files
+/// to the `target_dir`.
+///
+/// Returns a [`PathsEntry`] for every file that was linked into the target
+/// directory. The entries are ordered in the same order as they appear in the
+/// `paths.json` file of the package.
+pub async fn link_package_from_archive(
+    package_path: &Path,
+    target_dir: &Path,
+    driver: &InstallDriver,
+    options: InstallOptions,
+) -> Result<Vec<PathsEntry>, InstallError> {
+    let temp_dir = tempfile::tempdir().map_err(InstallError::FailedToCreateTempDirectory)?;
+    tracing::debug!(
+        "extracting {} to temporary directory {}",
+        package_path.display(),
+        temp_dir.path().display()
+    );
+
+    extract(package_path, temp_dir.path()).map_err(InstallError::FailedToExtractPackage)?;
+    link_package(temp_dir.path(), target_dir, driver, options).await
 }
 
 /// Given an extracted package archive (`package_dir`), installs its files to
@@ -723,7 +755,9 @@ mod test {
 
     use crate::{
         get_test_data_dir,
-        install::{link_package, InstallDriver, InstallOptions, PythonInfo},
+        install::{
+            link_package, link_package_from_archive, InstallDriver, InstallOptions, PythonInfo,
+        },
         package_cache::PackageCache,
     };
 
@@ -876,5 +910,30 @@ mod test {
         .unwrap();
 
         insta::assert_yaml_snapshot!(paths);
+    }
+
+    #[rstest::rstest]
+    #[case("clobber-tar-bz2", "clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2")]
+    #[case("clobber-conda", "clobber/clobber-python-0.1.0-cpython.conda")]
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    async fn test_link_package_from_archive(#[case] package: &str, #[case] package_path: &str) {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+
+        let package_path = get_test_data_dir().join(package_path);
+
+        let install_driver = InstallDriver::default();
+
+        // Link the package
+        let paths = link_package_from_archive(
+            &package_path,
+            environment_dir.path(),
+            &install_driver,
+            InstallOptions::default(),
+        )
+        .await
+        .unwrap();
+
+        insta::assert_yaml_snapshot!(format!("link_package_from_archive-{}", package), paths);
     }
 }
