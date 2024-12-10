@@ -1,6 +1,7 @@
 pub fn quote_args(args: Vec<String>) -> Vec<String> {
     if args.len() > 2
-        && (args[0].to_uppercase().contains("CMD.EXE") || args[0].to_uppercase().contains("%COMSPEC%"))
+        && (args[0].to_uppercase().contains("CMD.EXE")
+            || args[0].to_uppercase().contains("%COMSPEC%"))
         && (args[1].to_uppercase() == "/K" || args[1].to_uppercase() == "/C")
         && args[2..].iter().any(|arg| arg.contains(' '))
     {
@@ -38,7 +39,7 @@ pub fn ensure_pad(name: &str, pad: char) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{quote_args, quote_string, ensure_pad};
+    use super::{ensure_pad, quote_args, quote_string};
 
     #[test]
     fn test_quote_args() {

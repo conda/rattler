@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
 
+mod menu_xml;
+
 use rattler_conda_types::Platform;
 use rattler_shell::activation::{ActivationVariables, Activator};
 use rattler_shell::shell;
@@ -92,6 +94,24 @@ impl Directories {
         }
     }
 
+    pub fn ensure_directories_exist(&self) -> Result<(), MenuInstError> {
+        let paths = vec![
+            self.menu_config_location.parent().unwrap().to_path_buf(),
+            self.desktop_entries_location.clone(),
+            self.directory_entry_location
+                .parent()
+                .unwrap()
+                .to_path_buf(),
+        ];
+
+        for path in paths {
+            tracing::debug!("Ensuring path {} exists", path.display());
+            fs::create_dir_all(path)?;
+        }
+
+        Ok(())
+    }
+
     pub fn desktop_file(&self) -> PathBuf {
         self.desktop_entries_location.join(format!(
             "{}_{}.desktop",
@@ -100,6 +120,146 @@ impl Directories {
         ))
     }
 }
+
+// pub struct LinuxMenuDirectory {
+//     name: String,
+//     directories: Directories,
+//     mode: MenuMode,
+// }
+
+// impl LinuxMenuDirectory {
+//     pub fn new(directories: Directories) -> Self {
+//         // TODO
+//         let name = "test".to_string();
+//         Self { name, directories, mode: MenuMode::User }
+//     }
+
+//     pub fn create(&self) -> Result<PathBuf, MenuInstError> {
+//         self.directories.ensure_directories_exist()?;
+//         let path = self.write_directory_entry()?;
+
+//         if self.is_valid_menu_file()? && self.has_this_menu()? {
+//             return Ok(path);
+//         }
+
+//         self.ensure_menu_file()?;
+//         self.add_this_menu()?;
+//         Ok(path)
+//     }
+
+//     pub fn remove(&self) -> Result<PathBuf, MenuInstError> {
+//         fs::remove_file(&self.directories.directory_entry_location).ok();
+
+//         // Check if any shortcuts still exist
+//         for entry in fs::read_dir(&self.directories.desktop_entries_location)? {
+//             let entry = entry?;
+//             let filename = entry.file_name();
+//             let filename = filename.to_string_lossy();
+//             if filename.starts_with(&format!("{}_", slugify(&self.directories.menu_name))) {
+//                 return Ok(self.directories.directory_entry_location.clone());
+//             }
+//         }
+
+//         self.remove_this_menu()?;
+//         Ok(self.directories.directory_entry_location.clone())
+//     }
+
+//     fn write_directory_entry(&self) -> Result<PathBuf, MenuInstError> {
+//         let file = &self.directories.directory_entry_location;
+//         tracing::info!("Creating directory entry at {:?}", file);
+//         let writer = File::create(file)?;
+//         let mut writer = std::io::BufWriter::new(writer);
+
+//         writeln!(writer, "[Desktop Entry]")?;
+//         writeln!(writer, "Type=Directory")?;
+//         writeln!(writer, "Encoding=UTF-8")?;
+//         writeln!(writer, "Name={}", self.name)?;
+
+//         Ok(file.clone())
+//     }
+
+//     fn is_valid_menu_file(&self) -> Result<bool, MenuInstError> {
+//         if !self.directories.menu_config_location.exists() {
+//             return Ok(false);
+//         }
+
+//         let file = File::open(&self.directories.menu_config_location)?;
+//         let mut reader = Reader::from_reader(file);
+//         let mut buf = Vec::new();
+
+//         // Check if first element is Menu
+//         match reader.read_event_into(&mut buf)? {
+//             Event::Start(e) if e.name().as_ref() == b"Menu" => Ok(true),
+//             _ => Ok(false),
+//         }
+//     }
+
+//     fn has_this_menu(&self) -> Result<bool, MenuInstError> {
+//         let file = File::open(&self.directories.menu_config_location)?;
+//         let mut reader = Reader::from_reader(file);
+//         let mut buf = Vec::new();
+//         let mut inside_menu = false;
+
+//         loop {
+//             match reader.read_event_into(&mut buf)? {
+//                 Event::Start(e) if e.name().as_ref() == b"Menu" => {
+//                     inside_menu = true;
+//                 }
+//                 Event::Start(e) if e.name().as_ref() == b"Name" && inside_menu => {
+//                     if let Event::Text(t) = reader.read_event_into(&mut buf)? {
+//                         if t.unescape()?.into_owned() == self.directories.name {
+//                             return Ok(true);
+//                         }
+//                     }
+//                 }
+//                 Event::Eof => break,
+//                 _ => (),
+//             }
+//             buf.clear();
+//         }
+//         Ok(false)
+//     }
+
+//     fn ensure_menu_file(&self) -> Result<()> {
+//         if self.directories.menu_config_location.exists() && !self.directories.menu_config_location.is_file() {
+//             return Err(anyhow!("Menu config location is not a file!"));
+//         }
+
+//         if self.directories.menu_config_location.is_file() {
+//             let now = Local::now();
+//             let backup = format!("{}.{}",
+//                 self.directories.menu_config_location.display(),
+//                 now.format("%Y-%m-%d_%Hh%Mm%S")
+//             );
+//             fs::copy(&self.directories.menu_config_location, backup)?;
+
+//             if !self.is_valid_menu_file()? {
+//                 fs::remove_file(&self.directories.menu_config_location)?;
+//             }
+//         }
+
+//         if !self.directories.menu_config_location.exists() {
+//             self.new_menu_file()?;
+//         }
+//         Ok(())
+//     }
+
+//     fn new_menu_file(&self) -> Result<()> {
+//         tracing::info!("Creating {}", self.directories.menu_config_location.display());
+//         let mut contents = String::from("<Menu><Name>Applications</Name>");
+
+//         if self.mode == MenuMode::User {
+//             contents.push_str(&format!(
+//                 "<MergeFile type=\"parent\">{}</MergeFile>",
+//                 self.directories.system_menu_config_location.display()
+//             ));
+//         }
+//         contents.push_str("</Menu>\n");
+
+//         fs::write(&self.directories.menu_config_location, contents)?;
+//         Ok(())
+//     }
+// }
 
 impl LinuxMenu {
     fn new(
@@ -186,20 +346,6 @@ impl LinuxMenu {
             res.push(';');
         }
         res
-    }
-
-    fn create_directory_entry(&self) -> Result<(), MenuInstError> {
-        let file = &self.directories.directory_entry_location;
-        tracing::info!("Creating directory entry at {:?}", file);
-        let writer = File::create(file)?;
-        let mut writer = std::io::BufWriter::new(writer);
-
-        writeln!(writer, "[Desktop Entry]")?;
-        writeln!(writer, "Type=Directory")?;
-        writeln!(writer, "Encoding=UTF-8")?;
-        writeln!(writer, "Name={}", self.name)?;
-
-        Ok(())
     }
 
     fn create_desktop_entry(&self) -> Result<(), MenuInstError> {
