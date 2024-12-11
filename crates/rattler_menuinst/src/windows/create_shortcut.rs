@@ -4,16 +4,18 @@ use windows::{
 };
 use PropertiesSystem::IPropertyStore;
 
-fn create_shortcut(
-    path: String,
-    description: String,
-    filename: String,
-    arguments: Option<String>,
-    workdir: Option<String>,
-    iconpath: Option<String>,
+pub fn create_shortcut(
+    path: &str,
+    description: &str,
+    filename: &str,
+    arguments: Option<&str>,
+    workdir: Option<&str>,
+    iconpath: Option<&str>,
     iconindex: Option<i32>,
-    app_id: Option<String>,
+    app_id: Option<&str>,
 ) -> Result<()> {
+    tracing::info!("Creating shortcut: {} at {}", filename, path);
+
     unsafe {
         // Initialize COM
         let co = CoInitialize(None);
@@ -70,9 +72,9 @@ mod tests {
     #[test]
     fn test_basic_shortcut_creation() {
         let result = create_shortcut(
-            String::from("C:\\Windows\\notepad.exe"),
-            String::from("Notepad Shortcut"),
-            String::from("test_basic.lnk"),
+            "C:\\Windows\\notepad.exe",
+            "Notepad Shortcut",
+            "test_basic.lnk",
             None,
             None,
             None,
@@ -88,10 +90,10 @@ mod tests {
     #[test]
     fn test_shortcut_with_arguments() {
         let result = create_shortcut(
-            String::from("C:\\Windows\\notepad.exe"),
-            String::from("Notepad with Args"),
-            String::from("test_args.lnk"),
-            Some(String::from("/A test.txt")),
+            "C:\\Windows\\notepad.exe",
+            "Notepad with Args",
+            "test_args.lnk",
+            Some("/A test.txt"),
             None,
             None,
             None,
@@ -106,14 +108,14 @@ mod tests {
     #[test]
     fn test_shortcut_with_all_options() {
         let result = create_shortcut(
-            String::from("C:\\Windows\\notepad.exe"),
-            String::from("Full Options Shortcut"),
-            String::from("test_full.lnk"),
-            Some(String::from("/A")),
-            Some(String::from("C:\\Temp")),
-            Some(String::from("C:\\Windows\\notepad.exe")),
+            "C:\\Windows\\notepad.exe",
+            "Full Options Shortcut",
+            "test_full.lnk",
+            Some("/A"),
+            Some("C:\\Temp"),
+            Some("C:\\Windows\\notepad.exe"),
             Some(0),
-            Some(String::from("MyApp.TestShortcut")),
+            Some("MyApp.TestShortcut"),
         );
 
         assert!(result.is_ok());
@@ -124,9 +126,9 @@ mod tests {
     #[test]
     fn test_invalid_path() {
         let result = create_shortcut(
-            String::from("C:\\NonExistent\\fake.exe"),
-            String::from("Invalid Path"),
-            String::from("test_invalid.lnk"),
+            "C:\\NonExistent\\fake.exe",
+            "Invalid Path",
+            "test_invalid.lnk",
             None,
             None,
             None,
@@ -143,9 +145,9 @@ mod tests {
     #[test]
     fn test_invalid_save_location() {
         let result = create_shortcut(
-            String::from("C:\\Windows\\notepad.exe"),
-            String::from("Invalid Save"),
-            String::from("C:\\NonExistent\\Directory\\test.lnk"),
+            "C:\\Windows\\notepad.exe",
+            "Invalid Save",
+            "C:\\NonExistent\\Directory\\test.lnk",
             None,
             None,
             None,

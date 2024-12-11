@@ -154,7 +154,7 @@ pub struct Windows {
     /// If not set, defaults to `Menuinst.<name>`
     ///
     /// For more information, see [Microsoft's AppUserModelID documentation](https://learn.microsoft.com/en-us/windows/win32/shell/appids#how-to-form-an-application-defined-appusermodelid)
-    pub app_user_model_id: Option<String>,
+    pub app_user_model_id: Option<PlaceholderString>,
 }
 
 /// Linux-specific instructions.

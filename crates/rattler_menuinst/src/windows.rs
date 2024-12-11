@@ -8,8 +8,7 @@ use knownfolders::UserHandle;
 use crate::{
     render::{BaseMenuItemPlaceholders, MenuItemPlaceholders},
     schema::{Environment, MenuItemCommand, Windows},
-    utils::quote_args,
-    MenuInstError, MenuMode,
+    slugify, MenuInstError, MenuMode,
 };
 
 use fs_err as fs;
@@ -38,9 +37,11 @@ impl Directories {
         let desktop = known_folders
             .get_folder_path("desktop", UserHandle::Current)
             .unwrap();
-        let programs = known_folders
-            .get_folder_path("programs", UserHandle::Current)
-            .unwrap();
+        // let programs = known_folders
+        //     .get_folder_path("programs", UserHandle::Current)
+        //     .unwrap_or(known_folders.get_folder_path("programs", UserHandle::Common).unwrap());
+
+        let programs = PathBuf::from("C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs");
 
         Directories {
             start_menu,
@@ -101,13 +102,14 @@ impl WindowsMenu {
             // TODO handle activation
         }
 
-        let args = self
+        let args: Vec<String> = self
             .command
             .command
             .iter()
             .map(|elem| elem.resolve(&self.placeholders))
             .collect();
-        lines.push(lex::quote_args(args).join(" "));
+
+        lines.push(lex::quote_args(&args).join(" "));
 
         lines.join("\n")
     }
@@ -137,7 +139,7 @@ impl WindowsMenu {
         Ok(())
     }
 
-    fn build_command(&self, with_arg1: bool) {
+    fn build_command(&self, with_arg1: bool) -> Vec<String> {
         // TODO handle activation
         let mut command = Vec::new();
         for elem in self.command.command.iter() {
@@ -147,6 +149,8 @@ impl WindowsMenu {
         if with_arg1 && !command.iter().any(|s| s.contains("%1")) {
             command.push("%1".to_string());
         }
+
+        command
     }
 
     fn precreate(&self) -> Result<(), MenuInstError> {
@@ -158,7 +162,55 @@ impl WindowsMenu {
         Ok(())
     }
 
-    fn create_shortcut(&self, link_path: &Path, args: &str) -> Result<(), MenuInstError> {
+    fn app_id(&self) -> String {
+        match self.item.app_user_model_id.as_ref() {
+            Some(aumi) => aumi.resolve(&self.placeholders),
+            None => format!(
+                "Menuinst.{}",
+                slugify(&self.name)
+                    .replace(".", "")
+                    .chars()
+                    .take(128)
+                    .collect::<String>()
+            ),
+        }
+    }
+
+    fn create_shortcut(&self, args: &[String]) -> Result<(), MenuInstError> {
+        let icon = self
+            .command
+            .icon
+            .as_ref()
+            .map(|s| s.resolve(&self.placeholders));
+        let workdir = self
+            .command
+            .working_dir
+            .as_ref()
+            .map(|s| s.resolve(&self.placeholders));
+        let app_id = self.app_id();
+
+        let args = lex::quote_args(args).join(" ");
+
+        let link_name = format!("{}.lnk", self.name);
+        if self.item.desktop.unwrap_or(false) {
+            let desktop_link_path = self.directories.desktop.join(link_name);
+            create_shortcut::create_shortcut(
+                &self.name,
+                &self.command.description.resolve(&self.placeholders),
+                &desktop_link_path.to_string_lossy().to_string(),
+                Some(&args),
+                workdir.as_deref(),
+                icon.as_deref(),
+                Some(0),
+                Some(&app_id),
+            )
+            .unwrap();
+        }
+        // if self.metadata["desktop"]:
+        //     extra_dirs.append(self.menu.desktop_location)
+        // if self.metadata["quicklaunch"] and self.menu.quick_launch_location:
+        //     extra_dirs.append(self.menu.quick_launch_location)
+
         // target_path, *arguments = self._process_command()
         // working_dir = self.render_key("working_dir")
         // if working_dir:
@@ -186,6 +238,8 @@ impl WindowsMenu {
     }
 
     pub fn install(self) -> Result<(), MenuInstError> {
+        let args = self.build_command(true);
+        self.create_shortcut(&args);
         // let paths = [
         //     Some(&self.directories.programs),
         //     if self.item.desktop.unwrap_or(false) {
