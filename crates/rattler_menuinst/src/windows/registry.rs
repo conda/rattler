@@ -45,7 +45,11 @@ pub fn register_file_extension(
     Ok(())
 }
 
-pub fn unregister_file_extension(extension: &str, identifier: &str, mode: &str) -> Result<(), std::io::Error> {
+pub fn unregister_file_extension(
+    extension: &str,
+    identifier: &str,
+    mode: &str,
+) -> Result<(), std::io::Error> {
     let hkey = if mode == "system" {
         HKEY_LOCAL_MACHINE
     } else {
@@ -67,7 +71,8 @@ pub fn unregister_file_extension(extension: &str, identifier: &str, mode: &str) 
             if key.get_value::<String, _>(identifier).is_err() {
                 tracing::debug!(
                     "Handler '{}' is not associated with extension '{}'",
-                    identifier, extension
+                    identifier,
+                    extension
                 );
             } else {
                 key.delete_value(identifier)?;
@@ -114,7 +119,11 @@ pub fn register_url_protocol(
     Ok(())
 }
 
-pub fn unregister_url_protocol(protocol: &str, identifier: Option<&str>, mode: &str) -> Result<(), std::io::Error> {
+pub fn unregister_url_protocol(
+    protocol: &str,
+    identifier: Option<&str>,
+    mode: &str,
+) -> Result<(), std::io::Error> {
     let key = if mode == "system" {
         RegKey::predef(HKEY_CLASSES_ROOT)
     } else {
@@ -138,7 +147,6 @@ pub fn unregister_url_protocol(protocol: &str, identifier: Option<&str>, mode: &
 
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -167,8 +175,7 @@ mod tests {
         register_file_extension(extension, identifier, command, None, mode)?;
 
         // Verify registration
-        let classes = RegKey::predef(HKEY_CURRENT_USER)
-            .open_subkey("Software\\Classes")?;
+        let classes = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Software\\Classes")?;
 
         let ext_key = classes.open_subkey(&format!("{}\\OpenWithProgids", extension))?;
         assert!(ext_key.get_value::<String, _>(identifier).is_ok());
@@ -194,8 +201,7 @@ mod tests {
         register_file_extension(extension, identifier, command, Some(icon), mode)?;
 
         // Verify icon
-        let classes = RegKey::predef(HKEY_CURRENT_USER)
-            .open_subkey("Software\\Classes")?;
+        let classes = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Software\\Classes")?;
         let icon_key = classes.open_subkey(identifier)?;
         let icon_value: String = icon_key.get_value("DefaultIcon")?;
         assert_eq!(icon_value, icon);
@@ -269,8 +275,7 @@ mod tests {
         unregister_url_protocol(protocol, identifier, mode)?;
 
         // Verify removal
-        let key = RegKey::predef(HKEY_CURRENT_USER)
-            .open_subkey("Software\\Classes")?;
+        let key = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Software\\Classes")?;
         assert!(key.open_subkey(protocol).is_err());
 
         Ok(())
