@@ -1,4 +1,4 @@
-pub fn quote_args(args: Vec<String>) -> Vec<String> {
+pub fn quote_args(args: &[String]) -> Vec<String> {
     if args.len() > 2
         && (args[0].to_uppercase().contains("CMD.EXE")
             || args[0].to_uppercase().contains("%COMSPEC%"))
@@ -14,11 +14,11 @@ pub fn quote_args(args: Vec<String>) -> Vec<String> {
             .join(" ");
         vec![cmd, flag, format!("\"{}\"", quoted_args)]
     } else {
-        args.into_iter().map(quote_string).collect()
+        args.into_iter().map(|s| quote_string(&s)).collect()
     }
 }
 
-pub fn quote_string(s: String) -> String {
+pub fn quote_string(s: &str) -> String {
     let s = s.trim_matches('"').to_string();
     if s.starts_with('-') || s.starts_with(' ') {
         s
