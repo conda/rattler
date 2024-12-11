@@ -30,7 +30,15 @@ quick-xml = "0.37.1"
 chrono = { workspace = true, features = ["clock"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = "0.3.9"
+windows = { version = "0.58", features = [
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_Storage_EnhancedStorage",
+    "Win32_Foundation",
+    "implement"
+]}
 winreg = "0.52.0"
 
 [dev-dependencies]
