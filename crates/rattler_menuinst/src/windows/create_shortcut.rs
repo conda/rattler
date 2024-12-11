@@ -1,9 +1,6 @@
 use windows::{
-    core::*,
-    Win32::System::Com::*,
-    Win32::UI::Shell::*,
-    Win32::System::Com::StructuredStorage::*,
-    Win32::Storage::EnhancedStorage::PKEY_AppUserModel_ID,
+    core::*, Win32::Storage::EnhancedStorage::PKEY_AppUserModel_ID,
+    Win32::System::Com::StructuredStorage::*, Win32::System::Com::*, Win32::UI::Shell::*,
 };
 use PropertiesSystem::IPropertyStore;
 
@@ -24,11 +21,8 @@ fn create_shortcut(
             panic!("Failed to initialize COM");
         }
 
-        let shell_link: IShellLinkW = CoCreateInstance(
-            &ShellLink as *const GUID,
-            None,
-            CLSCTX_INPROC_SERVER
-        )?;
+        let shell_link: IShellLinkW =
+            CoCreateInstance(&ShellLink as *const GUID, None, CLSCTX_INPROC_SERVER)?;
 
         // Get IPersistFile interface
         let persist_file: IPersistFile = shell_link.cast()?;
@@ -47,10 +41,7 @@ fn create_shortcut(
         }
 
         if let Some(icon_path) = iconpath {
-            shell_link.SetIconLocation(
-                &HSTRING::from(icon_path),
-                iconindex.unwrap_or(0)
-            )?;
+            shell_link.SetIconLocation(&HSTRING::from(icon_path), iconindex.unwrap_or(0))?;
         }
 
         // Handle App User Model ID if provided

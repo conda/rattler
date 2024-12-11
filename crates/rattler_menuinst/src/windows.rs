@@ -14,9 +14,9 @@ use crate::{
 
 use fs_err as fs;
 
+mod create_shortcut;
 mod knownfolders;
 mod lex;
-mod create_shortcut;
 
 pub struct Directories {
     start_menu: PathBuf,
