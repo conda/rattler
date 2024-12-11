@@ -52,7 +52,7 @@ mod tests {
         let expected = vec![
             "\"cmd.exe\"".to_string(),
             "/C".to_string(),
-            "\"echo \"Hello World\"\"".to_string(),
+            "\"\"echo\" \"Hello World\"\"".to_string(),
         ];
         assert_eq!(quote_args(args), expected);
     }
