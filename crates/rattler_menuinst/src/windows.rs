@@ -182,64 +182,60 @@ impl WindowsMenu {
             .icon
             .as_ref()
             .map(|s| s.resolve(&self.placeholders));
-        let workdir = self
-            .command
-            .working_dir
-            .as_ref()
-            .map(|s| s.resolve(&self.placeholders));
+
+        let workdir = if let Some(workdir) = &self.command.working_dir {
+            workdir.resolve(&self.placeholders)
+        } else {
+            "%HOMEPATH%".to_string()
+        };
+
+        if workdir != "%HOMEPATH%" {
+            fs::create_dir_all(&workdir)?;
+        }
+
         let app_id = self.app_id();
 
+        // split args into command and arguments
+        let (command, args) = args.split_first().unwrap();
         let args = lex::quote_args(args).join(" ");
 
         let link_name = format!("{}.lnk", self.name);
         if self.item.desktop.unwrap_or(false) {
-            let desktop_link_path = self.directories.desktop.join(link_name);
+            let desktop_link_path = self.directories.desktop.join(&link_name);
             create_shortcut::create_shortcut(
-                &self.name,
+                &command,
                 &self.command.description.resolve(&self.placeholders),
                 &desktop_link_path.to_string_lossy().to_string(),
                 Some(&args),
-                workdir.as_deref(),
+                Some(&workdir),
                 icon.as_deref(),
                 Some(0),
                 Some(&app_id),
             )
             .unwrap();
         }
-        // if self.metadata["desktop"]:
-        //     extra_dirs.append(self.menu.desktop_location)
-        // if self.metadata["quicklaunch"] and self.menu.quick_launch_location:
-        //     extra_dirs.append(self.menu.quick_launch_location)
 
-        // target_path, *arguments = self._process_command()
-        // working_dir = self.render_key("working_dir")
-        // if working_dir:
-        //     Path(working_dir).mkdir(parents=True, exist_ok=True)
-        // else:
-        //     working_dir = "%HOMEPATH%"
+        if self.item.quicklaunch.unwrap_or(false) && self.directories.quick_launch.is_dir() {
+            let quicklaunch_link_path = self.directories.quick_launch.join(link_name);
+            create_shortcut::create_shortcut(
+                &self.name,
+                &self.command.description.resolve(&self.placeholders),
+                &quicklaunch_link_path.to_string_lossy().to_string(),
+                Some(&args),
+                Some(&workdir),
+                icon.as_deref(),
+                Some(0),
+                Some(&app_id),
+            )
+            .unwrap();
+        }
 
-        // icon = self.render_key("icon") or ""
-
-        // # winshortcut is a windows-only C extension! create_shortcut has this API
-        // # Notice args must be passed as positional, no keywords allowed!
-        // # winshortcut.create_shortcut(path, description, filename, arguments="",
-        // #                             workdir=None, iconpath=None, iconindex=0, app_id="")
-        // create_shortcut(
-        //     target_path,
-        //     self._shortcut_filename(ext=""),
-        //     str(path),
-        //     " ".join(arguments),
-        //     working_dir,
-        //     icon,
-        //     0,
-        //     self._app_user_model_id(),
-        // )
         Ok(())
     }
 
     pub fn install(self) -> Result<(), MenuInstError> {
-        let args = self.build_command(true);
-        self.create_shortcut(&args);
+        let args = self.build_command(false);
+        self.create_shortcut(&args)?;
         // let paths = [
         //     Some(&self.directories.programs),
         //     if self.item.desktop.unwrap_or(false) {

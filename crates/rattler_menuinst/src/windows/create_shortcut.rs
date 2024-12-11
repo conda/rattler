@@ -4,6 +4,7 @@ use windows::{
 };
 use PropertiesSystem::IPropertyStore;
 
+/// Create a Windows `.lnk` shortcut file at the specified path.
 pub fn create_shortcut(
     path: &str,
     description: &str,
