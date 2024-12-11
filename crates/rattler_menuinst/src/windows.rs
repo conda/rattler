@@ -16,6 +16,7 @@ use fs_err as fs;
 
 mod create_shortcut;
 mod knownfolders;
+mod registry;
 mod lex;
 
 pub struct Directories {
