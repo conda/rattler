@@ -51,7 +51,7 @@ impl Ord for Platform {
 
 /// Known architectures supported by Conda.
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Arch {
     X86,
     X86_64,
