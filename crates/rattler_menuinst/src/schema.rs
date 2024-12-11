@@ -536,7 +536,7 @@ mod test {
     use std::path::{Path, PathBuf};
 
     pub(crate) fn test_data() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/menuinst")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data")
     }
 
     #[test]
