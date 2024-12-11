@@ -16,8 +16,8 @@ use fs_err as fs;
 
 mod create_shortcut;
 mod knownfolders;
-mod registry;
 mod lex;
+mod registry;
 
 pub struct Directories {
     start_menu: PathBuf,
