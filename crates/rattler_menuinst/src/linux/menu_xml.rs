@@ -2,9 +2,9 @@ use chrono::Utc;
 use fs_err::{self as fs, File};
 use quick_xml::events::Event;
 use quick_xml::{Reader, Writer};
-use thiserror::Error;
 use std::io::Write;
 use std::path::PathBuf;
+use thiserror::Error;
 
 use crate::{slugify, MenuInstError};
 
@@ -56,16 +56,16 @@ impl MenuXml {
             self.menu_config_location.display(),
             self.name
         );
-    
+
         let contents = self.contents()?;
         let mut reader = Reader::from_str(&contents);
         reader.config_mut().trim_text(true);
-    
+
         let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
         let mut buf = Vec::new();
         let mut skip_menu = false;
         let mut depth = 0;
-    
+
         loop {
             match reader.read_event_into(&mut buf)? {
                 Event::Start(e) => {
@@ -103,10 +103,10 @@ impl MenuXml {
             }
             buf.clear();
         }
-    
+
         self.write_menu_file(&writer.into_inner())
     }
-    
+
     pub fn has_menu(&self) -> Result<bool, MenuInstError> {
         let contents = self.contents()?;
         let mut reader = Reader::from_str(&contents);
@@ -163,9 +163,11 @@ impl MenuXml {
             let mut reader = reader;
             loop {
                 match reader.read_event_into(&mut buf) {
-                    Ok(Event::Start(e)) => if e.name().as_ref() == b"Menu" {
-                        return true;
-                    },
+                    Ok(Event::Start(e)) => {
+                        if e.name().as_ref() == b"Menu" {
+                            return true;
+                        }
+                    }
                     Ok(Event::Eof) => break,
                     _ => (),
                 }
@@ -231,7 +233,13 @@ fn main() {
     let menu_config = PathBuf::from("applications.menu");
     let system_menu_config = PathBuf::from("system_applications.menu");
 
-    let menu_xml = MenuXml::new(menu_config, system_menu_config, "Test Menu".to_string(), "user".to_string()).unwrap();
+    let menu_xml = MenuXml::new(
+        menu_config,
+        system_menu_config,
+        "Test Menu".to_string(),
+        "user".to_string(),
+    )
+    .unwrap();
     menu_xml.ensure_menu_file().unwrap();
 
     if menu_xml.has_menu().unwrap() {
@@ -258,7 +266,8 @@ mod tests {
             system_menu_config,
             "Test Menu".to_string(),
             "user".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         (temp_dir, menu_xml)
     }
@@ -325,7 +334,7 @@ mod tests {
     #[test]
     fn test_remove_menu_xml_structure() {
         let (_temp_dir, menu_xml) = setup_test_dir();
-    
+
         // Create initial menu file with content
         let initial_content = r#"<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
      "http://standards.freedesktop.org/menu-spec/menu-1.0.dtd">
@@ -340,23 +349,23 @@ mod tests {
             </Include>
         </Menu>
     </Menu>"#;
-    
+
         fs::write(&menu_xml.menu_config_location, initial_content).unwrap();
-    
+
         // Remove the menu
         menu_xml.remove_menu().unwrap();
-    
+
         // Read and verify the result
         let result = fs::read_to_string(&menu_xml.menu_config_location).unwrap();
-        
+
         insta::assert_snapshot!(result);
     }
-    
+
     #[test]
     // load file from test data (example.menu) and add a new entry, then remove it
     fn test_add_and_remove_menu_xml_structure() {
         let (_temp_dir, menu_xml) = setup_test_dir();
-    
+
         let test_data = test_data();
         let schema_path = test_data.join("linux-menu/example.menu");
 
