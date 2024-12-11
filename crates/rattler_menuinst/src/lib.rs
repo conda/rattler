@@ -165,7 +165,7 @@ pub mod test {
     use crate::{install_menuitems, MenuMode};
 
     pub(crate) fn test_data() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/menuinst")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data")
     }
 
     #[test]

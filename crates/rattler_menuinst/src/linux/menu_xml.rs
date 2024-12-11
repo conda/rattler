@@ -2,16 +2,17 @@ use chrono::Utc;
 use fs_err::{self as fs, File};
 use quick_xml::events::Event;
 use quick_xml::{Reader, Writer};
-use std::io::{BufReader, Write};
+use thiserror::Error;
+use std::io::Write;
 use std::path::PathBuf;
 
-use crate::{slugify, MenuInstError, MenuMode};
+use crate::{slugify, MenuInstError};
 
 pub struct MenuXml {
     menu_config_location: PathBuf,
     system_menu_config_location: PathBuf,
     name: String,
-    mode: MenuMode,
+    mode: String,
 }
 
 impl MenuXml {
@@ -19,41 +20,54 @@ impl MenuXml {
         menu_config_location: PathBuf,
         system_menu_config_location: PathBuf,
         name: String,
-        mode: MenuMode,
-    ) -> Self {
-        Self {
+        mode: String,
+    ) -> Result<Self, MenuInstError> {
+        Ok(Self {
             menu_config_location,
             system_menu_config_location,
             name,
             mode,
-        }
+        })
     }
 
-    pub fn try_open(path: &PathBuf) -> Result<quick_xml::Reader<BufReader<File>>, MenuInstError> {
-        let file = File::open(path)?;
-        let buf_reader = BufReader::new(file);
+    fn is_target_menu(&self, mut reader: Reader<&[u8]>) -> Result<bool, MenuInstError> {
+        let mut buf = Vec::new();
+        loop {
+            match reader.read_event_into(&mut buf)? {
+                Event::Start(e) if e.name().as_ref() == b"Name" => {
+                    if let Event::Text(t) = reader.read_event_into(&mut buf)? {
+                        return Ok(t.unescape()?.into_owned() == self.name);
+                    }
+                }
+                Event::End(e) if e.name().as_ref() == b"Menu" => break,
+                _ => (),
+            }
+        }
+        Ok(false)
+    }
 
-        Ok(Reader::from_reader(buf_reader))
+    fn contents(&self) -> Result<String, MenuInstError> {
+        Ok(fs::read_to_string(&self.menu_config_location)?)
     }
 
     pub fn remove_menu(&self) -> Result<(), MenuInstError> {
-        tracing::info!(
+        println!(
             "Editing {} to remove {} config",
             self.menu_config_location.display(),
             self.name
         );
     
-        let xml_content = fs::read_to_string(&self.menu_config_location)?;
-        let mut reader = Reader::from_str(&xml_content);
+        let contents = self.contents()?;
+        let mut reader = Reader::from_str(&contents);
+        reader.config_mut().trim_text(true);
     
-        let mut writer = Writer::new(Vec::new());
+        let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
         let mut buf = Vec::new();
         let mut skip_menu = false;
         let mut depth = 0;
     
         loop {
             match reader.read_event_into(&mut buf)? {
-                Event::DocType(_) | Event::Text(_) if depth == 0 => continue,
                 Event::Start(e) => {
                     if e.name().as_ref() == b"Menu" {
                         depth += 1;
@@ -62,27 +76,11 @@ impl MenuXml {
                             writer.write_event(Event::Start(e))?;
                         } else {
                             // Check if this is our target menu
-                            let mut inner_buf = Vec::new();
-                            let mut is_target = false;
-                            while let Ok(inner_event) = reader.read_event_into(&mut inner_buf) {
-                                match inner_event {
-                                    Event::Start(se) if se.name().as_ref() == b"Name" => {
-                                        if let Event::Text(t) = reader.read_event_into(&mut inner_buf)? {
-                                            if t.unescape()?.into_owned() == self.name {
-                                                is_target = true;
-                                                break;
-                                            }
-                                        }
-                                        break;
-                                    }
-                                    Event::End(ee) if ee.name().as_ref() == b"Menu" => break,
-                                    _ => continue,
-                                }
-                            }
-                            if !is_target {
-                                writer.write_event(Event::Start(e))?;
-                            } else {
+
+                            if self.is_target_menu(reader.clone())? {
                                 skip_menu = true;
+                            } else {
+                                writer.write_event(Event::Start(e))?;
                             }
                         }
                     } else if !skip_menu {
@@ -90,20 +88,11 @@ impl MenuXml {
                     }
                 }
                 Event::End(e) => {
-                    if e.name().as_ref() == b"Menu" {
-                        depth -= 1;
-                        if depth == 0 || !skip_menu {
-                            writer.write_event(Event::End(e))?;
-                        }
-                        if skip_menu && depth == 0 {
-                            skip_menu = false;
-                        }
+                    if skip_menu && e.name().as_ref() == b"Menu" {
+                        skip_menu = false;
                     } else if !skip_menu {
                         writer.write_event(Event::End(e))?;
                     }
-                }
-                Event::Text(e) if !skip_menu => {
-                    writer.write_event(Event::Text(e))?;
                 }
                 Event::Eof => break,
                 e => {
@@ -119,13 +108,14 @@ impl MenuXml {
     }
     
     pub fn has_menu(&self) -> Result<bool, MenuInstError> {
-        let mut reader = Self::try_open(&self.menu_config_location)?;
+        let contents = self.contents()?;
+        let mut reader = Reader::from_str(&contents);
         let mut buf = Vec::new();
 
         loop {
             match reader.read_event_into(&mut buf)? {
                 Event::Start(e) if e.name().as_ref() == b"Menu" => {
-                    if self.is_target_menu(&mut reader, &mut buf)? {
+                    if self.is_target_menu(reader.clone())? {
                         return Ok(true);
                     }
                 }
@@ -138,7 +128,7 @@ impl MenuXml {
     }
 
     pub fn add_menu(&self) -> Result<(), MenuInstError> {
-        tracing::info!(
+        println!(
             "Editing {} to add {} config",
             self.menu_config_location.display(),
             self.name
@@ -167,14 +157,17 @@ impl MenuXml {
     }
 
     pub fn is_valid_menu_file(&self) -> bool {
-        if let Ok(reader) = Self::try_open(&self.menu_config_location) {
+        if let Ok(contents) = self.contents() {
+            let reader = Reader::from_str(&contents);
             let mut buf = Vec::new();
             let mut reader = reader;
-
-            if let Ok(event) = reader.read_event_into(&mut buf) {
-                match event {
-                    Event::Start(e) => return e.name().as_ref() == b"Menu",
-                    _ => return false,
+            loop {
+                match reader.read_event_into(&mut buf) {
+                    Ok(Event::Start(e)) => if e.name().as_ref() == b"Menu" {
+                        return true;
+                    },
+                    Ok(Event::Eof) => break,
+                    _ => (),
                 }
             }
         }
@@ -182,11 +175,8 @@ impl MenuXml {
     }
 
     fn write_menu_file(&self, content: &[u8]) -> Result<(), MenuInstError> {
-        tracing::info!("Writing {}", self.menu_config_location.display());
+        println!("Writing {}", self.menu_config_location.display());
         let mut file = File::create(&self.menu_config_location)?;
-
-        file.write_all(b"<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\"\n")?;
-        file.write_all(b" \"http://standards.freedesktop.org/menu-spec/menu-1.0.dtd\">\n")?;
         file.write_all(content)?;
         file.write_all(b"\n")?;
         Ok(())
@@ -219,43 +209,42 @@ impl MenuXml {
     }
 
     fn new_menu_file(&self) -> Result<(), MenuInstError> {
-        tracing::info!("Creating {}", self.menu_config_location.display());
-        let mut content = String::from("<Menu><Name>Applications</Name>");
+        println!("Creating {}", self.menu_config_location.display());
+        let mut content = String::from("<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\" \"http://standards.freedesktop.org/menu-spec/menu-1.0.dtd\">\n");
+        content.push_str("<Menu>\n  <Name>Applications</Name>\n");
 
-        if self.mode == MenuMode::User {
+        if self.mode == "user" {
             content.push_str(&format!(
-                "<MergeFile type=\"parent\">{}</MergeFile>",
+                "  <MergeFile type=\"parent\">{}</MergeFile>\n",
                 self.system_menu_config_location.display()
             ));
         }
         content.push_str("</Menu>\n");
-
+        println!("{}", content);
         fs::write(&self.menu_config_location, content)?;
         Ok(())
     }
+}
 
-    fn is_target_menu<R: std::io::BufRead>(
-        &self,
-        reader: &mut Reader<R>,
-        buf: &mut Vec<u8>,
-    ) -> Result<bool, MenuInstError> {
-        loop {
-            match reader.read_event_into(buf)? {
-                Event::Start(e) if e.name().as_ref() == b"Name" => {
-                    if let Event::Text(t) = reader.read_event_into(buf)? {
-                        return Ok(t.unescape()?.into_owned() == self.name);
-                    }
-                }
-                Event::End(e) if e.name().as_ref() == b"Menu" => break,
-                _ => (),
-            }
-        }
-        Ok(false)
+// main function
+fn main() {
+    let menu_config = PathBuf::from("applications.menu");
+    let system_menu_config = PathBuf::from("system_applications.menu");
+
+    let menu_xml = MenuXml::new(menu_config, system_menu_config, "Test Menu".to_string(), "user".to_string()).unwrap();
+    menu_xml.ensure_menu_file().unwrap();
+
+    if menu_xml.has_menu().unwrap() {
+        menu_xml.remove_menu().unwrap();
+    } else {
+        menu_xml.add_menu().unwrap();
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::test::test_data;
+
     use super::*;
     use tempfile::TempDir;
 
@@ -268,8 +257,8 @@ mod tests {
             menu_config,
             system_menu_config,
             "Test Menu".to_string(),
-            MenuMode::User,
-        );
+            "user".to_string(),
+        ).unwrap();
 
         (temp_dir, menu_xml)
     }
@@ -368,7 +357,7 @@ mod tests {
     fn test_add_and_remove_menu_xml_structure() {
         let (_temp_dir, menu_xml) = setup_test_dir();
     
-        let test_data = crate::test::test_data();
+        let test_data = test_data();
         let schema_path = test_data.join("linux-menu/example.menu");
 
         // Copy the example.menu file to the menu location
