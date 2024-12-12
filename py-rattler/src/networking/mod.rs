@@ -67,7 +67,9 @@ pub fn py_fetch_repo_data<'a>(
                 .into_iter()
                 .map(|(cache, chan)| {
                     let path = cache_path.to_string_lossy().into_owned();
-                    PySparseRepoData::new(chan, path, cache.repo_data_json_path)
+                    let repo_data_json_path = cache.repo_data_json_path.clone();
+                    drop(cache);
+                    PySparseRepoData::new(chan, path, repo_data_json_path)
                 })
                 .collect::<Result<Vec<_>, _>>(),
             Err(e) => Err(PyRattlerError::from(e).into()),
