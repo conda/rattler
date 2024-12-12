@@ -51,7 +51,7 @@ impl MenuXml {
     }
 
     pub fn remove_menu(&self) -> Result<(), MenuInstError> {
-        println!(
+        tracing::info!(
             "Editing {} to remove {} config",
             self.menu_config_location.display(),
             self.name
@@ -128,7 +128,7 @@ impl MenuXml {
     }
 
     pub fn add_menu(&self) -> Result<(), MenuInstError> {
-        println!(
+        tracing::info!(
             "Editing {} to add {} config",
             self.menu_config_location.display(),
             self.name
@@ -177,7 +177,7 @@ impl MenuXml {
     }
 
     fn write_menu_file(&self, content: &[u8]) -> Result<(), MenuInstError> {
-        println!("Writing {}", self.menu_config_location.display());
+        tracing::info!("Writing {}", self.menu_config_location.display());
         let mut file = File::create(&self.menu_config_location)?;
         file.write_all(content)?;
         file.write_all(b"\n")?;
@@ -211,7 +211,7 @@ impl MenuXml {
     }
 
     fn new_menu_file(&self) -> Result<(), MenuInstError> {
-        println!("Creating {}", self.menu_config_location.display());
+        tracing::info!("Creating {}", self.menu_config_location.display());
         let mut content = String::from("<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\" \"http://standards.freedesktop.org/menu-spec/menu-1.0.dtd\">\n");
         content.push_str("<Menu>\n  <Name>Applications</Name>\n");
 
@@ -222,7 +222,6 @@ impl MenuXml {
             ));
         }
         content.push_str("</Menu>\n");
-        println!("{}", content);
         fs::write(&self.menu_config_location, content)?;
         Ok(())
     }
