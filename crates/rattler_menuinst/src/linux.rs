@@ -148,6 +148,14 @@ impl LinuxMenu {
         }
     }
 
+    /// Set the directories for the menu item
+    fn with_directories(self, directories: Directories) -> Self {
+        LinuxMenu {
+            directories,
+            ..self
+        }
+    }
+
     fn location(&self) -> PathBuf {
         self.directories.desktop_file()
     }
@@ -561,4 +569,73 @@ pub fn remove_menu_item(
 ) -> Result<(), MenuInstError> {
     let menu = LinuxMenu::new(menu_name, prefix, item, command, placeholders, menu_mode);
     menu.remove()
+}
+
+#[cfg(test)]
+mod tests {
+    impl super::Directories {
+        pub fn new_test() -> Self {
+            let menu_name = "Test Menu";
+            let name = "Test Item";
+            let data_directory = tempfile::tempdir().unwrap().path().to_path_buf();
+            let system_menu_config_location = tempfile::tempdir().unwrap().path().to_path_buf();
+            let menu_config_location = tempfile::tempdir().unwrap().path().to_path_buf();
+            let desktop_entries_location = tempfile::tempdir().unwrap().path().to_path_buf();
+            let directory_entry_location = tempfile::tempdir().unwrap().path().to_path_buf();
+
+            Directories {
+                menu_name: menu_name.to_string(),
+                name: name.to_string(),
+                data_directory,
+                system_menu_config_location,
+                menu_config_location,
+                desktop_entries_location,
+                directory_entry_location,
+            }
+        }
+    }
+
+    #[test]
+    fn test_directories() {
+        let dirs = super::Directories::new_test();
+        assert!(dirs.ensure_directories_exist().is_ok());
+    }
+
+    #[test]
+    fn test_installation() {
+        let dirs = super::Directories::new_test();
+
+        let spyder = test_data().join("spyder/menu.json");
+        let (prefix, base_prefix) = (Path::new("/base/prefix"), Path::new("/prefix"));
+        let text = std::fs::read_to_string(file)?;
+        let menu_inst: MenuInstSchema = serde_json::from_str(&text)?;
+        let placeholders = BaseMenuItemPlaceholders::new(
+            Path::from("/base/prefix"),
+            Path::from("/prefix"),
+            Platform::Linux64,
+        );
+        let item = menu_inst.menu_items[0];
+        let linux_item = item.platforms.linux.unwrap();
+        let command = item.command.merge(linux_item.base);
+        LinuxMenu::new(
+            menu_inst.menu_name,
+            prefix,
+            item,
+            command,
+            placeholders,
+            MenuMode::User,
+        )
+        .with_directories(dirs)
+        .install()
+        .unwrap();
+
+        // linux::install_menu_item(
+        //     &,
+        //     prefix,
+        //     linux_item.specific,
+        //     command,
+        //     &placeholders,
+        //     menu_mode,
+        // )?;
+    }
 }

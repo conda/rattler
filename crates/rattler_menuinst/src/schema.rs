@@ -590,7 +590,7 @@ mod test {
             command
                 .name
                 .resolve(super::Environment::Base, &placeholders),
-            "Spyder 6 (empty)"
+            "Spyder 6 (prefix)"
         );
 
         // let foo = menu_0.platforms.osx.as_ref().unwrap().base.

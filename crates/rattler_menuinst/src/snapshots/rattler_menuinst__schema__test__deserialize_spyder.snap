@@ -81,6 +81,7 @@ MenuInstSchema {
                             hidden: None,
                             implements: None,
                             keywords: None,
+                            single_main_window: None,
                             mime_type: Some(
                                 [
                                     PlaceholderString(
@@ -524,7 +525,9 @@ MenuInstSchema {
                                 ],
                             ),
                             app_user_model_id: Some(
-                                "spyder-ide.Spyder-6.{{ ENV_NAME }}",
+                                PlaceholderString(
+                                    "spyder-ide.Spyder-6.{{ ENV_NAME }}",
+                                ),
                             ),
                         },
                     },
