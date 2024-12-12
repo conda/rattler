@@ -25,6 +25,7 @@ use rattler_package_streaming::{DownloadReporter, ExtractError};
 pub use reporter::CacheReporter;
 use reqwest::StatusCode;
 use simple_spawn_blocking::Cancelled;
+use tracing::instrument;
 use url::Url;
 
 use crate::validation::validate_package_directory;
@@ -209,6 +210,7 @@ impl PackageCache {
     /// This is a convenience wrapper around `get_or_fetch` which fetches the
     /// package from the given URL if the package could not be found in the
     /// cache.
+    #[instrument(skip_all, fields(url=%url))]
     pub async fn get_or_fetch_from_url_with_retry(
         &self,
         pkg: impl Into<CacheKey>,
@@ -306,7 +308,14 @@ where
 {
     // Acquire a read lock on the cache entry. This ensures that no other process is
     // currently writing to the cache.
-    let lock_file_path = path.with_extension("lock");
+    let lock_file_path = {
+        // Append the `.lock` extension to the cache path to create the lock file path.
+        // `Path::with_extension` strips too much from the filename if it contains one
+        // or more dots.
+        let mut path_str = path.as_os_str().to_owned();
+        path_str.push(".lock");
+        PathBuf::from(path_str)
+    };
 
     // Ensure the directory containing the lock-file exists.
     if let Some(root_dir) = lock_file_path.parent() {
@@ -333,7 +342,8 @@ where
             _ => false,
         };
 
-        if path.is_dir() && !hash_mismatch {
+        let cache_dir_exists = path.is_dir();
+        if cache_dir_exists && !hash_mismatch {
             let path_inner = path.clone();
 
             let reporter = reporter.as_deref().map(|r| (r, r.on_validate_start()));
@@ -387,6 +397,12 @@ where
                     }
                 }
             }
+        } else if !cache_dir_exists {
+            tracing::debug!("cache directory does not exist, fetching package");
+        } else if hash_mismatch {
+            tracing::warn!("hash mismatch, wanted a package with hash {} but the cached package has hash {}, fetching package",
+                given_sha.map_or(String::from("<unknown>"), |s| format!("{s:x}")),
+                locked_sha256.map_or(String::from("<unknown>"), |s| format!("{s:x}")));
         }
 
         // If the cache is stale, we need to fetch the package again. We have to acquire
