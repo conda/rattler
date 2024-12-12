@@ -32,6 +32,7 @@ pub struct LinuxMenu {
 
 /// Directories used on Linux for menu items
 #[allow(unused)]
+#[derive(Debug, Clone)]
 pub struct Directories {
     /// The name of the (parent) menu (in the json defined as `menu_name`)
     pub menu_name: String,
@@ -130,11 +131,23 @@ impl LinuxMenu {
         placeholders: &BaseMenuItemPlaceholders,
         mode: MenuMode,
     ) -> Self {
+        Self::new_impl(menu_name, prefix, item, command, placeholders, mode, None)
+    }
+
+    pub fn new_impl(
+        menu_name: &str,
+        prefix: &Path,
+        item: Linux,
+        command: MenuItemCommand,
+        placeholders: &BaseMenuItemPlaceholders,
+        mode: MenuMode,
+        directories: Option<Directories>,
+    ) -> Self {
         let name = command
             .name
             .resolve(crate::schema::Environment::Base, placeholders);
 
-        let directories = Directories::new(mode, &menu_name, &name);
+        let directories = directories.unwrap_or_else(|| Directories::new(mode, &menu_name, &name));
         let refined_placeholders = placeholders.refine(&directories.desktop_file());
 
         LinuxMenu {
@@ -148,12 +161,24 @@ impl LinuxMenu {
         }
     }
 
-    /// Set the directories for the menu item
-    fn with_directories(self, directories: Directories) -> Self {
-        LinuxMenu {
-            directories,
-            ..self
-        }
+    #[cfg(test)]
+    pub fn new_with_directories(
+        menu_name: &str,
+        prefix: &Path,
+        item: Linux,
+        command: MenuItemCommand,
+        placeholders: &BaseMenuItemPlaceholders,
+        directories: Directories,
+    ) -> Self {
+        Self::new_impl(
+            menu_name,
+            prefix,
+            item,
+            command,
+            placeholders,
+            MenuMode::User,
+            Some(directories),
+        )
     }
 
     fn location(&self) -> PathBuf {
@@ -573,69 +598,148 @@ pub fn remove_menu_item(
 
 #[cfg(test)]
 mod tests {
-    impl super::Directories {
-        pub fn new_test() -> Self {
-            let menu_name = "Test Menu";
-            let name = "Test Item";
-            let data_directory = tempfile::tempdir().unwrap().path().to_path_buf();
-            let system_menu_config_location = tempfile::tempdir().unwrap().path().to_path_buf();
-            let menu_config_location = tempfile::tempdir().unwrap().path().to_path_buf();
-            let desktop_entries_location = tempfile::tempdir().unwrap().path().to_path_buf();
-            let directory_entry_location = tempfile::tempdir().unwrap().path().to_path_buf();
+    use fs_err as fs;
+    use std::{
+        collections::HashMap,
+        path::{Path, PathBuf},
+    };
+    use tempfile::TempDir;
 
-            Directories {
-                menu_name: menu_name.to_string(),
-                name: name.to_string(),
-                data_directory,
-                system_menu_config_location,
-                menu_config_location,
-                desktop_entries_location,
-                directory_entry_location,
+    use crate::{
+        render::BaseMenuItemPlaceholders, schema::MenuInstSchema, test::test_data, MenuMode,
+    };
+
+    use super::{Directories, LinuxMenu};
+
+    struct FakeDirectories {
+        _tmp_dir: TempDir,
+        directories: Directories,
+    }
+
+    impl FakeDirectories {
+        fn new() -> Self {
+            let tmp_dir = TempDir::new().unwrap();
+            let directories = Directories {
+                menu_name: "Test".to_string(),
+                name: "Test".to_string(),
+                data_directory: tmp_dir.path().to_path_buf(),
+                system_menu_config_location: tmp_dir.path().join("system_menu_config_location"),
+                menu_config_location: tmp_dir.path().join("menu_config_location"),
+                desktop_entries_location: tmp_dir.path().join("desktop_entries_location"),
+                directory_entry_location: tmp_dir.path().join("directory_entry_location"),
+            };
+
+            directories.ensure_directories_exist().unwrap();
+
+            Self {
+                _tmp_dir: tmp_dir,
+                directories,
             }
+        }
+
+        pub fn directories(&self) -> &Directories {
+            &self.directories
+        }
+    }
+
+    struct FakePlaceholders {
+        placeholders: HashMap<String, String>,
+    }
+
+    impl AsRef<HashMap<String, String>> for FakePlaceholders {
+        fn as_ref(&self) -> &HashMap<String, String> {
+            &self.placeholders
+        }
+    }
+
+    struct FakePrefix {
+        _tmp_dir: TempDir,
+        prefix_path: PathBuf,
+        schema: MenuInstSchema,
+    }
+
+    impl FakePrefix {
+        fn new(schema_json: &str) -> Self {
+            let tmp_dir = TempDir::new().unwrap();
+            let prefix_path = tmp_dir.path().join("test-env");
+            let schema_json = test_data().join(schema_json);
+            let menu_folder = prefix_path.join("Menu");
+
+            fs::create_dir_all(&menu_folder).unwrap();
+            fs::copy(
+                &schema_json,
+                menu_folder.join(schema_json.file_name().unwrap()),
+            )
+            .unwrap();
+
+            // Create a icon file for the
+            let schema = std::fs::read_to_string(schema_json).unwrap();
+            let parsed_schema: MenuInstSchema = serde_json::from_str(&schema).unwrap();
+
+            let mut placeholders = HashMap::<String, String>::new();
+            placeholders.insert(
+                "MENU_DIR".to_string(),
+                menu_folder.to_string_lossy().to_string(),
+            );
+
+            for item in &parsed_schema.menu_items {
+                let icon = item.command.icon.as_ref().unwrap();
+                for ext in &["icns", "png", "svg"] {
+                    placeholders.insert("ICON_EXT".to_string(), ext.to_string());
+                    let icon_path = icon.resolve(FakePlaceholders {
+                        placeholders: placeholders.clone(),
+                    });
+                    fs::write(&icon_path, &[]).unwrap();
+                }
+            }
+
+            fs::create_dir_all(prefix_path.join("bin")).unwrap();
+            fs::write(prefix_path.join("bin/python"), &[]).unwrap();
+
+            Self {
+                _tmp_dir: tmp_dir,
+                prefix_path,
+                schema: parsed_schema,
+            }
+        }
+
+        pub fn prefix(&self) -> &Path {
+            &self.prefix_path
         }
     }
 
     #[test]
-    fn test_directories() {
-        let dirs = super::Directories::new_test();
-        assert!(dirs.ensure_directories_exist().is_ok());
-    }
-
-    #[test]
     fn test_installation() {
-        let dirs = super::Directories::new_test();
+        let dirs = FakeDirectories::new();
 
-        let spyder = test_data().join("spyder/menu.json");
-        let (prefix, base_prefix) = (Path::new("/base/prefix"), Path::new("/prefix"));
-        let text = std::fs::read_to_string(file)?;
-        let menu_inst: MenuInstSchema = serde_json::from_str(&text)?;
-        let placeholders = BaseMenuItemPlaceholders::new(
-            Path::from("/base/prefix"),
-            Path::from("/prefix"),
-            Platform::Linux64,
+        let fake_prefix = FakePrefix::new("spyder/menu.json");
+
+        let item = fake_prefix.schema.menu_items[0].clone();
+        let linux = item.platforms.linux.unwrap();
+        let command = item.command.merge(linux.base);
+
+        let placeholders = super::BaseMenuItemPlaceholders::new(
+            &fake_prefix.prefix(),
+            &fake_prefix.prefix(),
+            rattler_conda_types::Platform::current(),
         );
-        let item = menu_inst.menu_items[0];
-        let linux_item = item.platforms.linux.unwrap();
-        let command = item.command.merge(linux_item.base);
-        LinuxMenu::new(
-            menu_inst.menu_name,
-            prefix,
-            item,
-            command,
-            placeholders,
-            MenuMode::User,
-        )
-        .with_directories(dirs)
-        .install()
-        .unwrap();
 
-        // linux::install_menu_item(
-        //     &,
-        //     prefix,
-        //     linux_item.specific,
-        //     command,
-        //     &placeholders,
-        //     menu_mode,
-        // )?;
+        let linux_menu = LinuxMenu::new_with_directories(
+            &fake_prefix.schema.menu_name,
+            fake_prefix.prefix(),
+            linux.specific,
+            command,
+            &placeholders,
+            dirs.directories().clone(),
+        );
+
+        linux_menu.install().unwrap();
+
+        // check snapshot of desktop file
+        let desktop_file = dirs.directories().desktop_file();
+        let desktop_file_content = fs::read_to_string(&desktop_file).unwrap();
+        let desktop_file_content =
+            desktop_file_content.replace(&fake_prefix.prefix().to_str().unwrap(), "<PREFIX>");
+        insta::assert_snapshot!(desktop_file_content);
     }
 }
