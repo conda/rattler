@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.14](https://github.com/conda/rattler/compare/rattler_cache-v0.2.13...rattler_cache-v0.2.14) - 2024-12-12
+
+### Fixed
+- package cache lock file_name was incorrect ([#977](https://github.com/conda/rattler/pull/977))
+
 ## [0.2.13](https://github.com/conda/rattler/compare/rattler_cache-v0.2.12...rattler_cache-v0.2.13) - 2024-12-05
 
 ### Other
