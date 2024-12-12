@@ -199,7 +199,7 @@ impl WindowsMenu {
         let args = lex::quote_args(args).join(" ");
 
         let link_name = format!("{}.lnk", self.name);
-        if self.item.desktop.unwrap_or(false) {
+        if self.item.desktop.unwrap_or(true) {
             let desktop_link_path = self.directories.desktop.join(&link_name);
             create_shortcut::create_shortcut(
                 &command,
@@ -214,7 +214,7 @@ impl WindowsMenu {
             .unwrap();
         }
 
-        if self.item.quicklaunch.unwrap_or(false) && self.directories.quick_launch.is_dir() {
+        if self.item.quicklaunch.unwrap_or(true) && self.directories.quick_launch.is_dir() {
             let quicklaunch_link_path = self.directories.quick_launch.join(link_name);
             create_shortcut::create_shortcut(
                 &self.name,
