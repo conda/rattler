@@ -26,7 +26,7 @@ use crate::{
     utils, MenuInstError, MenuMode,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MacOSMenu {
     name: String,
     prefix: PathBuf,
@@ -36,7 +36,7 @@ pub struct MacOSMenu {
     placeholders: MenuItemPlaceholders,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Directories {
     /// Path to the .app directory defining the menu item
     location: PathBuf,
@@ -207,19 +207,20 @@ impl CFBundleURLTypesModel {
 }
 
 impl MacOSMenu {
-    pub fn new(
+    fn new_impl(
         prefix: &Path,
         item: MacOS,
         command: MenuItemCommand,
         menu_mode: MenuMode,
         placeholders: &BaseMenuItemPlaceholders,
+        directories: Option<Directories>,
     ) -> Self {
         let name = command
             .name
             .resolve(crate::schema::Environment::Base, placeholders);
 
         let bundle_name = format!("{name}.app");
-        let directories = Directories::new(menu_mode, &bundle_name);
+        let directories = directories.unwrap_or(Directories::new(menu_mode, &bundle_name));
         tracing::info!("Editing menu item for {bundle_name}");
 
         let refined_placeholders = placeholders.refine(&directories.location);
@@ -231,6 +232,35 @@ impl MacOSMenu {
             directories,
             placeholders: refined_placeholders,
         }
+    }
+
+    #[cfg(test)]
+    pub fn new_with_directories(
+        prefix: &Path,
+        item: MacOS,
+        command: MenuItemCommand,
+        menu_mode: MenuMode,
+        placeholders: &BaseMenuItemPlaceholders,
+        directories: Directories,
+    ) -> Self {
+        Self::new_impl(
+            prefix,
+            item,
+            command,
+            menu_mode,
+            placeholders,
+            Some(directories),
+        )
+    }
+
+    pub fn new(
+        prefix: &Path,
+        item: MacOS,
+        command: MenuItemCommand,
+        menu_mode: MenuMode,
+        placeholders: &BaseMenuItemPlaceholders,
+    ) -> Self {
+        Self::new_impl(prefix, item, command, menu_mode, placeholders, None)
     }
 
     /// In macOS, file type and URL protocol associations are handled by the
@@ -740,4 +770,132 @@ pub(crate) fn remove_menu_item(
 ) -> Result<Vec<PathBuf>, MenuInstError> {
     let menu = MacOSMenu::new(prefix, macos_item, command, menu_mode, placeholders);
     menu.remove()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{schema::MenuInstSchema, test::test_data, MenuMode};
+    use std::{
+        collections::HashMap,
+        fs,
+        path::{Path, PathBuf},
+    };
+    use tempfile::TempDir;
+
+    impl super::Directories {
+        pub fn new_test() -> Self {
+            // Create a temporary directory for testing
+            Self {
+                location: tempfile::tempdir().unwrap().into_path(),
+                nested_location: tempfile::tempdir().unwrap().into_path(),
+            }
+        }
+    }
+
+    #[test]
+    fn test_directories() {
+        let dirs = super::Directories::new_test();
+        assert!(dirs.location.exists());
+        assert!(dirs.nested_location.exists());
+    }
+
+    struct FakePlaceholders {
+        placeholders: HashMap<String, String>,
+    }
+
+    impl AsRef<HashMap<String, String>> for FakePlaceholders {
+        fn as_ref(&self) -> &HashMap<String, String> {
+            &self.placeholders
+        }
+    }
+
+    struct FakePrefix {
+        _tmp_dir: TempDir,
+        prefix_path: PathBuf,
+        schema: MenuInstSchema,
+    }
+
+    impl FakePrefix {
+        fn new(schema_json: &Path) -> Self {
+            let tmp_dir = TempDir::new().unwrap();
+            let prefix_path = tmp_dir.path().join("test-env");
+            let schema_json = test_data().join(schema_json);
+            let menu_folder = prefix_path.join("Menu");
+
+            fs::create_dir_all(&menu_folder).unwrap();
+            fs::copy(
+                &schema_json,
+                menu_folder.join(schema_json.file_name().unwrap()),
+            )
+            .unwrap();
+
+            // Create a icon file for the
+            let schema = std::fs::read_to_string(schema_json).unwrap();
+            let parsed_schema: MenuInstSchema = serde_json::from_str(&schema).unwrap();
+
+            let mut placeholders = HashMap::<String, String>::new();
+            placeholders.insert(
+                "MENU_DIR".to_string(),
+                menu_folder.to_string_lossy().to_string(),
+            );
+
+            for item in &parsed_schema.menu_items {
+                let icon = item.command.icon.as_ref().unwrap();
+                for ext in &["icns", "png", "svg"] {
+                    placeholders.insert("ICON_EXT".to_string(), ext.to_string());
+                    let icon_path = icon.resolve(FakePlaceholders {
+                        placeholders: placeholders.clone(),
+                    });
+                    fs::write(&icon_path, &[]).unwrap();
+                }
+            }
+
+            fs::create_dir_all(prefix_path.join("bin")).unwrap();
+            fs::write(prefix_path.join("bin/python"), &[]).unwrap();
+
+            Self {
+                _tmp_dir: tmp_dir,
+                prefix_path,
+                schema: parsed_schema,
+            }
+        }
+
+        pub fn prefix(&self) -> &Path {
+            &self.prefix_path
+        }
+    }
+
+    #[test]
+    fn test_macos_menu_installation() {
+        let dirs = super::Directories::new_test();
+        let fake_prefix = FakePrefix::new(Path::new("spyder/menu.json"));
+
+        let placeholders = super::BaseMenuItemPlaceholders::new(
+            &fake_prefix.prefix(),
+            &fake_prefix.prefix(),
+            rattler_conda_types::Platform::current(),
+        );
+
+        let item = fake_prefix.schema.menu_items[0].clone();
+        let macos = item.platforms.osx.unwrap();
+        let command = item.command.merge(macos.base);
+
+        let menu = super::MacOSMenu::new_with_directories(
+            fake_prefix.prefix(),
+            macos.specific,
+            command,
+            MenuMode::User,
+            &placeholders,
+            dirs.clone(),
+        );
+        menu.install().unwrap();
+
+        assert!(dirs.location.exists());
+        assert!(dirs.nested_location.exists());
+
+        // check that the plist file was created
+        insta::assert_snapshot!(
+            fs::read_to_string(dirs.location.join("Contents/Info.plist")).unwrap()
+        );
+    }
 }
