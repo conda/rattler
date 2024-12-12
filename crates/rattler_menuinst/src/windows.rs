@@ -1,9 +1,8 @@
+use fs_err as fs;
 use std::{
     io::Write as _,
     path::{Path, PathBuf},
 };
-
-use knownfolders::UserHandle;
 
 use crate::{
     render::{BaseMenuItemPlaceholders, MenuItemPlaceholders},
@@ -11,12 +10,12 @@ use crate::{
     slugify, MenuInstError, MenuMode,
 };
 
-use fs_err as fs;
-
 mod create_shortcut;
 mod knownfolders;
 mod lex;
 mod registry;
+
+use knownfolders::UserHandle;
 
 pub struct Directories {
     start_menu: PathBuf,
