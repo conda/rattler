@@ -1,9 +1,3 @@
-use std::path::{Path, PathBuf};
-
-pub fn menuinst_data_paths(prefix: &Path) -> Vec<PathBuf> {
-    vec![prefix.join("share/menuinst")]
-}
-
 pub fn quote_args<I, S>(args: I) -> Vec<String>
 where
     I: IntoIterator<Item = S>,
