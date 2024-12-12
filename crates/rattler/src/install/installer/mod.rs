@@ -9,13 +9,6 @@ use std::{
     sync::Arc,
 };
 
-use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
-use crate::install::link_script::LinkScriptError;
-use crate::{
-    default_cache_dir,
-    install::{clobber_registry::ClobberedPath, link_script::PrePostLinkResult},
-    package_cache::PackageCache,
-};
 pub use error::InstallerError;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
 #[cfg(feature = "indicatif")]
@@ -23,8 +16,7 @@ pub use indicatif::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
     ProgressFormatter,
 };
-use rattler_cache::package_cache::CacheLock;
-use rattler_cache::package_cache::CacheReporter;
+use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
     Platform, PrefixRecord, RepoDataRecord,
@@ -34,6 +26,16 @@ pub use reporter::Reporter;
 use reqwest::Client;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
+
+use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
+use crate::{
+    default_cache_dir,
+    install::{
+        clobber_registry::ClobberedPath,
+        link_script::{LinkScriptError, PrePostLinkResult},
+    },
+    package_cache::PackageCache,
+};
 
 /// An installer that can install packages into a prefix.
 #[derive(Default)]
@@ -78,6 +80,15 @@ impl Installer {
         Self::default()
     }
 
+    /// Returns the ideal number of IO operations that can be performed in
+    /// parallel.
+    ///
+    /// Currently, this value is based on the number of physical CPU cores
+    /// available.
+    pub fn ideal_io_concurrency_limit() -> usize {
+        InstallDriver::ideal_io_concurrency_limit()
+    }
+
     /// Sets an optional IO concurrency limit. This is used to make sure
     /// that the system doesn't acquire more IO resources than the system has
     /// available.
@@ -101,6 +112,8 @@ impl Installer {
     /// Sets an optional IO concurrency semaphore. This is used to make sure
     /// that the system doesn't acquire more IO resources than the system has
     /// available.
+    ///
+    /// For an ideal limit, use [`Self::ideal_io_concurrency_limit`].
     #[must_use]
     pub fn with_io_concurrency_semaphore(self, io_concurrency_semaphore: Arc<Semaphore>) -> Self {
         Self {
@@ -300,9 +313,9 @@ impl Installer {
         // Construct a driver.
         let driver = InstallDriver::builder()
             .execute_link_scripts(self.execute_link_scripts)
-            .with_io_concurrency_semaphore(
-                self.io_semaphore.unwrap_or(Arc::new(Semaphore::new(100))),
-            )
+            .with_io_concurrency_semaphore(self.io_semaphore.unwrap_or(Arc::new(Semaphore::new(
+                InstallDriver::ideal_io_concurrency_limit(),
+            ))))
             .with_prefix_records(&installed)
             .finish();
 

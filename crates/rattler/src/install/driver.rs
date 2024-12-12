@@ -33,11 +33,22 @@ pub struct InstallDriver {
     execute_link_scripts: bool,
 }
 
+impl InstallDriver {
+    /// Returns the ideal number of IO operations that can be performed in
+    /// parallel.
+    ///
+    /// Currently, this value is based on the number of physical CPU cores
+    /// available.
+    pub fn ideal_io_concurrency_limit() -> usize {
+        num_cpus::get_physical()
+    }
+}
+
 impl Default for InstallDriver {
     fn default() -> Self {
         Self::builder()
             .execute_link_scripts(false)
-            .with_io_concurrency_limit(100)
+            .with_io_concurrency_limit(Self::ideal_io_concurrency_limit())
             .finish()
     }
 }
