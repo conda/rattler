@@ -189,6 +189,10 @@ pub struct Linux {
     #[serde(rename = "Keywords")]
     pub keywords: Option<Vec<PlaceholderString>>,
 
+    /// Do not show the 'New Window' option in the app's context menu.
+    #[serde(rename = "SingleMainWindow")]
+    pub single_main_window: Option<bool>,
+
     /// The MIME type(s) supported by this application. Note this includes file
     /// types and URL protocols. For URL protocols, use
     /// `x-scheme-handler/your-protocol-here`. For example, if you want to
