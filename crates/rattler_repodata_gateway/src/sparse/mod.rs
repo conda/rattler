@@ -111,18 +111,14 @@ impl SparseRepoData {
         path: impl AsRef<Path>,
         patch_function: Option<fn(&mut PackageRecord)>,
     ) -> Result<Self, io::Error> {
-        if !path.as_ref().exists() {
-            Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("file not found: {:?}", path.as_ref()),
-            ))
-        } else {
+        if path.as_ref().exists() {
             let lock_file_path = path.as_ref().with_extension("lock");
             if !lock_file_path.exists() {
                 OpenOptions::new()
                     .read(true)
                     .write(true)
                     .create(true)
+                    .truncate(false)
                     .open(&lock_file_path)?;
             }
             let lock_file = LockedFile::open_ro(lock_file_path, "repodata cache")
@@ -142,6 +138,11 @@ impl SparseRepoData {
                 patch_record_fn: patch_function,
                 _lock: Some(lock_file),
             })
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("file not found: {:?}", path.as_ref()),
+            ))
         }
     }
 
