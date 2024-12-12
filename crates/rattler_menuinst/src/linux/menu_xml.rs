@@ -227,27 +227,6 @@ impl MenuXml {
     }
 }
 
-// main function
-fn main() {
-    let menu_config = PathBuf::from("applications.menu");
-    let system_menu_config = PathBuf::from("system_applications.menu");
-
-    let menu_xml = MenuXml::new(
-        menu_config,
-        system_menu_config,
-        "Test Menu".to_string(),
-        "user".to_string(),
-    )
-    .unwrap();
-    menu_xml.ensure_menu_file().unwrap();
-
-    if menu_xml.has_menu().unwrap() {
-        menu_xml.remove_menu().unwrap();
-    } else {
-        menu_xml.add_menu().unwrap();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::test::test_data;
