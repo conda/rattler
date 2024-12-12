@@ -593,8 +593,6 @@ mod test {
             "Spyder 6 (prefix)"
         );
 
-        // let foo = menu_0.platforms.osx.as_ref().unwrap().base.
-        // get_name(super::Environment::Base);
         insta::assert_debug_snapshot!(schema);
     }
 }
