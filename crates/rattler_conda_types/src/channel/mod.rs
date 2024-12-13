@@ -30,7 +30,7 @@ const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
 /// particular server. Conda solves this by allowing users not to specify a full
 /// Url but instead only specify the name of the channel and reading the primary
 /// server address from a configuration file (e.g. `.condarc`).
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub struct ChannelConfig {
     /// A url to prefix to channel names that don't start with a Url. Usually
     /// this Url refers to the `https://conda.anaconda.org` server but users are free to change this. This allows
