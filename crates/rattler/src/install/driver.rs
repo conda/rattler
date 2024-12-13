@@ -29,7 +29,7 @@ use crate::install::link_script::LinkScriptError;
 /// system has available.
 pub struct InstallDriver {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
-    clobber_registry: Arc<Mutex<ClobberRegistry>>,
+    pub(crate) clobber_registry: Arc<Mutex<ClobberRegistry>>,
     execute_link_scripts: bool,
 }
 

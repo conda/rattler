@@ -269,7 +269,7 @@ impl Installer {
     pub async fn install(
         self,
         prefix: impl AsRef<Path>,
-        records: impl IntoIterator<Item = RepoDataRecord>,
+        records: impl IntoIterator<Item=RepoDataRecord>,
     ) -> Result<InstallationResult, InstallerError> {
         let downloader = self
             .downloader
@@ -294,7 +294,7 @@ impl Installer {
                 PrefixRecord::collect_from_prefix(&prefix)
                     .map_err(InstallerError::FailedToDetectInstalledPackages)
             })
-            .await?
+                .await?
         };
 
         // Construct a driver.
@@ -373,20 +373,20 @@ impl Installer {
                             &package_cache,
                             populate_cache_report.clone(),
                         )
-                        .await?;
+                            .await?;
                         if let Some((reporter, index)) = populate_cache_report {
                             reporter.on_populate_cache_complete(index);
                         }
                         Ok((cache_lock, record))
                     })
-                    .map_err(JoinError::try_into_panic)
-                    .map(|res| match res {
-                        Ok(Ok(result)) => Ok(Some(result)),
-                        Ok(Err(e)) => Err(e),
-                        Err(Ok(payload)) => std::panic::resume_unwind(payload),
-                        Err(Err(_err)) => Err(InstallerError::Cancelled),
-                    })
-                    .left_future()
+                        .map_err(JoinError::try_into_panic)
+                        .map(|res| match res {
+                            Ok(Ok(result)) => Ok(Some(result)),
+                            Ok(Err(e)) => Err(e),
+                            Err(Ok(payload)) => std::panic::resume_unwind(payload),
+                            Err(Err(_err)) => Err(InstallerError::Cancelled),
+                        })
+                        .left_future()
                 } else {
                     ready(Ok(None)).right_future()
                 };
@@ -417,7 +417,7 @@ impl Installer {
                         base_install_options.clone(),
                         driver,
                     )
-                    .await?;
+                        .await?;
                     if let Some((reporter, index)) = reporter {
                         reporter.on_link_complete(index);
                     }
@@ -462,55 +462,61 @@ async fn link_package(
     install_options: InstallOptions,
     driver: &InstallDriver,
 ) -> Result<(), InstallerError> {
-    // Link the contents of the package into the prefix.
-    let paths =
-        crate::install::link_package(cached_package_dir, target_prefix, driver, install_options)
-            .await
+    let record = record.clone();
+    let target_prefix = target_prefix.to_path_buf();
+    let cached_package_dir = cached_package_dir.to_path_buf();
+    let clobber_registry = driver.clobber_registry.clone();
+    simple_spawn_blocking::tokio::run_blocking_task(move || {
+        // Link the contents of the package into the prefix.
+        let paths = crate::install::link_package_sync(
+            &cached_package_dir,
+            &target_prefix,
+            clobber_registry,
+            install_options,
+        )
             .map_err(|e| InstallerError::LinkError(record.file_name.clone(), e))?;
 
-    // Construct a PrefixRecord for the package
-    let prefix_record = PrefixRecord {
-        repodata_record: record.clone(),
-        package_tarball_full_path: None,
-        extracted_package_dir: Some(cached_package_dir.to_path_buf()),
-        files: paths
-            .iter()
-            .map(|entry| entry.relative_path.clone())
-            .collect(),
-        paths_data: paths.into(),
-        // TODO: Retrieve the requested spec for this package from the request
-        requested_spec: None,
+        // Construct a PrefixRecord for the package
+        let prefix_record = PrefixRecord {
+            repodata_record: record.clone(),
+            package_tarball_full_path: None,
+            extracted_package_dir: Some(cached_package_dir.to_path_buf()),
+            files: paths
+                .iter()
+                .map(|entry| entry.relative_path.clone())
+                .collect(),
+            paths_data: paths.into(),
+            // TODO: Retrieve the requested spec for this package from the request
+            requested_spec: None,
 
-        link: Some(Link {
-            source: cached_package_dir.to_path_buf(),
-            // TODO: compute the right value here based on the options and `can_hard_link` ...
-            link_type: Some(LinkType::HardLink),
-        }),
-    };
+            link: Some(Link {
+                source: cached_package_dir.to_path_buf(),
+                // TODO: compute the right value here based on the options and `can_hard_link` ...
+                link_type: Some(LinkType::HardLink),
+            }),
+        };
 
-    let target_prefix = target_prefix.to_path_buf();
-    driver
-        .run_blocking_io_task(move || {
-            let conda_meta_path = target_prefix.join("conda-meta");
-            std::fs::create_dir_all(&conda_meta_path).map_err(|e| {
-                InstallerError::IoError("failed to create conda-meta directory".to_string(), e)
-            })?;
+        let conda_meta_path = target_prefix.join("conda-meta");
+        std::fs::create_dir_all(&conda_meta_path).map_err(|e| {
+            InstallerError::IoError("failed to create conda-meta directory".to_string(), e)
+        })?;
 
-            let pkg_meta_path = format!(
-                "{}-{}-{}.json",
-                prefix_record
-                    .repodata_record
-                    .package_record
-                    .name
-                    .as_normalized(),
-                prefix_record.repodata_record.package_record.version,
-                prefix_record.repodata_record.package_record.build
-            );
+        let pkg_meta_path = format!(
+            "{}-{}-{}.json",
             prefix_record
-                .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
-                .map_err(|e| InstallerError::IoError(format!("failed to write {pkg_meta_path}"), e))
-        })
-        .await
+                .repodata_record
+                .package_record
+                .name
+                .as_normalized(),
+            prefix_record.repodata_record.package_record.version,
+            prefix_record.repodata_record.package_record.build
+        );
+        prefix_record
+            .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
+            .map_err(|e| InstallerError::IoError(format!("failed to write {pkg_meta_path}"), e))?;
+
+        Ok(())
+    }).await
 }
 
 /// Given a repodata record, fetch the package into the cache if its not already

@@ -29,15 +29,11 @@ mod installer;
 #[cfg(test)]
 mod test_utils;
 
-use std::{
-    collections::HashSet,
-    fs,
-    future::ready,
-    io::ErrorKind,
-    path::{Path, PathBuf},
-    sync::Arc,
+use crate::install::clobber_registry::ClobberRegistry;
+use crate::install::entry_point::{
+    create_unix_python_entry_point, create_windows_python_entry_point,
 };
-
+pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 pub use apple_codesign::AppleCodeSignBehavior;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
@@ -56,17 +52,22 @@ use rattler_conda_types::{
     prefix_record::PathsEntry,
     Platform,
 };
-use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::Either;
+use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use simple_spawn_blocking::Cancelled;
+use std::sync::Mutex;
+use std::{
+    collections::HashSet,
+    fs,
+    future::ready,
+    io::ErrorKind,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::task::JoinError;
 use tracing::instrument;
 pub use transaction::{Transaction, TransactionError, TransactionOperation};
 pub use unlink::{empty_trash, unlink_package};
-
-use crate::install::entry_point::{
-    create_unix_python_entry_point, create_windows_python_entry_point,
-};
-pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 
 /// An error that might occur when installing a package.
 #[derive(Debug, thiserror::Error)]
@@ -266,9 +267,7 @@ pub async fn link_package(
         .to_owned();
 
     // Ensure target directory exists
-    tokio_fs::create_dir_all(&target_dir)
-        .await
-        .map_err(InstallError::FailedToCreateTargetDirectory)?;
+    fs_err::create_dir_all(&target_dir).map_err(InstallError::FailedToCreateTargetDirectory)?;
 
     // Reuse or read the `paths.json` and `index.json` files from the package
     // directory
@@ -475,12 +474,257 @@ pub async fn link_package(
     rayon::spawn(move || {
         let _ = tx.send(
             link_entries_iter
+                // .by_uniform_blocks(10000)
                 .chain(entry_points_iter)
                 .collect::<Result<Vec<_>, _>>(),
         );
     });
 
     rx.await.unwrap_or_else(|_| Err(InstallError::Cancelled))
+}
+
+/// Given an extracted package archive (`package_dir`), installs its files to
+/// the `target_dir`.
+///
+/// Returns a [`PathsEntry`] for every file that was linked into the target
+/// directory. The entries are ordered in the same order as they appear in the
+/// `paths.json` file of the package.
+#[instrument(skip_all, fields(package_dir = % package_dir.display()))]
+pub fn link_package_sync(
+    package_dir: &Path,
+    target_dir: &Path,
+    clobber_registry: Arc<Mutex<ClobberRegistry>>,
+    options: InstallOptions,
+) -> Result<Vec<PathsEntry>, InstallError> {
+    // Determine the target prefix for linking
+    let target_prefix = options
+        .target_prefix
+        .as_deref()
+        .unwrap_or(target_dir)
+        .to_str()
+        .ok_or(InstallError::TargetPrefixIsNotUtf8)?
+        .to_owned();
+
+    // Ensure target directory exists
+    fs_err::create_dir_all(&target_dir).map_err(InstallError::FailedToCreateTargetDirectory)?;
+
+    // Reuse or read the `paths.json` and `index.json` files from the package
+    // directory
+    let paths_json = options.paths_json.map(Ok).unwrap_or_else(|| {
+        PathsJson::from_package_directory_with_deprecated_fallback(&package_dir)
+            .map_err(InstallError::FailedToReadPathsJson)
+    })?;
+    let index_json = options.index_json.map(Ok).unwrap_or_else(|| {
+        IndexJson::from_package_directory(package_dir).map_err(InstallError::FailedToReadIndexJson)
+    })?;
+
+    // Error out if this is a noarch python package but the python information is
+    // missing.
+    if index_json.noarch.is_python() && options.python_info.is_none() {
+        return Err(InstallError::MissingPythonInfo);
+    }
+
+    // Parse the `link.json` file and extract entry points from it.
+    let link_json = if index_json.noarch.is_python() {
+        options.link_json.flatten().map_or_else(
+            || {
+                LinkJson::from_package_directory(package_dir)
+                    .map_or_else(
+                        |e| {
+                            // Its ok if the file is not present.
+                            if e.kind() == ErrorKind::NotFound {
+                                Ok(None)
+                            } else {
+                                Err(e)
+                            }
+                        },
+                        |link_json| Ok(Some(link_json)),
+                    )
+                    .map_err(InstallError::FailedToReadLinkJson)
+            },
+            |value| Ok(Some(value)),
+        )?
+    } else {
+        None
+    };
+
+    // Determine whether or not we can use symbolic links
+    let allow_symbolic_links = options
+        .allow_symbolic_links
+        .unwrap_or_else(|| can_create_symlinks_sync(target_dir));
+    let allow_hard_links = options
+        .allow_hard_links
+        .unwrap_or_else(|| can_create_hardlinks_sync(target_dir, package_dir));
+    let allow_ref_links = options.allow_ref_links.unwrap_or_else(|| {
+        match reflink_copy::check_reflink_support(package_dir, target_dir) {
+            Ok(reflink_copy::ReflinkSupport::Supported) => true,
+            Ok(reflink_copy::ReflinkSupport::NotSupported) | Err(_) => false,
+            Ok(reflink_copy::ReflinkSupport::Unknown) => allow_hard_links,
+        }
+    });
+
+    // Determine the platform to use
+    let platform = options.platform.unwrap_or(Platform::current());
+
+    // compute all path renames
+    let mut final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
+
+    // register all paths in the install driver path registry
+    let clobber_paths = clobber_registry
+        .lock()
+        .unwrap()
+        .register_paths(&index_json, &final_paths);
+
+    for (_, computed_path) in final_paths.iter_mut() {
+        if let Some(clobber_rename) = clobber_paths.get(computed_path) {
+            *computed_path = clobber_rename.clone();
+        }
+    }
+
+    // Figure out all the directories that we are going to need
+    let mut directories_to_construct = HashSet::new();
+    for (_, computed_path) in final_paths.iter() {
+        let mut current_path = computed_path.parent();
+        while let Some(path) = current_path {
+            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
+                current_path = path.parent();
+            } else {
+                break;
+            }
+        }
+    }
+    let directories_target_dir = target_dir.to_path_buf();
+    for directory in directories_to_construct.into_iter().sorted() {
+        let full_path = directories_target_dir.join(directory);
+        match std::fs::create_dir(&full_path) {
+            Ok(_) => (),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
+            Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
+        }
+    }
+
+    // Wrap the python info in an `Arc` so we can more easily share it with async
+    // tasks.
+    let python_info = options.python_info;
+
+    // Link the individual files in parallel
+    let link_target_prefix = target_prefix.clone();
+    let package_dir = package_dir.to_path_buf();
+    let link_target_dir = target_dir.to_path_buf();
+    let mut paths = final_paths
+        .into_par_iter()
+        .with_min_len(1000)
+        .map(move |(entry, computed_path)| {
+            let clobber_rename = clobber_paths.get(&entry.relative_path).cloned();
+            let link_result = link_file(
+                &entry,
+                computed_path.clone(),
+                &package_dir,
+                &link_target_dir,
+                &link_target_prefix,
+                allow_symbolic_links && !entry.no_link,
+                allow_hard_links && !entry.no_link,
+                allow_ref_links && !entry.no_link,
+                platform,
+                options.apple_codesign_behavior,
+            );
+
+            let result = match link_result {
+                Ok(linked_file) => linked_file,
+                Err(e) => return Err(InstallError::FailedToLink(entry.relative_path.clone(), e)),
+            };
+
+            // Construct a `PathsEntry` from the result of the linking operation
+            Ok(PathsEntry {
+                relative_path: result.relative_path,
+                original_path: if clobber_rename.is_some() {
+                    Some(entry.relative_path.clone())
+                } else {
+                    None
+                },
+                path_type: entry.path_type.into(),
+                no_link: entry.no_link,
+                sha256: entry.sha256,
+                sha256_in_prefix: Some(result.sha256),
+                size_in_bytes: Some(result.file_size),
+                file_mode: match result.method {
+                    LinkMethod::Patched(file_mode) => Some(file_mode),
+                    _ => None,
+                },
+                prefix_placeholder: entry
+                    .prefix_placeholder
+                    .as_ref()
+                    .map(|p| p.placeholder.clone()),
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // If this package is a noarch python package we also have to create entry
+    // points.
+    //
+    // Be careful with the fact that this code is currently running in parallel with
+    // the linking of individual files.
+    if let Some(link_json) = link_json {
+        // Parse the `link.json` file and extract entry points from it.
+        let entry_points = match link_json.noarch {
+            NoArchLinks::Python(entry_points) => entry_points.entry_points,
+            NoArchLinks::Generic => {
+                unreachable!("we only use link.json for noarch: python packages")
+            }
+        };
+
+        // Get python info
+        let python_info = python_info
+            .clone()
+            .expect("should be safe because its checked above that this contains a value");
+
+        let target_prefix = target_prefix.clone();
+        let target_dir = target_dir.to_path_buf();
+
+        // Create entry points for each listed item. This is different between Windows
+        // and unix because on Windows, two PathEntry's are created whereas on
+        // Linux only one is created.
+        let mut entry_point_paths = if platform.is_windows() {
+            entry_points
+                .into_par_iter()
+                .with_min_len(1000)
+                .flat_map(move |entry_point| {
+                    match create_windows_python_entry_point(
+                        &target_dir,
+                        &target_prefix,
+                        &entry_point,
+                        &python_info,
+                        &platform,
+                    ) {
+                        Ok([a, b]) => Either::Left([Ok(a), Ok(b)].into_par_iter()),
+                        Err(e) => Either::Right(rayon::iter::once(Err(
+                            InstallError::FailedToCreatePythonEntryPoint(e),
+                        ))),
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            entry_points
+                .into_par_iter()
+                .with_min_len(1000)
+                .map(move |entry_point| {
+                    match create_unix_python_entry_point(
+                        &target_dir,
+                        &target_prefix,
+                        &entry_point,
+                        &python_info,
+                    ) {
+                        Ok(a) => Ok(a),
+                        Err(e) => Err(InstallError::FailedToCreatePythonEntryPoint(e)),
+                    }
+                })
+                .collect::<Result<_, _>>()?
+        };
+
+        paths.append(&mut entry_point_paths);
+    };
+
+    Ok(paths)
 }
 
 fn compute_paths(
@@ -576,6 +820,33 @@ async fn read_link_json(
 }
 
 /// Returns true if it is possible to create symlinks in the target directory.
+fn can_create_symlinks_sync(target_dir: &Path) -> bool {
+    let uuid = uuid::Uuid::new_v4();
+    let symlink_path = target_dir.join(format!("symtest_{uuid}"));
+    #[cfg(windows)]
+    let result = std::os::windows::fs::symlink_file("./", &symlink_path);
+    #[cfg(unix)]
+    let result = fs_err::os::unix::fs::symlink("./", &symlink_path).await;
+    match result {
+        Ok(_) => {
+            if let Err(e) = fs_err::remove_file(&symlink_path) {
+                tracing::warn!(
+                    "failed to delete temporary file '{}': {e}",
+                    symlink_path.display()
+                );
+            }
+            true
+        }
+        Err(e) => {
+            tracing::debug!(
+                "failed to create symlink in target directory: {e}. Disabling use of symlinks."
+            );
+            false
+        }
+    }
+}
+
+/// Returns true if it is possible to create symlinks in the target directory.
 async fn can_create_symlinks(target_dir: &Path) -> bool {
     let uuid = uuid::Uuid::new_v4();
     let symlink_path = target_dir.join(format!("symtest_{uuid}"));
@@ -608,6 +879,12 @@ async fn can_create_hardlinks(target_dir: &Path, package_dir: &Path) -> bool {
     paths_have_same_filesystem(target_dir, package_dir).await
 }
 
+/// Returns true if it is possible to create hard links from the target
+/// directory to the package cache directory.
+fn can_create_hardlinks_sync(target_dir: &Path, package_dir: &Path) -> bool {
+    paths_have_same_filesystem_sync(target_dir, package_dir)
+}
+
 /// Returns true if two paths share the same filesystem
 #[cfg(unix)]
 async fn paths_have_same_filesystem(a: &Path, b: &Path) -> bool {
@@ -619,8 +896,29 @@ async fn paths_have_same_filesystem(a: &Path, b: &Path) -> bool {
 }
 
 /// Returns true if two paths share the same filesystem
+#[cfg(unix)]
+fn paths_have_same_filesystem_sync(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let a = std::fs::metadata(a);
+    let b = std::fs::metadata(b);
+    match (a, b) {
+        (Ok(a), Ok(b)) => a.dev() == b.dev(),
+        _ => false,
+    }
+}
+
+/// Returns true if two paths share the same filesystem
 #[cfg(not(unix))]
 async fn paths_have_same_filesystem(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a.components().next() == b.components().next(),
+        _ => false,
+    }
+}
+
+/// Returns true if two paths share the same filesystem
+#[cfg(not(unix))]
+fn paths_have_same_filesystem_sync(a: &Path, b: &Path) -> bool {
     match (a.canonicalize(), b.canonicalize()) {
         (Ok(a), Ok(b)) => a.components().next() == b.components().next(),
         _ => false,
