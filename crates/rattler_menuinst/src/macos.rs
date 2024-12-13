@@ -752,9 +752,9 @@ impl MacOSMenu {
             fs_err::remove_dir_all(&self.directories.location).unwrap_or_else(|e| {
                 tracing::warn!("Failed to remove directory: {e}. Ignoring error.");
             });
-            return Ok(vec![self.directories.location.clone()]);
+            Ok(vec![self.directories.location.clone()])
         } else {
-            return Ok(vec![]);
+            Ok(vec![])
         }
     }
 }
