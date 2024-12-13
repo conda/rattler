@@ -408,6 +408,10 @@ pub struct MacOS {
     #[serde(rename = "UTImportedTypeDeclarations")]
     pub ut_imported_type_declarations: Option<Vec<UTTypeDeclarationModel>>,
 
+    /// If true, allows an OpenGL app to utilize the integrated GPU.
+    #[serde(rename = "NSSupportsAutomaticGraphicsSwitching")]
+    pub ns_supports_automatic_graphics_switching: Option<bool>,
+
     /// List of permissions to request for the launched application.
     /// See `the entitlements docs <https://developer.apple.com/documentation/bundleresources/entitlements>`
     /// for a full list of possible values.
@@ -516,12 +520,7 @@ impl MenuItemCommand {
 
 /// Metadata required to create menu items across operating systems with `menuinst`
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(deny_unknown_fields)]
 pub struct MenuInstSchema {
-    /// Version of the menuinst schema.
-    #[serde(rename = "$id")]
-    pub id: String,
-
     /// Standard of the JSON schema we adhere to.
     #[serde(rename = "$schema")]
     pub schema: String,
@@ -593,6 +592,16 @@ mod test {
             "Spyder 6 (prefix)"
         );
 
+        insta::assert_debug_snapshot!(schema);
+    }
+
+    /// Test against the defaults file from original menuinst
+    #[test]
+    fn test_deserialize_defaults() {
+        let test_data = test_data();
+        let schema_path = test_data.join("defaults/defaults.json");
+        let schema_str = std::fs::read_to_string(schema_path).unwrap();
+        let schema: super::MenuInstSchema = serde_json::from_str(&schema_str).unwrap();
         insta::assert_debug_snapshot!(schema);
     }
 }

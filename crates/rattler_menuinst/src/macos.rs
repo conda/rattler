@@ -468,6 +468,15 @@ impl MacOSMenu {
             );
         }
 
+        if let Some(ns_supports_automatic_graphics_switching) =
+            self.item.ns_supports_automatic_graphics_switching
+        {
+            pl.insert(
+                "NSSupportsAutomaticGraphicsSwitching".into(),
+                Value::Boolean(ns_supports_automatic_graphics_switching),
+            );
+        }
+
         if let Some(requires_native) = self.item.ls_requires_native_execution {
             pl.insert(
                 "LSRequiresNativeExecution".into(),

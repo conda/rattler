@@ -3,7 +3,6 @@ source: crates/rattler_menuinst/src/schema.rs
 expression: schema
 ---
 MenuInstSchema {
-    id: "https://schemas.conda.io/menuinst-1.schema.json",
     schema: "https://json-schema.org/draft-07/schema",
     menu_name: "MNE-Python (__PKG_VERSION__)",
     menu_items: [
@@ -130,6 +129,7 @@ MenuInstSchema {
                             ls_requires_native_execution: None,
                             ut_exported_type_declarations: None,
                             ut_imported_type_declarations: None,
+                            ns_supports_automatic_graphics_switching: None,
                             entitlements: None,
                             link_in_bundle: None,
                             event_handler: None,
@@ -286,6 +286,7 @@ MenuInstSchema {
                             ls_requires_native_execution: None,
                             ut_exported_type_declarations: None,
                             ut_imported_type_declarations: None,
+                            ns_supports_automatic_graphics_switching: None,
                             entitlements: None,
                             link_in_bundle: None,
                             event_handler: None,
@@ -454,6 +455,7 @@ MenuInstSchema {
                             ls_requires_native_execution: None,
                             ut_exported_type_declarations: None,
                             ut_imported_type_declarations: None,
+                            ns_supports_automatic_graphics_switching: None,
                             entitlements: None,
                             link_in_bundle: None,
                             event_handler: None,
@@ -628,6 +630,7 @@ MenuInstSchema {
                             ls_requires_native_execution: None,
                             ut_exported_type_declarations: None,
                             ut_imported_type_declarations: None,
+                            ns_supports_automatic_graphics_switching: None,
                             entitlements: None,
                             link_in_bundle: None,
                             event_handler: None,
@@ -799,6 +802,7 @@ MenuInstSchema {
                             ls_requires_native_execution: None,
                             ut_exported_type_declarations: None,
                             ut_imported_type_declarations: None,
+                            ns_supports_automatic_graphics_switching: None,
                             entitlements: None,
                             link_in_bundle: None,
                             event_handler: None,
