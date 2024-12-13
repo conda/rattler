@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.27](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.26...rattler_repodata_gateway-v0.21.27) - 2024-12-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [0.21.26](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.25...rattler_repodata_gateway-v0.21.26) - 2024-12-12
 
 ### Other
