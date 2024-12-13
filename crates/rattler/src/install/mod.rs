@@ -612,9 +612,9 @@ pub fn link_package_sync(
     let package_dir = package_dir.to_path_buf();
     let link_target_dir = target_dir.to_path_buf();
     let mut paths = final_paths
-        .into_iter()
-        // .into_par_iter()
-        // .with_min_len(100)
+        // .into_iter()
+        .into_par_iter()
+        .with_min_len(1000)
         .map(move |(entry, computed_path)| {
             let clobber_rename = clobber_paths.get(&entry.relative_path).cloned();
             let link_result = link_file(

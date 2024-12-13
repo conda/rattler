@@ -127,7 +127,7 @@ pub fn validate_package_directory_from_paths(
     paths: &PathsJson,
 ) -> Result<(), (PathBuf, PackageEntryValidationError)> {
     // Check every entry in the PathsJson object
-    paths.paths.iter().try_for_each(|entry| {
+    paths.paths.par_iter().with_min_len(1000).try_for_each(|entry| {
         validate_package_entry(package_dir, entry).map_err(|e| (entry.relative_path.clone(), e))
     })
 }
