@@ -4,7 +4,6 @@ use quick_xml::events::Event;
 use quick_xml::{Reader, Writer};
 use std::io::Write;
 use std::path::PathBuf;
-use thiserror::Error;
 
 use crate::{slugify, MenuInstError};
 
