@@ -484,7 +484,7 @@ async fn link_package(
             let prefix_record = PrefixRecord {
                 repodata_record: record.clone(),
                 package_tarball_full_path: None,
-                extracted_package_dir: Some(cached_package_dir.to_path_buf()),
+                extracted_package_dir: Some(cached_package_dir.clone()),
                 files: paths
                     .iter()
                     .map(|entry| entry.relative_path.clone())
@@ -494,7 +494,7 @@ async fn link_package(
                 requested_spec: None,
 
                 link: Some(Link {
-                    source: cached_package_dir.to_path_buf(),
+                    source: cached_package_dir,
                     // TODO: compute the right value here based on the options and `can_hard_link` ...
                     link_type: Some(LinkType::HardLink),
                 }),

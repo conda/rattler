@@ -28,7 +28,7 @@ use simple_spawn_blocking::Cancelled;
 use tracing::instrument;
 use url::Url;
 
-use crate::validation::validate_package_directory;
+use crate::validation::{validate_package_directory, ValidationMode};
 
 mod cache_key;
 mod cache_lock;
@@ -364,8 +364,10 @@ where
             }
 
             // Validate the package directory.
-            let validation_result =
-                tokio::task::spawn_blocking(move || validate_package_directory(&path_inner)).await;
+            let validation_result = tokio::task::spawn_blocking(move || {
+                validate_package_directory(&path_inner, ValidationMode::Full)
+            })
+            .await;
 
             if let Some((reporter, index)) = reporter {
                 reporter.on_validate_complete(index);

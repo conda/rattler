@@ -175,7 +175,6 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
             )]
             .into_iter()
             .collect(),
-            ..rattler_repodata_gateway::ChannelConfig::default()
         })
         .finish();
 

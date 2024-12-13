@@ -22,6 +22,16 @@ use rattler_digest::Sha256;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rayon::prelude::IndexedParallelIterator;
 
+/// The mode in which the validation should be performed.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ValidationMode {
+    /// Only check if the files exists. Do not check if the hashes match.
+    Fast,
+
+    /// Check if the files exists and the content matches the hashes.
+    Full,
+}
+
 /// An error that is returned by [`validate_package_directory`] if the contents
 /// of the directory seems to be corrupted.
 #[derive(Debug, thiserror::Error)]
@@ -91,6 +101,7 @@ pub enum PackageEntryValidationError {
 /// contains information about the files in the archive.
 pub fn validate_package_directory(
     package_dir: &Path,
+    mode: ValidationMode,
 ) -> Result<(IndexJson, PathsJson), PackageValidationError> {
     // Validate that there is a valid IndexJson
     let index_json = IndexJson::from_package_directory(package_dir)
@@ -114,7 +125,7 @@ pub fn validate_package_directory(
     };
 
     // Validate all the entries
-    validate_package_directory_from_paths(package_dir, &paths)
+    validate_package_directory_from_paths(package_dir, &paths, mode)
         .map_err(|(path, err)| PackageValidationError::CorruptedEntry(path, err))?;
 
     Ok((index_json, paths))
@@ -125,11 +136,17 @@ pub fn validate_package_directory(
 pub fn validate_package_directory_from_paths(
     package_dir: &Path,
     paths: &PathsJson,
+    mode: ValidationMode,
 ) -> Result<(), (PathBuf, PackageEntryValidationError)> {
     // Check every entry in the PathsJson object
-    paths.paths.par_iter().with_min_len(1000).try_for_each(|entry| {
-        validate_package_entry(package_dir, entry).map_err(|e| (entry.relative_path.clone(), e))
-    })
+    paths
+        .paths
+        .par_iter()
+        .with_min_len(1000)
+        .try_for_each(|entry| {
+            validate_package_entry(package_dir, entry, mode)
+                .map_err(|e| (entry.relative_path.clone(), e))
+        })
 }
 
 /// Determine whether the information in the [`PathsEntry`] matches the file in
@@ -137,14 +154,15 @@ pub fn validate_package_directory_from_paths(
 fn validate_package_entry(
     package_dir: &Path,
     entry: &PathsEntry,
+    mode: ValidationMode,
 ) -> Result<(), PackageEntryValidationError> {
     let path = package_dir.join(&entry.relative_path);
 
     // Validate based on the type of path
     match entry.path_type {
-        PathType::HardLink => validate_package_hard_link_entry(path, entry),
-        PathType::SoftLink => validate_package_soft_link_entry(path, entry),
-        PathType::Directory => validate_package_directory_entry(path, entry),
+        PathType::HardLink => validate_package_hard_link_entry(path, entry, mode),
+        PathType::SoftLink => validate_package_soft_link_entry(path, entry, mode),
+        PathType::Directory => validate_package_directory_entry(path, entry, mode),
     }
 }
 
@@ -153,8 +171,16 @@ fn validate_package_entry(
 fn validate_package_hard_link_entry(
     path: PathBuf,
     entry: &PathsEntry,
+    mode: ValidationMode,
 ) -> Result<(), PackageEntryValidationError> {
     debug_assert!(entry.path_type == PathType::HardLink);
+
+    if mode == ValidationMode::Fast {
+        if !path.is_file() {
+            return Err(PackageEntryValidationError::NotFound);
+        }
+        return Ok(());
+    }
 
     // Short-circuit if we have no validation reference
     if entry.sha256.is_none() && entry.size_in_bytes.is_none() {
@@ -212,6 +238,7 @@ fn validate_package_hard_link_entry(
 fn validate_package_soft_link_entry(
     path: PathBuf,
     entry: &PathsEntry,
+    _mode: ValidationMode,
 ) -> Result<(), PackageEntryValidationError> {
     debug_assert!(entry.path_type == PathType::SoftLink);
 
@@ -233,6 +260,7 @@ fn validate_package_soft_link_entry(
 fn validate_package_directory_entry(
     path: PathBuf,
     entry: &PathsEntry,
+    _mode: ValidationMode,
 ) -> Result<(), PackageEntryValidationError> {
     debug_assert!(entry.path_type == PathType::Directory);
 
@@ -254,7 +282,7 @@ mod test {
 
     use super::{
         validate_package_directory, validate_package_directory_from_paths,
-        PackageEntryValidationError, PackageValidationError,
+        PackageEntryValidationError, PackageValidationError, ValidationMode,
     };
 
     #[rstest]
@@ -309,7 +337,7 @@ mod test {
         // Revalidate the package, given that we changed a file it should now fail with
         // mismatched hashes.
         assert_matches!(
-            validate_package_directory_from_paths(temp_dir.path(), &paths),
+            validate_package_directory_from_paths(temp_dir.path(), &paths, ValidationMode::Full),
             Err((
                 path,
                 PackageEntryValidationError::HashMismatch(_, _)
