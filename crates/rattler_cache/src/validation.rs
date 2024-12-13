@@ -20,6 +20,7 @@ use digest::Digest;
 use rattler_conda_types::package::{IndexJson, PackageFile, PathType, PathsEntry, PathsJson};
 use rattler_digest::Sha256;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::IndexedParallelIterator;
 
 /// An error that is returned by [`validate_package_directory`] if the contents
 /// of the directory seems to be corrupted.
@@ -126,7 +127,7 @@ pub fn validate_package_directory_from_paths(
     paths: &PathsJson,
 ) -> Result<(), (PathBuf, PackageEntryValidationError)> {
     // Check every entry in the PathsJson object
-    paths.paths.par_iter().try_for_each(|entry| {
+    paths.paths.par_iter().with_min_len(100).try_for_each(|entry| {
         validate_package_entry(package_dir, entry).map_err(|e| (entry.relative_path.clone(), e))
     })
 }
