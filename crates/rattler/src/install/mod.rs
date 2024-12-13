@@ -30,8 +30,7 @@ mod installer;
 mod test_utils;
 
 use std::{
-    cmp::Ordering,
-    collections::{binary_heap::PeekMut, BinaryHeap, HashSet},
+    collections::HashSet,
     fs,
     future::ready,
     io::ErrorKind,
@@ -42,7 +41,7 @@ use std::{
 pub use apple_codesign::AppleCodeSignBehavior;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
-use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::FutureExt;
 #[cfg(feature = "indicatif")]
 pub use installer::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
@@ -57,6 +56,7 @@ use rattler_conda_types::{
     prefix_record::PathsEntry,
     Platform,
 };
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use simple_spawn_blocking::Cancelled;
 use tokio::task::JoinError;
 use tracing::instrument;
@@ -305,9 +305,8 @@ pub async fn link_package(
     let allow_ref_links = options.allow_ref_links.unwrap_or_else(|| {
         match reflink_copy::check_reflink_support(package_dir, target_dir) {
             Ok(reflink_copy::ReflinkSupport::Supported) => true,
-            Ok(reflink_copy::ReflinkSupport::NotSupported) => false,
+            Ok(reflink_copy::ReflinkSupport::NotSupported) | Err(_) => false,
             Ok(reflink_copy::ReflinkSupport::Unknown) => allow_hard_links,
-            Err(_) => false,
         }
     });
 
@@ -362,52 +361,37 @@ pub async fn link_package(
     // tasks.
     let python_info = options.python_info.map(Arc::new);
 
-    // Start linking all package files in parallel
-    let mut pending_futures = FuturesUnordered::new();
-    let mut number_of_paths_entries = 0;
-    for (entry, computed_path) in final_paths {
-        let package_dir = package_dir.to_owned();
-        let target_dir = target_dir.to_owned();
-        let target_prefix = target_prefix.clone();
+    // Link the individual files in parallel
+    let link_target_prefix = target_prefix.clone();
+    let package_dir = package_dir.to_path_buf();
+    let link_target_dir = target_dir.to_path_buf();
+    let link_entries_iter = final_paths
+        .into_par_iter()
+        .map(move |(entry, computed_path)| {
+            let clobber_rename = clobber_paths.get(&entry.relative_path).cloned();
+            let link_result = link_file(
+                &entry,
+                computed_path.clone(),
+                &package_dir,
+                &link_target_dir,
+                &link_target_prefix,
+                allow_symbolic_links && !entry.no_link,
+                allow_hard_links && !entry.no_link,
+                allow_ref_links && !entry.no_link,
+                platform,
+                options.apple_codesign_behavior,
+            );
 
-        let clobber_rename = clobber_paths.get(&entry.relative_path).cloned();
-        let install_future = async move {
-            let _permit = driver.acquire_io_permit().await;
-
-            // Spawn a blocking task to link the specific file. We use a blocking task here
-            // because filesystem access is blocking anyway so its more
-            // efficient to group them together in a single blocking call.
-            let cloned_entry = entry.clone();
-            let result = match tokio::task::spawn_blocking(move || {
-                link_file(
-                    &cloned_entry,
-                    computed_path,
-                    &package_dir,
-                    &target_dir,
-                    &target_prefix,
-                    allow_symbolic_links && !cloned_entry.no_link,
-                    allow_hard_links && !cloned_entry.no_link,
-                    allow_ref_links && !cloned_entry.no_link,
-                    platform,
-                    options.apple_codesign_behavior,
-                )
-            })
-            .await
-            .map_err(JoinError::try_into_panic)
-            {
-                Ok(Ok(linked_file)) => linked_file,
-                Ok(Err(e)) => {
-                    return Err(InstallError::FailedToLink(entry.relative_path.clone(), e))
-                }
-                Err(Ok(payload)) => std::panic::resume_unwind(payload),
-                Err(Err(_err)) => return Err(InstallError::Cancelled),
+            let result = match link_result {
+                Ok(linked_file) => linked_file,
+                Err(e) => return Err(InstallError::FailedToLink(entry.relative_path.clone(), e)),
             };
 
             // Construct a `PathsEntry` from the result of the linking operation
-            let paths_entry = PathsEntry {
+            Ok(PathsEntry {
                 relative_path: result.relative_path,
                 original_path: if clobber_rename.is_some() {
-                    Some(entry.relative_path)
+                    Some(entry.relative_path.clone())
                 } else {
                     None
                 },
@@ -424,21 +408,15 @@ pub async fn link_package(
                     .prefix_placeholder
                     .as_ref()
                     .map(|p| p.placeholder.clone()),
-            };
-
-            Ok(vec![(number_of_paths_entries, paths_entry)])
-        };
-
-        pending_futures.push(install_future.boxed());
-        number_of_paths_entries += 1;
-    }
+            })
+        });
 
     // If this package is a noarch python package we also have to create entry
     // points.
     //
     // Be careful with the fact that this code is currently running in parallel with
     // the linking of individual files.
-    if let Some(link_json) = link_json {
+    let entry_points_iter = if let Some(link_json) = link_json {
         // Parse the `link.json` file and extract entry points from it.
         let entry_points = match link_json.noarch {
             NoArchLinks::Python(entry_points) => entry_points.entry_points,
@@ -452,96 +430,57 @@ pub async fn link_package(
             .clone()
             .expect("should be safe because its checked above that this contains a value");
 
+        let target_prefix = target_prefix.clone();
+        let target_dir = target_dir.to_path_buf();
+
         // Create entry points for each listed item. This is different between Windows
         // and unix because on Windows, two PathEntry's are created whereas on
         // Linux only one is created.
-        for entry_point in entry_points {
-            let python_info = python_info.clone();
-            let target_dir = target_dir.to_owned();
-            let target_prefix = target_prefix.clone();
-
-            let entry_point_fut = async move {
-                // Acquire an IO permit
-                let _permit = driver.acquire_io_permit().await;
-
-                let entries = if platform.is_windows() {
-                    match create_windows_python_entry_point(
-                        &target_dir,
-                        &target_prefix,
-                        &entry_point,
-                        &python_info,
-                        &platform,
-                    ) {
-                        Ok([a, b]) => vec![
-                            (number_of_paths_entries, a),
-                            (number_of_paths_entries + 1, b),
-                        ],
-                        Err(e) => return Err(InstallError::FailedToCreatePythonEntryPoint(e)),
-                    }
-                } else {
-                    match create_unix_python_entry_point(
-                        &target_dir,
-                        &target_prefix,
-                        &entry_point,
-                        &python_info,
-                    ) {
-                        Ok(a) => vec![(number_of_paths_entries, a)],
-                        Err(e) => return Err(InstallError::FailedToCreatePythonEntryPoint(e)),
-                    }
-                };
-
-                Ok(entries)
-            };
-
-            pending_futures.push(entry_point_fut.boxed());
-            number_of_paths_entries += if platform.is_windows() { 2 } else { 1 };
-        }
-    }
-
-    // Await the result of all the background tasks. The background tasks are
-    // scheduled in order, however, they can complete in any order. This means
-    // we have to reorder them back into their original order. This is achieved
-    // by waiting to add finished results to the result Vec, if the result
-    // before it has not yet finished. To that end we use a `BinaryHeap` as a
-    // priority queue which will buffer up finished results that finished before
-    // their predecessor.
-    //
-    // What makes this loop special is that it also aborts if any of the returned
-    // results indicate a failure.
-    let mut paths = Vec::with_capacity(number_of_paths_entries);
-    let mut out_of_order_queue = BinaryHeap::<OrderWrapper<PathsEntry>>::with_capacity(100);
-    while let Some(link_result) = pending_futures.next().await {
-        for (index, data) in link_result? {
-            if index == paths.len() {
-                // If this is the next element expected in the sorted list, add it immediately.
-                // This basically means the future finished in order.
-                paths.push(data);
-
-                // By adding a finished future we have to check if there might also be another
-                // future that finished earlier and should also now be added to
-                // the result Vec.
-                while let Some(next_output) = out_of_order_queue.peek_mut() {
-                    if next_output.index == paths.len() {
-                        paths.push(PeekMut::pop(next_output).data);
-                    } else {
-                        break;
-                    }
+        let entry_point_iter = if platform.is_windows() {
+            rayon::iter::Either::Left(entry_points.into_par_iter().flat_map(move |entry_point| {
+                match create_windows_python_entry_point(
+                    &target_dir,
+                    &target_prefix,
+                    &entry_point,
+                    &python_info,
+                    &platform,
+                ) {
+                    Ok([a, b]) => rayon::iter::Either::Left([Ok(a), Ok(b)].into_par_iter()),
+                    Err(e) => rayon::iter::Either::Right(rayon::iter::once(Err(
+                        InstallError::FailedToCreatePythonEntryPoint(e),
+                    ))),
                 }
-            } else {
-                // Otherwise add it to the out-of-order queue. This means that we still have to
-                // wait for another element before we can add the result to the
-                // ordered list.
-                out_of_order_queue.push(OrderWrapper { index, data });
-            }
-        }
-    }
-    debug_assert_eq!(
-        paths.len(),
-        paths.capacity(),
-        "some futures where not added to the result"
-    );
+            }))
+        } else {
+            rayon::iter::Either::Right(entry_points.into_par_iter().map(move |entry_point| {
+                match create_unix_python_entry_point(
+                    &target_dir,
+                    &target_prefix,
+                    &entry_point,
+                    &python_info,
+                ) {
+                    Ok(a) => Ok(a),
+                    Err(e) => Err(InstallError::FailedToCreatePythonEntryPoint(e)),
+                }
+            }))
+        };
 
-    Ok(paths)
+        rayon::iter::Either::Left(entry_point_iter)
+    } else {
+        rayon::iter::Either::Right(rayon::iter::empty())
+    };
+
+    // Collect all path entries
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    rayon::spawn(move || {
+        let _ = tx.send(
+            link_entries_iter
+                .chain(entry_points_iter)
+                .collect::<Result<Vec<_>, _>>(),
+        );
+    });
+
+    rx.await.unwrap_or_else(|_| Err(InstallError::Cancelled))
 }
 
 fn compute_paths(
@@ -633,34 +572,6 @@ async fn read_link_json(
                     .map_err(InstallError::FailedToReadLinkJson)
             })
             .await
-    }
-}
-
-/// A helper struct for a `BinaryHeap` to provides ordering to items that are
-/// otherwise unordered.
-struct OrderWrapper<T> {
-    index: usize,
-    data: T,
-}
-
-impl<T> PartialEq for OrderWrapper<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.index == other.index
-    }
-}
-
-impl<T> Eq for OrderWrapper<T> {}
-
-impl<T> PartialOrd for OrderWrapper<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<T> Ord for OrderWrapper<T> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // BinaryHeap is a max heap, so compare backwards here.
-        other.index.cmp(&self.index)
     }
 }
 
