@@ -147,7 +147,7 @@ impl LinuxMenu {
             .name
             .resolve(crate::schema::Environment::Base, placeholders);
 
-        let directories = directories.unwrap_or_else(|| Directories::new(mode, &menu_name, &name));
+        let directories = directories.unwrap_or_else(|| Directories::new(mode, menu_name, &name));
         let refined_placeholders = placeholders.refine(&directories.desktop_file());
 
         LinuxMenu {
@@ -418,7 +418,7 @@ impl LinuxMenu {
             }
         }
 
-        if let Some(update_mime_database) = which::which("update-mime-database").ok() {
+        if let Ok(update_mime_database) = which::which("update-mime-database") {
             let mut command = Command::new(update_mime_database);
             command
                 .arg("-V")
