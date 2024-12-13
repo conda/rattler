@@ -826,7 +826,7 @@ fn can_create_symlinks_sync(target_dir: &Path) -> bool {
     #[cfg(windows)]
     let result = std::os::windows::fs::symlink_file("./", &symlink_path);
     #[cfg(unix)]
-    let result = fs_err::os::unix::fs::symlink("./", &symlink_path).await;
+    let result = fs_err::os::unix::fs::symlink("./", &symlink_path);
     match result {
         Ok(_) => {
             if let Err(e) = fs_err::remove_file(&symlink_path) {
