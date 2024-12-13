@@ -469,7 +469,7 @@ async fn link_package(
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
-    rayon::spawn(move || {
+    rayon::spawn_fifo(move || {
         let inner = move || {
             // Link the contents of the package into the prefix.
             let paths = crate::install::link_package_sync(
