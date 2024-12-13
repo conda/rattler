@@ -33,8 +33,7 @@ impl BaseMenuItemPlaceholders {
     pub fn new(base_prefix: &Path, prefix: &Path, platform: Platform) -> Self {
         let dist_name = |p: &Path| {
             p.file_name()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_else(|| "empty".to_string())
+                .map_or_else(|| "empty".to_string(), |s| s.to_string_lossy().to_string())
         };
 
         let (python, base_python) = if platform.is_windows() {
