@@ -3,7 +3,6 @@ source: crates/rattler_menuinst/src/schema.rs
 expression: schema
 ---
 MenuInstSchema {
-    id: "https://schemas.conda.io/menuinst-1.schema.json",
     schema: "https://json-schema.org/draft-07/schema",
     menu_name: "{{ DISTRIBUTION_NAME }}",
     menu_items: [
