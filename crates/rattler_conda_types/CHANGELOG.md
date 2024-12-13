@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.3...rattler_conda_types-v0.29.4) - 2024-12-12
+
+### Added
+- add `EnumIter` to `Arch` ([#972](https://github.com/conda/rattler/pull/972))
+
+## [0.29.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.2...rattler_conda_types-v0.29.3) - 2024-11-30
+
+### Added
+
+- merge pixi-build branch ([#950](https://github.com/conda/rattler/pull/950))
+
+### Fixed
+
+- `pixi project version` doesn't reset minor and patch version numbers ([#954](https://github.com/conda/rattler/pull/954))
+
 ## [0.29.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.1...rattler_conda_types-v0.29.2) - 2024-11-18
 
 ### Added

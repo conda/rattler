@@ -1,0 +1,26 @@
+[package]
+name = "rattler_sandbox"
+version = "0.1.0"
+description = "A crate to run executables in a sandbox"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+readme.workspace = true
+
+[dependencies]
+clap = { workspace = true, features = ["derive"] }
+fs-err = { workspace = true }
+tokio = { workspace = true, optional = true, features = ["process"]}
+
+[target.'cfg(any(target_os = "macos", all(target_os = "linux", target_arch = "x86_64"), all(target_os = "linux", target_arch = "aarch64")))'.dependencies]
+birdcage = "0.8.1"
+
+[dev-dependencies]
+libtest-mimic = "0.8.1"
+
+[[test]]
+name = "integration_test"
+path = "tests/integration_test.rs"
+harness = false

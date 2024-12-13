@@ -8,6 +8,7 @@ from rattler.rattler import PyGateway, PySourceConfig, PyMatchSpec
 
 from rattler.channel import Channel
 from rattler.match_spec import MatchSpec
+from rattler.networking import Client
 from rattler.repo_data.record import RepoDataRecord
 from rattler.platform import Platform, PlatformLiteral
 from rattler.package.package_name import PackageName
@@ -90,6 +91,7 @@ class Gateway:
         default_config: Optional[SourceConfig] = None,
         per_channel_config: Optional[dict[str, SourceConfig]] = None,
         max_concurrent_requests: int = 100,
+        client: Optional[Client] = None,
     ) -> None:
         """
         Arguments:
@@ -100,6 +102,8 @@ class Gateway:
                                 prefix, so any channel that starts with the URL uses the configuration.
                                 The configuration with the longest matching prefix is used.
             max_concurrent_requests: The maximum number of concurrent requests that can be made.
+            client: An authenticated client to use for acquiring repodata. If not specified a default
+                    client will be used.
 
         Examples
         --------
@@ -119,6 +123,7 @@ class Gateway:
                 for channel, config in (per_channel_config or {}).items()
             },
             max_concurrent_requests=max_concurrent_requests,
+            client=client._client if client is not None else None,
         )
 
     async def query(

@@ -300,9 +300,16 @@ pub async fn link_package(
         match options.allow_hard_links {
             Some(value) => ready(value).left_future(),
             None => can_create_hardlinks(target_dir, package_dir).right_future(),
-        }
+        },
     );
-    let allow_ref_links = options.allow_ref_links.unwrap_or(allow_hard_links);
+    let allow_ref_links = options.allow_ref_links.unwrap_or_else(|| {
+        match reflink_copy::check_reflink_support(package_dir, target_dir) {
+            Ok(reflink_copy::ReflinkSupport::Supported) => true,
+            Ok(reflink_copy::ReflinkSupport::NotSupported) => false,
+            Ok(reflink_copy::ReflinkSupport::Unknown) => allow_hard_links,
+            Err(_) => false,
+        }
+    });
 
     // Determine the platform to use
     let platform = options.platform.unwrap_or(Platform::current());
