@@ -9,13 +9,6 @@ use std::{
     sync::Arc,
 };
 
-use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
-use crate::install::link_script::LinkScriptError;
-use crate::{
-    default_cache_dir,
-    install::{clobber_registry::ClobberedPath, link_script::PrePostLinkResult},
-    package_cache::PackageCache,
-};
 pub use error::InstallerError;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
 #[cfg(feature = "indicatif")]
@@ -23,8 +16,8 @@ pub use indicatif::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
     ProgressFormatter,
 };
-use rattler_cache::package_cache::CacheLock;
-use rattler_cache::package_cache::CacheReporter;
+use itertools::Itertools;
+use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
     Platform, PrefixRecord, RepoDataRecord,
@@ -34,6 +27,16 @@ pub use reporter::Reporter;
 use reqwest::Client;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
+
+use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
+use crate::{
+    default_cache_dir,
+    install::{
+        clobber_registry::ClobberedPath,
+        link_script::{LinkScriptError, PrePostLinkResult},
+    },
+    package_cache::PackageCache,
+};
 
 /// An installer that can install packages into a prefix.
 #[derive(Default)]
@@ -344,7 +347,18 @@ impl Installer {
 
         // Execute the operations in the transaction.
         let mut pending_futures = FuturesUnordered::new();
-        for (idx, operation) in transaction.operations.iter().enumerate() {
+        for (idx, operation) in
+            transaction
+                .operations
+                .iter()
+                .enumerate()
+                .sorted_by_key(|(_, op)| {
+                    op.record_to_install()
+                        .and_then(|r| r.package_record.size)
+                        .unwrap_or(0)
+                })
+                .rev()
+        {
             let downloader = &downloader;
             let package_cache = &package_cache;
             let reporter = self.reporter.clone();
@@ -495,7 +509,8 @@ async fn link_package(
 
                 link: Some(Link {
                     source: cached_package_dir,
-                    // TODO: compute the right value here based on the options and `can_hard_link` ...
+                    // TODO: compute the right value here based on the options and `can_hard_link`
+                    // ...
                     link_type: Some(LinkType::HardLink),
                 }),
             };

@@ -375,7 +375,7 @@ impl<F: ProgressFormatter> IndicatifReporterInner<F> {
             .iter()
             .map(|&idx| (self.package_sizes[idx], &self.package_names[idx]));
 
-        let largest_package = package_iter.max_by_key(|(size, _)| *size);
+        let largest_package = package_iter.min_by_key(|(size, _)| *size);
         if let Some((_, first)) = largest_package {
             msg.push_str(first);
         }
