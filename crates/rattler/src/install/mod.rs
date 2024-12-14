@@ -29,16 +29,20 @@ mod installer;
 #[cfg(test)]
 mod test_utils;
 
-use crate::install::clobber_registry::ClobberRegistry;
-use crate::install::entry_point::{
-    create_unix_python_entry_point, create_windows_python_entry_point,
+use std::{
+    cmp::Ordering,
+    collections::{binary_heap::PeekMut, BinaryHeap, HashMap, HashSet},
+    fs,
+    future::ready,
+    io::ErrorKind,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
-pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
+
 pub use apple_codesign::AppleCodeSignBehavior;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
-use futures::stream::FuturesUnordered;
-use futures::{FutureExt, StreamExt};
+use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 #[cfg(feature = "indicatif")]
 pub use installer::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
@@ -53,25 +57,21 @@ use rattler_conda_types::{
     prefix_record::PathsEntry,
     Platform,
 };
-use rayon::iter::Either;
-use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-use simple_spawn_blocking::Cancelled;
-use std::cmp::Ordering;
-use std::collections::binary_heap::PeekMut;
-use std::collections::BinaryHeap;
-use std::sync::Mutex;
-use std::{
-    collections::HashSet,
-    fs,
-    future::ready,
-    io::ErrorKind,
-    path::{Path, PathBuf},
-    sync::Arc,
+use rayon::{
+    iter::Either,
+    prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
 };
+use simple_spawn_blocking::Cancelled;
 use tokio::task::JoinError;
 use tracing::instrument;
 pub use transaction::{Transaction, TransactionError, TransactionOperation};
 pub use unlink::{empty_trash, unlink_package};
+
+pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
+use crate::install::{
+    clobber_registry::ClobberRegistry,
+    entry_point::{create_unix_python_entry_point, create_windows_python_entry_point},
+};
 
 /// An error that might occur when installing a package.
 #[derive(Debug, thiserror::Error)]
@@ -655,8 +655,14 @@ pub fn link_package_sync(
 
     // Figure out all the directories that we are going to need
     let mut directories_to_construct = HashSet::new();
-    for (_, computed_path) in final_paths.iter() {
-        let mut current_path = computed_path.parent();
+    let mut paths_by_directory = HashMap::new();
+    for (entry, computed_path) in final_paths.into_iter() {
+        let Some(entry_parent) = computed_path.parent() else {
+            continue;
+        };
+
+        // Iterate over all parent directories and create them if they do not exist.
+        let mut current_path = Some(entry_parent);
         while let Some(path) = current_path {
             if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
                 current_path = path.parent();
@@ -664,11 +670,17 @@ pub fn link_package_sync(
                 break;
             }
         }
+
+        // Store the path by directory so we can create them in parallel
+        paths_by_directory
+            .entry(entry_parent.to_path_buf())
+            .or_insert_with(Vec::new)
+            .push((entry, computed_path));
     }
-    let directories_target_dir = target_dir.to_path_buf();
+
     for directory in directories_to_construct.into_iter().sorted() {
-        let full_path = directories_target_dir.join(directory);
-        match std::fs::create_dir(&full_path) {
+        let full_path = target_dir.join(directory);
+        match fs::create_dir(&full_path) {
             Ok(_) => (),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
             Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
@@ -683,52 +695,63 @@ pub fn link_package_sync(
     let link_target_prefix = target_prefix.clone();
     let package_dir = package_dir.to_path_buf();
     let link_target_dir = target_dir.to_path_buf();
-    let mut paths = final_paths
-        // .into_iter()
+    let mut paths = paths_by_directory
+        .into_values()
+        .collect_vec()
         .into_par_iter()
-        .with_min_len(1000)
-        .map(move |(entry, computed_path)| {
-            let clobber_rename = clobber_paths.get(&entry.relative_path).cloned();
-            let link_result = link_file(
-                &entry,
-                computed_path.clone(),
-                &package_dir,
-                &link_target_dir,
-                &link_target_prefix,
-                allow_symbolic_links && !entry.no_link,
-                allow_hard_links && !entry.no_link,
-                allow_ref_links && !entry.no_link,
-                platform,
-                options.apple_codesign_behavior,
-            );
+        .with_min_len(100)
+        .flat_map(move |entries_in_subdir| {
+            let mut path_entries = Vec::with_capacity(entries_in_subdir.len());
+            for (entry, computed_path) in entries_in_subdir {
+                let clobber_rename = clobber_paths.get(&entry.relative_path).cloned();
+                let link_result = link_file(
+                    &entry,
+                    computed_path.clone(),
+                    &package_dir,
+                    &link_target_dir,
+                    &link_target_prefix,
+                    allow_symbolic_links && !entry.no_link,
+                    allow_hard_links && !entry.no_link,
+                    allow_ref_links && !entry.no_link,
+                    platform,
+                    options.apple_codesign_behavior,
+                );
 
-            let result = match link_result {
-                Ok(linked_file) => linked_file,
-                Err(e) => return Err(InstallError::FailedToLink(entry.relative_path.clone(), e)),
-            };
+                let result = match link_result {
+                    Ok(linked_file) => linked_file,
+                    Err(e) => {
+                        return vec![Err(InstallError::FailedToLink(
+                            entry.relative_path.clone(),
+                            e,
+                        ))]
+                    }
+                };
 
-            // Construct a `PathsEntry` from the result of the linking operation
-            Ok(PathsEntry {
-                relative_path: result.relative_path,
-                original_path: if clobber_rename.is_some() {
-                    Some(entry.relative_path.clone())
-                } else {
-                    None
-                },
-                path_type: entry.path_type.into(),
-                no_link: entry.no_link,
-                sha256: entry.sha256,
-                sha256_in_prefix: Some(result.sha256),
-                size_in_bytes: Some(result.file_size),
-                file_mode: match result.method {
-                    LinkMethod::Patched(file_mode) => Some(file_mode),
-                    _ => None,
-                },
-                prefix_placeholder: entry
-                    .prefix_placeholder
-                    .as_ref()
-                    .map(|p| p.placeholder.clone()),
-            })
+                // Construct a `PathsEntry` from the result of the linking operation
+                path_entries.push(Ok(PathsEntry {
+                    relative_path: result.relative_path,
+                    original_path: if clobber_rename.is_some() {
+                        Some(entry.relative_path.clone())
+                    } else {
+                        None
+                    },
+                    path_type: entry.path_type.into(),
+                    no_link: entry.no_link,
+                    sha256: entry.sha256,
+                    sha256_in_prefix: Some(result.sha256),
+                    size_in_bytes: Some(result.file_size),
+                    file_mode: match result.method {
+                        LinkMethod::Patched(file_mode) => Some(file_mode),
+                        _ => None,
+                    },
+                    prefix_placeholder: entry
+                        .prefix_placeholder
+                        .as_ref()
+                        .map(|p| p.placeholder.clone()),
+                }));
+            }
+
+            path_entries
         })
         .collect::<Result<Vec<_>, _>>()?;
 

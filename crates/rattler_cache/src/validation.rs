@@ -311,7 +311,7 @@ mod test {
 
         // Validate that the extracted package is correct. Since it's just been
         // extracted this should work.
-        let result = validate_package_directory(temp_dir.path());
+        let result = validate_package_directory(temp_dir.path(), ValidationMode::Full);
         if let Err(e) = result {
             panic!("{e}");
         }
@@ -400,7 +400,7 @@ mod test {
     fn test_missing_metadata() {
         let temp_dir = tempfile::tempdir().unwrap();
         assert_matches!(
-            validate_package_directory(temp_dir.path()),
+            validate_package_directory(temp_dir.path(), ValidationMode::Full),
             Err(PackageValidationError::ReadIndexJsonError(_))
         );
     }
