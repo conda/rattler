@@ -5,9 +5,7 @@ use std::{
 };
 
 use crate::{
-    render::{BaseMenuItemPlaceholders, MenuItemPlaceholders},
-    schema::{Environment, MenuItemCommand, Windows},
-    slugify, MenuInstError, MenuMode,
+    render::{BaseMenuItemPlaceholders, MenuItemPlaceholders}, schema::{Environment, MenuItemCommand, Windows}, slugify, util::log_output, MenuInstError, MenuMode
 };
 
 mod create_shortcut;
@@ -155,8 +153,20 @@ impl WindowsMenu {
     fn precreate(&self) -> Result<(), MenuInstError> {
         if let Some(precreate_code) = self.command.precreate.as_ref() {
             let precreate_code = precreate_code.resolve(&self.placeholders);
-            // TODO run precreate code in a hidden window
-            tracing::info!("Precreate code: {}", precreate_code);
+
+            if precreate_code.is_empty() {
+                return Ok(());
+            }
+
+            let temp_file = tempfile::NamedTempFile::with_suffix(".bat")?;
+            fs::write(temp_file.path(), precreate_code)?;
+
+            let output = std::process::Command::new("cmd")
+                .arg("/c")
+                .arg(temp_file.path())
+                .output()?;
+
+            log_output("precreate", output);
         }
         Ok(())
     }
