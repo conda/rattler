@@ -40,9 +40,16 @@ pub enum MenuInstError {
     #[error("Failed to sign plist: {0}")]
     SigningFailed(String),
 
+    #[error("Failed to install menu item: {0}")]
+    ActivationError(#[from] rattler_shell::activation::ActivationError),
+
     #[cfg(target_os = "linux")]
     #[error("Failed to install menu item: {0}")]
     XmlError(#[from] quick_xml::Error),
+    
+    #[cfg(target_os = "windows")]
+    #[error("Failed to install menu item: {0}")]
+    WindowsError(#[from] ::windows::core::Error)
 }
 
 // Install menu items from a given schema file
