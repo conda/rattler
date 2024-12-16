@@ -78,8 +78,9 @@ pub struct ChannelInfo {
     pub base_url: Option<String>,
 }
 
-// Trait to allow for generic deserialization of records from a path.
+/// Trait to allow for generic deserialization of records from a path.
 pub trait RecordFromPath {
+    /// Deserialize a record from a path.
     fn from_path(path: &Path) -> Result<Self, std::io::Error>
     where
         Self: Sized;
