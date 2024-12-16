@@ -62,7 +62,7 @@ impl MimeConfig {
             .unwrap_or_default();
 
         let new_value = if !existing.is_empty() && !existing.contains(application) {
-            format!("{};{}", existing, application)
+            format!("{existing};{application}")
         } else {
             application.to_string()
         };
@@ -110,7 +110,6 @@ impl MimeConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use insta::assert_snapshot;
     use tempfile::NamedTempFile;
 
     fn create_temp_config() -> (MimeConfig, NamedTempFile) {
