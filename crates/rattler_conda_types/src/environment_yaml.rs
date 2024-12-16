@@ -91,7 +91,7 @@ impl EnvironmentYaml {
     /// Reads the contents of a file at the given path and parses it as an
     /// `environment.yaml` file.
     pub fn from_path(path: &Path) -> std::io::Result<Self> {
-        let contents = std::fs::read_to_string(path)?;
+        let contents = fs_err::read_to_string(path)?;
         Self::from_yaml_str(&contents)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
@@ -103,7 +103,7 @@ impl EnvironmentYaml {
 
     /// Write the contents of this `environment.yaml` file to the given path.
     pub fn to_path(&self, path: &Path) -> std::io::Result<()> {
-        std::fs::write(path, self.to_yaml_string())
+        fs_err::write(path, self.to_yaml_string())
     }
 
     /// Converts the contents of this `environment.yaml` file to a string.

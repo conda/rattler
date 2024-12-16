@@ -282,7 +282,8 @@ mod tests {
         assert!(target_prefix.path().join("i-was-post-linked").exists());
 
         // unlink the package
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
             operations: vec![TransactionOperation::Remove(prefix_records[0].clone())],
             python_info: None,

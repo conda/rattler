@@ -136,7 +136,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .collect::<Result<Vec<_>, _>>()?;
 
     // Determine the packages that are currently installed in the environment.
-    let installed_packages = PrefixRecord::collect_from_prefix(&target_prefix)?;
+    let installed_packages = PrefixRecord::collect_from_prefix::<PrefixRecord>(&target_prefix)?;
 
     // For each channel/subdirectory combination, download and cache the
     // `repodata.json` that should be available from the corresponding Url. The

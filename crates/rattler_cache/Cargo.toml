@@ -29,7 +29,7 @@ url.workspace = true
 thiserror.workspace = true
 reqwest-middleware.workspace = true
 digest.workspace = true
-fs4 = { workspace = true, features = ["fs-err-tokio"] }
+fs4 = { workspace = true, features = ["fs-err3-tokio", "tokio"] }
 simple_spawn_blocking = { version = "1.0.0", path = "../simple_spawn_blocking", features = ["tokio"] }
 rayon = { workspace = true }
 

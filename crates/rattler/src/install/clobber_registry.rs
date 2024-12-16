@@ -696,7 +696,8 @@ mod tests {
                 ],
             );
 
-            let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+            let prefix_records: Vec<PrefixRecord> =
+                PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
 
             for record in prefix_records {
                 if record.repodata_record.package_record.name.as_normalized() == "clobber-1" {
@@ -878,7 +879,8 @@ mod tests {
 
         println!("== RUNNING UPDATE");
 
-        let mut prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let mut prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
         prefix_records.sort_by(|a, b| {
             a.repodata_record
                 .package_record
@@ -974,7 +976,8 @@ mod tests {
             &["clobber.txt", "another-clobber.txt"],
         );
 
-        let mut prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let mut prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
         prefix_records.sort_by(|a, b| {
             a.repodata_record
                 .package_record
@@ -1063,7 +1066,8 @@ mod tests {
             ],
         );
 
-        let mut prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let mut prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
         prefix_records.sort_by(|a, b| {
             a.repodata_record
                 .package_record
@@ -1232,7 +1236,8 @@ mod tests {
         )
         .await;
 
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
 
         // remove one of the clobbering files
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
@@ -1299,7 +1304,8 @@ mod tests {
         )
         .await;
 
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
 
         // remove one of the clobbering files
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
