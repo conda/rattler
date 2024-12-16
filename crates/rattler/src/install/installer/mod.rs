@@ -347,17 +347,16 @@ impl Installer {
 
         // Execute the operations in the transaction.
         let mut pending_futures = FuturesUnordered::new();
-        for (idx, operation) in
-            transaction
-                .operations
-                .iter()
-                .enumerate()
-                .sorted_by_key(|(_, op)| {
-                    op.record_to_install()
-                        .and_then(|r| r.package_record.size)
-                        .unwrap_or(0)
-                })
-                .rev()
+        for (idx, operation) in transaction
+            .operations
+            .iter()
+            .enumerate()
+            .sorted_by_key(|(_, op)| {
+                op.record_to_install()
+                    .and_then(|r| r.package_record.size)
+                    .unwrap_or(0)
+            })
+            .rev()
         {
             let downloader = &downloader;
             let package_cache = &package_cache;

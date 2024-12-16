@@ -508,8 +508,8 @@ mod test {
     use url::Url;
 
     use super::PackageCache;
-    use crate::{package_cache::CacheKey, validation::validate_package_directory};
     use crate::validation::ValidationMode;
+    use crate::{package_cache::CacheKey, validation::validate_package_directory};
 
     fn get_test_data_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
@@ -556,7 +556,8 @@ mod test {
             .unwrap();
 
         // Validate the contents of the package
-        let (_, current_paths) = validate_package_directory(cache_lock.path(), ValidationMode::Full).unwrap();
+        let (_, current_paths) =
+            validate_package_directory(cache_lock.path(), ValidationMode::Full).unwrap();
 
         // Make sure that the paths are the same as what we would expect from the
         // original tar archive.
