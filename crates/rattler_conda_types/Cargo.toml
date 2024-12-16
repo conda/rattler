@@ -39,6 +39,8 @@ url = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true }
 rattler_redaction = { version = "0.1.4", path = "../rattler_redaction" }
 dirs = { workspace = true }
+rayon.workspace = true
+fs-err = "3.0.0"
 
 [dev-dependencies]
 rand = { workspace = true }

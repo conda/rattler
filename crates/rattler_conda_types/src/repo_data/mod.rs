@@ -78,6 +78,13 @@ pub struct ChannelInfo {
     pub base_url: Option<String>,
 }
 
+// Trait to allow for generic deserialization of records from a path.
+pub trait RecordFromPath {
+    fn from_path(path: &Path) -> Result<Self, std::io::Error>
+    where
+        Self: Sized;
+}
+
 /// A single record in the Conda repodata. A single record refers to a single
 /// binary distribution of a package on a Conda channel.
 #[serde_as]
@@ -207,6 +214,13 @@ impl Display for PackageRecord {
                 self.build
             )
         }
+    }
+}
+
+impl RecordFromPath for PackageRecord {
+    fn from_path(path: &Path) -> Result<Self, std::io::Error> {
+        let contents = fs_err::read_to_string(path)?;
+        Ok(serde_json::from_str(&contents)?)
     }
 }
 
