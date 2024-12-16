@@ -365,7 +365,7 @@ mod test {
 
         // Validate that the extracted package is correct. Since it's just been
         // extracted this should work.
-        let result = validate_package_directory(temp_dir.path());
+        let result = validate_package_directory(temp_dir.path(), ValidationMode::Full);
         if let Err(e) = result {
             panic!("{e}");
         }
@@ -388,7 +388,7 @@ mod test {
 
         // Revalidate the package, given that we replaced the symlink, it should fail.
         assert_matches!(
-            validate_package_directory_from_paths(temp_dir.path(), &paths),
+            validate_package_directory_from_paths(temp_dir.path(), &paths, ValidationMode::Full),
             Err((
                 path,
                 PackageEntryValidationError::ExpectedSymlink

@@ -656,7 +656,7 @@ pub fn link_package_sync(
     // Figure out all the directories that we are going to need
     let mut directories_to_construct = HashSet::new();
     let mut paths_by_directory = HashMap::new();
-    for (entry, computed_path) in final_paths.into_iter() {
+    for (entry, computed_path) in final_paths {
         let Some(entry_parent) = computed_path.parent() else {
             continue;
         };
