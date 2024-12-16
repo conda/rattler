@@ -14,6 +14,7 @@ impl PlaceholderString {
     }
 }
 
+#[allow(dead_code)]
 pub fn resolve(
     input: &Option<PlaceholderString>,
     placeholders: impl AsRef<HashMap<String, String>>,
