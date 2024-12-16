@@ -29,7 +29,7 @@ impl MimeConfig {
         if self.path.exists() {
             self.config
                 .load(&self.path)
-                .map_err(|e| MimeConfigError::Parse(e.to_string()))?;
+                .map_err(MimeConfigError::Parse)?;
         }
         Ok(())
     }
@@ -37,7 +37,7 @@ impl MimeConfig {
     pub fn save(&self) -> Result<(), MimeConfigError> {
         self.config
             .write(&self.path)
-            .map_err(|e| MimeConfigError::Io(e))?;
+            .map_err(MimeConfigError::Io)?;
         Ok(())
     }
 
@@ -47,7 +47,7 @@ impl MimeConfig {
         self.config.set_default_section("Added Associations");
 
         // Only set default if not already set
-        if !self.config.get("Default Applications", mime_type).is_some() {
+        if self.config.get("Default Applications", mime_type).is_none() {
             self.config.set(
                 "Default Applications",
                 mime_type,
