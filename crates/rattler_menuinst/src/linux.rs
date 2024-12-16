@@ -7,6 +7,7 @@ use std::process::Command;
 use tempfile::TempDir;
 
 mod menu_xml;
+mod mime_config;
 
 use rattler_conda_types::Platform;
 use rattler_shell::activation::{ActivationVariables, Activator};
@@ -385,6 +386,7 @@ impl LinuxMenu {
         mime_types: &[String],
         register: bool,
     ) -> Result<(), MenuInstError> {
+        tracing::info!("Registering mime types {:?}", mime_types);
         let mut resolved_globs = HashMap::<String, String>::new();
 
         if let Some(globs) = &self.item.glob_patterns {
@@ -416,7 +418,7 @@ impl LinuxMenu {
                     log_output("xdg-mime", output);
                 }
             } else {
-                tracing::debug!("xdg-mime not found, not registering mime types as default.");
+                tracing::info!("xdg-mime not found, not registering mime types as default.");
             }
         }
 
