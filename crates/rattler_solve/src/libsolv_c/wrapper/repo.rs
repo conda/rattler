@@ -116,7 +116,7 @@ impl<'pool> Repo<'pool> {
 
 #[cfg(test)]
 mod tests {
-    use super::{super::pool::StringId, *};
+    use super::*;
 
     #[test]
     fn test_repo_creation() {
@@ -168,6 +168,7 @@ mod tests {
 
         // Somehow there are already 2 solvables in the pool, so we check at the third position
         let solvable = unsafe { *ffi_pool.solvables.offset(2) };
+        use crate::libsolv_c::wrapper::pool::StringId;
         let name = StringId(solvable.name).resolve(&pool).unwrap();
         assert_eq!(name, "dummy-solvable");
     }
