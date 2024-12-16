@@ -10,9 +10,6 @@ repository.workspace = true
 license.workspace = true
 readme.workspace = true
 
-[features]
-with_rayon = ["rayon"]
-
 [dependencies]
 chrono = { workspace = true }
 file_url = { path = "../file_url", version = "0.2.0" }

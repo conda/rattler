@@ -13,7 +13,7 @@ use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-#[cfg(feature = "with_rayon")]
+#[cfg(feature = "rayon")]
 use rayon::prelude::*;
 
 /// Information about every file installed with the package.
@@ -277,7 +277,7 @@ impl PrefixRecord {
             })
             .collect();
 
-        #[cfg(feature = "with_rayon")]
+        #[cfg(feature = "rayon")]
         {
             // Process files in parallel
             json_paths
@@ -286,7 +286,7 @@ impl PrefixRecord {
                 .collect()
         }
 
-        #[cfg(not(feature = "with_rayon"))]
+        #[cfg(not(feature = "rayon"))]
         {
             json_paths
                 .iter()
