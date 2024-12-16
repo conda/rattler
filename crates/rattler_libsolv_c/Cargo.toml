@@ -17,8 +17,6 @@ libz-sys = { workspace = true, features = ["static"] }
 
 [build-dependencies]
 anyhow = { workspace = true }
-# 1.0.84 would fail to compile this library specifically on macOS. 
-# For now we just pin an older version.
 cc = "1.1.31"
 cmake = { workspace = true }
 
