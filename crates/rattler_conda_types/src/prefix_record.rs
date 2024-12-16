@@ -6,13 +6,15 @@ use crate::repo_data_record::RepoDataRecord;
 use crate::PackageRecord;
 use fs_err::File;
 use rattler_digest::serde::SerializableHash;
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::serde_as;
 use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+
+#[cfg(feature = "with_rayon")]
+use rayon::prelude::*;
 
 /// Information about every file installed with the package.
 ///
@@ -275,13 +277,22 @@ impl PrefixRecord {
             })
             .collect();
 
-        // Process files in parallel
-        let records: Result<Vec<T>, std::io::Error> = json_paths
-            .par_iter()
-            .map(|path| RecordFromPath::from_path(path))
-            .collect();
+        #[cfg(feature = "with_rayon")]
+        {
+            // Process files in parallel
+            json_paths
+                .par_iter()
+                .map(|path| RecordFromPath::from_path(path))
+                .collect()
+        }
 
-        records
+        #[cfg(not(feature = "with_rayon"))]
+        {
+            json_paths
+                .iter()
+                .map(|path| RecordFromPath::from_path(path))
+                .collect()
+        }
     }
 }
 

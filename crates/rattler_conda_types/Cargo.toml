@@ -10,6 +10,9 @@ repository.workspace = true
 license.workspace = true
 readme.workspace = true
 
+[features]
+with_rayon = ["rayon"]
+
 [dependencies]
 chrono = { workspace = true }
 file_url = { path = "../file_url", version = "0.2.0" }
@@ -39,7 +42,7 @@ url = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true }
 rattler_redaction = { version = "0.1.4", path = "../rattler_redaction" }
 dirs = { workspace = true }
-rayon = { workspace = true }
+rayon = { workspace = true, optional = true }
 fs-err = { workspace = true }
 
 [dev-dependencies]
