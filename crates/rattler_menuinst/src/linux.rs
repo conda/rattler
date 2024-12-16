@@ -148,6 +148,7 @@ impl LinuxMenu {
             .resolve(crate::schema::Environment::Base, placeholders);
 
         let directories = directories.unwrap_or_else(|| Directories::new(mode, menu_name, &name));
+
         let refined_placeholders = placeholders.refine(&directories.desktop_file());
 
         LinuxMenu {
@@ -352,6 +353,7 @@ impl LinuxMenu {
     }
 
     fn install(&self) -> Result<(), MenuInstError> {
+        self.directories.ensure_directories_exist()?;
         self.pre_create()?;
         self.create_desktop_entry()?;
         self.maybe_register_mime_types(true)?;
@@ -606,7 +608,7 @@ mod tests {
     use tempfile::TempDir;
 
     use crate::{
-        render::BaseMenuItemPlaceholders, schema::MenuInstSchema, test::test_data, MenuMode,
+        schema::MenuInstSchema, test::test_data,
     };
 
     use super::{Directories, LinuxMenu};
@@ -689,7 +691,7 @@ mod tests {
                     let icon_path = icon.resolve(FakePlaceholders {
                         placeholders: placeholders.clone(),
                     });
-                    fs::write(&icon_path, &[]).unwrap();
+                    fs::write(&icon_path, []).unwrap();
                 }
             }
 
@@ -719,8 +721,8 @@ mod tests {
         let command = item.command.merge(linux.base);
 
         let placeholders = super::BaseMenuItemPlaceholders::new(
-            &fake_prefix.prefix(),
-            &fake_prefix.prefix(),
+            fake_prefix.prefix(),
+            fake_prefix.prefix(),
             rattler_conda_types::Platform::current(),
         );
 

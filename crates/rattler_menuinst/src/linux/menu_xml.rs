@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use chrono::Utc;
 use fs_err::{self as fs, File};
 use quick_xml::events::Event;

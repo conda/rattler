@@ -160,27 +160,7 @@ pub fn remove_menu_items(
 pub mod test {
     use std::path::{Path, PathBuf};
 
-    use rattler_conda_types::Platform;
-
-    use crate::{install_menuitems, MenuMode};
-
     pub(crate) fn test_data() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data")
-    }
-
-    #[test]
-    fn test_install_menu_item() {
-        if std::env::var("INSTALL_MENU_ITEM").is_err() {
-            return;
-        }
-        let test_data = crate::test::test_data();
-        let schema_path =
-            test_data.join("/Users/wolfv/Programs/rattler/.prefix/Menu/napari-menu.json");
-
-        let prefix = schema_path.parent().unwrap().parent().unwrap();
-        let prefix = std::fs::canonicalize(prefix).unwrap();
-        let platform = Platform::OsxArm64;
-
-        install_menuitems(&schema_path, &prefix, &prefix, platform, MenuMode::User).unwrap();
     }
 }
