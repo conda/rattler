@@ -375,12 +375,15 @@ fn reflink_to_destination(
     loop {
         match reflink(source_path, destination_path) {
             Ok(_) => {
-                // Copy over filesystem permissions. We do this to ensure that the destination file has the
-                // same permissions as the source file.
-                let metadata = std::fs::metadata(source_path)
-                    .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-                std::fs::set_permissions(destination_path, metadata.permissions())
-                    .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+                #[cfg(target_os = "linux")]
+                {
+                    // Copy over filesystem permissions. We do this to ensure that the destination file has the
+                    // same permissions as the source file.
+                    let metadata = std::fs::metadata(source_path)
+                        .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+                    std::fs::set_permissions(destination_path, metadata.permissions())
+                        .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+                }
                 return Ok(LinkMethod::Reflink);
             }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {

@@ -28,7 +28,7 @@ use simple_spawn_blocking::Cancelled;
 use tracing::instrument;
 use url::Url;
 
-use crate::validation::validate_package_directory;
+use crate::validation::{validate_package_directory, ValidationMode};
 
 mod cache_key;
 mod cache_lock;
@@ -364,8 +364,10 @@ where
             }
 
             // Validate the package directory.
-            let validation_result =
-                tokio::task::spawn_blocking(move || validate_package_directory(&path_inner)).await;
+            let validation_result = tokio::task::spawn_blocking(move || {
+                validate_package_directory(&path_inner, ValidationMode::Full)
+            })
+            .await;
 
             if let Some((reporter, index)) = reporter {
                 reporter.on_validate_complete(index);
@@ -506,6 +508,7 @@ mod test {
     use url::Url;
 
     use super::PackageCache;
+    use crate::validation::ValidationMode;
     use crate::{package_cache::CacheKey, validation::validate_package_directory};
 
     fn get_test_data_dir() -> PathBuf {
@@ -553,7 +556,8 @@ mod test {
             .unwrap();
 
         // Validate the contents of the package
-        let (_, current_paths) = validate_package_directory(cache_lock.path()).unwrap();
+        let (_, current_paths) =
+            validate_package_directory(cache_lock.path(), ValidationMode::Full).unwrap();
 
         // Make sure that the paths are the same as what we would expect from the
         // original tar archive.

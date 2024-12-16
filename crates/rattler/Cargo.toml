@@ -38,6 +38,7 @@ rattler_digest = { path = "../rattler_digest", version = "1.0.3", default-featur
 rattler_networking = { path = "../rattler_networking", version = "0.21.8", default-features = false }
 rattler_shell = { path = "../rattler_shell", version = "0.22.10", default-features = false }
 rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.18", default-features = false, features = ["reqwest"] }
+rayon = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["stream", "json", "gzip"] }
