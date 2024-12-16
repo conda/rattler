@@ -154,7 +154,7 @@ impl CFBundleDocumentTypesModel {
         }
 
         type_dict.insert(
-            "LSItemContentType".into(),
+            "LSItemContentTypes".into(),
             Value::Array(
                 self.ls_item_content_types
                     .iter()
@@ -273,7 +273,7 @@ impl MacOSMenu {
     /// - <https://developer.apple.com/library/archive/documentation/Carbon/Conceptual/LaunchServicesConcepts/LSCConcepts/LSCConcepts.html>
     /// - The source code at /src/appkit-launcher in this repository
     fn needs_appkit_launcher(&self) -> bool {
-        self.item.cf_bundle_identifier.is_some() || self.item.cf_bundle_document_types.is_some()
+        self.item.event_handler.is_some()
     }
 
     // Run pre-create command
@@ -646,7 +646,7 @@ impl MacOSMenu {
                 self.default_launcher_path().to_string_lossy()
             ))
         });
-
+        tracing::info!("Writing script to {}", script_path.display());
         let mut file = File::create(&script_path)?;
         file.write_all(self.command().as_bytes())?;
         fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))?;
@@ -714,7 +714,7 @@ impl MacOSMenu {
 
     fn lsregister(args: &[&str]) -> Result<(), MenuInstError> {
         let exe = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
-
+        tracing::debug!("Calling lsregister with args: {:?}", args);
         let output = Command::new(exe).args(args).output().map_err(|e| {
             MenuInstError::InstallError(format!("Failed to execute lsregister: {e}"))
         })?;
