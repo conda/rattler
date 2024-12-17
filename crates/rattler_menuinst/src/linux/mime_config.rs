@@ -35,9 +35,7 @@ impl MimeConfig {
     }
 
     pub fn save(&self) -> Result<(), MimeConfigError> {
-        self.config
-            .write(&self.path)
-            .map_err(MimeConfigError::Io)?;
+        self.config.write(&self.path).map_err(MimeConfigError::Io)?;
         Ok(())
     }
 

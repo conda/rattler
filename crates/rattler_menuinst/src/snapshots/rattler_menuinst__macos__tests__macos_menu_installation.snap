@@ -13,7 +13,7 @@ expression: "fs::read_to_string(dirs.location.join(\"Contents/Info.plist\")).unw
 	<key>CFBundleExecutable</key>
 	<string>spyder-6-test-env</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.spyder-6-test-env-appkit-launcher</string>
+	<string>com.spyder-6-test-env</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleVersion</key>
@@ -33,7 +33,7 @@ expression: "fs::read_to_string(dirs.location.join(\"Contents/Info.plist\")).unw
 			<string>spyder.icns</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
-			<key>LSItemContentType</key>
+			<key>LSItemContentTypes</key>
 			<array>
 				<string>com.apple.applescript.text</string>
 				<string>com.apple.ascii-property-list</string>
@@ -137,7 +137,5 @@ expression: "fs::read_to_string(dirs.location.join(\"Contents/Info.plist\")).unw
 			<string>Default</string>
 		</dict>
 	</array>
-	<key>LSBackgroundOnly</key>
-	<true/>
 </dict>
 </plist>
