@@ -138,7 +138,7 @@ jobs:
         run: |
           # skip libsolv tests on linux targets because it segfaults right now in tests
           if [[ ${{ matrix.target }} == *"-linux-"* ]]; then
-            echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS} --exclude tools -E 'not test(libsolv)' -E 'not test(compare_solve)'" >> $GITHUB_OUTPUT
+            echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS} --exclude tools -E 'not(test(libsolv) | test(compare_solve))'" >> $GITHUB_OUTPUT
           else
             echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS} --exclude tools" >> $GITHUB_OUTPUT
           fi
