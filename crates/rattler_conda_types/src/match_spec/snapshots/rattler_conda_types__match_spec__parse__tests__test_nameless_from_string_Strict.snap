@@ -3,7 +3,7 @@ source: crates/rattler_conda_types/src/match_spec/parse.rs
 expression: evaluated
 ---
 2.7|>=3.6:
-  version: "==2.7|>=3.6"
+  error: "invalid version constraint: ambiguous. Do you mean ==2.7 or 2.7.*?"
 "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2":
   url: "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2"
 ~=1.2.3:
@@ -40,14 +40,13 @@ expression: evaluated
 "==2.7.*.*|>=3.6":
   error: "invalid version constraint: regex constraints are not supported"
 "3.9":
-  version: "==3.9"
+  error: "invalid version constraint: ambiguous. Do you mean ==3.9 or 3.9.*?"
 "*":
   version: "*"
 "[version=3.9]":
-  version: "==3.9"
+  error: "invalid version constraint: ambiguous. Do you mean ==3.9 or 3.9.*?"
 "[version=3.9, subdir=linux-64]":
-  version: "==3.9"
-  subdir: linux-64
+  error: "invalid version constraint: ambiguous. Do you mean ==3.9 or 3.9.*?"
 "==3.9[subdir=linux-64, build_number=\"0\"]":
   version: "==3.9"
   build_number:
