@@ -127,7 +127,7 @@ jobs:
         run: >
           cargo build
           --all-targets
-          --features ${{ env.DEFAULT_FEATURES }}
+          --features ${{ steps.build-options.outputs.DEFAULT_FEATURES || env.DEFAULT_FEATURES }}
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
 
