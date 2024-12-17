@@ -356,7 +356,7 @@ pub struct MacOS {
     /// Suitable replacement for text-to-speech operations on the app.
     /// For example, "my app one two three" instead of `MyApp123`.
     #[serde(rename = "CFBundleSpokenName")]
-    pub cf_bundle_spoken_name: Option<String>,
+    pub cf_bundle_spoken_name: Option<PlaceholderString>,
 
     /// Build version number for the bundle. In the context of 'menuinst'
     /// this can be used to signal a new version of the menu item for the same
@@ -384,7 +384,7 @@ pub struct MacOS {
 
     /// List of key-value pairs used to define environment variables.
     #[serde(rename = "LSEnvironment")]
-    pub ls_environment: Option<HashMap<String, String>>,
+    pub ls_environment: Option<HashMap<String, PlaceholderString>>,
 
     /// Minimum version of macOS required for this app to run, as `x.y.z`.
     /// For example, for macOS v10.4 and later, use `10.4.0`. (TODO: implement proper parsing)
@@ -423,7 +423,7 @@ pub struct MacOS {
     pub link_in_bundle: Option<HashMap<PlaceholderString, PlaceholderString>>,
 
     /// Required shell script logic to handle opened URL payloads.
-    pub event_handler: Option<String>,
+    pub event_handler: Option<PlaceholderString>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

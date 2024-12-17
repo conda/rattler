@@ -387,10 +387,12 @@ impl MacOSMenu {
             "CFBundleVersion".into(),
             Value::String(cf_bundle_version.clone()),
         );
+
         pl.insert(
             "CFBundleGetInfoString".into(),
             Value::String(format!("{slugname}-{cf_bundle_version}")),
         );
+
         pl.insert(
             "CFBundleShortVersionString".into(),
             Value::String(cf_bundle_version),
@@ -414,6 +416,13 @@ impl MacOSMenu {
                 types_array.push(cf_bundle_type.to_plist(&self.placeholders));
             }
             pl.insert("CFBundleDocumentTypes".into(), Value::Array(types_array));
+        }
+
+        if let Some(cf_bundle_spoken_names) = &self.item.cf_bundle_spoken_name {
+            pl.insert(
+                "CFBundleSpokenName".into(),
+                Value::String(cf_bundle_spoken_names.resolve(&self.placeholders)),
+            );
         }
 
         if self.needs_appkit_launcher() {
@@ -449,7 +458,7 @@ impl MacOSMenu {
         if let Some(env) = self.item.ls_environment.as_ref() {
             let mut env_dict = plist::Dictionary::new();
             for (k, v) in env {
-                env_dict.insert(k.into(), Value::String(v.into()));
+                env_dict.insert(k.into(), Value::String(v.resolve(&self.placeholders)));
             }
             pl.insert("LSEnvironment".into(), Value::Dictionary(env_dict));
         }
@@ -662,7 +671,7 @@ impl MacOSMenu {
         }
 
         let event_handler_logic = match self.item.event_handler.as_ref() {
-            Some(logic) => logic,
+            Some(logic) => logic.resolve(&self.placeholders),
             None => return Ok(None),
         };
 

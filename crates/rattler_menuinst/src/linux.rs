@@ -609,9 +609,7 @@ mod tests {
     };
     use tempfile::TempDir;
 
-    use crate::{
-        schema::MenuInstSchema, test::test_data,
-    };
+    use crate::{schema::MenuInstSchema, test::test_data};
 
     use super::{Directories, LinuxMenu};
 
