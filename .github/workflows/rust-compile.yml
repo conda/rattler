@@ -119,29 +119,19 @@ jobs:
         run: |
           echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls-tls" >> $GITHUB_OUTPUT
 
-          FEATURES=$(echo "${{ env.DEFAULT_FEATURES }}" | sed 's/libsolv_c,\{0,1\}//g' | sed 's/,$//')
-          # remove `libsolv_c` feature from linux targets because it segfaults right now in tests
-          echo "DEFAULT_FEATURES=${FEATURES}" >> $GITHUB_OUTPUT
-
       - name: Build
         run: >
-          cargo build
-          --all-targets
-          --features ${{ steps.build-options.outputs.DEFAULT_FEATURES || env.DEFAULT_FEATURES }}
+          cargo build 
+          --all-targets  
+          --features ${{ env.DEFAULT_FEATURES }}
           --target ${{ matrix.target }}
-          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
+          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}
 
       - name: Disable testing the tools crate if cross compiling
         id: test-options
         if: ${{ !matrix.skip-tests }}
-        shell: bash
         run: |
-          # skip libsolv tests on linux targets because it segfaults right now in tests
-          if [[ ${{ matrix.target }} == *"-linux-"* ]]; then
-            echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS} --exclude tools -E 'not(test(libsolv) | test(compare_solve))'" >> $GITHUB_OUTPUT
-          else
-            echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS} --exclude tools" >> $GITHUB_OUTPUT
-          fi
+          echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS} --exclude tools" >> $GITHUB_OUTPUT
 
       - name: Install cargo nextest
         if: ${{ !matrix.skip-tests }}
@@ -155,11 +145,11 @@ jobs:
           GOOGLE_CLOUD_TEST_KEY_JSON: ${{ secrets.GOOGLE_CLOUD_TEST_KEY_JSON }}
         run: >
           cargo nextest run
-          --workspace
-          --features ${{ steps.build-options.outputs.DEFAULT_FEATURES || env.DEFAULT_FEATURES }}
+          --workspace 
+          --features ${{ env.DEFAULT_FEATURES }} 
           --target ${{ matrix.target }}
-          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
-          ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}
+          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} 
+          ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} 
 
       - name: Run doctests
         if: ${{ !matrix.skip-tests }}
