@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.6](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.5...rattler_conda_types-v0.29.6) - 2024-12-17
+
+### Added
+
+- speed up `PrefixRecord` loading (#984)
+
 ## [0.29.5](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.4...rattler_conda_types-v0.29.5) - 2024-12-13
 
 ### Added

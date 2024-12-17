@@ -1,6 +1,6 @@
 [package]
 name = "rattler_cache"
-version = "0.2.15"
+version = "0.3.0"
 description = "A crate to manage the caching of data in rattler"
 categories.workspace = true
 homepage.workspace = true
@@ -18,10 +18,10 @@ fs-err.workspace = true
 fxhash.workspace = true
 itertools.workspace = true
 parking_lot.workspace = true
-rattler_conda_types = { version = "0.29.5", path = "../rattler_conda_types", default-features = false }
-rattler_digest = { version = "1.0.3", path = "../rattler_digest", default-features = false }
-rattler_networking = { version = "0.21.8", path = "../rattler_networking", default-features = false }
-rattler_package_streaming = { version = "0.22.18", path = "../rattler_package_streaming", default-features = false, features = ["reqwest"] }
+rattler_conda_types = { version = "0.29.6", path = "../rattler_conda_types", default-features = false }
+rattler_digest = { version = "1.0.4", path = "../rattler_digest", default-features = false }
+rattler_networking = { version = "0.21.9", path = "../rattler_networking", default-features = false }
+rattler_package_streaming = { version = "0.22.19", path = "../rattler_package_streaming", default-features = false, features = ["reqwest"] }
 reqwest.workspace = true
 tokio = { workspace = true, features = ["macros"] }
 tracing.workspace = true

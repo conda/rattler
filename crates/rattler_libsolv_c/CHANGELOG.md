@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.0.3...rattler_libsolv_c-v1.1.0) - 2024-12-17
+
+### Added
+
+- speed up `PrefixRecord` loading (#984)
+
+### Other
+
+- update everything (#987)
+
 ## [1.0.3](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.0.2...rattler_libsolv_c-v1.0.3) - 2024-11-04
 
 ### Other

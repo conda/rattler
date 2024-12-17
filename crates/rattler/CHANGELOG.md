@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.8](https://github.com/conda/rattler/compare/rattler-v0.28.7...rattler-v0.28.8) - 2024-12-17
+
+### Added
+
+- speed up `PrefixRecord` loading (#984)
+- improve performance when linking files using `rayon` (#985)
+
 ## [0.28.7](https://github.com/conda/rattler/compare/rattler-v0.28.6...rattler-v0.28.7) - 2024-12-13
 
 ### Fixed
