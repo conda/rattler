@@ -411,7 +411,7 @@ mod test {
     #[rstest]
     fn parse_logical_constraint(#[values(Lenient, Strict)] strictness: ParseStrictness) {
         assert_eq!(
-            logical_constraint_parser(strictness)("3.1"),
+            logical_constraint_parser(strictness)("==3.1"),
             Ok((
                 "",
                 Constraint::Exact(EqualityOperator::Equals, Version::from_str("3.1").unwrap())
@@ -520,7 +520,7 @@ mod test {
 
     #[test]
     fn pixi_issue_278() {
-        assert!(VersionSpec::from_str("1.8.1+g6b29558", Strict).is_ok());
+        assert!(VersionSpec::from_str("=1.8.1+g6b29558", Strict).is_ok());
     }
 
     #[test]

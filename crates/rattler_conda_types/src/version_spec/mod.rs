@@ -350,15 +350,15 @@ mod tests {
     use crate::{
         version_spec::{
             parse::ParseConstraintError, EqualityOperator, LogicalOperator, ParseVersionSpecError,
-            RangeOperator,
+            RangeOperator, StrictRangeOperator,
         },
-        ParseStrictness, Version, VersionSpec,
+        ParseStrictness, StrictVersion, Version, VersionSpec,
     };
 
     #[test]
     fn test_simple() {
         assert_eq!(
-            VersionSpec::from_str("1.2.3", ParseStrictness::Strict),
+            VersionSpec::from_str("==1.2.3", ParseStrictness::Strict),
             Ok(VersionSpec::Exact(
                 EqualityOperator::Equals,
                 Version::from_str("1.2.3").unwrap(),
@@ -369,6 +369,13 @@ mod tests {
             Ok(VersionSpec::Range(
                 RangeOperator::GreaterEquals,
                 Version::from_str("1.2.3").unwrap(),
+            ))
+        );
+        assert_eq!(
+            VersionSpec::from_str("=1.2.3", ParseStrictness::Strict),
+            Ok(VersionSpec::StrictRange(
+                StrictRangeOperator::StartsWith,
+                StrictVersion::from_str("1.2.3").unwrap(),
             ))
         );
     }
@@ -422,14 +429,14 @@ mod tests {
         let vs1 = VersionSpec::from_str(">=1.2.3,<2.0.0", ParseStrictness::Strict).unwrap();
         assert!(!vs1.matches(&v1));
 
-        let vs2 = VersionSpec::from_str("1.2", ParseStrictness::Strict).unwrap();
+        let vs2 = VersionSpec::from_str("==1.2.0", ParseStrictness::Strict).unwrap();
         assert!(vs2.matches(&v1));
 
         let v2 = Version::from_str("1.2.3").unwrap();
         assert!(vs1.matches(&v2));
         assert!(!vs2.matches(&v2));
 
-        let v3 = Version::from_str("1!1.2.3").unwrap();
+        let v3 = Version::from_str("1!1.2.3.*").unwrap();
         println!("{v3:?}");
 
         assert!(!vs1.matches(&v3));
