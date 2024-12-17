@@ -67,6 +67,8 @@ pub enum ParseConstraintError {
     InvalidOperator(String),
     #[error(transparent)]
     InvalidVersion(#[from] ParseVersionError),
+    #[error("ambiguous. Do you mean =={0} or {0}.*?")]
+    AmbiguousVersion(String),
     /// Expected a version
     #[error("expected a version")]
     ExpectedVersion,
@@ -208,8 +210,15 @@ fn logical_constraint_parser(
         let op = match (version_rest, op, strictness) {
             // The version was successfully parsed
             ("", Some(op), _) => op,
-            ("", None, _) => VersionOperators::Exact(EqualityOperator::Equals),
-
+            ("", None, _) => {
+                if strictness == Strict {
+                    return Err(nom::Err::Failure(ParseConstraintError::AmbiguousVersion(
+                        version_str.to_owned(),
+                    )));
+                } else {
+                    VersionOperators::Exact(EqualityOperator::Equals)
+                }
+            }
             // The version ends in a wildcard pattern
             (
                 "*" | ".*",
@@ -316,6 +325,7 @@ mod test {
     use std::str::FromStr;
 
     use assert_matches::assert_matches;
+    use insta::assert_snapshot;
     use rstest::rstest;
 
     use super::*;
@@ -511,6 +521,13 @@ mod test {
     #[test]
     fn pixi_issue_278() {
         assert!(VersionSpec::from_str("1.8.1+g6b29558", Strict).is_ok());
+    }
+
+    #[test]
+    fn test_exact_strict() {
+        assert!(VersionSpec::from_str("==3.1", Strict).is_ok());
+        assert!(VersionSpec::from_str("3.1", Strict).is_err());
+        assert_snapshot!(VersionSpec::from_str("1.2.3", Strict).unwrap_err());
     }
 
     #[test]
