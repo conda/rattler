@@ -134,10 +134,11 @@ jobs:
       - name: Disable testing the tools crate if cross compiling
         id: test-options
         if: ${{ !matrix.skip-tests }}
+        shell: bash
         run: |
           # skip libsolv tests on linux targets because it segfaults right now in tests
           if [[ ${{ matrix.target }} == *"-linux-"* ]]; then
-            echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS} --exclude tools --exclude libsolv_c" >> $GITHUB_OUTPUT
+            echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS} --exclude tools -E "not test(libsolv)" >> $GITHUB_OUTPUT
           else
             echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS} --exclude tools" >> $GITHUB_OUTPUT
           fi
