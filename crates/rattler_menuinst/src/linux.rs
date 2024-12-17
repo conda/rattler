@@ -216,7 +216,6 @@ impl LinuxMenu {
             for (k, v) in activation_env {
                 envs.push(format!(r#"{k}="{v}""#));
             }
-            tracing::debug!("Envs: {envs:?}");
         }
 
         let command = self
@@ -401,25 +400,14 @@ impl LinuxMenu {
             }
         }
 
+        let mimeapps = self.directories.config_directory.join("mimeapps.list");
+
         if register {
-            if let Ok(xdg_mime) = which::which("xdg-mime") {
-                let mut command = Command::new(xdg_mime);
-                command.arg("default").arg(self.location());
-                for mime_type in mime_types {
-                    command.arg(mime_type);
-                }
-                let output = command.output()?;
-                if !output.status.success() {
-                    tracing::warn!(
-                        "Could not set MIME type {} as default for {}",
-                        mime_types.join(", "),
-                        self.name
-                    );
-                    log_output("xdg-mime", output);
-                }
-            } else {
-                tracing::info!("xdg-mime not found, not registering mime types as default.");
-            }
+            let config = MimeConfig::new(mimeapps);
+
+        } else if mimeapps.exists() {
+            // in this case we remove the mime type from the mimeapps.list file
+            
         }
 
         if let Ok(update_mime_database) = which::which("update-mime-database") {
