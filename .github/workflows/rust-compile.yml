@@ -120,12 +120,19 @@ jobs:
           echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls-tls" >> $GITHUB_OUTPUT
 
       - name: Build
-        run: >
-          cargo build 
-          --all-targets  
-          --features ${{ env.DEFAULT_FEATURES }}
-          --target ${{ matrix.target }}
-          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}
+        run: |
+          # remove `libsolv_c` feature from linux targets because it segfaults right now in tests
+          if [[ "${{ matrix.target }}" == *"linux"* ]]; then
+            FEATURES=$(echo "${{ env.DEFAULT_FEATURES }}" | sed 's/libsolv_c,\{0,1\}//g' | sed 's/,$//')
+          else
+            FEATURES="${{ env.DEFAULT_FEATURES }}"
+          fi
+          
+          cargo build \
+            --all-targets \
+            --features "${FEATURES}" \
+            --target ${{ matrix.target }} \
+            ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}
 
       - name: Disable testing the tools crate if cross compiling
         id: test-options
