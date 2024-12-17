@@ -149,11 +149,11 @@ jobs:
           GOOGLE_CLOUD_TEST_KEY_JSON: ${{ secrets.GOOGLE_CLOUD_TEST_KEY_JSON }}
         run: >
           cargo nextest run
-          --workspace 
-          --features ${{ env.DEFAULT_FEATURES }} 
+          --workspace
+          --features ${{ steps.build-options.outputs.DEFAULT_FEATURES || env.DEFAULT_FEATURES }}
           --target ${{ matrix.target }}
-          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} 
-          ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} 
+          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
+          ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}
 
       - name: Run doctests
         if: ${{ !matrix.skip-tests }}
