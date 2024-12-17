@@ -125,9 +125,6 @@ mod tests {
     }
 
     #[test]
-    // currently the test fails on Linux for some reason with segfault
-    // but wasn't easy to reproduce locally.
-    #[cfg(not(target_os = "linux"))]
     fn test_repo_solv_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
         let solv_path = dir.path().join("repo.solv").to_string_lossy().into_owned();
