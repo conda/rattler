@@ -625,9 +625,32 @@ mod test {
         Ok(response)
     }
 
+    async fn fail_once_with_status_10000(
+        State(count): State<Arc<Mutex<i32>>>,
+        req: Request<Body>,
+        next: Next,
+    ) -> Result<Response, StatusCode> {
+        let count = {
+            let mut count = count.lock().await;
+            *count += 1;
+            *count
+        };
+
+        println!("Running middleware for request #{count} for {}", req.uri());
+        if count == 1 {
+            return Ok(Response::builder()
+                .status(StatusCode::from_u16(10054).unwrap())
+                .body(Body::empty())
+                .unwrap());
+        }
+
+        Ok(next.run(req).await)
+    }
+
     enum Middleware {
         FailTheFirstTwoRequests,
         FailAfterBytes(usize),
+        Fail10000,
     }
 
     async fn redirect_to_anaconda(
@@ -660,6 +683,10 @@ mod test {
             Middleware::FailAfterBytes(size) => router.layer(middleware::from_fn_with_state(
                 (request_count.clone(), Arc::new(Mutex::new(size))),
                 fail_with_half_package,
+            )),
+            Middleware::Fail10000 => router.layer(middleware::from_fn_with_state(
+                request_count.clone(),
+                fail_once_with_status_10000,
             )),
         };
 
@@ -726,6 +753,7 @@ mod test {
         test_flaky_package_cache(tar_bz2, Middleware::FailAfterBytes(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailAfterBytes(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailAfterBytes(50)).await;
+        test_flaky_package_cache(conda, Middleware::Fail10000).await;
     }
 
     #[tokio::test]
