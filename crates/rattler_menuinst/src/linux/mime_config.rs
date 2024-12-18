@@ -6,8 +6,6 @@ use thiserror::Error;
 pub enum MimeConfigError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("Config parse error: {0}")]
-    Parse(String),
 }
 
 #[derive(Debug)]
@@ -92,10 +90,12 @@ impl MimeConfig {
         }
     }
 
+    #[cfg(test)]
     pub fn get_default_application(&self, mime_type: &str) -> Option<String> {
         self.config.get("Default Applications", mime_type)
     }
 
+    #[cfg(test)]
     pub fn get_associations(&self, mime_type: &str) -> Vec<String> {
         self.config
             .get("Added Associations", mime_type)
