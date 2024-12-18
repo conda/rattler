@@ -46,10 +46,10 @@ pub enum MenuInstError {
     #[cfg(target_os = "linux")]
     #[error("Failed to install menu item: {0}")]
     XmlError(#[from] quick_xml::Error),
-    
+
     #[cfg(target_os = "windows")]
     #[error("Failed to install menu item: {0}")]
-    WindowsError(#[from] ::windows::core::Error)
+    WindowsError(#[from] ::windows::core::Error),
 }
 
 // Install menu items from a given schema file
@@ -155,7 +155,13 @@ pub fn remove_menu_items(
             #[cfg(target_os = "windows")]
             if let Some(windows_item) = item.platforms.win {
                 let command = item.command.merge(windows_item.base);
-                windows::remove_menu_item(prefix, windows_item.specific, command, menu_mode)?;
+                windows::remove_menu_item(
+                    prefix,
+                    windows_item.specific,
+                    command,
+                    &placeholders,
+                    menu_mode,
+                )?;
             }
         }
     }

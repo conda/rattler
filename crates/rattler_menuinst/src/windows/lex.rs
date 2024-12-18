@@ -54,16 +54,16 @@ mod tests {
             "/C".to_string(),
             "\"\"echo\" \"Hello World\"\"".to_string(),
         ];
-        assert_eq!(quote_args(args), expected);
+        assert_eq!(quote_args(&args), expected);
     }
 
     #[test]
     fn test_quote_string() {
-        assert_eq!(quote_string("Hello World".to_string()), "\"Hello World\"");
-        assert_eq!(quote_string("Hello".to_string()), "Hello");
-        assert_eq!(quote_string("-Hello".to_string()), "-Hello");
-        assert_eq!(quote_string(" Hello".to_string()), " Hello");
-        assert_eq!(quote_string("Hello/World".to_string()), "\"Hello/World\"");
+        assert_eq!(quote_string("Hello World"), "\"Hello World\"");
+        assert_eq!(quote_string("Hello"), "Hello");
+        assert_eq!(quote_string("-Hello"), "-Hello");
+        assert_eq!(quote_string(" Hello"), " Hello");
+        assert_eq!(quote_string("Hello/World"), "\"Hello/World\"");
     }
 
     #[test]
