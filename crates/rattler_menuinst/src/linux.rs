@@ -252,6 +252,7 @@ impl LinuxMenu {
 
     fn create_desktop_entry(&self) -> Result<(), MenuInstError> {
         let file = self.location();
+        tracing::info!("Creating desktop entry at {}", file.display());
         let writer = File::create(file)?;
         let mut writer = std::io::BufWriter::new(writer);
 
@@ -443,26 +444,35 @@ impl LinuxMenu {
         Ok(())
     }
 
-    fn xml_path_for_mime_type(&self, mime_type: &str) -> (PathBuf, bool) {
+    fn xml_path_for_mime_type(&self, mime_type: &str) -> Result<(PathBuf, bool), std::io::Error> {
         let basename = mime_type.replace("/", "-");
-        let xml_files: Vec<PathBuf> =
-            fs::read_dir(self.directories.data_directory.join("mime/applications"))
-                .unwrap()
-                .filter_map(|entry| {
-                    let path = entry.unwrap().path();
-                    if path
-                        .file_name()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .contains(&basename)
-                    {
-                        Some(path)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+        let mime_directory = self.directories.data_directory.join("mime/applications");
+        if !mime_directory.is_dir() {
+            return Ok((
+                self.directories
+                    .data_directory
+                    .join("mime/packages")
+                    .join(format!("{basename}.xml")),
+                false,
+            ));
+        }
+
+        let xml_files: Vec<PathBuf> = fs::read_dir(mime_directory)?
+            .filter_map(|entry| {
+                let path = entry.unwrap().path();
+                if path
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .contains(&basename)
+                {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         if !xml_files.is_empty() {
             if xml_files.len() > 1 {
@@ -472,15 +482,15 @@ impl LinuxMenu {
                     xml_files
                 );
             }
-            return (xml_files[0].clone(), true);
+            return Ok((xml_files[0].clone(), true));
         }
-        (
+        Ok((
             self.directories
                 .data_directory
                 .join("mime/packages")
                 .join(format!("{basename}.xml")),
             false,
-        )
+        ))
     }
 
     fn glob_pattern_for_mime_type(
@@ -489,7 +499,7 @@ impl LinuxMenu {
         glob_pattern: &str,
         install: bool,
     ) -> Result<PathBuf, MenuInstError> {
-        let (xml_path, exists) = self.xml_path_for_mime_type(mime_type);
+        let (xml_path, exists) = self.xml_path_for_mime_type(mime_type).unwrap();
         if exists {
             return Ok(xml_path);
         }
@@ -502,12 +512,12 @@ impl LinuxMenu {
 
         let xml = format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
-    <mime-info xmlns="{xmlns}">
-        <mime-type type="{mime_type}">
-            <glob pattern="{glob_pattern}"/>
-            <comment>{description}</comment>
-        </mime-type>
-    </mime-info>"#
+<mime-info xmlns="{xmlns}">
+    <mime-type type="{mime_type}">
+        <glob pattern="{glob_pattern}"/>
+        <comment>{description}</comment>
+    </mime-type>
+</mime-info>"#
         );
 
         let subcommand = if install { "install" } else { "uninstall" };
@@ -564,7 +574,7 @@ impl LinuxMenu {
                 .collect::<Vec<String>>();
 
             for mime in resolved {
-                let (xml_path, exists) = self.xml_path_for_mime_type(&mime);
+                let (xml_path, exists) = self.xml_path_for_mime_type(&mime).unwrap();
                 if !exists {
                     continue;
                 }
