@@ -1,13 +1,21 @@
 use fs_err as fs;
 use rattler_conda_types::Platform;
-use rattler_shell::{activation::{ActivationVariables, Activator}, shell};
+use rattler_shell::{
+    activation::{ActivationVariables, Activator},
+    shell,
+};
+use registry::notify_shell_changes;
 use std::{
     io::Write as _,
     path::{Path, PathBuf},
 };
 
 use crate::{
-    render::{BaseMenuItemPlaceholders, MenuItemPlaceholders}, schema::{Environment, MenuItemCommand, Windows}, slugify, util::log_output, MenuInstError, MenuMode
+    render::{BaseMenuItemPlaceholders, MenuItemPlaceholders},
+    schema::{Environment, MenuItemCommand, Windows},
+    slugify,
+    util::log_output,
+    MenuInstError, MenuMode,
 };
 
 mod create_shortcut;
@@ -19,34 +27,49 @@ use knownfolders::UserHandle;
 
 pub struct Directories {
     start_menu: PathBuf,
-    quick_launch: PathBuf,
+    quick_launch: Option<PathBuf>,
     desktop: PathBuf,
-    programs: PathBuf,
 }
 
-impl Directories {
-    pub fn create() -> Directories {
-        let known_folders = knownfolders::Folders::new();
-        let start_menu = known_folders
-            .get_folder_path("start", UserHandle::Current)
-            .unwrap();
-        let quick_launch = known_folders
-            .get_folder_path("quick_launch", UserHandle::Current)
-            .unwrap();
-        let desktop = known_folders
-            .get_folder_path("desktop", UserHandle::Current)
-            .unwrap();
-        // let programs = known_folders
-        //     .get_folder_path("programs", UserHandle::Current)
-        //     .unwrap_or(known_folders.get_folder_path("programs", UserHandle::Common).unwrap());
+fn shortcut_filename(name: &str, env_name: Option<&str>, ext: Option<&str>) -> String {
+    let env = if let Some(env_name) = env_name {
+        format!(" ({})", env_name)
+    } else {
+        "".to_string()
+    };
 
-        let programs = PathBuf::from("C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs");
+    let ext = ext.unwrap_or_else(|| "lnk");
+    format!("{}{}{}", name, env, ext)
+}
+
+/// On Windows we can create shortcuts in several places:
+/// - Start Menu
+/// - Desktop
+/// - Quick launch (only for user installs)
+impl Directories {
+    pub fn create(menu_mode: MenuMode) -> Directories {
+        let user_handle = match menu_mode {
+            MenuMode::System => UserHandle::Common,
+            MenuMode::User => UserHandle::Current,
+        };
+
+        let known_folders = knownfolders::Folders::new();
+        let start_menu = known_folders.get_folder_path("start", user_handle).unwrap();
+        let quick_launch = if menu_mode == MenuMode::User {
+            known_folders
+                .get_folder_path("quick_launch", user_handle)
+                .ok()
+        } else {
+            None
+        };
+        let desktop = known_folders
+            .get_folder_path("desktop", user_handle)
+            .unwrap();
 
         Directories {
             start_menu,
             quick_launch,
             desktop,
-            programs,
         }
     }
 }
@@ -58,6 +81,7 @@ pub struct WindowsMenu {
     command: MenuItemCommand,
     directories: Directories,
     placeholders: MenuItemPlaceholders,
+    menu_mode: MenuMode,
 }
 
 const SHORTCUT_EXTENSION: &str = "lnk";
@@ -69,21 +93,24 @@ impl WindowsMenu {
         command: MenuItemCommand,
         directories: Directories,
         placeholders: &BaseMenuItemPlaceholders,
+        menu_mode: MenuMode,
     ) -> Self {
         let name = command.name.resolve(Environment::Base, placeholders);
 
-        let programs_link_location = directories
-            .programs
+        let location = directories
+            .start_menu
             .join(&name)
             .with_extension(SHORTCUT_EXTENSION);
 
+        // self.menu.start_menu_location / self._shortcut_filename()
         Self {
             prefix: prefix.to_path_buf(),
             name,
             item,
             command,
             directories,
-            placeholders: placeholders.refine(&programs_link_location),
+            placeholders: placeholders.refine(&location),
+            menu_mode,
         }
     }
 
@@ -101,8 +128,7 @@ impl WindowsMenu {
             // create a bash activation script and emit it into the script
             let activator =
                 Activator::from_path(&self.prefix, shell::CmdExe, Platform::current()).unwrap();
-            let activation_env = activator
-                .run_activation(ActivationVariables::default(), None)?;
+            let activation_env = activator.run_activation(ActivationVariables::default(), None)?;
 
             for (k, v) in activation_env {
                 lines.push(format!(r#"set "{k}={v}""#));
@@ -121,43 +147,103 @@ impl WindowsMenu {
         Ok(lines.join("\n"))
     }
 
-    fn shortcut_filename(&self, ext: Option<String>) -> String {
+    fn shortcut_filename(&self, ext: Option<&str>) -> String {
         let env = if let Some(env_name) = self.placeholders.as_ref().get("ENV_NAME") {
             format!(" ({})", env_name)
         } else {
             "".to_string()
         };
 
-        let ext = ext.unwrap_or_else(|| "lnk".to_string());
+        let ext = ext.unwrap_or_else(|| "lnk");
         format!("{}{}{}", self.name, env, ext)
     }
 
-    fn write_script(&self, path: Option<PathBuf>) -> Result<(), MenuInstError> {
-        let path =
-            path.unwrap_or_else(|| self.prefix.join("Menu").join(self.shortcut_filename(None)));
-
+    fn write_script(&self, path: &Path) -> Result<(), MenuInstError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        let mut file = fs::File::create(&path)?;
+        let mut file = fs::File::create(path)?;
         file.write_all(self.script_content()?.as_bytes())?;
 
         Ok(())
     }
 
-    fn build_command(&self, with_arg1: bool) -> Vec<String> {
-        // TODO handle activation
-        let mut command = Vec::new();
-        for elem in self.command.command.iter() {
-            command.push(elem.resolve(&self.placeholders));
-        }
+    fn path_for_script(&self) -> PathBuf {
+        self.prefix
+            .join("Menu")
+            .join(self.shortcut_filename(Some("bat")))
+    }
 
-        if with_arg1 && !command.iter().any(|s| s.contains("%1")) {
-            command.push("%1".to_string());
-        }
+    fn build_command(&self, with_arg1: bool) -> Result<Vec<String>, MenuInstError> {
+        if self.command.activate.unwrap_or(false) {
+            let script_path = self.path_for_script();
+            self.write_script(&script_path)?;
 
-        command
+            let system_root = std::env::var("SystemRoot").unwrap_or("C:\\Windows".to_string());
+            let system32 = Path::new(&system_root).join("system32");
+            let cmd_exe = system32.join("cmd.exe").to_string_lossy().to_string();
+
+            if self.command.terminal.unwrap_or(false) {
+                let mut command = [&cmd_exe, "/D", "/K"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>();
+
+                // add script path with quotes
+                command.push(format!("\"{}\"", script_path.to_string_lossy()));
+
+                if with_arg1 {
+                    command.push("%1".to_string());
+                }
+                Ok(command)
+            } else {
+                let script_path = self.path_for_script();
+                self.write_script(&script_path)?;
+
+                let arg1 = if with_arg1 { "%1 " } else { "" };
+                let powershell = system32
+                    .join("WindowsPowerShell")
+                    .join("v1.0")
+                    .join("powershell.exe")
+                    .to_string_lossy()
+                    .to_string();
+
+                let mut command = [
+                    &cmd_exe,
+                    "/D",
+                    "/C",
+                    "START",
+                    "/MIN",
+                    "\"\"",
+                    &powershell,
+                    "-WindowStyle",
+                    "hidden",
+                ]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>();
+
+                command.push(format!(
+                    "\"start '{}' {}-WindowStyle hidden\"",
+                    script_path.to_string_lossy(),
+                    arg1
+                ));
+
+                Ok(command)
+            }
+        } else {
+            let mut command = Vec::new();
+            for elem in self.command.command.iter() {
+                command.push(elem.resolve(&self.placeholders));
+            }
+
+            if with_arg1 && !command.iter().any(|s| s.contains("%1")) {
+                command.push("%1".to_string());
+            }
+
+            Ok(command)
+        }
     }
 
     fn precreate(&self) -> Result<(), MenuInstError> {
@@ -225,7 +311,7 @@ impl WindowsMenu {
             create_shortcut::create_shortcut(
                 &command,
                 &self.command.description.resolve(&self.placeholders),
-                &desktop_link_path.to_string_lossy().to_string(),
+                &desktop_link_path,
                 Some(&args),
                 Some(&workdir),
                 icon.as_deref(),
@@ -235,28 +321,98 @@ impl WindowsMenu {
             created_files.push(desktop_link_path);
         }
 
-        if self.item.quicklaunch.unwrap_or(true) && self.directories.quick_launch.is_dir() {
-            let quicklaunch_link_path = self.directories.quick_launch.join(link_name);
-            create_shortcut::create_shortcut(
-                &self.name,
-                &self.command.description.resolve(&self.placeholders),
-                &quicklaunch_link_path.to_string_lossy().to_string(),
-                Some(&args),
-                Some(&workdir),
-                icon.as_deref(),
-                Some(0),
-                Some(&app_id),
-            )?;
-            created_files.push(quicklaunch_link_path);
+        if let Some(quick_launch_dir) = self.directories.quick_launch.as_ref() {
+            if self.item.quicklaunch.unwrap_or(true) {
+                let quicklaunch_link_path = quick_launch_dir.join(link_name);
+                create_shortcut::create_shortcut(
+                    &self.name,
+                    &self.command.description.resolve(&self.placeholders),
+                    &quicklaunch_link_path,
+                    Some(&args),
+                    Some(&workdir),
+                    icon.as_deref(),
+                    Some(0),
+                    Some(&app_id),
+                )?;
+                created_files.push(quicklaunch_link_path);
+            }
         }
-
         Ok(created_files)
     }
 
-    pub fn install(self) -> Result<(), MenuInstError> {
-        let args = self.build_command(false);
-        self.create_shortcut(&args)?;
+    fn icon(&self) -> Option<String> {
+        self.command
+            .icon
+            .as_ref()
+            .map(|s| s.resolve(&self.placeholders))
+    }
+
+    fn register_file_extensions(&self) -> Result<(), MenuInstError> {
+        let Some(extensions) = &self.item.file_extensions else {
+            return Ok(());
+        };
+
+        let icon = self.icon();
+        let command = self.build_command(true)?.join(" ");
+        let name = &self.name;
+        let app_user_model_id = self.app_id();
+
+        for extension in extensions {
+            let identifier = format!("{name}.AssocFile{extension}");
+            registry::register_file_extension(
+                extension,
+                &identifier,
+                &command,
+                icon.as_deref(),
+                Some(name),
+                Some(&app_user_model_id),
+                None, // friendly type name currently not set
+                self.menu_mode,
+            )?;
+        }
+
         Ok(())
+    }
+
+    fn register_url_protocols(&self) -> Result<bool, MenuInstError> {
+        let protocols = match &self.item.url_protocols {
+            Some(protocols) if !protocols.is_empty() => protocols,
+            _ => return Ok(false),
+        };
+
+        let command = self.build_command(true)?.join(" ");
+        let icon = self.icon();
+        let name = &self.name;
+        let app_user_model_id = format!("{name}.Protocol");
+
+        for protocol in protocols {
+            let identifier = format!("{name}.Protocol{protocol}");
+            registry::register_url_protocol(
+                protocol,
+                &command,
+                Some(&identifier),
+                icon.as_deref(),
+                Some(name),
+                Some(&app_user_model_id),
+                self.menu_mode,
+            )?;
+        }
+
+        Ok(true)
+    }
+
+    pub fn install(&self) -> Result<(), MenuInstError> {
+        let args = self.build_command(false)?;
+        self.precreate()?;
+        self.create_shortcut(&args)?;
+        self.register_file_extensions()?;
+        self.register_url_protocols()?;
+        notify_shell_changes();
+        Ok(())
+    }
+
+    pub fn remove(&self) -> Result<(), MenuInstError> {
+        todo!()
     }
 }
 
@@ -271,8 +427,9 @@ pub(crate) fn install_menu_item(
         prefix,
         windows_item,
         command,
-        Directories::create(),
+        Directories::create(menu_mode),
         placeholders,
+        menu_mode,
     );
     menu.install()
 }
@@ -281,7 +438,16 @@ pub(crate) fn remove_menu_item(
     prefix: &Path,
     specific: Windows,
     command: MenuItemCommand,
+    placeholders: &BaseMenuItemPlaceholders,
     menu_mode: MenuMode,
 ) -> Result<(), MenuInstError> {
-    todo!()
+    let menu = WindowsMenu::new(
+        prefix,
+        specific,
+        command,
+        Directories::create(menu_mode),
+        placeholders,
+        menu_mode,
+    );
+    menu.remove()
 }

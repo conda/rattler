@@ -404,10 +404,8 @@ impl LinuxMenu {
 
         if register {
             let config = MimeConfig::new(mimeapps);
-
         } else if mimeapps.exists() {
             // in this case we remove the mime type from the mimeapps.list file
-            
         }
 
         if let Ok(update_mime_database) = which::which("update-mime-database") {
