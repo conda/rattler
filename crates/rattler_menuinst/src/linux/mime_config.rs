@@ -25,18 +25,17 @@ impl MimeConfig {
         }
     }
 
-    pub fn load(&mut self) -> Result<(), MimeConfigError> {
+    pub fn load(&mut self) -> Result<(), std::io::Error> {
         if self.path.exists() {
             self.config
                 .load(&self.path)
-                .map_err(MimeConfigError::Parse)?;
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         }
         Ok(())
     }
 
-    pub fn save(&self) -> Result<(), MimeConfigError> {
-        self.config.write(&self.path).map_err(MimeConfigError::Io)?;
-        Ok(())
+    pub fn save(&self) -> Result<(), std::io::Error> {
+        self.config.write(&self.path)
     }
 
     pub fn register_mime_type(&mut self, mime_type: &str, application: &str) {
