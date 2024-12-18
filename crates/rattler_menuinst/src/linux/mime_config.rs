@@ -36,11 +36,12 @@ impl MimeConfig {
         self.config.write(&self.path)
     }
 
-    pub fn register_mime_type(&mut self, mime_type: &str, application: &str) {
-        // Ensure sections exist
-        self.config.set_default_section("Default Applications");
-        self.config.set_default_section("Added Associations");
+    #[cfg(test)]
+    pub fn to_string(&self) -> String {
+        self.config.writes()
+    }
 
+    pub fn register_mime_type(&mut self, mime_type: &str, application: &str) {
         // Only set default if not already set
         if self.config.get("Default Applications", mime_type).is_none() {
             self.config.set(
@@ -106,6 +107,8 @@ impl MimeConfig {
 
 #[cfg(test)]
 mod tests {
+    use crate::test::test_data;
+
     use super::*;
     use tempfile::NamedTempFile;
 
@@ -193,32 +196,36 @@ mod tests {
         // Test progressive changes to the config
         config.register_mime_type("text/plain", "notepad.desktop");
         insta::assert_snapshot!(get_config_contents(&config), @r###"
-        text/plain=notepad.desktop
         [Default Applications]
+        text/plain=notepad.desktop
+        [Added Associations]
         text/plain=notepad.desktop
         "###);
 
         config.register_mime_type("text/plain", "gedit.desktop");
         insta::assert_snapshot!(get_config_contents(&config), @r###"
-        text/plain=notepad.desktop;gedit.desktop
         [Default Applications]
         text/plain=notepad.desktop
+        [Added Associations]
+        text/plain=notepad.desktop;gedit.desktop
         "###);
 
         config.register_mime_type("application/pdf", "pdf-reader.desktop");
         insta::assert_snapshot!(get_config_contents(&config), @r###"
-        text/plain=notepad.desktop;gedit.desktop
-        application/pdf=pdf-reader.desktop
         [Default Applications]
         text/plain=notepad.desktop
+        application/pdf=pdf-reader.desktop
+        [Added Associations]
+        text/plain=notepad.desktop;gedit.desktop
         application/pdf=pdf-reader.desktop
         "###);
 
         config.deregister_mime_type("text/plain", "notepad.desktop");
         insta::assert_snapshot!(get_config_contents(&config), @r###"
-        text/plain=gedit.desktop
-        application/pdf=pdf-reader.desktop
         [Default Applications]
+        application/pdf=pdf-reader.desktop
+        [Added Associations]
+        text/plain=gedit.desktop
         application/pdf=pdf-reader.desktop
         "###);
     }
@@ -247,13 +254,14 @@ mod tests {
         }
 
         insta::assert_snapshot!(get_config_contents(&config), @r###"
-        text/plain=notepad.desktop;gedit.desktop;vim.desktop
-        application/pdf=pdf-reader.desktop;browser.desktop
-        image/jpeg=image-viewer.desktop;gimp.desktop
         [Default Applications]
         text/plain=notepad.desktop
         application/pdf=pdf-reader.desktop
         image/jpeg=image-viewer.desktop
+        [Added Associations]
+        text/plain=notepad.desktop;gedit.desktop;vim.desktop
+        application/pdf=pdf-reader.desktop;browser.desktop
+        image/jpeg=image-viewer.desktop;gimp.desktop
         "###);
 
         // Remove some applications
@@ -261,12 +269,35 @@ mod tests {
         config.deregister_mime_type("application/pdf", "pdf-reader.desktop");
 
         insta::assert_snapshot!(get_config_contents(&config), @r###"
-        text/plain=notepad.desktop;vim.desktop
-        application/pdf=browser.desktop
-        image/jpeg=image-viewer.desktop;gimp.desktop
         [Default Applications]
         text/plain=notepad.desktop
         image/jpeg=image-viewer.desktop
+        [Added Associations]
+        text/plain=notepad.desktop;vim.desktop
+        application/pdf=browser.desktop
+        image/jpeg=image-viewer.desktop;gimp.desktop
         "###);
+    }
+
+    #[test]
+    fn test_existing_mimeapps() {
+        // load from test-data/linux/mimeapps.list
+        let path = test_data().join("linux-menu/mimeapps.list");
+        let mut mimeapps = MimeConfig::new(path);
+        mimeapps.load().unwrap();
+
+        insta::assert_debug_snapshot!(mimeapps.config.get_map());
+
+        // Test adding a new mime type
+        mimeapps.register_mime_type("text/pixi", "pixi-app.desktop");
+
+        insta::assert_debug_snapshot!(mimeapps.config.get_map());
+        insta::assert_snapshot!(mimeapps.to_string());
+
+        // Test removing an application
+        mimeapps.deregister_mime_type("text/html", "google-chrome.desktop");
+        mimeapps.deregister_mime_type("text/pixi", "pixi-app.desktop");
+
+        insta::assert_debug_snapshot!(mimeapps.config.get_map());
     }
 }
