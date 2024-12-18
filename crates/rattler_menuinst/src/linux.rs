@@ -102,6 +102,9 @@ impl Directories {
     }
 
     pub fn ensure_directories_exist(&self) -> Result<(), MenuInstError> {
+        fs::create_dir_all(&self.data_directory)?;
+        fs::create_dir_all(&self.config_directory)?;
+
         let paths = vec![
             self.menu_config_location.parent().unwrap().to_path_buf(),
             self.desktop_entries_location.clone(),
@@ -624,10 +627,14 @@ mod tests {
     impl FakeDirectories {
         fn new() -> Self {
             let tmp_dir = TempDir::new().unwrap();
+            let data_directory = tmp_dir.path().join("data");
+            let config_directory = tmp_dir.path().join("config");
+
             let directories = Directories {
                 menu_name: "Test".to_string(),
                 name: "Test".to_string(),
-                data_directory: tmp_dir.path().to_path_buf(),
+                data_directory,
+                config_directory,
                 system_menu_config_location: tmp_dir.path().join("system_menu_config_location"),
                 menu_config_location: tmp_dir.path().join("menu_config_location"),
                 desktop_entries_location: tmp_dir.path().join("desktop_entries_location"),
