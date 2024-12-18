@@ -97,7 +97,11 @@ impl WindowsMenu {
     ) -> Self {
         let name = command.name.resolve(Environment::Base, placeholders);
 
-        let shortcut_name = shortcut_filename(&name, placeholders.as_ref().get("ENV_NAME"), Some(SHORTCUT_EXTENSION));
+        let shortcut_name = shortcut_filename(
+            &name,
+            placeholders.as_ref().get("ENV_NAME"),
+            Some(SHORTCUT_EXTENSION),
+        );
 
         let location = directories
             .start_menu

@@ -1,5 +1,6 @@
 use fs_err as fs;
 use fs_err::File;
+use mime_config::MimeConfig;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -43,6 +44,9 @@ pub struct Directories {
 
     /// The data directory for the menu
     pub data_directory: PathBuf,
+
+    /// The configuration directory for the menu
+    pub config_directory: PathBuf,
 
     /// The location of the menu configuration file This is the file that is
     /// used by the system to determine the menu layout It is usually located at
@@ -90,6 +94,7 @@ impl Directories {
             data_directory: data_directory.clone(),
             system_menu_config_location: system_config_directory.join("menus/applications.menu"),
             menu_config_location: config_directory.join("menus/applications.menu"),
+            config_directory,
             desktop_entries_location: data_directory.join("applications"),
             directory_entry_location: data_directory
                 .join(format!("desktop-directories/{}.directory", slugify(name))),
@@ -403,9 +408,21 @@ impl LinuxMenu {
         let mimeapps = self.directories.config_directory.join("mimeapps.list");
 
         if register {
-            let config = MimeConfig::new(mimeapps);
+            let mut config = MimeConfig::new(mimeapps);
+            config.load()?;
+            for mime_type in mime_types {
+                tracing::info!("Registering mime type {} for {}", mime_type, &self.name);
+                config.register_mime_type(mime_type, &self.name);
+            }
+            config.save()?;
         } else if mimeapps.exists() {
             // in this case we remove the mime type from the mimeapps.list file
+            let mut config = MimeConfig::new(mimeapps);
+            for mime_type in mime_types {
+                tracing::info!("Deregistering mime type {} for {}", mime_type, &self.name);
+                config.deregister_mime_type(mime_type, &self.name);
+            }
+            config.save()?;
         }
 
         if let Ok(update_mime_database) = which::which("update-mime-database") {
