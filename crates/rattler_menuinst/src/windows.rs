@@ -31,7 +31,7 @@ pub struct Directories {
     desktop: PathBuf,
 }
 
-fn shortcut_filename(name: &str, env_name: Option<&str>, ext: Option<&str>) -> String {
+fn shortcut_filename(name: &str, env_name: Option<&String>, ext: Option<&str>) -> String {
     let env = if let Some(env_name) = env_name {
         format!(" ({})", env_name)
     } else {
@@ -97,9 +97,11 @@ impl WindowsMenu {
     ) -> Self {
         let name = command.name.resolve(Environment::Base, placeholders);
 
+        let shortcut_name = shortcut_filename(&name, placeholders.as_ref().get("ENV_NAME"), Some(SHORTCUT_EXTENSION));
+
         let location = directories
             .start_menu
-            .join(&name)
+            .join(&shortcut_name)
             .with_extension(SHORTCUT_EXTENSION);
 
         // self.menu.start_menu_location / self._shortcut_filename()
@@ -148,14 +150,7 @@ impl WindowsMenu {
     }
 
     fn shortcut_filename(&self, ext: Option<&str>) -> String {
-        let env = if let Some(env_name) = self.placeholders.as_ref().get("ENV_NAME") {
-            format!(" ({})", env_name)
-        } else {
-            "".to_string()
-        };
-
-        let ext = ext.unwrap_or_else(|| "lnk");
-        format!("{}{}{}", self.name, env, ext)
+        shortcut_filename(&self.name, self.placeholders.as_ref().get("ENV_NAME"), ext)
     }
 
     fn write_script(&self, path: &Path) -> Result<(), MenuInstError> {
