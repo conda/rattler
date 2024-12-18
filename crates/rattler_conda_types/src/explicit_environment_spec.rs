@@ -10,8 +10,9 @@
 //! To create an explicit environment file, you can use the `conda env export` command.
 
 use crate::{ParsePlatformError, Platform};
+use fs_err::{self as fs, File};
 use serde::{Deserialize, Serialize};
-use std::{fs, fs::File, io::Read, path::Path, str::FromStr};
+use std::{io::Read, path::Path, str::FromStr};
 use url::Url;
 
 /// An [`ExplicitEnvironmentSpec`] represents an explicit environment specification. Packages are

@@ -9,13 +9,6 @@ use std::{
     sync::Arc,
 };
 
-use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
-use crate::install::link_script::LinkScriptError;
-use crate::{
-    default_cache_dir,
-    install::{clobber_registry::ClobberedPath, link_script::PrePostLinkResult},
-    package_cache::PackageCache,
-};
 pub use error::InstallerError;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
 #[cfg(feature = "indicatif")]
@@ -23,8 +16,8 @@ pub use indicatif::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
     ProgressFormatter,
 };
-use rattler_cache::package_cache::CacheLock;
-use rattler_cache::package_cache::CacheReporter;
+use itertools::Itertools;
+use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
     Platform, PrefixRecord, RepoDataRecord,
@@ -34,6 +27,16 @@ pub use reporter::Reporter;
 use reqwest::Client;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
+
+use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
+use crate::{
+    default_cache_dir,
+    install::{
+        clobber_registry::ClobberedPath,
+        link_script::{LinkScriptError, PrePostLinkResult},
+    },
+    package_cache::PackageCache,
+};
 
 /// An installer that can install packages into a prefix.
 #[derive(Default)]
@@ -344,7 +347,17 @@ impl Installer {
 
         // Execute the operations in the transaction.
         let mut pending_futures = FuturesUnordered::new();
-        for (idx, operation) in transaction.operations.iter().enumerate() {
+        for (idx, operation) in transaction
+            .operations
+            .iter()
+            .enumerate()
+            .sorted_by_key(|(_, op)| {
+                op.record_to_install()
+                    .and_then(|r| r.package_record.size)
+                    .unwrap_or(0)
+            })
+            .rev()
+        {
             let downloader = &downloader;
             let package_cache = &package_cache;
             let reporter = self.reporter.clone();
@@ -462,35 +475,45 @@ async fn link_package(
     install_options: InstallOptions,
     driver: &InstallDriver,
 ) -> Result<(), InstallerError> {
-    // Link the contents of the package into the prefix.
-    let paths =
-        crate::install::link_package(cached_package_dir, target_prefix, driver, install_options)
-            .await
+    let record = record.clone();
+    let target_prefix = target_prefix.to_path_buf();
+    let cached_package_dir = cached_package_dir.to_path_buf();
+    let clobber_registry = driver.clobber_registry.clone();
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    rayon::spawn_fifo(move || {
+        let inner = move || {
+            // Link the contents of the package into the prefix.
+            let paths = crate::install::link_package_sync(
+                &cached_package_dir,
+                &target_prefix,
+                clobber_registry,
+                install_options,
+            )
             .map_err(|e| InstallerError::LinkError(record.file_name.clone(), e))?;
 
-    // Construct a PrefixRecord for the package
-    let prefix_record = PrefixRecord {
-        repodata_record: record.clone(),
-        package_tarball_full_path: None,
-        extracted_package_dir: Some(cached_package_dir.to_path_buf()),
-        files: paths
-            .iter()
-            .map(|entry| entry.relative_path.clone())
-            .collect(),
-        paths_data: paths.into(),
-        // TODO: Retrieve the requested spec for this package from the request
-        requested_spec: None,
+            // Construct a PrefixRecord for the package
+            let prefix_record = PrefixRecord {
+                repodata_record: record.clone(),
+                package_tarball_full_path: None,
+                extracted_package_dir: Some(cached_package_dir.clone()),
+                files: paths
+                    .iter()
+                    .map(|entry| entry.relative_path.clone())
+                    .collect(),
+                paths_data: paths.into(),
+                // TODO: Retrieve the requested spec for this package from the request
+                requested_spec: None,
 
-        link: Some(Link {
-            source: cached_package_dir.to_path_buf(),
-            // TODO: compute the right value here based on the options and `can_hard_link` ...
-            link_type: Some(LinkType::HardLink),
-        }),
-    };
+                link: Some(Link {
+                    source: cached_package_dir,
+                    // TODO: compute the right value here based on the options and `can_hard_link`
+                    // ...
+                    link_type: Some(LinkType::HardLink),
+                }),
+            };
 
-    let target_prefix = target_prefix.to_path_buf();
-    driver
-        .run_blocking_io_task(move || {
             let conda_meta_path = target_prefix.join("conda-meta");
             std::fs::create_dir_all(&conda_meta_path).map_err(|e| {
                 InstallerError::IoError("failed to create conda-meta directory".to_string(), e)
@@ -508,9 +531,17 @@ async fn link_package(
             );
             prefix_record
                 .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
-                .map_err(|e| InstallerError::IoError(format!("failed to write {pkg_meta_path}"), e))
-        })
-        .await
+                .map_err(|e| {
+                    InstallerError::IoError(format!("failed to write {pkg_meta_path}"), e)
+                })?;
+
+            Ok(())
+        };
+
+        let _ = tx.send(inner());
+    });
+
+    rx.await.unwrap_or(Err(InstallerError::Cancelled))
 }
 
 /// Given a repodata record, fetch the package into the cache if its not already

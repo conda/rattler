@@ -1,16 +1,20 @@
 //! Defines the `[PrefixRecord]` struct.
 
 use crate::package::FileMode;
+use crate::repo_data::RecordFromPath;
 use crate::repo_data_record::RepoDataRecord;
 use crate::PackageRecord;
+use fs_err::File;
 use rattler_digest::serde::SerializableHash;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::serde_as;
-use std::fs::File;
 use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
 
 /// Information about every file installed with the package.
 ///
@@ -135,6 +139,12 @@ impl From<crate::package::PathType> for PathType {
     }
 }
 
+impl RecordFromPath for PrefixRecord {
+    fn from_path(path: &Path) -> Result<Self, std::io::Error> {
+        Self::from_path(path)
+    }
+}
+
 /// A record of a single package installed within an environment. The struct includes the
 /// [`RepoDataRecord`] which specifies information about where the original package comes from.
 #[serde_as]
@@ -224,7 +234,7 @@ impl PrefixRecord {
         path: impl AsRef<Path>,
         pretty: bool,
     ) -> Result<(), std::io::Error> {
-        self.write_to(File::create(path)?, pretty)
+        self.write_to(File::create(path.as_ref())?, pretty)
     }
 
     /// Writes the contents of this instance to the file at the specified location.
@@ -243,25 +253,46 @@ impl PrefixRecord {
 
     /// Collects all `PrefixRecord`s from the specified prefix. This function will read all files in
     /// the `$PREFIX/conda-meta` directory and parse them as `PrefixRecord`s.
-    pub fn collect_from_prefix(prefix: &Path) -> Result<Vec<PrefixRecord>, std::io::Error> {
-        let mut records = Vec::new();
+    pub fn collect_from_prefix<T: RecordFromPath + Send>(
+        prefix: &Path,
+    ) -> Result<Vec<T>, std::io::Error> {
         let conda_meta_path = prefix.join("conda-meta");
 
         if !conda_meta_path.exists() {
-            return Ok(records);
+            return Ok(Vec::new());
         }
 
-        for entry in std::fs::read_dir(prefix.join("conda-meta"))? {
-            let entry = entry?;
+        // Collect paths first to avoid holding the directory iterator during parallel processing
+        let json_paths: Vec<_> = fs_err::read_dir(&conda_meta_path)?
+            .filter_map(|entry| {
+                entry.ok().and_then(|e| {
+                    if e.file_type().ok()?.is_file()
+                        && e.file_name().to_string_lossy().ends_with(".json")
+                    {
+                        Some(e.path())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect();
 
-            if entry.file_type()?.is_file()
-                && entry.file_name().to_string_lossy().ends_with(".json")
-            {
-                let record = Self::from_path(entry.path())?;
-                records.push(record);
-            }
+        #[cfg(feature = "rayon")]
+        {
+            // Process files in parallel
+            json_paths
+                .par_iter()
+                .map(|path| RecordFromPath::from_path(path))
+                .collect()
         }
-        Ok(records)
+
+        #[cfg(not(feature = "rayon"))]
+        {
+            json_paths
+                .iter()
+                .map(|path| RecordFromPath::from_path(path))
+                .collect()
+        }
     }
 }
 
