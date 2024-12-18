@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use windows::{
     core::*, Win32::Storage::EnhancedStorage::PKEY_AppUserModel_ID,
     Win32::System::Com::StructuredStorage::*, Win32::System::Com::*, Win32::UI::Shell::*,
@@ -8,14 +10,14 @@ use PropertiesSystem::IPropertyStore;
 pub fn create_shortcut(
     path: &str,
     description: &str,
-    filename: &str,
+    filename: &Path,
     arguments: Option<&str>,
     workdir: Option<&str>,
     iconpath: Option<&str>,
     iconindex: Option<i32>,
     app_id: Option<&str>,
 ) -> Result<()> {
-    tracing::info!("Creating shortcut: {} at {}", filename, path);
+    tracing::info!("Creating shortcut: {:?} at {}", filename, path);
 
     unsafe {
         // Initialize COM
