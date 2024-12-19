@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
+use dashmap::DashMap;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use rattler_conda_types::{prefix_record::PathType, PackageRecord, PrefixRecord};
@@ -31,6 +32,9 @@ pub struct InstallDriver {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     pub(crate) clobber_registry: Arc<Mutex<ClobberRegistry>>,
     execute_link_scripts: bool,
+
+    #[cfg(target_os = "macos")]
+    pub(crate) directory_lock: DashMap<PathBuf, Arc<Mutex<()>>>,
 }
 
 impl Default for InstallDriver {
@@ -122,6 +126,7 @@ impl InstallDriverBuilder {
                 .map(Arc::new)
                 .unwrap_or_default(),
             execute_link_scripts: self.execute_link_scripts,
+            directory_lock: DashMap::new(),
         }
     }
 }
