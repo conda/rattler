@@ -303,7 +303,9 @@ impl Installer {
         // Construct a driver.
         let driver = InstallDriver::builder()
             .execute_link_scripts(self.execute_link_scripts)
-            .with_io_concurrency_semaphore(self.io_semaphore.unwrap_or(Arc::new(Semaphore::new(2))))
+            .with_io_concurrency_semaphore(
+                self.io_semaphore.unwrap_or(Arc::new(Semaphore::new(100))),
+            )
             .with_prefix_records(&installed)
             .finish();
 

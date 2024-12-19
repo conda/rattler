@@ -234,7 +234,8 @@ impl PrefixRecord {
         path: impl AsRef<Path>,
         pretty: bool,
     ) -> Result<(), std::io::Error> {
-        self.write_to(File::create(path.as_ref())?, pretty)
+        let file = File::create(path.as_ref())?;
+        self.write_to(BufWriter::with_capacity(50 * 1024, file), pretty)
     }
 
     /// Writes the contents of this instance to the file at the specified location.
@@ -244,9 +245,9 @@ impl PrefixRecord {
         pretty: bool,
     ) -> Result<(), std::io::Error> {
         if pretty {
-            serde_json::to_writer_pretty(BufWriter::new(writer), self)?;
+            serde_json::to_writer_pretty(writer, self)?;
         } else {
-            serde_json::to_writer(BufWriter::new(writer), self)?;
+            serde_json::to_writer(writer, self)?;
         }
         Ok(())
     }

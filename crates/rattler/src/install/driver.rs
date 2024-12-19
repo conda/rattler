@@ -37,7 +37,7 @@ impl Default for InstallDriver {
     fn default() -> Self {
         Self::builder()
             .execute_link_scripts(false)
-            .with_io_concurrency_limit(2)
+            .with_io_concurrency_limit(100)
             .finish()
     }
 }
