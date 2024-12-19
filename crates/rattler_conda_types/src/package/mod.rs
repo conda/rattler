@@ -14,7 +14,6 @@ mod package_metadata;
 mod paths;
 mod run_exports;
 
-use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 pub use {
@@ -71,7 +70,7 @@ pub trait PackageFile: Sized {
     /// the specified path, parse the JSON string and return the resulting object. If the file is
     /// not in a parsable format or if the file could not read, this function returns an error.
     fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
-        Self::from_reader(File::open(path)?)
+        Self::from_str(&fs_err::read_to_string(path)?)
     }
 
     /// Parses the object by looking up the appropriate file from the root of the specified Conda
