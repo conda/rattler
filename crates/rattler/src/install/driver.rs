@@ -126,6 +126,7 @@ impl InstallDriverBuilder {
                 .map(Arc::new)
                 .unwrap_or_default(),
             execute_link_scripts: self.execute_link_scripts,
+            directory_lock: DashMap::new(),
         }
     }
 }
