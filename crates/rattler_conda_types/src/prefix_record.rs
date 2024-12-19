@@ -214,7 +214,7 @@ impl PrefixRecord {
 
     /// Parses a `paths.json` file from a file.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
-        Self::from_reader(File::open(path.as_ref())?)
+        Self::from_str(&fs_err::read_to_string(path.as_ref())?)
     }
 
     /// Return the canonical file name for a `PrefixRecord`. Takes the form of
