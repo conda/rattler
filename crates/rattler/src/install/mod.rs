@@ -680,9 +680,17 @@ pub fn link_package_sync(
             .push((entry, computed_path));
     }
 
-    for directory in directories_to_construct.into_iter().sorted() {
-        tracing::info!("creating directory: {:?}", directory);
+    let mut created_directories = HashSet::new();
+
+    for directory in directories_to_construct.into_iter().sorted_by(|a, b| {
+        a.components().count().cmp(&b.components().count())
+    }) {
         let full_path = target_dir.join(&directory);
+
+        // if we already (recursively) created the parent directory we can skip this
+        if created_directories.iter().any(|dir| directory.starts_with(dir)) {
+            continue;
+        }
 
         // can we lock this directory?
         if full_path.exists() {
@@ -691,12 +699,15 @@ pub fn link_package_sync(
         } else if allow_ref_links && cfg!(target_os = "macos") {
             tracing::info!("reflinking directory from {:?} to {:?}", package_dir.join(&directory), target_dir.join(&directory));
             // reflink the whole directory if possible
-            reflink_copy::reflink(package_dir.join(&directory), full_path)
-                .map_err(|e| InstallError::FailedToCreateDirectory(directory.clone(), e))?;
-
-            // remove paths that we just reflinked (everyting that starts with the directory)
-            paths_by_directory.retain(|k, _| !k.starts_with(&directory));
-
+            match reflink_copy::reflink(package_dir.join(&directory), &full_path) {
+                Ok(_) =>  {
+                    created_directories.insert(directory.clone());
+                    // remove paths that we just reflinked (everyting that starts with the directory)
+                    paths_by_directory.retain(|k, _| !k.starts_with(&directory));
+                },
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
+                Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
+            }
         } else {
             tracing::info!("creating directory: {:?}", directory);
             match fs::create_dir(&full_path) {
