@@ -35,8 +35,11 @@
                     "command": ["{{ PREFIX }}/bin/spyder", "%F"],
                     "StartupWMClass": "Spyder-6.{{ ENV_NAME }}",
                     "MimeType": [
-                        "text/x-python"
-                    ]
+                        "text/x-spython"
+                    ],
+                    "glob_patterns": {
+                        "text/x-spython": "*.spy"
+                    }
                 },
                 "osx": {
                     "precommand": "pushd \"$(dirname \"$0\")\" &>/dev/null",

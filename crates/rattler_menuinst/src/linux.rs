@@ -122,6 +122,10 @@ impl Directories {
         Ok(())
     }
 
+    pub fn mime_directory(&self) -> PathBuf {
+        self.data_directory.join("mime")
+    }
+
     pub fn desktop_file(&self) -> PathBuf {
         self.desktop_entries_location.join(format!(
             "{}_{}.desktop",
@@ -433,7 +437,7 @@ impl LinuxMenu {
             let mut command = Command::new(update_mime_database);
             command
                 .arg("-V")
-                .arg(self.directories.data_directory.join("mime"));
+                .arg(self.directories.mime_directory());
             let output = command.output()?;
             if !output.status.success() {
                 tracing::warn!("Could not update mime database");
@@ -446,18 +450,15 @@ impl LinuxMenu {
 
     fn xml_path_for_mime_type(&self, mime_type: &str) -> Result<(PathBuf, bool), std::io::Error> {
         let basename = mime_type.replace("/", "-");
-        let mime_directory = self.directories.data_directory.join("mime/applications");
+        let mime_directory = self.directories.data_directory.join("mime/packages");
         if !mime_directory.is_dir() {
             return Ok((
-                self.directories
-                    .data_directory
-                    .join("mime/packages")
-                    .join(format!("{basename}.xml")),
+                mime_directory.join(format!("{basename}.xml")),
                 false,
             ));
         }
 
-        let xml_files: Vec<PathBuf> = fs::read_dir(mime_directory)?
+        let xml_files: Vec<PathBuf> = fs::read_dir(&mime_directory)?
             .filter_map(|entry| {
                 let path = entry.unwrap().path();
                 if path
@@ -485,10 +486,7 @@ impl LinuxMenu {
             return Ok((xml_files[0].clone(), true));
         }
         Ok((
-            self.directories
-                .data_directory
-                .join("mime/packages")
-                .join(format!("{basename}.xml")),
+            mime_directory.join(format!("{basename}.xml")),
             false,
         ))
     }
@@ -501,6 +499,7 @@ impl LinuxMenu {
     ) -> Result<PathBuf, MenuInstError> {
         let (xml_path, exists) = self.xml_path_for_mime_type(mime_type).unwrap();
         if exists {
+            println!("XML path exists");
             return Ok(xml_path);
         }
 
@@ -730,6 +729,19 @@ mod tests {
         }
     }
 
+    // print the whole tree of a directory
+    fn print_tree(path: &Path) {
+        for entry in fs::read_dir(path).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            println!("{}", path.display());
+            if path.is_dir() {
+                print_tree(&path);
+            }
+        }
+    }
+
+
     #[test]
     fn test_installation() {
         let dirs = FakeDirectories::new();
@@ -756,12 +768,22 @@ mod tests {
         );
 
         linux_menu.install().unwrap();
-
+        print_tree(&dirs.directories().config_directory);
         // check snapshot of desktop file
         let desktop_file = dirs.directories().desktop_file();
         let desktop_file_content = fs::read_to_string(&desktop_file).unwrap();
         let desktop_file_content =
             desktop_file_content.replace(&fake_prefix.prefix().to_str().unwrap(), "<PREFIX>");
         insta::assert_snapshot!(desktop_file_content);
+
+        // check mimeapps.list
+        let mimeapps_file = dirs.directories().config_directory.join("mimeapps.list");
+        let mimeapps_file_content = fs::read_to_string(&mimeapps_file).unwrap();
+        insta::assert_snapshot!(mimeapps_file_content);
+
+        let mime_file = dirs::data_dir().unwrap().join("mime/packages/text-x-spython.xml");
+        let mime_file_content = fs::read_to_string(&mime_file).unwrap();
+        insta::assert_snapshot!(mime_file_content);
+
     }
 }
