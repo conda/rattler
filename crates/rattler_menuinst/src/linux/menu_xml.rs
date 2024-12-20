@@ -186,12 +186,7 @@ impl MenuXml {
 
     pub fn ensure_menu_file(&self) -> Result<(), MenuInstError> {
         if self.menu_config_location.exists() && !self.menu_config_location.is_file() {
-            panic!(
-                "Menu config location {} is not a file!",
-                self.menu_config_location.display()
-            );
-            // return Err(anyhow!("Menu config location {} is not a file!",
-            //     self.menu_config_location.display()));
+            return Err(MenuInstError::MenuConfigNotAFile(self.menu_config_location.clone()));
         }
 
         if self.menu_config_location.is_file() {

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rattler_conda_types::Platform;
 
@@ -50,6 +50,10 @@ pub enum MenuInstError {
     #[cfg(target_os = "windows")]
     #[error("Failed to install menu item: {0}")]
     WindowsError(#[from] ::windows::core::Error),
+
+    #[cfg(target_os = "linux")]
+    #[error("Menu config location is not a file: {0:?}")]
+    MenuConfigNotAFile(PathBuf),
 }
 
 // Install menu items from a given schema file

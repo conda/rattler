@@ -435,9 +435,7 @@ impl LinuxMenu {
 
         if let Ok(update_mime_database) = which::which("update-mime-database") {
             let mut command = Command::new(update_mime_database);
-            command
-                .arg("-V")
-                .arg(self.directories.mime_directory());
+            command.arg("-V").arg(self.directories.mime_directory());
             let output = command.output()?;
             if !output.status.success() {
                 tracing::warn!("Could not update mime database");
@@ -452,10 +450,7 @@ impl LinuxMenu {
         let basename = mime_type.replace("/", "-");
         let mime_directory = self.directories.data_directory.join("mime/packages");
         if !mime_directory.is_dir() {
-            return Ok((
-                mime_directory.join(format!("{basename}.xml")),
-                false,
-            ));
+            return Ok((mime_directory.join(format!("{basename}.xml")), false));
         }
 
         let xml_files: Vec<PathBuf> = fs::read_dir(&mime_directory)?
@@ -485,10 +480,7 @@ impl LinuxMenu {
             }
             return Ok((xml_files[0].clone(), true));
         }
-        Ok((
-            mime_directory.join(format!("{basename}.xml")),
-            false,
-        ))
+        Ok((mime_directory.join(format!("{basename}.xml")), false))
     }
 
     fn glob_pattern_for_mime_type(
@@ -499,7 +491,6 @@ impl LinuxMenu {
     ) -> Result<PathBuf, MenuInstError> {
         let (xml_path, exists) = self.xml_path_for_mime_type(mime_type).unwrap();
         if exists {
-            println!("XML path exists");
             return Ok(xml_path);
         }
 
@@ -639,6 +630,9 @@ mod tests {
             let data_directory = tmp_dir.path().join("data");
             let config_directory = tmp_dir.path().join("config");
 
+            std::env::set_var("XDG_DATA_HOME", &data_directory);
+            std::env::set_var("XDG_CONFIG_HOME", &config_directory);
+
             let directories = Directories {
                 menu_name: "Test".to_string(),
                 name: "Test".to_string(),
@@ -660,6 +654,13 @@ mod tests {
 
         pub fn directories(&self) -> &Directories {
             &self.directories
+        }
+    }
+
+    impl Drop for FakeDirectories {
+        fn drop(&mut self) {
+            std::env::remove_var("XDG_DATA_HOME");
+            std::env::remove_var("XDG_CONFIG_HOME");
         }
     }
 
@@ -729,19 +730,6 @@ mod tests {
         }
     }
 
-    // print the whole tree of a directory
-    fn print_tree(path: &Path) {
-        for entry in fs::read_dir(path).unwrap() {
-            let entry = entry.unwrap();
-            let path = entry.path();
-            println!("{}", path.display());
-            if path.is_dir() {
-                print_tree(&path);
-            }
-        }
-    }
-
-
     #[test]
     fn test_installation() {
         let dirs = FakeDirectories::new();
@@ -768,7 +756,7 @@ mod tests {
         );
 
         linux_menu.install().unwrap();
-        print_tree(&dirs.directories().config_directory);
+
         // check snapshot of desktop file
         let desktop_file = dirs.directories().desktop_file();
         let desktop_file_content = fs::read_to_string(&desktop_file).unwrap();
@@ -781,9 +769,11 @@ mod tests {
         let mimeapps_file_content = fs::read_to_string(&mimeapps_file).unwrap();
         insta::assert_snapshot!(mimeapps_file_content);
 
-        let mime_file = dirs::data_dir().unwrap().join("mime/packages/text-x-spython.xml");
+        let mime_file = dirs
+            .directories()
+            .data_directory
+            .join("mime/packages/text-x-spython.xml");
         let mime_file_content = fs::read_to_string(&mime_file).unwrap();
         insta::assert_snapshot!(mime_file_content);
-
     }
 }

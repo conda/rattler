@@ -1,8 +1,6 @@
 ---
 source: crates/rattler_menuinst/src/linux.rs
-assertion_line: 786
 expression: mime_file_content
-snapshot_kind: text
 ---
 <?xml version="1.0" encoding="UTF-8"?>
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
