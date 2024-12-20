@@ -84,7 +84,7 @@ MenuInstSchema {
                             mime_type: Some(
                                 [
                                     PlaceholderString(
-                                        "text/x-python",
+                                        "text/x-spython",
                                     ),
                                 ],
                             ),
@@ -99,7 +99,15 @@ MenuInstSchema {
                                 ),
                             ),
                             try_exec: None,
-                            glob_patterns: None,
+                            glob_patterns: Some(
+                                {
+                                    PlaceholderString(
+                                        "text/x-spython",
+                                    ): PlaceholderString(
+                                        "*.spy",
+                                    ),
+                                },
+                            ),
                         },
                     },
                 ),

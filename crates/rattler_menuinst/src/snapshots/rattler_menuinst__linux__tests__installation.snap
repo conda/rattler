@@ -11,5 +11,5 @@ Terminal=false
 Icon=<PREFIX>/Menu/spyder.png
 Comment=Scientific PYthon Development EnviRonment
 Categories=Development;Science;
-MimeType=text/x-python;
+MimeType=text/x-spython;
 StartupWMClass=Spyder-6.test-env
