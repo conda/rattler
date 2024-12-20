@@ -656,21 +656,20 @@ pub fn copy_and_replace_textual_placeholder(
         source_bytes = rest;
     }
 
-    loop {
-        if let Some(index) = memchr::memmem::find(source_bytes, old_prefix) {
-            // Write all bytes up to the old prefix, followed by the new prefix.
-            destination.write_all(&source_bytes[..index])?;
-            destination.write_all(new_prefix)?;
+    let mut last_match = 0;
 
-            // Skip past the old prefix in the source bytes
-            source_bytes = &source_bytes[index + old_prefix.len()..];
-        } else {
-            // The old prefix was not found in the (remaining) source bytes.
-            // Write the rest of the bytes
-            destination.write_all(source_bytes)?;
-            return Ok(());
-        }
+    for index in memchr::memmem::find_iter(source_bytes, old_prefix) {
+        destination.write_all(&source_bytes[last_match..index])?;
+        destination.write_all(new_prefix)?;
+        last_match = index + old_prefix.len();
     }
+
+    // Write remaining bytes
+    if last_match < source_bytes.len() {
+        destination.write_all(&source_bytes[last_match..])?;
+    }
+
+    Ok(())
 }
 
 /// Given the contents of a file, copies it to the `destination` and in the process replace any
@@ -691,8 +690,10 @@ pub fn copy_and_replace_cstring_placeholder(
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
 
+    let finder = memchr::memmem::Finder::new(old_prefix);
+
     loop {
-        if let Some(index) = memchr::memmem::find(source_bytes, old_prefix) {
+        if let Some(index) = finder.find(source_bytes) {
             // write all bytes up to the old prefix, followed by the new prefix.
             destination.write_all(&source_bytes[..index])?;
 
@@ -707,7 +708,7 @@ pub fn copy_and_replace_cstring_placeholder(
             let old_len = old_bytes.len();
 
             // replace all occurrences of the old prefix with the new prefix
-            while let Some(index) = memchr::memmem::find(old_bytes, old_prefix) {
+            while let Some(index) = finder.find(old_bytes) {
                 out.write_all(&old_bytes[..index])?;
                 out.write_all(new_prefix)?;
                 old_bytes = &old_bytes[index + old_prefix.len()..];
