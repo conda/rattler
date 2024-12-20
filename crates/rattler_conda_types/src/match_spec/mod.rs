@@ -716,4 +716,9 @@ mod tests {
             .collect::<Vec<String>>()
             .join("\n"));
     }
+
+    #[test]
+    fn test_size_stays_the_same() {
+        assert_eq!(std::mem::size_of::<MatchSpec>(), 464);
+    }
 }

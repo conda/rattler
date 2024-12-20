@@ -1,0 +1,46 @@
+[package]
+name = "rattler_menuinst"
+version = "0.1.0"
+edition.workspace = true
+authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
+description = "Install menu entries for a Conda package"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[dependencies]
+plist = { workspace = true }
+dirs = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+shlex = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+rattler_conda_types = { path = "../rattler_conda_types", default-features = false }
+rattler_shell = { path = "../rattler_shell", default-features = false }
+thiserror = { workspace = true }
+unicode-normalization = { workspace = true }
+regex = { workspace = true }
+tempfile = { workspace = true }
+fs-err = { workspace = true }
+which = "7.0.0"
+known-folders = "1.2.0"
+quick-xml = "0.37.1"
+chrono = { workspace = true, features = ["clock"] }
+configparser = { version = "3.1.0", features = ["indexmap"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_Storage_EnhancedStorage",
+    "Win32_Foundation",
+    "implement"
+]}
+winreg = "0.52.0"
+
+[dev-dependencies]
+insta = { workspace = true }

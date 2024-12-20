@@ -1,13 +1,14 @@
 use std::{
     borrow::Borrow,
     collections::{HashMap, HashSet},
+    ffi::OsStr,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, MutexGuard},
 };
 
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::{prefix_record::PathType, PackageRecord, PrefixRecord};
+use rattler_conda_types::{prefix_record::PathType, PackageRecord, Platform, PrefixRecord};
 use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
@@ -155,10 +156,11 @@ impl InstallDriver {
         transaction: &Transaction<Old, New>,
         target_prefix: &Path,
     ) -> Result<Option<PrePostLinkResult>, PrePostLinkError> {
+        let mut result = None;
         if self.execute_link_scripts {
             match self.run_pre_unlink_scripts(transaction, target_prefix) {
                 Ok(res) => {
-                    return Ok(Some(res));
+                    result = Some(res);
                 }
                 Err(e) => {
                     tracing::error!("Error running pre-unlink scripts: {:?}", e);
@@ -166,7 +168,29 @@ impl InstallDriver {
             }
         }
 
-        Ok(None)
+        // For all packages that are removed, we need to remove menuinst entries as well
+        for record in transaction.removed_packages().map(Borrow::borrow) {
+            for path in record.paths_data.paths.iter() {
+                if path.relative_path.starts_with("Menu")
+                    && path.relative_path.extension() == Some(OsStr::new("json"))
+                {
+                    match rattler_menuinst::remove_menu_items(
+                        &target_prefix.join(&path.relative_path),
+                        target_prefix,
+                        target_prefix,
+                        Platform::current(),
+                        rattler_menuinst::MenuMode::User,
+                    ) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            tracing::warn!("Failed to remove menu item: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(result)
     }
 
     /// Runs a blocking task that will execute on a separate thread. The task is
@@ -221,6 +245,25 @@ impl InstallDriver {
         } else {
             None
         };
+
+        // find all files in `$PREFIX/Menu/*.json` and install them with `menuinst`
+        if let Ok(read_dir) = target_prefix.join("Menu").read_dir() {
+            for file in read_dir.flatten() {
+                let file = file.path();
+                if file.is_file() && file.extension().map_or(false, |ext| ext == "json") {
+                    rattler_menuinst::install_menuitems(
+                        &file,
+                        target_prefix,
+                        target_prefix,
+                        Platform::current(),
+                        rattler_menuinst::MenuMode::User,
+                    )
+                    .unwrap_or_else(|e| {
+                        tracing::warn!("Failed to install menu item: {} (ignored)", e);
+                    });
+                }
+            }
+        }
 
         Ok(PostProcessResult {
             post_link_result,
