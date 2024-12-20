@@ -560,7 +560,6 @@ pub fn link_package_sync(
     target_dir: &Path,
     clobber_registry: Arc<Mutex<ClobberRegistry>>,
     options: InstallOptions,
-    // directory_lock: &DashMap<PathBuf, Mutex<()>>,
 ) -> Result<Vec<PathsEntry>, InstallError> {
     // Determine the target prefix for linking
     let target_prefix = options
