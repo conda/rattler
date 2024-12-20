@@ -700,13 +700,8 @@ pub fn link_package_sync(
             // tracing::info!("directory already exists: {:?}", directory);
             continue;
         } else if allow_ref_links && cfg!(target_os = "macos") && !index_json.noarch.is_python() {
-            // currently this does not handle noarch packages
-            // tracing::info!(
-            //     "reflinking directory from {:?} to {:?}",
-            //     package_dir.join(&directory),
-            //     target_dir.join(&directory)
-            // );
             // reflink the whole directory if possible
+            // currently this does not handle noarch packages
             match reflink_copy::reflink(package_dir.join(&directory), &full_path) {
                 Ok(_) => {
                     created_directories.insert(directory.clone());
@@ -725,7 +720,6 @@ pub fn link_package_sync(
                 Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
             }
         } else {
-            // tracing::info!("creating directory: {:?}", directory);
             match fs::create_dir(&full_path) {
                 Ok(_) => (),
                 Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
@@ -734,7 +728,7 @@ pub fn link_package_sync(
         }
     }
 
-    // TODO take care of all the reflinked files:
+    // Take care of all the reflinked files (macos only)
     //  - Add them to the paths.json
     //  - Fix any occurences of the prefix in the files
     //  - Rename files that need clobber-renames
@@ -752,12 +746,12 @@ pub fn link_package_sync(
             } else {
                 reflinked_paths_entries.push(PathsEntry {
                     relative_path: file.0.relative_path,
-                    original_path: None,
                     path_type: file.0.path_type.into(),
                     no_link: file.0.no_link,
                     sha256: file.0.sha256,
                     size_in_bytes: file.0.size_in_bytes,
-                    // No placeholder, so both are none for sure
+                    // No placeholder, no clobbering, so these are none for sure
+                    original_path: None,
                     sha256_in_prefix: None,
                     file_mode: None,
                     prefix_placeholder: None,

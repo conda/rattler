@@ -742,7 +742,7 @@ pub fn copy_and_replace_cstring_placeholder(
 
 fn symlink(source_path: &Path, destination_path: &Path) -> std::io::Result<()> {
     #[cfg(windows)]
-    return fs::symlink_file(source_path, destination_path);
+    return fs_err::os::windows::fs::symlink_file(source_path, destination_path);
     #[cfg(unix)]
     return fs_err::os::unix::fs::symlink(source_path, destination_path);
 }
