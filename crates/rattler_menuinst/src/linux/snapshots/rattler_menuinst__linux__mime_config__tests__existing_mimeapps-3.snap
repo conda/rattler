@@ -1,0 +1,13 @@
+---
+source: crates/rattler_menuinst/src/linux/mime_config.rs
+expression: mimeapps.to_string()
+---
+[Default Applications]
+text/html=google-chrome.desktop
+x-scheme-handler/http=google-chrome.desktop
+x-scheme-handler/https=google-chrome.desktop
+x-scheme-handler/about=google-chrome.desktop
+x-scheme-handler/unknown=google-chrome.desktop
+text/pixi=pixi-app.desktop
+[Added Associations]
+text/pixi=pixi-app.desktop
