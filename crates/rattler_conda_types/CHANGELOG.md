@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.7](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.6...rattler_conda_types-v0.29.7) - 2024-12-20
+
+### Other
+
+- reflink directories at once on macOS (#995)
+- read json to memory before parsing (#991)
+
 ## [0.29.6](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.5...rattler_conda_types-v0.29.6) - 2024-12-17
 
 ### Added
