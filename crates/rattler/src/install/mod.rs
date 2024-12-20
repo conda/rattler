@@ -678,12 +678,84 @@ pub fn link_package_sync(
             .push((entry, computed_path));
     }
 
-    for directory in directories_to_construct.into_iter().sorted() {
-        let full_path = target_dir.join(directory);
-        match fs::create_dir(&full_path) {
-            Ok(_) => (),
-            Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
-            Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
+    let mut created_directories = HashSet::new();
+    let mut reflinked_files = HashMap::new();
+    for directory in directories_to_construct
+        .into_iter()
+        .sorted_by(|a, b| a.components().count().cmp(&b.components().count()))
+    {
+        let full_path = target_dir.join(&directory);
+
+        // if we already (recursively) created the parent directory we can skip this
+        if created_directories
+            .iter()
+            .any(|dir| directory.starts_with(dir))
+        {
+            continue;
+        }
+
+        // can we lock this directory?
+        if full_path.exists() {
+            // tracing::info!("directory already exists: {:?}", directory);
+            continue;
+        } else if allow_ref_links && cfg!(target_os = "macos") && !index_json.noarch.is_python() {
+            // reflink the whole directory if possible
+            // currently this does not handle noarch packages
+            match reflink_copy::reflink(package_dir.join(&directory), &full_path) {
+                Ok(_) => {
+                    created_directories.insert(directory.clone());
+                    // remove paths that we just reflinked (everything that starts with the directory)
+                    let (matching, non_matching): (HashMap<_, _>, HashMap<_, _>) =
+                        paths_by_directory
+                            .drain()
+                            .partition(|(k, _)| k.starts_with(&directory));
+
+                    // Store matching paths in reflinked_files
+                    reflinked_files.extend(matching);
+                    // Keep non-matching paths in paths_by_directory
+                    paths_by_directory = non_matching;
+                }
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
+                Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
+            }
+        } else {
+            match fs::create_dir(&full_path) {
+                Ok(_) => (),
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
+                Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
+            }
+        }
+    }
+
+    // Take care of all the reflinked files (macos only)
+    //  - Add them to the paths.json
+    //  - Fix any occurences of the prefix in the files
+    //  - Rename files that need clobber-renames
+    let mut reflinked_paths_entries = Vec::new();
+    for (parent_dir, files) in reflinked_files {
+        // files that are either in the clobber map or contain a placeholder,
+        // we defer to the regular linking that comes after this block
+        // and re-add them to the paths_by_directory map
+        for file in files {
+            if clobber_paths.contains_key(&file.1) || file.0.prefix_placeholder.is_some() {
+                paths_by_directory
+                    .entry(parent_dir.clone())
+                    .or_insert_with(Vec::new)
+                    .push(file);
+            } else {
+                reflinked_paths_entries.push(PathsEntry {
+                    relative_path: file.0.relative_path,
+                    path_type: file.0.path_type.into(),
+                    no_link: file.0.no_link,
+                    sha256: file.0.sha256,
+                    size_in_bytes: file.0.size_in_bytes,
+                    // No placeholder, no clobbering, so these are none for sure
+                    original_path: None,
+                    sha256_in_prefix: None,
+                    file_mode: None,
+                    prefix_placeholder: None,
+                })
+            }
         }
     }
 
@@ -704,6 +776,7 @@ pub fn link_package_sync(
             let mut path_entries = Vec::with_capacity(entries_in_subdir.len());
             for (entry, computed_path) in entries_in_subdir {
                 let clobber_rename = clobber_paths.get(&entry.relative_path).cloned();
+
                 let link_result = link_file(
                     &entry,
                     computed_path.clone(),
@@ -754,6 +827,8 @@ pub fn link_package_sync(
             path_entries
         })
         .collect::<Result<Vec<_>, _>>()?;
+
+    paths.extend(reflinked_paths_entries);
 
     // If this package is a noarch python package we also have to create entry
     // points.

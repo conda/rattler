@@ -1,5 +1,6 @@
 //! This module contains the logic to link a give file from the package cache into the target directory.
 //! See [`link_file`] for more information.
+use fs_err as fs;
 use memmap2::Mmap;
 use once_cell::sync::Lazy;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
@@ -12,7 +13,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Formatter;
 use std::fs::Permissions;
-use std::io::{ErrorKind, Read, Seek, Write};
+use std::io::{BufWriter, ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use super::apple_codesign::{codesign, AppleCodeSignBehavior};
@@ -165,8 +166,11 @@ pub fn link_file(
         let source = map_or_read_source_file(&source_path)?;
 
         // Open the destination file
-        let destination = std::fs::File::create(&destination_path)
-            .map_err(LinkFileError::FailedToOpenDestinationFile)?;
+        let destination = BufWriter::with_capacity(
+            50 * 1024,
+            fs::File::create(&destination_path)
+                .map_err(LinkFileError::FailedToOpenDestinationFile)?,
+        );
         let mut destination_writer = HashingWriter::<_, rattler_digest::Sha256>::new(destination);
 
         // Convert back-slashes (\) on windows with forward-slashes (/) to avoid problems with
@@ -213,9 +217,9 @@ pub fn link_file(
 
         // Copy over filesystem permissions. We do this to ensure that the destination file has the
         // same permissions as the source file.
-        let metadata = std::fs::symlink_metadata(&source_path)
+        let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-        std::fs::set_permissions(&destination_path, metadata.permissions())
+        fs::set_permissions(&destination_path, metadata.permissions())
             .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
 
         // (re)sign the binary if the file is executable
@@ -247,7 +251,7 @@ pub fn link_file(
                         .map_err(LinkFileError::FailedToComputeSha)?,
                 );
                 file_size = Some(
-                    std::fs::symlink_metadata(&destination_path)
+                    fs::symlink_metadata(&destination_path)
                         .map_err(LinkFileError::FailedToOpenDestinationFile)?
                         .len(),
                 );
@@ -297,7 +301,7 @@ pub fn link_file(
     } else if let Some(size_in_bytes) = path_json_entry.size_in_bytes {
         size_in_bytes
     } else {
-        let metadata = std::fs::symlink_metadata(&destination_path)
+        let metadata = fs::symlink_metadata(&destination_path)
             .map_err(LinkFileError::FailedToOpenDestinationFile)?;
         metadata.len()
     };
@@ -342,8 +346,7 @@ impl AsRef<[u8]> for MmapOrBytes {
 /// <https://github.com/prefix-dev/pixi/issues/234>
 #[allow(clippy::verbose_file_reads)]
 fn map_or_read_source_file(source_path: &Path) -> Result<MmapOrBytes, LinkFileError> {
-    let mut file =
-        std::fs::File::open(source_path).map_err(LinkFileError::FailedToOpenSourceFile)?;
+    let mut file = fs::File::open(source_path).map_err(LinkFileError::FailedToOpenSourceFile)?;
 
     // Try to memory map the file
     let mmap = unsafe { Mmap::map(&file) };
@@ -379,15 +382,15 @@ fn reflink_to_destination(
                 {
                     // Copy over filesystem permissions. We do this to ensure that the destination file has the
                     // same permissions as the source file.
-                    let metadata = std::fs::metadata(source_path)
+                    let metadata = fs::metadata(source_path)
                         .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-                    std::fs::set_permissions(destination_path, metadata.permissions())
+                    fs::set_permissions(destination_path, metadata.permissions())
                         .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
                 }
                 return Ok(LinkMethod::Reflink);
             }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                std::fs::remove_file(destination_path).map_err(|err| {
+                fs::remove_file(destination_path).map_err(|err| {
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
                 })?;
             }
@@ -415,10 +418,10 @@ fn hardlink_to_destination(
     destination_path: &Path,
 ) -> Result<LinkMethod, LinkFileError> {
     loop {
-        match std::fs::hard_link(source_path, destination_path) {
+        match fs::hard_link(source_path, destination_path) {
             Ok(_) => return Ok(LinkMethod::Hardlink),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                std::fs::remove_file(destination_path).map_err(|err| {
+                fs::remove_file(destination_path).map_err(|err| {
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
                 })?;
             }
@@ -446,7 +449,7 @@ fn symlink_to_destination(
         match symlink(&linked_path, destination_path) {
             Ok(_) => return Ok(LinkMethod::Softlink),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                std::fs::remove_file(destination_path).map_err(|err| {
+                fs::remove_file(destination_path).map_err(|err| {
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
                 })?;
             }
@@ -468,10 +471,10 @@ fn copy_to_destination(
     destination_path: &Path,
 ) -> Result<LinkMethod, LinkFileError> {
     loop {
-        match std::fs::copy(source_path, destination_path) {
+        match fs::copy(source_path, destination_path) {
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
                 // If the file already exists, remove it and try again.
-                std::fs::remove_file(destination_path).map_err(|err| {
+                fs::remove_file(destination_path).map_err(|err| {
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
                 })?;
             }
@@ -653,21 +656,20 @@ pub fn copy_and_replace_textual_placeholder(
         source_bytes = rest;
     }
 
-    loop {
-        if let Some(index) = memchr::memmem::find(source_bytes, old_prefix) {
-            // Write all bytes up to the old prefix, followed by the new prefix.
-            destination.write_all(&source_bytes[..index])?;
-            destination.write_all(new_prefix)?;
+    let mut last_match = 0;
 
-            // Skip past the old prefix in the source bytes
-            source_bytes = &source_bytes[index + old_prefix.len()..];
-        } else {
-            // The old prefix was not found in the (remaining) source bytes.
-            // Write the rest of the bytes
-            destination.write_all(source_bytes)?;
-            return Ok(());
-        }
+    for index in memchr::memmem::find_iter(source_bytes, old_prefix) {
+        destination.write_all(&source_bytes[last_match..index])?;
+        destination.write_all(new_prefix)?;
+        last_match = index + old_prefix.len();
     }
+
+    // Write remaining bytes
+    if last_match < source_bytes.len() {
+        destination.write_all(&source_bytes[last_match..])?;
+    }
+
+    Ok(())
 }
 
 /// Given the contents of a file, copies it to the `destination` and in the process replace any
@@ -688,8 +690,10 @@ pub fn copy_and_replace_cstring_placeholder(
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
 
+    let finder = memchr::memmem::Finder::new(old_prefix);
+
     loop {
-        if let Some(index) = memchr::memmem::find(source_bytes, old_prefix) {
+        if let Some(index) = finder.find(source_bytes) {
             // write all bytes up to the old prefix, followed by the new prefix.
             destination.write_all(&source_bytes[..index])?;
 
@@ -704,7 +708,7 @@ pub fn copy_and_replace_cstring_placeholder(
             let old_len = old_bytes.len();
 
             // replace all occurrences of the old prefix with the new prefix
-            while let Some(index) = memchr::memmem::find(old_bytes, old_prefix) {
+            while let Some(index) = finder.find(old_bytes) {
                 out.write_all(&old_bytes[..index])?;
                 out.write_all(new_prefix)?;
                 old_bytes = &old_bytes[index + old_prefix.len()..];
@@ -738,9 +742,9 @@ pub fn copy_and_replace_cstring_placeholder(
 
 fn symlink(source_path: &Path, destination_path: &Path) -> std::io::Result<()> {
     #[cfg(windows)]
-    return std::os::windows::fs::symlink_file(source_path, destination_path);
+    return fs_err::os::windows::fs::symlink_file(source_path, destination_path);
     #[cfg(unix)]
-    return std::os::unix::fs::symlink(source_path, destination_path);
+    return fs_err::os::unix::fs::symlink(source_path, destination_path);
 }
 
 #[allow(unused_variables)]
@@ -753,11 +757,11 @@ fn has_executable_permissions(permissions: &Permissions) -> bool {
 
 #[cfg(test)]
 mod test {
+    use super::PYTHON_REGEX;
+    use fs_err as fs;
     use rattler_conda_types::Platform;
     use rstest::rstest;
     use std::io::Cursor;
-
-    use super::PYTHON_REGEX;
 
     #[rstest]
     #[case("Hello, cruel world!", "cruel", "fabulous", "Hello, fabulous world!")]
@@ -910,7 +914,7 @@ mod test {
         for _ in 0..15 {
             target_prefix.push_str("verylongstring/");
         }
-        let input = std::fs::read(test_file).unwrap();
+        let input = fs::read(test_file).unwrap();
         let mut output = Cursor::new(Vec::new());
         super::copy_and_replace_textual_placeholder(
             &input,
