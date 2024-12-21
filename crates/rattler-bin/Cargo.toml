@@ -36,6 +36,8 @@ rattler_virtual_packages = { path="../rattler_virtual_packages", version = "1.1.
 rattler_cache = { path="../rattler_cache", version = "0.3.1", default-features = false }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
+# we enable the asm feature for sha2 to speed up hashing in the binary
+sha2 = { workspace = true, features = ["asm"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
