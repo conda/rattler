@@ -32,6 +32,9 @@ digest.workspace = true
 fs4 = { workspace = true, features = ["fs-err3-tokio", "tokio"] }
 simple_spawn_blocking = { version = "1.0.0", path = "../simple_spawn_blocking", features = ["tokio"] }
 rayon = { workspace = true }
+bitflags = "2.6.0"
+uuid.workspace = true
+tempfile.workspace = true
 
 [dev-dependencies]
 assert_matches.workspace = true

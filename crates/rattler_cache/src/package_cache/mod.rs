@@ -10,6 +10,8 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use fs_err as fs;
+use bitflags::bitflags;
 pub use cache_key::CacheKey;
 pub use cache_lock::CacheLock;
 use cache_lock::CacheRwLock;
@@ -25,6 +27,7 @@ use rattler_package_streaming::{DownloadReporter, ExtractError};
 pub use reporter::CacheReporter;
 use reqwest::StatusCode;
 use simple_spawn_blocking::Cancelled;
+use tempfile::NamedTempFile;
 use tracing::instrument;
 use url::Url;
 
@@ -46,9 +49,19 @@ pub struct PackageCache {
     inner: Arc<PackageCacheInner>,
 }
 
+bitflags! {
+    #[derive(Debug, Clone, Copy)]
+    pub struct FileCapabilities: u32 {
+        const CAN_REFLINK  = 0b0000_0001;
+        const CAN_SYMLINK  = 0b0000_0010;
+        const CAN_HARDLINK = 0b0000_0100;
+    }
+}
+
 #[derive(Default)]
 struct PackageCacheInner {
-    path: PathBuf,
+    disk_caches: Vec<DiskCache>,
+    /// A cache of the packages in this particular cache
     packages: DashMap<BucketKey, Arc<tokio::sync::Mutex<Entry>>>,
 }
 
@@ -99,16 +112,114 @@ impl From<Cancelled> for PackageCacheError {
     }
 }
 
-impl PackageCache {
-    /// Constructs a new [`PackageCache`] located at the specified path.
-    pub fn new(path: impl Into<PathBuf>) -> Self {
+
+fn is_writable<P: AsRef<Path>>(path: P) -> bool {
+    match fs::metadata(&path) {
+        Ok(metadata) => {
+            if !metadata.is_dir() {
+                return false;
+            }
+
+            NamedTempFile::new_in(path).is_ok()
+        }
+        Err(_) => false,
+    }
+}
+
+struct DiskCache {
+    path: PathBuf,
+    is_writable: bool,
+    capability_cache: DashMap<PathBuf, FileCapabilities>,
+}
+
+impl DiskCache {
+    fn has_cache_key(&self, key: &CacheKey) -> bool {
+        self.path.join(key.to_string()).is_dir()
+    }
+
+    fn is_writable(&self) -> bool {
+        self.is_writable
+    }
+
+    // fn test_capabilities(&self, to: &Path) -> FileCapabilities {
+    //     let mut capabilities = FileCapabilities::empty();
+    //     if self.test_reflink(to) {
+    //         capabilities |= FileCapabilities::CAN_REFLINK;
+    //     }
+    //     if self.can_symlink(to) {
+    //         capabilities |= FileCapabilities::CAN_SYMLINK;
+    //     }
+    //     if self.can_hardlink(to) {
+    //         capabilities |= FileCapabilities::CAN_HARDLINK;
+    //     }
+    //     capabilities
+    // }
+
+    // fn can_reflink(&self, to: &Path) -> bool {
+    //     self.capability_cache
+    //         .get(to)
+    //         .map_or(false, |capabilities| capabilities.contains(FileCapabilities::CAN_REFLINK))
+    // }
+}
+
+struct PackageCacheBuilder {
+    disk_caches: Vec<DiskCache>,
+}
+
+impl PackageCacheBuilder {
+    fn new() -> Self {
         Self {
-            inner: Arc::new(PackageCacheInner {
-                path: path.into(),
-                packages: DashMap::default(),
-            }),
+            disk_caches: Vec::new(),
         }
     }
+
+    /// Adds a disk cache to the package cache.
+    /// This function automatically checks if the cache is writable.
+    pub fn add_disk_cache(&mut self, path: impl Into<PathBuf>) -> &mut Self {
+        let path = path.into();
+        let is_writable = is_writable(&path);
+        self.disk_caches.push(DiskCache {
+            path,
+            is_writable,
+            capability_cache: DashMap::default(),
+        });
+        self
+    }
+
+    /// Constructs a new [`PackageCache`] from the builder.
+    /// This function will return an error if no disk caches were added.
+    pub fn build(self) -> Result<PackageCache, PackageCacheError> {
+        if self.disk_caches.is_empty() {
+            return Err(PackageCacheError::LockError(
+                "no disk caches were added".to_string(),
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "no disk caches were added"),
+            ));
+        }
+
+        Ok(PackageCache {
+            inner: Arc::new(PackageCacheInner {
+                disk_caches: self.disk_caches,
+                packages: DashMap::default(),
+            }),
+        })
+    }
+}
+
+impl PackageCache {
+    /// Constructs a new [`PackageCache`] located at the specified path.
+    // pub fn new(path: impl Into<PathBuf>) -> Self {
+    //     let path = path.into();
+    //     let is_writable = is_writable(&path);
+
+    //     Self {
+    //         inner: Arc::new(vec![PackageCacheInner {
+    //             path,
+    //             is_writable,
+    //             capability_cache: DashMap::default(),
+    //             packages: DashMap::default(),
+    //         }]),
+    //     }
+    // }
 
     /// Returns the directory that contains the specified package.
     ///
@@ -132,7 +243,12 @@ impl PackageCache {
         E: std::error::Error + Send + Sync + 'static,
     {
         let cache_key = pkg.into();
-        let cache_path = self.inner.path.join(cache_key.to_string());
+        for dc in self.disk_caches.iter() {
+            if dc.has_cache_key(&cache_key) {
+                return self.get_or_fetch_from_cache(cache_key, fetch, reporter).await;
+            }
+        }
+        // let cache_path = self.inner.path.join(cache_key.to_string());
         let cache_entry = self
             .inner
             .packages
