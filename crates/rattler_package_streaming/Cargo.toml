@@ -49,7 +49,6 @@ rstest = { workspace = true }
 rstest_reuse = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
 criterion = { workspace = true, features = ["html_reports", "async_tokio"] }
-uuid = { version = "*", features = ["v4"] }
 
 [[bench]]
 name = "extract"
