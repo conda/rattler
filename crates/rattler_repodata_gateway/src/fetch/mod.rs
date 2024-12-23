@@ -21,7 +21,7 @@ use std::{
 };
 use tempfile::NamedTempFile;
 use tokio_util::io::StreamReader;
-use tracing::instrument;
+use tracing::{instrument, Level};
 use url::Url;
 
 // use fs-err for better error reporting
@@ -301,7 +301,7 @@ async fn repodata_from_file(
 ///
 /// The checks to see if a `.zst` and/or `.bz2` file exist are performed by doing a HEAD request to
 /// the respective URLs. The result of these are cached.
-#[instrument(err, skip_all, fields(subdir_url, cache_path = % cache_path.display()))]
+#[instrument(err(level = Level::INFO), skip_all, fields(subdir_url, cache_path = % cache_path.display()))]
 pub async fn fetch_repo_data(
     subdir_url: Url,
     client: reqwest_middleware::ClientWithMiddleware,
