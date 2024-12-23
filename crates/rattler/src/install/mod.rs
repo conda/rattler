@@ -754,7 +754,7 @@ pub fn link_package_sync(
                     sha256_in_prefix: None,
                     file_mode: None,
                     prefix_placeholder: None,
-                })
+                });
             }
         }
     }

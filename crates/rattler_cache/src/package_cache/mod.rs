@@ -81,7 +81,7 @@ struct Entry {
     last_sha256: Option<Sha256Hash>,
 }
 
-/// Errors specific to the PackageCache interface
+/// Errors specific to the `PackageCache` interface
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum PackageCacheError {
@@ -95,7 +95,7 @@ pub enum PackageCacheError {
     NoWritableLayers,
 }
 
-/// Errors specific to individual layers in the PackageCache
+/// Errors specific to individual layers in the `PackageCache`
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum PackageCacheLayerError {
@@ -218,7 +218,7 @@ impl PackageCacheLayer {
                 cache_entry.last_sha256 = cache_lock.sha256;
                 Ok(cache_lock)
             }
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e),
         }
     }
 }
@@ -329,7 +329,7 @@ impl PackageCache {
 
         // No matches in all layers, let's write to the first writable layer
         tracing::debug!("no matches in all layers. writing to first writable layer");
-        if let Some(layer) = writable_layers.get(0) {
+        if let Some(layer) = writable_layers.first() {
             return match layer.validate_or_fetch(fetch, &cache_key, reporter).await {
                 Ok(cache_lock) => Ok(cache_lock),
                 Err(e) => Err(e.into()),
