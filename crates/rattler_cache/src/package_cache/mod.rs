@@ -52,7 +52,7 @@ struct PackageCacheInner {
     layers: Vec<PackageCacheLayer>,
 }
 
-struct PackageCacheLayer {
+pub struct PackageCacheLayer {
     path: PathBuf,
     packages: DashMap<BucketKey, Arc<tokio::sync::Mutex<Entry>>>,
 }
@@ -81,20 +81,21 @@ struct Entry {
     last_sha256: Option<Sha256Hash>,
 }
 
+/// Errors specific to the PackageCache interface
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum PackageCacheError {
-    #[error("The operation was cancelled")]
+    #[error("the operation was cancelled")]
     Cancelled,
 
-    #[error("Failed to interact with the package cache layer.")]
+    #[error("failed to interact with the package cache layer.")]
     LayerError(#[source] Box<dyn std::error::Error + Send + Sync>), // Wraps layer-specific errors
 
-    #[error("No writable layers to install package to")]
+    #[error("no writable layers to install package to")]
     NoWritableLayers,
 }
 
-/// Cache-specific error, such as errors when interacting with package layers
+/// Errors specific to individual layers in the PackageCache
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum PackageCacheLayerError {
@@ -107,14 +108,13 @@ pub enum PackageCacheLayerError {
     #[error("{0}")]
     LockError(String, #[source] std::io::Error),
 
-    #[error("The operation was cancelled")]
+    #[error("the operation was cancelled")]
     Cancelled,
 
     #[error(transparent)]
     FetchError(#[from] Arc<dyn std::error::Error + Send + Sync + 'static>),
 
-    // Wrap other errors as needed for more context
-    #[error("Package cache layer error: {0}")]
+    #[error("package cache layer error: {0}")]
     OtherError(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -138,8 +138,8 @@ impl From<PackageCacheLayerError> for PackageCacheError {
 }
 
 impl PackageCacheLayer {
+    /// Determine if the layer is read-only in the filesystem
     pub fn is_readonly(&self) -> bool {
-        // Determine if the layer is read-only
         self.path
             .metadata()
             .map(|m| m.permissions().readonly())
@@ -250,7 +250,12 @@ impl PackageCache {
         }
     }
 
-    fn split_layers(&self) -> (Vec<&PackageCacheLayer>, Vec<&PackageCacheLayer>) {
+    /// Returns a tuple containing two sets of layers:
+    /// - A collection of read-only layers.
+    /// - A collection of writable layers.
+    ///
+    /// The permissions are checked at the time of the function call.
+    pub fn split_layers(&self) -> (Vec<&PackageCacheLayer>, Vec<&PackageCacheLayer>) {
         let readonly_layers = self
             .inner
             .layers

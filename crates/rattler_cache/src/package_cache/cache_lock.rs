@@ -259,7 +259,10 @@ impl CacheRwLock {
         })?;
         let mut buf = [0; SHA256_LEN];
         let _ = file.seek(SeekFrom::Start(REVISION_LEN)).map_err(|e| {
-            PackageCacheLayerError::LockError("failed to seek to sha256 in cache lock".to_string(), e)
+            PackageCacheLayerError::LockError(
+                "failed to seek to sha256 in cache lock".to_string(),
+                e,
+            )
         })?;
         match file.read_exact(&mut buf) {
             Ok(_) => {}
