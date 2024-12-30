@@ -60,6 +60,7 @@ async def test_fetch_repo_data(
 
     repodata = result[0]
     assert isinstance(repodata, SparseRepoData)
+    assert repodata.subdir == str(plat)
 
     package = PackageName(repodata.package_names()[0])
     repodata_record = repodata.load_records(package)[0]
