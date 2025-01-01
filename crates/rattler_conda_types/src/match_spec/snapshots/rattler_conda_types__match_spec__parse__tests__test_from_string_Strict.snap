@@ -1,6 +1,7 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
 expression: evaluated
+snapshot_kind: text
 ---
 blas *.* mkl:
   name: blas
@@ -130,3 +131,5 @@ rust ~=1.2.3:
     base_url: "https://conda.anaconda.org/conda-forge"
     name: conda-forge
   subdir: linux-64
+numpy>=2.*.*:
+  error: "invalid version constraint: regex constraints are not supported"

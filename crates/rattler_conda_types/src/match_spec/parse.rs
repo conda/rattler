@@ -1057,6 +1057,8 @@ mod tests {
             "./relative/channel::package",
             "python[channel=https://conda.anaconda.org/python/conda,version=3.9]",
             "channel/win-64::foobar[channel=conda-forge, subdir=linux-64]",
+            // Issue #1004
+            "numpy>=2.*.*",
         ];
 
         let evaluated: IndexMap<_, _> = specs
@@ -1127,6 +1129,8 @@ mod tests {
             // subdir in brackets take precedence
             "[version=3.9, subdir=linux-64]",
             "==3.9[subdir=linux-64, build_number=\"0\"]",
+            // Issue #1004
+            ">=2.*.*",
         ];
 
         let evaluated: IndexMap<_, _> = specs
