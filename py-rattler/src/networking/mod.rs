@@ -35,7 +35,7 @@ pub fn py_fetch_repo_data<'a>(
     let mut meta_futures = Vec::new();
     let client = client.unwrap_or(PyClientWithMiddleware::new(None));
 
-    for (subdir, chan) in get_subdir_urls(channels, platforms)? {
+    for (subdir, chan, platform) in get_subdir_urls(channels, platforms)? {
         let callback = callback.as_ref().map(|callback| {
             Arc::new(ProgressReporter {
                 callback: callback.to_object(py),
@@ -56,7 +56,8 @@ pub fn py_fetch_repo_data<'a>(
                 )
                 .await?,
                 chan,
-            )) as Result<(CachedRepoData, PyChannel), FetchRepoDataError>
+                String::from(platform.inner.as_str()),
+            )) as Result<(CachedRepoData, PyChannel, String), FetchRepoDataError>
         });
     }
 
@@ -65,9 +66,8 @@ pub fn py_fetch_repo_data<'a>(
         match try_join_all(meta_futures).await {
             Ok(res) => res
                 .into_iter()
-                .map(|(cache, chan)| {
-                    let path = cache_path.to_string_lossy().into_owned();
-                    PySparseRepoData::new(chan, path, cache.repo_data_json_path)
+                .map(|(cache, chan, platform)| {
+                    PySparseRepoData::new(chan, platform, cache.repo_data_json_path)
                 })
                 .collect::<Result<Vec<_>, _>>(),
             Err(e) => Err(PyRattlerError::from(e).into()),
@@ -98,7 +98,7 @@ impl Reporter for ProgressReporter {
 fn get_subdir_urls(
     channels: Vec<PyChannel>,
     platforms: Vec<PyPlatform>,
-) -> PyResult<Vec<(Url, PyChannel)>> {
+) -> PyResult<Vec<(Url, PyChannel, PyPlatform)>> {
     let mut urls = Vec::new();
 
     for c in channels {
@@ -107,6 +107,7 @@ fn get_subdir_urls(
             urls.push((
                 Url::from_str(r.as_str()).map_err(PyRattlerError::from)?,
                 c.clone(),
+                *p,
             ));
         }
     }
