@@ -67,7 +67,7 @@ pub enum ParseConstraintError {
     InvalidOperator(String),
     #[error(transparent)]
     InvalidVersion(#[from] ParseVersionError),
-    #[error("ambiguous. Do you mean =={0} or {0}.*?")]
+    #[error("missing range specifier for '{0}'. Did you mean '=={0}' or '{0}.*'?")]
     AmbiguousVersion(String),
     /// Expected a version
     #[error("expected a version")]
