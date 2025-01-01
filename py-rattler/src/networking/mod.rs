@@ -107,7 +107,7 @@ fn get_subdir_urls(
             urls.push((
                 Url::from_str(r.as_str()).map_err(PyRattlerError::from)?,
                 c.clone(),
-                p.clone(),
+                *p,
             ));
         }
     }
