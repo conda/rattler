@@ -29,7 +29,7 @@ pub use repo_data::RepoData;
 use reqwest_middleware::ClientWithMiddleware;
 use subdir::Subdir;
 use tokio::sync::broadcast;
-use tracing::instrument;
+use tracing::{instrument, Level};
 use url::Url;
 
 use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
@@ -176,7 +176,7 @@ impl GatewayInner {
     /// coalesced, and they will all receive the same subdir. If an error
     /// occurs while creating the subdir all waiting tasks will also return an
     /// error.
-    #[instrument(skip(self, reporter, channel), fields(channel = %channel.base_url), err)]
+    #[instrument(skip(self, reporter, channel), fields(channel = %channel.base_url), err(level = Level::INFO))]
     async fn get_or_create_subdir(
         &self,
         channel: &Channel,
