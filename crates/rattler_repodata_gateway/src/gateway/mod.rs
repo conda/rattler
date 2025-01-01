@@ -411,7 +411,8 @@ mod test {
             .query(
                 vec![index],
                 vec![Platform::Linux64],
-                vec![MatchSpec::from_str("openssl 3.3.1 h2466b09_1", Strict).unwrap()].into_iter(),
+                vec![MatchSpec::from_str("openssl ==3.3.1 h2466b09_1", Strict).unwrap()]
+                    .into_iter(),
             )
             .recursive(true)
             .await
@@ -454,7 +455,7 @@ mod test {
                 vec![index.clone()],
                 vec![Platform::Linux64],
                 vec![
-                    MatchSpec::from_str("mamba 0.9.2 py39h951de11_0", Strict).unwrap(),
+                    MatchSpec::from_str("mamba ==0.9.2 py39h951de11_0", Strict).unwrap(),
                     MatchSpec::from_str(openssl_url, Strict).unwrap(),
                 ]
                 .into_iter(),
@@ -491,7 +492,7 @@ mod test {
             .query(
                 vec![index.clone()],
                 vec![Platform::Linux64],
-                vec![MatchSpec::from_str("mamba 0.9.2 py39h951de11_0", Strict).unwrap()]
+                vec![MatchSpec::from_str("mamba ==0.9.2 py39h951de11_0", Strict).unwrap()]
                     .into_iter(),
             )
             .recursive(true)
