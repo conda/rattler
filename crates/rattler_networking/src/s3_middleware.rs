@@ -18,23 +18,21 @@ impl S3Middleware {
         profile: Option<&str>,
         force_path_style: Option<bool>,
     ) -> Self {
-        let mut builder = aws_runtime::env_config::file::EnvConfigFiles::builder();
+        let mut aws_config_builder = aws_config::defaults(BehaviorVersion::latest());
         if let Some(config_file) = config_file {
+            let mut builder = aws_runtime::env_config::file::EnvConfigFiles::builder();
             builder = builder.with_file(
                 aws_runtime::env_config::file::EnvConfigFileKind::Config,
                 config_file,
-            )
+            );
+            let env_config_files = builder.build();
+            aws_config_builder = aws_config_builder.profile_files(env_config_files);
         }
-        let env_config_files = builder.build();
 
-        let mut builder = aws_config::defaults(BehaviorVersion::latest());
-        if config_file.is_some() {
-            builder = builder.profile_files(env_config_files)
-        };
         if let Some(profile) = profile {
-            builder = builder.profile_name(profile)
+            aws_config_builder = aws_config_builder.profile_name(profile)
         };
-        let sdk_config = builder.load().await;
+        let sdk_config = aws_config_builder.load().await;
 
         let mut builder = aws_sdk_s3::config::Builder::from(&sdk_config);
         if let Some(force_path_style) = force_path_style {
@@ -47,7 +45,7 @@ impl S3Middleware {
     }
 
     /// Generate a presigned S3 GetObject request
-    async fn generate_presigned_s3_request(
+    pub async fn generate_presigned_s3_request(
         &self,
         bucket_name: &str,
         key: &str,
@@ -83,29 +81,213 @@ impl Middleware for S3Middleware {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
+    use rstest::{fixture, rstest};
+    use serial_test::serial;
+    use tempfile::{tempdir, TempDir};
+
+    async fn with_env(
+        env: HashMap<&str, &str>,
+        f: impl FnOnce() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>,
+    ) {
+        for (key, value) in &env {
+            std::env::set_var(key, value);
+        }
+        f().await;
+        for (key, _) in env {
+            std::env::remove_var(key);
+        }
+    }
 
     #[tokio::test]
+    #[serial]
     async fn test_presigned_s3_request() {
-        if std::env::var("AWS_ACCESS_KEY_ID").is_err() {
-            eprintln!("Skipping test as AWS_ACCESS_KEY_ID is not set");
-            return;
-        };
-        eprintln!("Running test");
+        with_env(
+            HashMap::from([
+                ("AWS_ACCESS_KEY_ID", "minioadmin"),
+                ("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+                ("AWS_REGION", "eu-central-1"),
+                ("AWS_ENDPOINT_URL", "http://localhost:9000"),
+            ]),
+            move || {
+                Box::pin(async {
+                    let middleware = S3Middleware::new(None, None, Some(true)).await;
 
-        let middleware = S3Middleware::new(None, None, None).await;
+                    let presigned = middleware
+                        .generate_presigned_s3_request(
+                            "rattler-s3-testing",
+                            "my-channel/noarch/repodata.json",
+                        )
+                        .await
+                        .unwrap();
+                    assert!(
+                        presigned.uri().to_string().starts_with(
+                            "http://localhost:9000/rattler-s3-testing/my-channel/noarch/repodata.json?"
+                        ),
+                        "Unexpected presigned URL: {:?}",
+                        presigned.uri()
+                    );
+                })
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_presigned_s3_request_aws() {
+        with_env(
+            HashMap::from([
+                ("AWS_ACCESS_KEY_ID", "minioadmin"),
+                ("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+                ("AWS_REGION", "eu-central-1"),
+            ]),
+            move || {
+                Box::pin(async {
+                    let middleware = S3Middleware::new(None, None, None).await;
+
+                    let presigned = middleware
+                        .generate_presigned_s3_request(
+                            "rattler-s3-testing",
+                            "my-channel/noarch/repodata.json",
+                        )
+                        .await
+                        .unwrap();
+                    assert!(
+                        presigned.uri().to_string().starts_with(
+                            "https://rattler-s3-testing.s3.eu-central-1.amazonaws.com/my-channel/noarch/repodata.json?"
+                        ),
+                        "Unexpected presigned URL: {:?}",
+                        presigned.uri()
+                    );
+                })
+            },
+        )
+        .await;
+    }
+
+    #[fixture]
+    fn aws_config() -> (TempDir, std::path::PathBuf) {
+        let temp_dir = tempdir().unwrap();
+        let aws_config = r#"
+[profile default]
+aws_access_key_id = minioadmin
+aws_secret_access_key = minioadmin
+region = eu-central-1
+
+[profile packages]
+aws_access_key_id = minioadmin
+aws_secret_access_key = minioadmin
+endpoint_url = http://localhost:8000
+region = eu-central-1
+"#;
+        let aws_config_path = temp_dir.path().join("aws.config");
+        std::fs::write(&aws_config_path, aws_config).unwrap();
+        (temp_dir, aws_config_path)
+    }
+
+    #[rstest]
+    #[tokio::test]
+    #[serial]
+    async fn test_presigned_s3_request_custom_config(aws_config: (TempDir, std::path::PathBuf)) {
+        let middleware = S3Middleware::new(Some(aws_config.1.to_str().unwrap()), None, None).await;
 
         let presigned = middleware
-            .generate_presigned_s3_request("rattler-s3-testing", "input.txt")
+            .generate_presigned_s3_request("rattler-s3-testing", "my-channel/noarch/repodata.json")
             .await
             .unwrap();
         assert!(
-            presigned
-                .uri()
-                .to_string()
-                .starts_with("https://rattler-s3-testing.s3.eu-central-1.amazonaws.com/input.txt?"),
+            presigned.uri().to_string().starts_with(
+                "https://rattler-s3-testing.s3.eu-central-1.amazonaws.com/my-channel/noarch/repodata.json?"
+            ),
             "Unexpected presigned URL: {:?}",
             presigned.uri()
         );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    #[serial]
+    async fn test_presigned_s3_request_different_profile(
+        aws_config: (TempDir, std::path::PathBuf),
+    ) {
+        let middleware =
+            S3Middleware::new(Some(aws_config.1.to_str().unwrap()), Some("packages"), None).await;
+
+        let presigned = middleware
+            .generate_presigned_s3_request("rattler-s3-testing", "my-channel/noarch/repodata.json")
+            .await
+            .unwrap();
+        assert!(
+            presigned.uri().to_string().contains("localhost:8000"),
+            "Unexpected presigned URL: {:?}",
+            presigned.uri()
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    #[serial]
+    async fn test_presigned_s3_request_custom_config_from_env(
+        aws_config: (TempDir, std::path::PathBuf),
+    ) {
+        with_env(
+            HashMap::from([
+                ("AWS_CONFIG_FILE", aws_config.1.to_str().unwrap()),
+                ("AWS_PROFILE", "packages"),
+            ]),
+            move || {
+                Box::pin(async move {
+                    let middleware = S3Middleware::new(None, None, None).await;
+
+                    let presigned = middleware
+                        .generate_presigned_s3_request(
+                            "rattler-s3-testing",
+                            "my-channel/noarch/repodata.json",
+                        )
+                        .await
+                        .unwrap();
+                    assert!(
+                        presigned.uri().to_string().contains("localhost:8000"),
+                        "Unexpected presigned URL: {:?}",
+                        presigned.uri()
+                    );
+                })
+            },
+        )
+        .await;
+    }
+
+    /// Test that environment variables take precedence over the configuration file.
+    #[rstest]
+    #[tokio::test]
+    #[serial]
+    async fn test_presigned_s3_request_env_precedence(aws_config: (TempDir, std::path::PathBuf)) {
+        with_env(
+            HashMap::from([("AWS_ENDPOINT_URL", "http://localhost:9000")]),
+            move || {
+                let aws_config_path = aws_config.1.to_str().unwrap().to_string();
+                Box::pin(async move {
+                    let middleware =
+                        S3Middleware::new(Some(&aws_config_path), "default".into(), None).await;
+
+                    let presigned = middleware
+                        .generate_presigned_s3_request(
+                            "rattler-s3-testing",
+                            "my-channel/noarch/repodata.json",
+                        )
+                        .await
+                        .unwrap();
+                    assert!(
+                        presigned.uri().to_string().contains("localhost:9000"),
+                        "Unexpected presigned URL: {:?}",
+                        presigned.uri()
+                    );
+                })
+            },
+        )
+        .await;
     }
 }

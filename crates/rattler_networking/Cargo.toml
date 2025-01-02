@@ -11,7 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ["native-tls"]
+default = ["native-tls", "s3"]
 native-tls = ["reqwest/native-tls", "google-cloud-auth?/default-tls"]
 rustls-tls = ["reqwest/rustls-tls", "google-cloud-auth?/rustls-tls"]
 gcs = ["google-cloud-auth", "google-cloud-token"]
@@ -31,7 +31,13 @@ aws-sdk-s3 = { workspace = true, optional = true }
 aws-runtime = { workspace = true, optional = true }
 http = { workspace = true }
 itertools = { workspace = true }
-keyring = { workspace = true, features = ["apple-native", "windows-native", "async-secret-service", "async-io", "crypto-rust"] }
+keyring = { workspace = true, features = [
+    "apple-native",
+    "windows-native",
+    "async-secret-service",
+    "async-io",
+    "crypto-rust",
+] }
 netrc-rs = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = { workspace = true }
@@ -54,3 +60,6 @@ axum = { workspace = true }
 reqwest-retry = { workspace = true }
 sha2 = { workspace = true }
 temp-env = { workspace = true }
+rstest = { workspace = true }
+rand = { workspace = true }
+serial_test = { workspace = true }
