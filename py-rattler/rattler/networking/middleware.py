@@ -114,6 +114,7 @@ class GCSMiddleware:
     GCSMiddleware()
     >>> Client([middleware])
     Client()
+    >>>
     ```
     """
 
@@ -137,6 +138,7 @@ class S3Middleware:
     S3Middleware()
     >>> Client([middleware])
     Client()
+    >>>
     ```
     """
 
