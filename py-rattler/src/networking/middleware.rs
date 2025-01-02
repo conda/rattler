@@ -1,9 +1,9 @@
 use pyo3::{pyclass, pymethods, FromPyObject, PyResult};
 use rattler_networking::{
     mirror_middleware::Mirror, AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware,
-    MirrorMiddleware, OciMiddleware,
+    MirrorMiddleware, OciMiddleware, S3Middleware,
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 use url::Url;
 
 use crate::error::PyRattlerError;
@@ -14,6 +14,7 @@ pub enum PyMiddleware {
     Authentication(PyAuthenticationMiddleware),
     Oci(PyOciMiddleware),
     Gcs(PyGCSMiddleware),
+    S3(PyS3Middleware),
 }
 
 #[pyclass]
@@ -111,5 +112,39 @@ impl PyGCSMiddleware {
 impl From<PyGCSMiddleware> for GCSMiddleware {
     fn from(_value: PyGCSMiddleware) -> Self {
         GCSMiddleware
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyS3Middleware {
+    pub(crate) config_file: Option<PathBuf>,
+    pub(crate) profile: Option<String>,
+    pub(crate) force_path_style: Option<bool>,
+}
+
+#[pymethods]
+impl PyS3Middleware {
+    #[new]
+    pub fn __init__(
+        config_file: Option<PathBuf>,
+        profile: Option<String>,
+        force_path_style: Option<bool>,
+    ) -> Self {
+        Self {
+            config_file,
+            profile,
+            force_path_style,
+        }
+    }
+}
+
+impl From<PyS3Middleware> for S3Middleware {
+    fn from(_value: PyS3Middleware) -> Self {
+        S3Middleware::new(
+            _value.config_file.into(),
+            _value.profile.into(),
+            _value.force_path_style.into(),
+        )
     }
 }

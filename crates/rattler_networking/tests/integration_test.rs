@@ -114,7 +114,7 @@ async fn test_minio_download_repodata(
     minio_server: MinioServer,
     aws_config: (TempDir, std::path::PathBuf),
 ) {
-    let middleware = S3Middleware::new(Some(&aws_config.1), "default".into(), Some(true)).await;
+    let middleware = S3Middleware::new(Some(aws_config.1), Some("default".into()), Some(true));
 
     let download_client = Client::builder()
         .no_gzip()

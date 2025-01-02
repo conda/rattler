@@ -1,5 +1,12 @@
 from __future__ import annotations
-from rattler.rattler import PyMirrorMiddleware, PyAuthenticationMiddleware, PyOciMiddleware, PyGCSMiddleware
+
+from rattler.rattler import (
+    PyAuthenticationMiddleware,
+    PyGCSMiddleware,
+    PyMirrorMiddleware,
+    PyOciMiddleware,
+    PyS3Middleware,
+)
 
 
 class MirrorMiddleware:
@@ -107,10 +114,34 @@ class GCSMiddleware:
     GCSMiddleware()
     >>> Client([middleware])
     Client()
+    ```
     """
 
     def __init__(self) -> None:
         self._middleware = PyGCSMiddleware()
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}()"
+
+
+class S3Middleware:
+    """
+    Middleware to work with s3:// URLs
+
+    Examples
+    --------
+    ```python
+    >>> from rattler.networking import Client
+    >>> middleware = S3Middleware()
+    >>> middleware
+    S3Middleware()
+    >>> Client([middleware])
+    Client()
+    ```
+    """
+
+    def __init__(self) -> None:
+        self._middleware = PyS3Middleware()
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"

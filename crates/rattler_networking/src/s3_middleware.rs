@@ -10,42 +10,54 @@ use url::Url;
 
 /// S3 middleware to authenticate requests.
 pub struct S3Middleware {
-    client: aws_sdk_s3::Client,
+    config_file: Option<PathBuf>,
+    profile: Option<String>,
+    force_path_style: Option<bool>,
     expiration: std::time::Duration,
+}
+
+async fn create_client(
+    config_file: Option<PathBuf>,
+    profile: Option<String>,
+    force_path_style: Option<bool>,
+) -> aws_sdk_s3::Client {
+    let mut aws_config_builder = aws_config::defaults(BehaviorVersion::latest());
+    if let Some(config_file) = config_file {
+        let mut builder = aws_runtime::env_config::file::EnvConfigFiles::builder();
+        builder = builder.with_file(
+            aws_runtime::env_config::file::EnvConfigFileKind::Config,
+            config_file,
+        );
+        let env_config_files = builder.build();
+        aws_config_builder = aws_config_builder.profile_files(env_config_files);
+    }
+
+    if let Some(profile) = profile {
+        aws_config_builder = aws_config_builder.profile_name(profile);
+    };
+    let sdk_config = aws_config_builder.load().await;
+
+    let mut builder = aws_sdk_s3::config::Builder::from(&sdk_config);
+    if let Some(force_path_style) = force_path_style {
+        builder = builder.force_path_style(force_path_style);
+    };
+    let s3_config = builder.build();
+
+    let client: aws_sdk_s3::Client = aws_sdk_s3::Client::from_conf(s3_config);
+    client
 }
 
 impl S3Middleware {
     /// Create a new S3 middleware.
-    pub async fn new(
-        config_file: Option<&PathBuf>,
-        profile: Option<&str>,
+    pub fn new(
+        config_file: Option<PathBuf>,
+        profile: Option<String>,
         force_path_style: Option<bool>,
     ) -> Self {
-        let mut aws_config_builder = aws_config::defaults(BehaviorVersion::latest());
-        if let Some(config_file) = config_file {
-            let mut builder = aws_runtime::env_config::file::EnvConfigFiles::builder();
-            builder = builder.with_file(
-                aws_runtime::env_config::file::EnvConfigFileKind::Config,
-                config_file,
-            );
-            let env_config_files = builder.build();
-            aws_config_builder = aws_config_builder.profile_files(env_config_files);
-        }
-
-        if let Some(profile) = profile {
-            aws_config_builder = aws_config_builder.profile_name(profile);
-        };
-        let sdk_config = aws_config_builder.load().await;
-
-        let mut builder = aws_sdk_s3::config::Builder::from(&sdk_config);
-        if let Some(force_path_style) = force_path_style {
-            builder = builder.force_path_style(force_path_style);
-        };
-        let s3_config = builder.build();
-
-        let client: aws_sdk_s3::Client = aws_sdk_s3::Client::from_conf(s3_config);
         Self {
-            client,
+            config_file,
+            profile,
+            force_path_style,
             expiration: std::time::Duration::from_secs(300),
         }
     }
@@ -56,7 +68,13 @@ impl S3Middleware {
         bucket_name: &str,
         key: &str,
     ) -> MiddlewareResult<PresignedRequest> {
-        let builder = self.client.get_object().bucket(bucket_name).key(key);
+        let client = create_client(
+            self.config_file.clone(),
+            self.profile.clone(),
+            self.force_path_style,
+        )
+        .await;
+        let builder = client.get_object().bucket(bucket_name).key(key);
         builder
             .presigned(
                 PresigningConfig::expires_in(self.expiration)
@@ -123,7 +141,7 @@ mod tests {
             ]),
             move || {
                 Box::pin(async {
-                    let middleware = S3Middleware::new(None, None, Some(true)).await;
+                    let middleware = S3Middleware::new(None, None, Some(true));
 
                     let presigned = middleware
                         .generate_presigned_s3_request(
@@ -156,7 +174,7 @@ mod tests {
             ]),
             move || {
                 Box::pin(async {
-                    let middleware = S3Middleware::new(None, None, None).await;
+                    let middleware = S3Middleware::new(None, None, None);
 
                     let presigned = middleware
                         .generate_presigned_s3_request(
@@ -202,7 +220,7 @@ region = eu-central-1
     #[tokio::test]
     #[serial]
     async fn test_presigned_s3_request_custom_config(aws_config: (TempDir, std::path::PathBuf)) {
-        let middleware = S3Middleware::new(Some(&aws_config.1), None, None).await;
+        let middleware = S3Middleware::new(Some(aws_config.1), None, None);
 
         let presigned = middleware
             .generate_presigned_s3_request("rattler-s3-testing", "my-channel/noarch/repodata.json")
@@ -223,7 +241,7 @@ region = eu-central-1
     async fn test_presigned_s3_request_different_profile(
         aws_config: (TempDir, std::path::PathBuf),
     ) {
-        let middleware = S3Middleware::new(Some(&aws_config.1), Some("packages"), None).await;
+        let middleware = S3Middleware::new(Some(aws_config.1), Some("packages".into()), None);
 
         let presigned = middleware
             .generate_presigned_s3_request("rattler-s3-testing", "my-channel/noarch/repodata.json")
@@ -249,7 +267,7 @@ region = eu-central-1
             ]),
             move || {
                 Box::pin(async move {
-                    let middleware = S3Middleware::new(None, None, None).await;
+                    let middleware = S3Middleware::new(None, None, None);
 
                     let presigned = middleware
                         .generate_presigned_s3_request(
@@ -280,7 +298,7 @@ region = eu-central-1
                 let aws_config_path = aws_config.1;
                 Box::pin(async move {
                     let middleware =
-                        S3Middleware::new(Some(&aws_config_path), "default".into(), None).await;
+                        S3Middleware::new(Some(aws_config_path), Some("default".into()), None);
 
                     let presigned = middleware
                         .generate_presigned_s3_request(
