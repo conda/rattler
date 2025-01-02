@@ -153,6 +153,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
             authentication_storage,
         )))
         .with(rattler_networking::OciMiddleware)
+        .with(rattler_networking::S3Middleware::new(None, None, None).await)
         .with(rattler_networking::GCSMiddleware)
         .build();
 

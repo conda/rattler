@@ -72,6 +72,9 @@ getrandom = { version = "0.2.15", default-features = false }
 glob = "0.3.1"
 google-cloud-auth = { version = "0.17.2", default-features = false }
 google-cloud-token = "0.1.2"
+aws-config = "1.5.12"
+aws-sdk-s3 = "1.67.0"
+aws-runtime = "1.5.2"
 hex = "0.4.3"
 hex-literal = "0.4.1"
 http = "1.2"
