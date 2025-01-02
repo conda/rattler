@@ -110,8 +110,7 @@ region = eu-central-1
 #[tokio::test]
 #[serial]
 async fn test_minio_download_repodata(
-    #[allow(unused_variables)]
-    minio_server: MinioServer,
+    #[allow(unused_variables)] minio_server: MinioServer,
     aws_config: (TempDir, std::path::PathBuf),
 ) {
     let middleware = S3Middleware::new(Some(aws_config.1), Some("default".into()), Some(true));
