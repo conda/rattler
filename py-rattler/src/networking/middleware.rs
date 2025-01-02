@@ -142,10 +142,6 @@ impl PyS3Middleware {
 
 impl From<PyS3Middleware> for S3Middleware {
     fn from(_value: PyS3Middleware) -> Self {
-        S3Middleware::new(
-            _value.config_file,
-            _value.profile,
-            _value.force_path_style,
-        )
+        S3Middleware::new(_value.config_file, _value.profile, _value.force_path_style)
     }
 }
