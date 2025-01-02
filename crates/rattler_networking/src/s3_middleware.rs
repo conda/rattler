@@ -8,15 +8,22 @@ use url::Url;
 
 /// S3 middleware to authenticate requests
 pub struct S3Middleware {
-    client: aws_sdk_s3::Client
+    client: aws_sdk_s3::Client,
 }
 
 impl S3Middleware {
     /// Create a new S3 middleware
-    pub async fn new(config_file: Option<&str>, profile: Option<&str>, force_path_style: Option<bool>) -> Self {
+    pub async fn new(
+        config_file: Option<&str>,
+        profile: Option<&str>,
+        force_path_style: Option<bool>,
+    ) -> Self {
         let mut builder = aws_runtime::env_config::file::EnvConfigFiles::builder();
         if let Some(config_file) = config_file {
-            builder = builder.with_file(aws_runtime::env_config::file::EnvConfigFileKind::Config, config_file)
+            builder = builder.with_file(
+                aws_runtime::env_config::file::EnvConfigFileKind::Config,
+                config_file,
+            )
         }
         let env_config_files = builder.build();
 
@@ -28,7 +35,7 @@ impl S3Middleware {
             builder = builder.profile_name(profile)
         };
         let sdk_config = builder.load().await;
-        
+
         let mut builder = aws_sdk_s3::config::Builder::from(&sdk_config);
         if let Some(force_path_style) = force_path_style {
             builder = builder.force_path_style(force_path_style)
@@ -36,18 +43,22 @@ impl S3Middleware {
         let s3_config = builder.build();
 
         let client: aws_sdk_s3::Client = aws_sdk_s3::Client::from_conf(s3_config);
-        Self {
-            client
-        }
+        Self { client }
     }
 
     /// Generate a presigned S3 GetObject request
-    async fn generate_presigned_s3_request(&self, bucket_name: &str, key: &str) -> MiddlewareResult<PresignedRequest> {
+    async fn generate_presigned_s3_request(
+        &self,
+        bucket_name: &str,
+        key: &str,
+    ) -> MiddlewareResult<PresignedRequest> {
         let builder = self.client.get_object().bucket(bucket_name).key(key);
-        Ok(builder.presigned(PresigningConfig::expires_in(std::time::Duration::from_secs(300)).unwrap()).await.unwrap())
+        Ok(builder
+            .presigned(PresigningConfig::expires_in(std::time::Duration::from_secs(300)).unwrap())
+            .await
+            .unwrap())
     }
 }
-
 
 #[async_trait]
 impl Middleware for S3Middleware {
@@ -84,8 +95,17 @@ mod tests {
 
         let middleware = S3Middleware::new(None, None, None).await;
 
-        let presigned = middleware.generate_presigned_s3_request("rattler-s3-testing", "input.txt").await.unwrap();
-        assert!(presigned.uri().to_string().starts_with("https://rattler-s3-testing.s3.eu-central-1.amazonaws.com/input.txt?"), "Unexpected presigned URL: {:?}", presigned.uri());
-        panic!("{:?}", presigned.uri());
+        let presigned = middleware
+            .generate_presigned_s3_request("rattler-s3-testing", "input.txt")
+            .await
+            .unwrap();
+        assert!(
+            presigned
+                .uri()
+                .to_string()
+                .starts_with("https://rattler-s3-testing.s3.eu-central-1.amazonaws.com/input.txt?"),
+            "Unexpected presigned URL: {:?}",
+            presigned.uri()
+        );
     }
 }
