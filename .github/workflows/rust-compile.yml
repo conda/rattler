@@ -59,65 +59,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: "Linux-x86_64", target: x86_64-unknown-linux-musl, os: ubuntu-22.04 }
-          - {
-              name: "Linux-aarch64",
-              target: aarch64-unknown-linux-musl,
-              os: ubuntu-latest,
-              skip-tests: true,
-            }
-          - {
-              name: "Linux-arm",
-              target: arm-unknown-linux-musleabi,
-              os: ubuntu-latest,
-              use-cross: true,
-              skip-tests: true,
-            }
-
+          - { name: "Linux-x86_64",      target: x86_64-unknown-linux-musl,        os: ubuntu-22.04 }
+          - { name: "Linux-aarch64",     target: aarch64-unknown-linux-musl,       os: ubuntu-latest, skip-tests: true }
+          - { name: "Linux-arm",         target: arm-unknown-linux-musleabi,       os: ubuntu-latest, use-cross: true, skip-tests: true }
           # - { name: "Linux-mips",        target: mips-unknown-linux-musl,          os: ubuntu-latest, use-cross: true, skip-tests: true }
           # - { name: "Linux-mipsel",      target: mipsel-unknown-linux-musl,        os: ubuntu-latest, use-cross: true, skip-tests: true }
           # - { name: "Linux-mips64",      target: mips64-unknown-linux-muslabi64,   os: ubuntu-latest, use-cross: true, skip-tests: true }
           # - { name: "Linux-mips64el",    target: mips64el-unknown-linux-muslabi64, os: ubuntu-latest, use-cross: true, skip-tests: true }
 
-          #          - { name: "Linux-powerpc",     target: powerpc-unknown-linux-gnu,        os: ubuntu-latest, use-cross: true, skip-tests: true }
-          - {
-              name: "Linux-powerpc64",
-              target: powerpc64-unknown-linux-gnu,
-              os: ubuntu-latest,
-              use-cross: true,
-              skip-tests: true,
-            }
-          - {
-              name: "Linux-powerpc64le",
-              target: powerpc64le-unknown-linux-gnu,
-              os: ubuntu-latest,
-              use-cross: true,
-              skip-tests: true,
-            }
+          # - { name: "Linux-powerpc",     target: powerpc-unknown-linux-gnu,        os: ubuntu-latest, use-cross: true, skip-tests: true }
+          - { name: "Linux-powerpc64",   target: powerpc64-unknown-linux-gnu,      os: ubuntu-latest, use-cross: true, skip-tests: true }
+          - { name: "Linux-powerpc64le", target: powerpc64le-unknown-linux-gnu,    os: ubuntu-latest, use-cross: true, skip-tests: true }
 
-          - {
-              name: "Linux-s390x",
-              target: s390x-unknown-linux-gnu,
-              os: ubuntu-latest,
-              use-cross: true,
-              skip-tests: true,
-            }
+          - { name: "Linux-s390x",       target: s390x-unknown-linux-gnu,          os: ubuntu-latest, use-cross: true, skip-tests: true }
 
-          - { name: "macOS-x86_64", target: x86_64-apple-darwin, os: macOS-latest }
-          - {
-              name: "macOS-aarch64",
-              target: aarch64-apple-darwin,
-              os: macOS-latest,
-              skip-tests: true,
-            }
+          - { name: "macOS-x86_64",      target: x86_64-apple-darwin,              os: macOS-latest }
+          - { name: "macOS-aarch64",     target: aarch64-apple-darwin,             os: macOS-latest,                  skip-tests: true }
 
-          - { name: "Windows-x86_64", target: x86_64-pc-windows-msvc, os: windows-latest }
-          - {
-              name: "Windows-aarch64",
-              target: aarch64-pc-windows-msvc,
-              os: windows-latest,
-              skip-tests: true,
-            }
+          - { name: "Windows-x86_64",    target: x86_64-pc-windows-msvc,           os: windows-latest }
+          - { name: "Windows-aarch64",   target: aarch64-pc-windows-msvc,          os: windows-latest,                  skip-tests: true }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -154,17 +114,17 @@ jobs:
 
       - name: Use rustls on musl targets.
         id: build-options
-        if:
-          contains(matrix.target, '-musl') || startsWith(matrix.target, 'powerpc') ||
-          startsWith(matrix.target, 's390x')
+        if: contains(matrix.target, '-musl') || startsWith(matrix.target, 'powerpc') || startsWith(matrix.target, 's390x')
         run: |
           echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls-tls" >> $GITHUB_OUTPUT
 
       - name: Build
         run: >
-          cargo build  --all-targets
-          --features ${{ env.DEFAULT_FEATURES }} --target ${{ matrix.target }} ${{
-          steps.build-options.outputs.CARGO_BUILD_OPTIONS}}
+          cargo build
+          --all-targets
+          --features ${{ env.DEFAULT_FEATURES }}
+          --target ${{ matrix.target }}
+          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
 
       - name: Disable testing the tools crate if cross compiling
         id: test-options
@@ -183,9 +143,12 @@ jobs:
         env:
           GOOGLE_CLOUD_TEST_KEY_JSON: ${{ secrets.GOOGLE_CLOUD_TEST_KEY_JSON }}
         run: >
-          cargo nextest run --workspace  --features ${{ env.DEFAULT_FEATURES }}  --target ${{
-          matrix.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}  ${{
-          steps.test-options.outputs.CARGO_TEST_OPTIONS}}
+          cargo nextest run
+          --workspace
+          --features ${{ env.DEFAULT_FEATURES }}
+          --target ${{ matrix.target }}
+          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
+          ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}
 
       - name: Run doctests
         if: ${{ !matrix.skip-tests }}
