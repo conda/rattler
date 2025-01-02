@@ -1,8 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use rattler_networking::S3Middleware;
+use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage, S3Middleware};
+use reqwest::Client;
 use rstest::*;
 use serial_test::serial;
+use tempfile::{tempdir, TempDir};
+
+/* ----------------------------------- MINIO UTILS ---------------------------------- */
 
 struct MinioServer {
     handle: std::process::Child,
@@ -31,6 +35,13 @@ impl MinioServer {
     }
 }
 
+impl Drop for MinioServer {
+    fn drop(&mut self) {
+        eprintln!("Shutting down Minio server (PID={})", self.handle.id());
+        self.handle.kill().expect("Failed to kill Minio server");
+    }
+}
+
 fn run_subprocess(cmd: &str, args: &[&str], env: &HashMap<&str, &str>) -> std::process::Output {
     let mut command = std::process::Command::new(cmd);
     command.args(args);
@@ -54,7 +65,9 @@ fn init_channel() {
         "mc",
         &[
             "cp",
-            "../../test-data/test-server/repo/noarch/repodata.json",
+            PathBuf::from("../../test-data/test-server/repo/noarch/repodata.json")
+                .to_str()
+                .unwrap(),
             "local/rattler-s3-testing/my-channel/noarch/repodata.json",
         ],
         env,
@@ -63,7 +76,9 @@ fn init_channel() {
         "mc",
         &[
             "cp",
-            "../../test-data/test-server/repo/noarch/test-package-0.1-0.tar.bz2",
+            PathBuf::from("../../test-data/test-server/repo/noarch/test-package-0.1-0.tar.bz2")
+                .to_str()
+                .unwrap(),
             "local/rattler-s3-testing/my-channel/noarch/test-package-0.1-0.tar.bz2",
         ],
         env,
@@ -77,16 +92,50 @@ fn minio_server() -> MinioServer {
     server
 }
 
+#[fixture]
+fn aws_config() -> (TempDir, std::path::PathBuf) {
+    let temp_dir = tempdir().unwrap();
+    let aws_config = r#"
+[profile default]
+aws_access_key_id = minioadmin
+aws_secret_access_key = minioadmin
+endpoint_url = http://localhost:9000
+region = eu-central-1
+"#;
+    let aws_config_path = temp_dir.path().join("aws.config");
+    std::fs::write(&aws_config_path, aws_config).unwrap();
+    (temp_dir, aws_config_path)
+}
+
 #[rstest]
 #[tokio::test]
 #[serial]
-async fn test_presigned_s3_request() {
-    std::env::set_var("AWS_ACCESS_KEY_ID", "minioadmin");
-    std::env::set_var("AWS_SECRET_ACCESS_KEY", "minioadmin");
-    std::env::set_var("AWS_REGION", "eu-central-1");
-    std::env::set_var("AWS_ENDPOINT_URL", "http://localhost:9000");
+async fn test_minio_download_repodata(
+    minio_server: MinioServer,
+    aws_config: (TempDir, std::path::PathBuf),
+) {
+    let middleware = S3Middleware::new(Some(&aws_config.1), "default".into(), Some(true)).await;
 
-    let middleware = S3Middleware::new(None, None, Some(true)).await;
+    let download_client = Client::builder()
+        .no_gzip()
+        .build()
+        .expect("failed to create client");
 
-    // TODO: Do install or search
+    let authentication_storage = AuthenticationStorage::default();
+    let download_client = reqwest_middleware::ClientBuilder::new(download_client)
+        .with_arc(Arc::new(AuthenticationMiddleware::new(
+            authentication_storage,
+        )))
+        .with(middleware)
+        .build();
+
+    let result = download_client
+        .get("s3://rattler-s3-testing/my-channel/noarch/repodata.json")
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(result.status(), 200);
+    let body = result.text().await.unwrap();
+    assert!(body.contains("test-package-0.1-0.tar.bz2"));
 }

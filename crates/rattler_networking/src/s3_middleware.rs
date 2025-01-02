@@ -1,4 +1,6 @@
 //! Middleware to handle `s3://` URLs to pull artifacts from an S3 bucket
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::presigning::{PresignedRequest, PresigningConfig};
@@ -14,7 +16,7 @@ pub struct S3Middleware {
 impl S3Middleware {
     /// Create a new S3 middleware
     pub async fn new(
-        config_file: Option<&str>,
+        config_file: Option<&PathBuf>,
         profile: Option<&str>,
         force_path_style: Option<bool>,
     ) -> Self {
@@ -45,7 +47,7 @@ impl S3Middleware {
     }
 
     /// Generate a presigned S3 GetObject request
-    pub async fn generate_presigned_s3_request(
+    async fn generate_presigned_s3_request(
         &self,
         bucket_name: &str,
         key: &str,
@@ -192,7 +194,7 @@ region = eu-central-1
     #[tokio::test]
     #[serial]
     async fn test_presigned_s3_request_custom_config(aws_config: (TempDir, std::path::PathBuf)) {
-        let middleware = S3Middleware::new(Some(aws_config.1.to_str().unwrap()), None, None).await;
+        let middleware = S3Middleware::new(Some(&aws_config.1), None, None).await;
 
         let presigned = middleware
             .generate_presigned_s3_request("rattler-s3-testing", "my-channel/noarch/repodata.json")
@@ -213,8 +215,7 @@ region = eu-central-1
     async fn test_presigned_s3_request_different_profile(
         aws_config: (TempDir, std::path::PathBuf),
     ) {
-        let middleware =
-            S3Middleware::new(Some(aws_config.1.to_str().unwrap()), Some("packages"), None).await;
+        let middleware = S3Middleware::new(Some(&aws_config.1), Some("packages"), None).await;
 
         let presigned = middleware
             .generate_presigned_s3_request("rattler-s3-testing", "my-channel/noarch/repodata.json")
@@ -268,7 +269,7 @@ region = eu-central-1
         with_env(
             HashMap::from([("AWS_ENDPOINT_URL", "http://localhost:9000")]),
             move || {
-                let aws_config_path = aws_config.1.to_str().unwrap().to_string();
+                let aws_config_path = aws_config.1;
                 Box::pin(async move {
                     let middleware =
                         S3Middleware::new(Some(&aws_config_path), "default".into(), None).await;
