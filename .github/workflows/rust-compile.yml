@@ -138,6 +138,16 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          run-install: false
+
+      - name: Install minio
+        run: |
+          pixi global install minio-server
+          pixi global install minio-client
+
       - name: Run tests
         if: ${{ !matrix.skip-tests }}
         env:
