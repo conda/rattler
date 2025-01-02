@@ -1,7 +1,7 @@
 use crate::networking::middleware::PyMiddleware;
 use pyo3::{pyclass, pymethods};
 use rattler_networking::{
-    AuthenticationMiddleware, GCSMiddleware, S3Middleware, MirrorMiddleware, OciMiddleware,
+    AuthenticationMiddleware, GCSMiddleware, MirrorMiddleware, OciMiddleware, S3Middleware,
 };
 use reqwest_middleware::ClientWithMiddleware;
 

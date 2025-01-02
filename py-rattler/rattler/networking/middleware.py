@@ -1,4 +1,5 @@
 from __future__ import annotations
+from pathlib import Path
 
 from rattler.rattler import (
     PyAuthenticationMiddleware,
@@ -142,8 +143,10 @@ class S3Middleware:
     ```
     """
 
-    def __init__(self) -> None:
-        self._middleware = PyS3Middleware()
+    def __init__(
+        self, config_file: Path | None = None, profile: str | None = None, force_path_style: bool | None = None
+    ) -> None:
+        self._middleware = PyS3Middleware(config_file, profile, force_path_style)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"

@@ -126,6 +126,7 @@ pub struct PyS3Middleware {
 #[pymethods]
 impl PyS3Middleware {
     #[new]
+    #[pyo3(signature = (config_file=None, profile=None, force_path_style=None))]
     pub fn __init__(
         config_file: Option<PathBuf>,
         profile: Option<String>,
