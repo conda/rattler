@@ -8,13 +8,14 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 use url::Url;
 
-/// S3 middleware to authenticate requests
+/// S3 middleware to authenticate requests.
 pub struct S3Middleware {
     client: aws_sdk_s3::Client,
+    expiration: std::time::Duration,
 }
 
 impl S3Middleware {
-    /// Create a new S3 middleware
+    /// Create a new S3 middleware.
     pub async fn new(
         config_file: Option<&PathBuf>,
         profile: Option<&str>,
@@ -32,37 +33,43 @@ impl S3Middleware {
         }
 
         if let Some(profile) = profile {
-            aws_config_builder = aws_config_builder.profile_name(profile)
+            aws_config_builder = aws_config_builder.profile_name(profile);
         };
         let sdk_config = aws_config_builder.load().await;
 
         let mut builder = aws_sdk_s3::config::Builder::from(&sdk_config);
         if let Some(force_path_style) = force_path_style {
-            builder = builder.force_path_style(force_path_style)
+            builder = builder.force_path_style(force_path_style);
         };
         let s3_config = builder.build();
 
         let client: aws_sdk_s3::Client = aws_sdk_s3::Client::from_conf(s3_config);
-        Self { client }
+        Self {
+            client,
+            expiration: std::time::Duration::from_secs(300),
+        }
     }
 
-    /// Generate a presigned S3 GetObject request
+    /// Generate a presigned S3 `GetObject` request.
     async fn generate_presigned_s3_request(
         &self,
         bucket_name: &str,
         key: &str,
     ) -> MiddlewareResult<PresignedRequest> {
         let builder = self.client.get_object().bucket(bucket_name).key(key);
-        Ok(builder
-            .presigned(PresigningConfig::expires_in(std::time::Duration::from_secs(300)).unwrap())
+        builder
+            .presigned(
+                PresigningConfig::expires_in(self.expiration)
+                    .map_err(reqwest_middleware::Error::middleware)?,
+            )
             .await
-            .unwrap())
+            .map_err(reqwest_middleware::Error::middleware)
     }
 }
 
 #[async_trait]
 impl Middleware for S3Middleware {
-    /// Create a new authentication middleware for S3
+    /// Create a new authentication middleware for S3.
     async fn handle(
         &self,
         mut req: Request,
@@ -75,7 +82,8 @@ impl Middleware for S3Middleware {
             let key = url.path();
             let presigned_request = self.generate_presigned_s3_request(bucket_name, key).await?;
 
-            *req.url_mut() = Url::parse(presigned_request.uri()).unwrap();
+            *req.url_mut() = Url::parse(presigned_request.uri())
+                .map_err(reqwest_middleware::Error::middleware)?;
         }
         next.run(req, extensions).await
     }
