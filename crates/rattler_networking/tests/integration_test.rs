@@ -10,6 +10,7 @@ use tempfile::{tempdir, TempDir};
 
 struct MinioServer {
     handle: std::process::Child,
+    #[allow(dead_code)]
     directory: tempfile::TempDir,
 }
 
@@ -23,7 +24,7 @@ impl MinioServer {
             "127.0.0.1:9000",
         ];
         let handle = std::process::Command::new("minio")
-            .args(&args)
+            .args(args)
             .spawn()
             .expect("Failed to start Minio server");
         eprintln!(
@@ -49,9 +50,7 @@ fn run_subprocess(cmd: &str, args: &[&str], env: &HashMap<&str, &str>) -> std::p
         command.env(key, value);
     }
     let output = command.output().expect("Failed to run command");
-    if !output.status.success() {
-        eprintln!("Command failed: {:?}", output);
-    }
+    assert!(output.status.success());
     output
 }
 
@@ -111,6 +110,7 @@ region = eu-central-1
 #[tokio::test]
 #[serial]
 async fn test_minio_download_repodata(
+    #[allow(unused_variables)]
     minio_server: MinioServer,
     aws_config: (TempDir, std::path::PathBuf),
 ) {
