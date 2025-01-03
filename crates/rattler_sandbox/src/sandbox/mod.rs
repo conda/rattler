@@ -52,6 +52,11 @@ fn init() {
             let _ = sandbox.add_exception(birdcage::Exception::WriteAndRead(path.into()));
         }
     }
+
+    if opts.network {
+        let _ = sandbox.add_exception(birdcage::Exception::Networking);
+    }
+
     if let Some((exe, args)) = opts.args.split_first() {
         // Initialize the sandbox; by default everything is prohibited.
         let mut command = Command::new(exe);
