@@ -28,6 +28,7 @@ pub enum S3Config {
 }
 
 /// S3 middleware to authenticate requests.
+#[derive(Clone, Debug)]
 pub struct S3 {
     auth_storage: AuthenticationStorage,
     config: S3Config,
@@ -35,6 +36,7 @@ pub struct S3 {
 }
 
 /// S3 middleware to authenticate requests.
+#[derive(Clone, Debug)]
 pub struct S3Middleware {
     s3: S3,
 }
