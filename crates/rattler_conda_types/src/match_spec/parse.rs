@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashSet, ops::Not, str::FromStr, sync::Arc};
+use std::{borrow::Cow, collections::HashSet, ops::Not, str::FromStr};
 
 use nom::{
     branch::alt,
@@ -21,18 +21,11 @@ use super::{
     MatchSpec,
 };
 use crate::{
-    build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
-    package::ArchiveIdentifier,
-    utils::{path::is_absolute_path, url::parse_scheme},
-    version_spec::{
+    build_spec::{BuildNumberSpec, ParseBuildNumberSpecError}, package::ArchiveIdentifier, utils::{path::is_absolute_path, url::parse_scheme}, version_spec::{
         is_start_of_version_constraint,
         version_tree::{recognize_constraint, recognize_version},
         ParseVersionSpecError,
-    },
-    Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
-    ParseChannelError, ParseStrictness,
-    ParseStrictness::{Lenient, Strict},
-    ParseVersionError, Platform, VersionSpec,
+    }, InvalidPackageNameError, NamedChannelOrUrl, NamelessMatchSpec, PackageName, ParseChannelError, ParseStrictness::{self, Lenient, Strict}, ParseVersionError, Platform, VersionSpec
 };
 
 /// The type of parse error that occurred when parsing match spec.
@@ -280,7 +273,7 @@ fn parse_bracket_vec_into_components(
             "subdir" => match_spec.subdir = Some(value.to_string()),
             "channel" => {
                 let (channel, subdir) = parse_channel_and_subdir(value)?;
-                match_spec.channel = match_spec.channel.or(channel.map(Arc::new));
+                match_spec.channel = match_spec.channel.or(channel);
                 match_spec.subdir = match_spec.subdir.or(subdir);
             }
             // TODO: Still need to add `track_features`, `features`, `license` and `license_family`
@@ -490,7 +483,7 @@ impl NamelessMatchSpec {
 
         if let Some(channel_str) = channel_str {
             let (channel, subdir) = parse_channel_and_subdir(channel_str)?;
-            match_spec.channel = match_spec.channel.or(channel.map(Arc::new));
+            match_spec.channel = match_spec.channel.or(channel);
             match_spec.subdir = match_spec.subdir.or(subdir);
         }
 
@@ -519,21 +512,17 @@ impl NamelessMatchSpec {
 /// Parse channel and subdir from a string.
 fn parse_channel_and_subdir(
     input: &str,
-) -> Result<(Option<Channel>, Option<String>), ParseMatchSpecError> {
-    let channel_config = ChannelConfig::default_with_root_dir(
-        std::env::current_dir().expect("Could not get current directory"),
-    );
-
+) -> Result<(Option<NamedChannelOrUrl>, Option<String>), ParseMatchSpecError> {
     if let Some((channel, subdir)) = input.rsplit_once('/') {
         // If the subdir is a platform, we assume the channel has a subdir
         if Platform::from_str(subdir).is_ok() {
             return Ok((
-                Some(Channel::from_str(channel, &channel_config)?),
+                Some(NamedChannelOrUrl::from_str(channel)?),
                 Some(subdir.to_string()),
             ));
         }
     }
-    Ok((Some(Channel::from_str(input, &channel_config)?), None))
+    Ok((Some(NamedChannelOrUrl::from_str(input)?), None))
 }
 
 /// Parses a conda match spec.
@@ -592,7 +581,7 @@ fn matchspec_parser(
 
     if let Some(channel_str) = channel_str {
         let (channel, subdir) = parse_channel_and_subdir(channel_str)?;
-        nameless_match_spec.channel = nameless_match_spec.channel.or(channel.map(Arc::new));
+        nameless_match_spec.channel = nameless_match_spec.channel.or(channel);
         nameless_match_spec.subdir = nameless_match_spec.subdir.or(subdir);
     }
 
