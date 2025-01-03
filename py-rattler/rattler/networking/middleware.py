@@ -7,6 +7,7 @@ from rattler.rattler import (
     PyMirrorMiddleware,
     PyOciMiddleware,
     PyS3Middleware,
+    PyS3Config,
 )
 
 
@@ -126,6 +127,34 @@ class GCSMiddleware:
         return f"{type(self).__name__}()"
 
 
+class S3Config:
+    """
+    Middleware to work with s3:// URLs
+
+    Examples
+    --------
+    ```python
+    >>> from rattler.networking import S3Middleware
+    >>> config = S3Config("http://localhost:9000", "eu-central-1", True)
+    >>> config
+    S3Config(http://localhost:9000, eu-central-1, True)
+    >>> middleware = S3Middleware(config)
+    >>> middleware
+    S3Middleware()
+    >>>
+    ```
+    """
+
+    def __init__(self, endpoint_url: str, region: str, force_path_style: bool) -> None:
+        self._config = PyS3Config(endpoint_url, region, force_path_style)
+        self.endpoint_url = endpoint_url
+        self.region = region
+        self.force_path_style = force_path_style
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.endpoint_url}, {self.region}, {self.force_path_style})"
+
+
 class S3Middleware:
     """
     Middleware to work with s3:// URLs
@@ -144,9 +173,12 @@ class S3Middleware:
     """
 
     def __init__(
-        self, config_file: Path | None = None, profile: str | None = None, force_path_style: bool | None = None
+        self, config: S3Config | None = None
     ) -> None:
-        self._middleware = PyS3Middleware(config_file, profile, force_path_style)
+        if config is not None:
+            self._middleware = PyS3Middleware(config._config)
+        else:
+            self._middleware = PyS3Middleware()
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"

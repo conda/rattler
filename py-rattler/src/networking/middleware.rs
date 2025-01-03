@@ -1,9 +1,8 @@
 use pyo3::{pyclass, pymethods, FromPyObject, PyResult};
 use rattler_networking::{
-    mirror_middleware::Mirror, AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware,
-    MirrorMiddleware, OciMiddleware, S3Middleware,
+    mirror_middleware::Mirror, s3_middleware::S3Config, AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, MirrorMiddleware, OciMiddleware, S3Middleware
 };
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 use url::Url;
 
 use crate::error::PyRattlerError;
@@ -117,31 +116,61 @@ impl From<PyGCSMiddleware> for GCSMiddleware {
 
 #[pyclass]
 #[derive(Clone)]
+pub struct PyS3Config {
+    pub(crate) endpoint_url: Url,
+    pub(crate) region: String,
+    pub(crate) force_path_style: bool,
+}
+
+#[pymethods]
+impl PyS3Config {
+    #[new]
+    pub fn __init__(
+        endpoint_url: String,
+        region: String,
+        force_path_style: bool,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            endpoint_url: Url::parse(&endpoint_url).map_err(PyRattlerError::from)?,
+            region,
+            force_path_style,
+        })
+    }
+}
+
+impl From<PyS3Config> for S3Config {
+    fn from(_value: PyS3Config) -> Self {
+        S3Config {
+            auth_storage: AuthenticationStorage::default(),
+            endpoint_url: _value.endpoint_url,
+            region: _value.region,
+            force_path_style: _value.force_path_style,
+        }
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
 pub struct PyS3Middleware {
-    pub(crate) config_file: Option<PathBuf>,
-    pub(crate) profile: Option<String>,
-    pub(crate) force_path_style: Option<bool>,
+    pub(crate) s3_config: Option<PyS3Config>,
 }
 
 #[pymethods]
 impl PyS3Middleware {
     #[new]
-    #[pyo3(signature = (config_file=None, profile=None, force_path_style=None))]
+    #[pyo3(signature = (s3_config=None))]
     pub fn __init__(
-        config_file: Option<PathBuf>,
-        profile: Option<String>,
-        force_path_style: Option<bool>,
-    ) -> Self {
-        Self {
-            config_file,
-            profile,
-            force_path_style,
-        }
+        s3_config: Option<PyS3Config>,
+    ) -> PyResult<Self> {
+        Ok(Self { s3_config })
     }
 }
 
 impl From<PyS3Middleware> for S3Middleware {
     fn from(_value: PyS3Middleware) -> Self {
-        S3Middleware::new(_value.config_file, _value.profile, _value.force_path_style)
+        match _value.s3_config {
+            Some(config) => S3Middleware::new(Some(config.into())),
+            None => S3Middleware::new(None),
+        }
     }
 }
