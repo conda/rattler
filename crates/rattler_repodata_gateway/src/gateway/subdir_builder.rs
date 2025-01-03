@@ -54,6 +54,7 @@ impl<'g> SubdirBuilder<'g> {
             || url.scheme() == "https"
             || url.scheme() == "gcs"
             || url.scheme() == "oci"
+            || url.scheme() == "s3"
         {
             let source_config = self.gateway.channel_config.get(&self.channel.base_url);
 
