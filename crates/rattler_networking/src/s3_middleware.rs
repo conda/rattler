@@ -44,7 +44,7 @@ impl S3Middleware {
     /// Create a new S3 middleware.
     pub fn new(config: S3Config, auth_storage: AuthenticationStorage) -> Self {
         Self {
-            s3: S3::new(config, auth_storage)
+            s3: S3::new(config, auth_storage),
         }
     }
 }
