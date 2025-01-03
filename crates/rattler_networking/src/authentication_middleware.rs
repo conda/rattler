@@ -106,6 +106,9 @@ impl AuthenticationMiddleware {
                     Ok(req)
                 }
                 Authentication::CondaToken(_) => Ok(req),
+                Authentication::S3Credentials { .. } => {
+                    panic!("S3 credentials should be handled by the S3 middleware")
+                } // todo
             }
         } else {
             Ok(req)

@@ -1,10 +1,13 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage, S3Middleware};
+use rattler_networking::{
+    s3_middleware::S3Config, AuthenticationMiddleware, AuthenticationStorage, S3Middleware,
+};
 use reqwest::Client;
 use rstest::*;
 use serial_test::serial;
 use tempfile::{tempdir, TempDir};
+use url::Url;
 
 /* ----------------------------------- MINIO UTILS ---------------------------------- */
 
@@ -113,7 +116,13 @@ async fn test_minio_download_repodata(
     #[allow(unused_variables)] minio_server: MinioServer,
     aws_config: (TempDir, std::path::PathBuf),
 ) {
-    let middleware = S3Middleware::new(Some(aws_config.1), Some("default".into()), Some(true));
+    // TODO: also test with_env
+    let middleware = S3Middleware::new(Some(S3Config {
+        auth_storage: AuthenticationStorage::default(), // todo: create custom storage here
+        endpoint_url: Url::parse("http://localhost:9000").unwrap(),
+        region: "eu-central-1".into(),
+        force_path_style: true,
+    }));
 
     let download_client = Client::builder()
         .no_gzip()

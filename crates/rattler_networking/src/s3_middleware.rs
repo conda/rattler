@@ -1,6 +1,4 @@
 //! Middleware to handle `s3://` URLs to pull artifacts from an S3 bucket
-use std::path::PathBuf;
-
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::presigning::{PresignedRequest, PresigningConfig};
@@ -8,72 +6,91 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 use url::Url;
 
+use crate::{Authentication, AuthenticationStorage};
+
 /// S3 middleware to authenticate requests.
 pub struct S3Middleware {
-    config_file: Option<PathBuf>,
-    profile: Option<String>,
-    force_path_style: Option<bool>,
+    config: Option<S3Config>,
     expiration: std::time::Duration,
 }
 
-async fn create_client(
-    config_file: Option<PathBuf>,
-    profile: Option<String>,
-    force_path_style: Option<bool>,
-) -> aws_sdk_s3::Client {
-    let mut aws_config_builder = aws_config::defaults(BehaviorVersion::latest());
-    if let Some(config_file) = config_file {
-        let mut builder = aws_runtime::env_config::file::EnvConfigFiles::builder();
-        builder = builder.with_file(
-            aws_runtime::env_config::file::EnvConfigFileKind::Config,
-            config_file,
-        );
-        let env_config_files = builder.build();
-        aws_config_builder = aws_config_builder.profile_files(env_config_files);
+/// Configuration for the S3 middleware.
+#[derive(Clone)]
+pub struct S3Config {
+    /// The authentication storage to use for the S3 client.
+    pub auth_storage: AuthenticationStorage,
+    /// The endpoint URL to use for the S3 client.
+    pub endpoint_url: Url,
+    /// The region to use for the S3 client.
+    pub region: String,
+    /// Whether to force path style for the S3 client.
+    pub force_path_style: bool,
+}
+
+async fn create_client(config: Option<S3Config>, url: Url) -> aws_sdk_s3::Client {
+    match config {
+        Some(config) => {
+            let auth = config.auth_storage.get_by_url(url).unwrap(); // todo
+            let config_builder = match auth {
+                (
+                    _,
+                    Some(Authentication::S3Credentials {
+                        access_key_id,
+                        secret_access_key,
+                        session_token,
+                    }),
+                ) => aws_sdk_s3::config::Builder::new()
+                    .endpoint_url(config.endpoint_url)
+                    .region(aws_sdk_s3::config::Region::new(config.region))
+                    .force_path_style(config.force_path_style)
+                    .credentials_provider(aws_sdk_s3::config::Credentials::new(
+                        access_key_id,
+                        secret_access_key,
+                        session_token,
+                        None,
+                        "pixi",
+                    )),
+                (_, Some(_)) => {
+                    panic!("Unsupported authentication method"); // todo proper error message
+                }
+                (_, None) => aws_sdk_s3::config::Builder::new()
+                    .endpoint_url(config.endpoint_url)
+                    .region(aws_sdk_s3::config::Region::new(config.region))
+                    .force_path_style(config.force_path_style),
+            };
+
+            let aws_config = config_builder.build();
+            aws_sdk_s3::Client::from_conf(aws_config)
+        }
+        None => {
+            let sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
+            let config = aws_sdk_s3::config::Builder::from(&sdk_config).build();
+            aws_sdk_s3::Client::from_conf(config)
+        }
     }
-
-    if let Some(profile) = profile {
-        aws_config_builder = aws_config_builder.profile_name(profile);
-    };
-    let sdk_config = aws_config_builder.load().await;
-
-    let mut builder = aws_sdk_s3::config::Builder::from(&sdk_config);
-    if let Some(force_path_style) = force_path_style {
-        builder = builder.force_path_style(force_path_style);
-    };
-    let s3_config = builder.build();
-
-    let client: aws_sdk_s3::Client = aws_sdk_s3::Client::from_conf(s3_config);
-    client
 }
 
 impl S3Middleware {
     /// Create a new S3 middleware.
-    pub fn new(
-        config_file: Option<PathBuf>,
-        profile: Option<String>,
-        force_path_style: Option<bool>,
-    ) -> Self {
+    pub fn new(config: Option<S3Config>) -> Self {
         Self {
-            config_file,
-            profile,
-            force_path_style,
+            config,
             expiration: std::time::Duration::from_secs(300),
         }
     }
 
     /// Generate a presigned S3 `GetObject` request.
-    async fn generate_presigned_s3_request(
-        &self,
-        bucket_name: &str,
-        key: &str,
-    ) -> MiddlewareResult<PresignedRequest> {
-        let client = create_client(
-            self.config_file.clone(),
-            self.profile.clone(),
-            self.force_path_style,
-        )
-        .await;
+    async fn generate_presigned_s3_request(&self, url: Url) -> MiddlewareResult<PresignedRequest> {
+        let client = create_client(self.config.clone(), url.clone()).await;
+
+        let bucket_name = url.host_str().expect("Host should be present in S3 URL");
+        let key = url.path().strip_prefix("/").ok_or_else(|| {
+            reqwest_middleware::Error::middleware(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Missing prefix",
+            ))
+        })?;
+
         let builder = client.get_object().bucket(bucket_name).key(key);
         builder
             .presigned(
@@ -96,14 +113,7 @@ impl Middleware for S3Middleware {
     ) -> MiddlewareResult<Response> {
         if req.url().scheme() == "s3" {
             let url = req.url().clone();
-            let bucket_name = url.host_str().expect("Host should be present in S3 URL");
-            let key = url.path().strip_prefix("/").ok_or_else(|| {
-                reqwest_middleware::Error::middleware(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Missing prefix",
-                ))
-            })?;
-            let presigned_request = self.generate_presigned_s3_request(bucket_name, key).await?;
+            let presigned_request = self.generate_presigned_s3_request(url).await?;
 
             *req.url_mut() = Url::parse(presigned_request.uri())
                 .map_err(reqwest_middleware::Error::middleware)?;
@@ -136,28 +146,28 @@ mod tests {
 
     #[tokio::test]
     #[serial]
-    async fn test_presigned_s3_request() {
+    async fn test_presigned_s3_request_endpoint_url() {
         with_env(
             HashMap::from([
                 ("AWS_ACCESS_KEY_ID", "minioadmin"),
                 ("AWS_SECRET_ACCESS_KEY", "minioadmin"),
                 ("AWS_REGION", "eu-central-1"),
-                ("AWS_ENDPOINT_URL", "http://localhost:9000"),
+                ("AWS_ENDPOINT_URL", "http://custom-aws"),
             ]),
             move || {
                 Box::pin(async {
-                    let middleware = S3Middleware::new(None, None, Some(true));
+                    let middleware = S3Middleware::new(None);
 
                     let presigned = middleware
                         .generate_presigned_s3_request(
-                            "rattler-s3-testing",
-                            "my-channel/noarch/repodata.json",
+                            Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json")
+                                .unwrap(),
                         )
                         .await
                         .unwrap();
                     assert!(
                         presigned.uri().to_string().starts_with(
-                            "http://localhost:9000/rattler-s3-testing/my-channel/noarch/repodata.json?"
+                            "http://rattler-s3-testing.custom-aws/my-channel/noarch/repodata.json?"
                         ),
                         "Unexpected presigned URL: {:?}",
                         presigned.uri()
@@ -179,12 +189,11 @@ mod tests {
             ]),
             move || {
                 Box::pin(async {
-                    let middleware = S3Middleware::new(None, None, None);
+                    let middleware = S3Middleware::new(None);
 
                     let presigned = middleware
                         .generate_presigned_s3_request(
-                            "rattler-s3-testing",
-                            "my-channel/noarch/repodata.json",
+                            Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json").unwrap()
                         )
                         .await
                         .unwrap();
@@ -224,44 +233,6 @@ region = eu-central-1
     #[rstest]
     #[tokio::test]
     #[serial]
-    async fn test_presigned_s3_request_custom_config(aws_config: (TempDir, std::path::PathBuf)) {
-        let middleware = S3Middleware::new(Some(aws_config.1), None, None);
-
-        let presigned = middleware
-            .generate_presigned_s3_request("rattler-s3-testing", "my-channel/noarch/repodata.json")
-            .await
-            .unwrap();
-        assert!(
-            presigned.uri().to_string().starts_with(
-                "https://rattler-s3-testing.s3.eu-central-1.amazonaws.com/my-channel/noarch/repodata.json?"
-            ),
-            "Unexpected presigned URL: {:?}",
-            presigned.uri()
-        );
-    }
-
-    #[rstest]
-    #[tokio::test]
-    #[serial]
-    async fn test_presigned_s3_request_different_profile(
-        aws_config: (TempDir, std::path::PathBuf),
-    ) {
-        let middleware = S3Middleware::new(Some(aws_config.1), Some("packages".into()), None);
-
-        let presigned = middleware
-            .generate_presigned_s3_request("rattler-s3-testing", "my-channel/noarch/repodata.json")
-            .await
-            .unwrap();
-        assert!(
-            presigned.uri().to_string().contains("localhost:8000"),
-            "Unexpected presigned URL: {:?}",
-            presigned.uri()
-        );
-    }
-
-    #[rstest]
-    #[tokio::test]
-    #[serial]
     async fn test_presigned_s3_request_custom_config_from_env(
         aws_config: (TempDir, std::path::PathBuf),
     ) {
@@ -272,12 +243,12 @@ region = eu-central-1
             ]),
             move || {
                 Box::pin(async move {
-                    let middleware = S3Middleware::new(None, None, None);
+                    let middleware = S3Middleware::new(None);
 
                     let presigned = middleware
                         .generate_presigned_s3_request(
-                            "rattler-s3-testing",
-                            "my-channel/noarch/repodata.json",
+                            Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json")
+                                .unwrap(),
                         )
                         .await
                         .unwrap();
@@ -292,23 +263,23 @@ region = eu-central-1
         .await;
     }
 
-    /// Test that environment variables take precedence over the configuration file.
     #[rstest]
     #[tokio::test]
     #[serial]
     async fn test_presigned_s3_request_env_precedence(aws_config: (TempDir, std::path::PathBuf)) {
         with_env(
-            HashMap::from([("AWS_ENDPOINT_URL", "http://localhost:9000")]),
+            HashMap::from([
+                ("AWS_ENDPOINT_URL", "http://localhost:9000"),
+                ("AWS_CONFIG_FILE", aws_config.1.to_str().unwrap()),
+            ]),
             move || {
-                let aws_config_path = aws_config.1;
                 Box::pin(async move {
-                    let middleware =
-                        S3Middleware::new(Some(aws_config_path), Some("default".into()), None);
+                    let middleware = S3Middleware::new(None);
 
                     let presigned = middleware
                         .generate_presigned_s3_request(
-                            "rattler-s3-testing",
-                            "my-channel/noarch/repodata.json",
+                            Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json")
+                                .unwrap(),
                         )
                         .await
                         .unwrap();
