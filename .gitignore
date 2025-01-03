@@ -31,3 +31,5 @@ test-data/channels/conda-forge/
 
 # Visual studio files
 .vs/
+
+__pycache__/

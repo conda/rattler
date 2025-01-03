@@ -36,8 +36,15 @@ pub fn extract_tar_bz2(
     let mut md5_reader =
         rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
 
+    // Create a SpooledTempFile with a 5MB limit and copy the contents of the reader into it.
+    // Based on benchmarks this is faster than unpacking while downloading.
+    let mut temp_file = SpooledTempFile::new(5 * 1024 * 1024);
+
+    copy(&mut md5_reader, &mut temp_file)?;
+    temp_file.seek(SeekFrom::Start(0))?;
+
     // Unpack the archive
-    stream_tar_bz2(&mut md5_reader).unpack(destination)?;
+    stream_tar_bz2(&mut temp_file).unpack(destination)?;
 
     // Get the hashes
     let (sha256_reader, md5) = md5_reader.finalize();
