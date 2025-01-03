@@ -1,8 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use rattler_networking::{
-    s3_middleware::{CustomS3Config, S3Config},
-    AuthenticationMiddleware, AuthenticationStorage, S3Middleware,
+    s3_middleware::S3Config, AuthenticationMiddleware, AuthenticationStorage, S3Middleware,
 };
 use reqwest::Client;
 use rstest::*;
