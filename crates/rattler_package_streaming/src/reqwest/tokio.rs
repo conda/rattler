@@ -34,7 +34,7 @@ async fn get_reader(
     client: reqwest_middleware::ClientWithMiddleware,
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
-) -> Result<impl tokio::io::AsyncRead, ExtractError> {
+) -> Result<impl tokio::io::AsyncBufRead, ExtractError> {
     if let Some(reporter) = &reporter {
         reporter.on_download_start();
     }
