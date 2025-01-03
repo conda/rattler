@@ -1,6 +1,7 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
 expression: evaluated
+snapshot_kind: text
 ---
 2.7|>=3.6:
   version: "==2.7|>=3.6"
@@ -57,3 +58,5 @@ expression: evaluated
     op: Eq
     rhs: 0
   subdir: linux-64
+">=2.*.*":
+  version: ">=2"

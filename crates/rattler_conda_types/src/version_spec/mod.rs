@@ -507,6 +507,16 @@ mod tests {
     }
 
     #[test]
+    fn issue_1004() {
+        assert_eq!(
+            VersionSpec::from_str(">=2.*.*", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::from_str(">=2", ParseStrictness::Lenient).unwrap()
+        );
+
+        assert!(VersionSpec::from_str("0.2.18.*.*", ParseStrictness::Strict).is_err());
+    }
+
+    #[test]
     fn issue_bracket_printing() {
         let v = VersionSpec::from_str("(>=1,<2)|>3", ParseStrictness::Lenient).unwrap();
         assert_eq!(format!("{v}"), ">=1,<2|>3");
