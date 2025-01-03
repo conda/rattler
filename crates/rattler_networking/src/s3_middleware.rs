@@ -6,7 +6,6 @@ use aws_config::BehaviorVersion;
 use aws_sdk_s3::presigning::PresigningConfig;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
-use tracing::debug;
 use url::Url;
 
 use crate::{Authentication, AuthenticationStorage};
@@ -45,11 +44,7 @@ impl S3Middleware {
     /// Create a new S3 middleware.
     pub fn new(config: S3Config, auth_storage: AuthenticationStorage) -> Self {
         Self {
-            s3: S3 {
-                config,
-                auth_storage,
-                expiration: std::time::Duration::from_secs(300),
-            },
+            s3: S3::new(config, auth_storage)
         }
     }
 }
@@ -157,8 +152,6 @@ impl Middleware for S3Middleware {
         if req.url().scheme() == "s3" {
             let url = req.url().clone();
             let presigned_url = self.s3.generate_presigned_s3_url(url).await?;
-
-            debug!("Presigned S3 url: {:?}", presigned_url);
             *req.url_mut() = presigned_url.clone();
         }
         next.run(req, extensions).await
@@ -188,6 +181,8 @@ mod tests {
     }
 
     // TODO: test no auth
+
+    // TODO: test S3Config::Custom
 
     #[tokio::test]
     #[serial]
