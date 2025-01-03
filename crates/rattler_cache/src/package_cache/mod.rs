@@ -502,8 +502,6 @@ mod test {
     use rattler_conda_types::package::{ArchiveIdentifier, PackageFile, PathsJson};
     use rattler_digest::{parse_digest_from_hex, Sha256};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
-    use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-    use reqwest_retry::RetryTransientMiddleware;
     use tempfile::tempdir;
     use tokio::sync::Mutex;
     use tokio_stream::StreamExt;
@@ -648,7 +646,7 @@ mod test {
         // build our application with a route
         let router = Router::new()
             // `GET /` goes to `root`
-            .route("/{channel}/{subdir}/{file}", get(redirect_to_anaconda));
+            .route("/:channel/:subdir/:file", get(redirect_to_anaconda));
 
         // Construct a router that returns data from the static dir but fails the first
         // try.
@@ -681,23 +679,23 @@ mod test {
 
         let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
 
-        // // Do the first request without
-        // let result = cache
-        //     .get_or_fetch_from_url_with_retry(
-        //         ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
-        //         server_url.join(archive_name).unwrap(),
-        //         test_reqwest_client(),
-        //         DoNotRetryPolicy,
-        //         None,
-        //     )
-        //     .await;
+        // Do the first request without
+        let result = cache
+            .get_or_fetch_from_url_with_retry(
+                ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
+                server_url.join(archive_name).unwrap(),
+                reqwest::Client::default().into(),
+                DoNotRetryPolicy,
+                None,
+            )
+            .await;
 
-        // // First request without retry policy should fail
-        // assert_matches!(result, Err(_));
-        // {
-        //     let request_count_lock = request_count.lock().await;
-        //     assert_eq!(*request_count_lock, 1, "Expected there to be 1 request");
-        // }
+        // First request without retry policy should fail
+        assert_matches!(result, Err(_));
+        {
+            let request_count_lock = request_count.lock().await;
+            assert_eq!(*request_count_lock, 1, "Expected there to be 1 request");
+        }
 
         // The second one should fail after the 2nd try
         let result = cache
@@ -715,14 +713,6 @@ mod test {
             let request_count_lock = request_count.lock().await;
             assert_eq!(*request_count_lock, 3, "Expected there to be 3 requests");
         }
-    }
-
-    fn test_reqwest_client() -> ClientWithMiddleware {
-        ClientBuilder::new(reqwest::Client::new())
-            .with(RetryTransientMiddleware::new_with_policy(
-                ExponentialBackoffBuilder::default().build_with_max_retries(3),
-            ))
-            .build()
     }
 
     #[tokio::test]
