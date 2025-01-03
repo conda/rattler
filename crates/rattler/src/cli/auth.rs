@@ -136,7 +136,11 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
         } else {
             let secret_access_key = args.aws_secret_access_key.unwrap();
             let session_token = args.aws_session_token;
-            Authentication::S3Credentials { access_key_id, secret_access_key, session_token }
+            Authentication::S3Credentials {
+                access_key_id,
+                secret_access_key,
+                session_token,
+            }
         }
     } else {
         return Err(AuthenticationCLIError::NoAuthenticationMethod);
@@ -150,11 +154,11 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
         return Err(AuthenticationCLIError::AnacondaOrgBadMethod);
     }
 
-    if host.starts_with("s3://") && !matches!(auth, Authentication::S3Credentials{..}) {
+    if host.starts_with("s3://") && !matches!(auth, Authentication::S3Credentials { .. }) {
         return Err(AuthenticationCLIError::S3BadMethod);
     }
 
-    if matches!(auth, Authentication::S3Credentials{..}) && !host.starts_with("s3://") {
+    if matches!(auth, Authentication::S3Credentials { .. }) && !host.starts_with("s3://") {
         return Err(AuthenticationCLIError::S3BadMethod);
     }
 

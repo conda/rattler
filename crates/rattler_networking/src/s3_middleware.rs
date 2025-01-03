@@ -47,8 +47,9 @@ impl S3Middleware {
         Self {
             s3: S3 {
                 config,
-            auth_storage,
-            expiration: std::time::Duration::from_secs(300),}
+                auth_storage,
+                expiration: std::time::Duration::from_secs(300),
+            },
         }
     }
 }
@@ -98,7 +99,7 @@ impl S3 {
                 (_, Some(_)) => {
                     panic!("Unsupported authentication method"); // todo proper error message
                 }
-                (_, None) => todo!("should use no credentials provider and not sign")
+                (_, None) => todo!("should use no credentials provider and not sign"),
                 // (_, None) => aws_sdk_s3::config::Builder::from(&sdk_config)
                 //     .endpoint_url(endpoint_url)
                 //     .region(aws_sdk_s3::config::Region::new(region))
@@ -113,7 +114,6 @@ impl S3 {
             aws_sdk_s3::Client::from_conf(config)
         }
     }
-
 
     /// Generate a presigned S3 `GetObject` request.
     async fn generate_presigned_s3_url(&self, url: Url) -> MiddlewareResult<Url> {
@@ -131,14 +131,17 @@ impl S3 {
         // if client has no credentials provider, don't presign but use default url
         // TODO: implement this
 
-        Url::parse(builder
-            .presigned(
-                PresigningConfig::expires_in(self.expiration)
-                    .map_err(reqwest_middleware::Error::middleware)?,
-            )
-            .await
-            .map_err(reqwest_middleware::Error::middleware)?
-            .uri()).map_err(reqwest_middleware::Error::middleware)
+        Url::parse(
+            builder
+                .presigned(
+                    PresigningConfig::expires_in(self.expiration)
+                        .map_err(reqwest_middleware::Error::middleware)?,
+                )
+                .await
+                .map_err(reqwest_middleware::Error::middleware)?
+                .uri(),
+        )
+        .map_err(reqwest_middleware::Error::middleware)
     }
 }
 

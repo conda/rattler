@@ -1,5 +1,4 @@
 from __future__ import annotations
-from pathlib import Path
 
 from rattler.rattler import (
     PyAuthenticationMiddleware,
@@ -141,18 +140,29 @@ class S3Config:
     >>> middleware = S3Middleware(config)
     >>> middleware
     S3Middleware()
+    >>> S3Config()
+    S3Config(aws sdk)
     >>>
     ```
     """
 
-    def __init__(self, endpoint_url: str, region: str, force_path_style: bool) -> None:
+    def __init__(
+        self, endpoint_url: str | None = None, region: str | None = None, force_path_style: bool | None = None
+    ) -> None:
         self._config = PyS3Config(endpoint_url, region, force_path_style)
-        self.endpoint_url = endpoint_url
-        self.region = region
-        self.force_path_style = force_path_style
+        if (endpoint_url is None) != (region is None) or (endpoint_url is None) != (force_path_style is None):
+            raise ValueError("Invalid arguments for S3Config")
+        self._endpoint_url = endpoint_url
+        self._region = region
+        self._force_path_style = force_path_style
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}({self.endpoint_url}, {self.region}, {self.force_path_style})"
+        inner = (
+            f"{self._endpoint_url}, {self._region}, {self._force_path_style}"
+            if self._endpoint_url is not None
+            else "aws sdk"
+        )
+        return f"{type(self).__name__}({inner})"
 
 
 class S3Middleware:
@@ -172,13 +182,10 @@ class S3Middleware:
     ```
     """
 
-    def __init__(
-        self, config: S3Config | None = None
-    ) -> None:
-        if config is not None:
-            self._middleware = PyS3Middleware(config._config)
-        else:
-            self._middleware = PyS3Middleware()
+    def __init__(self, config: S3Config | None = None) -> None:
+        if config is None:
+            config = S3Config()
+        self._middleware = PyS3Middleware(config._config)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"
