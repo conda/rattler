@@ -97,7 +97,12 @@ impl Middleware for S3Middleware {
         if req.url().scheme() == "s3" {
             let url = req.url().clone();
             let bucket_name = url.host_str().expect("Host should be present in S3 URL");
-            let key = url.path();
+            let key = url.path().strip_prefix("/").ok_or_else(|| {
+                reqwest_middleware::Error::middleware(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Missing prefix",
+                ))
+            })?;
             let presigned_request = self.generate_presigned_s3_request(bucket_name, key).await?;
 
             *req.url_mut() = Url::parse(presigned_request.uri())
