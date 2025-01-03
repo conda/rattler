@@ -27,7 +27,7 @@ pkg-config = "~=0.29.2"
 rust = "~=1.81.0"
 cmake = "~=3.26.4"
 minio-server = "*"
-# minio-client = "*" # xref: https://github.com/conda-forge/staged-recipes/pull/28736
+minio-client = "*"
 
 [target.linux-64.dependencies]
 clang = ">=18.1.8,<19.0"
