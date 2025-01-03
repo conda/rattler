@@ -15,7 +15,7 @@ pub struct S3Middleware {
 }
 
 /// Configuration for the S3 middleware.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct S3Config {
     /// The authentication storage to use for the S3 client.
     pub auth_storage: AuthenticationStorage,
@@ -65,6 +65,8 @@ pub async fn create_s3_client(config: Option<S3Config>, url: Url) -> aws_sdk_s3:
         }
         None => {
             let sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
+            // TODO: infer path style from endpoint URL or other means and set
+            // .force_path_style(true) on builder if necessary
             let config = aws_sdk_s3::config::Builder::from(&sdk_config).build();
             aws_sdk_s3::Client::from_conf(config)
         }
