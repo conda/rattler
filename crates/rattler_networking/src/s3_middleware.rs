@@ -8,30 +8,44 @@ use url::Url;
 
 use crate::{Authentication, AuthenticationStorage};
 
+/// Configuration for the S3 middleware.
+#[derive(Clone)]
+pub enum S3Config {
+    /// Use the default AWS configuration.
+    FromAWS,
+    /// Use a custom configuration.
+    Custom {
+        /// The authentication storage to use for the S3 client.
+        auth_storage: AuthenticationStorage,
+        /// The endpoint URL to use for the S3 client.
+        endpoint_url: Url,
+        /// The region to use for the S3 client.
+        region: String,
+        /// Whether to force path style for the S3 client.
+        force_path_style: bool,
+    },
+}
+
 /// S3 middleware to authenticate requests.
 pub struct S3Middleware {
-    config: Option<S3Config>,
+    config: S3Config,
     expiration: std::time::Duration,
 }
 
-/// Configuration for the S3 middleware.
-#[derive(Clone, Debug)]
-pub struct S3Config {
-    /// The authentication storage to use for the S3 client.
-    pub auth_storage: AuthenticationStorage,
-    /// The endpoint URL to use for the S3 client.
-    pub endpoint_url: Url,
-    /// The region to use for the S3 client.
-    pub region: String,
-    /// Whether to force path style for the S3 client.
-    pub force_path_style: bool,
-}
-
 /// Create an S3 client for given channel with provided configuration.
-pub async fn create_s3_client(config: Option<S3Config>, url: Option<Url>) -> aws_sdk_s3::Client {
+pub async fn create_s3_client(config: S3Config, url: Option<Url>) -> aws_sdk_s3::Client {
     let sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
-    if let (Some(config), Some(url)) = (config, url) {
-        let auth = config.auth_storage.get_by_url(url).unwrap(); // todo
+    if let (
+        S3Config::Custom {
+            endpoint_url,
+            region,
+            force_path_style,
+            auth_storage,
+        },
+        Some(url),
+    ) = (config, url)
+    {
+        let auth = auth_storage.get_by_url(url).unwrap(); // todo
         let config_builder = match auth {
             (
                 _,
@@ -41,9 +55,9 @@ pub async fn create_s3_client(config: Option<S3Config>, url: Option<Url>) -> aws
                     session_token,
                 }),
             ) => aws_sdk_s3::config::Builder::from(&sdk_config)
-                .endpoint_url(config.endpoint_url)
-                .region(aws_sdk_s3::config::Region::new(config.region))
-                .force_path_style(config.force_path_style)
+                .endpoint_url(endpoint_url)
+                .region(aws_sdk_s3::config::Region::new(region))
+                .force_path_style(force_path_style)
                 .credentials_provider(aws_sdk_s3::config::Credentials::new(
                     access_key_id,
                     secret_access_key,
@@ -55,9 +69,9 @@ pub async fn create_s3_client(config: Option<S3Config>, url: Option<Url>) -> aws
                 panic!("Unsupported authentication method"); // todo proper error message
             }
             (_, None) => aws_sdk_s3::config::Builder::from(&sdk_config)
-                .endpoint_url(config.endpoint_url)
-                .region(aws_sdk_s3::config::Region::new(config.region))
-                .force_path_style(config.force_path_style),
+                .endpoint_url(endpoint_url)
+                .region(aws_sdk_s3::config::Region::new(region))
+                .force_path_style(force_path_style),
         };
         let aws_config = config_builder.build();
         aws_sdk_s3::Client::from_conf(aws_config)
@@ -71,7 +85,7 @@ pub async fn create_s3_client(config: Option<S3Config>, url: Option<Url>) -> aws
 
 impl S3Middleware {
     /// Create a new S3 middleware.
-    pub fn new(config: Option<S3Config>) -> Self {
+    pub fn new(config: S3Config) -> Self {
         Self {
             config,
             expiration: std::time::Duration::from_secs(300),
@@ -155,7 +169,7 @@ mod tests {
             ]),
             move || {
                 Box::pin(async {
-                    let middleware = S3Middleware::new(None);
+                    let middleware = S3Middleware::new(S3Config::FromAWS);
 
                     let presigned = middleware
                         .generate_presigned_s3_request(
@@ -188,7 +202,7 @@ mod tests {
             ]),
             move || {
                 Box::pin(async {
-                    let middleware = S3Middleware::new(None);
+                    let middleware = S3Middleware::new(S3Config::FromAWS);
 
                     let presigned = middleware
                         .generate_presigned_s3_request(
@@ -242,7 +256,7 @@ region = eu-central-1
             ]),
             move || {
                 Box::pin(async move {
-                    let middleware = S3Middleware::new(None);
+                    let middleware = S3Middleware::new(S3Config::FromAWS);
 
                     let presigned = middleware
                         .generate_presigned_s3_request(
@@ -273,7 +287,7 @@ region = eu-central-1
             ]),
             move || {
                 Box::pin(async move {
-                    let middleware = S3Middleware::new(None);
+                    let middleware = S3Middleware::new(S3Config::FromAWS);
 
                     let presigned = middleware
                         .generate_presigned_s3_request(

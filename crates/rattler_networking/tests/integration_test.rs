@@ -1,7 +1,8 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use rattler_networking::{
-    s3_middleware::S3Config, AuthenticationMiddleware, AuthenticationStorage, S3Middleware,
+    s3_middleware::{CustomS3Config, S3Config},
+    AuthenticationMiddleware, AuthenticationStorage, S3Middleware,
 };
 use reqwest::Client;
 use rstest::*;
@@ -121,12 +122,12 @@ async fn test_minio_download_repodata(
 ) {
     // TODO: also test with AWS environment variables
     let auth_storage = AuthenticationStorage::from_file(auth_file.1.as_path()).unwrap();
-    let middleware = S3Middleware::new(Some(S3Config {
+    let middleware = S3Middleware::new(S3Config::Custom {
         auth_storage: auth_storage.clone(),
         endpoint_url: Url::parse("http://localhost:9000").unwrap(),
         region: "eu-central-1".into(),
         force_path_style: true,
-    }));
+    });
 
     let download_client = Client::builder().no_gzip().build().unwrap();
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
