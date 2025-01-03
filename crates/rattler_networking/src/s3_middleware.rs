@@ -27,7 +27,8 @@ pub struct S3Config {
     pub force_path_style: bool,
 }
 
-async fn create_client(config: Option<S3Config>, url: Url) -> aws_sdk_s3::Client {
+/// Create an S3 client with the given configuration.
+pub async fn create_s3_client(config: Option<S3Config>, url: Url) -> aws_sdk_s3::Client {
     match config {
         Some(config) => {
             let auth = config.auth_storage.get_by_url(url).unwrap(); // todo
@@ -81,7 +82,7 @@ impl S3Middleware {
 
     /// Generate a presigned S3 `GetObject` request.
     async fn generate_presigned_s3_request(&self, url: Url) -> MiddlewareResult<PresignedRequest> {
-        let client = create_client(self.config.clone(), url.clone()).await;
+        let client = create_s3_client(self.config.clone(), url.clone()).await;
 
         let bucket_name = url.host_str().expect("Host should be present in S3 URL");
         let key = url.path().strip_prefix("/").ok_or_else(|| {
