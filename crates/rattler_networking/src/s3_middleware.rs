@@ -27,49 +27,45 @@ pub struct S3Config {
     pub force_path_style: bool,
 }
 
-/// Create an S3 client with the given configuration.
-pub async fn create_s3_client(config: Option<S3Config>, url: Url) -> aws_sdk_s3::Client {
-    match config {
-        Some(config) => {
-            let auth = config.auth_storage.get_by_url(url).unwrap(); // todo
-            let config_builder = match auth {
-                (
-                    _,
-                    Some(Authentication::S3Credentials {
-                        access_key_id,
-                        secret_access_key,
-                        session_token,
-                    }),
-                ) => aws_sdk_s3::config::Builder::new()
-                    .endpoint_url(config.endpoint_url)
-                    .region(aws_sdk_s3::config::Region::new(config.region))
-                    .force_path_style(config.force_path_style)
-                    .credentials_provider(aws_sdk_s3::config::Credentials::new(
-                        access_key_id,
-                        secret_access_key,
-                        session_token,
-                        None,
-                        "pixi",
-                    )),
-                (_, Some(_)) => {
-                    panic!("Unsupported authentication method"); // todo proper error message
-                }
-                (_, None) => aws_sdk_s3::config::Builder::new()
-                    .endpoint_url(config.endpoint_url)
-                    .region(aws_sdk_s3::config::Region::new(config.region))
-                    .force_path_style(config.force_path_style),
-            };
-
-            let aws_config = config_builder.build();
-            aws_sdk_s3::Client::from_conf(aws_config)
-        }
-        None => {
-            let sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
-            // TODO: infer path style from endpoint URL or other means and set
-            // .force_path_style(true) on builder if necessary
-            let config = aws_sdk_s3::config::Builder::from(&sdk_config).build();
-            aws_sdk_s3::Client::from_conf(config)
-        }
+/// Create an S3 client for given channel with provided configuration.
+pub async fn create_s3_client(config: Option<S3Config>, url: Option<Url>) -> aws_sdk_s3::Client {
+    let sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
+    if let (Some(config), Some(url)) = (config, url) {
+        let auth = config.auth_storage.get_by_url(url).unwrap(); // todo
+        let config_builder = match auth {
+            (
+                _,
+                Some(Authentication::S3Credentials {
+                    access_key_id,
+                    secret_access_key,
+                    session_token,
+                }),
+            ) => aws_sdk_s3::config::Builder::from(&sdk_config)
+                .endpoint_url(config.endpoint_url)
+                .region(aws_sdk_s3::config::Region::new(config.region))
+                .force_path_style(config.force_path_style)
+                .credentials_provider(aws_sdk_s3::config::Credentials::new(
+                    access_key_id,
+                    secret_access_key,
+                    session_token,
+                    None,
+                    "pixi",
+                )),
+            (_, Some(_)) => {
+                panic!("Unsupported authentication method"); // todo proper error message
+            }
+            (_, None) => aws_sdk_s3::config::Builder::from(&sdk_config)
+                .endpoint_url(config.endpoint_url)
+                .region(aws_sdk_s3::config::Region::new(config.region))
+                .force_path_style(config.force_path_style),
+        };
+        let aws_config = config_builder.build();
+        aws_sdk_s3::Client::from_conf(aws_config)
+    } else {
+        // TODO: infer path style from endpoint URL or other means and set
+        // .force_path_style(true) on builder if necessary
+        let config = aws_sdk_s3::config::Builder::from(&sdk_config).build();
+        aws_sdk_s3::Client::from_conf(config)
     }
 }
 
@@ -84,7 +80,7 @@ impl S3Middleware {
 
     /// Generate a presigned S3 `GetObject` request.
     async fn generate_presigned_s3_request(&self, url: Url) -> MiddlewareResult<PresignedRequest> {
-        let client = create_s3_client(self.config.clone(), url.clone()).await;
+        let client = create_s3_client(self.config.clone(), Some(url.clone())).await;
 
         let bucket_name = url.host_str().expect("Host should be present in S3 URL");
         let key = url.path().strip_prefix("/").ok_or_else(|| {

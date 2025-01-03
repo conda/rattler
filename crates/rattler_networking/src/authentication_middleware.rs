@@ -105,10 +105,7 @@ impl AuthenticationMiddleware {
                         .insert(reqwest::header::AUTHORIZATION, header_value);
                     Ok(req)
                 }
-                Authentication::CondaToken(_) => Ok(req),
-                Authentication::S3Credentials { .. } => {
-                    panic!("S3 credentials should be handled by the S3 middleware")
-                } // todo
+                Authentication::CondaToken(_) | Authentication::S3Credentials { .. } => Ok(req),
             }
         } else {
             Ok(req)

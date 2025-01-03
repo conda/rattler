@@ -95,18 +95,21 @@ fn minio_server() -> MinioServer {
 }
 
 #[fixture]
-fn aws_config() -> (TempDir, std::path::PathBuf) {
+fn auth_file() -> (TempDir, std::path::PathBuf) {
     let temp_dir = tempdir().unwrap();
     let aws_config = r#"
-[profile default]
-aws_access_key_id = minioadmin
-aws_secret_access_key = minioadmin
-endpoint_url = http://localhost:9000
-region = eu-central-1
+{
+    "s3://rattler-s3-testing/my-channel": {
+        "S3Credentials": {
+            "access_key_id": "minioadmin",
+            "secret_access_key": "minioadmin"
+        }
+    }
+}
 "#;
-    let aws_config_path = temp_dir.path().join("aws.config");
-    std::fs::write(&aws_config_path, aws_config).unwrap();
-    (temp_dir, aws_config_path)
+    let credentials_path = temp_dir.path().join("credentials.json");
+    std::fs::write(&credentials_path, aws_config).unwrap();
+    (temp_dir, credentials_path)
 }
 
 #[rstest]
@@ -114,26 +117,20 @@ region = eu-central-1
 #[serial]
 async fn test_minio_download_repodata(
     #[allow(unused_variables)] minio_server: MinioServer,
-    aws_config: (TempDir, std::path::PathBuf),
+    auth_file: (TempDir, std::path::PathBuf),
 ) {
-    // TODO: also test with_env
+    // TODO: also test with AWS environment variables
+    let auth_storage = AuthenticationStorage::from_file(auth_file.1.as_path()).unwrap();
     let middleware = S3Middleware::new(Some(S3Config {
-        auth_storage: AuthenticationStorage::default(), // todo: create custom storage here
+        auth_storage: auth_storage.clone(),
         endpoint_url: Url::parse("http://localhost:9000").unwrap(),
         region: "eu-central-1".into(),
         force_path_style: true,
     }));
 
-    let download_client = Client::builder()
-        .no_gzip()
-        .build()
-        .expect("failed to create client");
-
-    let authentication_storage = AuthenticationStorage::default();
+    let download_client = Client::builder().no_gzip().build().unwrap();
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::new(
-            authentication_storage,
-        )))
+        .with_arc(Arc::new(AuthenticationMiddleware::new(auth_storage)))
         .with(middleware)
         .build();
 

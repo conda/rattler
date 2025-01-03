@@ -159,6 +159,32 @@ impl AuthenticationStorage {
             Ok(Some(credentials)) => return Ok((url, Some(credentials))),
         };
 
+        // S3 protocol URLs need to be treated separately since they follow a different schema
+        if url.scheme() == "s3" {
+            let mut current_url = url.clone();
+            loop {
+                match self.get(current_url.as_str()) {
+                    Ok(None) => {
+                        let possible_rest =
+                            current_url.as_str().rsplit_once('/').map(|(rest, _)| rest);
+
+                        match possible_rest {
+                            Some(rest) => {
+                                if let Ok(new_url) = Url::parse(rest) {
+                                    current_url = new_url;
+                                } else {
+                                    return Ok((url, None));
+                                }
+                            }
+                            _ => return Ok((url, None)), // No more subdomains to check
+                        }
+                    }
+                    Ok(Some(credentials)) => return Ok((url, Some(credentials))),
+                    Err(_) => return Ok((url, None)),
+                }
+            }
+        }
+
         // Check for credentials under e.g. `*.prefix.dev`
         let Some(mut domain) = url.domain() else {
             return Ok((url, None));
