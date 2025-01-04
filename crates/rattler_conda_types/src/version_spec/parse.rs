@@ -221,12 +221,14 @@ fn logical_constraint_parser(
             }
             // The version ends in a wildcard pattern
             (
-                "*" | ".*",
+                version_remainder,
                 Some(VersionOperators::Range(
                     RangeOperator::GreaterEquals | RangeOperator::Greater,
                 )),
                 Lenient,
-            ) => VersionOperators::Range(RangeOperator::GreaterEquals),
+            ) if is_star_or_star_dot_star(version_remainder) => {
+                VersionOperators::Range(RangeOperator::GreaterEquals)
+            }
             (
                 "*" | ".*",
                 Some(VersionOperators::Exact(EqualityOperator::NotEquals)),
@@ -236,7 +238,9 @@ fn logical_constraint_parser(
                 // even in strict mode we allow this.
                 VersionOperators::StrictRange(StrictRangeOperator::NotStartsWith)
             }
-            ("*" | ".*", Some(op), Lenient) => {
+            (version_remainder, Some(op), Lenient)
+                if is_star_or_star_dot_star(version_remainder) =>
+            {
                 // In lenient mode we simply ignore the glob.
                 op
             }
@@ -305,6 +309,18 @@ pub fn looks_like_infinite_starts_with(input: &str) -> bool {
     }
 
     false
+}
+
+/// Returns true if the input is `*` or a sequence of `.*`.
+pub fn is_star_or_star_dot_star(input: &str) -> bool {
+    if input == "*" {
+        return true;
+    }
+    let mut input = input;
+    while let Some(rest) = input.strip_suffix(".*") {
+        input = rest;
+    }
+    input.is_empty()
 }
 
 /// Parses a version constraint.

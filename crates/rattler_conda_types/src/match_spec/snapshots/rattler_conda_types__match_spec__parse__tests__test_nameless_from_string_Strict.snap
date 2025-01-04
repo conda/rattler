@@ -54,3 +54,5 @@ snapshot_kind: text
     op: Eq
     rhs: 0
   subdir: linux-64
+">=2.*.*":
+  error: "invalid version constraint: regex constraints are not supported"
