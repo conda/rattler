@@ -115,7 +115,19 @@ impl S3 {
             let s3_config = config_builder.build();
             Ok(aws_sdk_s3::Client::from_conf(s3_config))
         } else {
-            let sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
+            let mut sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
+            if let Some(credentials_provider) = sdk_config.credentials_provider() {
+                let creds = credentials_provider.as_ref().provide_credentials().await;
+                if creds.is_ok() {
+                    tracing::info!("Using AWS credentials from environment via default provider");
+                } else {
+                    tracing::warn!("No AWS credentials found, assuming bucket is public");
+                    sdk_config = aws_config::defaults(BehaviorVersion::latest())
+                        .no_credentials()
+                        .load()
+                        .await;
+                }
+            }
             let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
             // Infer if we expect path-style addressing from the endpoint URL.
             if let Some(endpoint_url) = sdk_config.endpoint_url() {
@@ -281,7 +293,11 @@ region = eu-central-1
 [profile packages]
 aws_access_key_id = minioadmin
 aws_secret_access_key = minioadmin
-endpoint_url = http://localhost:8000
+endpoint_url = http://localhost:9000
+region = eu-central-1
+
+[profile public]
+endpoint_url = http://localhost:9000
 region = eu-central-1
 "#;
         let aws_config_path = temp_dir.path().join("aws.config");
@@ -312,7 +328,7 @@ region = eu-central-1
                         .await
                         .unwrap();
                     assert!(
-                        presigned.to_string().contains("localhost:8000"),
+                        presigned.to_string().contains("localhost:9000"),
                         "Unexpected presigned URL: {presigned:?}"
                     );
                 })
@@ -416,5 +432,37 @@ region = eu-central-1
                 == "http://localhost:9000/rattler-s3-testing/my-channel/noarch/repodata.json?x-id=GetObject",
             "Unexpected presigned URL: {presigned:?}"
         );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    #[serial]
+    async fn test_presigned_s3_request_public_bucket_aws(
+        aws_config: (TempDir, std::path::PathBuf),
+    ) {
+        with_env(
+            HashMap::from([
+                ("AWS_CONFIG_FILE", aws_config.1.to_str().unwrap()),
+                ("AWS_PROFILE", "public"),
+            ]),
+            move || {
+                Box::pin(async move {
+                    let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::new());
+                    let presigned = s3
+                        .generate_presigned_s3_url(
+                            Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json")
+                                .unwrap(),
+                        )
+                        .await
+                        .unwrap();
+                    assert!(
+                        presigned.to_string()
+                            == "http://localhost:9000/rattler-s3-testing/my-channel/noarch/repodata.json?x-id=GetObject",
+                        "Unexpected presigned URL: {presigned:?}"
+                    );
+                })
+            },
+        )
+        .await;
     }
 }

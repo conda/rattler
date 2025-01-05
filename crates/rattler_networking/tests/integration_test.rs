@@ -139,6 +139,10 @@ aws_access_key_id = minioadmin
 aws_secret_access_key = minioadmin
 endpoint_url = http://localhost:9000
 region = eu-central-1
+
+[profile public]
+endpoint_url = http://localhost:9000
+region = eu-central-1
 "#;
     let aws_config_path = temp_dir.path().join("aws.config");
     std::fs::write(&aws_config_path, aws_config).unwrap();
@@ -192,6 +196,53 @@ async fn test_minio_download_repodata_aws_profile(
         HashMap::from([
             ("AWS_CONFIG_FILE", aws_config.1.to_str().unwrap()),
             ("AWS_PROFILE", "default"),
+        ]),
+        move || {
+            Box::pin(async move {
+                let auth_storage = AuthenticationStorage::new(); // empty storage
+                let middleware = S3Middleware::new(S3Config::FromAWS, auth_storage.clone());
+
+                let download_client = Client::builder().no_gzip().build().unwrap();
+                let download_client = reqwest_middleware::ClientBuilder::new(download_client)
+                    .with_arc(Arc::new(AuthenticationMiddleware::new(auth_storage)))
+                    .with(middleware)
+                    .build();
+
+                let result = download_client
+                    .get("s3://rattler-s3-testing/my-channel/noarch/repodata.json")
+                    .send()
+                    .await
+                    .unwrap();
+
+                assert_eq!(result.status(), 200);
+                let body = result.text().await.unwrap();
+                assert!(body.contains("test-package-0.1-0.tar.bz2"));
+            })
+        },
+    )
+    .await;
+}
+
+#[rstest]
+#[tokio::test]
+#[serial]
+async fn test_minio_download_aws_profile_public(
+    #[allow(unused_variables)] minio_server: MinioServer,
+    aws_config: (TempDir, std::path::PathBuf),
+) {
+    // Make bucket public
+    run_subprocess(
+        "mc",
+        &["anonymous", "set", "download", "local/rattler-s3-testing"],
+        &HashMap::from([(
+            "MC_HOST_local",
+            "http://minioadmin:minioadmin@localhost:9000",
+        )]),
+    );
+    with_env(
+        HashMap::from([
+            ("AWS_CONFIG_FILE", aws_config.1.to_str().unwrap()),
+            ("AWS_PROFILE", "public"),
         ]),
         move || {
             Box::pin(async move {
