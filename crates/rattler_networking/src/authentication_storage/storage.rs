@@ -176,7 +176,7 @@ impl AuthenticationStorage {
                                     return Ok((url, None));
                                 }
                             }
-                            _ => return Ok((url, None)),  // No more subpaths to check
+                            _ => return Ok((url, None)), // No more subpaths to check
                         }
                     }
                     Ok(Some(credentials)) => return Ok((url, Some(credentials))),

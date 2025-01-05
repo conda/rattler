@@ -101,7 +101,7 @@ impl S3 {
                     return Err(anyhow::anyhow!("Unsupported authentication method"));
                 }
                 (_, None) => {
-                    eprintln!("No authentication found");
+                    tracing::info!("No authentication found, assuming bucket is public");
                     let sdk_config = aws_config::defaults(BehaviorVersion::latest())
                         .no_credentials() // Turn off request signing
                         .load()
@@ -119,7 +119,10 @@ impl S3 {
             let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
             // Infer if we expect path-style addressing from the endpoint URL.
             if let Some(endpoint_url) = sdk_config.endpoint_url() {
-                // If the endpoint URL is localhost, we most likely have to use path-style addressing.
+                // If the endpoint URL is localhost, we probably have to use path-style addressing.
+                // There are certainly more edge cases, but this is a valid start to make the
+                // integration tests with minIO work.
+                // xref: https://github.com/awslabs/aws-sdk-rust/issues/1230
                 if endpoint_url.starts_with("http://localhost") {
                     s3_config_builder = s3_config_builder.force_path_style(true);
                 }
