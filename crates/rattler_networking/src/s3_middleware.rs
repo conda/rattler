@@ -1,6 +1,5 @@
 //! Middleware to handle `s3://` URLs to pull artifacts from an S3 bucket
-use core::panic;
-
+use anyhow::Error;
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::presigning::PresigningConfig;
@@ -59,9 +58,13 @@ impl S3 {
         }
     }
 
-    /// Create an S3 client for given channel with provided configuration.
-    pub async fn create_s3_client(&self, url: Option<Url>) -> aws_sdk_s3::Client {
-        let sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
+    /// Create an S3 client.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The S3 URL to obtain authentication information from the authentication storage.
+    ///     Only respected for custom (non-AWS-based) configuration.
+    pub async fn create_s3_client(&self, url: Option<Url>) -> Result<aws_sdk_s3::Client, Error> {
         if let (
             S3Config::Custom {
                 endpoint_url,
@@ -80,41 +83,62 @@ impl S3 {
                         secret_access_key,
                         session_token,
                     }),
-                ) => aws_sdk_s3::config::Builder::from(&sdk_config)
-                    .endpoint_url(endpoint_url)
-                    .region(aws_sdk_s3::config::Region::new(region))
-                    .force_path_style(force_path_style)
-                    .credentials_provider(aws_sdk_s3::config::Credentials::new(
-                        access_key_id,
-                        secret_access_key,
-                        session_token,
-                        None,
-                        "pixi",
-                    )),
-                (_, Some(_)) => {
-                    panic!("Unsupported authentication method"); // todo proper error message
+                ) => {
+                    let sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
+                    aws_sdk_s3::config::Builder::from(&sdk_config)
+                        .endpoint_url(endpoint_url)
+                        .region(aws_sdk_s3::config::Region::new(region))
+                        .force_path_style(force_path_style)
+                        .credentials_provider(aws_sdk_s3::config::Credentials::new(
+                            access_key_id,
+                            secret_access_key,
+                            session_token,
+                            None,
+                            "pixi",
+                        ))
                 }
-                (_, None) => todo!("should use no credentials provider and not sign"),
-                // (_, None) => aws_sdk_s3::config::Builder::from(&sdk_config)
-                //     .endpoint_url(endpoint_url)
-                //     .region(aws_sdk_s3::config::Region::new(region))
-                //     .force_path_style(force_path_style),
+                (_, Some(_)) => {
+                    return Err(anyhow::anyhow!("Unsupported authentication method"));
+                }
+                (_, None) => {
+                    eprintln!("No authentication found");
+                    let sdk_config = aws_config::defaults(BehaviorVersion::latest())
+                        .no_credentials() // Turn off request signing
+                        .load()
+                        .await;
+                    aws_sdk_s3::config::Builder::from(&sdk_config)
+                        .endpoint_url(endpoint_url)
+                        .region(aws_sdk_s3::config::Region::new(region))
+                        .force_path_style(force_path_style)
+                }
             };
-            let aws_config = config_builder.build();
-            aws_sdk_s3::Client::from_conf(aws_config)
+            let s3_config = config_builder.build();
+            Ok(aws_sdk_s3::Client::from_conf(s3_config))
         } else {
-            // TODO: infer path style from endpoint URL or other means and set
-            // .force_path_style(true) on builder if necessary
-            let config = aws_sdk_s3::config::Builder::from(&sdk_config).build();
-            aws_sdk_s3::Client::from_conf(config)
+            let sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
+            let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
+            // Infer if we expect path-style addressing from the endpoint URL.
+            if let Some(endpoint_url) = sdk_config.endpoint_url() {
+                // If the endpoint URL is localhost, we most likely have to use path-style addressing.
+                if endpoint_url.starts_with("http://localhost") {
+                    s3_config_builder = s3_config_builder.force_path_style(true);
+                }
+            }
+            let client = aws_sdk_s3::Client::from_conf(s3_config_builder.build());
+            Ok(client)
         }
     }
 
     /// Generate a presigned S3 `GetObject` request.
     async fn generate_presigned_s3_url(&self, url: Url) -> MiddlewareResult<Url> {
-        let client = self.create_s3_client(Some(url.clone())).await;
+        let client = self.create_s3_client(Some(url.clone())).await?;
 
-        let bucket_name = url.host_str().expect("Host should be present in S3 URL");
+        let bucket_name = url.host_str().ok_or_else(|| {
+            reqwest_middleware::Error::middleware(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Host should be present in S3 URL",
+            ))
+        })?;
         let key = url.path().strip_prefix("/").ok_or_else(|| {
             reqwest_middleware::Error::middleware(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -123,8 +147,6 @@ impl S3 {
         })?;
 
         let builder = client.get_object().bucket(bucket_name).key(key);
-        // if client has no credentials provider, don't presign but use default url
-        // TODO: implement this
 
         Url::parse(
             builder
@@ -180,10 +202,6 @@ mod tests {
         }
     }
 
-    // TODO: test no auth
-
-    // TODO: test S3Config::Custom
-
     #[tokio::test]
     #[serial]
     async fn test_presigned_s3_request_endpoint_url() {
@@ -209,8 +227,7 @@ mod tests {
                         presigned.to_string().starts_with(
                             "http://rattler-s3-testing.custom-aws/my-channel/noarch/repodata.json?"
                         ),
-                        "Unexpected presigned URL: {:?}",
-                        presigned
+                        "Unexpected presigned URL: {presigned:?}"
                     );
                 })
             },
@@ -241,8 +258,7 @@ mod tests {
                         presigned.to_string().starts_with(
                             "https://rattler-s3-testing.s3.eu-central-1.amazonaws.com/my-channel/noarch/repodata.json?"
                         ),
-                        "Unexpected presigned URL: {:?}",
-                        presigned
+                        "Unexpected presigned URL: {presigned:?}"
                     );
                 })
             },
@@ -294,8 +310,7 @@ region = eu-central-1
                         .unwrap();
                     assert!(
                         presigned.to_string().contains("localhost:8000"),
-                        "Unexpected presigned URL: {:?}",
-                        presigned
+                        "Unexpected presigned URL: {presigned:?}"
                     );
                 })
             },
@@ -325,12 +340,78 @@ region = eu-central-1
                         .unwrap();
                     assert!(
                         presigned.to_string().contains("localhost:9000"),
-                        "Unexpected presigned URL: {:?}",
-                        presigned
+                        "Unexpected presigned URL: {presigned:?}"
                     );
                 })
             },
         )
         .await;
+    }
+
+    #[rstest]
+    #[tokio::test]
+    #[serial]
+    async fn test_presigned_s3_request_custom_config() {
+        let temp_dir = tempdir().unwrap();
+        let aws_config = r#"
+        {
+            "s3://rattler-s3-testing/my-channel": {
+                "S3Credentials": {
+                    "access_key_id": "minioadmin",
+                    "secret_access_key": "minioadmin"
+                }
+            }
+        }
+        "#;
+        let credentials_path = temp_dir.path().join("credentials.json");
+        std::fs::write(&credentials_path, aws_config).unwrap();
+        let s3 = S3::new(
+            S3Config::Custom {
+                endpoint_url: Url::parse("http://localhost:9000").unwrap(),
+                region: "eu-central-1".into(),
+                force_path_style: true,
+            },
+            AuthenticationStorage::from_file(credentials_path.as_path()).unwrap(),
+        );
+
+        let presigned = s3
+            .generate_presigned_s3_url(
+                Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json").unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            presigned.path(),
+            "/rattler-s3-testing/my-channel/noarch/repodata.json"
+        );
+        assert_eq!(presigned.scheme(), "http");
+        assert_eq!(presigned.host_str().unwrap(), "localhost");
+        assert!(presigned.query().unwrap().contains("X-Amz-Credential"));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    #[serial]
+    async fn test_presigned_s3_request_public_bucket() {
+        let s3 = S3::new(
+            S3Config::Custom {
+                endpoint_url: Url::parse("http://localhost:9000").unwrap(),
+                region: "eu-central-1".into(),
+                force_path_style: true,
+            },
+            AuthenticationStorage::new(), // empty auth storage
+        );
+
+        let presigned = s3
+            .generate_presigned_s3_url(
+                Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json").unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            presigned.to_string()
+                == "http://localhost:9000/rattler-s3-testing/my-channel/noarch/repodata.json?x-id=GetObject",
+            "Unexpected presigned URL: {presigned:?}"
+        );
     }
 }
