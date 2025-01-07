@@ -698,7 +698,9 @@ pub fn link_package_sync(
         if full_path.exists() {
             // tracing::info!("directory already exists: {:?}", directory);
             continue;
-        } else if allow_ref_links && cfg!(target_os = "macos") && !index_json.noarch.is_python() {
+        }
+
+        if allow_ref_links && cfg!(target_os = "macos") && !index_json.noarch.is_python() {
             // reflink the whole directory if possible
             // currently this does not handle noarch packages
             match reflink_copy::reflink(package_dir.join(&directory), &full_path) {
@@ -754,7 +756,7 @@ pub fn link_package_sync(
                     sha256_in_prefix: None,
                     file_mode: None,
                     prefix_placeholder: None,
-                })
+                });
             }
         }
     }
