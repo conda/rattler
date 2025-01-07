@@ -635,23 +635,18 @@ mod test {
         FailAfterBytes(usize),
     }
 
-    async fn redirect_to_anaconda(
+    async fn redirect_to_prefix(
         axum::extract::Path((channel, subdir, file)): axum::extract::Path<(String, String, String)>,
     ) -> Redirect {
-        Redirect::permanent(&format!(
-            "https://conda.anaconda.org/{channel}/{subdir}/{file}"
-        ))
+        Redirect::permanent(&format!("https://prefix.dev/{channel}/{subdir}/{file}"))
     }
 
     async fn test_flaky_package_cache(archive_name: &str, middleware: Middleware) {
-        let static_dir = get_test_data_dir();
-        println!("Serving files from {}", static_dir.display());
-
         // Construct a service that serves raw files from the test directory
         // build our application with a route
         let router = Router::new()
             // `GET /` goes to `root`
-            .route("/{channel}/{subdir}/{file}", get(redirect_to_anaconda));
+            .route("/{channel}/{subdir}/{file}", get(redirect_to_prefix));
 
         // Construct a router that returns data from the static dir but fails the first
         // try.

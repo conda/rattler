@@ -1,21 +1,15 @@
 //! This module provides functionality to download and cache `repodata.json`
 //! from a remote location.
 
-use cache::{CacheHeaders, Expiring, RepoDataState};
-use cache_control::{Cachability, CacheControl};
-use std::time::Duration;
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
     sync::Arc,
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
-// use fs-err for better error reporting
-use crate::{
-    reporter::ResponseReporterExt,
-    utils::{AsyncEncoding, Encoding, LockedFile},
-    Reporter,
-};
+
+use cache::{CacheHeaders, Expiring, RepoDataState};
+use cache_control::{Cachability, CacheControl};
 use fs_err::tokio as tokio_fs;
 use futures::{future::ready, FutureExt, TryStreamExt};
 use humansize::{SizeFormatter, DECIMAL};
@@ -31,6 +25,13 @@ use tempfile::NamedTempFile;
 use tokio_util::io::StreamReader;
 use tracing::{instrument, Level};
 use url::Url;
+
+// use fs-err for better error reporting
+use crate::{
+    reporter::ResponseReporterExt,
+    utils::{AsyncEncoding, Encoding, LockedFile},
+    Reporter,
+};
 
 mod cache;
 pub mod jlap;
@@ -418,6 +419,7 @@ pub async fn fetch_repo_data(
         &subdir_url,
         cache_state.as_ref(),
         options.variant.file_name(),
+        &options,
     )
     .await;
 
@@ -605,8 +607,8 @@ pub async fn fetch_repo_data(
                     .duration_since(SystemTime::now())
                     .unwrap_or(Duration::ZERO);
 
-                // Wait for a second to let the remote service restore itself. This increases the
-                // chance of success.
+                // Wait for a second to let the remote service restore itself. This increases
+                // the chance of success.
                 tracing::warn!(
                         "failed to download repodata from {}: {}. Retry #{}, Sleeping {:?} until the next attempt...",
                         &url,
@@ -781,22 +783,35 @@ pub async fn check_variant_availability(
     subdir_url: &Url,
     cache_state: Option<&RepoDataState>,
     filename: &str,
+    options: &FetchRepoDataOptions,
 ) -> VariantAvailability {
     // Determine from the cache which variant are available. This is currently
     // cached for a maximum of 14 days.
     let expiration_duration = chrono::TimeDelta::try_days(14).expect("14 days is a valid duration");
-    let has_zst = cache_state
-        .and_then(|state| state.has_zst.as_ref())
-        .and_then(|value| value.value(expiration_duration))
-        .copied();
-    let has_bz2 = cache_state
-        .and_then(|state| state.has_bz2.as_ref())
-        .and_then(|value| value.value(expiration_duration))
-        .copied();
-    let has_jlap = cache_state
-        .and_then(|state| state.has_jlap.as_ref())
-        .and_then(|value| value.value(expiration_duration))
-        .copied();
+    let has_zst = if options.zstd_enabled {
+        cache_state
+            .and_then(|state| state.has_zst.as_ref())
+            .and_then(|value| value.value(expiration_duration))
+            .copied()
+    } else {
+        Some(false)
+    };
+    let has_bz2 = if options.bz2_enabled {
+        cache_state
+            .and_then(|state| state.has_bz2.as_ref())
+            .and_then(|value| value.value(expiration_duration))
+            .copied()
+    } else {
+        Some(false)
+    };
+    let has_jlap = if options.jlap_enabled {
+        cache_state
+            .and_then(|state| state.has_jlap.as_ref())
+            .and_then(|value| value.value(expiration_duration))
+            .copied()
+    } else {
+        Some(false)
+    };
 
     // Create a future to possibly refresh the zst state.
     let zst_repodata_url = subdir_url.join(&format!("{filename}.zst")).unwrap();
@@ -1096,7 +1111,9 @@ fn validate_cached_state(
 #[cfg(test)]
 mod test {
     use std::{
-        path::Path,
+        future::IntoFuture,
+        net::SocketAddr,
+        path::{Path, PathBuf},
         sync::{
             atomic::{AtomicUsize, Ordering},
             Arc,
@@ -1104,13 +1121,26 @@ mod test {
     };
 
     use assert_matches::assert_matches;
+    use axum::{
+        body::Body,
+        extract::State,
+        http::{Request, StatusCode},
+        middleware,
+        middleware::Next,
+        response::{IntoResponse, Response},
+        routing::get,
+        Router,
+    };
+    use bytes::Bytes;
     use fs_err::tokio as tokio_fs;
+    use futures::{stream, StreamExt};
     use hex_literal::hex;
     use rattler_networking::AuthenticationMiddleware;
     use reqwest::Client;
-    use reqwest_middleware::ClientWithMiddleware;
+    use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
     use tempfile::TempDir;
-    use tokio::io::AsyncWriteExt;
+    use tokio::{io::AsyncWriteExt, sync::Mutex};
+    use tokio_util::io::ReaderStream;
     use url::Url;
 
     use super::{fetch_repo_data, CacheResult, CachedRepoData, FetchRepoDataOptions};
@@ -1554,5 +1584,123 @@ mod test {
                 RepoDataNotFoundError::HttpError(_)
             ))
         ));
+    }
+
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    async fn test_flaky_package_cache() {
+        fn get_test_data_dir() -> PathBuf {
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
+        }
+
+        async fn redirect_to_prefix(
+            axum::extract::Path((file,)): axum::extract::Path<(String,)>,
+        ) -> impl IntoResponse {
+            let path = get_test_data_dir()
+                .join("channels/pytorch/linux-64/")
+                .join(file);
+            if !path.exists() {
+                return Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::empty())
+                    .unwrap();
+            }
+            let file = tokio::fs::File::open(path).await.unwrap();
+            let body = Body::from_stream(ReaderStream::new(file));
+            Response::builder()
+                .status(StatusCode::OK)
+                .body(body)
+                .unwrap()
+        }
+
+        /// A helper middleware function that fails the first two requests.
+        #[allow(clippy::type_complexity)]
+        async fn fail_with_half_package(
+            State((count, bytes)): State<(Arc<Mutex<i32>>, Arc<Mutex<usize>>)>,
+            req: Request<Body>,
+            next: Next,
+        ) -> Result<Response, StatusCode> {
+            let count = {
+                let mut count = count.lock().await;
+                *count += 1;
+                *count
+            };
+
+            println!("Running middleware for request #{count} for {}", req.uri());
+            let response = next.run(req).await;
+
+            if count < 2 {
+                println!("Cutting response body in half");
+                let body = response.into_body();
+                let mut body = body.into_data_stream();
+                let mut buffer = Vec::new();
+                while let Some(Ok(chunk)) = body.next().await {
+                    buffer.extend(chunk);
+                }
+
+                let byte_count = *bytes.lock().await;
+                let bytes = buffer.into_iter().take(byte_count).collect::<Vec<u8>>();
+                // Create a stream that ends prematurely
+                let stream = stream::iter(vec![
+                    Ok(bytes.into_iter().collect::<Bytes>()),
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "premature close",
+                    )),
+                    // The stream ends after sending partial data, simulating a premature close
+                ]);
+                let body = Body::from_stream(stream);
+                return Ok(Response::new(body));
+            }
+
+            Ok(response)
+        }
+
+        let request_count = Arc::new(Mutex::new(0));
+        let router = Router::new()
+            .route("/{file}", get(redirect_to_prefix))
+            .layer(middleware::from_fn_with_state(
+                (request_count.clone(), Arc::new(Mutex::new(1024 * 1024))),
+                fail_with_half_package,
+            ));
+
+        // Construct the server that will listen on localhost but with a *random port*.
+        // The random port is very important because it enables creating
+        // multiple instances at the same time. We need this to be able to run
+        // tests in parallel.
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let service = router.into_make_service();
+        tokio::spawn(axum::serve(listener, service).into_future());
+
+        let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
+
+        let client = ClientBuilder::new(Client::default()).build();
+
+        let cache_dir = TempDir::new().unwrap();
+        let result = fetch_repo_data(
+            server_url,
+            client,
+            cache_dir.path().into(),
+            FetchRepoDataOptions {
+                bz2_enabled: false,
+                zstd_enabled: false,
+                jlap_enabled: false,
+                ..FetchRepoDataOptions::default()
+            },
+            None,
+        )
+        .await;
+
+        // Unwrap the result because at this point we should have a valid result.
+        result.unwrap();
+
+        assert_eq!(
+            *request_count.lock().await,
+            2,
+            "there must have been exactly two requests"
+        );
     }
 }
