@@ -1,6 +1,7 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
 expression: evaluated
+snapshot_kind: text
 ---
 blas *.* mkl:
   name: blas
@@ -52,32 +53,13 @@ python=3.9:
 python=*:
   error: "invalid version constraint: '*' is incompatible with '=' operator'"
 "https://software.repos.intel.com/python/conda::python[version=3.9]":
-  name: python
-  version: "==3.9"
-  channel:
-    base_url: "https://software.repos.intel.com/python/conda"
-    name: python/conda
+  error: "invalid version constraint: missing range specifier for '3.9'. Did you mean '==3.9' or '3.9.*'?"
 "https://c.com/p/conda/linux-64::python[version=3.9]":
-  name: python
-  version: "==3.9"
-  channel:
-    base_url: "https://c.com/p/conda"
-    name: p/conda
-  subdir: linux-64
+  error: "invalid version constraint: missing range specifier for '3.9'. Did you mean '==3.9' or '3.9.*'?"
 "https://c.com/p/conda::python[version=3.9, subdir=linux-64]":
-  name: python
-  version: "==3.9"
-  channel:
-    base_url: "https://c.com/p/conda"
-    name: p/conda
-  subdir: linux-64
+  error: "invalid version constraint: missing range specifier for '3.9'. Did you mean '==3.9' or '3.9.*'?"
 "conda-forge/linux-32::python[version=3.9, subdir=linux-64]":
-  name: python
-  version: "==3.9"
-  channel:
-    base_url: "https://conda.anaconda.org/conda-forge"
-    name: conda-forge
-  subdir: linux-64
+  error: "invalid version constraint: missing range specifier for '3.9'. Did you mean '==3.9' or '3.9.*'?"
 "conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]":
   name: python
   version: "==3.9"
@@ -115,14 +97,12 @@ rust ~=1.2.3:
     base_url: "file://<CRATE>/relative/channel"
     name: "./relative/channel"
 "python[channel=https://conda.anaconda.org/python/conda,version=3.9]":
-  name: python
-  version: "==3.9"
-  channel:
-    base_url: "https://conda.anaconda.org/python/conda"
-    name: python/conda
+  error: "invalid version constraint: missing range specifier for '3.9'. Did you mean '==3.9' or '3.9.*'?"
 "channel/win-64::foobar[channel=conda-forge, subdir=linux-64]":
   name: foobar
   channel:
     base_url: "https://conda.anaconda.org/conda-forge"
     name: conda-forge
   subdir: linux-64
+numpy>=2.*.*:
+  error: "invalid version constraint: regex constraints are not supported"

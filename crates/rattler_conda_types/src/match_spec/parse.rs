@@ -804,11 +804,12 @@ mod tests {
     fn test_nameless_match_spec() {
         insta::assert_yaml_snapshot!([
             NamelessMatchSpec::from_str("3.8.* *_cpython", Strict).unwrap(),
-            NamelessMatchSpec::from_str("1.0 py27_0[fn=\"bla\"]", Strict).unwrap(),
+            NamelessMatchSpec::from_str("==1.0 py27_0[fn=\"bla\"]", Strict).unwrap(),
             NamelessMatchSpec::from_str("=1.0 py27_0", Strict).unwrap(),
             NamelessMatchSpec::from_str("*cpu*", Strict).unwrap(),
-            NamelessMatchSpec::from_str("conda-forge::foobar", Strict).unwrap(),
-            NamelessMatchSpec::from_str("foobar[channel=conda-forge]", Strict).unwrap(),
+            // the next two tests are a bit weird, the version is `foobar` and the channel is `conda-forge`
+            NamelessMatchSpec::from_str("conda-forge::==foobar", Strict).unwrap(),
+            NamelessMatchSpec::from_str("==foobar[channel=conda-forge]", Strict).unwrap(),
             NamelessMatchSpec::from_str("* [build=foo]", Strict).unwrap(),
             NamelessMatchSpec::from_str(">=1.2[build=foo]", Strict).unwrap(),
             NamelessMatchSpec::from_str("[version='>=1.2', build=foo]", Strict).unwrap(),
@@ -1057,6 +1058,8 @@ mod tests {
             "./relative/channel::package",
             "python[channel=https://conda.anaconda.org/python/conda,version=3.9]",
             "channel/win-64::foobar[channel=conda-forge, subdir=linux-64]",
+            // Issue #1004
+            "numpy>=2.*.*",
         ];
 
         let evaluated: IndexMap<_, _> = specs
@@ -1127,6 +1130,8 @@ mod tests {
             // subdir in brackets take precedence
             "[version=3.9, subdir=linux-64]",
             "==3.9[subdir=linux-64, build_number=\"0\"]",
+            // Issue #1004
+            ">=2.*.*",
         ];
 
         let evaluated: IndexMap<_, _> = specs

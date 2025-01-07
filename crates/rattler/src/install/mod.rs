@@ -696,7 +696,6 @@ pub fn link_package_sync(
 
         // can we lock this directory?
         if full_path.exists() {
-            // tracing::info!("directory already exists: {:?}", directory);
             continue;
         }
 

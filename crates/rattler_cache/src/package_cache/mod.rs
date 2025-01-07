@@ -646,7 +646,7 @@ mod test {
         // build our application with a route
         let router = Router::new()
             // `GET /` goes to `root`
-            .route("/:channel/:subdir/:file", get(redirect_to_anaconda));
+            .route("/{channel}/{subdir}/{file}", get(redirect_to_anaconda));
 
         // Construct a router that returns data from the static dir but fails the first
         // try.
