@@ -246,10 +246,8 @@ impl From<PackageName> for MatchSpec {
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct NamelessMatchSpec {
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub version: Option<VersionSpec>,
     /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub build: Option<StringMatcher>,
     /// The build number of the package
     pub build_number: Option<BuildNumberSpec>,
