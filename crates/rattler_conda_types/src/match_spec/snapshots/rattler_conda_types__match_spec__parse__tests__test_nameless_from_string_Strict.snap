@@ -34,9 +34,7 @@ expression: evaluated
   version: 1.0.*
 "[version=1.0.*, build_number=\">6\"]":
   version: 1.0.*
-  build_number:
-    op: Gt
-    rhs: 6
+  build_number: ">6"
 "==2.7.*.*|>=3.6":
   error: "invalid version constraint: regex constraints are not supported"
 "3.9":
@@ -50,7 +48,5 @@ expression: evaluated
   subdir: linux-64
 "==3.9[subdir=linux-64, build_number=\"0\"]":
   version: "==3.9"
-  build_number:
-    op: Eq
-    rhs: 0
+  build_number: "==0"
   subdir: linux-64
