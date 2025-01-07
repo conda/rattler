@@ -209,6 +209,12 @@ impl PackageCache {
     /// This is a convenience wrapper around `get_or_fetch` which fetches the
     /// package from the given URL if the package could not be found in the
     /// cache.
+    ///
+    /// This function assumes that the `client` is already configured with a
+    /// retry middleware that will retry any request that fails. This function
+    /// uses the passed in `retry_policy` if, after the request has been sent
+    /// and the response is successful, streaming of the package data fails
+    /// and the whole request must be retried.
     #[instrument(skip_all, fields(url=%url))]
     pub async fn get_or_fetch_from_url_with_retry(
         &self,
@@ -496,6 +502,9 @@ mod test {
     use rattler_conda_types::package::{ArchiveIdentifier, PackageFile, PathsJson};
     use rattler_digest::{parse_digest_from_hex, Sha256};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
+    use reqwest::Client;
+    use reqwest_middleware::ClientBuilder;
+    use reqwest_retry::RetryTransientMiddleware;
     use tempfile::tempdir;
     use tokio::sync::Mutex;
     use tokio_stream::StreamExt;
@@ -675,12 +684,14 @@ mod test {
 
         let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
 
+        let client = ClientBuilder::new(Client::default()).build();
+
         // Do the first request without
         let result = cache
             .get_or_fetch_from_url_with_retry(
                 ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
                 server_url.join(archive_name).unwrap(),
-                reqwest::Client::default().into(),
+                client.clone(),
                 DoNotRetryPolicy,
                 None,
             )
@@ -693,13 +704,20 @@ mod test {
             assert_eq!(*request_count_lock, 1, "Expected there to be 1 request");
         }
 
+        let retry_policy = ExponentialBackoffBuilder::default().build_with_max_retries(3);
+        let client = ClientBuilder::from_client(client)
+            .with(RetryTransientMiddleware::new_with_policy(
+                retry_policy.clone(),
+            ))
+            .build();
+
         // The second one should fail after the 2nd try
         let result = cache
             .get_or_fetch_from_url_with_retry(
                 ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
                 server_url.join(archive_name).unwrap(),
-                reqwest::Client::default().into(),
-                ExponentialBackoffBuilder::default().build_with_max_retries(3),
+                client,
+                retry_policy,
                 None,
             )
             .await;
