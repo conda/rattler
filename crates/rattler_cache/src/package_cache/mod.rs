@@ -23,7 +23,6 @@ use rattler_digest::Sha256Hash;
 use rattler_networking::retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy};
 use rattler_package_streaming::{DownloadReporter, ExtractError};
 pub use reporter::CacheReporter;
-use reqwest::StatusCode;
 use simple_spawn_blocking::Cancelled;
 use tracing::instrument;
 use url::Url;
@@ -253,17 +252,12 @@ impl PackageCache {
                     // Extract any potential error
                     let Err(err) = result else { return Ok(()); };
 
-                    // Only retry on certain errors.
-                    if !matches!(
-                    &err,
-                    ExtractError::IoError(_) | ExtractError::CouldNotCreateDestination(_)
-                ) && !matches!(&err, ExtractError::ReqwestError(err) if
-                    err.is_timeout() ||
-                    err.is_connect() ||
-                    err
-                        .status()
-                        .map_or(false, |status| status.is_server_error() || status == StatusCode::TOO_MANY_REQUESTS || status == StatusCode::REQUEST_TIMEOUT)
-                ) {
+                    // Only retry on io errors. We assume that the user has
+                    // middleware installed that handles connection retries.
+
+                    if !matches!(&err,
+                        ExtractError::IoError(_) | ExtractError::CouldNotCreateDestination(_)
+                    ) {
                         return Err(err);
                     }
 
@@ -508,8 +502,10 @@ mod test {
     use url::Url;
 
     use super::PackageCache;
-    use crate::validation::ValidationMode;
-    use crate::{package_cache::CacheKey, validation::validate_package_directory};
+    use crate::{
+        package_cache::CacheKey,
+        validation::{validate_package_directory, ValidationMode},
+    };
 
     fn get_test_data_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
