@@ -481,8 +481,8 @@ impl Matches<RepoDataRecord> for NamelessMatchSpec {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
     use itertools::Itertools;
+    use std::str::FromStr;
 
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
