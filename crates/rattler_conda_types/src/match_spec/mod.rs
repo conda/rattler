@@ -1,7 +1,7 @@
 use crate::{build_spec::BuildNumberSpec, PackageName, PackageRecord, RepoDataRecord, VersionSpec};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
+use serde_with::{serde_as, skip_serializing_none};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::sync::Arc;
@@ -246,10 +246,8 @@ impl From<PackageName> for MatchSpec {
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct NamelessMatchSpec {
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub version: Option<VersionSpec>,
     /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub build: Option<StringMatcher>,
     /// The build number of the package
     pub build_number: Option<BuildNumberSpec>,
@@ -483,6 +481,7 @@ impl Matches<RepoDataRecord> for NamelessMatchSpec {
 
 #[cfg(test)]
 mod tests {
+    use itertools::Itertools;
     use std::str::FromStr;
 
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
@@ -713,7 +712,24 @@ mod tests {
             .into_iter()
             .map(|s| MatchSpec::from_str(s, Strict).unwrap())
             .map(|s| s.to_string())
-            .collect::<Vec<String>>()
-            .join("\n"));
+            .format("\n")
+            .to_string());
+    }
+
+    #[test]
+    fn test_serialize_json_matchspec() {
+        let specs = ["mamba 1.0.* py37_0",
+            "conda-forge::pytest[version='==1.0', sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]",
+            "conda-forge/linux-64::pytest",
+            "conda-forge/linux-64::pytest[version=1.0.*]",
+            "conda-forge/linux-64::pytest[version=1.0.*, build=py37_0]",
+            "conda-forge/linux-64::pytest ==1.2.3"];
+
+        assert_snapshot!(specs
+            .into_iter()
+            .map(|s| MatchSpec::from_str(s, Strict).unwrap())
+            .map(|s| serde_json::to_string(&s).unwrap())
+            .format("\n")
+            .to_string());
     }
 }
