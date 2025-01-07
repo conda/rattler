@@ -701,9 +701,7 @@ mod test {
 
         let retry_policy = ExponentialBackoffBuilder::default().build_with_max_retries(3);
         let client = ClientBuilder::from_client(client)
-            .with(RetryTransientMiddleware::new_with_policy(
-                retry_policy.clone(),
-            ))
+            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
             .build();
 
         // The second one should fail after the 2nd try
