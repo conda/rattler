@@ -1,0 +1,51 @@
+[package]
+name = "rattler-index-s3"
+version = "0.1.0"
+edition.workspace = true
+description = "Rust binary for indexing directories in s3 buckets to create channels"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+default-run = "rattler-index-s3"
+
+[[bin]]
+name = "rattler-index-s3"
+path = "src/main.rs"
+
+
+[features]
+default = ["native-tls"]
+native-tls = [
+    "reqwest/native-tls",
+    "rattler/native-tls",
+    "rattler_repodata_gateway/native-tls",
+    "rattler_networking/native-tls",
+]
+rustls-tls = [
+    "reqwest/rustls-tls",
+    "rattler/rustls-tls",
+    "rattler_repodata_gateway/rustls-tls",
+    "rattler_networking/rustls-tls",
+]
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+url = { workspace = true }
+rattler = { path = "../rattler", version = "0.28.9", default-features = false, features = [
+    "indicatif",
+] }
+rattler_networking = { path = "../rattler_networking", version = "0.21.9", default-features = false, features = [
+    "gcs",
+    "s3",
+] }
+rattler_repodata_gateway = { path = "../rattler_repodata_gateway", version = "0.21.29", default-features = false, features = [
+    "gateway",
+] }
+reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+tracing = { workspace = true }

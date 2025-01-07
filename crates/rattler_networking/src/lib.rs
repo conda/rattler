@@ -11,6 +11,11 @@ pub mod gcs_middleware;
 #[cfg(feature = "gcs")]
 pub use gcs_middleware::GCSMiddleware;
 
+#[cfg(feature = "s3")]
+pub mod s3_middleware;
+#[cfg(feature = "s3")]
+pub use s3_middleware::S3Middleware;
+
 pub mod authentication_middleware;
 pub mod authentication_storage;
 

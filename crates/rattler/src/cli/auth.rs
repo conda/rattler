@@ -24,6 +24,18 @@ pub struct LoginArgs {
     /// The token to use on anaconda.org / quetz authentication
     #[clap(long)]
     conda_token: Option<String>,
+
+    /// The S3 access key ID
+    #[clap(long)]
+    s3_access_key_id: Option<String>,
+
+    /// The S3 secret access key
+    #[clap(long)]
+    s3_secret_access_key: Option<String>,
+
+    /// The S3 session token
+    #[clap(long)]
+    s3_session_token: Option<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -71,6 +83,14 @@ pub enum AuthenticationCLIError {
     #[error("Authentication with anaconda.org requires a conda token. Use `--conda-token` to provide one")]
     AnacondaOrgBadMethod,
 
+    /// S3 authentication needs an access key ID and a secret access key.
+    #[error("Secret access key must be provided when using S3 authentication")]
+    MissingSecretAccessKey,
+
+    /// Bad authentication method when using S3
+    #[error("Authentication with S3 requires a S3 access key ID and a secret access key. Use `--s3-access-key-id` and `--s3-secret-access-key` to provide them")]
+    S3BadMethod,
+
     /// Wrapper for errors that are generated from the underlying storage system
     /// (keyring or file system)
     #[error("Failed to interact with the authentication storage system")]
@@ -79,7 +99,7 @@ pub enum AuthenticationCLIError {
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
     // parse as url and extract host without scheme or port
-    let host = if url.contains("://") {
+    let host = if url.contains("http://") || url.contains("https://") {
         url::Url::parse(url)?.host_str().unwrap().to_string()
     } else {
         url.to_string()
@@ -110,6 +130,18 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
         }
     } else if let Some(token) = args.token {
         Authentication::BearerToken(token)
+    } else if let Some(access_key_id) = args.s3_access_key_id {
+        if args.s3_secret_access_key.is_none() {
+            return Err(AuthenticationCLIError::MissingSecretAccessKey);
+        } else {
+            let secret_access_key = args.s3_secret_access_key.unwrap();
+            let session_token = args.s3_session_token;
+            Authentication::S3Credentials {
+                access_key_id,
+                secret_access_key,
+                session_token,
+            }
+        }
     } else {
         return Err(AuthenticationCLIError::NoAuthenticationMethod);
     };
@@ -120,6 +152,14 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
 
     if host.contains("anaconda.org") && !matches!(auth, Authentication::CondaToken(_)) {
         return Err(AuthenticationCLIError::AnacondaOrgBadMethod);
+    }
+
+    if host.starts_with("s3://") && !matches!(auth, Authentication::S3Credentials { .. }) {
+        return Err(AuthenticationCLIError::S3BadMethod);
+    }
+
+    if matches!(auth, Authentication::S3Credentials { .. }) && !host.starts_with("s3://") {
+        return Err(AuthenticationCLIError::S3BadMethod);
     }
 
     storage

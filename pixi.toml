@@ -24,8 +24,10 @@ cxx-compiler = "~=1.6.0"
 openssl = "~=3.1"
 make = "~=4.3"
 pkg-config = "~=0.29.2"
-rust = "~=1.80.0"
+rust = "~=1.81.0"
 cmake = "~=3.26.4"
+minio-server = "*"
+minio-client = "*"
 
 [target.linux-64.dependencies]
 clang = ">=18.1.8,<19.0"
@@ -45,4 +47,6 @@ pre-commit-install = "pre-commit install"
 pre-commit-run = "pre-commit run"
 
 [environments]
-lint = { features = ["lint"], no-default-feature = true, solve-group = "default" }
+lint = { features = [
+    "lint",
+], no-default-feature = true, solve-group = "default" }

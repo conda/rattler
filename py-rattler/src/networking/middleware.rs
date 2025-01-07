@@ -1,7 +1,7 @@
 use pyo3::{pyclass, pymethods, FromPyObject, PyResult};
 use rattler_networking::{
-    mirror_middleware::Mirror, AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware,
-    MirrorMiddleware, OciMiddleware,
+    mirror_middleware::Mirror, s3_middleware::S3Config, AuthenticationMiddleware,
+    AuthenticationStorage, GCSMiddleware, MirrorMiddleware, OciMiddleware, S3Middleware,
 };
 use std::collections::HashMap;
 use url::Url;
@@ -14,6 +14,7 @@ pub enum PyMiddleware {
     Authentication(PyAuthenticationMiddleware),
     Oci(PyOciMiddleware),
     Gcs(PyGCSMiddleware),
+    S3(PyS3Middleware),
 }
 
 #[pyclass]
@@ -111,5 +112,77 @@ impl PyGCSMiddleware {
 impl From<PyGCSMiddleware> for GCSMiddleware {
     fn from(_value: PyGCSMiddleware) -> Self {
         GCSMiddleware
+    }
+}
+
+#[derive(Clone)]
+#[pyclass]
+pub struct PyS3Config {
+    // non-trivial enums are not supported by pyo3 as pyclasses
+    custom: Option<PyS3ConfigCustom>,
+}
+
+#[derive(Clone)]
+struct PyS3ConfigCustom {
+    endpoint_url: Url,
+    region: String,
+    force_path_style: bool,
+}
+
+#[pymethods]
+impl PyS3Config {
+    #[new]
+    #[pyo3(signature = (endpoint_url=None, region=None, force_path_style=None))]
+    pub fn __init__(
+        endpoint_url: Option<String>,
+        region: Option<String>,
+        force_path_style: Option<bool>,
+    ) -> PyResult<Self> {
+        match (endpoint_url, region, force_path_style) {
+            (Some(endpoint_url), Some(region), Some(force_path_style)) => Ok(Self {
+                custom: Some(PyS3ConfigCustom {
+                    endpoint_url: Url::parse(&endpoint_url)
+                        .map_err(PyRattlerError::from)
+                        .unwrap(),
+                    region,
+                    force_path_style,
+                }),
+            }),
+            (None, None, None) => Ok(Self { custom: None }),
+            _ => unreachable!("Case handled in python"),
+        }
+    }
+}
+
+impl From<PyS3Config> for S3Config {
+    fn from(_value: PyS3Config) -> Self {
+        match _value.custom {
+            None => S3Config::FromAWS,
+            Some(custom) => S3Config::Custom {
+                endpoint_url: custom.endpoint_url,
+                region: custom.region,
+                force_path_style: custom.force_path_style,
+            },
+        }
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyS3Middleware {
+    pub(crate) s3_config: PyS3Config,
+}
+
+#[pymethods]
+impl PyS3Middleware {
+    #[new]
+    pub fn __init__(s3_config: PyS3Config) -> PyResult<Self> {
+        Ok(Self { s3_config })
+    }
+}
+
+impl From<PyS3Middleware> for S3Middleware {
+    fn from(_value: PyS3Middleware) -> Self {
+        S3Middleware::new(_value.s3_config.into(), AuthenticationStorage::default())
     }
 }
