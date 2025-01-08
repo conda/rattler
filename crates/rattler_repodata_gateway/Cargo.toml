@@ -54,6 +54,7 @@ tokio-util = { workspace = true, features = ["codec", "io"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 zstd = { workspace = true }
+retry-policies = { workspace = true }
 rattler_cache = { version = "0.3.1", path = "../rattler_cache" }
 rattler_redaction = { version = "0.1.5", path = "../rattler_redaction", features = ["reqwest", "reqwest-middleware"] }
 
