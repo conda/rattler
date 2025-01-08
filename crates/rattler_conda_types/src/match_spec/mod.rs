@@ -132,6 +132,8 @@ pub struct MatchSpec {
     pub build_number: Option<BuildNumberSpec>,
     /// Match the specific filename of the package
     pub file_name: Option<String>,
+    /// The selected optional features of the package
+    pub optional_features: Option<Vec<String>>,
     /// The channel of the package
     pub channel: Option<Arc<Channel>>,
     /// The subdir of the channel
@@ -168,6 +170,20 @@ impl Display for MatchSpec {
         match &self.name {
             Some(name) => write!(f, "{}", name.as_normalized())?,
             None => write!(f, "*")?,
+        }
+
+        match &self.optional_features {
+            Some(dependencies) => {
+                write!(f, "[")?;
+                for (i, dep) in dependencies.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{dep}")?;
+                }
+                write!(f, "]")?;
+            }
+            None => {}
         }
 
         if let Some(version) = &self.version {
@@ -218,6 +234,7 @@ impl MatchSpec {
                 build: self.build,
                 build_number: self.build_number,
                 file_name: self.file_name,
+                optional_features: self.optional_features,
                 channel: self.channel,
                 subdir: self.subdir,
                 namespace: self.namespace,
@@ -255,6 +272,8 @@ pub struct NamelessMatchSpec {
     pub build_number: Option<BuildNumberSpec>,
     /// Match the specific filename of the package
     pub file_name: Option<String>,
+    /// The selected optional features of the package
+    pub optional_features: Option<Vec<String>>,
     /// The channel of the package
     #[serde(deserialize_with = "deserialize_channel", default)]
     pub channel: Option<Arc<Channel>>,
@@ -308,6 +327,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             build: spec.build,
             build_number: spec.build_number,
             file_name: spec.file_name,
+            optional_features: spec.optional_features,
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
@@ -327,6 +347,7 @@ impl MatchSpec {
             build: spec.build,
             build_number: spec.build_number,
             file_name: spec.file_name,
+            optional_features: spec.optional_features,
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,

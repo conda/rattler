@@ -97,7 +97,7 @@ pub enum ChannelPriority {
     /// precedence.
     Disabled,
 }
-
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents a dependency resolution task, to be solved by one of the backends
 pub struct SolverTask<TAvailablePackagesIterator> {
     /// An iterator over all available packages

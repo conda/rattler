@@ -6,7 +6,7 @@ pub mod sharded;
 mod topological_sort;
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
     path::Path,
 };
@@ -145,6 +145,11 @@ pub struct PackageRecord {
     /// what way. See [`NoArchType`] for more information.
     #[serde(skip_serializing_if = "NoArchType::is_none")]
     pub noarch: NoArchType,
+
+    /// Specifications of optional or dependencies. These are dependencies that are
+    /// only required if certain features are enabled or if certain conditions are met. 
+    #[serde(default)]
+    pub optional_depends: BTreeMap<String, Vec<String>>,
 
     /// Optionally the platform the package supports
     pub platform: Option<String>, // Note that this does not match the [`Platform`] enum..
@@ -323,6 +328,7 @@ impl PackageRecord {
             noarch: NoArchType::default(),
             platform: None,
             python_site_packages_path: None,
+            optional_depends: BTreeMap::new(),
             sha256: None,
             size: None,
             subdir: Platform::current().to_string(),
@@ -511,6 +517,7 @@ impl PackageRecord {
             noarch: index.noarch,
             platform: index.platform,
             python_site_packages_path: index.python_site_packages_path,
+            optional_depends: BTreeMap::new(),
             sha256,
             size,
             subdir,

@@ -4,7 +4,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_till1, take_until, take_while, take_while1},
     character::complete::{char, multispace0, one_of, space0},
-    combinator::{opt, recognize},
+    combinator::{map, opt, recognize},
     error::{context, ContextError, ParseError},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, preceded, separated_pair, terminated},
@@ -178,6 +178,7 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
             alt((
                 delimited(char('"'), take_until("\""), char('"')),
                 delimited(char('\''), take_until("'"), char('\'')),
+                delimited(char('['), take_until("]"), char(']')),
                 take_till1(|c| c == ',' || c == ']' || c == '\'' || c == '"'),
             )),
         ))(input)
@@ -207,7 +208,7 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
 /// Strips the brackets part of the matchspec returning the rest of the
 /// matchspec and  the contents of the brackets as a `Vec<&str>`.
 fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMatchSpecError> {
-    if let Some(matches) = lazy_regex::regex!(r#".*(?:(\[.*\]))$"#).captures(input) {
+    if let Some(matches) = lazy_regex::regex!(r#".*(\[(?:[^\[\]]|\[(?:[^\[\]]|\[.*\])*\])*\])$"#).captures(input) {
         let bracket_str = matches.get(1).unwrap().as_str();
         let bracket_contents = parse_bracket_list(bracket_str)?;
 
@@ -220,6 +221,21 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
         Ok((input, bracket_contents))
     } else {
         Ok((input.into(), SmallVec::new()))
+    }
+}
+
+/// Parses a list of optional dependencies from a string `[feat1, feat2, feat3]`.
+pub fn parse_optional_features(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
+    fn parse_features(input: &str) -> IResult<&str, Vec<String>> {
+        separated_list0(
+            char(','),
+            map(take_till1(|c| c == ',' || c == ']'), |s: &str| s.trim().to_string()),
+        )(input)
+    }
+
+    match parse_features(input).finish() {
+        Ok((_remaining, dependencies)) => Ok(dependencies),
+        Err(_) => Err(ParseMatchSpecError::InvalidBracket),
     }
 }
 
@@ -248,6 +264,9 @@ fn parse_bracket_vec_into_components(
             "version" => match_spec.version = Some(VersionSpec::from_str(value, strictness)?),
             "build" => match_spec.build = Some(StringMatcher::from_str(value)?),
             "build_number" => match_spec.build_number = Some(BuildNumberSpec::from_str(value)?),
+            "optional_features" => {
+                match_spec.optional_features = Some(parse_optional_features(value)?);
+            },
             "sha256" => {
                 match_spec.sha256 = Some(
                     parse_digest_from_hex::<Sha256>(value)
@@ -1342,6 +1361,7 @@ mod tests {
             build: "py27_0*".parse().ok(),
             build_number: Some(BuildNumberSpec::from_str(">=6").unwrap()),
             file_name: Some("foo-1.0-py27_0.tar.bz2".to_string()),
+            optional_features: None,
             channel: Some(
                 Channel::from_str("conda-forge", &channel_config())
                     .map(Arc::new)
