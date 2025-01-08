@@ -630,7 +630,15 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
             .filter(|c| {
                 let record = &self.pool.resolve_solvable(*c).record;
                 match record {
-                    SolverPackageRecord::RecordWithFeature(rec, _) | SolverPackageRecord::Record(rec) => spec.matches(*rec) != inverse,
+                    SolverPackageRecord::Record(rec) => {
+                        // Base package matches if spec matches and no features are required
+                        spec.matches(*rec) != inverse && spec.optional_features.is_none()
+                    }
+                    SolverPackageRecord::RecordWithFeature(rec, feature) => {
+                        // Feature-enabled package matches if spec matches and feature is required
+                        spec.matches(*rec) != inverse && 
+                        spec.optional_features.as_ref().map_or(false, |features| features.contains(feature))
+                    }
                     SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
                         version,
                         build_string,
@@ -706,13 +714,28 @@ impl super::SolverImpl for Solver {
                 .intern_version_set(name_id, NamelessMatchSpec::default().into())
         });
 
-        let root_requirements = task.specs.iter().map(|spec| {
+        let root_requirements = task.specs.iter().flat_map(|spec| {
             let (name, nameless_spec) = spec.clone().into_nameless();
+            let features = spec.optional_features.clone();
             let name = name.expect("cannot use matchspec without a name");
             let name_id = provider.pool.intern_package_name(name.as_normalized());
-            provider
+            let mut reqs = vec![provider
                 .pool
-                .intern_version_set(name_id, nameless_spec.into())
+                .intern_version_set(name_id, nameless_spec.clone().into())];
+
+            // Add requirements for optional features if specified
+            if let Some(features) = features {
+                for feature in features {
+                    // Create a version set that matches the base package and requires the feature
+                    let mut feature_spec = nameless_spec.clone();
+                    feature_spec.optional_features = Some(vec![feature.clone()]);
+                    let feature_version_set = provider
+                        .pool
+                        .intern_version_set(name_id, feature_spec.into());
+                    reqs.push(feature_version_set);
+                }
+            }
+            reqs
         });
 
         let all_requirements = virtual_package_requirements
