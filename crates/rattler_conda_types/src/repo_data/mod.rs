@@ -147,7 +147,7 @@ pub struct PackageRecord {
     pub noarch: NoArchType,
 
     /// Specifications of optional or dependencies. These are dependencies that are
-    /// only required if certain features are enabled or if certain conditions are met. 
+    /// only required if certain features are enabled or if certain conditions are met.
     #[serde(default)]
     pub optional_depends: BTreeMap<String, Vec<String>>,
 

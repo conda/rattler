@@ -208,7 +208,9 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
 /// Strips the brackets part of the matchspec returning the rest of the
 /// matchspec and  the contents of the brackets as a `Vec<&str>`.
 fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMatchSpecError> {
-    if let Some(matches) = lazy_regex::regex!(r#".*(\[(?:[^\[\]]|\[(?:[^\[\]]|\[.*\])*\])*\])$"#).captures(input) {
+    if let Some(matches) =
+        lazy_regex::regex!(r#".*(\[(?:[^\[\]]|\[(?:[^\[\]]|\[.*\])*\])*\])$"#).captures(input)
+    {
         let bracket_str = matches.get(1).unwrap().as_str();
         let bracket_contents = parse_bracket_list(bracket_str)?;
 
@@ -229,7 +231,9 @@ pub fn parse_optional_features(input: &str) -> Result<Vec<String>, ParseMatchSpe
     fn parse_features(input: &str) -> IResult<&str, Vec<String>> {
         separated_list0(
             char(','),
-            map(take_till1(|c| c == ',' || c == ']'), |s: &str| s.trim().to_string()),
+            map(take_till1(|c| c == ',' || c == ']'), |s: &str| {
+                s.trim().to_string()
+            }),
         )(input)
     }
 
@@ -266,7 +270,7 @@ fn parse_bracket_vec_into_components(
             "build_number" => match_spec.build_number = Some(BuildNumberSpec::from_str(value)?),
             "optional_features" => {
                 match_spec.optional_features = Some(parse_optional_features(value)?);
-            },
+            }
             "sha256" => {
                 match_spec.sha256 = Some(
                     parse_digest_from_hex::<Sha256>(value)

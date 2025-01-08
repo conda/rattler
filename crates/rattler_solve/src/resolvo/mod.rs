@@ -115,14 +115,18 @@ impl<'a> Ord for SolverPackageRecord<'a> {
 impl<'a> SolverPackageRecord<'a> {
     fn name(&self) -> &PackageName {
         match self {
-            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => &rec.package_record.name,
+            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => {
+                &rec.package_record.name
+            }
             SolverPackageRecord::VirtualPackage(rec) => &rec.name,
         }
     }
 
     fn version(&self) -> &rattler_conda_types::Version {
         match self {
-            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => rec.package_record.version.version(),
+            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => {
+                rec.package_record.version.version()
+            }
             SolverPackageRecord::VirtualPackage(rec) => &rec.version,
         }
     }
@@ -130,21 +134,27 @@ impl<'a> SolverPackageRecord<'a> {
     fn track_features(&self) -> &[String] {
         const EMPTY: [String; 0] = [];
         match self {
-            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => &rec.package_record.track_features,
+            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => {
+                &rec.package_record.track_features
+            }
             SolverPackageRecord::VirtualPackage(_rec) => &EMPTY,
         }
     }
 
     fn build_number(&self) -> u64 {
         match self {
-            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => rec.package_record.build_number,
+            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => {
+                rec.package_record.build_number
+            }
             SolverPackageRecord::VirtualPackage(_rec) => 0,
         }
     }
 
     fn timestamp(&self) -> Option<&chrono::DateTime<chrono::Utc>> {
         match self {
-            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => rec.package_record.timestamp.as_ref(),
+            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => {
+                rec.package_record.timestamp.as_ref()
+            }
             SolverPackageRecord::VirtualPackage(_rec) => None,
         }
     }
@@ -534,7 +544,7 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
 
     async fn get_dependencies(&self, solvable: SolvableId) -> Dependencies {
         let mut dependencies = KnownDependencies::default();
-        
+
         // Get the record and any feature that might be enabled
         let (record, feature) = match &self.pool.resolve_solvable(solvable).record {
             SolverPackageRecord::Record(rec) => (rec, None),
@@ -543,7 +553,7 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
         };
 
         let mut parse_match_spec_cache = self.parse_match_spec_cache.borrow_mut();
-        
+
         // Add regular dependencies
         for depends in record.package_record.depends.iter() {
             let version_set_id =
@@ -567,7 +577,11 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
             if let Some(deps) = record.package_record.optional_depends.get(feature_name) {
                 // Add each dependency for this feature
                 for req in deps {
-                    let version_set_id = match parse_match_spec(&self.pool, req, &mut parse_match_spec_cache) {
+                    let version_set_id = match parse_match_spec(
+                        &self.pool,
+                        req,
+                        &mut parse_match_spec_cache,
+                    ) {
                         Ok(version_set_id) => version_set_id,
                         Err(e) => {
                             let reason = self.pool.intern_string(format!(
@@ -580,7 +594,11 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                 }
 
                 // Add a dependency back to the base package with exact version
-                let base_dep = format!("{}=={}", record.package_record.name.as_normalized(), record.package_record.version);
+                let base_dep = format!(
+                    "{}=={}",
+                    record.package_record.name.as_normalized(),
+                    record.package_record.version
+                );
                 let version_set_id = match parse_match_spec(
                     &self.pool,
                     base_dep.as_str(),
@@ -636,8 +654,11 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                     }
                     SolverPackageRecord::RecordWithFeature(rec, feature) => {
                         // Feature-enabled package matches if spec matches and feature is required
-                        spec.matches(*rec) != inverse && 
-                        spec.optional_features.as_ref().map_or(false, |features| features.contains(feature))
+                        spec.matches(*rec) != inverse
+                            && spec
+                                .optional_features
+                                .as_ref()
+                                .map_or(false, |features| features.contains(feature))
                     }
                     SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
                         version,
@@ -776,7 +797,8 @@ impl super::SolverImpl for Solver {
             .into_iter()
             .filter_map(
                 |id| match solver.provider().pool.resolve_solvable(id).record {
-                    SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => Some(rec.clone()),
+                    SolverPackageRecord::Record(rec)
+                    | SolverPackageRecord::RecordWithFeature(rec, _) => Some(rec.clone()),
                     SolverPackageRecord::VirtualPackage(_) => None,
                 },
             )
