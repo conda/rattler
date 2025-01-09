@@ -1,4 +1,7 @@
-use crate::{build_spec::BuildNumberSpec, PackageName, PackageRecord, RepoDataRecord, VersionSpec};
+use crate::{
+    build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
+    VersionSpec,
+};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
@@ -226,6 +229,15 @@ impl MatchSpec {
                 url: self.url,
             },
         )
+    }
+
+    /// Returns whether the package is a virtual package.
+    /// This is determined by the package name starting with `__`.
+    /// Not having a package name is considered not virtual.
+    pub fn is_virtual(&self) -> bool {
+        self.name
+            .as_ref()
+            .map_or(false, |name| name.as_normalized().starts_with("__"))
     }
 }
 
@@ -479,9 +491,34 @@ impl Matches<RepoDataRecord> for NamelessMatchSpec {
     }
 }
 
+impl Matches<GenericVirtualPackage> for MatchSpec {
+    /// Match a [`MatchSpec`] against a [`GenericVirtualPackage`]
+    fn matches(&self, other: &GenericVirtualPackage) -> bool {
+        if let Some(name) = self.name.as_ref() {
+            if name != &other.name {
+                return false;
+            }
+        }
+
+        if let Some(spec) = self.version.as_ref() {
+            if !spec.matches(&other.version) {
+                return false;
+            }
+        }
+
+        if let Some(build_string) = self.build.as_ref() {
+            if !build_string.matches(&other.build_string) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
+    use rstest::rstest;
     use std::str::FromStr;
 
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
@@ -731,5 +768,45 @@ mod tests {
             .map(|s| serde_json::to_string(&s).unwrap())
             .format("\n")
             .to_string());
+    }
+
+    #[rstest]
+    #[case("foo >=1.0 py37_0", true)]
+    #[case("foo >=1.0 py37*", true)]
+    #[case("foo 1.0.* py38*", false)]
+    #[case("foo * py37_1", false)]
+    #[case("foo ==1.0", true)]
+    #[case("foo >=2.0", false)]
+    #[case("foo >=1.0", true)]
+    #[case("foo", true)]
+    #[case("bar", false)]
+    fn test_match_generic_virtual_package(#[case] spec_str: &str, #[case] expected: bool) {
+        let virtual_package = crate::GenericVirtualPackage {
+            name: PackageName::new_unchecked("foo"),
+            version: Version::from_str("1.0").unwrap(),
+            build_string: String::from("py37_0"),
+        };
+
+        let spec = MatchSpec::from_str(spec_str, Strict).unwrap();
+        assert_eq!(spec.matches(&virtual_package), expected);
+    }
+
+    #[test]
+    fn test_is_virtual() {
+        let spec = MatchSpec::from_str("non_virtual_name", Strict).unwrap();
+        assert!(!spec.is_virtual());
+
+        let spec = MatchSpec::from_str("__virtual_name", Strict).unwrap();
+        assert!(spec.is_virtual());
+
+        let spec = MatchSpec::from_str("non_virtual_name >=12", Strict).unwrap();
+        assert!(!spec.is_virtual());
+
+        let spec = MatchSpec::from_str("__virtual_name >=12", Strict).unwrap();
+        assert!(spec.is_virtual());
+
+        let spec =
+            MatchSpec::from_nameless(NamelessMatchSpec::from_str(">=12", Strict).unwrap(), None);
+        assert!(!spec.is_virtual());
     }
 }
