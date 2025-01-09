@@ -326,12 +326,16 @@ impl<'a> CondaDependencyProvider<'a> {
                         package_name,
                         SolverPackageRecord::RecordWithFeature(record, feature.clone()),
                     );
-                    let package_name_with_feature = pool.intern_package_name(format!(
-                        "{}[{}]",
-                        record.package_record.name.as_normalized(),
-                        feature
-                    ));
-                    all_entries.push((package_name_with_feature, feature_solvable));
+                    let package_name_with_feature = record
+                        .package_record
+                        .name
+                        .clone()
+                        .with_feature(feature.clone())
+                        .expect("Package name should not already have a feature");
+
+                    let package_name_id =
+                        pool.intern_package_name(package_name_with_feature.as_normalized());
+                    all_entries.push((package_name_id, feature_solvable));
                 }
 
                 // Update records with all entries in a single mutable borrow
@@ -776,10 +780,13 @@ impl super::SolverImpl for Solver {
             if let Some(features) = features {
                 for feature in features {
                     // Create a version set that matches the feature-enabled package
-                    let package_name_with_feature =
-                        format!("{}[{}]", name.as_normalized(), feature);
-                    let feature_name_id =
-                        provider.pool.intern_package_name(package_name_with_feature);
+                    let package_name_with_feature = name
+                        .clone()
+                        .with_feature(feature.to_string())
+                        .expect("Package name should not already have a feature");
+                    let feature_name_id = provider
+                        .pool
+                        .intern_package_name(package_name_with_feature.as_normalized());
                     let feature_version_set = provider
                         .pool
                         .intern_version_set(feature_name_id, nameless_spec.clone().into());
@@ -853,14 +860,13 @@ fn parse_match_spec(
             let mut spec_with_feature = spec.clone();
             spec_with_feature.optional_features = Some(vec![feature.to_string()]);
 
-            let name_with_feature = format!(
-                "{}[{}]",
-                name.as_ref()
-                    .expect("Packages with no name are not supported")
-                    .as_normalized(),
-                feature
-            );
-            let dependency_name = pool.intern_package_name(&name_with_feature);
+            let base_name = name
+                .as_ref()
+                .expect("Packages with no name are not supported")
+                .clone()
+                .with_feature(feature.to_string())
+                .expect("Package name should not already have a feature");
+            let dependency_name = pool.intern_package_name(base_name.as_normalized());
             let version_set_id = pool.intern_version_set(dependency_name, spec_with_feature.into());
             version_set_ids.push(version_set_id);
         }
