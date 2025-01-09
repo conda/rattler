@@ -419,6 +419,12 @@ impl<'lock> Environment<'lock> {
             .map(|pkgs| pkgs.filter_map(LockedPackageRef::as_pypi))
     }
 
+    /// Returns whether this environment has any pypi packages for the specified platform.
+    pub fn has_pypi_packages(&self, platform: Platform) -> bool {
+        self.pypi_packages(platform)
+            .is_some_and(|mut packages| packages.next().is_some())
+    }
+
     /// Creates a [`OwnedEnvironment`] from this environment.
     pub fn to_owned(self) -> OwnedEnvironment {
         OwnedEnvironment {
