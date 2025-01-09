@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 344
 expression: prefix_record
 ---
 arch: x86_64
@@ -13,6 +12,7 @@ license: TCL
 license_family: BSD
 md5: c69a5047cc9291ae40afd4a1ad6f0c0f
 name: tk
+optional_depends: {}
 platform: win32
 sha256: 087795090a99a1d397ef1ed80b4a01fabfb0122efb141562c168e3c0a76edba6
 size: 3681762

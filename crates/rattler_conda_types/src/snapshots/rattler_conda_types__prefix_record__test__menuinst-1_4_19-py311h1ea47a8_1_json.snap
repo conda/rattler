@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 266
 expression: prefix_record
 ---
 arch: x86_64
@@ -12,6 +11,7 @@ depends:
 license: BSD-3-Clause
 md5: 8eb00075c8acb7dd264c4a8537b89549
 name: menuinst
+optional_depends: {}
 platform: win
 sha256: f23b6f89654c21ff994991a2c0e018311e2a9288a68796d1612d4fb953b75be2
 size: 110326
@@ -229,4 +229,3 @@ link:
   source: "C:\\Users\\bas\\micromamba\\pkgs\\menuinst-1.4.19-py311h1ea47a8_1"
   type: 1
 requested_spec: ""
-

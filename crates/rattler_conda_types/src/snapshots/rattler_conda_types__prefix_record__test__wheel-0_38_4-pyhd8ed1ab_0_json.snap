@@ -11,6 +11,7 @@ license_family: MIT
 md5: c829cfb8cb826acb9de0ac1a2df0a940
 name: wheel
 noarch: python
+optional_depends: {}
 sha256: bd4f11ff075ff251ade9f57686f31473e25be46ab282d9603f551401250f9f44
 size: 32521
 subdir: noarch
@@ -230,4 +231,3 @@ link:
   source: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\wheel-0.38.4-pyhd8ed1ab_0"
   type: 1
 requested_spec: "conda-forge/noarch::wheel==0.38.4=pyhd8ed1ab_0[md5=c829cfb8cb826acb9de0ac1a2df0a940]"
-

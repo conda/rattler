@@ -12,6 +12,7 @@ depends:
 license: Unlicense
 md5: 5e5a97795de72f8cc3baf3d9ea6327a2
 name: libsqlite
+optional_depends: {}
 platform: win32
 sha256: 4e50b3d90a351c9d47d239d3f90fce4870df2526e4f7fef35203ab3276a6dfc9
 size: 669941
@@ -55,4 +56,3 @@ link:
   source: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\libsqlite-3.40.0-hcfcfb64_0"
   type: 1
 requested_spec: "conda-forge/win-64::libsqlite==3.40.0=hcfcfb64_0[md5=5e5a97795de72f8cc3baf3d9ea6327a2]"
-

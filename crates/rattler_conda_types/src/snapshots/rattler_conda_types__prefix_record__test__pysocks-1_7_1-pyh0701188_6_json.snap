@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 266
 expression: prefix_record
 ---
 build: pyh0701188_6
@@ -14,6 +13,7 @@ license_family: BSD
 md5: 56cd9fe388baac0e90c7149cfac95b60
 name: pysocks
 noarch: python
+optional_depends: {}
 sha256: b3a612bc887f3dd0fb7c4199ad8e342bd148cf69a9b74fd9468a18cf2bef07b7
 size: 19348
 subdir: noarch
@@ -98,4 +98,3 @@ link:
   source: "C:\\Users\\bas\\micromamba\\pkgs\\pysocks-1.7.1-pyh0701188_6"
   type: 1
 requested_spec: ""
-
