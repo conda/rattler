@@ -179,13 +179,79 @@ impl<'a> Display for SolverPackageRecord<'a> {
     }
 }
 
+/// Represents the type of name that is being used in the pool.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum NameType {
+    /// A package name without a feature.
+    WithoutFeature(String),
+
+    /// A package name with a feature.
+    WithFeature(String, String),
+}
+
+impl From<&str> for NameType {
+    fn from(value: &str) -> Self {
+        Self::WithoutFeature(value.to_string())
+    }
+}
+
+impl From<String> for NameType {
+    fn from(value: String) -> Self {
+        Self::WithoutFeature(value)
+    }
+}
+
+impl From<(String, String)> for NameType {
+    fn from((name, feature): (String, String)) -> Self {
+        Self::WithFeature(name, feature)
+    }
+}
+
+impl From<(&str, String)> for NameType {
+    fn from((name, feature): (&str, String)) -> Self {
+        Self::WithFeature(name.to_string(), feature)
+    }
+}
+
+impl Display for NameType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NameType::WithoutFeature(name) => write!(f, "{name}"),
+            NameType::WithFeature(name, feature) => write!(f, "{name}[{feature}]"),
+        }
+    }
+}
+
+impl Ord for NameType {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            // Compare names first
+            (NameType::WithoutFeature(name1), NameType::WithoutFeature(name2))
+            | (NameType::WithFeature(name1, _), NameType::WithFeature(name2, _)) => {
+                name1.cmp(name2)
+            }
+            // WithoutFeature comes before WithFeature
+            (NameType::WithoutFeature(_), NameType::WithFeature(_, _)) => std::cmp::Ordering::Less,
+            (NameType::WithFeature(_, _), NameType::WithoutFeature(_)) => {
+                std::cmp::Ordering::Greater
+            }
+        }
+    }
+}
+
+impl PartialOrd for NameType {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 /// An implement of [`resolvo::DependencyProvider`] that implements the
 /// ecosystem behavior for conda. This allows resolvo to solve for conda
 /// packages.
 #[derive(Default)]
 pub struct CondaDependencyProvider<'a> {
     /// The pool that deduplicates data used by the provider.
-    pub pool: Pool<SolverMatchSpec<'a>, String>,
+    pub pool: Pool<SolverMatchSpec<'a>, NameType>,
 
     records: HashMap<NameId, Candidates>,
 
@@ -326,10 +392,9 @@ impl<'a> CondaDependencyProvider<'a> {
                         package_name,
                         SolverPackageRecord::RecordWithFeature(record, feature.clone()),
                     );
-                    let package_name_with_feature = pool.intern_package_name(format!(
-                        "{}[{}]",
+                    let package_name_with_feature = pool.intern_package_name((
                         record.package_record.name.as_normalized(),
-                        feature
+                        feature.clone(),
                     ));
                     all_entries.push((package_name_with_feature, feature_solvable));
                 }
@@ -776,8 +841,7 @@ impl super::SolverImpl for Solver {
             if let Some(features) = features {
                 for feature in features {
                     // Create a version set that matches the feature-enabled package
-                    let package_name_with_feature =
-                        format!("{}[{}]", name.as_normalized(), feature);
+                    let package_name_with_feature = (name.as_normalized(), feature.to_string());
                     let feature_name_id =
                         provider.pool.intern_package_name(package_name_with_feature);
                     let feature_version_set = provider
@@ -839,7 +903,7 @@ impl super::SolverImpl for Solver {
 }
 
 fn parse_match_spec(
-    pool: &Pool<SolverMatchSpec<'_>>,
+    pool: &Pool<SolverMatchSpec<'_>, NameType>,
     spec_str: &str,
     parse_match_spec_cache: &mut HashMap<String, VersionSetId>,
 ) -> Result<Vec<VersionSetId>, ParseMatchSpecError> {
@@ -853,14 +917,13 @@ fn parse_match_spec(
             let mut spec_with_feature = spec.clone();
             spec_with_feature.optional_features = Some(vec![feature.to_string()]);
 
-            let name_with_feature = format!(
-                "{}[{}]",
+            let name_with_feature = (
                 name.as_ref()
                     .expect("Packages with no name are not supported")
                     .as_normalized(),
-                feature
+                feature.to_string(),
             );
-            let dependency_name = pool.intern_package_name(&name_with_feature);
+            let dependency_name = pool.intern_package_name(name_with_feature);
             let version_set_id = pool.intern_version_set(dependency_name, spec_with_feature.into());
             version_set_ids.push(version_set_id);
         }
