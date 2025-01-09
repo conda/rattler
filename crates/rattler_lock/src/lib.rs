@@ -230,6 +230,11 @@ impl LockFile {
     pub fn version(&self) -> FileFormatVersion {
         self.inner.version
     }
+
+    /// Check if there are any packages in the lockfile
+    pub fn is_empty(&self) -> bool {
+        self.inner.conda_packages.is_empty() && self.inner.pypi_packages.is_empty()
+    }
 }
 
 /// Information about a specific environment in the lock-file.
@@ -640,5 +645,20 @@ mod test {
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
             .has_pypi_packages(Platform::OsxArm64));
+    }
+
+    #[test]
+    fn test_is_empty() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v6/empty-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+        assert!(conda_lock.is_empty());
+
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v6/python-from-conda-only-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+        assert!(!conda_lock.is_empty());
     }
 }
