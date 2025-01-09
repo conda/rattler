@@ -192,7 +192,7 @@ pub struct CondaDependencyProvider<'a> {
     matchspec_to_highest_version:
         RefCell<HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>>,
 
-    parse_match_spec_cache: RefCell<HashMap<String, Vec<VersionSetId>>>,
+    parse_match_spec_cache: RefCell<HashMap<String, VersionSetId>>,
 
     stop_time: Option<std::time::SystemTime>,
 
@@ -841,11 +841,8 @@ impl super::SolverImpl for Solver {
 fn parse_match_spec(
     pool: &Pool<SolverMatchSpec<'_>>,
     spec_str: &str,
-    parse_match_spec_cache: &mut HashMap<String, Vec<VersionSetId>>,
+    parse_match_spec_cache: &mut HashMap<String, VersionSetId>,
 ) -> Result<Vec<VersionSetId>, ParseMatchSpecError> {
-    if let Some(spec_ids) = parse_match_spec_cache.get(spec_str) {
-        return Ok(spec_ids.clone());
-    }
     let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient)?;
     let (name, spec) = match_spec.into_nameless();
 
@@ -868,6 +865,10 @@ fn parse_match_spec(
             version_set_ids.push(version_set_id);
         }
     } else {
+        if let Some(spec_id) = parse_match_spec_cache.get(spec_str) {
+            return Ok(vec![*spec_id]);
+        }
+
         let dependency_name = pool.intern_package_name(
             name.as_ref()
                 .expect("Packages with no name are not supported")
@@ -875,8 +876,9 @@ fn parse_match_spec(
         );
         let version_set_id = pool.intern_version_set(dependency_name, spec.into());
         version_set_ids.push(version_set_id);
+
+        parse_match_spec_cache.insert(spec_str.to_string(), version_set_id);
     }
 
-    parse_match_spec_cache.insert(spec_str.to_string(), version_set_ids.clone());
     Ok(version_set_ids)
 }
