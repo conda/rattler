@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.10](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.9...rattler_conda_types-v0.29.10) - 2025-01-09
+
+### Added
+
+- Match GenericVirtualPackage with MatchSpec (#1016)
+
 ## [0.29.9](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.8...rattler_conda_types-v0.29.9) - 2025-01-09
 
 ### Added
