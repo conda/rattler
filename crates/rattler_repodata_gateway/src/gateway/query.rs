@@ -265,6 +265,15 @@ impl RepoDataQuery {
                                     pending_package_specs.insert(dependency_name.clone(), SourceSpecs::Transitive);
                                 }
                             }
+
+                            for (_, dependencies) in record.package_record.optional_depends.iter() {
+                                for dependency in dependencies {
+                                    let dependency_name = PackageName::new_unchecked(dependency.split_once(' ').unwrap_or((dependency, "")).0);
+                                    if seen.insert(dependency_name.clone()) {
+                                        pending_package_specs.insert(dependency_name.clone(), SourceSpecs::Transitive);
+                                    }
+                                }
+                            }
                         }
                     }
 
