@@ -606,4 +606,39 @@ mod test {
             .map(|p| p.location().to_string())
             .collect::<Vec<_>>());
     }
+
+    #[test]
+    fn test_has_pypi_packages() {
+        // v4
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v4/pypi-matplotlib-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        assert!(conda_lock
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .has_pypi_packages(Platform::Linux64));
+
+        // v6
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v6/numpy-as-pypi-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        assert!(conda_lock
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .has_pypi_packages(Platform::OsxArm64));
+
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v6/python-from-conda-only-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        assert!(!conda_lock
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .has_pypi_packages(Platform::OsxArm64));
+    }
 }
