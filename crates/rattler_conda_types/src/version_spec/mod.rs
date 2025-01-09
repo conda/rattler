@@ -6,6 +6,7 @@ pub(crate) mod parse;
 pub(crate) mod version_tree;
 
 use std::{
+    borrow::Cow,
     convert::TryFrom,
     fmt::{Display, Formatter},
     str::FromStr,
@@ -13,14 +14,14 @@ use std::{
 
 pub(crate) use constraint::is_start_of_version_constraint;
 use constraint::Constraint;
-use parse::ParseConstraintError;
+pub use parse::ParseConstraintError;
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use version_tree::VersionTree;
 
 use crate::{
     version::StrictVersion, version_spec::version_tree::ParseVersionTreeError, ParseStrictness,
-    ParseVersionError, Version,
+    ParseStrictness::Lenient, ParseVersionError, Version,
 };
 
 /// An operator to compare two versions.
@@ -118,7 +119,7 @@ impl LogicalOperator {
 
 /// A version specification.
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum VersionSpec {
     /// No version specified
     None,
@@ -137,14 +138,14 @@ pub enum VersionSpec {
 #[allow(clippy::enum_variant_names, missing_docs)]
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
 pub enum ParseVersionSpecError {
-    #[error("invalid version: {0}")]
-    InvalidVersion(#[source] ParseVersionError),
+    #[error(transparent)]
+    InvalidVersion(#[from] ParseVersionError),
 
-    #[error("invalid version tree: {0}")]
-    InvalidVersionTree(#[source] ParseVersionTreeError),
+    #[error(transparent)]
+    InvalidVersionTree(#[from] ParseVersionTreeError),
 
-    #[error("invalid version constraint: {0}")]
-    InvalidConstraint(#[source] ParseConstraintError),
+    #[error(transparent)]
+    InvalidConstraint(#[from] ParseConstraintError),
 }
 
 impl From<Constraint> for VersionSpec {
@@ -302,7 +303,17 @@ impl Serialize for VersionSpec {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&format!("{self}"))
+        self.to_string().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for VersionSpec {
+    fn deserialize<D>(deserializer: D) -> Result<VersionSpec, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = Cow::<'de, str>::deserialize(deserializer)?;
+        VersionSpec::from_str(&s, Lenient).map_err(serde::de::Error::custom)
     }
 }
 

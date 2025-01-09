@@ -1,11 +1,14 @@
-use super::{local_subdir::LocalSubdirClient, GatewayError, SourceConfig};
-use crate::fetch::{fetch_repo_data, FetchRepoDataError, FetchRepoDataOptions, Variant};
-use crate::gateway::error::SubdirNotFoundError;
-use crate::gateway::subdir::SubdirClient;
-use crate::Reporter;
+use std::{path::PathBuf, sync::Arc};
+
 use rattler_conda_types::{Channel, PackageName, Platform, RepoDataRecord};
 use reqwest_middleware::ClientWithMiddleware;
-use std::{path::PathBuf, sync::Arc};
+
+use super::{local_subdir::LocalSubdirClient, GatewayError, SourceConfig};
+use crate::{
+    fetch::{fetch_repo_data, FetchRepoDataError, FetchRepoDataOptions},
+    gateway::{error::SubdirNotFoundError, subdir::SubdirClient},
+    Reporter,
+};
 
 pub struct RemoteSubdirClient {
     sparse: LocalSubdirClient,
@@ -29,10 +32,10 @@ impl RemoteSubdirClient {
             cache_dir,
             FetchRepoDataOptions {
                 cache_action: source_config.cache_action,
-                variant: Variant::default(),
                 jlap_enabled: source_config.jlap_enabled,
                 zstd_enabled: source_config.zstd_enabled,
                 bz2_enabled: source_config.bz2_enabled,
+                ..FetchRepoDataOptions::default()
             },
             reporter,
         )
@@ -48,7 +51,8 @@ impl RemoteSubdirClient {
             e => GatewayError::FetchRepoDataError(e),
         })?;
 
-        // Create a new sparse repodata client that can be used to read records from the repodata.
+        // Create a new sparse repodata client that can be used to read records from the
+        // repodata.
         let sparse = LocalSubdirClient::from_channel_subdir(
             &repodata.repo_data_json_path,
             channel.clone(),

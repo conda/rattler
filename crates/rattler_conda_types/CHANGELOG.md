@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.9](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.8...rattler_conda_types-v0.29.9) - 2025-01-09
+
+### Added
+
+- expose ParseConstraintError (#1020)
+
+## [0.29.8](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.7...rattler_conda_types-v0.29.8) - 2025-01-08
+
+### Added
+
+- add deserialize from string for types (#1015)
+- require a range specifier for version spec in strict mode (#989)
+
+### Fixed
+
+- parsing of >=2.*.* (#1006)
+
 ## [0.29.7](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.6...rattler_conda_types-v0.29.7) - 2024-12-20
 
 ### Other
