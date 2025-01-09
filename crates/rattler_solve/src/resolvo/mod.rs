@@ -13,8 +13,9 @@ use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::{
-    package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
-    PackageName, PackageRecord, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
+    package::ArchiveType, version_spec::EqualityOperator, BuildNumberSpec, GenericVirtualPackage,
+    MatchSpec, Matches, NamelessMatchSpec, OrdOperator, PackageName, PackageRecord,
+    ParseMatchSpecError, ParseStrictness, RepoDataRecord, StringMatcher, VersionSpec,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -600,25 +601,29 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                 }
 
                 // Add a dependency back to the base package with exact version
-                let base_dep = format!(
-                    "{}=={}",
-                    record.package_record.name.as_normalized(),
-                    record.package_record.version
-                );
-
-                let version_set_id = match parse_match_spec(
-                    &self.pool,
-                    base_dep.as_str(),
-                    &mut parse_match_spec_cache,
-                ) {
-                    Ok(version_set_id) => version_set_id,
-                    Err(e) => {
-                        let reason = self.pool.intern_string(format!(
-                            "failed to create base package dependency: {e}",
-                        ));
-                        return Dependencies::Unknown(reason);
-                    }
+                let base_spec = MatchSpec {
+                    name: Some(record.package_record.name.clone()),
+                    version: Some(VersionSpec::Exact(
+                        EqualityOperator::Equals,
+                        record.package_record.version.version().clone(),
+                    )),
+                    build: Some(StringMatcher::Exact(record.package_record.build.clone())),
+                    build_number: Some(BuildNumberSpec::new(
+                        OrdOperator::Eq,
+                        record.package_record.build_number,
+                    )),
+                    subdir: Some(record.package_record.subdir.clone()),
+                    md5: record.package_record.md5,
+                    sha256: record.package_record.sha256,
+                    ..Default::default()
                 };
+
+                let (name, nameless_spec) = base_spec.into_nameless();
+                let name_id = self.pool.intern_package_name(
+                    name.expect("cannot use matchspec without a name")
+                        .as_normalized(),
+                );
+                let version_set_id = self.pool.intern_version_set(name_id, nameless_spec.into());
                 dependencies.requirements.push(version_set_id.into());
             }
         }
@@ -749,7 +754,7 @@ impl super::SolverImpl for Solver {
 
         let root_requirements = task.specs.iter().flat_map(|spec| {
             let (name, nameless_spec) = spec.clone().into_nameless();
-            let features = spec.optional_features.clone();
+            let features = &spec.optional_features;
             let name = name.expect("cannot use matchspec without a name");
             let name_id = provider.pool.intern_package_name(name.as_normalized());
             let mut reqs = vec![provider

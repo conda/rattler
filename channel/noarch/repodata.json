@@ -1,0 +1,29 @@
+{
+    "info": {
+      "subdir": "noarch"
+    },
+    "packages": {
+      "scipy-1.9.1-py310h20cbe94_0.tar.bz2": {
+        "build": "py310h20cbe94_0",
+        "build_number": 0,
+        "depends": [
+        ],
+        "optional_depends": {
+          "polars": ["polars >=1.1.1"],
+          "pandas": ["pandas >=1.2"]
+        },
+        "license": "BSD-3-Clause",
+        "license_family": "BSD",
+        "md5": "15790362c6982c2a037b034068c51653",
+        "name": "scipy",
+        "sha256": "337a0e2f5e981a7e7c3cc2aa5a16a77a4329816f98497a8c631f0c68365f8f42",
+        "size": 23900021,
+        "subdir": "noarch",
+        "timestamp": 1664915829364,
+        "version": "1.9.1"
+      }
+    },
+    "packages.conda": {},
+    "removed": [],
+    "repodata_version": 1
+  }

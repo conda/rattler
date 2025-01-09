@@ -27,7 +27,7 @@ pub mod prefix_record;
 #[cfg(test)]
 use std::path::{Path, PathBuf};
 
-pub use build_spec::{BuildNumber, BuildNumberSpec, ParseBuildNumberSpecError};
+pub use build_spec::{BuildNumber, BuildNumberSpec, OrdOperator, ParseBuildNumberSpecError};
 pub use channel::{Channel, ChannelConfig, ChannelUrl, NamedChannelOrUrl, ParseChannelError};
 pub use channel_data::{ChannelData, ChannelDataPackage};
 pub use environment_yaml::{EnvironmentYaml, MatchSpecOrSubSection};

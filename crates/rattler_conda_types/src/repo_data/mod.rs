@@ -148,7 +148,7 @@ pub struct PackageRecord {
 
     /// Specifications of optional or dependencies. These are dependencies that are
     /// only required if certain features are enabled or if certain conditions are met.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub optional_depends: BTreeMap<String, Vec<String>>,
 
     /// Optionally the platform the package supports
