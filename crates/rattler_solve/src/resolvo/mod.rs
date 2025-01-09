@@ -50,17 +50,22 @@ impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
 impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 
 /// Wrapper around `MatchSpec` so that we can use it in the `resolvo` pool
-#[repr(transparent)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct SolverMatchSpec<'a> {
     inner: NamelessMatchSpec,
+    feature: Option<String>,
     _marker: PhantomData<&'a PackageRecord>,
 }
 
 impl<'a> From<NamelessMatchSpec> for SolverMatchSpec<'a> {
     fn from(value: NamelessMatchSpec) -> Self {
+        let feature = value
+            .optional_features
+            .as_ref()
+            .and_then(|features| features.first().cloned());
         Self {
             inner: value,
+            feature,
             _marker: PhantomData,
         }
     }
@@ -187,7 +192,7 @@ pub struct CondaDependencyProvider<'a> {
     matchspec_to_highest_version:
         RefCell<HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>>,
 
-    parse_match_spec_cache: RefCell<HashMap<String, VersionSetId>>,
+    parse_match_spec_cache: RefCell<HashMap<String, Vec<VersionSetId>>>,
 
     stop_time: Option<std::time::SystemTime>,
 
@@ -561,23 +566,6 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
 
         let mut parse_match_spec_cache = self.parse_match_spec_cache.borrow_mut();
 
-        // Add regular dependencies
-        for depends in record.package_record.depends.iter() {
-            let version_set_id =
-                match parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache) {
-                    Ok(version_set_id) => version_set_id,
-                    Err(e) => {
-                        let reason = self.pool.intern_string(format!(
-                            "the dependency '{depends}' failed to parse: {e}",
-                        ));
-
-                        return Dependencies::Unknown(reason);
-                    }
-                };
-
-            dependencies.requirements.push(version_set_id.into());
-        }
-
         // If this is a feature-enabled package, add its feature dependencies
         if let Some(feature_name) = feature {
             // Find the feature's dependencies
@@ -597,7 +585,9 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                             return Dependencies::Unknown(reason);
                         }
                     };
-                    dependencies.requirements.push(version_set_id.into());
+                    for version_set_id in version_set_id {
+                        dependencies.requirements.push(version_set_id.into());
+                    }
                 }
 
                 // Add a dependency back to the base package with exact version
@@ -626,6 +616,25 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                 let version_set_id = self.pool.intern_version_set(name_id, nameless_spec.into());
                 dependencies.requirements.push(version_set_id.into());
             }
+        } else {
+            // Add regular dependencies
+            for depends in record.package_record.depends.iter() {
+                let version_set_id =
+                    match parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache) {
+                        Ok(version_set_id) => version_set_id,
+                        Err(e) => {
+                            let reason = self.pool.intern_string(format!(
+                                "the dependency '{depends}' failed to parse: {e}",
+                            ));
+
+                            return Dependencies::Unknown(reason);
+                        }
+                    };
+
+                for version_set_id in version_set_id {
+                    dependencies.requirements.push(version_set_id.into());
+                }
+            }
         }
 
         for constrains in record.package_record.constrains.iter() {
@@ -640,7 +649,9 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                         return Dependencies::Unknown(reason);
                     }
                 };
-            dependencies.constrains.push(version_set_id);
+            for version_set_id in version_set_id {
+                dependencies.constrains.push(version_set_id);
+            }
         }
 
         Dependencies::Known(dependencies)
@@ -830,19 +841,42 @@ impl super::SolverImpl for Solver {
 fn parse_match_spec(
     pool: &Pool<SolverMatchSpec<'_>>,
     spec_str: &str,
-    parse_match_spec_cache: &mut HashMap<String, VersionSetId>,
-) -> Result<VersionSetId, ParseMatchSpecError> {
-    if let Some(spec_id) = parse_match_spec_cache.get(spec_str) {
-        return Ok(*spec_id);
+    parse_match_spec_cache: &mut HashMap<String, Vec<VersionSetId>>,
+) -> Result<Vec<VersionSetId>, ParseMatchSpecError> {
+    if let Some(spec_ids) = parse_match_spec_cache.get(spec_str) {
+        return Ok(spec_ids.clone());
     }
     let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient)?;
     let (name, spec) = match_spec.into_nameless();
-    let dependency_name = pool.intern_package_name(
-        name.as_ref()
-            .expect("match specs without names are not supported")
-            .as_normalized(),
-    );
-    let version_set_id = pool.intern_version_set(dependency_name, spec.into());
-    parse_match_spec_cache.insert(spec_str.to_string(), version_set_id);
-    Ok(version_set_id)
+
+    let mut version_set_ids = vec![];
+
+    if let Some(ref features) = spec.optional_features {
+        for feature in features {
+            let mut spec_with_feature = spec.clone();
+            spec_with_feature.optional_features = Some(vec![feature.to_string()]);
+
+            let name_with_feature = format!(
+                "{}[{}]",
+                name.as_ref()
+                    .expect("Packages with no name are not supported")
+                    .as_normalized(),
+                feature
+            );
+            let dependency_name = pool.intern_package_name(&name_with_feature);
+            let version_set_id = pool.intern_version_set(dependency_name, spec_with_feature.into());
+            version_set_ids.push(version_set_id);
+        }
+    } else {
+        let dependency_name = pool.intern_package_name(
+            name.as_ref()
+                .expect("Packages with no name are not supported")
+                .as_normalized(),
+        );
+        let version_set_id = pool.intern_version_set(dependency_name, spec.into());
+        version_set_ids.push(version_set_id);
+    }
+
+    parse_match_spec_cache.insert(spec_str.to_string(), version_set_ids.clone());
+    Ok(version_set_ids)
 }
