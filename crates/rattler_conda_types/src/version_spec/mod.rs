@@ -13,7 +13,7 @@ use std::{
 
 pub(crate) use constraint::is_start_of_version_constraint;
 use constraint::Constraint;
-use parse::ParseConstraintError;
+pub use parse::ParseConstraintError;
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use version_tree::VersionTree;
@@ -137,14 +137,14 @@ pub enum VersionSpec {
 #[allow(clippy::enum_variant_names, missing_docs)]
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
 pub enum ParseVersionSpecError {
-    #[error("invalid version: {0}")]
-    InvalidVersion(#[source] ParseVersionError),
+    #[error(transparent)]
+    InvalidVersion(#[from] ParseVersionError),
 
-    #[error("invalid version tree: {0}")]
-    InvalidVersionTree(#[source] ParseVersionTreeError),
+    #[error(transparent)]
+    InvalidVersionTree(#[from] ParseVersionTreeError),
 
-    #[error("invalid version constraint: {0}")]
-    InvalidConstraint(#[source] ParseConstraintError),
+    #[error(transparent)]
+    InvalidConstraint(#[from] ParseConstraintError),
 }
 
 impl From<Constraint> for VersionSpec {
