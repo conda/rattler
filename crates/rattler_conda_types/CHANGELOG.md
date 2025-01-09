@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.9](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.8...rattler_conda_types-v0.29.9) - 2025-01-09
+
+### Added
+
+- expose ParseConstraintError (#1020)
+
 ## [0.29.8](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.7...rattler_conda_types-v0.29.8) - 2025-01-08
 
 ### Added
