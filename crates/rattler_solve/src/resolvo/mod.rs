@@ -234,7 +234,7 @@ impl<'a> CondaDependencyProvider<'a> {
             .collect::<Vec<_>>();
 
         // Hashmap that maps the package name to the channel it was first found in.
-        let mut package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
+        let package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
 
         // Add additional records
         for repo_data in repodata {
@@ -310,103 +310,109 @@ impl<'a> CondaDependencyProvider<'a> {
                     pool.intern_package_name(record.package_record.name.as_normalized());
                 let solvable_id =
                     pool.intern_solvable(package_name, SolverPackageRecord::Record(record));
-                let candidates = records.entry(package_name).or_default();
-                candidates.candidates.push(solvable_id);
 
-                // For each feature in optional_depends, create a feature-enabled solvable
+                // Collect all candidates first
+                let mut all_entries = vec![(package_name, solvable_id)];
+
+                // Add feature-enabled solvables
                 for feature in record.package_record.optional_depends.keys() {
                     let feature_solvable = pool.intern_solvable(
                         package_name,
                         SolverPackageRecord::RecordWithFeature(record, feature.clone()),
                     );
-                    candidates.candidates.push(feature_solvable);
+                    let package_name_with_feature = pool.intern_package_name(format!(
+                        "{}[{}]",
+                        record.package_record.name.as_normalized(),
+                        feature
+                    ));
+                    all_entries.push((package_name_with_feature, feature_solvable));
                 }
 
-                // Filter out any records that are newer than a specific date.
-                match (&exclude_newer, &record.package_record.timestamp) {
-                    (Some(exclude_newer), Some(record_timestamp))
-                        if record_timestamp > exclude_newer =>
-                    {
-                        let reason = pool.intern_string(format!(
-                            "the package is uploaded after the cutoff date of {exclude_newer}"
-                        ));
-                        candidates.excluded.push((solvable_id, reason));
+                // Update records with all entries in a single mutable borrow
+                for (pkg_name, solvable) in all_entries {
+                    let candidates = records.entry(pkg_name).or_default();
+                    candidates.candidates.push(solvable);
+
+                    // Filter out any records that are newer than a specific date.
+                    match (&exclude_newer, &record.package_record.timestamp) {
+                        (Some(exclude_newer), Some(record_timestamp))
+                            if record_timestamp > exclude_newer =>
+                        {
+                            let reason = pool.intern_string(format!(
+                                "the package is uploaded after the cutoff date of {exclude_newer}"
+                            ));
+                            candidates.excluded.push((solvable, reason));
+                        }
+                        _ => {}
                     }
-                    _ => {}
-                }
 
-                // Add to excluded when package is not in the specified channel.
-                if !channel_specific_specs.is_empty() {
-                    if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
-                        spec.name
-                            .as_ref()
-                            .expect("expecting a name")
-                            .as_normalized()
-                            == record.package_record.name.as_normalized()
-                    }) {
-                        // Check if the spec has a channel, and compare it to the repodata channel
-                        if let Some(spec_channel) = &spec.channel {
-                            if record.channel.as_ref() != Some(&spec_channel.canonical_name()) {
-                                tracing::debug!("Ignoring {} {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), match &record.channel {
-                                    Some(channel) => format!("from {}", &channel),
-                                    None => "without a channel".to_string(),
-                                });
-                                // Add record to the excluded with reason of being in the non
-                                // requested channel.
-                                let message = format!(
-                                    "candidate not in requested channel: '{}'",
-                                    spec_channel
-                                        .name
-                                        .clone()
-                                        .unwrap_or(spec_channel.base_url.to_string())
-                                );
-                                candidates
-                                    .excluded
-                                    .push((solvable_id, pool.intern_string(message)));
-                                continue;
+                    // Add to excluded when package is not in the specified channel.
+                    if !channel_specific_specs.is_empty() {
+                        if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
+                            spec.name
+                                .as_ref()
+                                .expect("expecting a name")
+                                .as_normalized()
+                                == record.package_record.name.as_normalized()
+                        }) {
+                            // Check if the spec has a channel, and compare it to the repodata channel
+                            if let Some(spec_channel) = &spec.channel {
+                                if record.channel.as_ref() != Some(&spec_channel.canonical_name()) {
+                                    tracing::debug!("Ignoring {} {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), match &record.channel {
+                                        Some(channel) => format!("from {}", &channel),
+                                        None => "without a channel".to_string(),
+                                    });
+                                    // Add record to the excluded with reason of being in the non
+                                    // requested channel.
+                                    let message = format!(
+                                        "candidate not in requested channel: '{}'",
+                                        spec_channel
+                                            .name
+                                            .clone()
+                                            .unwrap_or(spec_channel.base_url.to_string())
+                                    );
+                                    candidates
+                                        .excluded
+                                        .push((solvable, pool.intern_string(message)));
+                                    continue;
+                                }
                             }
                         }
                     }
-                }
 
-                // Enforce channel priority
-                // This function makes the assumption that the records are given in order of the
-                // channels.
-                if let (Some(first_channel), ChannelPriority::Strict) = (
-                    package_name_found_in_channel.get(record.package_record.name.as_normalized()),
-                    channel_priority,
-                ) {
-                    // Add the record to the excluded list when it is from a different channel.
-                    if first_channel != &&record.channel {
-                        if let Some(channel) = &record.channel {
-                            tracing::debug!(
-                                "Ignoring '{}' from '{}' because of strict channel priority.",
-                                &record.package_record.name.as_normalized(),
-                                channel
-                            );
-                            candidates.excluded.push((
-                                solvable_id,
-                                pool.intern_string(format!(
-                                    "due to strict channel priority not using this option from: '{channel}'",
-                                )),
-                            ));
-                        } else {
-                            tracing::debug!(
-                                "Ignoring '{}' without a channel because of strict channel priority.",
-                                &record.package_record.name.as_normalized(),
-                            );
-                            candidates.excluded.push((
-                                solvable_id,
-                                pool.intern_string("due to strict channel priority not using from an unknown channel".to_string()),
-                            ));
+                    // Enforce channel priority
+                    if let (Some(first_channel), ChannelPriority::Strict) = (
+                        package_name_found_in_channel
+                            .get(record.package_record.name.as_normalized()),
+                        channel_priority,
+                    ) {
+                        // Add the record to the excluded list when it is from a different channel.
+                        if first_channel != &&record.channel {
+                            if let Some(channel) = &record.channel {
+                                tracing::debug!(
+                                    "Ignoring '{}' from '{}' because of strict channel priority.",
+                                    &record.package_record.name.as_normalized(),
+                                    channel
+                                );
+                                candidates.excluded.push((
+                                    solvable,
+                                    pool.intern_string(format!(
+                                        "due to strict channel priority not using this option from: '{channel}'",
+                                    )),
+                                ));
+                            } else {
+                                tracing::debug!(
+                                    "Ignoring '{}' without a channel because of strict channel priority.",
+                                    &record.package_record.name.as_normalized(),
+                                );
+                                candidates.excluded.push((
+                                    solvable,
+                                    pool.intern_string("due to strict channel priority not using from an unknown channel".to_string()),
+                                ));
+                            }
+                            continue;
                         }
-                        continue;
                     }
-                } else {
-                    package_name_found_in_channel.insert(
-                        record.package_record.name.as_normalized().to_string(),
-                        &record.channel,
-                    );
                 }
             }
         }
@@ -599,6 +605,7 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                     record.package_record.name.as_normalized(),
                     record.package_record.version
                 );
+
                 let version_set_id = match parse_match_spec(
                     &self.pool,
                     base_dep.as_str(),
@@ -650,15 +657,20 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                 match record {
                     SolverPackageRecord::Record(rec) => {
                         // Base package matches if spec matches and no features are required
-                        spec.matches(*rec) != inverse && spec.optional_features.is_none()
+
+                        spec.matches(*rec) != inverse
                     }
                     SolverPackageRecord::RecordWithFeature(rec, feature) => {
                         // Feature-enabled package matches if spec matches and feature is required
-                        spec.matches(*rec) != inverse
-                            && spec
-                                .optional_features
+
+                        if spec.matches(*rec) {
+                            spec.optional_features
                                 .as_ref()
                                 .map_or(false, |features| features.contains(feature))
+                                != inverse
+                        } else {
+                            inverse
+                        }
                     }
                     SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
                         version,
@@ -747,19 +759,21 @@ impl super::SolverImpl for Solver {
             // Add requirements for optional features if specified
             if let Some(features) = features {
                 for feature in features {
-                    // Create a version set that matches the base package and requires the feature
-                    let mut feature_spec = nameless_spec.clone();
-                    feature_spec.optional_features = Some(vec![feature.clone()]);
+                    // Create a version set that matches the feature-enabled package
+                    let package_name_with_feature =
+                        format!("{}[{}]", name.as_normalized(), feature);
+                    let feature_name_id =
+                        provider.pool.intern_package_name(package_name_with_feature);
                     let feature_version_set = provider
                         .pool
-                        .intern_version_set(name_id, feature_spec.into());
+                        .intern_version_set(feature_name_id, nameless_spec.clone().into());
                     reqs.push(feature_version_set);
                 }
             }
             reqs
         });
 
-        let all_requirements = virtual_package_requirements
+        let all_requirements: Vec<Requirement> = virtual_package_requirements
             .chain(root_requirements)
             .map(Requirement::from)
             .collect();
@@ -776,7 +790,7 @@ impl super::SolverImpl for Solver {
             .collect();
 
         let problem = Problem::new()
-            .requirements(all_requirements)
+            .requirements(all_requirements.clone())
             .constraints(root_constraints);
 
         // Construct a solver and solve the problems in the queue
