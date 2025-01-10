@@ -38,7 +38,7 @@ pub mod linux;
 pub mod osx;
 
 use std::{
-    env,
+    env, fmt,
     hash::{Hash, Hasher},
     str::FromStr,
     sync::Arc,
@@ -394,6 +394,12 @@ impl EnvOverride for LibC {
 
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
         Ok(Self::current()?)
+    }
+}
+
+impl fmt::Display for LibC {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}={}", self.family, self.version)
     }
 }
 

@@ -1,7 +1,10 @@
-use crate::{build_spec::BuildNumberSpec, PackageName, PackageRecord, RepoDataRecord, VersionSpec};
+use crate::{
+    build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
+    VersionSpec,
+};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
+use serde_with::{serde_as, skip_serializing_none};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::sync::Arc;
@@ -227,6 +230,15 @@ impl MatchSpec {
             },
         )
     }
+
+    /// Returns whether the package is a virtual package.
+    /// This is determined by the package name starting with `__`.
+    /// Not having a package name is considered not virtual.
+    pub fn is_virtual(&self) -> bool {
+        self.name
+            .as_ref()
+            .map_or(false, |name| name.as_normalized().starts_with("__"))
+    }
 }
 
 // Enable constructing a match spec from a package name.
@@ -246,10 +258,8 @@ impl From<PackageName> for MatchSpec {
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct NamelessMatchSpec {
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub version: Option<VersionSpec>,
     /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub build: Option<StringMatcher>,
     /// The build number of the package
     pub build_number: Option<BuildNumberSpec>,
@@ -481,8 +491,34 @@ impl Matches<RepoDataRecord> for NamelessMatchSpec {
     }
 }
 
+impl Matches<GenericVirtualPackage> for MatchSpec {
+    /// Match a [`MatchSpec`] against a [`GenericVirtualPackage`]
+    fn matches(&self, other: &GenericVirtualPackage) -> bool {
+        if let Some(name) = self.name.as_ref() {
+            if name != &other.name {
+                return false;
+            }
+        }
+
+        if let Some(spec) = self.version.as_ref() {
+            if !spec.matches(&other.version) {
+                return false;
+            }
+        }
+
+        if let Some(build_string) = self.build.as_ref() {
+            if !build_string.matches(&other.build_string) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use itertools::Itertools;
+    use rstest::rstest;
     use std::str::FromStr;
 
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
@@ -713,7 +749,64 @@ mod tests {
             .into_iter()
             .map(|s| MatchSpec::from_str(s, Strict).unwrap())
             .map(|s| s.to_string())
-            .collect::<Vec<String>>()
-            .join("\n"));
+            .format("\n")
+            .to_string());
+    }
+
+    #[test]
+    fn test_serialize_json_matchspec() {
+        let specs = ["mamba 1.0.* py37_0",
+            "conda-forge::pytest[version='==1.0', sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]",
+            "conda-forge/linux-64::pytest",
+            "conda-forge/linux-64::pytest[version=1.0.*]",
+            "conda-forge/linux-64::pytest[version=1.0.*, build=py37_0]",
+            "conda-forge/linux-64::pytest ==1.2.3"];
+
+        assert_snapshot!(specs
+            .into_iter()
+            .map(|s| MatchSpec::from_str(s, Strict).unwrap())
+            .map(|s| serde_json::to_string(&s).unwrap())
+            .format("\n")
+            .to_string());
+    }
+
+    #[rstest]
+    #[case("foo >=1.0 py37_0", true)]
+    #[case("foo >=1.0 py37*", true)]
+    #[case("foo 1.0.* py38*", false)]
+    #[case("foo * py37_1", false)]
+    #[case("foo ==1.0", true)]
+    #[case("foo >=2.0", false)]
+    #[case("foo >=1.0", true)]
+    #[case("foo", true)]
+    #[case("bar", false)]
+    fn test_match_generic_virtual_package(#[case] spec_str: &str, #[case] expected: bool) {
+        let virtual_package = crate::GenericVirtualPackage {
+            name: PackageName::new_unchecked("foo"),
+            version: Version::from_str("1.0").unwrap(),
+            build_string: String::from("py37_0"),
+        };
+
+        let spec = MatchSpec::from_str(spec_str, Strict).unwrap();
+        assert_eq!(spec.matches(&virtual_package), expected);
+    }
+
+    #[test]
+    fn test_is_virtual() {
+        let spec = MatchSpec::from_str("non_virtual_name", Strict).unwrap();
+        assert!(!spec.is_virtual());
+
+        let spec = MatchSpec::from_str("__virtual_name", Strict).unwrap();
+        assert!(spec.is_virtual());
+
+        let spec = MatchSpec::from_str("non_virtual_name >=12", Strict).unwrap();
+        assert!(!spec.is_virtual());
+
+        let spec = MatchSpec::from_str("__virtual_name >=12", Strict).unwrap();
+        assert!(spec.is_virtual());
+
+        let spec =
+            MatchSpec::from_nameless(NamelessMatchSpec::from_str(">=12", Strict).unwrap(), None);
+        assert!(!spec.is_virtual());
     }
 }

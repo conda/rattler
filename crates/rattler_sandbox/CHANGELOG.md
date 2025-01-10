@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/conda/rattler/compare/rattler_sandbox-v0.1.1...rattler_sandbox-v0.1.2) - 2025-01-09
+
+### Added
+
+- wire up network config for sandbox (#1010)
+
 ## [0.1.1](https://github.com/conda/rattler/compare/rattler_sandbox-v0.1.0...rattler_sandbox-v0.1.1) - 2024-12-17
 
 ### Other

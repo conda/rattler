@@ -47,9 +47,7 @@ pytorch=*=cuda*:
 "conda-forge::foo[version=1.0.*, build_number=\">6\"]":
   name: foo
   version: 1.0.*
-  build_number:
-    op: Gt
-    rhs: 6
+  build_number: ">6"
   channel:
     base_url: "https://conda.anaconda.org/conda-forge"
     name: conda-forge
@@ -92,9 +90,7 @@ python=*:
 "conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]":
   name: python
   version: "==3.9"
-  build_number:
-    op: Eq
-    rhs: 0
+  build_number: "==0"
   channel:
     base_url: "https://conda.anaconda.org/conda-forge"
     name: conda-forge
