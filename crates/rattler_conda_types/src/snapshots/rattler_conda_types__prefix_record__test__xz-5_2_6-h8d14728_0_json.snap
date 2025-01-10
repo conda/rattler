@@ -11,7 +11,6 @@ depends:
 license: LGPL-2.1 and GPL-2.0
 md5: 515d77642eaa3639413c6b1bc3f94219
 name: xz
-optional_depends: {}
 platform: win
 sha256: 54d9778f75a02723784dc63aff4126ff6e6749ba21d11a6d03c1f4775f269fe0
 size: 217804

@@ -207,9 +207,9 @@ impl Ord for NameType {
                 name1.cmp(name2)
             }
             // WithoutFeature comes before WithFeature
-            (NameType::WithoutFeature(_), NameType::WithFeature(_, _)) => std::cmp::Ordering::Less,
+            (NameType::WithoutFeature(_), NameType::WithFeature(_, _)) => std::cmp::Ordering::Greater,
             (NameType::WithFeature(_, _), NameType::WithoutFeature(_)) => {
-                std::cmp::Ordering::Greater
+                std::cmp::Ordering::Less
             }
         }
     }
@@ -288,7 +288,7 @@ impl<'a> CondaDependencyProvider<'a> {
             .collect::<Vec<_>>();
 
         // Hashmap that maps the package name to the channel it was first found in.
-        let package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
+        let mut package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
 
         // Add additional records
         for repo_data in repodata {
@@ -466,7 +466,12 @@ impl<'a> CondaDependencyProvider<'a> {
                                 ));
                             }
                             continue;
-                        }
+                        } 
+                    } else {
+                        package_name_found_in_channel.insert(
+                            record.package_record.name.as_normalized().to_string(),
+                            &record.channel,
+                        );
                     }
                 }
             }

@@ -11,7 +11,6 @@ license: BSD-3-Clause
 license_family: BSD
 md5: 52d246d8d14b83c516229be5bb03a163
 name: vc
-optional_depends: {}
 platform: win32
 sha256: 05d5ae5859e8d097559f5445ffbaeac638c9875e4d2a0c5fd8c4bb1c010d35c1
 size: 15650

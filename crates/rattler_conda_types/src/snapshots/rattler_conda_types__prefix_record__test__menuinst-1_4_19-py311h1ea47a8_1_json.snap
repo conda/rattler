@@ -11,7 +11,6 @@ depends:
 license: BSD-3-Clause
 md5: 8eb00075c8acb7dd264c4a8537b89549
 name: menuinst
-optional_depends: {}
 platform: win
 sha256: f23b6f89654c21ff994991a2c0e018311e2a9288a68796d1612d4fb953b75be2
 size: 110326
