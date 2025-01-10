@@ -97,8 +97,8 @@ region = eu-central-1
 endpoint_url = {}
 region = eu-central-1
 "#,
-        minio_host.as_str(),
-        minio_host.as_str()
+        minio_host,
+        minio_host
     );
     let aws_config_path = temp_dir.path().join("aws.config");
     std::fs::write(&aws_config_path, aws_config).unwrap();
