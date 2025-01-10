@@ -1,4 +1,7 @@
-use std::{borrow::Cow, collections::BTreeSet};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+};
 
 use rattler_conda_types::{
     package::ArchiveIdentifier, BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord,
@@ -73,6 +76,8 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub depends: Cow<'a, Vec<String>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub constrains: Cow<'a, Vec<String>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub optional_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
 
     // Additional properties (in semi alphabetic order but grouped by commonality)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -157,7 +162,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             build_number,
             constrains: value.constrains.into_owned(),
             depends: value.depends.into_owned(),
-            optional_depends: std::collections::BTreeMap::new(),
+            optional_depends: value.optional_depends.into_owned(),
             features: value.features.into_owned(),
             legacy_bz2_md5: value.legacy_bz2_md5,
             legacy_bz2_size: value.legacy_bz2_size.into_owned(),
@@ -274,6 +279,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             purls: Cow::Borrowed(&package_record.purls),
             depends: Cow::Borrowed(&package_record.depends),
             constrains: Cow::Borrowed(&package_record.constrains),
+            optional_depends: Cow::Borrowed(&package_record.optional_depends),
             arch: (package_record.arch != arch).then_some(Cow::Owned(arch)),
             platform: (package_record.platform != platform).then_some(Cow::Owned(platform)),
             md5: package_record.md5,

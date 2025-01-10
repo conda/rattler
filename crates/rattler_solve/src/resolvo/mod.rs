@@ -634,9 +634,10 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                             return Dependencies::Unknown(reason);
                         }
                     };
-                    for version_set_id in version_set_id {
-                        dependencies.requirements.push(version_set_id.into());
-                    }
+
+                    dependencies
+                        .requirements
+                        .extend(version_set_id.into_iter().map(Requirement::from));
                 }
 
                 // Add a dependency back to the base package with exact version
@@ -680,9 +681,9 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                         }
                     };
 
-                for version_set_id in version_set_id {
-                    dependencies.requirements.push(version_set_id.into());
-                }
+                dependencies
+                    .requirements
+                    .extend(version_set_id.into_iter().map(Requirement::from));
             }
         }
 
