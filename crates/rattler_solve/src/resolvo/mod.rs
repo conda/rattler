@@ -189,30 +189,6 @@ pub enum NameType {
     WithFeature(String, String),
 }
 
-impl From<&str> for NameType {
-    fn from(value: &str) -> Self {
-        Self::WithoutFeature(value.to_string())
-    }
-}
-
-impl From<String> for NameType {
-    fn from(value: String) -> Self {
-        Self::WithoutFeature(value)
-    }
-}
-
-impl From<(String, String)> for NameType {
-    fn from((name, feature): (String, String)) -> Self {
-        Self::WithFeature(name, feature)
-    }
-}
-
-impl From<(&str, String)> for NameType {
-    fn from((name, feature): (&str, String)) -> Self {
-        Self::WithFeature(name.to_string(), feature)
-    }
-}
-
 impl Display for NameType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -242,6 +218,12 @@ impl Ord for NameType {
 impl PartialOrd for NameType {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl From<&str> for NameType {
+    fn from(value: &str) -> Self {
+        NameType::WithoutFeature(value.to_owned())
     }
 }
 
@@ -392,10 +374,12 @@ impl<'a> CondaDependencyProvider<'a> {
                         package_name,
                         SolverPackageRecord::RecordWithFeature(record, feature.clone()),
                     );
-                    let package_name_with_feature = pool.intern_package_name((
-                        record.package_record.name.as_normalized(),
-                        feature.clone(),
-                    ));
+                    let package_name_with_feature =
+                        pool.intern_package_name(NameType::WithFeature(
+                            record.package_record.name.as_normalized().to_owned(),
+                            feature.clone(),
+                        ));
+
                     all_entries.push((package_name_with_feature, feature_solvable));
                 }
 
@@ -841,7 +825,8 @@ impl super::SolverImpl for Solver {
             if let Some(features) = features {
                 for feature in features {
                     // Create a version set that matches the feature-enabled package
-                    let package_name_with_feature = (name.as_normalized(), feature.to_string());
+                    let package_name_with_feature =
+                        NameType::WithFeature(name.as_normalized().to_owned(), feature.to_string());
                     let feature_name_id =
                         provider.pool.intern_package_name(package_name_with_feature);
                     let feature_version_set = provider
@@ -917,10 +902,11 @@ fn parse_match_spec(
             let mut spec_with_feature = spec.clone();
             spec_with_feature.optional_features = Some(vec![feature.to_string()]);
 
-            let name_with_feature = (
+            let name_with_feature = NameType::WithFeature(
                 name.as_ref()
                     .expect("Packages with no name are not supported")
-                    .as_normalized(),
+                    .as_normalized()
+                    .to_owned(),
                 feature.to_string(),
             );
             let dependency_name = pool.intern_package_name(name_with_feature);
