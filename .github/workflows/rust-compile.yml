@@ -152,6 +152,10 @@ jobs:
           pixi global install minio-server
           pixi global install minio-client
 
+      - name: Start minio
+        if: ${{ !matrix.skip-tests }}
+        run: pixi exec minio server --address 0.0.0.0:9000 ${{ runner.temp }}/minio-data &
+
       - name: Run tests
         if: ${{ !matrix.skip-tests }}
         env:

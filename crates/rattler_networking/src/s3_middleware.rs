@@ -25,7 +25,7 @@ pub enum S3Config {
     },
 }
 
-/// S3 middleware to authenticate requests.
+/// Wrapper around S3 client.
 #[derive(Clone, Debug)]
 pub struct S3 {
     auth_storage: AuthenticationStorage,
@@ -49,7 +49,7 @@ impl S3Middleware {
 }
 
 impl S3 {
-    /// Create a new S3 middleware.
+    /// Create a new S3 client wrapper.
     pub fn new(config: S3Config, auth_storage: AuthenticationStorage) -> Self {
         Self {
             config,
@@ -197,88 +197,58 @@ impl Middleware for S3Middleware {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use super::*;
     use rstest::{fixture, rstest};
-    use serial_test::serial;
+    use temp_env::async_with_vars;
     use tempfile::{tempdir, TempDir};
 
-    async fn with_env(
-        env: HashMap<&str, &str>,
-        f: impl FnOnce() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>,
-    ) {
-        for (key, value) in &env {
-            std::env::set_var(key, value);
-        }
-        f().await;
-        for (key, _) in env {
-            std::env::remove_var(key);
-        }
-    }
-
     #[tokio::test]
-    #[serial]
     async fn test_presigned_s3_request_endpoint_url() {
-        with_env(
-            HashMap::from([
-                ("AWS_ACCESS_KEY_ID", "minioadmin"),
-                ("AWS_SECRET_ACCESS_KEY", "minioadmin"),
-                ("AWS_REGION", "eu-central-1"),
-                ("AWS_ENDPOINT_URL", "http://custom-aws"),
-            ]),
-            move || {
-                Box::pin(async {
-                    let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::default());
-
-                    let presigned = s3
-                        .generate_presigned_s3_url(
-                            Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json")
-                                .unwrap(),
-                        )
-                        .await
-                        .unwrap();
-                    assert!(
-                        presigned.to_string().starts_with(
-                            "http://rattler-s3-testing.custom-aws/my-channel/noarch/repodata.json?"
-                        ),
-                        "Unexpected presigned URL: {presigned:?}"
-                    );
-                })
+        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::default());
+        let presigned = async_with_vars(
+            [
+                ("AWS_ACCESS_KEY_ID", Some("minioadmin")),
+                ("AWS_SECRET_ACCESS_KEY", Some("minioadmin")),
+                ("AWS_REGION", Some("eu-central-1")),
+                ("AWS_ENDPOINT_URL", Some("http://custom-aws")),
+            ],
+            async {
+                s3.generate_presigned_s3_url(
+                    Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json").unwrap(),
+                )
+                .await
+                .unwrap()
             },
         )
         .await;
+        assert!(
+            presigned.to_string().starts_with(
+                "http://rattler-s3-testing.custom-aws/my-channel/noarch/repodata.json?"
+            ),
+            "Unexpected presigned URL: {presigned:?}"
+        );
     }
 
     #[tokio::test]
-    #[serial]
     async fn test_presigned_s3_request_aws() {
-        with_env(
-            HashMap::from([
-                ("AWS_ACCESS_KEY_ID", "minioadmin"),
-                ("AWS_SECRET_ACCESS_KEY", "minioadmin"),
-                ("AWS_REGION", "eu-central-1"),
-            ]),
-            move || {
-                Box::pin(async {
-                    let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::default());
-
-                    let presigned = s3
-                        .generate_presigned_s3_url(
-                            Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json").unwrap()
-                        )
-                        .await
-                        .unwrap();
-                    assert!(
-                        presigned.to_string().starts_with(
-                            "https://rattler-s3-testing.s3.eu-central-1.amazonaws.com/my-channel/noarch/repodata.json?"
-                        ),
-                        "Unexpected presigned URL: {presigned:?}"
-                    );
-                })
+        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::default());
+        let presigned = async_with_vars(
+            [
+                ("AWS_ACCESS_KEY_ID", Some("minioadmin")),
+                ("AWS_SECRET_ACCESS_KEY", Some("minioadmin")),
+                ("AWS_REGION", Some("eu-central-1")),
+            ],
+            async {
+                s3.generate_presigned_s3_url(
+                    Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json").unwrap(),
+                )
+                .await
+                .unwrap()
             },
         )
         .await;
+        assert!(presigned.to_string().starts_with("https://rattler-s3-testing.s3.eu-central-1.amazonaws.com/my-channel/noarch/repodata.json?"), "Unexpected presigned URL: {presigned:?}"
+        );
     }
 
     #[fixture]
@@ -307,69 +277,55 @@ region = eu-central-1
 
     #[rstest]
     #[tokio::test]
-    #[serial]
     async fn test_presigned_s3_request_custom_config_from_env(
         aws_config: (TempDir, std::path::PathBuf),
     ) {
-        with_env(
-            HashMap::from([
-                ("AWS_CONFIG_FILE", aws_config.1.to_str().unwrap()),
-                ("AWS_PROFILE", "packages"),
-            ]),
-            move || {
-                Box::pin(async move {
-                    let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::default());
-
-                    let presigned = s3
-                        .generate_presigned_s3_url(
-                            Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json")
-                                .unwrap(),
-                        )
-                        .await
-                        .unwrap();
-                    assert!(
-                        presigned.to_string().contains("localhost:9000"),
-                        "Unexpected presigned URL: {presigned:?}"
-                    );
-                })
+        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::default());
+        let presigned = async_with_vars(
+            [
+                ("AWS_CONFIG_FILE", Some(aws_config.1.to_str().unwrap())),
+                ("AWS_PROFILE", Some("packages")),
+            ],
+            async {
+                s3.generate_presigned_s3_url(
+                    Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json").unwrap(),
+                )
+                .await
+                .unwrap()
             },
         )
         .await;
+        assert!(
+            presigned.to_string().contains("localhost:9000"),
+            "Unexpected presigned URL: {presigned:?}"
+        );
     }
 
     #[rstest]
     #[tokio::test]
-    #[serial]
     async fn test_presigned_s3_request_env_precedence(aws_config: (TempDir, std::path::PathBuf)) {
-        with_env(
-            HashMap::from([
-                ("AWS_ENDPOINT_URL", "http://localhost:9000"),
-                ("AWS_CONFIG_FILE", aws_config.1.to_str().unwrap()),
-            ]),
-            move || {
-                Box::pin(async move {
-                    let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::default());
-
-                    let presigned = s3
-                        .generate_presigned_s3_url(
-                            Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json")
-                                .unwrap(),
-                        )
-                        .await
-                        .unwrap();
-                    assert!(
-                        presigned.to_string().contains("localhost:9000"),
-                        "Unexpected presigned URL: {presigned:?}"
-                    );
-                })
+        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::default());
+        let presigned = async_with_vars(
+            [
+                ("AWS_ENDPOINT_URL", Some("http://localhost:9000")),
+                ("AWS_CONFIG_FILE", Some(aws_config.1.to_str().unwrap())),
+            ],
+            async {
+                s3.generate_presigned_s3_url(
+                    Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json").unwrap(),
+                )
+                .await
+                .unwrap()
             },
         )
         .await;
+        assert!(
+            presigned.to_string().contains("localhost:9000"),
+            "Unexpected presigned URL: {presigned:?}"
+        );
     }
 
-    #[rstest]
     #[tokio::test]
-    #[serial]
     async fn test_presigned_s3_request_custom_config() {
         let temp_dir = tempdir().unwrap();
         let aws_config = r#"
@@ -408,9 +364,7 @@ region = eu-central-1
         assert!(presigned.query().unwrap().contains("X-Amz-Credential"));
     }
 
-    #[rstest]
     #[tokio::test]
-    #[serial]
     async fn test_presigned_s3_request_public_bucket() {
         let s3 = S3::new(
             S3Config::Custom {
@@ -436,33 +390,28 @@ region = eu-central-1
 
     #[rstest]
     #[tokio::test]
-    #[serial]
     async fn test_presigned_s3_request_public_bucket_aws(
         aws_config: (TempDir, std::path::PathBuf),
     ) {
-        with_env(
-            HashMap::from([
-                ("AWS_CONFIG_FILE", aws_config.1.to_str().unwrap()),
-                ("AWS_PROFILE", "public"),
-            ]),
-            move || {
-                Box::pin(async move {
-                    let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::new());
-                    let presigned = s3
-                        .generate_presigned_s3_url(
-                            Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json")
-                                .unwrap(),
-                        )
-                        .await
-                        .unwrap();
-                    assert!(
-                        presigned.to_string()
-                            == "http://localhost:9000/rattler-s3-testing/my-channel/noarch/repodata.json?x-id=GetObject",
-                        "Unexpected presigned URL: {presigned:?}"
-                    );
-                })
+        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::new());
+        let presigned = async_with_vars(
+            [
+                ("AWS_CONFIG_FILE", Some(aws_config.1.to_str().unwrap())),
+                ("AWS_PROFILE", Some("public")),
+            ],
+            async {
+                s3.generate_presigned_s3_url(
+                    Url::parse("s3://rattler-s3-testing/my-channel/noarch/repodata.json").unwrap(),
+                )
+                .await
+                .unwrap()
             },
         )
         .await;
+        assert!(
+        presigned.to_string()
+            == "http://localhost:9000/rattler-s3-testing/my-channel/noarch/repodata.json?x-id=GetObject",
+        "Unexpected presigned URL: {presigned:?}"
+        );
     }
 }
