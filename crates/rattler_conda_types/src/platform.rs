@@ -100,7 +100,7 @@ impl Platform {
 
             #[cfg(all(target_arch = "powerpc64", target_endian = "big"))]
             return Platform::LinuxPpc64;
-            
+
             #[cfg(target_arch = "powerpc")]
             return Platform::LinuxPpc;
 
