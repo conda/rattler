@@ -519,6 +519,7 @@ impl Archspec {
             Platform::LinuxAarch64 | Platform::LinuxArmV6l | Platform::LinuxArmV7l => "aarch64",
             Platform::LinuxPpc64le => "ppc64le",
             Platform::LinuxPpc64 => "ppc64",
+            Platform::LinuxPpc => "ppc",
             Platform::LinuxS390X => "s390x",
             Platform::LinuxRiscv32 => "riscv32",
             Platform::LinuxRiscv64 => "riscv64",
