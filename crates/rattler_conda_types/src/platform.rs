@@ -20,6 +20,7 @@ pub enum Platform {
     LinuxArmV7l,
     LinuxPpc64le,
     LinuxPpc64,
+    LinuxPpc,
     LinuxS390X,
     LinuxRiscv32,
     LinuxRiscv64,
@@ -63,6 +64,7 @@ pub enum Arch {
     ArmV7l,
     Ppc64le,
     Ppc64,
+    Ppc,
     S390X,
     Riscv32,
     Riscv64,
@@ -98,6 +100,9 @@ impl Platform {
 
             #[cfg(all(target_arch = "powerpc64", target_endian = "big"))]
             return Platform::LinuxPpc64;
+            
+            #[cfg(target_arch = "powerpc")]
+            return Platform::LinuxPpc;
 
             #[cfg(target_arch = "s390x")]
             return Platform::LinuxS390X;
@@ -116,6 +121,7 @@ impl Platform {
                 target_arch = "aarch64",
                 target_arch = "arm",
                 target_arch = "powerpc64",
+                target_arch = "powerpc",
                 target_arch = "s390x"
             )))]
             compile_error!("unsupported linux architecture");
@@ -198,6 +204,7 @@ impl Platform {
                 | Platform::LinuxArmV7l
                 | Platform::LinuxPpc64le
                 | Platform::LinuxPpc64
+                | Platform::LinuxPpc
                 | Platform::LinuxS390X
                 | Platform::LinuxRiscv32
                 | Platform::LinuxRiscv64
@@ -220,6 +227,7 @@ impl Platform {
             | Platform::LinuxArmV7l
             | Platform::LinuxPpc64le
             | Platform::LinuxPpc64
+            | Platform::LinuxPpc
             | Platform::LinuxS390X
             | Platform::LinuxRiscv32
             | Platform::LinuxRiscv64 => Some("linux"),
@@ -263,6 +271,7 @@ impl FromStr for Platform {
             "linux-armv7l" => Platform::LinuxArmV7l,
             "linux-ppc64le" => Platform::LinuxPpc64le,
             "linux-ppc64" => Platform::LinuxPpc64,
+            "linux-ppc" => Platform::LinuxPpc,
             "linux-s390x" => Platform::LinuxS390X,
             "linux-riscv32" => Platform::LinuxRiscv32,
             "linux-riscv64" => Platform::LinuxRiscv64,
@@ -294,6 +303,7 @@ impl From<Platform> for &'static str {
             Platform::LinuxArmV7l => "linux-armv7l",
             Platform::LinuxPpc64le => "linux-ppc64le",
             Platform::LinuxPpc64 => "linux-ppc64",
+            Platform::LinuxPpc => "linux-ppc",
             Platform::LinuxS390X => "linux-s390x",
             Platform::LinuxRiscv32 => "linux-riscv32",
             Platform::LinuxRiscv64 => "linux-riscv64",
@@ -321,6 +331,7 @@ impl Platform {
             Platform::LinuxArmV7l => Some(Arch::ArmV7l),
             Platform::LinuxPpc64le => Some(Arch::Ppc64le),
             Platform::LinuxPpc64 => Some(Arch::Ppc64),
+            Platform::LinuxPpc => Some(Arch::Ppc),
             Platform::LinuxS390X => Some(Arch::S390X),
             Platform::LinuxRiscv32 => Some(Arch::Riscv32),
             Platform::LinuxRiscv64 => Some(Arch::Riscv64),
@@ -394,6 +405,7 @@ impl FromStr for Arch {
             "armv7l" => Arch::ArmV7l,
             "ppc64le" => Arch::Ppc64le,
             "ppc64" => Arch::Ppc64,
+            "ppc" => Arch::Ppc,
             "s390x" => Arch::S390X,
             "riscv32" => Arch::Riscv32,
             "riscv64" => Arch::Riscv64,
@@ -419,6 +431,7 @@ impl From<Arch> for &'static str {
             Arch::ArmV7l => "armv7l",
             Arch::Ppc64le => "ppc64le",
             Arch::Ppc64 => "ppc64",
+            Arch::Ppc => "ppc",
             Arch::S390X => "s390x",
             Arch::Riscv32 => "riscv32",
             Arch::Riscv64 => "riscv64",
@@ -506,6 +519,7 @@ mod tests {
         assert_eq!(Platform::LinuxArmV7l.arch(), Some(Arch::ArmV7l));
         assert_eq!(Platform::LinuxPpc64le.arch(), Some(Arch::Ppc64le));
         assert_eq!(Platform::LinuxPpc64.arch(), Some(Arch::Ppc64));
+        assert_eq!(Platform::LinuxPpc.arch(), Some(Arch::Ppc));
         assert_eq!(Platform::LinuxS390X.arch(), Some(Arch::S390X));
         assert_eq!(Platform::LinuxRiscv32.arch(), Some(Arch::Riscv32));
         assert_eq!(Platform::LinuxRiscv64.arch(), Some(Arch::Riscv64));
