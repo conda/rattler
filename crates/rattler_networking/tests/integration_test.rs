@@ -41,13 +41,18 @@ fn init_channel() {
         option_env!("MINIO_PORT").unwrap_or("9000")
     );
     let env = &HashMap::from([("MC_HOST_local", host.as_str())]);
+    let mc_executable = if cfg!(target_os = "windows") {
+        "mc.bat"
+    } else {
+        "mc"
+    };
     for bucket in &[
         "local/rattler-s3-testing",
         "local/rattler-s3-testing-public",
     ] {
-        run_subprocess("mc", &["mb", "--ignore-existing", bucket], env);
+        run_subprocess(mc_executable, &["mb", "--ignore-existing", bucket], env);
         run_subprocess(
-            "mc",
+            mc_executable,
             &[
                 "cp",
                 PathBuf::from("../../test-data/test-server/repo/noarch/repodata.json")
@@ -58,7 +63,7 @@ fn init_channel() {
             env,
         );
         run_subprocess(
-            "mc",
+            mc_executable,
             &[
                 "cp",
                 PathBuf::from("../../test-data/test-server/repo/noarch/test-package-0.1-0.tar.bz2")
@@ -71,7 +76,7 @@ fn init_channel() {
     }
     // Make bucket public
     run_subprocess(
-        "mc",
+        mc_executable,
         &[
             "anonymous",
             "set",

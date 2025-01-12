@@ -146,12 +146,16 @@ jobs:
           # on windows, the minio server doesn't get shutdown properly so there is still a lock on this file
           post-cleanup: false
 
-      - name: Start minio for integration tests
+      - name: Install minio for integration tests
         if: ${{ !matrix.skip-tests }}
         run: |
           pixi global install minio-client
           pixi global install minio-server
-          pixi run minio server --address 0.0.0.0:9000 ${{ runner.temp }}/minio-data &
+
+      - name: Start minio server
+        if: ${{ !matrix.skip-tests }}
+        run: |
+          minio${{ startsWith(matrix.os, 'windows') && '.bat' || '' }} server --address 0.0.0.0:9000 ${{ runner.temp }}/minio-data &
 
       - name: Run tests
         if: ${{ !matrix.skip-tests }}
