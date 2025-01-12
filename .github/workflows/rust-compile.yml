@@ -118,6 +118,22 @@ jobs:
         run: |
           echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls-tls" >> $GITHUB_OUTPUT
 
+      - name: Set up pixi
+        if: ${{ !matrix.skip-tests }}
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          run-install: false
+          # on windows, the minio server doesn't get shutdown properly so there is still a lock on this file
+          post-cleanup: false
+
+      - name: Install minio for integration tests
+        if: ${{ !matrix.skip-tests }}
+        run: |
+          pixi global install minio-client
+          pixi global install minio-server
+          which minio
+          which mc
+
       - name: Build
         run: >
           cargo build
@@ -137,20 +153,6 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-
-      - name: Set up pixi
-        if: ${{ !matrix.skip-tests }}
-        uses: prefix-dev/setup-pixi@v0.8.1
-        with:
-          run-install: false
-          # on windows, the minio server doesn't get shutdown properly so there is still a lock on this file
-          post-cleanup: false
-
-      - name: Install minio for integration tests
-        if: ${{ !matrix.skip-tests }}
-        run: |
-          pixi global install minio-client
-          pixi global install minio-server
 
       - name: Start minio server
         if: ${{ !matrix.skip-tests }}
