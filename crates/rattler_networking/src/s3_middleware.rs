@@ -100,7 +100,7 @@ impl S3 {
                         ))
                 }
                 (_, Some(_)) => {
-                    return Err(anyhow::anyhow!("Unsupported authentication method"));
+                    return Err(anyhow::anyhow!("unsupported authentication method"));
                 }
                 (_, None) => {
                     tracing::info!("No authentication found, assuming bucket is public");
@@ -153,15 +153,10 @@ impl S3 {
         let bucket_name = url.host_str().ok_or_else(|| {
             reqwest_middleware::Error::middleware(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                "Host should be present in S3 URL",
+                "host should be present in S3 URL",
             ))
         })?;
-        let key = url.path().strip_prefix("/").ok_or_else(|| {
-            reqwest_middleware::Error::middleware(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Missing prefix",
-            ))
-        })?;
+        let key = url.path().strip_prefix("/").unwrap();
 
         let builder = client.get_object().bucket(bucket_name).key(key);
 
