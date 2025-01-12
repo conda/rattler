@@ -15,7 +15,7 @@ default = ["native-tls", "s3"]
 native-tls = ["reqwest/native-tls", "google-cloud-auth?/default-tls"]
 rustls-tls = ["reqwest/rustls-tls", "google-cloud-auth?/rustls-tls"]
 gcs = ["google-cloud-auth", "google-cloud-token"]
-s3 = ["aws-config", "aws-sdk-s3", "aws-runtime"]
+s3 = ["aws-config", "aws-sdk-s3"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -28,7 +28,6 @@ google-cloud-auth = { workspace = true, optional = true }
 google-cloud-token = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true }
 aws-sdk-s3 = { workspace = true, optional = true }
-aws-runtime = { workspace = true, optional = true }
 http = { workspace = true }
 itertools = { workspace = true }
 keyring = { workspace = true, features = [
