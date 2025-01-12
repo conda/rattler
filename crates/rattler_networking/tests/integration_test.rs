@@ -17,7 +17,9 @@ fn run_subprocess(cmd: &str, args: &[&str], env: &HashMap<&str, &str>) -> std::p
     for (key, value) in env {
         command.env(key, value);
     }
-    let output = command.output().unwrap();
+    let output = command
+        .output()
+        .expect(format!("Failed to execute command {:?}", command).as_str());
     if !output.status.success() {
         eprintln!("Command failed: {:?}", command);
         eprintln!("Output: {:?}", String::from_utf8_lossy(&output.stdout));
