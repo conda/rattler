@@ -45,7 +45,7 @@ fn init_channel() {
         "local/rattler-s3-testing",
         "local/rattler-s3-testing-public",
     ] {
-        run_subprocess("mc", &["mb", bucket], env);
+        run_subprocess("mc", &["mb", "--ignore-existing", bucket], env);
         run_subprocess(
             "mc",
             &[
@@ -53,7 +53,7 @@ fn init_channel() {
                 PathBuf::from("../../test-data/test-server/repo/noarch/repodata.json")
                     .to_str()
                     .unwrap(),
-                format!("{}/my-channel/noarch/repodata.json", bucket).as_str(),
+                format!("{bucket}/my-channel/noarch/repodata.json").as_str(),
             ],
             env,
         );
@@ -64,7 +64,7 @@ fn init_channel() {
                 PathBuf::from("../../test-data/test-server/repo/noarch/test-package-0.1-0.tar.bz2")
                     .to_str()
                     .unwrap(),
-                format!("{}/my-channel/noarch/test-package-0.1-0.tar.bz2", bucket).as_str(),
+                format!("{bucket}/my-channel/noarch/test-package-0.1-0.tar.bz2").as_str(),
             ],
             env,
         );
@@ -90,14 +90,13 @@ fn aws_config(minio_host: &str) -> (TempDir, std::path::PathBuf) {
 [profile default]
 aws_access_key_id = minioadmin
 aws_secret_access_key = minioadmin
-endpoint_url = {}
+endpoint_url = {minio_host}
 region = eu-central-1
 
 [profile public]
-endpoint_url = {}
+endpoint_url = {minio_host}
 region = eu-central-1
-"#,
-        minio_host, minio_host
+"#
     );
     let aws_config_path = temp_dir.path().join("aws.config");
     std::fs::write(&aws_config_path, aws_config).unwrap();

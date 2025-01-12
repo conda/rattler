@@ -146,15 +146,14 @@ jobs:
           # on windows, the minio server doesn't get shutdown properly so there is still a lock on this file
           post-cleanup: false
 
-      - name: Install minio
+      - name: Start minio for integration tests
         if: ${{ !matrix.skip-tests }}
         run: |
-          pixi global install minio-server
           pixi global install minio-client
-
-      - name: Start minio
-        if: ${{ !matrix.skip-tests }}
-        run: pixi exec minio server --address 0.0.0.0:9000 ${{ runner.temp }}/minio-data &
+          pixi global install minio-server
+          pixi run minio server --address 0.0.0.0:9000 ${{ runner.temp }}/minio-data &
+          MINIO_PID=$(echo $!)
+          echo "MINIO_PID=${MINIO_PID}" >> $GITHUB_ENV
 
       - name: Run tests
         if: ${{ !matrix.skip-tests }}
@@ -167,6 +166,10 @@ jobs:
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}
+
+      - name: Stop minio
+        if: ${{ always() && !matrix.skip-tests }}
+        run: kill -9 -$MINIO_PID
 
       - name: Run doctests
         if: ${{ !matrix.skip-tests }}
