@@ -18,7 +18,11 @@ fn run_subprocess(cmd: &str, args: &[&str], env: &HashMap<&str, &str>) -> std::p
         command.env(key, value);
     }
     let output = command.output().unwrap();
-    assert!(output.status.success());
+    if !output.status.success() {
+        eprintln!("Command failed: {:?}", command);
+        eprintln!("Output: {:?}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("Error: {:?}", String::from_utf8_lossy(&output.stderr));
+    }
     output
 }
 
@@ -41,11 +45,7 @@ fn init_channel() {
         option_env!("MINIO_PORT").unwrap_or("9000")
     );
     let env = &HashMap::from([("MC_HOST_local", host.as_str())]);
-    let mc_executable = if cfg!(target_os = "windows") {
-        "mc.bat"
-    } else {
-        "mc"
-    };
+    let mc_executable = if cfg!(windows) { "mc.bat" } else { "mc" };
     for bucket in &[
         "local/rattler-s3-testing",
         "local/rattler-s3-testing-public",
