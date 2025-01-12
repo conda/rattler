@@ -19,7 +19,7 @@ fn run_subprocess(cmd: &str, args: &[&str], env: &HashMap<&str, &str>) -> std::p
     }
     let output = command
         .output()
-        .expect(format!("Failed to execute command {:?}", command).as_str());
+        .unwrap_or_else(|_| panic!("Failed to execute command {:?}", command));
     if !output.status.success() {
         eprintln!("Command failed: {:?}", command);
         eprintln!("Output: {:?}", String::from_utf8_lossy(&output.stdout));
