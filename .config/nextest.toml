@@ -1,6 +1,0 @@
-[test-groups]
-serial-integration = { max-threads = 1 }
-
-[[profile.default.overrides]]
-filter = 'package(rattler_networking) and (test(#test_minio*) | test(s3_middleware::tests))'
-test-group = 'serial-integration'
