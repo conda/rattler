@@ -26,15 +26,15 @@ pub struct LoginArgs {
     conda_token: Option<String>,
 
     /// The S3 access key ID
-    #[clap(long)]
+    #[clap(long, requires_all = ["s3_secret_access_key"], conflicts_with_all = ["host", "token","username", "password", "conda_token"])]
     s3_access_key_id: Option<String>,
 
     /// The S3 secret access key
-    #[clap(long)]
+    #[clap(long, requires_all = ["s3_access_key_id"])]
     s3_secret_access_key: Option<String>,
 
     /// The S3 session token
-    #[clap(long)]
+    #[clap(long, requires_all = ["s3_access_key_id"])]
     s3_session_token: Option<String>,
 }
 
