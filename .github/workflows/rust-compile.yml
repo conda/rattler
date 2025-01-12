@@ -152,8 +152,6 @@ jobs:
           pixi global install minio-client
           pixi global install minio-server
           pixi run minio server --address 0.0.0.0:9000 ${{ runner.temp }}/minio-data &
-          MINIO_PID=$(echo $!)
-          echo "MINIO_PID=${MINIO_PID}" >> $GITHUB_ENV
 
       - name: Run tests
         if: ${{ !matrix.skip-tests }}
@@ -166,10 +164,6 @@ jobs:
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}
-
-      - name: Stop minio
-        if: ${{ always() && !matrix.skip-tests }}
-        run: kill -9 -$MINIO_PID
 
       - name: Run doctests
         if: ${{ !matrix.skip-tests }}
