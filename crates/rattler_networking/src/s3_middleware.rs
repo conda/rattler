@@ -5,7 +5,7 @@ use aws_config::BehaviorVersion;
 use aws_sdk_s3::presigning::PresigningConfig;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
-use tracing::debug;
+use tracing::info;
 use url::Url;
 
 use crate::{Authentication, AuthenticationStorage};
@@ -43,7 +43,7 @@ pub struct S3Middleware {
 impl S3Middleware {
     /// Create a new S3 middleware.
     pub fn new(config: S3Config, auth_storage: AuthenticationStorage) -> Self {
-        debug!("Creating S3 middleware using {:?}", config);
+        info!("Creating S3 middleware using {:?}", config);
         Self {
             s3: S3::new(config, auth_storage),
         }
@@ -325,7 +325,7 @@ region = eu-central-1
     #[tokio::test]
     async fn test_presigned_s3_request_custom_config() {
         let temp_dir = tempdir().unwrap();
-        let aws_config = r#"
+        let credentials = r#"
         {
             "s3://rattler-s3-testing/my-channel": {
                 "S3Credentials": {
@@ -336,7 +336,7 @@ region = eu-central-1
         }
         "#;
         let credentials_path = temp_dir.path().join("credentials.json");
-        std::fs::write(&credentials_path, aws_config).unwrap();
+        std::fs::write(&credentials_path, credentials).unwrap();
         let s3 = S3::new(
             S3Config::Custom {
                 endpoint_url: Url::parse("http://localhost:9000").unwrap(),

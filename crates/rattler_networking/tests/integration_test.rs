@@ -119,7 +119,7 @@ async fn test_minio_download_repodata(
     #[allow(unused_variables)] init_channel: (),
 ) {
     let temp_dir = tempdir().unwrap();
-    let aws_config = r#"
+    let credentials = r#"
 {
     "s3://rattler-s3-testing/my-channel": {
         "S3Credentials": {
@@ -129,7 +129,7 @@ async fn test_minio_download_repodata(
     }
 }"#;
     let credentials_path = temp_dir.path().join("credentials.json");
-    std::fs::write(&credentials_path, aws_config).unwrap();
+    std::fs::write(&credentials_path, credentials).unwrap();
     let auth_storage = AuthenticationStorage::from_file(credentials_path.as_path()).unwrap();
     let middleware = S3Middleware::new(
         S3Config::Custom {
@@ -255,4 +255,65 @@ async fn test_minio_download_aws_profile_public(
     assert_eq!(result.status(), 200);
     let body = result.text().await.unwrap();
     assert!(body.contains("test-package-0.1-0.tar.bz2"));
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_cloudflare_r2_download_repodata() {
+    let temp_dir = tempdir().unwrap();
+
+    let r2_access_key_id = std::env::var("RATTLER_TEST_R2_ACCESS_KEY_ID").ok();
+    let r2_secret_access_key = std::env::var("RATTLER_TEST_R2_SECRET_ACCESS_KEY").ok();
+    if r2_access_key_id.is_none() || r2_secret_access_key.is_none() {
+        eprintln!(
+            "Skipping test as RATTLER_TEST_R2_ACCESS_KEY_ID or RATTLER_TEST_R2_SECRET_ACCESS_KEY is not set"
+        );
+        return;
+    }
+
+    let r2_access_key_id = r2_access_key_id.unwrap();
+    let r2_secret_access_key = r2_secret_access_key.unwrap();
+
+    let credentials = format!(
+        r#"
+    {{
+        "s3://rattler-s3-testing/channel": {{
+            "S3Credentials": {{
+                "access_key_id": "{}",
+                "secret_access_key": "{}"
+            }}
+        }}
+    }}
+    "#,
+        r2_access_key_id, r2_secret_access_key
+    );
+
+    let credentials_path = temp_dir.path().join("credentials.json");
+    std::fs::write(&credentials_path, credentials).unwrap();
+
+    let auth_storage = AuthenticationStorage::from_file(credentials_path.as_path()).unwrap();
+    let middleware = S3Middleware::new(
+        S3Config::Custom {
+            endpoint_url: Url::parse("https://e1a7cde76f1780ec06bac859036dbaf7.eu.r2.cloudflarestorage.com").unwrap(),
+            region: "auto".into(),
+            force_path_style: true,
+        },
+        auth_storage.clone(),
+    );
+
+    let download_client = Client::builder().no_gzip().build().unwrap();
+    let download_client = reqwest_middleware::ClientBuilder::new(download_client)
+        .with_arc(Arc::new(AuthenticationMiddleware::new(auth_storage)))
+        .with(middleware)
+        .build();
+
+    let result = download_client
+        .get("s3://rattler-s3-testing/channel/noarch/repodata.json")
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(result.status(), 200);
+    let body = result.text().await.unwrap();
+    assert!(body.contains("my-webserver-0.1.0-pyh4616a5c_0.conda"), "body does not contain package: {}", body);
 }
