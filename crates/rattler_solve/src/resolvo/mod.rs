@@ -57,15 +57,22 @@ pub struct SolverMatchSpec<'a> {
     _marker: PhantomData<&'a PackageRecord>,
 }
 
+impl<'a> SolverMatchSpec<'a> {
+    /// Returns a reference to this match spec with the given feature enabled
+    pub fn with_feature(&self, feature: String) -> SolverMatchSpec<'a> {
+        Self {
+            inner: self.inner.clone(),
+            feature: Some(feature),
+            _marker: self._marker,
+        }
+    }
+}
+
 impl<'a> From<NamelessMatchSpec> for SolverMatchSpec<'a> {
     fn from(value: NamelessMatchSpec) -> Self {
-        let feature = value
-            .optional_features
-            .as_ref()
-            .and_then(|features| features.first().cloned());
         Self {
             inner: value,
-            feature,
+            feature: None,
             _marker: PhantomData,
         }
     }
@@ -906,12 +913,10 @@ fn parse_match_spec(
     let (name, spec) = match_spec.into_nameless();
 
     let mut version_set_ids = vec![];
-
     if let Some(ref features) = spec.optional_features {
-        for feature in features {
-            let mut spec_with_feature = spec.clone();
-            spec_with_feature.optional_features = Some(vec![feature.to_string()]);
+        let spec_with_feature: SolverMatchSpec<'_> = spec.clone().into();
 
+        for feature in features {
             let name_with_feature = NameType::WithFeature(
                 name.as_ref()
                     .expect("Packages with no name are not supported")
@@ -920,7 +925,11 @@ fn parse_match_spec(
                 feature.to_string(),
             );
             let dependency_name = pool.intern_package_name(name_with_feature);
-            let version_set_id = pool.intern_version_set(dependency_name, spec_with_feature.into());
+
+            let version_set_id = pool.intern_version_set(
+                dependency_name,
+                spec_with_feature.with_feature(feature.to_string()),
+            );
             version_set_ids.push(version_set_id);
         }
     } else {
