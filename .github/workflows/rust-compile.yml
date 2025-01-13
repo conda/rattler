@@ -155,7 +155,10 @@ jobs:
       - name: Start minio server
         if: ${{ !matrix.skip-tests }}
         run: |
-          minio server --address 0.0.0.0:9000 ${{ runner.temp }}/minio-data &
+          minio server --help
+          mkdir -p ${{ runner.temp }}/minio-data
+          minio server --address 127.0.0.1:9000 ${{ runner.temp }}/minio-data &
+          curl -i localhost:9000
 
       - name: Run tests
         if: ${{ !matrix.skip-tests }}
