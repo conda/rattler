@@ -294,7 +294,10 @@ async fn test_cloudflare_r2_download_repodata() {
     let auth_storage = AuthenticationStorage::from_file(credentials_path.as_path()).unwrap();
     let middleware = S3Middleware::new(
         S3Config::Custom {
-            endpoint_url: Url::parse("https://e1a7cde76f1780ec06bac859036dbaf7.eu.r2.cloudflarestorage.com").unwrap(),
+            endpoint_url: Url::parse(
+                "https://e1a7cde76f1780ec06bac859036dbaf7.eu.r2.cloudflarestorage.com",
+            )
+            .unwrap(),
             region: "auto".into(),
             force_path_style: true,
         },
@@ -315,5 +318,9 @@ async fn test_cloudflare_r2_download_repodata() {
 
     assert_eq!(result.status(), 200);
     let body = result.text().await.unwrap();
-    assert!(body.contains("my-webserver-0.1.0-pyh4616a5c_0.conda"), "body does not contain package: {}", body);
+    assert!(
+        body.contains("my-webserver-0.1.0-pyh4616a5c_0.conda"),
+        "body does not contain package: {}",
+        body
+    );
 }
