@@ -66,6 +66,12 @@ impl<'a> SolverMatchSpec<'a> {
             _marker: self._marker,
         }
     }
+
+    /// Returns a mutable reference to this match spec after enabling the given feature
+    pub fn with_feature_ref(&mut self, feature: String) -> &SolverMatchSpec<'a> {
+        self.feature = Some(feature);
+        self
+    }
 }
 
 impl<'a> From<NamelessMatchSpec> for SolverMatchSpec<'a> {
@@ -828,11 +834,10 @@ impl super::SolverImpl for Solver {
         });
 
         let root_requirements = task.specs.iter().flat_map(|spec| {
-            let (name, mut nameless_spec) = spec.clone().into_nameless();
+            let (name, nameless_spec) = spec.clone().into_nameless();
             let features = &spec.optional_features;
             let name = name.expect("cannot use matchspec without a name");
             let name_id = provider.pool.intern_package_name(name.as_normalized());
-            nameless_spec.optional_features = None;
             let mut reqs = vec![provider
                 .pool
                 .intern_version_set(name_id, nameless_spec.clone().into())];
@@ -845,10 +850,13 @@ impl super::SolverImpl for Solver {
                         NameType::WithFeature(name.as_normalized().to_owned(), feature.to_string());
                     let feature_name_id =
                         provider.pool.intern_package_name(package_name_with_feature);
-                    nameless_spec.optional_features = Some(vec![feature.to_string()]);
+
+                    let mut solver_match_spec: SolverMatchSpec<'_> = nameless_spec.clone().into();
+                    let _ = solver_match_spec.with_feature_ref(feature.to_string());
+
                     let feature_version_set = provider
                         .pool
-                        .intern_version_set(feature_name_id, nameless_spec.clone().into());
+                        .intern_version_set(feature_name_id, solver_match_spec);
                     reqs.push(feature_version_set);
                 }
             }
