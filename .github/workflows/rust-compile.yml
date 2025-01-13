@@ -158,7 +158,8 @@ jobs:
           minio server --help
           mkdir -p ${{ runner.temp }}/minio-data
           minio server --address 127.0.0.1:9000 ${{ runner.temp }}/minio-data &
-          curl -i localhost:9000
+          sleep 5
+          curl -I http://localhost:9000/minio/health/live
 
       - name: Run tests
         if: ${{ !matrix.skip-tests }}
