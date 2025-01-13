@@ -207,10 +207,10 @@ impl Ord for NameType {
                 name1.cmp(name2)
             }
             // WithoutFeature comes before WithFeature
-            (NameType::WithoutFeature(_), NameType::WithFeature(_, _)) => std::cmp::Ordering::Greater,
-            (NameType::WithFeature(_, _), NameType::WithoutFeature(_)) => {
-                std::cmp::Ordering::Less
+            (NameType::WithoutFeature(_), NameType::WithFeature(_, _)) => {
+                std::cmp::Ordering::Greater
             }
+            (NameType::WithFeature(_, _), NameType::WithoutFeature(_)) => std::cmp::Ordering::Less,
         }
     }
 }
@@ -466,7 +466,7 @@ impl<'a> CondaDependencyProvider<'a> {
                                 ));
                             }
                             continue;
-                        } 
+                        }
                     } else {
                         package_name_found_in_channel.insert(
                             record.package_record.name.as_normalized().to_string(),
@@ -660,6 +660,7 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                     subdir: Some(record.package_record.subdir.clone()),
                     md5: record.package_record.md5,
                     sha256: record.package_record.sha256,
+                    optional_features: None,
                     ..Default::default()
                 };
 
@@ -690,22 +691,22 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                     .requirements
                     .extend(version_set_id.into_iter().map(Requirement::from));
             }
-        }
 
-        for constrains in record.package_record.constrains.iter() {
-            let version_set_id =
-                match parse_match_spec(&self.pool, constrains, &mut parse_match_spec_cache) {
-                    Ok(version_set_id) => version_set_id,
-                    Err(e) => {
-                        let reason = self.pool.intern_string(format!(
-                            "the constrains '{constrains}' failed to parse: {e}",
-                        ));
+            for constrains in record.package_record.constrains.iter() {
+                let version_set_id =
+                    match parse_match_spec(&self.pool, constrains, &mut parse_match_spec_cache) {
+                        Ok(version_set_id) => version_set_id,
+                        Err(e) => {
+                            let reason = self.pool.intern_string(format!(
+                                "the constrains '{constrains}' failed to parse: {e}",
+                            ));
 
-                        return Dependencies::Unknown(reason);
-                    }
-                };
-            for version_set_id in version_set_id {
-                dependencies.constrains.push(version_set_id);
+                            return Dependencies::Unknown(reason);
+                        }
+                    };
+                for version_set_id in version_set_id {
+                    dependencies.constrains.push(version_set_id);
+                }
             }
         }
 
@@ -735,10 +736,11 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                         // Feature-enabled package matches if spec matches and feature is required
 
                         if spec.matches(*rec) {
-                            spec.optional_features
-                                .as_ref()
-                                .map_or(false, |features| features.contains(feature))
-                                != inverse
+                            if let Some(spec_feature) = &spec.feature {
+                                (*spec_feature == *feature) != inverse
+                            } else {
+                                inverse
+                            }
                         } else {
                             inverse
                         }
@@ -819,10 +821,11 @@ impl super::SolverImpl for Solver {
         });
 
         let root_requirements = task.specs.iter().flat_map(|spec| {
-            let (name, nameless_spec) = spec.clone().into_nameless();
+            let (name, mut nameless_spec) = spec.clone().into_nameless();
             let features = &spec.optional_features;
             let name = name.expect("cannot use matchspec without a name");
             let name_id = provider.pool.intern_package_name(name.as_normalized());
+            nameless_spec.optional_features = None;
             let mut reqs = vec![provider
                 .pool
                 .intern_version_set(name_id, nameless_spec.clone().into())];
@@ -835,6 +838,7 @@ impl super::SolverImpl for Solver {
                         NameType::WithFeature(name.as_normalized().to_owned(), feature.to_string());
                     let feature_name_id =
                         provider.pool.intern_package_name(package_name_with_feature);
+                    nameless_spec.optional_features = Some(vec![feature.to_string()]);
                     let feature_version_set = provider
                         .pool
                         .intern_version_set(feature_name_id, nameless_spec.clone().into());
