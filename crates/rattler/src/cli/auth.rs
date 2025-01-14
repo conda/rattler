@@ -141,7 +141,8 @@ fn logout(args: LogoutArgs, storage: AuthenticationStorage) -> Result<(), Authen
 
 /// CLI entrypoint for authentication
 pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
-    let storage = AuthenticationStorage::from_env_and_defaults().map_err(AuthenticationCLIError::StorageError)?;
+    let storage = AuthenticationStorage::from_env_and_defaults()
+        .map_err(AuthenticationCLIError::StorageError)?;
 
     match args.subcommand {
         Subcommand::Login(args) => login(args, storage),
