@@ -72,8 +72,7 @@ impl FileStorageCache {
             let _lock = lock_file_storage(path)?;
             let file = std::fs::File::open(path)?;
             let reader = std::io::BufReader::new(file);
-            let content = serde_json::from_reader(reader)?;
-            content
+            serde_json::from_reader(reader)?
         } else {
             BTreeMap::new()
         };
