@@ -134,7 +134,7 @@ mod tests {
         let file = tempdir().unwrap();
         let path = file.path().join("test.json");
 
-        let storage = FileStorage::new(path.clone()).unwrap();
+        let storage = FileStorage::from_path(path.clone()).unwrap();
 
         assert_eq!(storage.get("test").unwrap(), None);
 
@@ -170,6 +170,6 @@ mod tests {
         let mut file = std::fs::File::create(&path).unwrap();
         file.write_all(b"invalid json").unwrap();
 
-        assert!(FileStorage::new(path.clone()).is_err());
+        assert!(FileStorage::from_path(path.clone()).is_err());
     }
 }

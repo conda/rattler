@@ -174,7 +174,7 @@ mod tests {
     ) {
         let (captured_tx, captured_rx) = tokio::sync::mpsc::channel(1);
         let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::default())
-            .with_arc(Arc::new(AuthenticationMiddleware::new(storage.clone())))
+            .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(storage.clone())))
             .with_arc(Arc::new(CaptureAbortMiddleware { captured_tx }))
             .build();
 
@@ -185,7 +185,7 @@ mod tests {
     fn test_store_fallback() -> anyhow::Result<()> {
         let tdir = tempdir()?;
         let mut storage = AuthenticationStorage::empty();
-        storage.add_backend(Arc::from(FileStorage::new(
+        storage.add_backend(Arc::from(FileStorage::from_path(
             tdir.path().to_path_buf().join("auth.json"),
         )?));
 
@@ -200,7 +200,7 @@ mod tests {
     async fn test_conda_token_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
         let mut storage = AuthenticationStorage::empty();
-        storage.add_backend(Arc::from(FileStorage::new(
+        storage.add_backend(Arc::from(FileStorage::from_path(
             tdir.path().to_path_buf().join("auth.json"),
         )?));
 
@@ -254,7 +254,7 @@ mod tests {
     async fn test_bearer_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
         let mut storage = AuthenticationStorage::empty();
-        storage.add_backend(Arc::from(FileStorage::new(
+        storage.add_backend(Arc::from(FileStorage::from_path(
             tdir.path().to_path_buf().join("auth.json"),
         )?));
         let host = "bearer.example.com";
@@ -314,7 +314,7 @@ mod tests {
     async fn test_basic_auth_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
         let mut storage = AuthenticationStorage::empty();
-        storage.add_backend(Arc::from(FileStorage::new(
+        storage.add_backend(Arc::from(FileStorage::from_path(
             tdir.path().to_path_buf().join("auth.json"),
         )?));
         let host = "basic.example.com";
@@ -392,7 +392,7 @@ mod tests {
         ] {
             let tdir = tempdir()?;
             let mut storage = AuthenticationStorage::empty();
-            storage.add_backend(Arc::from(FileStorage::new(
+            storage.add_backend(Arc::from(FileStorage::from_path(
                 tdir.path().to_path_buf().join("auth.json"),
             )?));
 
@@ -426,7 +426,7 @@ mod tests {
                     .to_str()
                     .unwrap(),
             ),
-            || AuthenticationStorage::default().unwrap(),
+            || AuthenticationStorage::new().unwrap(),
         );
 
         let host = "test.example.com";
