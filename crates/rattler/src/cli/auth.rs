@@ -1,6 +1,6 @@
 //! This module contains CLI common entrypoint for authentication.
 use clap::Parser;
-use rattler_networking::{Authentication, AuthenticationStorage};
+use rattler_networking::{authentication_storage::backends::file::FileStorageError, Authentication, AuthenticationStorage};
 use thiserror;
 
 /// Command line arguments that contain authentication data
@@ -73,6 +73,11 @@ pub enum AuthenticationCLIError {
 
     /// Wrapper for errors that are generated from the underlying storage system
     /// (keyring or file system)
+    #[error("Failed to initialize the authentication storage system")]
+    InitializeStorageError(#[source] FileStorageError),
+
+    /// Wrapper for errors that are generated from the underlying storage system
+    /// (keyring or file system)
     #[error("Failed to interact with the authentication storage system")]
     StorageError(#[source] anyhow::Error),
 }
@@ -142,7 +147,7 @@ fn logout(args: LogoutArgs, storage: AuthenticationStorage) -> Result<(), Authen
 /// CLI entrypoint for authentication
 pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
     let storage = AuthenticationStorage::from_env_and_defaults()
-        .map_err(AuthenticationCLIError::StorageError)?;
+        .map_err(AuthenticationCLIError::InitializeStorageError)?;
 
     match args.subcommand {
         Subcommand::Login(args) => login(args, storage),

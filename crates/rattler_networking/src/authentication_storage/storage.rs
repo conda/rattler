@@ -10,7 +10,7 @@ use url::Url;
 
 use super::{
     authentication::Authentication,
-    backends::{file::FileStorage, keyring::KeyringAuthenticationStorage, netrc::NetRcStorage},
+    backends::{file::{FileStorage, FileStorageError}, keyring::KeyringAuthenticationStorage, netrc::NetRcStorage},
     StorageBackend,
 };
 
@@ -40,7 +40,7 @@ impl AuthenticationStorage {
     /// - keyring storage
     /// - file storage from the default location
     /// - netrc storage
-    pub fn from_env_and_defaults() -> Result<Self> {
+    pub fn from_env_and_defaults() -> Result<Self, FileStorageError> {
         let mut storage = Self::empty();
 
         if let Ok(auth_file) = std::env::var("RATTLER_AUTH_FILE") {
@@ -49,23 +49,10 @@ impl AuthenticationStorage {
                 "\"RATTLER_AUTH_FILE\" environment variable set, using file storage at {}",
                 auth_file
             );
-            storage.add_backend(Arc::from(FileStorage::from_path(path.into()).map_err(
-                |e| {
-                    anyhow!(
-                        "Error creating file storage backend from file ({}): {}",
-                        path.display(),
-                        e
-                    )
-                },
-            )?));
+            storage.add_backend(Arc::from(FileStorage::from_path(path.into())?));
         }
         storage.add_backend(Arc::from(KeyringAuthenticationStorage::default()));
-        storage.add_backend(Arc::from(FileStorage::new().map_err(|e| {
-            anyhow!(
-                "Error creating file storage backend from default path: {}",
-                e
-            )
-        })?));
+        storage.add_backend(Arc::from(FileStorage::new()?));
         storage.add_backend(Arc::from(NetRcStorage::from_env().unwrap_or_else(
             |(path, err)| {
                 tracing::warn!("error reading netrc file from {}: {}", path.display(), err);

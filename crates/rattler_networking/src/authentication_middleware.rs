@@ -1,6 +1,6 @@
 //! `reqwest` middleware that authenticates requests with data from the `AuthenticationStorage`
+use crate::authentication_storage::backends::file::FileStorageError;
 use crate::{Authentication, AuthenticationStorage};
-use anyhow::Result;
 use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
@@ -55,7 +55,7 @@ impl AuthenticationMiddleware {
     }
 
     /// Create a new authentication middleware with the default authentication storage
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, FileStorageError> {
         Ok(Self {
             auth_storage: AuthenticationStorage::from_env_and_defaults()?,
         })
