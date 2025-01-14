@@ -1,5 +1,6 @@
 //! file storage for passwords.
 use anyhow::Result;
+use fslock::LockFile;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::path::PathBuf;
@@ -34,18 +35,45 @@ pub enum FileStorageError {
     #[error("IO error: {0}")]
     IOError(#[from] std::io::Error),
 
+    /// Failed to lock the file storage file
+    #[error("failed to lock file storage file {0}")]
+    FailedToLock(String, #[source] std::io::Error),
+
     /// An error occurred when (de)serializing the credentials
     #[error("JSON error: {0}")]
     JSONError(#[from] serde_json::Error),
+}
+
+/// Lock the file storage file for reading and writing. This will block until the lock is
+/// acquired.
+fn lock_file_storage(path: &Path) -> Result<LockFile, FileStorageError> {
+    let path = path.with_extension("lock");
+    std::fs::create_dir_all(path.parent().unwrap())?;
+    let mut lock = fslock::LockFile::open(&path)
+        .map_err(|e| FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e))?;
+
+    // First try to lock the file without block. If we can't immediately get the lock we block and issue a debug message.
+    if !lock
+        .try_lock_with_pid()
+        .map_err(|e| FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e))?
+    {
+        tracing::debug!("waiting for lock on {}", path.to_string_lossy());
+        lock.lock_with_pid()
+            .map_err(|e| FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e))?;
+    }
+
+    Ok(lock)
 }
 
 impl FileStorageCache {
     pub fn from_path(path: &Path) -> Result<Self, FileStorageError> {
         let file_exists = path.exists();
         let content = if file_exists {
+            let _lock = lock_file_storage(path)?;
             let file = std::fs::File::open(path)?;
             let reader = std::io::BufReader::new(file);
-            serde_json::from_reader(reader)?
+            let content = serde_json::from_reader(reader)?;
+            content
         } else {
             BTreeMap::new()
         };
@@ -87,6 +115,8 @@ impl FileStorage {
 
     /// Serialize the given `BTreeMap` and write it to the JSON file
     fn write_json(&self, dict: &BTreeMap<String, Authentication>) -> Result<(), FileStorageError> {
+        let _lock = lock_file_storage(&self.path)?;
+
         let file = std::fs::File::create(&self.path)?;
         let writer = std::io::BufWriter::new(file);
         serde_json::to_writer(writer, dict)?;

@@ -40,7 +40,7 @@ impl AuthenticationStorage {
     /// - keyring storage
     /// - file storage from the default location
     /// - netrc storage
-    pub fn new() -> Result<Self> {
+    pub fn from_env_and_defaults() -> Result<Self> {
         let mut storage = Self::empty();
 
         if let Ok(auth_file) = std::env::var("RATTLER_AUTH_FILE") {

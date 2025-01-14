@@ -57,7 +57,7 @@ impl AuthenticationMiddleware {
     /// Create a new authentication middleware with the default authentication storage
     pub fn new() -> Result<Self> {
         Ok(Self {
-            auth_storage: AuthenticationStorage::new()?,
+            auth_storage: AuthenticationStorage::from_env_and_defaults()?,
         })
     }
 
@@ -428,7 +428,7 @@ mod tests {
                     .to_str()
                     .unwrap(),
             ),
-            || AuthenticationStorage::new().unwrap(),
+            || AuthenticationStorage::from_env_and_defaults().unwrap(),
         );
 
         let host = "test.example.com";
