@@ -63,6 +63,12 @@ impl FileStorage {
         Ok(Self { path, cache })
     }
 
+    /// Create a new file storage with the default path
+    pub fn default() -> Result<Self, FileStorageError> {
+        let path = dirs::home_dir().unwrap().join(".rattler").join("credentials.json");
+        Self::new(path)
+    }
+
     /// Updates the cache by reading the JSON file and deserializing it into a `BTreeMap`, or return an empty `BTreeMap` if the
     /// file does not exist
     fn read_json(&self) -> Result<BTreeMap<String, Authentication>, FileStorageError> {
@@ -107,21 +113,6 @@ impl StorageBackend for FileStorage {
         } else {
             Ok(())
         }
-    }
-}
-
-impl Default for FileStorage {
-    fn default() -> Self {
-        let mut path = dirs::home_dir().unwrap();
-        path.push(".rattler");
-        path.push("credentials.json");
-        Self::new(path.clone()).unwrap_or(Self {
-            path,
-            cache: Arc::new(RwLock::new(FileStorageCache {
-                content: BTreeMap::new(),
-                file_exists: false,
-            })),
-        })
     }
 }
 

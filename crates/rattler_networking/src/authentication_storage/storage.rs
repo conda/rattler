@@ -52,7 +52,7 @@ impl AuthenticationStorage {
             storage.add_backend(Arc::from(FileStorage::new(path.into())?));
         }
         storage.add_backend(Arc::from(KeyringAuthenticationStorage::default()));
-        storage.add_backend(Arc::from(FileStorage::default()));
+        storage.add_backend(Arc::from(FileStorage::default()?));
         storage.add_backend(Arc::from(NetRcStorage::from_env().unwrap_or_else(
             |(path, err)| {
                 tracing::warn!("error reading netrc file from {}: {}", path.display(), err);
