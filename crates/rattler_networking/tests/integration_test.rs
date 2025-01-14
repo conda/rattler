@@ -264,7 +264,11 @@ async fn test_cloudflare_r2_download_repodata() {
 
     let r2_access_key_id = std::env::var("RATTLER_TEST_R2_ACCESS_KEY_ID").ok();
     let r2_secret_access_key = std::env::var("RATTLER_TEST_R2_SECRET_ACCESS_KEY").ok();
-    if r2_access_key_id.is_none() || r2_secret_access_key.is_none() {
+    if r2_access_key_id.is_none()
+        || r2_access_key_id.clone().unwrap().is_empty()
+        || r2_secret_access_key.is_none()
+        || r2_secret_access_key.clone().unwrap().is_empty()
+    {
         eprintln!(
             "Skipping test as RATTLER_TEST_R2_ACCESS_KEY_ID or RATTLER_TEST_R2_SECRET_ACCESS_KEY is not set"
         );
