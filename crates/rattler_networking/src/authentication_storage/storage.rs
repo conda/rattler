@@ -25,7 +25,8 @@ use super::{
 /// Credentials are stored and retrieved from the backends in the
 /// order they are added to the storage
 pub struct AuthenticationStorage {
-    backends: Vec<Arc<dyn StorageBackend + Send + Sync>>,
+    /// Authentication backends
+    pub backends: Vec<Arc<dyn StorageBackend + Send + Sync>>,
     cache: Arc<Mutex<HashMap<String, Option<Authentication>>>>,
 }
 
