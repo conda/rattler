@@ -8,9 +8,10 @@ use reqwest_middleware::{Middleware, Next};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use url::Url;
+use anyhow::Result;
 
 /// `reqwest` middleware to authenticate requests
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct AuthenticationMiddleware {
     auth_storage: AuthenticationStorage,
 }
@@ -51,6 +52,13 @@ impl AuthenticationMiddleware {
     /// Create a new authentication middleware with the given authentication storage
     pub fn new(auth_storage: AuthenticationStorage) -> Self {
         Self { auth_storage }
+    }
+
+    /// Create a new authentication middleware with the default authentication storage
+    pub fn default() -> Result<Self> {
+        Ok(Self {
+            auth_storage: AuthenticationStorage::default()?,
+        })
     }
 
     /// Authenticate the given URL with the given authentication information
@@ -176,7 +184,7 @@ mod tests {
     #[test]
     fn test_store_fallback() -> anyhow::Result<()> {
         let tdir = tempdir()?;
-        let mut storage = AuthenticationStorage::new();
+        let mut storage = AuthenticationStorage::empty();
         storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
         )?));
@@ -191,7 +199,7 @@ mod tests {
     #[tokio::test]
     async fn test_conda_token_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
-        let mut storage = AuthenticationStorage::new();
+        let mut storage = AuthenticationStorage::empty();
         storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
         )?));
@@ -245,7 +253,7 @@ mod tests {
     #[tokio::test]
     async fn test_bearer_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
-        let mut storage = AuthenticationStorage::new();
+        let mut storage = AuthenticationStorage::empty();
         storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
         )?));
@@ -305,7 +313,7 @@ mod tests {
     #[tokio::test]
     async fn test_basic_auth_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
-        let mut storage = AuthenticationStorage::new();
+        let mut storage = AuthenticationStorage::empty();
         storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
         )?));
@@ -383,7 +391,7 @@ mod tests {
             ("*.com", false),
         ] {
             let tdir = tempdir()?;
-            let mut storage = AuthenticationStorage::new();
+            let mut storage = AuthenticationStorage::empty();
             storage.add_backend(Arc::from(FileStorage::new(
                 tdir.path().to_path_buf().join("auth.json"),
             )?));
@@ -418,7 +426,7 @@ mod tests {
                     .to_str()
                     .unwrap(),
             ),
-            || AuthenticationStorage::from_env().unwrap(),
+            || AuthenticationStorage::default().unwrap(),
         );
 
         let host = "test.example.com";
