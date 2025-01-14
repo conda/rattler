@@ -174,7 +174,9 @@ mod tests {
     ) {
         let (captured_tx, captured_rx) = tokio::sync::mpsc::channel(1);
         let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::default())
-            .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(storage.clone())))
+            .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
+                storage.clone(),
+            )))
             .with_arc(Arc::new(CaptureAbortMiddleware { captured_tx }))
             .build();
 
