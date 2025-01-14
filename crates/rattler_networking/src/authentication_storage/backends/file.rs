@@ -59,7 +59,7 @@ impl FileStorageCache {
 
 impl FileStorage {
     /// Create a new file storage with the given path
-    pub fn new(path: PathBuf) -> Result<Self, FileStorageError> {
+    pub fn from_path(path: PathBuf) -> Result<Self, FileStorageError> {
         // read the JSON file if it exists, and store it in the cache
         let cache = Arc::new(RwLock::new(FileStorageCache::from_path(&path)?));
 
@@ -67,12 +67,12 @@ impl FileStorage {
     }
 
     /// Create a new file storage with the default path
-    pub fn default() -> Result<Self, FileStorageError> {
+    pub fn new() -> Result<Self, FileStorageError> {
         let path = dirs::home_dir()
             .unwrap()
             .join(".rattler")
             .join("credentials.json");
-        Self::new(path)
+        Self::from_path(path)
     }
 
     /// Updates the cache by reading the JSON file and deserializing it into a `BTreeMap`, or return an empty `BTreeMap` if the

@@ -36,11 +36,11 @@ impl AuthenticationStorage {
 
     /// Create a new authentication storage with the default backends
     /// Following order:
-    /// - file storage from $RATTLER_AUTH_FILE (if set)
+    /// - file storage from `RATTLER_AUTH_FILE` (if set)
     /// - keyring storage
     /// - file storage from the default location
     /// - netrc storage
-    pub fn default() -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let mut storage = Self::empty();
 
         if let Ok(auth_file) = std::env::var("RATTLER_AUTH_FILE") {
@@ -49,16 +49,18 @@ impl AuthenticationStorage {
                 "\"RATTLER_AUTH_FILE\" environment variable set, using file storage at {}",
                 auth_file
             );
-            storage.add_backend(Arc::from(FileStorage::new(path.into()).map_err(|e| {
-                anyhow!(
-                    "Error creating file storage backend from file ({}): {}",
-                    path.display(),
-                    e
-                )
-            })?));
+            storage.add_backend(Arc::from(FileStorage::from_path(path.into()).map_err(
+                |e| {
+                    anyhow!(
+                        "Error creating file storage backend from file ({}): {}",
+                        path.display(),
+                        e
+                    )
+                },
+            )?));
         }
         storage.add_backend(Arc::from(KeyringAuthenticationStorage::default()));
-        storage.add_backend(Arc::from(FileStorage::default().map_err(|e| {
+        storage.add_backend(Arc::from(FileStorage::new().map_err(|e| {
             anyhow!(
                 "Error creating file storage backend from default path: {}",
                 e

@@ -50,14 +50,14 @@ impl Middleware for AuthenticationMiddleware {
 
 impl AuthenticationMiddleware {
     /// Create a new authentication middleware with the given authentication storage
-    pub fn new(auth_storage: AuthenticationStorage) -> Self {
+    pub fn from_auth_storage(auth_storage: AuthenticationStorage) -> Self {
         Self { auth_storage }
     }
 
     /// Create a new authentication middleware with the default authentication storage
-    pub fn default() -> Result<Self> {
+    pub fn new() -> Result<Self> {
         Ok(Self {
-            auth_storage: AuthenticationStorage::default()?,
+            auth_storage: AuthenticationStorage::new()?,
         })
     }
 
