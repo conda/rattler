@@ -55,6 +55,7 @@ fn operator_parser(input: &str) -> IResult<&str, VersionOperators, ParseVersionO
     Ok((rest, op))
 }
 
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum ParseConstraintError {
     #[error("'*' is incompatible with '{0}' operator'")]

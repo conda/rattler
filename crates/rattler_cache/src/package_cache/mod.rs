@@ -23,7 +23,6 @@ use rattler_digest::Sha256Hash;
 use rattler_networking::retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy};
 use rattler_package_streaming::{DownloadReporter, ExtractError};
 pub use reporter::CacheReporter;
-use reqwest::StatusCode;
 use simple_spawn_blocking::Cancelled;
 use tracing::instrument;
 use url::Url;
@@ -210,6 +209,12 @@ impl PackageCache {
     /// This is a convenience wrapper around `get_or_fetch` which fetches the
     /// package from the given URL if the package could not be found in the
     /// cache.
+    ///
+    /// This function assumes that the `client` is already configured with a
+    /// retry middleware that will retry any request that fails. This function
+    /// uses the passed in `retry_policy` if, after the request has been sent
+    /// and the response is successful, streaming of the package data fails
+    /// and the whole request must be retried.
     #[instrument(skip_all, fields(url=%url))]
     pub async fn get_or_fetch_from_url_with_retry(
         &self,
@@ -253,17 +258,12 @@ impl PackageCache {
                     // Extract any potential error
                     let Err(err) = result else { return Ok(()); };
 
-                    // Only retry on certain errors.
-                    if !matches!(
-                    &err,
-                    ExtractError::IoError(_) | ExtractError::CouldNotCreateDestination(_)
-                ) && !matches!(&err, ExtractError::ReqwestError(err) if
-                    err.is_timeout() ||
-                    err.is_connect() ||
-                    err
-                        .status()
-                        .map_or(false, |status| status.is_server_error() || status == StatusCode::TOO_MANY_REQUESTS || status == StatusCode::REQUEST_TIMEOUT)
-                ) {
+                    // Only retry on io errors. We assume that the user has
+                    // middleware installed that handles connection retries.
+
+                    if !matches!(&err,
+                        ExtractError::IoError(_) | ExtractError::CouldNotCreateDestination(_)
+                    ) {
                         return Err(err);
                     }
 
@@ -502,14 +502,19 @@ mod test {
     use rattler_conda_types::package::{ArchiveIdentifier, PackageFile, PathsJson};
     use rattler_digest::{parse_digest_from_hex, Sha256};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
+    use reqwest::Client;
+    use reqwest_middleware::ClientBuilder;
+    use reqwest_retry::RetryTransientMiddleware;
     use tempfile::tempdir;
     use tokio::sync::Mutex;
     use tokio_stream::StreamExt;
     use url::Url;
 
     use super::PackageCache;
-    use crate::validation::ValidationMode;
-    use crate::{package_cache::CacheKey, validation::validate_package_directory};
+    use crate::{
+        package_cache::CacheKey,
+        validation::{validate_package_directory, ValidationMode},
+    };
 
     fn get_test_data_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
@@ -630,23 +635,18 @@ mod test {
         FailAfterBytes(usize),
     }
 
-    async fn redirect_to_anaconda(
+    async fn redirect_to_prefix(
         axum::extract::Path((channel, subdir, file)): axum::extract::Path<(String, String, String)>,
     ) -> Redirect {
-        Redirect::permanent(&format!(
-            "https://conda.anaconda.org/{channel}/{subdir}/{file}"
-        ))
+        Redirect::permanent(&format!("https://prefix.dev/{channel}/{subdir}/{file}"))
     }
 
     async fn test_flaky_package_cache(archive_name: &str, middleware: Middleware) {
-        let static_dir = get_test_data_dir();
-        println!("Serving files from {}", static_dir.display());
-
         // Construct a service that serves raw files from the test directory
         // build our application with a route
         let router = Router::new()
             // `GET /` goes to `root`
-            .route("/{channel}/{subdir}/{file}", get(redirect_to_anaconda));
+            .route("/{channel}/{subdir}/{file}", get(redirect_to_prefix));
 
         // Construct a router that returns data from the static dir but fails the first
         // try.
@@ -679,12 +679,14 @@ mod test {
 
         let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
 
+        let client = ClientBuilder::new(Client::default()).build();
+
         // Do the first request without
         let result = cache
             .get_or_fetch_from_url_with_retry(
                 ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
                 server_url.join(archive_name).unwrap(),
-                reqwest::Client::default().into(),
+                client.clone(),
                 DoNotRetryPolicy,
                 None,
             )
@@ -697,13 +699,18 @@ mod test {
             assert_eq!(*request_count_lock, 1, "Expected there to be 1 request");
         }
 
+        let retry_policy = ExponentialBackoffBuilder::default().build_with_max_retries(3);
+        let client = ClientBuilder::from_client(client)
+            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+            .build();
+
         // The second one should fail after the 2nd try
         let result = cache
             .get_or_fetch_from_url_with_retry(
                 ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
                 server_url.join(archive_name).unwrap(),
-                reqwest::Client::default().into(),
-                ExponentialBackoffBuilder::default().build_with_max_retries(3),
+                client,
+                retry_policy,
                 None,
             )
             .await;

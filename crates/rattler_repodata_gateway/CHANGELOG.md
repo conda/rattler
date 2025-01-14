@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.32](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.31...rattler_repodata_gateway-v0.21.32) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.21.31](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.30...rattler_repodata_gateway-v0.21.31) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.21.30](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.29...rattler_repodata_gateway-v0.21.30) - 2025-01-08
+
+### Fixed
+
+- retry failed repodata streaming on io error (#1017)
+
 ## [0.21.29](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.28...rattler_repodata_gateway-v0.21.29) - 2024-12-20
 
 ### Other

@@ -38,7 +38,7 @@ pub mod linux;
 pub mod osx;
 
 use std::{
-    env,
+    env, fmt,
     hash::{Hash, Hasher},
     str::FromStr,
     sync::Arc,
@@ -397,6 +397,12 @@ impl EnvOverride for LibC {
     }
 }
 
+impl fmt::Display for LibC {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}={}", self.family, self.version)
+    }
+}
+
 /// Cuda virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct Cuda {
@@ -513,6 +519,7 @@ impl Archspec {
             Platform::LinuxAarch64 | Platform::LinuxArmV6l | Platform::LinuxArmV7l => "aarch64",
             Platform::LinuxPpc64le => "ppc64le",
             Platform::LinuxPpc64 => "ppc64",
+            Platform::LinuxPpc => "ppc",
             Platform::LinuxS390X => "s390x",
             Platform::LinuxRiscv32 => "riscv32",
             Platform::LinuxRiscv64 => "riscv64",

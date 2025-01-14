@@ -230,6 +230,11 @@ impl LockFile {
     pub fn version(&self) -> FileFormatVersion {
         self.inner.version
     }
+
+    /// Check if there are any packages in the lockfile
+    pub fn is_empty(&self) -> bool {
+        self.inner.conda_packages.is_empty() && self.inner.pypi_packages.is_empty()
+    }
 }
 
 /// Information about a specific environment in the lock-file.
@@ -419,6 +424,12 @@ impl<'lock> Environment<'lock> {
             .map(|pkgs| pkgs.filter_map(LockedPackageRef::as_pypi))
     }
 
+    /// Returns whether this environment has any pypi packages for the specified platform.
+    pub fn has_pypi_packages(&self, platform: Platform) -> bool {
+        self.pypi_packages(platform)
+            .is_some_and(|mut packages| packages.next().is_some())
+    }
+
     /// Creates a [`OwnedEnvironment`] from this environment.
     pub fn to_owned(self) -> OwnedEnvironment {
         OwnedEnvironment {
@@ -599,5 +610,55 @@ mod test {
             .unwrap()
             .map(|p| p.location().to_string())
             .collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn test_has_pypi_packages() {
+        // v4
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v4/pypi-matplotlib-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        assert!(conda_lock
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .has_pypi_packages(Platform::Linux64));
+
+        // v6
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v6/numpy-as-pypi-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        assert!(conda_lock
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .has_pypi_packages(Platform::OsxArm64));
+
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v6/python-from-conda-only-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        assert!(!conda_lock
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .has_pypi_packages(Platform::OsxArm64));
+    }
+
+    #[test]
+    fn test_is_empty() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v6/empty-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+        assert!(conda_lock.is_empty());
+
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v6/python-from-conda-only-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+        assert!(!conda_lock.is_empty());
     }
 }
