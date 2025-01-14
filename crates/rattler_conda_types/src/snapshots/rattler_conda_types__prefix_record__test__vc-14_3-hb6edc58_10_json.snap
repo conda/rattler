@@ -21,6 +21,7 @@ version: "14.3"
 fn: vc-14.3-hb6edc58_10.conda
 url: "https://conda.anaconda.org/conda-forge/win-64/vc-14.3-hb6edc58_10.conda"
 channel: "https://conda.anaconda.org/conda-forge/win-64"
+selected_feature: ~
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\vc-14.3-hb6edc58_10.conda"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\vc-14.3-hb6edc58_10"
 files: []

@@ -21,6 +21,7 @@ version: 5.2.6
 fn: xz-5.2.6-h8d14728_0.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/win-64/xz-5.2.6-h8d14728_0.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/win-64"
+selected_feature: ~
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\pkgs\\xz-5.2.6-h8d14728_0.tar.bz2"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\pkgs\\xz-5.2.6-h8d14728_0"
 files:

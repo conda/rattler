@@ -46,6 +46,14 @@ fn dummy_channel_json_path() -> String {
     )
 }
 
+fn dummy_channel_with_optional_dependencies_json_path() -> String {
+    format!(
+        "{}/{}",
+        env!("CARGO_MANIFEST_DIR"),
+        "../../test-data/channels/dummy-optional-dependencies/noarch/repodata.json"
+    )
+}
+
 fn dummy_md5_hash() -> rattler_digest::Md5Hash {
     rattler_digest::parse_digest_from_hex::<rattler_digest::Md5>("b3af409bb8423187c75e6c7f5b683908")
         .unwrap()
@@ -710,8 +718,9 @@ mod resolvo {
     use url::Url;
 
     use super::{
-        dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
-        GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+        dummy_channel_json_path, dummy_channel_with_optional_dependencies_json_path,
+        installed_package, solve, solve_real_world, FromStr, GenericVirtualPackage,
+        SimpleSolveTask, SolveError, Version,
     };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
@@ -947,6 +956,89 @@ mod resolvo {
         );
 
         insta::assert_snapshot!(result.unwrap_err());
+    }
+
+    // #[test]
+    // fn test_optional_dependencies() {
+    //     // Test package with features enabled
+    //     insta::assert_yaml_snapshot!(solve_real_world::<$T>(
+    //         vec!["pandas[aws]",]
+    //     ));
+    // }
+
+    // #[test]
+    // fn test_multiple_features() {
+    //     insta::assert_yaml_snapshot!(solve_real_world::<$T>(
+    //         vec!["pandas[aws,excel]",]
+    //     ));
+    // }
+
+    // #[test]
+    // fn test_feature_dependencies() {
+    //     // Test that enabling a feature pulls in its dependencies
+    //     insta::assert_yaml_snapshot!(solve_real_world::<$T>(
+    //         vec!["pytorch[cuda]",]
+    //     ));
+    // }
+
+    /// Installs `foo` while enabling a single optional dependency `[with-latest-bors]`.
+    /// This should pull in `bors >=2.0`.
+    #[test]
+    fn test_solve_dummy_repo_optional_depends_foo_latest_bors_resolvo() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["foo[optional_features=[with-latest-bors]]"],
+                ..SimpleSolveTask::default()
+            },
+        );
+
+        insta::assert_debug_snapshot!(result);
+    }
+
+    /// Installs `cuda-version` with `[with-cudadev]` which depends on `"foo >=4.0.2", "bar >=1.2.3"`.
+    #[test]
+    fn test_solve_dummy_repo_optional_depends_cuda_dev_resolvo() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["cuda-version[optional_features=[with-cudadev]]"],
+                ..SimpleSolveTask::default()
+            },
+        );
+
+        insta::assert_debug_snapshot!(result);
+    }
+
+    /// Attempts to enable two optional features that conflict: `[with-oldbors,with-latest-bors]`.
+    /// This should fail because one requests `bors <2.0` and the other requests `bors >=2.0`.
+    #[test]
+    fn test_solve_dummy_repo_optional_depends_conflict_resolvo() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["foo[optional_features=[with-oldbors,with-latest-bors]]"],
+                ..SimpleSolveTask::default()
+            },
+        );
+
+        assert!(result.is_err());
+        insta::assert_debug_snapshot!(result.err().unwrap());
+    }
+
+    /// Enables multiple optional dependencies in the same spec (like `[with-baz2,with-bar]`).
+    /// This should pull in `baz >=2.0` and `bar >=1.2.3` if both can coexist.
+    #[test]
+    fn test_solve_dummy_repo_optional_depends_foo_multi_resolvo() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["foo[optional_features=[with-baz2,with-bar]]"],
+                ..SimpleSolveTask::default()
+            },
+        );
+
+        insta::assert_debug_snapshot!(result);
     }
 }
 

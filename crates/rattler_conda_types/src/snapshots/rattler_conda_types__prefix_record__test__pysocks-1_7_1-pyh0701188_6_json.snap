@@ -22,6 +22,7 @@ version: 1.7.1
 fn: pysocks-1.7.1-pyh0701188_6.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/noarch/pysocks-1.7.1-pyh0701188_6.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/noarch"
+selected_feature: ~
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\pkgs\\pysocks-1.7.1-pyh0701188_6.tar.bz2"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\pkgs\\pysocks-1.7.1-pyh0701188_6"
 files:

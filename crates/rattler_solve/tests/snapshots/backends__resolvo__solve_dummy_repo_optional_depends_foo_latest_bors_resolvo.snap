@@ -1,0 +1,11 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+expression: result
+---
+Err(
+    Unsolvable(
+        [
+            "No candidates were found for foo[with-latest-bors] *.\n",
+        ],
+    ),
+)
