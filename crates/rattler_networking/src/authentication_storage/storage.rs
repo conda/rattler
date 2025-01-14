@@ -85,10 +85,10 @@ impl AuthenticationStorage {
         self.backends.push(backend);
     }
 
-    /// Add a new storage backend to the authentication storage to the front
+    /// Add a new storage backend to the authentication storage at the given index
     /// (backends are tried in the order they are added)
-    pub fn add_backend_front(&mut self, backend: Arc<dyn StorageBackend + Send + Sync>) {
-        self.backends.insert(0, backend);
+    pub fn insert_backend(&mut self, index: usize, backend: Arc<dyn StorageBackend + Send + Sync>) {
+        self.backends.insert(index, backend);
     }
 
     /// Store the given authentication information for the given host
