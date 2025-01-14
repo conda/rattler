@@ -1,5 +1,6 @@
 //! `reqwest` middleware that authenticates requests with data from the `AuthenticationStorage`
 use crate::{Authentication, AuthenticationStorage};
+use anyhow::Result;
 use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
@@ -8,7 +9,6 @@ use reqwest_middleware::{Middleware, Next};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use url::Url;
-use anyhow::Result;
 
 /// `reqwest` middleware to authenticate requests
 #[derive(Clone)]

@@ -2,8 +2,8 @@
 use anyhow::Result;
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
 use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 
 use crate::authentication_storage::StorageBackend;
 use crate::Authentication;
@@ -50,7 +50,10 @@ impl FileStorageCache {
             BTreeMap::new()
         };
 
-        Ok(Self { content, file_exists })
+        Ok(Self {
+            content,
+            file_exists,
+        })
     }
 }
 
@@ -65,7 +68,10 @@ impl FileStorage {
 
     /// Create a new file storage with the default path
     pub fn default() -> Result<Self, FileStorageError> {
-        let path = dirs::home_dir().unwrap().join(".rattler").join("credentials.json");
+        let path = dirs::home_dir()
+            .unwrap()
+            .join(".rattler")
+            .join("credentials.json");
         Self::new(path)
     }
 

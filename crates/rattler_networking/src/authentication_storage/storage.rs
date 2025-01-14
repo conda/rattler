@@ -49,10 +49,21 @@ impl AuthenticationStorage {
                 "\"RATTLER_AUTH_FILE\" environment variable set, using file storage at {}",
                 auth_file
             );
-            storage.add_backend(Arc::from(FileStorage::new(path.into())?));
+            storage.add_backend(Arc::from(FileStorage::new(path.into()).map_err(|e| {
+                anyhow!(
+                    "Error creating file storage backend from file ({}): {}",
+                    path.display(),
+                    e
+                )
+            })?));
         }
         storage.add_backend(Arc::from(KeyringAuthenticationStorage::default()));
-        storage.add_backend(Arc::from(FileStorage::default()?));
+        storage.add_backend(Arc::from(FileStorage::default().map_err(|e| {
+            anyhow!(
+                "Error creating file storage backend from default path: {}",
+                e
+            )
+        })?));
         storage.add_backend(Arc::from(NetRcStorage::from_env().unwrap_or_else(
             |(path, err)| {
                 tracing::warn!("error reading netrc file from {}: {}", path.display(), err);
