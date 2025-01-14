@@ -383,8 +383,13 @@ impl<'a> CondaDependencyProvider<'a> {
 
                 // Add feature-enabled solvables
                 for feature in record.package_record.optional_depends.keys() {
+                    let package_name_with_feature =
+                        pool.intern_package_name(NameType::WithFeature(
+                            record.package_record.name.as_normalized().to_owned(),
+                            feature.clone(),
+                        ));
                     let feature_solvable = pool.intern_solvable(
-                        package_name,
+                        package_name_with_feature,
                         SolverPackageRecord::RecordWithFeature(record, feature.clone()),
                     );
                     let package_name_with_feature =
@@ -900,9 +905,13 @@ impl super::SolverImpl for Solver {
         let required_records = solvables
             .into_iter()
             .filter_map(
-                |id| match solver.provider().pool.resolve_solvable(id).record {
-                    SolverPackageRecord::Record(rec)
-                    | SolverPackageRecord::RecordWithFeature(rec, _) => Some(rec.clone()),
+                |id| match &solver.provider().pool.resolve_solvable(id).record {
+                    SolverPackageRecord::Record(rec) => Some((*rec).clone()),
+                    SolverPackageRecord::RecordWithFeature(rec, feature) => {
+                        let mut cloned = (*rec).clone();
+                        cloned.set_selected_feature(feature.to_string());
+                        Some(cloned)
+                    }
                     SolverPackageRecord::VirtualPackage(_) => None,
                 },
             )

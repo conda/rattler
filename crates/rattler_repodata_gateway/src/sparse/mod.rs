@@ -319,6 +319,7 @@ fn parse_records<'i>(
             channel: Some(channel_name.url().clone().redact().to_string()),
             package_record,
             file_name: key.filename.to_owned(),
+            selected_feature: None,
         });
     }
 

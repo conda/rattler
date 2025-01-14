@@ -112,6 +112,7 @@ fn installed_package(
             python_site_packages_path: None,
             run_exports: None,
         },
+        selected_feature: None,
     }
 }
 
@@ -872,6 +873,7 @@ mod resolvo {
             file_name: url_str.to_string(),
             url: url.clone(),
             channel: None,
+            selected_feature: None,
         }];
 
         // Completely clean solver task, except for the specs and RepoData
@@ -905,6 +907,7 @@ mod resolvo {
             file_name: url_str.to_string(),
             url: Url::from_str("https://false.dont").unwrap(),
             channel: None,
+            selected_feature: None,
         }];
 
         // Completely clean solver task, except for the specs and RepoData

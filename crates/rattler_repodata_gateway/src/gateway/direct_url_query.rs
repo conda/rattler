@@ -91,6 +91,7 @@ impl DirectUrlQuery {
             file_name: self.url.clone().to_string(),
             url: self.url.clone(),
             channel: None,
+            selected_feature: None,
         }]))
     }
 }

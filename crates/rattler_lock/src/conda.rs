@@ -250,6 +250,7 @@ impl TryFrom<CondaBinaryData> for RepoDataRecord {
             file_name: value.file_name,
             url: value.location.try_into_url()?,
             channel: value.channel.map(|channel| channel.to_string()),
+            selected_feature: None,
         })
     }
 }

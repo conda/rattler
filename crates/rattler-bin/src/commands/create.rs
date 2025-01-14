@@ -324,13 +324,24 @@ fn print_transaction(transaction: &Transaction<PrefixRecord, RepoDataRecord>) {
             String::new()
         };
 
-        format!(
-            "{} {} {} {}",
-            r.package_record.name.as_normalized(),
-            r.package_record.version,
-            r.package_record.build,
-            direct_url_print,
-        )
+        if let Some(feature) = &r.selected_feature {
+            format!(
+                "{}[{}] {} {} {}",
+                r.package_record.name.as_normalized(),
+                feature,
+                r.package_record.version,
+                r.package_record.build,
+                direct_url_print,
+            )
+        } else {
+            format!(
+                "{} {} {} {}",
+                r.package_record.name.as_normalized(),
+                r.package_record.version,
+                r.package_record.build,
+                direct_url_print,
+            )
+        }
     };
 
     for operation in &transaction.operations {

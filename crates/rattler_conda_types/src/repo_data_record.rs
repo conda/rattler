@@ -24,6 +24,17 @@ pub struct RepoDataRecord {
     /// explicit about where the package came from.
     /// TODO: Refactor this into `Source` which can be a "name", "channelurl", or "direct url".
     pub channel: Option<String>,
+
+    /// The selected feature set for this package.
+    pub selected_feature: Option<String>,
+}
+
+impl RepoDataRecord {
+    /// Set the selected feature set for this package.
+    pub fn set_selected_feature(&mut self, selected_feature: String) -> &mut Self {
+        self.selected_feature = Some(selected_feature);
+        self
+    }
 }
 
 impl AsRef<PackageRecord> for RepoDataRecord {
