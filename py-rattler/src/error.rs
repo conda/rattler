@@ -8,6 +8,7 @@ use rattler_conda_types::{
     VersionBumpError, VersionExtendError,
 };
 use rattler_lock::{ConversionError, ParseCondaLockError};
+use rattler_networking::authentication_storage::backends::file::FileStorageError;
 use rattler_package_streaming::ExtractError;
 use rattler_repodata_gateway::{fetch::FetchRepoDataError, GatewayError};
 use rattler_shell::activation::ActivationError;
@@ -76,6 +77,8 @@ pub enum PyRattlerError {
     ),
     #[error(transparent)]
     ValidatePackageRecordsError(#[from] ValidatePackageRecordsError),
+    #[error(transparent)]
+    FileStorageError(#[from] FileStorageError),
 }
 
 fn pretty_print_error(mut err: &dyn Error) -> String {
@@ -166,6 +169,9 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::ValidatePackageRecordsError(err) => {
                 ValidatePackageRecordsException::new_err(pretty_print_error(&err))
             }
+            PyRattlerError::FileStorageError(err) => {
+                FileStorageException::new_err(pretty_print_error(&err))
+            }
         }
     }
 }
@@ -202,3 +208,4 @@ create_exception!(
     PyException
 );
 create_exception!(exceptions, ValidatePackageRecordsException, PyException);
+create_exception!(exceptions, FileStorageException, PyException);
