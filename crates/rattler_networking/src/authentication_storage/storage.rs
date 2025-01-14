@@ -10,7 +10,11 @@ use url::Url;
 
 use super::{
     authentication::Authentication,
-    backends::{file::{FileStorage, FileStorageError}, keyring::KeyringAuthenticationStorage, netrc::NetRcStorage},
+    backends::{
+        file::{FileStorage, FileStorageError},
+        keyring::KeyringAuthenticationStorage,
+        netrc::NetRcStorage,
+    },
     StorageBackend,
 };
 
