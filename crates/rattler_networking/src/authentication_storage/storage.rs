@@ -37,8 +37,8 @@ impl AuthenticationStorage {
     /// Create a new authentication storage with the default backends
     /// Following order:
     /// - file storage from $RATTLER_AUTH_FILE (if set)
-    /// - file storage from the default location
     /// - keyring storage
+    /// - file storage from the default location
     /// - netrc storage
     pub fn default() -> Result<Self> {
         let mut storage = Self::empty();
@@ -51,8 +51,8 @@ impl AuthenticationStorage {
             );
             storage.add_backend(Arc::from(FileStorage::new(path.into())?));
         }
-        storage.add_backend(Arc::from(FileStorage::default()));
         storage.add_backend(Arc::from(KeyringAuthenticationStorage::default()));
+        storage.add_backend(Arc::from(FileStorage::default()));
         storage.add_backend(Arc::from(NetRcStorage::from_env().unwrap_or_else(
             |(path, err)| {
                 tracing::warn!("error reading netrc file from {}: {}", path.display(), err);
@@ -60,22 +60,6 @@ impl AuthenticationStorage {
             },
         )));
 
-        Ok(storage)
-    }
-
-    /// Create a new authentication storage with just a file storage backend
-    /// Returns an error if the file is not found.
-    pub fn from_file(path: &std::path::Path) -> Result<Self> {
-        let mut storage = Self::empty();
-        let backend = FileStorage::new(path.to_path_buf()).map_err(|e| {
-            anyhow!(
-                "Error creating file storage backend from file ({}): {}",
-                path.display(),
-                e
-            )
-        })?;
-
-        storage.add_backend(Arc::from(backend));
         Ok(storage)
     }
 
