@@ -770,7 +770,8 @@ mod test {
 
     #[test]
     fn doesnt_crash() {
-        let virtual_packages = VirtualPackages::detect(&VirtualPackageOverrides::default()).unwrap();
+        let virtual_packages =
+            VirtualPackages::detect(&VirtualPackageOverrides::default()).unwrap();
         println!("{virtual_packages:#?}");
     }
     #[test]
