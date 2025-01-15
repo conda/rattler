@@ -164,6 +164,7 @@ impl PyRecord {
                 subdir,
                 constrains: Vec::new(),
                 depends: Vec::new(),
+                optional_depends: BTreeMap::new(),
                 features: None,
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,
@@ -205,6 +206,7 @@ impl PyRecord {
                     .map(|channel| Url::parse(&channel).map_err(PyRattlerError::from))
                     .transpose()?
                     .map(Into::into),
+                selected_feature: None,
             }),
         })
     }
