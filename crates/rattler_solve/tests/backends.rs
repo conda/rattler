@@ -957,7 +957,7 @@ mod resolvo {
 
         insta::assert_snapshot!(result.unwrap_err());
     }
-
+    #[cfg(feature = "optional_features")]
     /// Installs `foo` while enabling a single optional dependency `[with-latest-bors]`.
     /// This should pull in `bors >=2.0`.
     #[test]
@@ -994,6 +994,7 @@ mod resolvo {
         );
     }
 
+    #[cfg(feature = "optional_features")]
     /// Installs `cuda-version` with `[with-cudadev]` which depends on `"foo >=4.0.2", "bar >=1.2.3"`.
     #[test]
     fn test_solve_dummy_repo_optional_depends_cuda_dev_resolvo() {
@@ -1043,8 +1044,9 @@ mod resolvo {
         );
     }
 
+    #[cfg(feature = "optional_features")]
     /// Attempts to enable two optional features that conflict: `[with-oldbors,with-latest-bors]`.
-    /// This should fail because one requests `bors <2.0` and the other requests `bors >=2.0`.
+    /// This should fail because one requests `bors <2.0` and the other requests `bors >=2.0`.  
     #[test]
     fn test_solve_dummy_repo_optional_depends_conflict_resolvo() {
         let result = solve::<rattler_solve::resolvo::Solver>(
@@ -1058,6 +1060,7 @@ mod resolvo {
         insta::assert_snapshot!(result.unwrap_err());
     }
 
+    #[cfg(feature = "optional_features")]
     /// Enables multiple optional dependencies in the same spec (like `[with-baz2,with-bar]`).
     /// This should pull in `baz >=2.0` and `bar >=1.2.3` if both can coexist.
     #[test]
@@ -1108,6 +1111,7 @@ mod resolvo {
         );
     }
 
+    #[cfg(feature = "optional_features")]
     /// Should install xfoo with the feature with-issue717 which requires `with-issue717[with-bors21]` hence pulling in bors 2.1 as well
     #[test]
     fn test_solve_dummy_repo_optional_depends_xfoo_optional_depends_with_features() {
