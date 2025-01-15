@@ -23,3 +23,6 @@ archspec = { workspace = true }
 
 [target.'cfg(target_os="macos")'.dependencies]
 plist = { workspace = true }
+
+[target.'cfg(target_os="windows")'.dependencies]
+winver = { workspace = true }

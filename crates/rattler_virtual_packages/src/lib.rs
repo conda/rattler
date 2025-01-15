@@ -36,6 +36,7 @@ pub mod cuda;
 pub mod libc;
 pub mod linux;
 pub mod osx;
+pub mod win;
 
 use std::{
     env, fmt,
@@ -142,7 +143,7 @@ pub trait EnvOverride: Sized {
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum VirtualPackage {
     /// Available on windows
-    Win,
+    Win(Windows),
 
     /// Available on `Unix` based platforms
     Unix,
@@ -163,19 +164,86 @@ pub enum VirtualPackage {
     Archspec(Archspec),
 }
 
+/// A struct that represents all virtual packages provided by this library.
+#[derive(Debug, Clone, Default)]
+pub struct VirtualPackages {
+    /// Available on windows
+    pub win: Option<Windows>,
+
+    /// Available on `Unix` based platforms
+    pub unix: bool,
+
+    /// Available when running on `Linux`
+    pub linux: Option<Linux>,
+
+    /// Available when running on `OSX`
+    pub osx: Option<Osx>,
+
+    /// Available `LibC` family and version
+    pub libc: Option<LibC>,
+
+    /// Available `Cuda` version
+    pub cuda: Option<Cuda>,
+
+    /// The CPU architecture
+    pub archspec: Option<Archspec>,
+}
+
+impl VirtualPackages {
+    /// Convert this struct into an iterator of [`VirtualPackage`].
+    pub fn into_virtual_packages(self) -> impl Iterator<Item = VirtualPackage> {
+        let Self {
+            win,
+            unix,
+            linux,
+            osx,
+            libc,
+            cuda,
+            archspec,
+        } = self;
+
+        [
+            win.map(VirtualPackage::Win),
+            unix.then_some(VirtualPackage::Unix),
+            linux.map(VirtualPackage::Linux),
+            osx.map(VirtualPackage::Osx),
+            libc.map(VirtualPackage::LibC),
+            cuda.map(VirtualPackage::Cuda),
+            archspec.map(VirtualPackage::Archspec),
+        ]
+        .into_iter()
+        .flatten()
+    }
+
+    /// Convert this struct into an iterator of [`GenericVirtualPackage`].
+    pub fn into_generic_virtual_packages(self) -> impl Iterator<Item = GenericVirtualPackage> {
+        self.into_virtual_packages().map(Into::into)
+    }
+
+    /// Detect the virtual packages of the current system with the given
+    /// overrides.
+    pub fn detect(overrides: &VirtualPackageOverrides) -> Result<Self, DetectVirtualPackageError> {
+        Ok(Self {
+            win: Windows::detect(overrides.win.as_ref())?,
+            unix: Platform::current().is_unix(),
+            linux: Linux::detect(overrides.linux.as_ref())?,
+            osx: Osx::detect(overrides.osx.as_ref())?,
+            libc: LibC::detect(overrides.libc.as_ref())?,
+            cuda: Cuda::detect(overrides.cuda.as_ref())?,
+            archspec: Archspec::detect(overrides.archspec.as_ref())?,
+        })
+    }
+}
+
 impl From<VirtualPackage> for GenericVirtualPackage {
     fn from(package: VirtualPackage) -> Self {
         match package {
-            VirtualPackage::Win => GenericVirtualPackage {
-                name: PackageName::new_unchecked("__win"),
-                version: Version::major(0),
-                build_string: "0".into(),
-            },
             VirtualPackage::Unix => GenericVirtualPackage {
                 name: PackageName::new_unchecked("__unix"),
                 version: Version::major(0),
                 build_string: "0".into(),
             },
+            VirtualPackage::Win(windows) => windows.into(),
             VirtualPackage::Linux(linux) => linux.into(),
             VirtualPackage::Osx(osx) => osx.into(),
             VirtualPackage::LibC(libc) => libc.into(),
@@ -201,7 +269,9 @@ impl VirtualPackage {
     pub fn detect(
         overrides: &VirtualPackageOverrides,
     ) -> Result<Vec<Self>, DetectVirtualPackageError> {
-        try_detect_virtual_packages_with_overrides(overrides)
+        Ok(VirtualPackages::detect(overrides)?
+            .into_virtual_packages()
+            .collect())
     }
 }
 
@@ -233,12 +303,18 @@ pub enum DetectVirtualPackageError {
 /// struct with all overrides set to the default environment variables.
 #[derive(Default, Clone, Debug)]
 pub struct VirtualPackageOverrides {
+    /// The override for the win virtual package
+    pub win: Option<Override>,
     /// The override for the osx virtual package
     pub osx: Option<Override>,
+    /// The override for the linux virtual package
+    pub linux: Option<Override>,
     /// The override for the libc virtual package
     pub libc: Option<Override>,
     /// The override for the cuda virtual package
     pub cuda: Option<Override>,
+    /// The override for the archspec virtual package
+    pub archspec: Option<Override>,
 }
 
 impl VirtualPackageOverrides {
@@ -246,9 +322,12 @@ impl VirtualPackageOverrides {
     /// to a given value.
     pub fn all(ov: Override) -> Self {
         Self {
+            win: Some(ov.clone()),
             osx: Some(ov.clone()),
+            linux: Some(ov.clone()),
             libc: Some(ov.clone()),
-            cuda: Some(ov),
+            cuda: Some(ov.clone()),
+            archspec: Some(ov),
         }
     }
 
@@ -257,47 +336,6 @@ impl VirtualPackageOverrides {
     pub fn from_env() -> Self {
         Self::all(Override::DefaultEnvVar)
     }
-}
-
-// Detect the available virtual packages on the system
-fn try_detect_virtual_packages_with_overrides(
-    overrides: &VirtualPackageOverrides,
-) -> Result<Vec<VirtualPackage>, DetectVirtualPackageError> {
-    let mut result = Vec::new();
-    let platform = Platform::current();
-
-    if platform.is_unix() {
-        result.push(VirtualPackage::Unix);
-    }
-
-    if platform.is_windows() {
-        result.push(VirtualPackage::Win);
-    }
-
-    if platform.is_linux() {
-        if let Some(linux_version) = Linux::current()? {
-            result.push(linux_version.into());
-        }
-        if let Some(libc) = LibC::detect(overrides.libc.as_ref())? {
-            result.push(libc.into());
-        }
-    }
-
-    if platform.is_osx() {
-        if let Some(osx) = Osx::detect(overrides.osx.as_ref())? {
-            result.push(osx.into());
-        }
-    }
-
-    if let Some(cuda) = Cuda::detect(overrides.cuda.as_ref())? {
-        result.push(cuda.into());
-    }
-
-    if let Some(archspec) = Archspec::current() {
-        result.push(archspec.into());
-    }
-
-    Ok(result)
 }
 
 /// Linux virtual package description
@@ -337,6 +375,18 @@ impl From<Linux> for VirtualPackage {
 impl From<Version> for Linux {
     fn from(version: Version) -> Self {
         Linux { version }
+    }
+}
+
+impl EnvOverride for Linux {
+    const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_LINUX";
+
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
+        Version::from_str(env_var_value).map(Self::from)
+    }
+
+    fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current()?)
     }
 }
 
@@ -502,7 +552,10 @@ impl From<Arc<Microarchitecture>> for Archspec {
 impl Archspec {
     /// Returns the current CPU architecture
     pub fn current() -> Option<Self> {
-        archspec::cpu::host().ok().map(Into::into)
+        archspec::cpu::host()
+            .ok()
+            .map(Into::into)
+            .or_else(|| Self::from_platform(Platform::current()))
     }
 
     /// Returns the minimal supported archspec architecture for the given
@@ -533,15 +586,16 @@ impl Archspec {
             Platform::OsxArm64 => "m1",
         };
 
-        Some(
-            archspec::cpu::Microarchitecture::known_targets()
-                .get(archspec_name)
-                .cloned()
-                .unwrap_or_else(|| {
-                    Arc::new(archspec::cpu::Microarchitecture::generic(archspec_name))
-                })
-                .into(),
-        )
+        Some(Self::from_name(archspec_name))
+    }
+
+    /// Constructs an `Archspec` from the given `archspec_name`.
+    pub fn from_name(archspec_name: &str) -> Self {
+        archspec::cpu::Microarchitecture::known_targets()
+            .get(archspec_name)
+            .cloned()
+            .unwrap_or_else(|| Arc::new(archspec::cpu::Microarchitecture::generic(archspec_name)))
+            .into()
     }
 }
 
@@ -558,6 +612,24 @@ impl From<Archspec> for GenericVirtualPackage {
 impl From<Archspec> for VirtualPackage {
     fn from(archspec: Archspec) -> Self {
         VirtualPackage::Archspec(archspec)
+    }
+}
+
+impl EnvOverride for Archspec {
+    fn parse_version(value: &str) -> Result<Self, ParseVersionError> {
+        match Microarchitecture::known_targets()
+            .get(&value.to_lowercase())
+            .cloned()
+        {
+            Some(arch) => Ok(Self { spec: arch }),
+            None => Ok(Self::from_name(value)),
+        }
+    }
+
+    const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_ARCHSPEC";
+
+    fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current())
     }
 }
 
@@ -608,6 +680,64 @@ impl EnvOverride for Osx {
         Ok(Self::current()?)
     }
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_OSX";
+}
+
+/// Windows virtual package description
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
+pub struct Windows {
+    /// The version of windows
+    pub version: Option<Version>,
+}
+
+impl Windows {
+    /// Returns the Windows version of the current platform.
+    ///
+    /// Returns `None` if the current platform is not a Windows based platform.
+    pub fn current() -> Option<Self> {
+        if cfg!(target_os = "windows") {
+            Some(Self {
+                version: win::windows_version(),
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl From<Windows> for GenericVirtualPackage {
+    fn from(windows: Windows) -> Self {
+        GenericVirtualPackage {
+            name: PackageName::new_unchecked("__win"),
+            version: windows.version.unwrap_or_else(|| Version::major(0)),
+            build_string: "0".into(),
+        }
+    }
+}
+
+impl From<Windows> for VirtualPackage {
+    fn from(windows: Windows) -> Self {
+        VirtualPackage::Win(windows)
+    }
+}
+
+impl From<Version> for Windows {
+    fn from(version: Version) -> Self {
+        Self {
+            version: Some(version),
+        }
+    }
+}
+
+impl EnvOverride for Windows {
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
+        Version::from_str(env_var_value).map(|version| Self {
+            version: Some(version),
+        })
+    }
+    fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current())
+    }
+    const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_WIN";
 }
 
 #[cfg(test)]
