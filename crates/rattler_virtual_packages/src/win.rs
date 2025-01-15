@@ -1,5 +1,5 @@
 //! Low-level functions to detect the Windows version on the system. See
-//! [`crate::windows::windows_version`].
+//! [`windows_version`].
 
 use once_cell::sync::OnceCell;
 use rattler_conda_types::Version;
