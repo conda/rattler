@@ -4,12 +4,16 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_till1, take_until, take_while, take_while1},
     character::complete::{char, multispace0, one_of, space0},
-    combinator::{map, opt, recognize},
+    combinator::{opt, recognize},
     error::{context, ContextError, ParseError},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, preceded, separated_pair, terminated},
     Finish, IResult,
 };
+
+#[cfg(feature = "optional_features")]
+use nom::combinator::map;
+
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use smallvec::SmallVec;
 use thiserror::Error;
@@ -226,6 +230,7 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
     }
 }
 
+#[cfg(feature = "optional_features")]
 /// Parses a list of optional dependencies from a string `[feat1, feat2, feat3]`.
 pub fn parse_optional_features(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     fn parse_features(input: &str) -> IResult<&str, Vec<String>> {
