@@ -1,6 +1,9 @@
 //! file storage for passwords.
 use anyhow::Result;
-use async_fd_lock::{RwLockWriteGuard, blocking::{LockRead, LockWrite}};
+use async_fd_lock::{
+    blocking::{LockRead, LockWrite},
+    RwLockWriteGuard,
+};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::Path;
@@ -52,7 +55,8 @@ impl FileStorageCache {
             let read_guard = File::options()
                 .read(true)
                 .open(&path)?
-                .lock_read().map_err(FileStorageError::FailedToLock)?;
+                .lock_read()
+                .map_err(FileStorageError::FailedToLock)?;
             serde_json::from_reader(read_guard)?
         } else {
             BTreeMap::new()
@@ -95,7 +99,10 @@ impl FileStorage {
 
     /// Serialize the given `BTreeMap` and write it to the JSON file
     fn write_json(&self, dict: &BTreeMap<String, Authentication>) -> Result<(), FileStorageError> {
-        let write_guard: std::result::Result<RwLockWriteGuard<File>, async_fd_lock::LockError<File>> = File::options()
+        let write_guard: std::result::Result<
+            RwLockWriteGuard<File>,
+            async_fd_lock::LockError<File>,
+        > = File::options()
             .create(true)
             .write(true)
             .truncate(true)
