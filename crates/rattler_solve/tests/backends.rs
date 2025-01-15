@@ -46,6 +46,7 @@ fn dummy_channel_json_path() -> String {
     )
 }
 
+#[cfg(feature = "optional_features")]
 fn dummy_channel_with_optional_dependencies_json_path() -> String {
     format!(
         "{}/{}",
@@ -718,10 +719,12 @@ mod resolvo {
     use url::Url;
 
     use super::{
-        dummy_channel_json_path, dummy_channel_with_optional_dependencies_json_path,
-        installed_package, solve, solve_real_world, FromStr, GenericVirtualPackage,
-        SimpleSolveTask, SolveError, Version,
+        dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
+        GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
     };
+
+    #[cfg(feature = "optional_features")]
+    use super::dummy_channel_with_optional_dependencies_json_path;
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
 
