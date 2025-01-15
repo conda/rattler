@@ -18,11 +18,11 @@ gcs = ["google-cloud-auth", "google-cloud-token"]
 
 [dependencies]
 anyhow = { workspace = true }
+async-fd-lock = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 dirs = { workspace = true }
-fslock = { workspace = true }
 google-cloud-auth = { workspace = true, optional = true }
 google-cloud-token = { workspace = true, optional = true }
 http = { workspace = true }
