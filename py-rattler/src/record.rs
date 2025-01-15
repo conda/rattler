@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use pyo3::prelude::PyAnyMethods;
 use pyo3::{
