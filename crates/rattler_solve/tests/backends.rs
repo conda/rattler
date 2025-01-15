@@ -958,29 +958,6 @@ mod resolvo {
         insta::assert_snapshot!(result.unwrap_err());
     }
 
-    // #[test]
-    // fn test_optional_dependencies() {
-    //     // Test package with features enabled
-    //     insta::assert_yaml_snapshot!(solve_real_world::<$T>(
-    //         vec!["pandas[aws]",]
-    //     ));
-    // }
-
-    // #[test]
-    // fn test_multiple_features() {
-    //     insta::assert_yaml_snapshot!(solve_real_world::<$T>(
-    //         vec!["pandas[aws,excel]",]
-    //     ));
-    // }
-
-    // #[test]
-    // fn test_feature_dependencies() {
-    //     // Test that enabling a feature pulls in its dependencies
-    //     insta::assert_yaml_snapshot!(solve_real_world::<$T>(
-    //         vec!["pytorch[cuda]",]
-    //     ));
-    // }
-
     /// Installs `foo` while enabling a single optional dependency `[with-latest-bors]`.
     /// This should pull in `bors >=2.0`.
     #[test]
@@ -991,9 +968,30 @@ mod resolvo {
                 specs: &["foo[optional_features=[with-latest-bors]]"],
                 ..SimpleSolveTask::default()
             },
+        )
+        .unwrap();
+
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result[0].package_record.version,
+            Version::from_str("2.0.2").unwrap(),
+            "expected lowest version of foobar"
         );
 
-        insta::assert_debug_snapshot!(result);
+        assert_eq!(result[1].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result[1].package_record.version,
+            Version::from_str("2.0.2").unwrap(),
+            "expected lowest version of foobar"
+        );
+
+        assert_eq!(result[2].package_record.name.as_normalized(), "bors");
+        assert_eq!(
+            result[2].package_record.version,
+            Version::from_str("2.1").unwrap(),
+            "expected highest compatible version of bors"
+        );
     }
 
     /// Installs `cuda-version` with `[with-cudadev]` which depends on `"foo >=4.0.2", "bar >=1.2.3"`.
@@ -1005,9 +1003,44 @@ mod resolvo {
                 specs: &["cuda-version[optional_features=[with-cudadev]]"],
                 ..SimpleSolveTask::default()
             },
+        )
+        .unwrap();
+
+        assert_eq!(result.len(), 4);
+        assert_eq!(
+            result[0].package_record.name.as_normalized(),
+            "cuda-version"
+        );
+        assert_eq!(
+            result[0].package_record.version,
+            Version::from_str("12.5").unwrap(),
+            "expected version 12.5 of cuda-version"
         );
 
-        insta::assert_debug_snapshot!(result);
+        // The cuda-version with feature `with-cudadev`:
+        assert_eq!(
+            result[1].package_record.name.as_normalized(),
+            "cuda-version"
+        );
+        assert_eq!(
+            result[1].package_record.version,
+            Version::from_str("12.5").unwrap(),
+            "expected version 12.5 of cuda-version"
+        );
+
+        assert_eq!(result[2].package_record.name.as_normalized(), "bar");
+        assert_eq!(
+            result[2].package_record.version,
+            Version::from_str("1.2.3").unwrap(),
+            "expected version 1.2.3 of bar"
+        );
+
+        assert_eq!(result[3].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result[3].package_record.version,
+            Version::from_str("4.0.2").unwrap(),
+            "expected version 4.0.2 of foo"
+        );
     }
 
     /// Attempts to enable two optional features that conflict: `[with-oldbors,with-latest-bors]`.
@@ -1022,8 +1055,7 @@ mod resolvo {
             },
         );
 
-        assert!(result.is_err());
-        insta::assert_debug_snapshot!(result.err().unwrap());
+        insta::assert_snapshot!(result.unwrap_err());
     }
 
     /// Enables multiple optional dependencies in the same spec (like `[with-baz2,with-bar]`).
@@ -1036,9 +1068,93 @@ mod resolvo {
                 specs: &["foo[optional_features=[with-baz2,with-bar]]"],
                 ..SimpleSolveTask::default()
             },
+        )
+        .unwrap();
+
+        assert_eq!(result.len(), 5);
+        assert_eq!(result[0].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result[0].package_record.version,
+            Version::from_str("3.0.2").unwrap(),
+            "expected version 3.0.2 of foo"
         );
 
-        insta::assert_debug_snapshot!(result);
+        assert_eq!(result[1].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result[1].package_record.version,
+            Version::from_str("3.0.2").unwrap(),
+            "expected version 3.0.2 of foo"
+        );
+
+        assert_eq!(result[2].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result[2].package_record.version,
+            Version::from_str("3.0.2").unwrap(),
+            "expected version 3.0.2 of foo"
+        );
+
+        assert_eq!(result[3].package_record.name.as_normalized(), "bar");
+        assert_eq!(
+            result[3].package_record.version,
+            Version::from_str("1.2.3").unwrap(),
+            "expected version 1.2.3 of bar"
+        );
+
+        assert_eq!(result[4].package_record.name.as_normalized(), "baz");
+        assert_eq!(
+            result[4].package_record.version,
+            Version::from_str("2.0").unwrap(),
+            "expected version 2.0 of baz"
+        );
+    }
+
+    /// Should install xfoo with the feature with-issue717 which requires `with-issue717[with-bors21]` hence pulling in bors 2.1 as well
+    #[test]
+    fn test_solve_dummy_repo_optional_depends_xfoo_optional_depends_with_features() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["xfoo[optional_features=[with-issue717]]"],
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.len(), 5);
+        assert_eq!(result[0].package_record.name.as_normalized(), "xfoo");
+        assert_eq!(
+            result[0].package_record.version,
+            Version::from_str("2").unwrap(),
+            "expected version 2 of xfoo"
+        );
+
+        assert_eq!(result[1].package_record.name.as_normalized(), "xfoo");
+        assert_eq!(
+            result[1].package_record.version,
+            Version::from_str("2").unwrap(),
+            "expected version 2 of xfoo"
+        );
+
+        assert_eq!(result[2].package_record.name.as_normalized(), "issue_717");
+        assert_eq!(
+            result[2].package_record.version,
+            Version::from_str("2.1").unwrap(),
+            "expected version 2.1 of issue_717"
+        );
+
+        assert_eq!(result[3].package_record.name.as_normalized(), "issue_717");
+        assert_eq!(
+            result[3].package_record.version,
+            Version::from_str("2.1").unwrap(),
+            "expected version 2.1 of issue_717"
+        );
+
+        assert_eq!(result[4].package_record.name.as_normalized(), "bors");
+        assert_eq!(
+            result[4].package_record.version,
+            Version::from_str("2.1").unwrap(),
+            "expected version 2.1 of bors"
+        );
     }
 }
 
