@@ -9,8 +9,6 @@ use rattler_conda_types::Version;
 /// Returns an error if determining the Windows version resulted in an error.
 /// Returns `None` if the Windows version could not be determined. Note that
 /// this does not mean the current platform is not Windows.
-///
-/// Detection of the Windows version is implemented using the [`winver`] crate.
 pub fn windows_version() -> Option<Version> {
     static DETECTED_WINDOWS_VERSION: OnceCell<Option<Version>> = OnceCell::new();
     DETECTED_WINDOWS_VERSION
