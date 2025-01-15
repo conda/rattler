@@ -54,7 +54,7 @@ impl FileStorageCache {
         let content = if file_exists {
             let read_guard = File::options()
                 .read(true)
-                .open(&path)?
+                .open(path)?
                 .lock_read()
                 .map_err(FileStorageError::FailedToLock)?;
             serde_json::from_reader(read_guard)?
