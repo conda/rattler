@@ -269,7 +269,17 @@ fn parse_bracket_vec_into_components(
             "build" => match_spec.build = Some(StringMatcher::from_str(value)?),
             "build_number" => match_spec.build_number = Some(BuildNumberSpec::from_str(value)?),
             "optional_features" => {
-                match_spec.optional_features = Some(parse_optional_features(value)?);
+                // Optional features are not supported yet
+                #[cfg(feature = "optional_features")]
+                {
+                    match_spec.optional_features = Some(parse_optional_features(value)?);
+                }
+                #[cfg(not(feature = "optional_features"))]
+                {
+                    return Err(ParseMatchSpecError::InvalidBracketKey(
+                        "optional_features".to_string(),
+                    ));
+                }
             }
             "sha256" => {
                 match_spec.sha256 = Some(
