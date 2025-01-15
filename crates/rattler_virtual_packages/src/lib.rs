@@ -39,7 +39,9 @@ pub mod osx;
 pub mod win;
 
 use std::{
+    borrow::Cow,
     env, fmt,
+    fmt::Display,
     hash::{Hash, Hasher},
     str::FromStr,
     sync::Arc,
@@ -501,9 +503,12 @@ impl From<Cuda> for VirtualPackage {
 
 /// Archspec describes the CPU architecture
 #[derive(Clone, Debug)]
-pub struct Archspec {
-    /// The associated microarchitecture
-    pub spec: Arc<Microarchitecture>,
+pub enum Archspec {
+    /// A microarchitecture from the archspec library.
+    Microarchitecture(Arc<Microarchitecture>),
+
+    /// An unknown microarchitecture
+    Unknown,
 }
 
 impl Serialize for Archspec {
@@ -511,7 +516,7 @@ impl Serialize for Archspec {
     where
         S: Serializer,
     {
-        self.spec.name().serialize(serializer)
+        self.as_str().serialize(serializer)
     }
 }
 
@@ -520,24 +525,24 @@ impl<'de> Deserialize<'de> for Archspec {
     where
         D: Deserializer<'de>,
     {
-        let name = String::deserialize(deserializer)?;
-        let spec = archspec::cpu::Microarchitecture::known_targets()
-            .get(&name)
-            .cloned()
-            .unwrap_or_else(|| Arc::new(archspec::cpu::Microarchitecture::generic(&name)));
-        Ok(Self { spec })
+        let name = Cow::<'de, str>::deserialize(deserializer)?;
+        if name == "0" {
+            Ok(Self::Unknown)
+        } else {
+            Ok(Self::from_name(&name))
+        }
     }
 }
 
 impl Hash for Archspec {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.spec.name().hash(state);
+        self.as_str().hash(state);
     }
 }
 
 impl PartialEq<Self> for Archspec {
     fn eq(&self, other: &Self) -> bool {
-        self.spec.name() == other.spec.name()
+        self.as_str() == other.as_str()
     }
 }
 
@@ -545,17 +550,33 @@ impl Eq for Archspec {}
 
 impl From<Arc<Microarchitecture>> for Archspec {
     fn from(arch: Arc<Microarchitecture>) -> Self {
-        Self { spec: arch }
+        Self::Microarchitecture(arch)
+    }
+}
+
+impl Display for Archspec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 
 impl Archspec {
-    /// Returns the current CPU architecture
-    pub fn current() -> Option<Self> {
+    /// Returns the string representation of the virtual package.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Archspec::Microarchitecture(arch) => arch.name(),
+            Archspec::Unknown => "0",
+        }
+    }
+
+    /// Returns the current CPU architecture or `Archspec::Unknown` if the
+    /// architecture could not be determined.
+    pub fn current() -> Self {
         archspec::cpu::host()
             .ok()
             .map(Into::into)
             .or_else(|| Self::from_platform(Platform::current()))
+            .unwrap_or(Archspec::Unknown)
     }
 
     /// Returns the minimal supported archspec architecture for the given
@@ -589,9 +610,10 @@ impl Archspec {
         Some(Self::from_name(archspec_name))
     }
 
-    /// Constructs an `Archspec` from the given `archspec_name`.
+    /// Constructs an `Archspec` from the given `archspec_name`. Creates a
+    /// "generic" architecture if the name is not known.
     pub fn from_name(archspec_name: &str) -> Self {
-        archspec::cpu::Microarchitecture::known_targets()
+        Microarchitecture::known_targets()
             .get(archspec_name)
             .cloned()
             .unwrap_or_else(|| Arc::new(archspec::cpu::Microarchitecture::generic(archspec_name)))
@@ -604,7 +626,7 @@ impl From<Archspec> for GenericVirtualPackage {
         GenericVirtualPackage {
             name: PackageName::new_unchecked("__archspec"),
             version: Version::major(1),
-            build_string: archspec.spec.name().into(),
+            build_string: archspec.to_string(),
         }
     }
 }
@@ -617,19 +639,17 @@ impl From<Archspec> for VirtualPackage {
 
 impl EnvOverride for Archspec {
     fn parse_version(value: &str) -> Result<Self, ParseVersionError> {
-        match Microarchitecture::known_targets()
-            .get(&value.to_lowercase())
-            .cloned()
-        {
-            Some(arch) => Ok(Self { spec: arch }),
-            None => Ok(Self::from_name(value)),
+        if value == "0" {
+            Ok(Archspec::Unknown)
+        } else {
+            Ok(Self::from_name(value))
         }
     }
 
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_ARCHSPEC";
 
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
-        Ok(Self::current())
+        Ok(Some(Self::current()))
     }
 }
 
