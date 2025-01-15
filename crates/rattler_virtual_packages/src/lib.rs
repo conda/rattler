@@ -766,12 +766,12 @@ mod test {
 
     use rattler_conda_types::Version;
 
-    use crate::{Cuda, EnvOverride, LibC, Osx, Override, VirtualPackage, VirtualPackageOverrides};
+    use super::*;
 
     #[test]
     fn doesnt_crash() {
-        let virtual_packages = VirtualPackage::detect(&VirtualPackageOverrides::default()).unwrap();
-        println!("{virtual_packages:?}");
+        let virtual_packages = VirtualPackages::detect(&VirtualPackageOverrides::default()).unwrap();
+        println!("{virtual_packages:#?}");
     }
     #[test]
     fn parse_libc() {

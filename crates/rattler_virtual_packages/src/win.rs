@@ -1,11 +1,8 @@
 //! Low-level functions to detect the Windows version on the system. See
 //! [`crate::windows::windows_version`].
 
-use std::str::FromStr;
-
 use once_cell::sync::OnceCell;
 use rattler_conda_types::Version;
-use winver::WindowsVersion;
 
 /// Returns the Windows version of the current platform.
 ///
@@ -23,9 +20,9 @@ pub fn windows_version() -> Option<Version> {
 
 #[cfg(target_os = "windows")]
 fn detect_windows_version() -> Option<Version> {
-    let windows_version = WindowsVersion::detect()?;
+    let windows_version = winver::WindowsVersion::detect()?;
     Some(
-        Version::from_str(&windows_version.to_string())
+        std::str::FromStr::from_str(&windows_version.to_string())
             .expect("WindowsVersion::to_string() should always return a valid version"),
     )
 }
