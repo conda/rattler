@@ -142,7 +142,7 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
     };
 
     let pkgs1 = match T::default().solve(solver_task) {
-        Ok(result) => result.into_keys().collect(),
+        Ok(result) => result.records,
         Err(e) => panic!("{e}"),
     };
 
@@ -668,8 +668,7 @@ mod libsolv_c {
                 strategy: SolveStrategy::default(),
             })
             .unwrap()
-            .into_keys()
-            .collect();
+            .records;
 
         if pkgs.is_empty() {
             println!("No packages in the environment!");
@@ -900,11 +899,7 @@ mod resolvo {
             ..SolverTask::from_iter([&repo_data])
         };
 
-        let pkgs: Vec<RepoDataRecord> = rattler_solve::resolvo::Solver
-            .solve(task)
-            .unwrap()
-            .into_keys()
-            .collect();
+        let pkgs: Vec<RepoDataRecord> = rattler_solve::resolvo::Solver.solve(task).unwrap().records;
 
         assert_eq!(pkgs.len(), 1);
         assert_eq!(pkgs[0].package_record.name.as_normalized(), "_libgcc_mutex");
@@ -1213,11 +1208,11 @@ fn solve<T: SolverImpl + Default>(
 
     let pkgs = T::default().solve(task)?;
 
-    if pkgs.is_empty() {
+    if pkgs.records.is_empty() {
         println!("No packages in the environment!");
     }
 
-    Ok(pkgs.into_keys().collect())
+    Ok(pkgs.records)
 }
 
 #[derive(Default)]
@@ -1273,8 +1268,7 @@ fn compare_solve(task: CompareTask<'_>) {
                         ..SolverTask::from_iter(&available_packages)
                     })
                     .unwrap()
-                    .into_keys()
-                    .collect(),
+                    .records,
             ),
         ));
         let end_solve = Instant::now();
@@ -1294,8 +1288,7 @@ fn compare_solve(task: CompareTask<'_>) {
                         ..SolverTask::from_iter(&available_packages)
                     })
                     .unwrap()
-                    .into_keys()
-                    .collect(),
+                    .records,
             ),
         ));
         let end_solve = Instant::now();
@@ -1379,7 +1372,7 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
         ..SolverTask::from_iter(&available_packages)
     };
 
-    let result: Vec<RepoDataRecord> = T::default().solve(task).unwrap().into_keys().collect();
+    let result: Vec<RepoDataRecord> = T::default().solve(task).unwrap().records;
 
     let record = result.iter().find(|record| {
         record.package_record.name.as_normalized() == spec.name.as_ref().unwrap().as_normalized()

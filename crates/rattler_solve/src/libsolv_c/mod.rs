@@ -279,10 +279,10 @@ impl super::SolverImpl for Solver {
             )
         })?;
 
-        Ok(required_records
-            .into_iter()
-            .map(|rec| (rec, None))
-            .collect())
+        Ok(SolverResult {
+            records: required_records,
+            features: HashMap::new(),
+        })
     }
 }
 

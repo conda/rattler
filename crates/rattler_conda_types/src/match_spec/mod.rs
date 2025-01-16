@@ -2,6 +2,7 @@ use crate::{
     build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
     VersionSpec,
 };
+use itertools::Itertools;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
@@ -178,12 +179,7 @@ impl Display for MatchSpec {
         match &self.optional_features {
             Some(dependencies) => {
                 write!(f, "[")?;
-                for (i, dep) in dependencies.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{dep}")?;
-                }
+                write!(f, "{}", dependencies.iter().format(", "))?;
                 write!(f, "]")?;
             }
             None => {}

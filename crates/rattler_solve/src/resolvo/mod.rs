@@ -9,8 +9,6 @@ use std::{
     ops::Deref,
 };
 
-use indexmap::IndexMap;
-
 use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
@@ -184,8 +182,11 @@ impl<'a> SolverPackageRecord<'a> {
 impl<'a> Display for SolverPackageRecord<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            SolverPackageRecord::RecordWithFeature(rec, _) | SolverPackageRecord::Record(rec) => {
+            SolverPackageRecord::Record(rec) => {
                 write!(f, "{}", &rec.package_record)
+            }
+            SolverPackageRecord::RecordWithFeature(rec, feature) => {
+                write!(f, "{}[{}]", &rec.package_record, feature)
             }
             SolverPackageRecord::VirtualPackage(rec) => {
                 write!(f, "{rec}")
@@ -904,26 +905,26 @@ impl super::SolverImpl for Solver {
         })?;
 
         // Get the resulting packages from the solver.
-        let mut record_features: IndexMap<RepoDataRecord, Option<Vec<String>>> = IndexMap::new();
+        let mut features: HashMap<PackageName, Vec<String>> = HashMap::new();
+        let mut records = Vec::new();
 
         for id in solvables {
             match &solver.provider().pool.resolve_solvable(id).record {
                 SolverPackageRecord::Record(rec) => {
-                    record_features.entry((*rec).clone()).or_insert(None);
+                    records.push((*rec).clone());
                 }
                 SolverPackageRecord::RecordWithFeature(rec, feature) => {
-                    let rec = (*rec).clone();
-                    record_features
-                        .entry(rec)
-                        .or_insert_with(|| Some(Vec::new()))
-                        .get_or_insert_with(Vec::new)
+                    features
+                        .entry(rec.package_record.name.clone())
+                        .or_default()
                         .push(feature.clone());
+                    records.push((*rec).clone());
                 }
                 SolverPackageRecord::VirtualPackage(_) => {}
             }
         }
 
-        Ok(record_features)
+        Ok(SolverResult { records, features })
     }
 }
 
