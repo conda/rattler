@@ -68,7 +68,7 @@ impl<'a> SolverMatchSpec<'a> {
     }
 
     /// Returns a mutable reference to this match spec after enabling the given feature
-    pub fn with_feature_ref(&mut self, feature: String) -> &SolverMatchSpec<'a> {
+    pub fn set_feature(&mut self, feature: String) -> &SolverMatchSpec<'a> {
         self.feature = Some(feature);
         self
     }
@@ -860,7 +860,7 @@ impl super::SolverImpl for Solver {
                         provider.pool.intern_package_name(package_name_with_feature);
 
                     let mut solver_match_spec: SolverMatchSpec<'_> = nameless_spec.clone().into();
-                    let _ = solver_match_spec.with_feature_ref(feature.to_string());
+                    let _ = solver_match_spec.set_feature(feature.to_string());
 
                     let feature_version_set = provider
                         .pool
