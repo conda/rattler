@@ -263,7 +263,6 @@ impl RepoData {
                 channel: Some(channel.base_url.as_str().to_string()),
                 package_record,
                 file_name: filename,
-                selected_feature: None,
             });
         }
         records

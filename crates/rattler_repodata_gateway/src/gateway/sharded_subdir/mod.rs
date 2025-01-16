@@ -297,7 +297,6 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                 channel: Some(channel_base_url.url().clone().redact().to_string()),
                 package_record,
                 file_name,
-                selected_feature: None,
             })
             .collect())
     })

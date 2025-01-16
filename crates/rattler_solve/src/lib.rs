@@ -12,7 +12,7 @@ pub mod resolvo;
 use std::fmt;
 
 use chrono::{DateTime, Utc};
-use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord};
+use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord, SolverResult};
 
 /// Represents a solver implementation, capable of solving [`SolverTask`]s
 pub trait SolverImpl {
@@ -28,7 +28,7 @@ pub trait SolverImpl {
     >(
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
-    ) -> Result<Vec<RepoDataRecord>, SolveError>;
+    ) -> Result<SolverResult, SolveError>;
 }
 
 /// Represents an error when solving the dependencies for a given environment

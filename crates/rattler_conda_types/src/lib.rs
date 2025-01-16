@@ -53,7 +53,7 @@ pub use repo_data::{
     ChannelInfo, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
     ValidatePackageRecordsError,
 };
-pub use repo_data_record::RepoDataRecord;
+pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;
 pub use version::{
     Component, ParseVersionError, ParseVersionErrorKind, StrictVersion, Version, VersionBumpError,

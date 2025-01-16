@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::HashMap,
     env,
     future::IntoFuture,
     path::PathBuf,
@@ -261,11 +262,16 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     // Next, use a solver to solve this specific problem. This provides us with all
     // the operations we need to apply to our environment to bring it up to
     // date.
-    let required_packages =
+    let required_packages_with_features =
         wrap_in_progress("solving", move || match opt.solver.unwrap_or_default() {
             Solver::Resolvo => resolvo::Solver.solve(solver_task),
             Solver::LibSolv => libsolv_c::Solver.solve(solver_task),
         })?;
+
+    let required_packages: Vec<RepoDataRecord> = required_packages_with_features
+        .clone()
+        .into_keys()
+        .collect();
 
     if opt.dry_run {
         // Construct a transaction to
@@ -278,7 +284,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         if transaction.operations.is_empty() {
             println!("No operations necessary");
         } else {
-            print_transaction(&transaction);
+            print_transaction(&transaction, required_packages_with_features);
         }
 
         return Ok(());
@@ -309,14 +315,17 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
             console::style(console::Emoji("✔", "")).green(),
             install_start.elapsed()
         );
-        print_transaction(&result.transaction);
+        print_transaction(&result.transaction, required_packages_with_features);
     }
 
     Ok(())
 }
 
 /// Prints the operations of the transaction to the console.
-fn print_transaction(transaction: &Transaction<PrefixRecord, RepoDataRecord>) {
+fn print_transaction(
+    transaction: &Transaction<PrefixRecord, RepoDataRecord>,
+    features: HashMap<RepoDataRecord, Option<Vec<String>>>,
+) {
     let format_record = |r: &RepoDataRecord| {
         let direct_url_print = if let Some(channel) = &r.channel {
             channel.clone()
@@ -324,11 +333,11 @@ fn print_transaction(transaction: &Transaction<PrefixRecord, RepoDataRecord>) {
             String::new()
         };
 
-        if let Some(feature) = &r.selected_feature {
+        if let Some(Some(features)) = features.get(r) {
             format!(
                 "{}[{}] {} {} {}",
                 r.package_record.name.as_normalized(),
-                feature,
+                features.join(", "),
                 r.package_record.version,
                 r.package_record.build,
                 direct_url_print,

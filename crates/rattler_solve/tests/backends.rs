@@ -121,7 +121,6 @@ fn installed_package(
             python_site_packages_path: None,
             run_exports: None,
         },
-        selected_feature: None,
     }
 }
 
@@ -143,7 +142,7 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
     };
 
     let pkgs1 = match T::default().solve(solver_task) {
-        Ok(result) => result,
+        Ok(result) => result.into_keys().collect(),
         Err(e) => panic!("{e}"),
     };
 
@@ -655,7 +654,7 @@ mod libsolv_c {
 
         let specs: Vec<MatchSpec> = vec!["foo<4".parse().unwrap()];
 
-        let pkgs = rattler_solve::libsolv_c::Solver
+        let pkgs: Vec<RepoDataRecord> = rattler_solve::libsolv_c::Solver
             .solve(SolverTask {
                 locked_packages: Vec::new(),
                 virtual_packages: Vec::new(),
@@ -668,7 +667,9 @@ mod libsolv_c {
                 exclude_newer: None,
                 strategy: SolveStrategy::default(),
             })
-            .unwrap();
+            .unwrap()
+            .into_keys()
+            .collect();
 
         if pkgs.is_empty() {
             println!("No packages in the environment!");
@@ -885,7 +886,6 @@ mod resolvo {
             file_name: url_str.to_string(),
             url: url.clone(),
             channel: None,
-            selected_feature: None,
         }];
 
         // Completely clean solver task, except for the specs and RepoData
@@ -900,7 +900,11 @@ mod resolvo {
             ..SolverTask::from_iter([&repo_data])
         };
 
-        let pkgs = rattler_solve::resolvo::Solver.solve(task).unwrap();
+        let pkgs: Vec<RepoDataRecord> = rattler_solve::resolvo::Solver
+            .solve(task)
+            .unwrap()
+            .into_keys()
+            .collect();
 
         assert_eq!(pkgs.len(), 1);
         assert_eq!(pkgs[0].package_record.name.as_normalized(), "_libgcc_mutex");
@@ -919,7 +923,6 @@ mod resolvo {
             file_name: url_str.to_string(),
             url: Url::from_str("https://false.dont").unwrap(),
             channel: None,
-            selected_feature: None,
         }];
 
         // Completely clean solver task, except for the specs and RepoData
@@ -1214,7 +1217,7 @@ fn solve<T: SolverImpl + Default>(
         println!("No packages in the environment!");
     }
 
-    Ok(pkgs)
+    Ok(pkgs.into_keys().collect())
 }
 
 #[derive(Default)]
@@ -1269,7 +1272,9 @@ fn compare_solve(task: CompareTask<'_>) {
                         exclude_newer: task.exclude_newer,
                         ..SolverTask::from_iter(&available_packages)
                     })
-                    .unwrap(),
+                    .unwrap()
+                    .into_keys()
+                    .collect(),
             ),
         ));
         let end_solve = Instant::now();
@@ -1288,7 +1293,9 @@ fn compare_solve(task: CompareTask<'_>) {
                         exclude_newer: task.exclude_newer,
                         ..SolverTask::from_iter(&available_packages)
                     })
-                    .unwrap(),
+                    .unwrap()
+                    .into_keys()
+                    .collect(),
             ),
         ));
         let end_solve = Instant::now();
@@ -1372,7 +1379,7 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
         ..SolverTask::from_iter(&available_packages)
     };
 
-    let result = T::default().solve(task).unwrap();
+    let result: Vec<RepoDataRecord> = T::default().solve(task).unwrap().into_keys().collect();
 
     let record = result.iter().find(|record| {
         record.package_record.name.as_normalized() == spec.name.as_ref().unwrap().as_normalized()

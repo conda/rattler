@@ -10,7 +10,7 @@ pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages};
 pub use libc_byte_slice::LibcByteSlice;
 use output::get_required_packages;
-use rattler_conda_types::{MatchSpec, NamelessMatchSpec, RepoDataRecord};
+use rattler_conda_types::{MatchSpec, NamelessMatchSpec, RepoDataRecord, SolverResult};
 use wrapper::{
     flags::SolverFlag,
     pool::{Pool, Verbosity},
@@ -94,7 +94,7 @@ impl super::SolverImpl for Solver {
     >(
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
-    ) -> Result<Vec<RepoDataRecord>, SolveError> {
+    ) -> Result<SolverResult, SolveError> {
         if task.timeout.is_some() {
             return Err(SolveError::UnsupportedOperations(vec![
                 "timeout".to_string()
@@ -279,7 +279,10 @@ impl super::SolverImpl for Solver {
             )
         })?;
 
-        Ok(required_records)
+        Ok(required_records
+            .into_iter()
+            .map(|rec| (rec, None))
+            .collect())
     }
 }
 

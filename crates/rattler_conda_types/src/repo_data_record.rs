@@ -1,5 +1,8 @@
 //! Defines the `[RepoDataRecord]` struct.
 
+use std::collections::HashMap;
+use std::vec::Vec;
+
 use crate::PackageRecord;
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -24,17 +27,6 @@ pub struct RepoDataRecord {
     /// explicit about where the package came from.
     /// TODO: Refactor this into `Source` which can be a "name", "channelurl", or "direct url".
     pub channel: Option<String>,
-
-    /// The selected feature set for this package.
-    pub selected_feature: Option<String>,
-}
-
-impl RepoDataRecord {
-    /// Set the selected feature set for this package.
-    pub fn set_selected_feature(&mut self, selected_feature: String) -> &mut Self {
-        self.selected_feature = Some(selected_feature);
-        self
-    }
 }
 
 impl AsRef<PackageRecord> for RepoDataRecord {
@@ -42,3 +34,6 @@ impl AsRef<PackageRecord> for RepoDataRecord {
         &self.package_record
     }
 }
+
+/// Type alias for the solver result containing records and their features
+pub type SolverResult = HashMap<RepoDataRecord, Option<Vec<String>>>;

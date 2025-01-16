@@ -15,7 +15,7 @@ use itertools::Itertools;
 use rattler_conda_types::{
     package::ArchiveType, version_spec::EqualityOperator, BuildNumberSpec, GenericVirtualPackage,
     MatchSpec, Matches, NamelessMatchSpec, OrdOperator, PackageName, PackageRecord,
-    ParseMatchSpecError, ParseStrictness, RepoDataRecord, StringMatcher, VersionSpec,
+    ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult, StringMatcher, VersionSpec,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -812,7 +812,7 @@ impl super::SolverImpl for Solver {
     >(
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
-    ) -> Result<Vec<RepoDataRecord>, SolveError> {
+    ) -> Result<SolverResult, SolveError> {
         let stop_time = task
             .timeout
             .map(|timeout| std::time::SystemTime::now() + timeout);
@@ -902,22 +902,26 @@ impl super::SolverImpl for Solver {
         })?;
 
         // Get the resulting packages from the solver.
-        let required_records = solvables
-            .into_iter()
-            .filter_map(
-                |id| match &solver.provider().pool.resolve_solvable(id).record {
-                    SolverPackageRecord::Record(rec) => Some((*rec).clone()),
-                    SolverPackageRecord::RecordWithFeature(rec, feature) => {
-                        let mut cloned = (*rec).clone();
-                        cloned.set_selected_feature(feature.to_string());
-                        Some(cloned)
-                    }
-                    SolverPackageRecord::VirtualPackage(_) => None,
-                },
-            )
-            .collect();
+        let mut record_features: HashMap<RepoDataRecord, Option<Vec<String>>> = HashMap::new();
 
-        Ok(required_records)
+        for id in solvables {
+            match &solver.provider().pool.resolve_solvable(id).record {
+                SolverPackageRecord::Record(rec) => {
+                    record_features.entry((*rec).clone()).or_insert(None);
+                }
+                SolverPackageRecord::RecordWithFeature(rec, feature) => {
+                    let rec = (*rec).clone();
+                    record_features
+                        .entry(rec)
+                        .or_insert_with(|| Some(Vec::new()))
+                        .get_or_insert_with(Vec::new)
+                        .push(feature.clone());
+                }
+                SolverPackageRecord::VirtualPackage(_) => {}
+            }
+        }
+
+        Ok(record_features)
     }
 }
 
