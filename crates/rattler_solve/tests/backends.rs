@@ -627,7 +627,7 @@ mod libsolv_c {
     #[test]
     #[cfg(target_family = "unix")]
     fn test_solve_with_cached_solv_file_install_new() {
-        use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
+        use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, RepoDataRecord};
         use rattler_solve::{SolverImpl, SolverTask};
 
         use super::read_repodata;
