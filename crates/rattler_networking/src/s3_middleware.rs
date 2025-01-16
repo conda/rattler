@@ -150,12 +150,9 @@ impl S3 {
     async fn generate_presigned_s3_url(&self, url: Url) -> MiddlewareResult<Url> {
         let client = self.create_s3_client(Some(url.clone())).await?;
 
-        let bucket_name = url.host_str().ok_or_else(|| {
-            reqwest_middleware::Error::middleware(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "host should be present in S3 URL",
-            ))
-        })?;
+        let bucket_name = url
+            .host_str()
+            .ok_or_else(|| anyhow::anyhow!("host should be present in S3 URL"))?;
         let key = url.path().strip_prefix("/").unwrap();
 
         let builder = client.get_object().bucket(bucket_name).key(key);
