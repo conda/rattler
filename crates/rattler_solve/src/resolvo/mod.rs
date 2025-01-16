@@ -199,17 +199,17 @@ impl<'a> Display for SolverPackageRecord<'a> {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum NameType {
     /// A package name without a feature.
-    WithoutFeature(String),
+    Base(String),
 
     /// A package name with a feature.
-    WithFeature(String, String),
+    BaseWithFeature(String, String),
 }
 
 impl Display for NameType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            NameType::WithoutFeature(name) => write!(f, "{name}"),
-            NameType::WithFeature(name, feature) => write!(f, "{name}[{feature}]"),
+            NameType::Base(name) => write!(f, "{name}"),
+            NameType::BaseWithFeature(name, feature) => write!(f, "{name}[{feature}]"),
         }
     }
 }
@@ -218,15 +218,15 @@ impl Ord for NameType {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match (self, other) {
             // Compare names first
-            (NameType::WithoutFeature(name1), NameType::WithoutFeature(name2))
-            | (NameType::WithFeature(name1, _), NameType::WithFeature(name2, _)) => {
+            (NameType::Base(name1), NameType::Base(name2))
+            | (NameType::BaseWithFeature(name1, _), NameType::BaseWithFeature(name2, _)) => {
                 name1.cmp(name2)
             }
             // WithoutFeature comes before WithFeature
-            (NameType::WithoutFeature(_), NameType::WithFeature(_, _)) => {
+            (NameType::Base(_), NameType::BaseWithFeature(_, _)) => {
                 std::cmp::Ordering::Greater
             }
-            (NameType::WithFeature(_, _), NameType::WithoutFeature(_)) => std::cmp::Ordering::Less,
+            (NameType::BaseWithFeature(_, _), NameType::Base(_)) => std::cmp::Ordering::Less,
         }
     }
 }
@@ -239,7 +239,7 @@ impl PartialOrd for NameType {
 
 impl From<&str> for NameType {
     fn from(value: &str) -> Self {
-        NameType::WithoutFeature(value.to_owned())
+        NameType::Base(value.to_owned())
     }
 }
 
@@ -387,7 +387,7 @@ impl<'a> CondaDependencyProvider<'a> {
                 // Add feature-enabled solvables
                 for feature in record.package_record.optional_depends.keys() {
                     let package_name_with_feature =
-                        pool.intern_package_name(NameType::WithFeature(
+                        pool.intern_package_name(NameType::BaseWithFeature(
                             record.package_record.name.as_normalized().to_owned(),
                             feature.clone(),
                         ));
@@ -396,7 +396,7 @@ impl<'a> CondaDependencyProvider<'a> {
                         SolverPackageRecord::RecordWithFeature(record, feature.clone()),
                     );
                     let package_name_with_feature =
-                        pool.intern_package_name(NameType::WithFeature(
+                        pool.intern_package_name(NameType::BaseWithFeature(
                             record.package_record.name.as_normalized().to_owned(),
                             feature.clone(),
                         ));
@@ -855,7 +855,7 @@ impl super::SolverImpl for Solver {
                 for feature in features {
                     // Create a version set that matches the feature-enabled package
                     let package_name_with_feature =
-                        NameType::WithFeature(name.as_normalized().to_owned(), feature.to_string());
+                        NameType::BaseWithFeature(name.as_normalized().to_owned(), feature.to_string());
                     let feature_name_id =
                         provider.pool.intern_package_name(package_name_with_feature);
 
@@ -941,7 +941,7 @@ fn parse_match_spec(
         let spec_with_feature: SolverMatchSpec<'_> = spec.clone().into();
 
         for feature in features {
-            let name_with_feature = NameType::WithFeature(
+            let name_with_feature = NameType::BaseWithFeature(
                 name.as_ref()
                     .expect("Packages with no name are not supported")
                     .as_normalized()
