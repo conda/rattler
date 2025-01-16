@@ -223,9 +223,7 @@ impl Ord for NameType {
                 name1.cmp(name2)
             }
             // WithoutFeature comes before WithFeature
-            (NameType::Base(_), NameType::BaseWithFeature(_, _)) => {
-                std::cmp::Ordering::Greater
-            }
+            (NameType::Base(_), NameType::BaseWithFeature(_, _)) => std::cmp::Ordering::Greater,
             (NameType::BaseWithFeature(_, _), NameType::Base(_)) => std::cmp::Ordering::Less,
         }
     }
@@ -854,8 +852,10 @@ impl super::SolverImpl for Solver {
             if let Some(features) = features {
                 for feature in features {
                     // Create a version set that matches the feature-enabled package
-                    let package_name_with_feature =
-                        NameType::BaseWithFeature(name.as_normalized().to_owned(), feature.to_string());
+                    let package_name_with_feature = NameType::BaseWithFeature(
+                        name.as_normalized().to_owned(),
+                        feature.to_string(),
+                    );
                     let feature_name_id =
                         provider.pool.intern_package_name(package_name_with_feature);
 
