@@ -19,7 +19,6 @@ version: 0.38.4
 fn: wheel-0.38.4-pyhd8ed1ab_0.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/noarch/wheel-0.38.4-pyhd8ed1ab_0.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/noarch"
-selected_feature: ~
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\wheel-0.38.4-pyhd8ed1ab_0.tar.bz2"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\wheel-0.38.4-pyhd8ed1ab_0"
 files:

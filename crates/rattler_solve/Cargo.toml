@@ -24,6 +24,7 @@ rattler_libsolv_c = { path = "../rattler_libsolv_c", version = "1.1.1", default-
 resolvo = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
+indexmap = { workspace = true}
 
 [dev-dependencies]
 criterion = { workspace = true }

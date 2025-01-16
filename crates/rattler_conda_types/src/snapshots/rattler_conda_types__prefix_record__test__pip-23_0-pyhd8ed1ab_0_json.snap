@@ -21,7 +21,6 @@ version: "23.0"
 fn: pip-23.0-pyhd8ed1ab_0.conda
 url: "https://conda.anaconda.org/conda-forge/noarch/pip-23.0-pyhd8ed1ab_0.conda"
 channel: "https://conda.anaconda.org/conda-forge/noarch"
-selected_feature: ~
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\pip-23.0-pyhd8ed1ab_0.conda"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\pip-23.0-pyhd8ed1ab_0"
 files:

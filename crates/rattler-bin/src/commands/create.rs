@@ -1,6 +1,5 @@
 use std::{
     borrow::Cow,
-    collections::HashMap,
     env,
     future::IntoFuture,
     path::PathBuf,
@@ -20,7 +19,7 @@ use rattler::{
 };
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, ParseStrictness, Platform,
-    PrefixRecord, RepoDataRecord, Version,
+    PrefixRecord, RepoDataRecord, SolverResult, Version,
 };
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
@@ -324,7 +323,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
 /// Prints the operations of the transaction to the console.
 fn print_transaction(
     transaction: &Transaction<PrefixRecord, RepoDataRecord>,
-    features: HashMap<RepoDataRecord, Option<Vec<String>>>,
+    features: SolverResult,
 ) {
     let format_record = |r: &RepoDataRecord| {
         let direct_url_print = if let Some(channel) = &r.channel {

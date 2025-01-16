@@ -9,6 +9,8 @@ use std::{
     ops::Deref,
 };
 
+use indexmap::IndexMap;
+
 use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
@@ -902,7 +904,7 @@ impl super::SolverImpl for Solver {
         })?;
 
         // Get the resulting packages from the solver.
-        let mut record_features: HashMap<RepoDataRecord, Option<Vec<String>>> = HashMap::new();
+        let mut record_features: IndexMap<RepoDataRecord, Option<Vec<String>>> = IndexMap::new();
 
         for id in solvables {
             match &solver.provider().pool.resolve_solvable(id).record {

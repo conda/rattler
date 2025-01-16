@@ -21,7 +21,6 @@ version: 3.40.0
 fn: libsqlite-3.40.0-hcfcfb64_0.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.40.0-hcfcfb64_0.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/win-64"
-selected_feature: ~
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\libsqlite-3.40.0-hcfcfb64_0.tar.bz2"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\libsqlite-3.40.0-hcfcfb64_0"
 files:

@@ -1,9 +1,9 @@
 //! Defines the `[RepoDataRecord]` struct.
 
-use std::collections::HashMap;
 use std::vec::Vec;
 
 use crate::PackageRecord;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -36,4 +36,4 @@ impl AsRef<PackageRecord> for RepoDataRecord {
 }
 
 /// Type alias for the solver result containing records and their features
-pub type SolverResult = HashMap<RepoDataRecord, Option<Vec<String>>>;
+pub type SolverResult = IndexMap<RepoDataRecord, Option<Vec<String>>>;
