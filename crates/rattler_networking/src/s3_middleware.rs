@@ -130,15 +130,20 @@ impl S3 {
                         .await;
                 }
             }
-            let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
-            // Infer if we expect path-style addressing from the endpoint URL.
-            if let Some(endpoint_url) = sdk_config.endpoint_url() {
-                // If the endpoint URL is localhost, we probably have to use path-style addressing.
-                // There are certainly more edge cases, but this is a valid start to make the
-                // integration tests with minIO work.
-                // xref: https://github.com/awslabs/aws-sdk-rust/issues/1230
-                if endpoint_url.starts_with("http://localhost") {
-                    s3_config_builder = s3_config_builder.force_path_style(true);
+            #[cfg(not(test))]
+            let s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
+            #[cfg(test)]
+            {
+                let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
+                // Infer if we expect path-style addressing from the endpoint URL.
+                if let Some(endpoint_url) = sdk_config.endpoint_url() {
+                    // If the endpoint URL is localhost, we probably have to use path-style addressing.
+                    // There are certainly more edge cases, but this is a valid start to make the
+                    // integration tests with minIO work.
+                    // xref: https://github.com/awslabs/aws-sdk-rust/issues/1230
+                    if endpoint_url.starts_with("http://localhost") {
+                        s3_config_builder = s3_config_builder.force_path_style(true);
+                    }
                 }
             }
             let client = aws_sdk_s3::Client::from_conf(s3_config_builder.build());
@@ -198,7 +203,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_presigned_s3_request_endpoint_url() {
-        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::empty());
+        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::new());
         let presigned = async_with_vars(
             [
                 ("AWS_ACCESS_KEY_ID", Some("minioadmin")),
@@ -225,7 +230,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_presigned_s3_request_aws() {
-        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::empty());
+        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::new());
         let presigned = async_with_vars(
             [
                 ("AWS_ACCESS_KEY_ID", Some("minioadmin")),
@@ -274,7 +279,7 @@ region = eu-central-1
     async fn test_presigned_s3_request_custom_config_from_env(
         aws_config: (TempDir, std::path::PathBuf),
     ) {
-        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::empty());
+        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::new());
         let presigned = async_with_vars(
             [
                 ("AWS_CONFIG_FILE", Some(aws_config.1.to_str().unwrap())),
@@ -298,7 +303,7 @@ region = eu-central-1
     #[rstest]
     #[tokio::test]
     async fn test_presigned_s3_request_env_precedence(aws_config: (TempDir, std::path::PathBuf)) {
-        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::default().unwrap());
+        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::default());
         let presigned = async_with_vars(
             [
                 ("AWS_ENDPOINT_URL", Some("http://localhost:9000")),
@@ -366,7 +371,7 @@ region = eu-central-1
                 region: "eu-central-1".into(),
                 force_path_style: true,
             },
-            AuthenticationStorage::empty(), // empty auth storage
+            AuthenticationStorage::new(), // empty auth storage
         );
 
         let presigned = s3
@@ -387,7 +392,7 @@ region = eu-central-1
     async fn test_presigned_s3_request_public_bucket_aws(
         aws_config: (TempDir, std::path::PathBuf),
     ) {
-        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::empty());
+        let s3 = S3::new(S3Config::FromAWS, AuthenticationStorage::new());
         let presigned = async_with_vars(
             [
                 ("AWS_CONFIG_FILE", Some(aws_config.1.to_str().unwrap())),

@@ -77,7 +77,6 @@ aws-config = { version = "1.5.14", default-features = false, features = [
     "rustls",
     "sso",
 ] }
-aws-sdk-sso = { version = "1.54.0", default-features = false }
 aws-sdk-s3 = { version = "1.69.0", default-features = false, features = [
     "rt-tokio",
     "rustls",
