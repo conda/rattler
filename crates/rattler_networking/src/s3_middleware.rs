@@ -130,20 +130,15 @@ impl S3 {
                         .await;
                 }
             }
-            let s3_config_builder = if cfg!(not(test)) {
-                aws_sdk_s3::config::Builder::from(&sdk_config)
-            } else {
-                let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
-                // Infer if we expect path-style addressing from the endpoint URL.
-                if let Some(endpoint_url) = sdk_config.endpoint_url() {
-                    // If the endpoint URL is localhost, we probably have to use path-style addressing.
-                    // xref: https://github.com/awslabs/aws-sdk-rust/issues/1230
-                    if endpoint_url.starts_with("http://localhost") {
-                        s3_config_builder = s3_config_builder.force_path_style(true);
-                    }
+            let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
+            // Infer if we expect path-style addressing from the endpoint URL.
+            if let Some(endpoint_url) = sdk_config.endpoint_url() {
+                // If the endpoint URL is localhost, we probably have to use path-style addressing.
+                // xref: https://github.com/awslabs/aws-sdk-rust/issues/1230
+                if endpoint_url.starts_with("http://localhost") {
+                    s3_config_builder = s3_config_builder.force_path_style(true);
                 }
-                s3_config_builder
-            };
+            }
             let client = aws_sdk_s3::Client::from_conf(s3_config_builder.build());
             Ok(client)
         }
