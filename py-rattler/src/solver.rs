@@ -97,7 +97,6 @@ pub fn py_solve(
                     .solve(task)
                     .map(|res| {
                         res.into_keys()
-                            .into_iter()
                             .map(Into::into)
                             .collect::<Vec<PyRecord>>()
                     })
@@ -180,7 +179,6 @@ pub fn py_solve_with_sparse_repodata(
                     .solve(task)
                     .map(|res| {
                         res.into_keys()
-                            .into_iter()
                             .map(Into::into)
                             .collect::<Vec<PyRecord>>()
                     })
