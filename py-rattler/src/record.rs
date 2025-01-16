@@ -207,7 +207,6 @@ impl PyRecord {
                     .map(|channel| Url::parse(&channel).map_err(PyRattlerError::from))
                     .transpose()?
                     .map(Into::into),
-                selected_feature: None,
             }),
         })
     }
