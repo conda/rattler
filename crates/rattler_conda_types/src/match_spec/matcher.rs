@@ -45,12 +45,6 @@ impl PartialEq for StringMatcher {
     }
 }
 
-impl From<String> for StringMatcher {
-    fn from(s: String) -> Self {
-        StringMatcher::Exact(s)
-    }
-}
-
 impl StringMatcher {
     /// Match string against [`StringMatcher`].
     pub fn matches(&self, other: &str) -> bool {
