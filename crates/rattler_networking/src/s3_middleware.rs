@@ -130,7 +130,7 @@ impl S3 {
                         .await;
                 }
             }
-            let s3_config_builder =if cfg!(not(test)) {
+            let s3_config_builder = if cfg!(not(test)) {
                 aws_sdk_s3::config::Builder::from(&sdk_config)
             } else {
                 let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
