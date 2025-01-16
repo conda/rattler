@@ -274,7 +274,7 @@ fn parse_bracket_vec_into_components(
             "build" => match_spec.build = Some(StringMatcher::from_str(value)?),
             "build_number" => match_spec.build_number = Some(BuildNumberSpec::from_str(value)?),
             "optional_features" => {
-                // Optional features are not supported yet
+                // Optional features are still experimental
                 #[cfg(feature = "optional_features")]
                 {
                     match_spec.optional_features = Some(parse_optional_features(value)?);
