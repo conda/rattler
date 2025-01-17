@@ -185,12 +185,7 @@ jobs:
           minio server --address 127.0.0.1:9000 ${{ runner.temp }}/minio-data &
           sleep 5
           curl -I http://localhost:9000/minio/health/live
-          cargo nextest run \
-          --workspace \
-          --features ${{ env.DEFAULT_FEATURES }} \
-          --target ${{ matrix.target }} \
-          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }} \
-          ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}
+          cargo nextest run --workspace --features ${{ env.DEFAULT_FEATURES }} --target ${{ matrix.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}
 
       - name: Run doctests
         if: ${{ !matrix.skip-tests }}
