@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use rattler_networking::{
-    s3_middleware::S3Config, AuthenticationMiddleware, AuthenticationStorage, S3Middleware,
+    authentication_storage::backends::file::FileStorage, s3_middleware::S3Config, AuthenticationMiddleware, AuthenticationStorage, S3Middleware
 };
 use reqwest::Client;
 use rstest::*;
@@ -130,7 +130,8 @@ async fn test_minio_download_repodata(
 }"#;
     let credentials_path = temp_dir.path().join("credentials.json");
     std::fs::write(&credentials_path, credentials).unwrap();
-    let auth_storage = AuthenticationStorage::from_file(credentials_path.as_path()).unwrap();
+    let mut auth_storage = AuthenticationStorage::empty();
+    auth_storage.add_backend(Arc::from(FileStorage::from_path(credentials_path).unwrap()));
     let middleware = S3Middleware::new(
         S3Config::Custom {
             endpoint_url: Url::parse(minio_host).unwrap(),
@@ -142,7 +143,7 @@ async fn test_minio_download_repodata(
 
     let download_client = Client::builder().no_gzip().build().unwrap();
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::new(auth_storage)))
+        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(auth_storage)))
         .with(middleware)
         .build();
 
@@ -163,7 +164,7 @@ async fn test_minio_download_repodata_public(
     minio_host: &str,
     #[allow(unused_variables)] init_channel: (),
 ) {
-    let auth_storage = AuthenticationStorage::new(); // empty storage
+    let auth_storage = AuthenticationStorage::empty();
     let middleware = S3Middleware::new(
         S3Config::Custom {
             endpoint_url: Url::parse(minio_host).unwrap(),
@@ -175,7 +176,7 @@ async fn test_minio_download_repodata_public(
 
     let download_client = Client::builder().no_gzip().build().unwrap();
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::new(auth_storage)))
+        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(auth_storage)))
         .with(middleware)
         .build();
 
@@ -196,12 +197,11 @@ async fn test_minio_download_repodata_aws_profile(
     aws_config: (TempDir, std::path::PathBuf),
     #[allow(unused_variables)] init_channel: (),
 ) {
-    let auth_storage = AuthenticationStorage::new(); // empty storage
-    let middleware = S3Middleware::new(S3Config::FromAWS, auth_storage.clone());
+    let middleware = S3Middleware::new(S3Config::FromAWS, AuthenticationStorage::empty());
 
     let download_client = Client::builder().no_gzip().build().unwrap();
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::new(auth_storage)))
+        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(AuthenticationStorage::empty())))
         .with(middleware)
         .build();
 
@@ -230,12 +230,11 @@ async fn test_minio_download_aws_profile_public(
     aws_config: (TempDir, std::path::PathBuf),
     #[allow(unused_variables)] init_channel: (),
 ) {
-    let auth_storage = AuthenticationStorage::new(); // empty storage
-    let middleware = S3Middleware::new(S3Config::FromAWS, auth_storage.clone());
+    let middleware = S3Middleware::new(S3Config::FromAWS, AuthenticationStorage::empty());
 
     let download_client = Client::builder().no_gzip().build().unwrap();
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::new(auth_storage)))
+        .with_arc(Arc::new(AuthenticationMiddleware::from_env_and_defaults().unwrap()))
         .with(middleware)
         .build();
     let result = async_with_vars(
@@ -295,7 +294,8 @@ async fn test_cloudflare_r2_download_repodata() {
     let credentials_path = temp_dir.path().join("credentials.json");
     std::fs::write(&credentials_path, credentials).unwrap();
 
-    let auth_storage = AuthenticationStorage::from_file(credentials_path.as_path()).unwrap();
+    let mut auth_storage = AuthenticationStorage::empty();
+    auth_storage.add_backend(Arc::from(FileStorage::from_path(credentials_path).unwrap()));
     let middleware = S3Middleware::new(
         S3Config::Custom {
             endpoint_url: Url::parse(
@@ -310,7 +310,7 @@ async fn test_cloudflare_r2_download_repodata() {
 
     let download_client = Client::builder().no_gzip().build().unwrap();
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::new(auth_storage)))
+        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(auth_storage)))
         .with(middleware)
         .build();
 
