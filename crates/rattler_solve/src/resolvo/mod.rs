@@ -918,7 +918,6 @@ impl super::SolverImpl for Solver {
                         .entry(rec.package_record.name.clone())
                         .or_default()
                         .push(feature.clone());
-                    records.push((*rec).clone());
                 }
                 SolverPackageRecord::VirtualPackage(_) => {}
             }

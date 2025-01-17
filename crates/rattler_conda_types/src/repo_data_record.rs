@@ -35,7 +35,7 @@ impl AsRef<PackageRecord> for RepoDataRecord {
 }
 
 /// Struct for the solver result containing records and their features
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct SolverResult {
     /// The records that are part of the solution to the solver task.
     pub records: Vec<RepoDataRecord>,
