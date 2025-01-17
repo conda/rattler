@@ -152,26 +152,26 @@ jobs:
           pixi global install minio-client
           pixi global install minio-server
 
-      - name: Start minio server
-        if: ${{ !matrix.skip-tests && !startsWith(matrix.os, 'windows-') }}
-        run: |
-          minio server --help
-          mkdir -p ${{ runner.temp }}/minio-data
-          minio server --address 127.0.0.1:9000 ${{ runner.temp }}/minio-data &
-          sleep 5
+      # - name: Start minio server
+      #   if: ${{ !matrix.skip-tests && !startsWith(matrix.os, 'windows-') }}
+      #   run: |
+      #     minio server --help
+      #     mkdir -p ${{ runner.temp }}/minio-data
+      #     minio server --address 127.0.0.1:9000 ${{ runner.temp }}/minio-data &
+      #     sleep 5
 
-      - name: Start minio server
-        if: ${{ !matrix.skip-tests && startsWith(matrix.os, 'windows-') }}
-        shell: powershell
-        run: |
-          minio server --help
-          mkdir ${{ runner.temp }}\minio-data
-          Start-Process "minio" -ArgumentList "server --address 127.0.0.1:9000 ${{ runner.temp }}\minio-data" -NoNewWindow
-          Start-Sleep -Seconds 5
+      # - name: Start minio server
+      #   if: ${{ !matrix.skip-tests && startsWith(matrix.os, 'windows-') }}
+      #   shell: powershell
+      #   run: |
+      #     minio server --help
+      #     mkdir ${{ runner.temp }}\minio-data
+      #     Start-Process "minio" -ArgumentList "server --address 127.0.0.1:9000 ${{ runner.temp }}\minio-data" -NoNewWindow
+      #     Start-Sleep -Seconds 5
 
-      - name: Test minio server connection
-        if: ${{ !matrix.skip-tests }}
-        run: curl -I http://localhost:9000/minio/health/live
+      # - name: Test minio server connection
+      #   if: ${{ !matrix.skip-tests }}
+      #   run: curl -I http://localhost:9000/minio/health/live
 
       - name: Run tests
         if: ${{ !matrix.skip-tests }}
@@ -179,12 +179,17 @@ jobs:
           GOOGLE_CLOUD_TEST_KEY_JSON: ${{ secrets.GOOGLE_CLOUD_TEST_KEY_JSON }}
           RATTLER_TEST_R2_ACCESS_KEY_ID: ${{ secrets.RATTLER_TEST_R2_ACCESS_KEY_ID }}
           RATTLER_TEST_R2_SECRET_ACCESS_KEY: ${{ secrets.RATTLER_TEST_R2_SECRET_ACCESS_KEY }}
-        run: >
-          cargo nextest run
-          --workspace
-          --features ${{ env.DEFAULT_FEATURES }}
-          --target ${{ matrix.target }}
-          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
+        run: |
+          minio server --help
+          mkdir -p ${{ runner.temp }}/minio-data
+          minio server --address 127.0.0.1:9000 ${{ runner.temp }}/minio-data &
+          sleep 5
+          curl -I http://localhost:9000/minio/health/live
+          cargo nextest run \
+          --workspace \
+          --features ${{ env.DEFAULT_FEATURES }} \
+          --target ${{ matrix.target }} \
+          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }} \
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}
 
       - name: Run doctests
