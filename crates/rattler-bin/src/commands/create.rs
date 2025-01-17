@@ -148,7 +148,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .expect("failed to create client");
 
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::new()?))
+        .with_arc(Arc::new(AuthenticationMiddleware::from_env_and_defaults()?))
         .with(rattler_networking::OciMiddleware)
         .with(rattler_networking::GCSMiddleware)
         .build();

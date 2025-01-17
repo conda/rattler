@@ -55,7 +55,7 @@ impl AuthenticationMiddleware {
     }
 
     /// Create a new authentication middleware with the default authentication storage
-    pub fn new() -> Result<Self, FileStorageError> {
+    pub fn from_env_and_defaults() -> Result<Self, FileStorageError> {
         Ok(Self {
             auth_storage: AuthenticationStorage::from_env_and_defaults()?,
         })
