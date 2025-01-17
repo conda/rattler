@@ -25,8 +25,10 @@ impl PyClientWithMiddleware {
                     client = client.with(MirrorMiddleware::from(middleware));
                 }
                 PyMiddleware::Authentication(_) => {
-                    client =
-                        client.with(AuthenticationMiddleware::from_env_and_defaults().map_err(PyRattlerError::from)?);
+                    client = client.with(
+                        AuthenticationMiddleware::from_env_and_defaults()
+                            .map_err(PyRattlerError::from)?,
+                    );
                 }
                 PyMiddleware::Oci(middleware) => {
                     client = client.with(OciMiddleware::from(middleware));
