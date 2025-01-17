@@ -1472,7 +1472,9 @@ mod test {
 
         let client = Client::builder().no_gzip().build().unwrap();
         let authenticated_client = reqwest_middleware::ClientBuilder::new(client)
-            .with_arc(Arc::new(AuthenticationMiddleware::from_env_and_defaults().unwrap()))
+            .with_arc(Arc::new(
+                AuthenticationMiddleware::from_env_and_defaults().unwrap(),
+            ))
             .build();
 
         let result = fetch_repo_data(
