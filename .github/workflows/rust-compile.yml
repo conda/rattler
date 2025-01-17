@@ -153,13 +153,24 @@ jobs:
           pixi global install minio-server
 
       - name: Start minio server
-        if: ${{ !matrix.skip-tests }}
+        if: ${{ !matrix.skip-tests && !startsWith(matrix.os, 'windows-') }}
         run: |
           minio server --help
           mkdir -p ${{ runner.temp }}/minio-data
           minio server --address 127.0.0.1:9000 ${{ runner.temp }}/minio-data &
           sleep 5
-          curl -I http://localhost:9000/minio/health/live
+
+      - name: Start minio server
+        if: ${{ !matrix.skip-tests && startsWith(matrix.os, 'windows-') }}
+        shell: powershell
+        run: |
+          minio server --help
+          mkdir ${{ runner.temp }}\minio-data
+          Start-Process "minio" -ArgumentList "server --address 127.0.0.1:9000 ${{ runner.temp }}\minio-data" -Wait -NoNewWindow
+          Start-Sleep -Seconds 5
+
+      - name: Test minio server connection
+        run: curl -I http://localhost:9000/minio/health/live
 
       - name: Run tests
         if: ${{ !matrix.skip-tests }}
