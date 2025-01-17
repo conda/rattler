@@ -1184,37 +1184,23 @@ mod resolvo {
     /// Tests what happens when a feature depends on the base package but with another feature enabled
     #[test]
     fn test_solve_dummy_repo_optional_depends_recursive_feature() {
-        let mut result = solve::<rattler_solve::resolvo::Solver>(
+        let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
                 specs: &["foo[optional_features=[with-recursive]]"],
                 ..SimpleSolveTask::default()
             },
-        )
-        .unwrap();
+        );
 
         // Sort records by name for stable test results
-        result
-            .records
-            .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
-
-        assert_eq!(result.records.len(), 3);
-        // All records should be foo since it's recursive
-        for record in &result.records {
-            assert_eq!(record.package_record.name.as_normalized(), "foo");
-            assert_eq!(
-                record.package_record.version,
-                Version::from_str("2.0.2").unwrap(),
-                "expected version 2.0.2 of foo"
-            );
-        }
+        insta::assert_snapshot!(result.unwrap_err());
     }
 
     #[cfg(feature = "optional_features")]
     /// Tests that an optional dependency can restrict the highest version of a base dependency
     #[test]
     fn test_solve_dummy_repo_optional_depends_version_restriction() {
-        let mut result = solve::<rattler_solve::resolvo::Solver>(
+        let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
                 specs: &["foo[optional_features=[with-version-restrict]]"],
@@ -1223,21 +1209,18 @@ mod resolvo {
         )
         .unwrap();
 
-        // Sort records by name for stable test results
-        result
-            .records
-            .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
-
-        assert_eq!(result.records.len(), 2);
+        assert_eq!(result.records.len(), 1);
         // Both records should be foo
-        for record in &result.records {
-            assert_eq!(record.package_record.name.as_normalized(), "foo");
-            assert_eq!(
-                record.package_record.version,
-                Version::from_str("3.0.2").unwrap(),
-                "expected version 3.0.2 of foo due to version restriction from feature"
-            );
-        }
+        assert_eq!(result.records[0].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result.records[0].package_record.version,
+            Version::from_str("3.0.2").unwrap(),
+            "expected version 3.0.2 of foo due to version restriction from feature"
+        );
+        assert_eq!(
+            result.features.get("foo"),
+            Some(&vec!["with-version-restrict".to_string()])
+        );
     }
 
     #[cfg(feature = "optional_features")]
@@ -1258,16 +1241,18 @@ mod resolvo {
             .records
             .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
 
-        assert_eq!(result.records.len(), 2);
+        assert_eq!(result.records.len(), 1);
         // Both records should be foo
-        for record in &result.records {
-            assert_eq!(record.package_record.name.as_normalized(), "foo");
-            assert_eq!(
-                record.package_record.version,
-                Version::from_str("2.0.2").unwrap(),
-                "expected version 2.0.2 of foo"
-            );
-        }
+        assert_eq!(result.records[0].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result.records[0].package_record.version,
+            Version::from_str("2.0.2").unwrap(),
+            "expected version 2.0.2 of foo"
+        );
+        assert_eq!(
+            result.features.get("foo"),
+            Some(&vec!["with-self".to_string()])
+        );
     }
 
     #[cfg(feature = "optional_features")]
@@ -1289,15 +1274,25 @@ mod resolvo {
             .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
 
         assert_eq!(result.records.len(), 2);
+
         // Both records should be foo
-        for record in &result.records {
-            assert_eq!(record.package_record.name.as_normalized(), "foo");
-            assert_eq!(
-                record.package_record.version,
-                Version::from_str("2.0.2").unwrap(),
-                "expected older version 2.0.2 of foo since it has the required feature"
-            );
-        }
+        assert_eq!(result.records[1].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result.records[1].package_record.version,
+            Version::from_str("2.0.2").unwrap(),
+            "expected older version 2.0.2 of foo since it has the required feature"
+        );
+        assert_eq!(
+            result.features.get("foo"),
+            Some(&vec!["legacy-only".to_string()])
+        );
+
+        assert_eq!(result.records[0].package_record.name.as_normalized(), "bar");
+        assert_eq!(
+            result.records[0].package_record.version,
+            Version::from_str("1.2.3").unwrap(),
+            "expected version 1.2.3 of bar"
+        );
     }
 
     #[cfg(feature = "optional_features")]
@@ -1312,7 +1307,10 @@ mod resolvo {
             },
         );
 
-        insta::assert_snapshot!(result.unwrap_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Cannot solve the request because of: No candidates were found for foo[does-not-exist] *.\n"
+        );
     }
 
     #[cfg(feature = "optional_features")]
