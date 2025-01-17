@@ -1,7 +1,7 @@
 use pyo3::{pyclass, pymethods, FromPyObject, PyResult};
 use rattler_networking::{
-    mirror_middleware::Mirror, s3_middleware::S3Config, AuthenticationMiddleware,
-    AuthenticationStorage, GCSMiddleware, MirrorMiddleware, OciMiddleware, S3Middleware,
+    mirror_middleware::Mirror, s3_middleware::S3Config, GCSMiddleware, MirrorMiddleware,
+    OciMiddleware,
 };
 use std::collections::HashMap;
 use url::Url;
@@ -71,12 +71,6 @@ impl PyAuthenticationMiddleware {
     }
 }
 
-impl From<PyAuthenticationMiddleware> for AuthenticationMiddleware {
-    fn from(_value: PyAuthenticationMiddleware) -> Self {
-        AuthenticationMiddleware::new(AuthenticationStorage::default())
-    }
-}
-
 #[pyclass]
 #[repr(transparent)]
 #[derive(Clone)]
@@ -119,14 +113,14 @@ impl From<PyGCSMiddleware> for GCSMiddleware {
 #[pyclass]
 pub struct PyS3Config {
     // non-trivial enums are not supported by pyo3 as pyclasses
-    custom: Option<PyS3ConfigCustom>,
+    pub(crate) custom: Option<PyS3ConfigCustom>,
 }
 
 #[derive(Clone)]
-struct PyS3ConfigCustom {
-    endpoint_url: Url,
-    region: String,
-    force_path_style: bool,
+pub(crate) struct PyS3ConfigCustom {
+    pub(crate) endpoint_url: Url,
+    pub(crate) region: String,
+    pub(crate) force_path_style: bool,
 }
 
 #[pymethods]
@@ -178,11 +172,5 @@ impl PyS3Middleware {
     #[new]
     pub fn __init__(s3_config: PyS3Config) -> PyResult<Self> {
         Ok(Self { s3_config })
-    }
-}
-
-impl From<PyS3Middleware> for S3Middleware {
-    fn from(_value: PyS3Middleware) -> Self {
-        S3Middleware::new(_value.s3_config.into(), AuthenticationStorage::default())
     }
 }

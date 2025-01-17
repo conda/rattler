@@ -149,15 +149,12 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .build()
         .expect("failed to create client");
 
-    let authentication_storage = AuthenticationStorage::default();
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::new(
-            authentication_storage,
-        )))
+        .with_arc(Arc::new(AuthenticationMiddleware::from_env_and_defaults()?))
         .with(rattler_networking::OciMiddleware)
         .with(rattler_networking::S3Middleware::new(
             S3Config::FromAWS,
-            AuthenticationStorage::default(),
+            AuthenticationStorage::from_env_and_defaults()?,
         ))
         .with(rattler_networking::GCSMiddleware)
         .build();
