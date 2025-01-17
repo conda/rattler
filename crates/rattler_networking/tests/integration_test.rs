@@ -1,7 +1,8 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use rattler_networking::{
-    authentication_storage::backends::file::FileStorage, s3_middleware::S3Config, AuthenticationMiddleware, AuthenticationStorage, S3Middleware
+    authentication_storage::backends::file::FileStorage, s3_middleware::S3Config,
+    AuthenticationMiddleware, AuthenticationStorage, S3Middleware,
 };
 use reqwest::Client;
 use rstest::*;
@@ -143,7 +144,9 @@ async fn test_minio_download_repodata(
 
     let download_client = Client::builder().no_gzip().build().unwrap();
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(auth_storage)))
+        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
+            auth_storage,
+        )))
         .with(middleware)
         .build();
 
@@ -176,7 +179,9 @@ async fn test_minio_download_repodata_public(
 
     let download_client = Client::builder().no_gzip().build().unwrap();
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(auth_storage)))
+        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
+            auth_storage,
+        )))
         .with(middleware)
         .build();
 
@@ -201,7 +206,9 @@ async fn test_minio_download_repodata_aws_profile(
 
     let download_client = Client::builder().no_gzip().build().unwrap();
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(AuthenticationStorage::empty())))
+        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
+            AuthenticationStorage::empty(),
+        )))
         .with(middleware)
         .build();
 
@@ -234,7 +241,9 @@ async fn test_minio_download_aws_profile_public(
 
     let download_client = Client::builder().no_gzip().build().unwrap();
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::from_env_and_defaults().unwrap()))
+        .with_arc(Arc::new(
+            AuthenticationMiddleware::from_env_and_defaults().unwrap(),
+        ))
         .with(middleware)
         .build();
     let result = async_with_vars(
@@ -310,7 +319,9 @@ async fn test_cloudflare_r2_download_repodata() {
 
     let download_client = Client::builder().no_gzip().build().unwrap();
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(auth_storage)))
+        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
+            auth_storage,
+        )))
         .with(middleware)
         .build();
 
