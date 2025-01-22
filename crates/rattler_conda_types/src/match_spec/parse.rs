@@ -280,9 +280,7 @@ fn parse_bracket_vec_into_components(
                 }
                 #[cfg(not(feature = "extras"))]
                 {
-                    return Err(ParseMatchSpecError::InvalidBracketKey(
-                        "extras".to_string(),
-                    ));
+                    return Err(ParseMatchSpecError::InvalidBracketKey("extras".to_string()));
                 }
             }
             "sha256" => {
