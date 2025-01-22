@@ -228,16 +228,27 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
 }
 
 #[cfg(feature = "extras")]
-/// Parses a list of optional dependencies from a string `[feat1, feat2, feat3]`.
+/// Parses a list of optional dependencies from a string `feat1, feat2, feat3]` -> `vec![feat1, feat2, feat3]`.
 pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
-    use nom::combinator::map;
+    use nom::{character::complete::alphanumeric1, combinator::map, multi::many1};
 
     fn parse_features(input: &str) -> IResult<&str, Vec<String>> {
-        separated_list0(
-            char(','),
-            map(take_till1(|c| c == ',' || c == ']'), |s: &str| {
-                s.trim().to_string()
-            }),
+        terminated(
+            // Parse one or more items separated by commas
+            separated_list1(
+                char(','),
+                // For each item, consume leading/trailing whitespace and join the segments
+                map(
+                    delimited(
+                        multispace0,
+                        many1(alt((alphanumeric1, tag("_"), tag("-")))),
+                        multispace0,
+                    ),
+                    |segments: Vec<&str>| segments.join(""),
+                ),
+            ),
+            // Consume trailing whitespace at the end of the whole list
+            multispace0,
         )(input)
     }
 
@@ -733,6 +744,9 @@ mod tests {
         match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
         NamelessMatchSpec, ParseChannelError, ParseStrictness, ParseStrictness::*, VersionSpec,
     };
+
+    #[cfg(feature = "extras")]
+    use crate::match_spec::parse::parse_extras;
 
     fn channel_config() -> ChannelConfig {
         ChannelConfig::default_with_root_dir(
@@ -1410,5 +1424,40 @@ mod tests {
             .map(|s| MatchSpec::from_str(s, Strict).unwrap())
             .collect::<Vec<_>>();
         assert_eq!(specs, parsed_specs);
+    }
+
+    #[cfg(feature = "extras")]
+    #[test]
+    fn test_simple_extras() {
+        let spec = MatchSpec::from_str("foo[extras=[bar]]", Strict).unwrap();
+
+        assert_eq!(spec.extras, Some(vec!["bar".to_string()]));
+        assert!(MatchSpec::from_str("foo[extras=[bar,baz]", Strict).is_err());
+    }
+
+    #[cfg(feature = "extras")]
+    #[test]
+    fn test_multiple_extras() {
+        let spec = MatchSpec::from_str("foo[extras=[bar,baz]]", Strict).unwrap();
+        assert_eq!(
+            spec.extras,
+            Some(vec!["bar".to_string(), "baz".to_string()])
+        );
+    }
+
+    #[cfg(feature = "extras")]
+    #[test]
+    fn test_parse_extras() {
+        assert_eq!(
+            parse_extras("bar,baz").unwrap(),
+            vec!["bar".to_string(), "baz".to_string()]
+        );
+        assert_eq!(parse_extras("bar").unwrap(), vec!["bar".to_string()]);
+        assert_eq!(
+            parse_extras("bar, baz").unwrap(),
+            vec!["bar".to_string(), "baz".to_string()]
+        );
+        println!("{:?}", parse_extras("[bar,baz]"));
+        assert!(parse_extras("[bar,baz]").is_err());
     }
 }
