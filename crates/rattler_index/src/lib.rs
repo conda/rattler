@@ -2,6 +2,7 @@
 //! files
 #![deny(missing_docs)]
 
+mod locked_file;
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsStr,
@@ -202,7 +203,12 @@ pub fn index(
                     .insert(file_name.to_string_lossy().to_string(), record),
             };
         }
+
         let out_file = output_folder.join(platform).join("repodata.json");
+
+        // Lock all files that have to do with that cache key
+        let lock_file_path = output_folder.join("repodata.json.lock");
+        let _lock_file = locked_file::LockedFile::open_rw(lock_file_path, "repodata cache");
         File::create(&out_file)?.write_all(serde_json::to_string_pretty(&repodata)?.as_bytes())?;
     }
 
