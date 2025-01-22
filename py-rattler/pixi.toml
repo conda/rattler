@@ -41,19 +41,19 @@ typer = "*"
 types-networkx = "*"
 
 [feature.test.tasks]
-test = { cmd = "pytest --doctest-modules", depends_on = ["build"] }
+test = { cmd = "pytest --doctest-modules", depends-on = ["build"] }
 fmt-python = "ruff format rattler examples tests"
 fmt-rust = "cargo fmt --all"
 lint-python = "ruff check ."
 lint-rust = "cargo clippy --all"
-fmt = { depends_on = ["fmt-python", "fmt-rust"] }
-lint = { depends_on = ["type-check", "lint-python", "lint-rust"] }
-type-check = { cmd = "mypy", depends_on = ["build"] }
+fmt = { depends-on = ["fmt-python", "fmt-rust"] }
+lint = { depends-on = ["type-check", "lint-python", "lint-rust"] }
+type-check = { cmd = "mypy", depends-on = ["build"] }
 
 # checks for the CI
 fmt-rust-check = "cargo fmt --all --check"
 fmt-python-check = "ruff format rattler examples tests --diff"
-fmt-check = { depends_on = ["fmt-python-check", "fmt-rust-check"] }
+fmt-check = { depends-on = ["fmt-python-check", "fmt-rust-check"] }
 
 [feature.docs.dependencies]
 mkdocs = ">=1.5.3,<2"

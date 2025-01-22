@@ -33,7 +33,7 @@ pub fn py_fetch_repo_data<'a>(
     client: Option<PyClientWithMiddleware>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let mut meta_futures = Vec::new();
-    let client = client.unwrap_or(PyClientWithMiddleware::new(None));
+    let client = client.unwrap_or(PyClientWithMiddleware::new(None)?);
 
     for (subdir, chan, platform) in get_subdir_urls(channels, platforms)? {
         let callback = callback.as_ref().map(|callback| {

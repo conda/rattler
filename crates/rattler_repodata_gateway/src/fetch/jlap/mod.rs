@@ -30,7 +30,7 @@
 //! pub async fn main() {
 //!     let subdir_url = Url::parse("https://conda.anaconda.org/conda-forge/osx-64/").unwrap();
 //!     let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
-//!         .with_arc(Arc::new(AuthenticationMiddleware::default()))
+//!         .with_arc(Arc::new(AuthenticationMiddleware::from_env_and_defaults().unwrap()))
 //!         .build();
 //!     let cache = Path::new("./cache");
 //!     let current_repo_data = cache.join("c93ef9c9.json");

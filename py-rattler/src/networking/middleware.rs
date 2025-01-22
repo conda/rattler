@@ -1,7 +1,6 @@
 use pyo3::{pyclass, pymethods, FromPyObject, PyResult};
 use rattler_networking::{
-    mirror_middleware::Mirror, AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware,
-    MirrorMiddleware, OciMiddleware,
+    mirror_middleware::Mirror, GCSMiddleware, MirrorMiddleware, OciMiddleware,
 };
 use std::collections::HashMap;
 use url::Url;
@@ -67,12 +66,6 @@ impl PyAuthenticationMiddleware {
     #[new]
     pub fn __init__() -> Self {
         Self {}
-    }
-}
-
-impl From<PyAuthenticationMiddleware> for AuthenticationMiddleware {
-    fn from(_value: PyAuthenticationMiddleware) -> Self {
-        AuthenticationMiddleware::new(AuthenticationStorage::default())
     }
 }
 
