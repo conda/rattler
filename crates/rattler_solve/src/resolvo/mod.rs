@@ -679,7 +679,7 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                     subdir: Some(record.package_record.subdir.clone()),
                     md5: record.package_record.md5,
                     sha256: record.package_record.sha256,
-                    optional_features: None,
+                    extras: None,
                     ..Default::default()
                 };
 
@@ -841,7 +841,7 @@ impl super::SolverImpl for Solver {
 
         let root_requirements = task.specs.iter().flat_map(|spec| {
             let (name, nameless_spec) = spec.clone().into_nameless();
-            let features = &spec.optional_features;
+            let features = &spec.extras;
             let name = name.expect("cannot use matchspec without a name");
             let name_id = provider.pool.intern_package_name(name.as_normalized());
             let mut reqs = vec![provider
@@ -940,7 +940,7 @@ fn parse_match_spec(
     let (name, spec) = match_spec.into_nameless();
 
     let mut version_set_ids = vec![];
-    if let Some(ref features) = spec.optional_features {
+    if let Some(ref features) = spec.extras {
         let spec_with_feature: SolverMatchSpec<'_> = spec.clone().into();
 
         for feature in features {

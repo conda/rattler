@@ -146,7 +146,7 @@ jobs:
         run: >
           cargo nextest run
           --workspace 
-          --features ${{ env.DEFAULT_FEATURES }} 
+          --features ${{ env.DEFAULT_FEATURES }} extras
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} 
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} 
@@ -155,88 +155,3 @@ jobs:
         if: ${{ !matrix.skip-tests }}
         run: >
           cargo test --doc
-
-  test-experimental:
-    name: Test Experimental Features (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
-    needs: [ format_and_lint ]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { name: "Linux-x86_64",      target: x86_64-unknown-linux-musl,        os: ubuntu-22.04 }
-          - { name: "Linux-aarch64",     target: aarch64-unknown-linux-musl,       os: ubuntu-latest, skip-tests: true }
-          - { name: "Linux-arm",         target: arm-unknown-linux-musleabi,       os: ubuntu-latest, use-cross: true, skip-tests: true }
-
-          # - { name: "Linux-mips",        target: mips-unknown-linux-musl,          os: ubuntu-latest, use-cross: true, skip-tests: true }
-          # - { name: "Linux-mipsel",      target: mipsel-unknown-linux-musl,        os: ubuntu-latest, use-cross: true, skip-tests: true }
-          # - { name: "Linux-mips64",      target: mips64-unknown-linux-muslabi64,   os: ubuntu-latest, use-cross: true, skip-tests: true }
-          # - { name: "Linux-mips64el",    target: mips64el-unknown-linux-muslabi64, os: ubuntu-latest, use-cross: true, skip-tests: true }
-
-#          - { name: "Linux-powerpc",     target: powerpc-unknown-linux-gnu,        os: ubuntu-latest, use-cross: true, skip-tests: true }
-          - { name: "Linux-powerpc64",   target: powerpc64-unknown-linux-gnu,      os: ubuntu-latest, use-cross: true, skip-tests: true }
-          - { name: "Linux-powerpc64le", target: powerpc64le-unknown-linux-gnu,    os: ubuntu-latest, use-cross: true, skip-tests: true }
-
-          - { name: "Linux-s390x",       target: s390x-unknown-linux-gnu,          os: ubuntu-latest, use-cross: true, skip-tests: true }
-
-          - { name: "macOS-x86_64",      target: x86_64-apple-darwin,              os: macOS-latest }
-          - { name: "macOS-aarch64",     target: aarch64-apple-darwin,             os: macOS-latest,                  skip-tests: true }
-
-          - { name: "Windows-x86_64",    target: x86_64-pc-windows-msvc,           os: windows-latest }
-          - { name: "Windows-aarch64",   target: aarch64-pc-windows-msvc,          os: windows-latest,                  skip-tests: true }
-        feature-set:
-          - "optional_features"
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          target: ${{ matrix.target }}
-          components: rustfmt
-          cache: false
-
-      - uses: taiki-e/setup-cross-toolchain-action@v1
-        if: matrix.target != 'x86_64-unknown-linux-musl'
-        with:
-          target: ${{ matrix.target }}
-
-      - if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: |
-          sudo apt install musl-tools gcc g++
-          sudo ln -s /usr/bin/musl-gcc /usr/bin/musl-g++
-      
-      - uses: Swatinem/rust-cache@v2
-      
-      - name: Install cargo nextest
-        if: ${{ !matrix.skip-tests }}
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-
-      - name: Use rustls on musl targets.
-        id: build-options
-        if: contains(matrix.target, '-musl') || startsWith(matrix.target, 'powerpc') || startsWith(matrix.target, 's390x')
-        run: |
-          echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls-tls" >> $GITHUB_OUTPUT
-      
-      - name: Run feature-specific tests
-        if: ${{ !matrix.skip-tests }}
-        run: >
-          cargo nextest run
-          --workspace
-          --features ${{ matrix.feature-set }}
-          --target ${{ matrix.target }}
-          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}
-          "optional_"
-
-      - name: Run feature-specific doctests
-        if: ${{ !matrix.skip-tests }}
-        run: >
-          cargo test --doc
-          --features ${{ matrix.feature-set }}
-          --target ${{ matrix.target }}
-          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}

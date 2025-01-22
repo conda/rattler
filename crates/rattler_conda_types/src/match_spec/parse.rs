@@ -227,9 +227,9 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
     }
 }
 
-#[cfg(feature = "optional_features")]
+#[cfg(feature = "extras")]
 /// Parses a list of optional dependencies from a string `[feat1, feat2, feat3]`.
-pub fn parse_optional_features(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
+pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     use nom::combinator::map;
 
     fn parse_features(input: &str) -> IResult<&str, Vec<String>> {
@@ -272,16 +272,16 @@ fn parse_bracket_vec_into_components(
             "version" => match_spec.version = Some(VersionSpec::from_str(value, strictness)?),
             "build" => match_spec.build = Some(StringMatcher::from_str(value)?),
             "build_number" => match_spec.build_number = Some(BuildNumberSpec::from_str(value)?),
-            "optional_features" => {
+            "extras" => {
                 // Optional features are still experimental
-                #[cfg(feature = "optional_features")]
+                #[cfg(feature = "extras")]
                 {
-                    match_spec.optional_features = Some(parse_optional_features(value)?);
+                    match_spec.extras = Some(parse_extras(value)?);
                 }
-                #[cfg(not(feature = "optional_features"))]
+                #[cfg(not(feature = "extras"))]
                 {
                     return Err(ParseMatchSpecError::InvalidBracketKey(
-                        "optional_features".to_string(),
+                        "extras".to_string(),
                     ));
                 }
             }
@@ -1379,7 +1379,7 @@ mod tests {
             build: "py27_0*".parse().ok(),
             build_number: Some(BuildNumberSpec::from_str(">=6").unwrap()),
             file_name: Some("foo-1.0-py27_0.tar.bz2".to_string()),
-            optional_features: None,
+            extras: None,
             channel: Some(
                 Channel::from_str("conda-forge", &channel_config())
                     .map(Arc::new)

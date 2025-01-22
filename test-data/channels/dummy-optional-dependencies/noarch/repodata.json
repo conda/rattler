@@ -51,7 +51,7 @@
             "bar >=1.0"
           ],
           "with-recursive": [
-            "foo[optional_features=[with-bar]]"
+            "foo[extras=[with-bar]]"
           ],
           "with-self": [
             "foo >=2.0"
@@ -351,7 +351,7 @@
         "build_number": 0,
         "depends": [],
         "constrains": [
-          "ray[version=>=2.9.0, optional_features=[default,data]]"
+          "ray[version=>=2.9.0, extras=[default,data]]"
         ],
         "license": "MIT",
         "license_family": "MIT",
@@ -402,7 +402,7 @@
         "version": "2",
         "optional_depends": {
           "with-issue717": [
-            "issue_717[version=>=2.1, optional_features=[with-bors21]]"
+            "issue_717[version=>=2.1, extras=[with-bors21]]"
           ]
         }
       },
