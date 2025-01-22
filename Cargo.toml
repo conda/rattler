@@ -169,5 +169,6 @@ url = { version = "2.5.4" }
 uuid = { version = "1.11.0", default-features = false }
 walkdir = "2.5.0"
 windows-sys = { version = "0.59.0", default-features = false }
+winver = { version = "1.0.0" }
 zip = { version = "2.2.2", default-features = false }
 zstd = { version = "0.13.2", default-features = false }
