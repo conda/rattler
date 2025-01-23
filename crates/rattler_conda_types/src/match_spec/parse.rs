@@ -289,7 +289,7 @@ fn parse_bracket_vec_into_components(
                 {
                     match_spec.extras = Some(parse_extras(value)?);
                 }
-                #[cfg(not(feature = "extras"))]
+                #[cfg(not(feature = "experimental_extras"))]
                 {
                     return Err(ParseMatchSpecError::InvalidBracketKey("extras".to_string()));
                 }
