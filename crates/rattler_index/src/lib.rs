@@ -2,31 +2,31 @@
 //! files
 #![deny(missing_docs)]
 
+use fs_err as fs;
+use rattler_conda_types::{
+    package::{ArchiveType, IndexJson, PackageFile},
+    ChannelInfo, PackageRecord, Platform, RepoData,
+};
+use rattler_package_streaming::{read, seek};
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsStr,
     io::{Read, Write},
     path::{Path, PathBuf},
 };
-
-use fs_err::File;
-use rattler_conda_types::{
-    package::{ArchiveType, IndexJson, PackageFile},
-    ChannelInfo, PackageRecord, Platform, RepoData,
-};
-use rattler_package_streaming::{read, seek};
+use tempfile::NamedTempFile;
 use walkdir::WalkDir;
 
 /// Extract the package record from an `index.json` file.
 pub fn package_record_from_index_json<T: Read>(
     file: &Path,
     index_json_reader: &mut T,
-) -> Result<PackageRecord, std::io::Error> {
+) -> std::io::Result<PackageRecord> {
     let index = IndexJson::from_reader(index_json_reader)?;
 
     let sha256_result = rattler_digest::compute_file_digest::<rattler_digest::Sha256>(file)?;
     let md5_result = rattler_digest::compute_file_digest::<rattler_digest::Md5>(file)?;
-    let size = std::fs::metadata(file)?.len();
+    let size = fs::metadata(file)?.len();
 
     let package_record = PackageRecord {
         name: index.name,
@@ -60,8 +60,8 @@ pub fn package_record_from_index_json<T: Read>(
 /// Extract the package record from a `.tar.bz2` package file.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
-pub fn package_record_from_tar_bz2(file: &Path) -> Result<PackageRecord, std::io::Error> {
-    let reader = std::fs::File::open(file)?;
+pub fn package_record_from_tar_bz2(file: &Path) -> std::io::Result<PackageRecord> {
+    let reader = fs::File::open(file)?;
     let mut archive = read::stream_tar_bz2(reader);
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
@@ -79,8 +79,8 @@ pub fn package_record_from_tar_bz2(file: &Path) -> Result<PackageRecord, std::io
 /// Extract the package record from a `.conda` package file.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
-pub fn package_record_from_conda(file: &Path) -> Result<PackageRecord, std::io::Error> {
-    let reader = std::fs::File::open(file)?;
+pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> {
+    let reader = fs::File::open(file)?;
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
 
     for entry in archive.entries()?.flatten() {
@@ -99,10 +99,7 @@ pub fn package_record_from_conda(file: &Path) -> Result<PackageRecord, std::io::
 /// Create a new `repodata.json` for all packages in the given output folder. If
 /// `target_platform` is `Some`, only that specific subdir is indexed. Otherwise
 /// indexes all subdirs and creates a `repodata.json` for each.
-pub fn index(
-    output_folder: &Path,
-    target_platform: Option<&Platform>,
-) -> Result<(), std::io::Error> {
+pub fn index(output_folder: &Path, target_platform: Option<&Platform>) -> std::io::Result<()> {
     let entries = WalkDir::new(output_folder).into_iter();
     let entries: Vec<(PathBuf, ArchiveType)> = entries
         .filter_entry(|e| e.depth() <= 2)
@@ -130,7 +127,7 @@ pub fn index(
 
     // Always create noarch subdir
     if !output_folder.join("noarch").exists() {
-        std::fs::create_dir(output_folder.join("noarch"))?;
+        fs::create_dir(output_folder.join("noarch"))?;
     }
 
     // Make sure that we index noarch if it is not already indexed
@@ -142,7 +139,7 @@ pub fn index(
     if let Some(target_platform) = target_platform {
         let platform_str = target_platform.to_string();
         if !output_folder.join(&platform_str).exists() {
-            std::fs::create_dir(output_folder.join(&platform_str))?;
+            fs::create_dir(output_folder.join(&platform_str))?;
             platforms.insert(platform_str);
         }
     }
@@ -202,8 +199,11 @@ pub fn index(
                     .insert(file_name.to_string_lossy().to_string(), record),
             };
         }
-        let out_file = output_folder.join(platform).join("repodata.json");
-        File::create(&out_file)?.write_all(serde_json::to_string_pretty(&repodata)?.as_bytes())?;
+
+        let mut out_file =
+            NamedTempFile::with_prefix_in("repodata-", output_folder.join(&platform))?;
+        out_file.write_all(serde_json::to_string_pretty(&repodata)?.as_bytes())?;
+        out_file.persist(output_folder.join(&platform).join("repodata.json"))?;
     }
 
     Ok(())
