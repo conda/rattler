@@ -176,15 +176,6 @@ impl Display for MatchSpec {
             None => write!(f, "*")?,
         }
 
-        match &self.extras {
-            Some(dependencies) => {
-                write!(f, "[")?;
-                write!(f, "{}", dependencies.iter().format(", "))?;
-                write!(f, "]")?;
-            }
-            None => {}
-        }
-
         if let Some(version) = &self.version {
             write!(f, " {version}")?;
         }
@@ -194,6 +185,10 @@ impl Display for MatchSpec {
         }
 
         let mut keys = Vec::new();
+
+        if let Some(extras) = &self.extras {
+            keys.push(format!("extras=[{}]", extras.iter().format(", ")));
+        }
 
         if let Some(md5) = &self.md5 {
             keys.push(format!("md5=\"{md5:x}\""));
