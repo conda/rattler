@@ -20,7 +20,7 @@
         "subdir": "noarch",
         "timestamp": 1716314536803,
         "version": "12.5",
-        "optional_depends": {
+        "extra_depends": {
           "with-cudadev": [
             "foo >=4.0.2",
             "bar >=1.2.3"
@@ -40,7 +40,7 @@
         "subdir": "noarch",
         "timestamp": 1605110689658,
         "version": "2.0.2",
-        "optional_depends": {
+        "extra_depends": {
           "with-oldbors": [
             "bors <2.0"
           ],
@@ -71,7 +71,7 @@
         "subdir": "noarch",
         "timestamp": 1715610974000,
         "version": "3.0.2",
-        "optional_depends": {
+        "extra_depends": {
           "with-baz2": [
             "baz >=2.0"
           ],
@@ -96,7 +96,7 @@
         "subdir": "noarch",
         "timestamp": 1715610974000,
         "version": "3.0.3",
-        "optional_depends": {
+        "extra_depends": {
           "with-foobar21": [
             "foobar >=2.1"
           ],
@@ -121,7 +121,7 @@
         "subdir": "noarch",
         "timestamp": 1715610974000,
         "version": "3.0.4",
-        "optional_depends": {
+        "extra_depends": {
           "with-issue717": [
             "issue_717 >=2.1"
           ],
@@ -143,7 +143,7 @@
         "subdir": "noarch",
         "timestamp": 1715610974000,
         "version": "4.0.2",
-        "optional_depends": {
+        "extra_depends": {
           "with-xbar": [
             "xbar >=1"
           ]
@@ -163,7 +163,7 @@
         "subdir": "noarch",
         "timestamp": 1605110689658,
         "version": "1.2.3",
-        "optional_depends": {
+        "extra_depends": {
           "with-xfoo": [
             "xfoo >=1"
           ]
@@ -184,7 +184,7 @@
         "subdir": "noarch",
         "timestamp": 1605110689658,
         "version": "1.2.3",
-        "optional_depends": {
+        "extra_depends": {
           "with-foobar": [
             "foobar >=2.0"
           ]
@@ -203,7 +203,7 @@
         "subdir": "noarch",
         "timestamp": 1715610974000,
         "version": "2.0",
-        "optional_depends": {
+        "extra_depends": {
           "with-bors": [
             "bors >=2.0"
           ]
@@ -222,7 +222,7 @@
         "subdir": "noarch",
         "timestamp": 1605110689658,
         "version": "1.0",
-        "optional_depends": {
+        "extra_depends": {
           "with-baz10": [
             "baz >=1.0"
           ]
@@ -241,7 +241,7 @@
         "subdir": "noarch",
         "timestamp": 1605110689658,
         "version": "1.1",
-        "optional_depends": {
+        "extra_depends": {
           "with-foobar20": [
             "foobar >=2.0"
           ]
@@ -260,7 +260,7 @@
         "subdir": "noarch",
         "timestamp": 1605110689658,
         "version": "1.2.1",
-        "optional_depends": {
+        "extra_depends": {
           "with-baz2": [
             "baz >=2.0"
           ]
@@ -279,7 +279,7 @@
         "subdir": "noarch",
         "timestamp": 1715610974000,
         "version": "2.0",
-        "optional_depends": {
+        "extra_depends": {
           "with-xbar": [
             "xbar >=1"
           ]
@@ -298,7 +298,7 @@
         "subdir": "noarch",
         "timestamp": 1715610974000,
         "version": "2.1",
-        "optional_depends": {
+        "extra_depends": {
           "with-cuda": [
             "cuda-version >=12.5"
           ]
@@ -319,7 +319,7 @@
         "subdir": "noarch",
         "timestamp": 1605110689658,
         "version": "2.0",
-        "optional_depends": {
+        "extra_depends": {
           "with-baz10": [
             "baz >=1.0"
           ]
@@ -340,7 +340,7 @@
         "subdir": "noarch",
         "timestamp": 1715610974000,
         "version": "2.1",
-        "optional_depends": {
+        "extra_depends": {
           "with-baz2": [
             "baz >=2.0"
           ]
@@ -362,7 +362,7 @@
         "subdir": "noarch",
         "timestamp": 1715610974000,
         "version": "2.1",
-        "optional_depends": {
+        "extra_depends": {
           "with-bors21": [
             "bors >=2.1"
           ]
@@ -381,7 +381,7 @@
         "subdir": "noarch",
         "timestamp": 1715610974000,
         "version": "1",
-        "optional_depends": {
+        "extra_depends": {
           "with-cuda": [
             "cuda-version >=12.5"
           ]
@@ -400,7 +400,7 @@
         "subdir": "noarch",
         "timestamp": 1715610974000,
         "version": "2",
-        "optional_depends": {
+        "extra_depends": {
           "with-issue717": [
             "issue_717[version=>=2.1, extras=[with-bors21]]"
           ]
@@ -421,7 +421,7 @@
         "subdir": "noarch",
         "timestamp": 1715610974000,
         "version": "1",
-        "optional_depends": {
+        "extra_depends": {
           "with-foo4": [
             "foo >=4.0.2"
           ]

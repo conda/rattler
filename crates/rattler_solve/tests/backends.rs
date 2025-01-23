@@ -105,7 +105,7 @@ fn installed_package(
             sha256: Some(dummy_sha256_hash()),
             size: None,
             arch: None,
-            optional_depends: BTreeMap::new(),
+            extra_depends: BTreeMap::new(),
             platform: None,
             depends: Vec::new(),
             constrains: Vec::new(),
@@ -975,7 +975,7 @@ mod resolvo {
     /// Installs `foo` while enabling a single optional dependency `[with-latest-bors]`.
     /// This should pull in `bors >=2.0`.
     #[test]
-    fn test_solve_dummy_repo_optional_depends_foo_latest_bors_resolvo() {
+    fn test_solve_dummy_repo_extra_depends_foo_latest_bors_resolvo() {
         let mut result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
@@ -1015,7 +1015,7 @@ mod resolvo {
     #[cfg(feature = "experimental_extras")]
     /// Installs `cuda-version` with `[with-cudadev]` which depends on `"foo >=4.0.2", "bar >=1.2.3"`.
     #[test]
-    fn test_solve_dummy_repo_optional_depends_cuda_dev_resolvo() {
+    fn test_solve_dummy_repo_extra_depends_cuda_dev_resolvo() {
         let mut result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
@@ -1066,7 +1066,7 @@ mod resolvo {
     /// Attempts to enable two optional features that conflict: `[with-oldbors,with-latest-bors]`.
     /// This should fail because one requests `bors <2.0` and the other requests `bors >=2.0`.  
     #[test]
-    fn test_solve_dummy_repo_optional_depends_conflict_resolvo() {
+    fn test_solve_dummy_repo_extra_depends_conflict_resolvo() {
         let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
@@ -1082,7 +1082,7 @@ mod resolvo {
     /// Enables multiple optional dependencies in the same spec (like `[with-baz2,with-bar]`).
     /// This should pull in `baz >=2.0` and `bar >=1.2.3` if both can coexist.
     #[test]
-    fn test_solve_dummy_repo_optional_depends_foo_multi_resolvo() {
+    fn test_solve_dummy_repo_extra_depends_foo_multi_resolvo() {
         let mut result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
@@ -1130,7 +1130,7 @@ mod resolvo {
     #[cfg(feature = "experimental_extras")]
     /// Should install xfoo with the feature with-issue717 which requires `with-issue717[with-bors21]` hence pulling in bors 2.1 as well
     #[test]
-    fn test_solve_dummy_repo_optional_depends_xfoo_optional_depends_with_features() {
+    fn test_solve_dummy_repo_extra_depends_xfoo_extra_depends_with_features() {
         let mut result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
@@ -1183,7 +1183,7 @@ mod resolvo {
     #[cfg(feature = "experimental_extras")]
     /// Tests what happens when a feature depends on the base package but with another feature enabled
     #[test]
-    fn test_solve_dummy_repo_optional_depends_recursive_feature() {
+    fn test_solve_dummy_repo_extra_depends_recursive_feature() {
         let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
@@ -1199,7 +1199,7 @@ mod resolvo {
     #[cfg(feature = "experimental_extras")]
     /// Tests that an optional dependency can restrict the highest version of a base dependency
     #[test]
-    fn test_solve_dummy_repo_optional_depends_version_restriction() {
+    fn test_solve_dummy_repo_extra_depends_version_restriction() {
         let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
@@ -1226,7 +1226,7 @@ mod resolvo {
     #[cfg(feature = "experimental_extras")]
     /// Tests what happens if a feature introduces a dependency on the base package itself
     #[test]
-    fn test_solve_dummy_repo_optional_depends_self_dependency() {
+    fn test_solve_dummy_repo_extra_depends_self_dependency() {
         let mut result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
@@ -1258,7 +1258,7 @@ mod resolvo {
     #[cfg(feature = "experimental_extras")]
     /// Tests what happens if there are two packages for foo but only the package with the lower version has the package that is requested
     #[test]
-    fn test_solve_dummy_repo_optional_depends_feature_only_in_older() {
+    fn test_solve_dummy_repo_extra_depends_feature_only_in_older() {
         let mut result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
@@ -1298,7 +1298,7 @@ mod resolvo {
     #[cfg(feature = "experimental_extras")]
     /// Test what happens if a feature is requested that doesn't exist
     #[test]
-    fn test_solve_dummy_repo_optional_depends_nonexistent_feature() {
+    fn test_solve_dummy_repo_extra_depends_nonexistent_feature() {
         let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
@@ -1316,7 +1316,7 @@ mod resolvo {
     #[cfg(feature = "experimental_extras")]
     /// Test what happens when the only package that provides a certain feature cannot be selected due to a conflict
     #[test]
-    fn test_solve_dummy_repo_optional_depends_feature_conflict() {
+    fn test_solve_dummy_repo_extra_depends_feature_conflict() {
         let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {

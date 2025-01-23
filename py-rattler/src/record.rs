@@ -165,7 +165,7 @@ impl PyRecord {
                 subdir,
                 constrains: Vec::new(),
                 depends: Vec::new(),
-                optional_depends: BTreeMap::new(),
+                extra_depends: BTreeMap::new(),
                 features: None,
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,

@@ -266,7 +266,7 @@ impl RepoDataQuery {
                                 }
                             }
 
-                            for (_, dependencies) in record.package_record.optional_depends.iter() {
+                            for (_, dependencies) in record.package_record.extra_depends.iter() {
                                 for dependency in dependencies {
                                     let dependency_name = PackageName::new_unchecked(dependency.split_once(' ').unwrap_or((dependency, "")).0);
                                     if seen.insert(dependency_name.clone()) {

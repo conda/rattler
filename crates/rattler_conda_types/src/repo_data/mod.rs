@@ -114,6 +114,11 @@ pub struct PackageRecord {
     #[serde(default)]
     pub depends: Vec<String>,
 
+    /// Specifications of optional or dependencies. These are dependencies that are
+    /// only required if certain features are enabled or if certain conditions are met.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extra_depends: BTreeMap<String, Vec<String>>,
+
     /// Features are a deprecated way to specify different feature sets for the
     /// conda solver. This is not supported anymore and should not be used.
     /// Instead, `mutex` packages should be used to specify
@@ -145,11 +150,6 @@ pub struct PackageRecord {
     /// what way. See [`NoArchType`] for more information.
     #[serde(skip_serializing_if = "NoArchType::is_none")]
     pub noarch: NoArchType,
-
-    /// Specifications of optional or dependencies. These are dependencies that are
-    /// only required if certain features are enabled or if certain conditions are met.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub optional_depends: BTreeMap<String, Vec<String>>,
 
     /// Optionally the platform the package supports
     pub platform: Option<String>, // Note that this does not match the [`Platform`] enum..
@@ -328,7 +328,7 @@ impl PackageRecord {
             noarch: NoArchType::default(),
             platform: None,
             python_site_packages_path: None,
-            optional_depends: BTreeMap::new(),
+            extra_depends: BTreeMap::new(),
             sha256: None,
             size: None,
             subdir: Platform::current().to_string(),
@@ -517,7 +517,7 @@ impl PackageRecord {
             noarch: index.noarch,
             platform: index.platform,
             python_site_packages_path: index.python_site_packages_path,
-            optional_depends: BTreeMap::new(),
+            extra_depends: BTreeMap::new(),
             sha256,
             size,
             subdir,
