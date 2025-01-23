@@ -230,31 +230,26 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
 #[cfg(feature = "experimental_extras")]
 /// Parses a list of optional dependencies from a string `feat1, feat2, feat3]` -> `vec![feat1, feat2, feat3]`.
 pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
-    use nom::{character::complete::alphanumeric1, combinator::map, multi::many1};
+    use nom::{
+        combinator::{all_consuming, map},
+        multi::separated_list1,
+    };
 
-    fn parse_features(input: &str) -> IResult<&str, Vec<String>> {
-        terminated(
-            // Parse one or more items separated by commas
-            separated_list1(
-                char(','),
-                // For each item, consume leading/trailing whitespace and join the segments
-                map(
-                    delimited(
-                        multispace0,
-                        many1(alt((alphanumeric1, tag("_"), tag("-")))),
-                        multispace0,
-                    ),
-                    |segments: Vec<&str>| segments.join(""),
-                ),
-            ),
-            // Consume trailing whitespace at the end of the whole list
+    fn parse_feature_name(i: &str) -> IResult<&str, &str> {
+        delimited(
             multispace0,
-        )(input)
+            take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-'),
+            multispace0,
+        )(i)
     }
 
-    match parse_features(input).finish() {
-        Ok((_remaining, dependencies)) => Ok(dependencies),
-        Err(_) => Err(ParseMatchSpecError::InvalidBracket),
+    fn parse_features(i: &str) -> IResult<&str, Vec<String>> {
+        separated_list1(char(','), map(parse_feature_name, |s: &str| s.to_string()))(i)
+    }
+
+    match all_consuming(parse_features)(input).finish() {
+        Ok((_remaining, features)) => Ok(features),
+        Err(_e) => Err(ParseMatchSpecError::InvalidBracket),
     }
 }
 
@@ -1457,7 +1452,38 @@ mod tests {
             parse_extras("bar, baz").unwrap(),
             vec!["bar".to_string(), "baz".to_string()]
         );
-        println!("{:?}", parse_extras("[bar,baz]"));
         assert!(parse_extras("[bar,baz]").is_err());
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    #[test]
+    fn test_invalid_extras() {
+        // Empty extras value
+        assert!(MatchSpec::from_str("foo[extras=]", Strict).is_err());
+
+        // Missing brackets around extras list
+        assert!(MatchSpec::from_str("foo[extras=bar,baz]", Strict).is_err());
+
+        // Trailing comma in extras list
+        assert!(MatchSpec::from_str("foo[extras=[bar,]]", Strict).is_err());
+
+        // Invalid characters in extras name
+        assert!(MatchSpec::from_str("foo[extras=[bar!,baz]]", Strict).is_err());
+
+        // Invalid characters in extras name
+        println!(
+            "{:?}",
+            MatchSpec::from_str("foo[extras=[bar!,baz]]", Strict)
+        );
+        assert!(MatchSpec::from_str("foo[extras=[bar!,baz]]", Strict).is_err());
+
+        // Empty extras item
+        assert!(MatchSpec::from_str("foo[extras=[bar,,baz]]", Strict).is_err());
+
+        // Missing closing bracket
+        assert!(MatchSpec::from_str("foo[extras=[bar,baz", Strict).is_err());
+
+        // Missing opening bracket
+        assert!(MatchSpec::from_str("foo[extras=bar,baz]]", Strict).is_err());
     }
 }
