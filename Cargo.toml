@@ -72,6 +72,16 @@ getrandom = { version = "0.2.15", default-features = false }
 glob = "0.3.2"
 google-cloud-auth = { version = "0.17.2", default-features = false }
 google-cloud-token = "0.1.2"
+aws-config = { version = "1.5.14", default-features = false, features = [
+    "rt-tokio",
+    "rustls",
+    "sso",
+] }
+aws-sdk-s3 = { version = "1.69.0", default-features = false, features = [
+    "rt-tokio",
+    "rustls",
+    "sigv4a",
+] }
 hex = "0.4.3"
 hex-literal = "0.4.1"
 http = "1.2"
@@ -142,7 +152,7 @@ sysinfo = "0.33.1"
 tar = "0.4.43"
 tempdir = "0.3.7"
 tempfile = "3.15.0"
-temp-env = "0.3.6"
+temp-env = { version = "0.3.6", features = ["async_closure"] }
 test-log = "0.2.16"
 thiserror = "2.0"
 tokio = { version = "1.42.0", default-features = false }

@@ -15,6 +15,7 @@ default = ["native-tls"]
 native-tls = ["reqwest/native-tls", "google-cloud-auth?/default-tls"]
 rustls-tls = ["reqwest/rustls-tls", "google-cloud-auth?/rustls-tls"]
 gcs = ["google-cloud-auth", "google-cloud-token"]
+s3 = ["aws-config", "aws-sdk-s3"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -25,9 +26,17 @@ chrono = { workspace = true }
 dirs = { workspace = true }
 google-cloud-auth = { workspace = true, optional = true }
 google-cloud-token = { workspace = true, optional = true }
+aws-config = { workspace = true, optional = true }
+aws-sdk-s3 = { workspace = true, optional = true }
 http = { workspace = true }
 itertools = { workspace = true }
-keyring = { workspace = true, features = ["apple-native", "windows-native", "async-secret-service", "async-io", "crypto-rust"] }
+keyring = { workspace = true, features = [
+    "apple-native",
+    "windows-native",
+    "async-secret-service",
+    "async-io",
+    "crypto-rust",
+] }
 netrc-rs = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = { workspace = true }
@@ -50,3 +59,5 @@ axum = { workspace = true }
 reqwest-retry = { workspace = true }
 sha2 = { workspace = true }
 temp-env = { workspace = true }
+rstest = { workspace = true }
+rand = { workspace = true }
