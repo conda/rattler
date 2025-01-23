@@ -278,7 +278,7 @@ pub struct NamelessMatchSpec {
     pub build_number: Option<BuildNumberSpec>,
     /// Match the specific filename of the package
     pub file_name: Option<String>,
-    /// The selected optional features of the package
+    /// Optional extra dependencies to select for the package
     pub extras: Option<Vec<String>>,
     /// The channel of the package
     #[serde(deserialize_with = "deserialize_channel", default)]
