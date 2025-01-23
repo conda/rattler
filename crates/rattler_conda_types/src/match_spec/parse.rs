@@ -227,7 +227,7 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
     }
 }
 
-#[cfg(feature = "extras")]
+#[cfg(feature = "experimental_extras")]
 /// Parses a list of optional dependencies from a string `feat1, feat2, feat3]` -> `vec![feat1, feat2, feat3]`.
 pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     use nom::{character::complete::alphanumeric1, combinator::map, multi::many1};
@@ -285,7 +285,7 @@ fn parse_bracket_vec_into_components(
             "build_number" => match_spec.build_number = Some(BuildNumberSpec::from_str(value)?),
             "extras" => {
                 // Optional features are still experimental
-                #[cfg(feature = "extras")]
+                #[cfg(feature = "experimental_extras")]
                 {
                     match_spec.extras = Some(parse_extras(value)?);
                 }
@@ -745,7 +745,7 @@ mod tests {
         NamelessMatchSpec, ParseChannelError, ParseStrictness, ParseStrictness::*, VersionSpec,
     };
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     use crate::match_spec::parse::parse_extras;
 
     fn channel_config() -> ChannelConfig {
@@ -1426,7 +1426,7 @@ mod tests {
         assert_eq!(specs, parsed_specs);
     }
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     #[test]
     fn test_simple_extras() {
         let spec = MatchSpec::from_str("foo[extras=[bar]]", Strict).unwrap();
@@ -1435,7 +1435,7 @@ mod tests {
         assert!(MatchSpec::from_str("foo[extras=[bar,baz]", Strict).is_err());
     }
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     #[test]
     fn test_multiple_extras() {
         let spec = MatchSpec::from_str("foo[extras=[bar,baz]]", Strict).unwrap();
@@ -1445,7 +1445,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     #[test]
     fn test_parse_extras() {
         assert_eq!(

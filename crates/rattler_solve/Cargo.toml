@@ -44,7 +44,7 @@ url = { workspace = true }
 default = ["resolvo"]
 libsolv_c = ["rattler_libsolv_c", "libc"]
 resolvo = ["dep:resolvo", "dep:futures"]
-extras = []
+experimental_extras = []
 
 [[bench]]
 name = "bench"

@@ -46,7 +46,7 @@ fn dummy_channel_json_path() -> String {
     )
 }
 
-#[cfg(feature = "extras")]
+#[cfg(feature = "experimental_extras")]
 fn dummy_channel_with_optional_dependencies_json_path() -> String {
     format!(
         "{}/{}",
@@ -724,7 +724,7 @@ mod resolvo {
         GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
     };
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     use super::dummy_channel_with_optional_dependencies_json_path;
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
@@ -971,7 +971,7 @@ mod resolvo {
 
         insta::assert_snapshot!(result.unwrap_err());
     }
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     /// Installs `foo` while enabling a single optional dependency `[with-latest-bors]`.
     /// This should pull in `bors >=2.0`.
     #[test]
@@ -1012,7 +1012,7 @@ mod resolvo {
         );
     }
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     /// Installs `cuda-version` with `[with-cudadev]` which depends on `"foo >=4.0.2", "bar >=1.2.3"`.
     #[test]
     fn test_solve_dummy_repo_optional_depends_cuda_dev_resolvo() {
@@ -1062,7 +1062,7 @@ mod resolvo {
         );
     }
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     /// Attempts to enable two optional features that conflict: `[with-oldbors,with-latest-bors]`.
     /// This should fail because one requests `bors <2.0` and the other requests `bors >=2.0`.  
     #[test]
@@ -1078,7 +1078,7 @@ mod resolvo {
         insta::assert_snapshot!(result.unwrap_err());
     }
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     /// Enables multiple optional dependencies in the same spec (like `[with-baz2,with-bar]`).
     /// This should pull in `baz >=2.0` and `bar >=1.2.3` if both can coexist.
     #[test]
@@ -1127,7 +1127,7 @@ mod resolvo {
         );
     }
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     /// Should install xfoo with the feature with-issue717 which requires `with-issue717[with-bors21]` hence pulling in bors 2.1 as well
     #[test]
     fn test_solve_dummy_repo_optional_depends_xfoo_optional_depends_with_features() {
@@ -1180,7 +1180,7 @@ mod resolvo {
         );
     }
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     /// Tests what happens when a feature depends on the base package but with another feature enabled
     #[test]
     fn test_solve_dummy_repo_optional_depends_recursive_feature() {
@@ -1196,7 +1196,7 @@ mod resolvo {
         insta::assert_snapshot!(result.unwrap_err());
     }
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     /// Tests that an optional dependency can restrict the highest version of a base dependency
     #[test]
     fn test_solve_dummy_repo_optional_depends_version_restriction() {
@@ -1223,7 +1223,7 @@ mod resolvo {
         );
     }
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     /// Tests what happens if a feature introduces a dependency on the base package itself
     #[test]
     fn test_solve_dummy_repo_optional_depends_self_dependency() {
@@ -1255,7 +1255,7 @@ mod resolvo {
         );
     }
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     /// Tests what happens if there are two packages for foo but only the package with the lower version has the package that is requested
     #[test]
     fn test_solve_dummy_repo_optional_depends_feature_only_in_older() {
@@ -1295,7 +1295,7 @@ mod resolvo {
         );
     }
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     /// Test what happens if a feature is requested that doesn't exist
     #[test]
     fn test_solve_dummy_repo_optional_depends_nonexistent_feature() {
@@ -1313,7 +1313,7 @@ mod resolvo {
         );
     }
 
-    #[cfg(feature = "extras")]
+    #[cfg(feature = "experimental_extras")]
     /// Test what happens when the only package that provides a certain feature cannot be selected due to a conflict
     #[test]
     fn test_solve_dummy_repo_optional_depends_feature_conflict() {

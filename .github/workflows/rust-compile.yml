@@ -146,7 +146,7 @@ jobs:
         run: >
           cargo nextest run
           --workspace 
-          --features ${{ env.DEFAULT_FEATURES }},extras
+          --features ${{ env.DEFAULT_FEATURES }},experimental_extras
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} 
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} 
