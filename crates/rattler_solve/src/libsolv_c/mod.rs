@@ -107,10 +107,10 @@ impl super::SolverImpl for Solver {
             ]));
         }
 
-        if task.specs.iter().any(| spec | spec.extras.is_some()) {
-            return Err(SolveError::UnsupportedOperations(vec![
-                "extras".to_string()
-            ]));
+        if task.specs.iter().any(|spec| spec.extras.is_some()) {
+            return Err(SolveError::UnsupportedOperations(
+                vec!["extras".to_string()],
+            ));
         }
 
         // Construct a default libsolv pool
