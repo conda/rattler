@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 266
 expression: prefix_record
 ---
 arch: x86_64
@@ -229,4 +228,3 @@ link:
   source: "C:\\Users\\bas\\micromamba\\pkgs\\menuinst-1.4.19-py311h1ea47a8_1"
   type: 1
 requested_spec: ""
-

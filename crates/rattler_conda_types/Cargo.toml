@@ -12,6 +12,7 @@ readme.workspace = true
 
 [features]
 default = ["rayon"]
+experimental_extras = []
 
 [dependencies]
 chrono = { workspace = true }

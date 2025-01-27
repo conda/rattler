@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use pyo3::prelude::PyAnyMethods;
@@ -164,6 +165,7 @@ impl PyRecord {
                 subdir,
                 constrains: Vec::new(),
                 depends: Vec::new(),
+                extra_depends: BTreeMap::new(),
                 features: None,
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,

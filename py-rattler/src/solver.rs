@@ -95,7 +95,12 @@ pub fn py_solve(
             Ok::<_, PyErr>(
                 Solver
                     .solve(task)
-                    .map(|res| res.into_iter().map(Into::into).collect::<Vec<PyRecord>>())
+                    .map(|res| {
+                        res.records
+                            .into_iter()
+                            .map(Into::into)
+                            .collect::<Vec<PyRecord>>()
+                    })
                     .map_err(PyRattlerError::from)?,
             )
         })
@@ -173,7 +178,12 @@ pub fn py_solve_with_sparse_repodata(
             Ok::<_, PyErr>(
                 Solver
                     .solve(task)
-                    .map(|res| res.into_iter().map(Into::into).collect::<Vec<PyRecord>>())
+                    .map(|res| {
+                        res.records
+                            .into_iter()
+                            .map(Into::into)
+                            .collect::<Vec<PyRecord>>()
+                    })
                     .map_err(PyRattlerError::from)?,
             )
         })

@@ -6,7 +6,7 @@ pub mod sharded;
 mod topological_sort;
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
     path::Path,
 };
@@ -113,6 +113,11 @@ pub struct PackageRecord {
     /// Specification of packages this package depends on
     #[serde(default)]
     pub depends: Vec<String>,
+
+    /// Specifications of optional or dependencies. These are dependencies that are
+    /// only required if certain features are enabled or if certain conditions are met.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extra_depends: BTreeMap<String, Vec<String>>,
 
     /// Features are a deprecated way to specify different feature sets for the
     /// conda solver. This is not supported anymore and should not be used.
@@ -323,6 +328,7 @@ impl PackageRecord {
             noarch: NoArchType::default(),
             platform: None,
             python_site_packages_path: None,
+            extra_depends: BTreeMap::new(),
             sha256: None,
             size: None,
             subdir: Platform::current().to_string(),
@@ -511,6 +517,7 @@ impl PackageRecord {
             noarch: index.noarch,
             platform: index.platform,
             python_site_packages_path: index.python_site_packages_path,
+            extra_depends: BTreeMap::new(),
             sha256,
             size,
             subdir,

@@ -2,6 +2,7 @@ use crate::{
     build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
     VersionSpec,
 };
+use itertools::Itertools;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
@@ -135,6 +136,8 @@ pub struct MatchSpec {
     pub build_number: Option<BuildNumberSpec>,
     /// Match the specific filename of the package
     pub file_name: Option<String>,
+    /// The selected optional features of the package
+    pub extras: Option<Vec<String>>,
     /// The channel of the package
     pub channel: Option<Arc<Channel>>,
     /// The subdir of the channel
@@ -183,6 +186,10 @@ impl Display for MatchSpec {
 
         let mut keys = Vec::new();
 
+        if let Some(extras) = &self.extras {
+            keys.push(format!("extras=[{}]", extras.iter().format(", ")));
+        }
+
         if let Some(md5) = &self.md5 {
             keys.push(format!("md5=\"{md5:x}\""));
         }
@@ -221,6 +228,7 @@ impl MatchSpec {
                 build: self.build,
                 build_number: self.build_number,
                 file_name: self.file_name,
+                extras: self.extras,
                 channel: self.channel,
                 subdir: self.subdir,
                 namespace: self.namespace,
@@ -265,6 +273,8 @@ pub struct NamelessMatchSpec {
     pub build_number: Option<BuildNumberSpec>,
     /// Match the specific filename of the package
     pub file_name: Option<String>,
+    /// Optional extra dependencies to select for the package
+    pub extras: Option<Vec<String>>,
     /// The channel of the package
     #[serde(deserialize_with = "deserialize_channel", default)]
     pub channel: Option<Arc<Channel>>,
@@ -318,6 +328,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             build: spec.build,
             build_number: spec.build_number,
             file_name: spec.file_name,
+            extras: spec.extras,
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
@@ -337,6 +348,7 @@ impl MatchSpec {
             build: spec.build,
             build_number: spec.build_number,
             file_name: spec.file_name,
+            extras: spec.extras,
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
