@@ -1,0 +1,16 @@
+[project]
+authors = ["nichmor <nmorkotilo@gmail.com>"]
+channels = ["conda-forge"]
+description = "Add a short description here"
+name = "benches"
+platforms = ["osx-arm64"]
+version = "0.1.0"
+
+[tasks]
+run-server = "uvicorn webserver:app --host 0.0.0.0 --port 8008"
+
+[dependencies]
+fastapi = ">=0.115.6,<0.116"
+requests = ">=2.32.3,<3"
+python = ">=3.13.1,<3.14"
+uvicorn = ">=0.34.0,<0.35"
