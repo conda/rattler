@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.10...rattler_conda_types-v0.30.0) - 2025-01-23
+
+### Added
+
+- add linux-ppc (PPC32 BE) platform to rattler (#1024)
+
 ## [0.29.10](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.9...rattler_conda_types-v0.29.10) - 2025-01-09
 
 ### Added
