@@ -1,0 +1,16 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+expression: result.unwrap_err()
+---
+Cannot solve the request because of: The following packages are incompatible
+├─ foo[with-oldbors] * cannot be installed because there are no viable options:
+│  └─ foo[with-oldbors] 2.0.2 would require
+│     └─ bors <2.0, which cannot be installed because there are no viable options:
+│        ├─ bors 1.2.1, which conflicts with the versions reported above.
+│        ├─ bors 1.1, which conflicts with the versions reported above.
+│        └─ bors 1.0, which conflicts with the versions reported above.
+└─ foo[with-latest-bors] * cannot be installed because there are no viable options:
+   └─ foo[with-latest-bors] 2.0.2 would require
+      └─ bors >=2.0, which cannot be installed because there are no viable options:
+         ├─ bors 2.1, which conflicts with the versions reported above.
+         └─ bors 2.0, which conflicts with the versions reported above.

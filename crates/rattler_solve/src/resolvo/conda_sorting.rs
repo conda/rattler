@@ -10,7 +10,7 @@ use resolvo::{
     utils::Pool, Dependencies, NameId, Requirement, SolvableId, SolverCache, VersionSetId,
 };
 
-use super::{SolverMatchSpec, SolverPackageRecord};
+use super::{NameType, SolverMatchSpec, SolverPackageRecord};
 use crate::resolvo::CondaDependencyProvider;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -52,7 +52,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
     }
 
     /// Referece to the pool
-    fn pool(&self) -> &Pool<SolverMatchSpec<'repo>> {
+    fn pool(&self) -> &Pool<SolverMatchSpec<'repo>, NameType> {
         &self.solver.provider().pool
     }
 

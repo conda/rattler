@@ -1,0 +1,26 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+expression: result.unwrap_err()
+---
+Cannot solve the request because of: The following packages are incompatible
+├─ foo[with-bar] * cannot be installed because there are no viable options:
+│  ├─ foo[with-bar] 3.5.0 would require
+│  │  └─ foo ==3.5.0 py36h1af98f8_1[md5=fb731d9290f0bcbf3a054665f33ec94f, sha256=67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4], which cannot be installed because there are no viable options:
+│  │     └─ foo 3.5.0, which conflicts with the versions reported above.
+│  ├─ foo[with-bar] 3.4.0 would require
+│  │  └─ foo ==3.4.0 py36h1af98f8_1[md5=fb731d9290f0bcbf3a054665f33ec94f, sha256=67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4], which cannot be installed because there are no viable options:
+│  │     └─ foo 3.4.0, which conflicts with the versions reported above.
+│  ├─ foo[with-bar] 3.3.0 would require
+│  │  └─ foo ==3.3.0 py36h1af98f8_1[md5=fb731d9290f0bcbf3a054665f33ec94f, sha256=67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4], which cannot be installed because there are no viable options:
+│  │     └─ foo 3.3.0, which conflicts with the versions reported above.
+│  ├─ foo[with-bar] 3.2.0 would require
+│  │  └─ foo ==3.2.0 py36h1af98f8_1[md5=fb731d9290f0bcbf3a054665f33ec94f, sha256=67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4], which cannot be installed because there are no viable options:
+│  │     └─ foo 3.2.0, which conflicts with the versions reported above.
+│  ├─ foo[with-bar] 3.1.0 would require
+│  │  └─ foo ==3.1.0 py36h1af98f8_1[md5=fb731d9290f0bcbf3a054665f33ec94f, sha256=67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4], which cannot be installed because there are no viable options:
+│  │     └─ foo 3.1.0, which conflicts with the versions reported above.
+│  └─ foo[with-bar] 3.0.2 would require
+│     └─ foo ==3.0.2 py36h1af98f8_1[md5=fb731d9290f0bcbf3a054665f33ec94f, sha256=67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4], which cannot be installed because there are no viable options:
+│        └─ foo 3.0.2, which conflicts with the versions reported above.
+└─ foo >=4.0 cannot be installed because there are no viable options:
+   └─ foo 4.0.2, which conflicts with the versions reported above.

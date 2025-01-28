@@ -1,6 +1,8 @@
 //! Defines the `[RepoDataRecord]` struct.
 
-use crate::PackageRecord;
+use std::{collections::HashMap, vec::Vec};
+
+use crate::{PackageName, PackageRecord};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -30,4 +32,13 @@ impl AsRef<PackageRecord> for RepoDataRecord {
     fn as_ref(&self) -> &PackageRecord {
         &self.package_record
     }
+}
+
+/// Struct for the solver result containing records and their features
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+pub struct SolverResult {
+    /// The records that are part of the solution to the solver task.
+    pub records: Vec<RepoDataRecord>,
+    /// The features of the records that are part of the solution to the solver task.
+    pub features: HashMap<PackageName, Vec<String>>,
 }
