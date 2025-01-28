@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, List, Literal
+from typing import Optional, List
 from dataclasses import dataclass
 
 from rattler.rattler import PyGateway, PySourceConfig, PyMatchSpec
 
 from rattler.channel import Channel
 from rattler.match_spec import MatchSpec
-from rattler.networking import Client
+from rattler.networking import Client, CacheAction
 from rattler.repo_data.record import RepoDataRecord
 from rattler.platform import Platform, PlatformLiteral
 from rattler.package.package_name import PackageName
-
-CacheAction = Literal["cache-or-fetch", "use-cache-only", "force-cache-only", "no-cache"]
 
 
 @dataclass

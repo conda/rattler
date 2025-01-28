@@ -55,6 +55,7 @@ async def test_fetch_repo_data(
         platforms=[plat],
         cache_path=cache_dir,
         callback=None,
+        fetch_options=None,
     )
     assert isinstance(result, list)
 
