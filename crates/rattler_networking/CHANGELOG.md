@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0](https://github.com/conda/rattler/compare/rattler_networking-v0.21.10...rattler_networking-v0.22.0) - 2025-01-23
+
+### Other
+
+- Improve AuthenticationStorage (#1026)
+
 ## [0.21.10](https://github.com/conda/rattler/compare/rattler_networking-v0.21.9...rattler_networking-v0.21.10) - 2025-01-08
 
 ### Other

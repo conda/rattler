@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.33](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.32...rattler_repodata_gateway-v0.21.33) - 2025-01-23
+
+### Other
+
+- Improve AuthenticationStorage (#1026)
+
 ## [0.21.32](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.31...rattler_repodata_gateway-v0.21.32) - 2025-01-09
 
 ### Other
