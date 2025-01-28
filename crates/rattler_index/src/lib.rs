@@ -14,7 +14,17 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
 };
-use tempfile::NamedTempFile;
+
+use fs_err::File;
+use opendal::{
+    raw::{oio::List, Access, OpList},
+    Builder, Configurator,
+};
+use rattler_conda_types::{
+    package::{ArchiveType, IndexJson, PackageFile},
+    ChannelInfo, PackageRecord, Platform, RepoData,
+};
+use rattler_package_streaming::{read, seek};
 use walkdir::WalkDir;
 
 /// Extract the package record from an `index.json` file.
@@ -100,112 +110,129 @@ pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> 
 /// Create a new `repodata.json` for all packages in the given output folder. If
 /// `target_platform` is `Some`, only that specific subdir is indexed. Otherwise
 /// indexes all subdirs and creates a `repodata.json` for each.
-pub fn index(output_folder: &Path, target_platform: Option<&Platform>) -> std::io::Result<()> {
-    let entries = WalkDir::new(output_folder).into_iter();
-    let entries: Vec<(PathBuf, ArchiveType)> = entries
-        .filter_entry(|e| e.depth() <= 2)
-        .filter_map(Result::ok)
-        .filter_map(|e| {
-            ArchiveType::split_str(e.path().to_string_lossy().as_ref())
-                .map(|(p, t)| (PathBuf::from(format!("{}{}", p, t.extension())), t))
-        })
-        .collect();
+pub async fn index<T: Configurator>(
+    channel_dir: &String,
+    target_platform: Option<&Platform>,
+    config: T,
+) -> Result<(), std::io::Error> {
+    let mut builder = config.into_builder();
 
-    // find all subdirs
-    let mut platforms = entries
-        .iter()
-        .filter_map(|(p, _)| {
-            p.parent().and_then(Path::file_name).and_then(|file_name| {
-                let name = file_name.to_string_lossy().to_string();
-                if name == "src_cache" {
-                    None
-                } else {
-                    Some(name)
-                }
-            })
-        })
-        .collect::<std::collections::HashSet<_>>();
+    // Iterate over all entries in the output folder.
+    let access = builder.build()?;
+    let op_list = OpList::new().with_concurrent(1);
+    let result = access.list(channel_dir, op_list).await?;
+    let rp_list = result.0;
+    let mut lister = result.1;
+    let mut entries = Vec::new();
 
-    // Always create noarch subdir
-    if !output_folder.join("noarch").exists() {
-        fs::create_dir(output_folder.join("noarch"))?;
+    while let Ok(entry) = lister.next().await {
+        entries.push(entry);
     }
 
-    // Make sure that we index noarch if it is not already indexed
-    if !output_folder.join("noarch/repodata.json").exists() {
-        platforms.insert("noarch".to_string());
-    }
+    panic!("List of contents: {:?}", entries);
 
-    // Create target platform dir if needed
-    if let Some(target_platform) = target_platform {
-        let platform_str = target_platform.to_string();
-        if !output_folder.join(&platform_str).exists() {
-            fs::create_dir(output_folder.join(&platform_str))?;
-            platforms.insert(platform_str);
-        }
-    }
+    // let entries = WalkDir::new(channel_dir).into_iter();
+    // let entries: Vec<(PathBuf, ArchiveType)> = entries
+    //     .filter_entry(|e| e.depth() <= 2)
+    //     .filter_map(Result::ok)
+    //     .filter_map(|e| {
+    //         ArchiveType::split_str(e.path().to_string_lossy().as_ref())
+    //             .map(|(p, t)| (PathBuf::from(format!("{}{}", p, t.extension())), t))
+    //     })
+    //     .collect();
 
-    for platform in platforms {
-        if let Some(target_platform) = target_platform {
-            if platform != target_platform.to_string() {
-                if platform == "noarch" {
-                    // check that noarch is already indexed if it is not the target platform
-                    if output_folder.join("noarch/repodata.json").exists() {
-                        continue;
-                    }
-                } else {
-                    continue;
-                }
-            }
-        }
+    // // find all subdirs
+    // let mut platforms = entries
+    //     .iter()
+    //     .filter_map(|(p, _)| {
+    //         p.parent().and_then(Path::file_name).and_then(|file_name| {
+    //             let name = file_name.to_string_lossy().to_string();
+    //             if name == "src_cache" {
+    //                 None
+    //             } else {
+    //                 Some(name)
+    //             }
+    //         })
+    //     })
+    //     .collect::<std::collections::HashSet<_>>();
 
-        let mut repodata = RepoData {
-            info: Some(ChannelInfo {
-                subdir: platform.clone(),
-                base_url: None,
-            }),
-            packages: HashMap::default(),
-            conda_packages: HashMap::default(),
-            removed: HashSet::default(),
-            version: Some(2),
-        };
+    // // Always create noarch subdir
+    // if !channel_dir.join("noarch").exists() {
+    //     std::fs::create_dir(channel_dir.join("noarch"))?;
+    // }
 
-        for (p, t) in entries.iter().filter_map(|(p, t)| {
-            p.parent().and_then(|parent| {
-                parent.file_name().and_then(|file_name| {
-                    if file_name == OsStr::new(&platform) {
-                        // If the file_name is the platform we're looking for, return Some((p, t))
-                        Some((p, t))
-                    } else {
-                        // Otherwise, we return None to filter out this item
-                        None
-                    }
-                })
-            })
-        }) {
-            let record = match t {
-                ArchiveType::TarBz2 => package_record_from_tar_bz2(p),
-                ArchiveType::Conda => package_record_from_conda(p),
-            };
-            let (Ok(record), Some(file_name)) = (record, p.file_name()) else {
-                tracing::info!("Could not read package record from {:?}", p);
-                continue;
-            };
-            match t {
-                ArchiveType::TarBz2 => repodata
-                    .packages
-                    .insert(file_name.to_string_lossy().to_string(), record),
-                ArchiveType::Conda => repodata
-                    .conda_packages
-                    .insert(file_name.to_string_lossy().to_string(), record),
-            };
-        }
+    // // Make sure that we index noarch if it is not already indexed
+    // if !channel_dir.join("noarch/repodata.json").exists() {
+    //     platforms.insert("noarch".to_string());
+    // }
 
-        let mut out_file =
-            NamedTempFile::with_prefix_in("repodata-", output_folder.join(&platform))?;
-        out_file.write_all(serde_json::to_string_pretty(&repodata)?.as_bytes())?;
-        out_file.persist(output_folder.join(&platform).join("repodata.json"))?;
-    }
+    // // Create target platform dir if needed
+    // if let Some(target_platform) = target_platform {
+    //     let platform_str = target_platform.to_string();
+    //     if !channel_dir.join(&platform_str).exists() {
+    //         std::fs::create_dir(channel_dir.join(&platform_str))?;
+    //         platforms.insert(platform_str);
+    //     }
+    // }
+
+    // for platform in platforms {
+    //     if let Some(target_platform) = target_platform {
+    //         if platform != target_platform.to_string() {
+    //             if platform == "noarch" {
+    //                 // check that noarch is already indexed if it is not the target platform
+    //                 if channel_dir.join("noarch/repodata.json").exists() {
+    //                     continue;
+    //                 }
+    //             } else {
+    //                 continue;
+    //             }
+    //         }
+    //     }
+
+    //     let mut repodata = RepoData {
+    //         info: Some(ChannelInfo {
+    //             subdir: platform.clone(),
+    //             base_url: None,
+    //         }),
+    //         packages: HashMap::default(),
+    //         conda_packages: HashMap::default(),
+    //         removed: HashSet::default(),
+    //         version: Some(2),
+    //     };
+
+    //     for (p, t) in entries.iter().filter_map(|(p, t)| {
+    //         p.parent().and_then(|parent| {
+    //             parent.file_name().and_then(|file_name| {
+    //                 if file_name == OsStr::new(&platform) {
+    //                     // If the file_name is the platform we're looking for, return Some((p, t))
+    //                     Some((p, t))
+    //                 } else {
+    //                     // Otherwise, we return None to filter out this item
+    //                     None
+    //                 }
+    //             })
+    //         })
+    //     }) {
+    //         let record = match t {
+    //             ArchiveType::TarBz2 => package_record_from_tar_bz2(p),
+    //             ArchiveType::Conda => package_record_from_conda(p),
+    //         };
+    //         let (Ok(record), Some(file_name)) = (record, p.file_name()) else {
+    //             tracing::info!("Could not read package record from {:?}", p);
+    //             continue;
+    //         };
+    //         match t {
+    //             ArchiveType::TarBz2 => repodata
+    //                 .packages
+    //                 .insert(file_name.to_string_lossy().to_string(), record),
+    //             ArchiveType::Conda => repodata
+    //                 .conda_packages
+    //                 .insert(file_name.to_string_lossy().to_string(), record),
+    //         };
+    //     }
+    //     let out_file = channel_dir.join(platform).join("repodata.json");
+    //     File::create(&out_file)?.write_all(serde_json::to_string_pretty(&repodata)?.as_bytes())?;
+    // }
 
     Ok(())
 }

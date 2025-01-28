@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use opendal::services::FsConfig;
 use rattler_conda_types::Platform;
 use rattler_index::index;
 use serde_json::Value;
@@ -12,8 +13,8 @@ fn test_data_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
 }
 
-#[test]
-fn test_index() {
+#[tokio::test]
+async fn test_index() {
     let temp_dir = tempfile::tempdir().unwrap();
     let subdir_path = Path::new("win-64");
     let conda_file_path = tools::download_and_cache_file(
@@ -50,7 +51,11 @@ fn test_index() {
     )
     .unwrap();
 
-    let res = index(temp_dir.path(), Some(&Platform::Win64));
+    let channel = &temp_dir.path().to_string_lossy().to_string();
+    let mut fs_config = FsConfig::default();
+    fs_config.root = Some(channel.clone());
+
+    let res = index(channel, Some(&Platform::Win64), fs_config).await;
     assert!(res.is_ok());
 
     let repodata_path = temp_dir.path().join(subdir_path).join("repodata.json");
@@ -84,10 +89,13 @@ fn test_index() {
     );
 }
 
-#[test]
-fn test_index_empty_directory() {
+#[tokio::test]
+async fn test_index_empty_directory() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let res = index(temp_dir.path(), None);
+    let channel = &temp_dir.path().to_string_lossy().to_string();
+    let mut fs_config = FsConfig::default();
+    fs_config.root = Some(channel.clone());
+    let res = index(channel, None, fs_config).await;
     assert!(res.is_ok());
     assert_eq!(fs::read_dir(temp_dir).unwrap().count(), 0);
 }
