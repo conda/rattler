@@ -8,7 +8,7 @@ use crate::{PyChannel, Wrap};
 use pyo3::exceptions::PyValueError;
 use pyo3::{pyclass, pymethods, Bound, FromPyObject, PyAny, PyResult, Python};
 use pyo3_async_runtimes::tokio::future_into_py;
-use rattler_repodata_gateway::fetch::CacheAction;
+use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
 use rattler_repodata_gateway::{ChannelConfig, Gateway, SourceConfig, SubdirSelection};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -199,6 +199,65 @@ impl PySourceConfig {
                 bz2_enabled,
                 sharded_enabled,
                 cache_action: cache_action.0,
+            },
+        }
+    }
+}
+
+#[pyclass]
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct PyFetchRepoDataOptions {
+    pub(crate) inner: FetchRepoDataOptions,
+}
+
+impl From<PyFetchRepoDataOptions> for FetchRepoDataOptions {
+    fn from(value: PyFetchRepoDataOptions) -> Self {
+        value.inner
+    }
+}
+
+impl From<FetchRepoDataOptions> for PyFetchRepoDataOptions {
+    fn from(value: FetchRepoDataOptions) -> Self {
+        Self { inner: value }
+    }
+}
+
+impl<'py> FromPyObject<'py> for Wrap<Variant> {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        let parsed = match <&'py str>::extract_bound(ob)? {
+            "after-patches" => Variant::AfterPatches,
+            "from-packages" => Variant::FromPackages,
+            "current" => Variant::Current,
+            v => {
+                return Err(PyValueError::new_err(format!(
+                "variant must be one of {{'after-patches', 'from-packages', 'current'}}, got {v}",
+            )))
+            }
+        };
+        Ok(Wrap(parsed))
+    }
+}
+
+#[pymethods]
+impl PyFetchRepoDataOptions {
+    #[new]
+    #[allow(clippy::fn_params_excessive_bools)]
+    pub fn new(
+        cache_action: Wrap<CacheAction>,
+        variant: Wrap<Variant>,
+        jlap_enabled: bool,
+        zstd_enabled: bool,
+        bz2_enabled: bool,
+    ) -> Self {
+        Self {
+            inner: FetchRepoDataOptions {
+                cache_action: cache_action.0,
+                variant: variant.0,
+                jlap_enabled,
+                zstd_enabled,
+                bz2_enabled,
+                retry_policy: None,
             },
         }
     }
