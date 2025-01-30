@@ -40,10 +40,7 @@ fn aws_config(
     r2_host: String,
     r2_credentials: Option<(String, String)>,
 ) -> Option<(TempDir, std::path::PathBuf)> {
-    if r2_credentials.is_none() {
-        return None;
-    }
-    let r2_credentials = r2_credentials.clone().unwrap();
+    let r2_credentials = r2_credentials?;
     let temp_dir = tempdir().unwrap();
     let aws_config = format!(
         r#"
