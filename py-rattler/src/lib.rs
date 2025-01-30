@@ -64,7 +64,7 @@ use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
 use pyo3::prelude::*;
 use record::PyRecord;
 use repo_data::{
-    gateway::{PyGateway, PySourceConfig},
+    gateway::{PyFetchRepoDataOptions, PyGateway, PySourceConfig},
     patch_instructions::PyPatchInstructions,
     sparse::PySparseRepoData,
     PyRepoData,
@@ -123,6 +123,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyPatchInstructions>()?;
     m.add_class::<PyGateway>()?;
     m.add_class::<PySourceConfig>()?;
+    m.add_class::<PyFetchRepoDataOptions>()?;
 
     m.add_class::<PyRecord>()?;
 

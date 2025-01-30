@@ -5,13 +5,16 @@ from rattler.networking.middleware import (
     GCSMiddleware,
     MirrorMiddleware,
     S3Middleware,
+    CacheAction,
 )
 
 __all__ = [
     "fetch_repo_data",
+    "CacheAction",
+    "FetchRepoDataOptions",
     "Client",
     "MirrorMiddleware",
     "AuthenticationMiddleware",
-    "GCSMiddleware",
     "S3Middleware",
+    "GCSMiddleware",
 ]
