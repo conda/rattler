@@ -39,7 +39,7 @@ impl PyClientWithMiddleware {
                 }
                 PyMiddleware::S3(middleware) => {
                     client = client.with(S3Middleware::new(
-                        middleware.s3_config.into(),
+                        middleware.s3_config.iter().map(|(k, v)| (k.clone(), v.clone().into())).collect(),
                         AuthenticationStorage::from_env_and_defaults()
                             .map_err(PyRattlerError::from)?,
                     ));

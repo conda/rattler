@@ -138,33 +138,19 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - name: Set up pixi
-        if: ${{ !matrix.skip-tests }}
-        uses: prefix-dev/setup-pixi@v0.8.1
-        with:
-          run-install: false
-          # on windows, the minio server doesn't get shutdown properly so there is still a lock on this file
-          post-cleanup: false
-
-      - name: Install minio for integration tests
-        if: ${{ !matrix.skip-tests }}
-        run: |
-          pixi global install minio-client
-          pixi global install minio-server
-
       - name: Run tests
         if: ${{ !matrix.skip-tests }}
         env:
           GOOGLE_CLOUD_TEST_KEY_JSON: ${{ secrets.GOOGLE_CLOUD_TEST_KEY_JSON }}
           RATTLER_TEST_R2_ACCESS_KEY_ID: ${{ secrets.RATTLER_TEST_R2_ACCESS_KEY_ID }}
           RATTLER_TEST_R2_SECRET_ACCESS_KEY: ${{ secrets.RATTLER_TEST_R2_SECRET_ACCESS_KEY }}
-        run: |
-          minio server --help
-          mkdir -p ${{ runner.temp }}/minio-data
-          minio server --address 127.0.0.1:9000 ${{ runner.temp }}/minio-data &
-          sleep 5
-          curl -I http://localhost:9000/minio/health/live
-          cargo nextest run --workspace --features ${{ env.DEFAULT_FEATURES }},experimental_extras --target ${{ matrix.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} 
+        run: >
+          cargo nextest run
+          --workspace
+          --features ${{ env.DEFAULT_FEATURES }},experimental_extras
+          --target ${{ matrix.target }}
+          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}
+          ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} 
 
       - name: Run doctests
         if: ${{ !matrix.skip-tests }}

@@ -164,13 +164,13 @@ impl From<PyS3Config> for S3Config {
 #[pyclass]
 #[derive(Clone)]
 pub struct PyS3Middleware {
-    pub(crate) s3_config: PyS3Config,
+    pub(crate) s3_config: HashMap<String, PyS3Config>,
 }
 
 #[pymethods]
 impl PyS3Middleware {
     #[new]
-    pub fn __init__(s3_config: PyS3Config) -> PyResult<Self> {
+    pub fn __init__(s3_config: HashMap<String, PyS3Config>) -> PyResult<Self> {
         Ok(Self { s3_config })
     }
 }

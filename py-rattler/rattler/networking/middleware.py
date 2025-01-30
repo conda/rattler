@@ -137,7 +137,7 @@ class S3Config:
     >>> config = S3Config("http://localhost:9000", "eu-central-1", True)
     >>> config
     S3Config(http://localhost:9000, eu-central-1, True)
-    >>> middleware = S3Middleware(config)
+    >>> middleware = S3Middleware({"my-bucket": config})
     >>> middleware
     S3Middleware()
     >>> S3Config()
@@ -182,10 +182,10 @@ class S3Middleware:
     ```
     """
 
-    def __init__(self, config: S3Config | None = None) -> None:
+    def __init__(self, config: dict[str, S3Config] | None = None) -> None:
         if config is None:
-            config = S3Config()
-        self._middleware = PyS3Middleware(config._config)
+            config = dict()
+        self._middleware = PyS3Middleware(config)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"
