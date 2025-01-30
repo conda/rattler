@@ -185,7 +185,7 @@ class S3Middleware:
     def __init__(self, config: dict[str, S3Config] | None = None) -> None:
         if config is None:
             config = dict()
-        self._middleware = PyS3Middleware(config)
+        self._middleware = PyS3Middleware({k: v._config for k, v in config.items()})
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"
