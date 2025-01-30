@@ -149,8 +149,8 @@ jobs:
           --workspace
           --features ${{ env.DEFAULT_FEATURES }},experimental_extras
           --target ${{ matrix.target }}
-          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}
-          ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} 
+          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
+          ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}
 
       - name: Run doctests
         if: ${{ !matrix.skip-tests }}
