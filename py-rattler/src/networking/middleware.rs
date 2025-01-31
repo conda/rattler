@@ -135,8 +135,7 @@ impl PyS3Config {
         match (endpoint_url, region, force_path_style) {
             (Some(endpoint_url), Some(region), Some(force_path_style)) => Ok(Self {
                 custom: Some(PyS3ConfigCustom {
-                    endpoint_url: Url::parse(&endpoint_url)
-                        .map_err(PyRattlerError::from)?,
+                    endpoint_url: Url::parse(&endpoint_url).map_err(PyRattlerError::from)?,
                     region,
                     force_path_style,
                 }),
