@@ -124,42 +124,6 @@ async fn test_r2_download_repodata(r2_host: String, r2_credentials: Option<(Stri
     );
 }
 
-#[ignore]
-#[rstest]
-#[tokio::test]
-async fn test_r2_download_repodata_public(r2_host: String) {
-    let auth_storage = AuthenticationStorage::empty();
-    let middleware = S3Middleware::new(
-        HashMap::from([(
-            "rattler-s3-testing-public".into(),
-            S3Config::Custom {
-                endpoint_url: Url::parse(&r2_host).unwrap(),
-                region: "auto".into(),
-                force_path_style: true,
-            },
-        )]),
-        auth_storage.clone(),
-    );
-
-    let download_client = Client::builder().no_gzip().build().unwrap();
-    let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
-            auth_storage,
-        )))
-        .with(middleware)
-        .build();
-
-    let result = download_client
-        .get("s3://rattler-s3-testing-public/channel/noarch/repodata.json")
-        .send()
-        .await
-        .unwrap();
-
-    assert_eq!(result.status(), 200);
-    let body = result.text().await.unwrap();
-    assert!(body.contains("test-package-0.1-0.tar.bz2"));
-}
-
 #[rstest]
 #[tokio::test]
 async fn test_r2_download_repodata_aws_profile(aws_config: Option<(TempDir, std::path::PathBuf)>) {
@@ -185,46 +149,6 @@ async fn test_r2_download_repodata_aws_profile(aws_config: Option<(TempDir, std:
         async {
             download_client
                 .get("s3://rattler-s3-testing/channel/noarch/repodata.json")
-                .send()
-                .await
-                .unwrap()
-        },
-    )
-    .await;
-    assert_eq!(result.status(), 200);
-    let body = result.text().await.unwrap();
-    assert!(
-        body.contains("my-webserver-0.1.0-pyh4616a5c_0.conda"),
-        "body does not contain package: {}",
-        body
-    );
-}
-
-#[ignore]
-#[rstest]
-#[tokio::test]
-async fn test_r2_download_aws_profile_public(aws_config: Option<(TempDir, std::path::PathBuf)>) {
-    if aws_config.is_none() {
-        return;
-    }
-    let aws_config = aws_config.unwrap();
-    let middleware = S3Middleware::new(HashMap::new(), AuthenticationStorage::empty());
-
-    let download_client = Client::builder().no_gzip().build().unwrap();
-    let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(
-            AuthenticationMiddleware::from_env_and_defaults().unwrap(),
-        ))
-        .with(middleware)
-        .build();
-    let result = async_with_vars(
-        [
-            ("AWS_CONFIG_FILE", Some(aws_config.1.to_str().unwrap())),
-            ("AWS_PROFILE", Some("public")),
-        ],
-        async {
-            download_client
-                .get("s3://rattler-s3-testing-public/channel/noarch/repodata.json")
                 .send()
                 .await
                 .unwrap()

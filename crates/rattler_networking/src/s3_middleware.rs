@@ -109,33 +109,13 @@ impl S3 {
                     return Err(anyhow::anyhow!("unsupported authentication method"));
                 }
                 (_, None) => {
-                    tracing::info!("No authentication found, assuming bucket is public");
-                    let sdk_config = aws_config::defaults(BehaviorVersion::latest())
-                        .no_credentials() // Turn off request signing
-                        .load()
-                        .await;
-                    aws_sdk_s3::config::Builder::from(&sdk_config)
-                        .endpoint_url(endpoint_url)
-                        .region(aws_sdk_s3::config::Region::new(region))
-                        .force_path_style(force_path_style)
+                    return Err(anyhow::anyhow!("no S3 authentication found"));
                 }
             };
             let s3_config = config_builder.build();
             Ok(aws_sdk_s3::Client::from_conf(s3_config))
         } else {
-            let mut sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
-            if let Some(credentials_provider) = sdk_config.credentials_provider() {
-                let creds = credentials_provider.as_ref().provide_credentials().await;
-                if creds.is_ok() {
-                    tracing::info!("Using AWS credentials from environment via default provider");
-                } else {
-                    tracing::warn!("No AWS credentials found, assuming bucket is public");
-                    sdk_config = aws_config::defaults(BehaviorVersion::latest())
-                        .no_credentials()
-                        .load()
-                        .await;
-                }
-            }
+            let sdk_config = aws_config::defaults(BehaviorVersion::latest()).load().await;
             let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
             // Infer if we expect path-style addressing from the endpoint URL.
             if let Some(endpoint_url) = sdk_config.endpoint_url() {
@@ -379,7 +359,7 @@ region = eu-central-1
     }
 
     #[tokio::test]
-    async fn test_presigned_s3_request_public_bucket() {
+    async fn test_presigned_s3_request_no_credentials() {
         let s3 = S3::new(
             HashMap::from([(
                 "rattler-s3-testing".into(),
@@ -389,19 +369,20 @@ region = eu-central-1
                     force_path_style: true,
                 },
             )]),
-            AuthenticationStorage::empty(), // empty auth storage
+            AuthenticationStorage::empty(),
         );
 
-        let presigned = s3
+        let result = s3
             .generate_presigned_s3_url(
                 Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
             )
-            .await
-            .unwrap();
+            .await;
+        assert!(result.is_err());
+        let err_message = result.err().unwrap().to_string();
         assert!(
-            presigned.to_string()
-                == "http://localhost:9000/rattler-s3-testing/channel/noarch/repodata.json?x-id=GetObject",
-            "Unexpected presigned URL: {presigned:?}"
+            err_message.contains("no S3 authentication found"),
+            "{}",
+            err_message
         );
     }
 
@@ -411,24 +392,20 @@ region = eu-central-1
         aws_config: (TempDir, std::path::PathBuf),
     ) {
         let s3 = S3::new(HashMap::new(), AuthenticationStorage::empty());
-        let presigned = async_with_vars(
+        async_with_vars(
             [
                 ("AWS_CONFIG_FILE", Some(aws_config.1.to_str().unwrap())),
                 ("AWS_PROFILE", Some("public")),
             ],
             async {
-                s3.generate_presigned_s3_url(
-                    Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
-                )
-                .await
-                .unwrap()
+                let result = s3
+                    .generate_presigned_s3_url(
+                        Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                    )
+                    .await;
+                assert!(result.is_err());
             },
         )
         .await;
-        assert!(
-        presigned.to_string()
-            == "http://localhost:9000/rattler-s3-testing/channel/noarch/repodata.json?x-id=GetObject",
-        "Unexpected presigned URL: {presigned:?}"
-        );
     }
 }
