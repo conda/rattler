@@ -161,7 +161,10 @@ impl S3 {
         let bucket_name = url
             .host_str()
             .ok_or_else(|| anyhow::anyhow!("host should be present in S3 URL"))?;
-        let key = url.path().strip_prefix("/").ok_or_else(|| anyhow::anyhow!("invalid s3 url: {}", url))?;
+        let key = url
+            .path()
+            .strip_prefix("/")
+            .ok_or_else(|| anyhow::anyhow!("invalid s3 url: {}", url))?;
 
         let builder = client.get_object().bucket(bucket_name).key(key);
 
