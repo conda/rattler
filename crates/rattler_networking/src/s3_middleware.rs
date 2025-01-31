@@ -82,7 +82,7 @@ impl S3 {
             .unwrap_or(&S3Config::FromAWS)
             .clone()
         {
-            let auth = self.auth_storage.get_by_url(url).unwrap(); // todo
+            let auth = self.auth_storage.get_by_url(url)?;
             let config_builder = match auth {
                 (
                     _,
@@ -161,7 +161,7 @@ impl S3 {
         let bucket_name = url
             .host_str()
             .ok_or_else(|| anyhow::anyhow!("host should be present in S3 URL"))?;
-        let key = url.path().strip_prefix("/").unwrap();
+        let key = url.path().strip_prefix("/").ok_or_else(|| anyhow::anyhow!("invalid s3 url: {}", url))?;
 
         let builder = client.get_object().bucket(bucket_name).key(key);
 
@@ -191,7 +191,6 @@ impl Middleware for S3Middleware {
         if req.url().scheme() == "s3" {
             let url = req.url().clone();
             let presigned_url = self.s3.generate_presigned_s3_url(url).await?;
-            // panic!("{}", presigned_url);
             *req.url_mut() = presigned_url.clone();
         }
         next.run(req, extensions).await
