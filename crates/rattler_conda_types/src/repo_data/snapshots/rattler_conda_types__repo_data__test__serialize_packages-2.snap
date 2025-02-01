@@ -290,8 +290,8 @@ expression: json
       "size": 414494,
       "subdir": "linux-64",
       "timestamp": 1715610974,
-      "track_features": "foo,bar",
-      "version": "1"
+      "track_features": "foo bar",
+      "version": "2"
     },
     "track-features-3-xxx.tar.bz2": {
       "build": "xxx",
@@ -305,8 +305,23 @@ expression: json
       "size": 414494,
       "subdir": "linux-64",
       "timestamp": 1715610974,
-      "track_features": "foo,bar",
-      "version": "1"
+      "track_features": "foo bar",
+      "version": "3"
+    },
+    "track-features-4-xxx.tar.bz2": {
+      "build": "xxx",
+      "build_number": 0,
+      "depends": [],
+      "license": "MIT",
+      "license_family": "MIT",
+      "md5": "bc13aa58e2092bcb0b97c561373d3905",
+      "name": "track-features",
+      "sha256": "97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a",
+      "size": 414494,
+      "subdir": "linux-64",
+      "timestamp": 1715610974,
+      "track_features": "foo bar",
+      "version": "4"
     },
     "xbar-1-xxx.tar.bz2": {
       "build": "xxx",
