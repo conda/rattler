@@ -13,6 +13,7 @@ mod no_softlink;
 mod package_metadata;
 mod paths;
 mod run_exports;
+mod track_features;
 
 use std::io::Read;
 use std::path::Path;
@@ -31,6 +32,7 @@ pub use {
     package_metadata::PackageMetadata,
     paths::{FileMode, PathType, PathsEntry, PathsJson, PrefixPlaceholder},
     run_exports::RunExportsJson,
+    track_features::TrackFeatures,
 };
 
 /// A trait implemented for structs that represent specific files in a Conda archive.

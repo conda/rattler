@@ -21,7 +21,7 @@ use url::Url;
 
 use crate::{
     build_spec::BuildNumber,
-    package::{IndexJson, RunExportsJson},
+    package::{IndexJson, RunExportsJson, TrackFeatures},
     utils::{
         serde::{sort_map_alphabetically, DeserializeFromStrUnchecked},
         UrlWithTrailingSlash,
@@ -194,9 +194,8 @@ pub struct PackageRecord {
     /// them less priority). To that effect, the number of track features is
     /// counted (number of commas) and the package is downweighted
     /// by the number of track_features.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    #[serde_as(as = "OneOrMany<_>")]
-    pub track_features: Vec<String>,
+    #[serde(default, skip_serializing_if = "TrackFeatures::is_empty")]
+    pub track_features: TrackFeatures,
 
     /// The version of the package
     pub version: VersionWithSource,
@@ -333,7 +332,7 @@ impl PackageRecord {
             size: None,
             subdir: Platform::current().to_string(),
             timestamp: None,
-            track_features: vec![],
+            track_features: TrackFeatures::default(),
             version: version.into(),
             purls: None,
             run_exports: None,

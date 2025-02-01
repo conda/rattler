@@ -139,7 +139,7 @@ pub fn add_repodata_records<'a>(
         }
 
         // Track features
-        for track_features in record.track_features.iter() {
+        for track_features in record.track_features.features() {
             let track_feature = track_features.trim();
             if !track_feature.is_empty() {
                 data.add_idarray(

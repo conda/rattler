@@ -1,7 +1,8 @@
 use std::{borrow::Cow, collections::BTreeSet};
 
 use rattler_conda_types::{
-    BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource,
+    package::TrackFeatures, BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord,
+    PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
@@ -131,7 +132,7 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
                 size: value.size.into_owned(),
                 subdir,
                 timestamp: value.timestamp,
-                track_features: value.track_features.into_owned(),
+                track_features: TrackFeatures::from_features(&value.track_features),
                 version: value.version.into_owned(),
                 run_exports: None,
                 // Polyfill the arch and platform fields if they are not present in the lock-file.

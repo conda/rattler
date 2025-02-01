@@ -154,7 +154,7 @@ impl<'a> SolverPackageRecord<'a> {
         const EMPTY: [String; 0] = [];
         match self {
             SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => {
-                &rec.package_record.track_features
+                &rec.package_record.track_features.features()
             }
             SolverPackageRecord::VirtualPackage(_rec) => &EMPTY,
         }

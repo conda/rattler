@@ -2,12 +2,15 @@
 
 use fxhash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use serde_with::{serde_as, skip_serializing_none};
 use std::collections::BTreeSet;
 use std::io;
 use std::path::Path;
 
-use crate::{package::ArchiveType, PackageRecord, PackageUrl, RepoData, Shard};
+use crate::{
+    package::{ArchiveType, TrackFeatures},
+    PackageRecord, PackageUrl, RepoData, Shard,
+};
 
 /// Represents a Conda repodata patch.
 ///
@@ -67,8 +70,7 @@ pub struct PackageRecordPatch {
     /// Track features are nowadays only used to downweight packages (ie. give them less priority). To
     /// that effect, the number of track features is counted (number of commas) and the package is downweighted
     /// by the number of track_features.
-    #[serde_as(as = "Option<OneOrMany<_>>")]
-    pub track_features: Option<Vec<String>>,
+    pub track_features: Option<TrackFeatures>,
 
     /// Features are a deprecated way to specify different feature sets for the conda solver. This is not
     /// supported anymore and should not be used. Instead, `mutex` packages should be used to specify

@@ -4,8 +4,8 @@ use std::{
 };
 
 use rattler_conda_types::{
-    package::ArchiveIdentifier, BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord,
-    PackageUrl, VersionWithSource,
+    package::{ArchiveIdentifier, TrackFeatures},
+    BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
@@ -182,7 +182,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             size: value.size.into_owned(),
             subdir,
             timestamp: value.timestamp,
-            track_features: value.track_features.into_owned(),
+            track_features: TrackFeatures::from_features(&value.track_features),
             version: value
                 .version
                 .map(Cow::into_owned)
@@ -289,7 +289,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             legacy_bz2_size: Cow::Borrowed(&package_record.legacy_bz2_size),
             timestamp: package_record.timestamp,
             features: Cow::Borrowed(&package_record.features),
-            track_features: Cow::Borrowed(&package_record.track_features),
+            track_features: Cow::Owned(package_record.track_features.features().to_vec()),
             license: Cow::Borrowed(&package_record.license),
             license_family: Cow::Borrowed(&package_record.license_family),
             python_site_packages_path: Cow::Borrowed(&package_record.python_site_packages_path),

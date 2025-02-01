@@ -7,10 +7,11 @@ use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{ExtraName, Requirement};
 use rattler_conda_types::{
-    NoArchType, PackageName, PackageRecord, PackageUrl, Platform, VersionWithSource,
+    package::TrackFeatures, NoArchType, PackageName, PackageRecord, PackageUrl, Platform,
+    VersionWithSource,
 };
 use serde::Deserialize;
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use serde_with::{serde_as, skip_serializing_none};
 use url::Url;
 
 use super::ParseCondaLockError;
@@ -111,9 +112,8 @@ pub struct CondaLockedPackageV3 {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub constrains: Vec<String>,
     pub features: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    #[serde_as(as = "OneOrMany<_>")]
-    pub track_features: Vec<String>,
+    #[serde(default, skip_serializing_if = "TrackFeatures::is_empty")]
+    pub track_features: TrackFeatures,
     pub license: Option<String>,
     pub license_family: Option<String>,
     pub noarch: Option<NoArchType>,
