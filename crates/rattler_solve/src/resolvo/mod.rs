@@ -151,6 +151,15 @@ impl SolverPackageRecord<'_> {
         }
     }
 
+    fn flags_len(&self) -> usize {
+        match self {
+            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => {
+                rec.package_record.flags.len()
+            }
+            SolverPackageRecord::VirtualPackage(_rec) => 0,
+        }
+    }
+
     fn track_features(&self) -> &[String] {
         const EMPTY: [String; 0] = [];
         match self {

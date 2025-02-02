@@ -129,6 +129,11 @@ pub struct PackageRecord {
     /// mutually exclusive features.
     pub features: Option<String>,
 
+    /// Flags are a way to define build-time features. This has been traditionally
+    /// done by changing the build string, but flags are much nicer.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub flags: BTreeSet<String>,
+
     /// A deprecated md5 hash
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub legacy_bz2_md5: Option<Md5Hash>,
@@ -335,6 +340,7 @@ impl PackageRecord {
             platform: None,
             python_site_packages_path: None,
             extra_depends: BTreeMap::new(),
+            flags: BTreeSet::new(),
             sha256: None,
             size: None,
             subdir: Platform::current().to_string(),
@@ -509,6 +515,7 @@ impl PackageRecord {
             platform: index.platform,
             python_site_packages_path: index.python_site_packages_path,
             extra_depends: BTreeMap::new(),
+            flags: BTreeSet::new(),
             sha256,
             size,
             subdir,

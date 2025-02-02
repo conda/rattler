@@ -1,6 +1,11 @@
 //! A module that enables parsing of lock files version 3 or lower.
 
-use std::{collections::BTreeSet, ops::Not, str::FromStr, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Not,
+    str::FromStr,
+    sync::Arc,
+};
 
 use fxhash::FxHashMap;
 use indexmap::IndexSet;
@@ -202,7 +207,8 @@ pub fn parse_v3_or_lower(
                             build_number,
                             constrains: value.constrains,
                             depends: value.dependencies,
-                            extra_depends: std::collections::BTreeMap::new(),
+                            extra_depends: BTreeMap::new(),
+                            flags: BTreeSet::new(),
                             features: value.features,
                             legacy_bz2_md5: None,
                             legacy_bz2_size: None,
