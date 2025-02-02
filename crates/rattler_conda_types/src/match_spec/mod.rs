@@ -138,6 +138,8 @@ pub struct MatchSpec {
     pub file_name: Option<String>,
     /// The selected optional features of the package
     pub extras: Option<Vec<String>>,
+    /// The selected build flags
+    pub flags: Option<Vec<String>>,
     /// The channel of the package
     pub channel: Option<Arc<Channel>>,
     /// The subdir of the channel
@@ -190,6 +192,10 @@ impl Display for MatchSpec {
             keys.push(format!("extras=[{}]", extras.iter().format(", ")));
         }
 
+        if let Some(flags) = &self.flags {
+            keys.push(format!("flags=[{}]", flags.iter().format(", ")));
+        }
+
         if let Some(md5) = &self.md5 {
             keys.push(format!("md5=\"{md5:x}\""));
         }
@@ -229,6 +235,7 @@ impl MatchSpec {
                 build_number: self.build_number,
                 file_name: self.file_name,
                 extras: self.extras,
+                flags: self.flags,
                 channel: self.channel,
                 subdir: self.subdir,
                 namespace: self.namespace,
@@ -275,6 +282,8 @@ pub struct NamelessMatchSpec {
     pub file_name: Option<String>,
     /// Optional extra dependencies to select for the package
     pub extras: Option<Vec<String>>,
+    /// Optional build time flags to select for the package
+    pub flags: Option<Vec<String>>,
     /// The channel of the package
     #[serde(deserialize_with = "deserialize_channel", default)]
     pub channel: Option<Arc<Channel>>,
@@ -329,6 +338,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             build_number: spec.build_number,
             file_name: spec.file_name,
             extras: spec.extras,
+            flags: spec.flags,
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
@@ -349,6 +359,7 @@ impl MatchSpec {
             build_number: spec.build_number,
             file_name: spec.file_name,
             extras: spec.extras,
+            flags: spec.flags,
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
@@ -418,6 +429,12 @@ impl Matches<PackageRecord> for NamelessMatchSpec {
 
         if let Some(sha256_spec) = self.sha256.as_ref() {
             if Some(sha256_spec) != other.sha256.as_ref() {
+                return false;
+            }
+        }
+
+        if let Some(flags) = self.flags.as_ref() {
+            if !flags.iter().all(|flag| other.flags.contains(flag)) {
                 return false;
             }
         }
