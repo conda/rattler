@@ -6,8 +6,10 @@ use itertools::Itertools;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
+use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
+use std::str::FromStr;
 use std::sync::Arc;
 use url::Url;
 
@@ -139,7 +141,7 @@ pub struct MatchSpec {
     /// The selected optional features of the package
     pub extras: Option<Vec<String>>,
     /// The selected build flags
-    pub flags: Option<Vec<String>>,
+    pub flags: Option<Vec<FlagMatcher>>,
     /// The channel of the package
     pub channel: Option<Arc<Channel>>,
     /// The subdir of the channel
@@ -195,7 +197,7 @@ impl Display for MatchSpec {
         }
 
         if let Some(flags) = &self.flags {
-            keys.push(format!("flags=[{}]", flags.iter().format(", ")));
+            keys.push(format!("flags=[{:?}]", flags.iter().format(", ")));
         }
 
         if let Some(md5) = &self.md5 {
@@ -227,6 +229,80 @@ impl Display for MatchSpec {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum FlagMatcher {
+    /// Match if flag exists
+    Required(String),
+    /// Match if flag doesn't exist
+    Negated(String),
+    /// Match if flag exists, but don't fail if it doesn't
+    Optional(String),
+}
+
+impl FlagMatcher {
+    pub fn matches(&self, flags: &BTreeSet<String>) -> bool {
+        match self {
+            FlagMatcher::Required(flag) => flags.contains(flag),
+            FlagMatcher::Negated(flag) => !flags.contains(flag),
+            FlagMatcher::Optional(flag) => !flags.contains(flag) || flags.contains(flag),
+        }
+    }
+}
+
+impl Display for FlagMatcher {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FlagMatcher::Required(flag) => write!(f, "{}", flag),
+            FlagMatcher::Negated(flag) => write!(f, "~{}", flag),
+            FlagMatcher::Optional(flag) => write!(f, "?{}", flag),
+        }
+    }
+}
+
+impl FromStr for FlagMatcher {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.starts_with('~') {
+            Ok(FlagMatcher::Negated(s[1..].to_string()))
+        } else if s.starts_with('?') {
+            Ok(FlagMatcher::Optional(s[1..].to_string()))
+        } else {
+            Ok(FlagMatcher::Required(s.to_string()))
+        }
+    }
+}
+
+impl Serialize for FlagMatcher {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            FlagMatcher::Required(flag) => serializer.serialize_str(flag),
+            FlagMatcher::Negated(flag) => serializer.serialize_str(&format!("~{}", flag)),
+            FlagMatcher::Optional(flag) => serializer.serialize_str(&format!("?{}", flag)),
+        }
+    }
+}
+
+// Add deserialization implementation
+impl<'de> Deserialize<'de> for FlagMatcher {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if s.starts_with('~') || s.starts_with('!') {
+            Ok(FlagMatcher::Negated(s[1..].to_string()))
+        } else if s.starts_with('?') {
+            Ok(FlagMatcher::Optional(s[1..].to_string()))
+        } else {
+            Ok(FlagMatcher::Required(s))
+        }
     }
 }
 
@@ -290,7 +366,7 @@ pub struct NamelessMatchSpec {
     /// Optional extra dependencies to select for the package
     pub extras: Option<Vec<String>>,
     /// Optional build time flags to select for the package
-    pub flags: Option<Vec<String>>,
+    pub flags: Option<Vec<FlagMatcher>>,
     /// The channel of the package
     #[serde(deserialize_with = "deserialize_channel", default)]
     pub channel: Option<Arc<Channel>>,
@@ -451,7 +527,7 @@ impl Matches<PackageRecord> for NamelessMatchSpec {
         }
 
         if let Some(flags) = self.flags.as_ref() {
-            if !flags.iter().all(|flag| other.flags.contains(flag)) {
+            if !flags.iter().all(|flag| flag.matches(&other.flags)) {
                 return false;
             }
         }
