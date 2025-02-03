@@ -35,12 +35,6 @@ jobs:
           rm -rf .git/lfs
           rm -rf ~/.git-lfs
 
-          # Remove from git config
-          git config --global --unset filter.lfs.required
-          git config --global --unset filter.lfs.clean
-          git config --global --unset filter.lfs.smudge
-          git config --global --unset filter.lfs.process
-
           # Verify configs are gone
           git config --global --list
 
