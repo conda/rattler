@@ -22,7 +22,7 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageName, ParseStrictness,
     Platform, PrefixRecord, RepoDataRecord, Version,
 };
-use rattler_networking::AuthenticationMiddleware;
+use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 use rattler_solve::{
     libsolv_c::{self},
@@ -151,6 +151,10 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
         .with_arc(Arc::new(AuthenticationMiddleware::from_env_and_defaults()?))
         .with(rattler_networking::OciMiddleware)
+        .with(rattler_networking::S3Middleware::new(
+            HashMap::new(),
+            AuthenticationStorage::from_env_and_defaults()?,
+        ))
         .with(rattler_networking::GCSMiddleware)
         .build();
 

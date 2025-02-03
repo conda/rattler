@@ -19,6 +19,15 @@ pub enum Authentication {
     },
     /// A conda token is sent in the URL as `/t/{TOKEN}/...`
     CondaToken(String),
+    /// S3 credentials
+    S3Credentials {
+        /// The access key ID to use for S3 authentication
+        access_key_id: String,
+        /// The secret access key to use for S3 authentication
+        secret_access_key: String,
+        /// The session token to use for S3 authentication
+        session_token: Option<String>,
+    },
 }
 
 /// An error that can occur when parsing an authentication string

@@ -1,7 +1,8 @@
 use crate::{error::PyRattlerError, networking::middleware::PyMiddleware};
 use pyo3::{pyclass, pymethods, PyResult};
 use rattler_networking::{
-    AuthenticationMiddleware, GCSMiddleware, MirrorMiddleware, OciMiddleware,
+    AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, MirrorMiddleware,
+    OciMiddleware, S3Middleware,
 };
 use reqwest_middleware::ClientWithMiddleware;
 
@@ -35,6 +36,17 @@ impl PyClientWithMiddleware {
                 }
                 PyMiddleware::Gcs(middleware) => {
                     client = client.with(GCSMiddleware::from(middleware));
+                }
+                PyMiddleware::S3(middleware) => {
+                    client = client.with(S3Middleware::new(
+                        middleware
+                            .s3_config
+                            .iter()
+                            .map(|(k, v)| (k.clone(), v.clone().into()))
+                            .collect(),
+                        AuthenticationStorage::from_env_and_defaults()
+                            .map_err(PyRattlerError::from)?,
+                    ));
                 }
             }
         }
