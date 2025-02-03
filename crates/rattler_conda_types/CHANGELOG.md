@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.30.0...rattler_conda_types-v0.30.1) - 2025-02-03
+
+### Fixed
+
+- track feature serialization and deserialization (#1039)
+
 ## [0.30.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.29.10...rattler_conda_types-v0.30.0) - 2025-01-23
 
 ### Added
