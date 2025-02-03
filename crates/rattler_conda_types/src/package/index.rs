@@ -2,7 +2,7 @@ use std::path::Path;
 
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use serde_with::{serde_as, skip_serializing_none};
 
 use super::PackageFile;
 use crate::{NoArchType, PackageName, VersionWithSource};
@@ -75,7 +75,7 @@ pub struct IndexJson {
     /// counted (number of commas) and the package is downweighted
     /// by the number of track_features.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    #[serde_as(as = "OneOrMany<_>")]
+    #[serde_as(as = "crate::utils::serde::Features")]
     pub track_features: Vec<String>,
 
     /// The version of the package

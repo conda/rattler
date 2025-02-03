@@ -15,7 +15,7 @@ use fxhash::{FxHashMap, FxHashSet};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use serde_with::{serde_as, skip_serializing_none};
 use thiserror::Error;
 use url::Url;
 
@@ -114,8 +114,9 @@ pub struct PackageRecord {
     #[serde(default)]
     pub depends: Vec<String>,
 
-    /// Specifications of optional or dependencies. These are dependencies that are
-    /// only required if certain features are enabled or if certain conditions are met.
+    /// Specifications of optional or dependencies. These are dependencies that
+    /// are only required if certain features are enabled or if certain
+    /// conditions are met.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extra_depends: BTreeMap<String, Vec<String>>,
 
@@ -191,11 +192,10 @@ pub struct PackageRecord {
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 
     /// Track features are nowadays only used to downweight packages (ie. give
-    /// them less priority). To that effect, the number of track features is
-    /// counted (number of commas) and the package is downweighted
+    /// them less priority). To that effect, the package is downweighted
     /// by the number of track_features.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    #[serde_as(as = "OneOrMany<_>")]
+    #[serde_as(as = "crate::utils::serde::Features")]
     pub track_features: Vec<String>,
 
     /// The version of the package
