@@ -1,8 +1,8 @@
 //! This module contains CLI common entrypoint for authentication.
 use clap::Parser;
 use rattler_networking::{
-    authentication_storage::backends::file::FileStorageError, Authentication,
-    AuthenticationStorage, AuthenticationStorageError,
+    authentication_storage::{backends::file::FileStorageError, AuthenticationStorageError},
+    Authentication, AuthenticationStorage,
 };
 use thiserror;
 
@@ -90,15 +90,16 @@ pub enum AuthenticationCLIError {
     #[error("Authentication with S3 requires a S3 access key ID and a secret access key. Use `--s3-access-key-id` and `--s3-secret-access-key` to provide them")]
     S3BadMethod,
 
+    // TODO: rework this
     /// Wrapper for errors that are generated from the underlying storage system
     /// (keyring or file system)
-    #[error("Failed to initialize the authentication storage system")]
-    InitializeStorageError(#[source] FileStorageError),
+    #[error("Failed to interact with the authentication storage system")]
+    AnyhowError(#[from] anyhow::Error),
 
     /// Wrapper for errors that are generated from the underlying storage system
     /// (keyring or file system)
     #[error("Failed to interact with the authentication storage system")]
-    StorageError(#[source] AuthenticationStorageError),
+    AuthenticationStorageError(#[from] AuthenticationStorageError),
 }
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
@@ -163,9 +164,7 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
         return Err(AuthenticationCLIError::S3BadMethod);
     }
 
-    storage
-        .store(&host, &auth)
-        .map_err(AuthenticationCLIError::StorageError)?;
+    storage.store(&host, &auth)?;
     Ok(())
 }
 
@@ -174,16 +173,13 @@ fn logout(args: LogoutArgs, storage: AuthenticationStorage) -> Result<(), Authen
 
     println!("Removing authentication for {host}");
 
-    storage
-        .delete(&host)
-        .map_err(AuthenticationCLIError::StorageError)?;
+    storage.delete(&host)?;
     Ok(())
 }
 
 /// CLI entrypoint for authentication
 pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
-    let storage = AuthenticationStorage::from_env_and_defaults()
-        .map_err(AuthenticationCLIError::InitializeStorageError)?;
+    let storage = AuthenticationStorage::from_env_and_defaults()?;
 
     match args.subcommand {
         Subcommand::Login(args) => login(args, storage),

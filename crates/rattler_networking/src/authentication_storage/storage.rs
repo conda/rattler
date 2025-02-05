@@ -9,13 +9,12 @@ use std::{
 use url::Url;
 
 use crate::authentication_storage::{
-    backends::keyring::KeyringAuthenticationStorageError, AuthenticationStorageError,
+    backends::{file::FileStorage, keyring::KeyringAuthenticationStorageError}, AuthenticationStorageError,
 };
 
 use super::{
     authentication::Authentication,
     backends::{
-        file::{FileStorage, FileStorageError},
         keyring::KeyringAuthenticationStorage,
         netrc::NetRcStorage,
     },
@@ -49,7 +48,7 @@ impl AuthenticationStorage {
     /// - keyring storage
     /// - file storage from the default location
     /// - netrc storage
-    pub fn from_env_and_defaults() -> Result<Self, FileStorageError> {
+    pub fn from_env_and_defaults() -> Result<Self, AuthenticationStorageError> {
         let mut storage = Self::empty();
 
         if let Ok(auth_file) = std::env::var("RATTLER_AUTH_FILE") {
