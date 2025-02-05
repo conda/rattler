@@ -133,7 +133,7 @@ impl StorageBackend for FileStorage {
         host: &str,
         authentication: &crate::Authentication,
     ) -> Result<(), AuthenticationStorageError> {
-        let mut dict: BTreeMap<String, Authentication> = self.read_json()?;
+        let mut dict = self.read_json()?;
         dict.insert(host.to_string(), authentication.clone());
         Ok(self.write_json(&dict)?)
     }
