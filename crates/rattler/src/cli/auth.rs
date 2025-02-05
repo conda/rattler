@@ -97,7 +97,7 @@ pub enum AuthenticationCLIError {
     /// Wrapper for errors that are generated from the underlying storage system
     /// (keyring or file system)
     #[error("Failed to interact with the authentication storage system")]
-    StorageError(#[source] anyhow::Error),
+    StorageError(#[source] AuthenticationStorageError),
 }
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {

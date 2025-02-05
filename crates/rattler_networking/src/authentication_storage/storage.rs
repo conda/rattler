@@ -2,12 +2,13 @@
 
 use anyhow::{anyhow, Result};
 use reqwest::IntoUrl;
-use tracing::debug;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
 use url::Url;
+
+use crate::authentication_storage::{backends::keyring::KeyringAuthenticationStorageError, AuthenticationStorageError};
 
 use super::{
     authentication::Authentication,
@@ -82,11 +83,18 @@ impl AuthenticationStorage {
             cache.insert(host.to_string(), Some(authentication.clone()));
         }
 
-        debug!("Storing credentials for host {}", host);
-        debug!("Backends: {:?}", self.backends);
         for backend in &self.backends {
             if let Err(e) = backend.store(host, authentication) {
-                tracing::warn!("Error storing credentials in backend: {}", e);
+                match e {
+                    AuthenticationStorageError::KeyringStorageError(KeyringAuthenticationStorageError::StorageError(_)) => {
+                        tracing::debug!("Error storing credentials in keyring: {}", e);
+                        continue;
+                    },
+                    _ => {
+                        tracing::warn!("Error deleting credentials from backend: {}", e);
+                        continue;
+                    }
+                }
             } else {
                 return Ok(());
             }
@@ -115,7 +123,16 @@ impl AuthenticationStorage {
                     continue;
                 }
                 Err(e) => {
-                    tracing::warn!("Error retrieving credentials from backend: {}", e);
+                    match e {
+                        AuthenticationStorageError::KeyringStorageError(KeyringAuthenticationStorageError::StorageError(_)) => {
+                            tracing::trace!("Error storing credentials in keyring: {}", e);
+                            continue;
+                        },
+                        _ => {
+                            tracing::warn!("Error retrieving credentials from backend: {}", e);
+                            continue;
+                        }
+                    }
                 }
             }
         }
@@ -209,7 +226,16 @@ impl AuthenticationStorage {
 
         for backend in &self.backends {
             if let Err(e) = backend.delete(host) {
-                tracing::warn!("Error deleting credentials from backend: {}", e);
+                match e {
+                    AuthenticationStorageError::KeyringStorageError(KeyringAuthenticationStorageError::StorageError(_)) => {
+                        tracing::debug!("Error deleting credentials in keyring: {}", e);
+                        continue;
+                    },
+                    _ => {
+                        tracing::warn!("Error deleting credentials from backend: {}", e);
+                        continue;
+                    }
+                }
             } else {
                 all_failed = false;
             }

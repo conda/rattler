@@ -1,5 +1,4 @@
 //! file storage for passwords.
-use anyhow::Result;
 use async_fd_lock::{
     blocking::{LockRead, LockWrite},
     RwLockWriteGuard,
@@ -10,7 +9,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
-use crate::authentication_storage::StorageBackend;
+use crate::authentication_storage::{AuthenticationStorageError, StorageBackend};
 use crate::Authentication;
 
 #[derive(Clone, Debug)]
@@ -126,18 +125,18 @@ impl FileStorage {
 }
 
 impl StorageBackend for FileStorage {
-    fn store(&self, host: &str, authentication: &crate::Authentication) -> Result<()> {
-        let mut dict = self.read_json()?;
+    fn store(&self, host: &str, authentication: &crate::Authentication) -> Result<(), AuthenticationStorageError> {
+        let mut dict: BTreeMap<String, Authentication> = self.read_json()?;
         dict.insert(host.to_string(), authentication.clone());
         Ok(self.write_json(&dict)?)
     }
 
-    fn get(&self, host: &str) -> Result<Option<crate::Authentication>> {
+    fn get(&self, host: &str) -> Result<Option<crate::Authentication>, AuthenticationStorageError> {
         let cache = self.cache.read().unwrap();
         Ok(cache.content.get(host).cloned())
     }
 
-    fn delete(&self, host: &str) -> Result<()> {
+    fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
         let mut dict = self.read_json()?;
         if dict.remove(host).is_some() {
             Ok(self.write_json(&dict)?)
