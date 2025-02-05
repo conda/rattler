@@ -21,8 +21,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
     "Typing :: Typed",
 ]
-license = "BSD-3-Clause"
-license-files = ["LICENSE"]
+license = { file = "LICENSE" }
 
 [project.urls]
 Homepage = "https://github.com/conda/rattler"
