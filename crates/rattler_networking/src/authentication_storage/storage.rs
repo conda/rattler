@@ -131,10 +131,8 @@ impl AuthenticationStorage {
                     ) = e
                     {
                         tracing::trace!("Error storing credentials in keyring: {}", e);
-                        continue;
                     } else {
                         tracing::warn!("Error retrieving credentials from backend: {}", e);
-                        continue;
                     }
                 }
             }
@@ -234,10 +232,8 @@ impl AuthenticationStorage {
                 ) = e
                 {
                     tracing::debug!("Error deleting credentials in keyring: {}", e);
-                    continue;
                 } else {
                     tracing::warn!("Error deleting credentials from backend: {}", e);
-                    continue;
                 }
             } else {
                 all_failed = false;
