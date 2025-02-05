@@ -103,8 +103,7 @@ pub enum AuthenticationCLIError {
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
     // parse as url and extract host without scheme or port
-    let host = if url.contains("://")
-    {
+    let host = if url.contains("://") {
         url::Url::parse(url)?.host_str().unwrap().to_string()
     } else {
         url.to_string()
@@ -160,7 +159,10 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
     }
 
     let host = get_url(&args.host)?;
-    eprintln!("Authenticating with {host} using {} methode", auth.methode());
+    eprintln!(
+        "Authenticating with {host} using {} methode",
+        auth.methode()
+    );
 
     storage.store(&host, &auth)?;
     Ok(())
