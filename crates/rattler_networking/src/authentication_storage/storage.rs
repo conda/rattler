@@ -2,6 +2,7 @@
 
 use anyhow::{anyhow, Result};
 use reqwest::IntoUrl;
+use tracing::debug;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -81,6 +82,8 @@ impl AuthenticationStorage {
             cache.insert(host.to_string(), Some(authentication.clone()));
         }
 
+        debug!("Storing credentials for host {}", host);
+        debug!("Backends: {:?}", self.backends);
         for backend in &self.backends {
             if let Err(e) = backend.store(host, authentication) {
                 tracing::warn!("Error storing credentials in backend: {}", e);
@@ -89,7 +92,7 @@ impl AuthenticationStorage {
             }
         }
 
-        Err(anyhow!("All backends failed to store credentials"))
+        Err(anyhow!("All backends failed to store credentials. Checked the following backends: {:?}", self.backends))
     }
 
     /// Retrieve the authentication information for the given host

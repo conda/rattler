@@ -99,6 +99,11 @@ impl FileStorage {
 
     /// Serialize the given `BTreeMap` and write it to the JSON file
     fn write_json(&self, dict: &BTreeMap<String, Authentication>) -> Result<(), FileStorageError> {
+        let parent = self.path.parent().ok_or(FileStorageError::IOError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Parent directory not found",
+        )))?;
+        std::fs::create_dir_all(parent)?;
         let write_guard: std::result::Result<
             RwLockWriteGuard<File>,
             async_fd_lock::LockError<File>,
