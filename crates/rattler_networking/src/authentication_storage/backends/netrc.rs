@@ -1,6 +1,9 @@
 //! Read authentication credentials from `.netrc` files.
 
-use crate::{authentication_storage::{AuthenticationStorageError, StorageBackend}, Authentication};
+use crate::{
+    authentication_storage::{AuthenticationStorageError, StorageBackend},
+    Authentication,
+};
 use netrc_rs::{Machine, Netrc};
 use std::{collections::HashMap, env, io::ErrorKind, path::Path, path::PathBuf};
 
@@ -89,12 +92,20 @@ impl NetRcStorage {
 }
 
 impl StorageBackend for NetRcStorage {
-    fn store(&self, _host: &str, _authentication: &Authentication) -> Result<(), AuthenticationStorageError> {
-        Err(NetRcStorageError::NotSupportedError("NetRcStorage does not support storing credentials".to_string()))?
+    fn store(
+        &self,
+        _host: &str,
+        _authentication: &Authentication,
+    ) -> Result<(), AuthenticationStorageError> {
+        Err(NetRcStorageError::NotSupportedError(
+            "NetRcStorage does not support storing credentials".to_string(),
+        ))?
     }
 
     fn delete(&self, _host: &str) -> Result<(), AuthenticationStorageError> {
-        Err(NetRcStorageError::NotSupportedError("NetRcStorage does not support deleting credentials".to_string()))?
+        Err(NetRcStorageError::NotSupportedError(
+            "NetRcStorage does not support deleting credentials".to_string(),
+        ))?
     }
 
     fn get(&self, host: &str) -> Result<Option<Authentication>, AuthenticationStorageError> {

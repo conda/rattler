@@ -3,7 +3,10 @@
 use keyring::Entry;
 use std::str::FromStr;
 
-use crate::{authentication_storage::{AuthenticationStorageError, StorageBackend}, Authentication};
+use crate::{
+    authentication_storage::{AuthenticationStorageError, StorageBackend},
+    Authentication,
+};
 
 #[derive(Clone, Debug)]
 /// A storage backend that stores credentials in the operating system's keyring
@@ -49,17 +52,26 @@ impl Default for KeyringAuthenticationStorage {
 }
 
 impl StorageBackend for KeyringAuthenticationStorage {
-    fn store(&self, host: &str, authentication: &Authentication) -> Result<(), AuthenticationStorageError> {
-        let password = serde_json::to_string(authentication).map_err(KeyringAuthenticationStorageError::from)?;
-        let entry = Entry::new(&self.store_key, host).map_err(KeyringAuthenticationStorageError::from)?;
+    fn store(
+        &self,
+        host: &str,
+        authentication: &Authentication,
+    ) -> Result<(), AuthenticationStorageError> {
+        let password = serde_json::to_string(authentication)
+            .map_err(KeyringAuthenticationStorageError::from)?;
+        let entry =
+            Entry::new(&self.store_key, host).map_err(KeyringAuthenticationStorageError::from)?;
 
-        entry.set_password(&password).map_err(KeyringAuthenticationStorageError::from)?;
+        entry
+            .set_password(&password)
+            .map_err(KeyringAuthenticationStorageError::from)?;
 
         Ok(())
     }
 
     fn get(&self, host: &str) -> Result<Option<Authentication>, AuthenticationStorageError> {
-        let entry = Entry::new(&self.store_key, host).map_err(KeyringAuthenticationStorageError::from)?;
+        let entry =
+            Entry::new(&self.store_key, host).map_err(KeyringAuthenticationStorageError::from)?;
         let password = entry.get_password();
 
         let p_string = match password {
@@ -81,8 +93,11 @@ impl StorageBackend for KeyringAuthenticationStorage {
     }
 
     fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
-        let entry = Entry::new(&self.store_key, host).map_err(KeyringAuthenticationStorageError::from)?;
-        entry.delete_credential().map_err(KeyringAuthenticationStorageError::from)?;
+        let entry =
+            Entry::new(&self.store_key, host).map_err(KeyringAuthenticationStorageError::from)?;
+        entry
+            .delete_credential()
+            .map_err(KeyringAuthenticationStorageError::from)?;
 
         Ok(())
     }

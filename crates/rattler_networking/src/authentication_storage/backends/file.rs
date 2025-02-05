@@ -98,10 +98,13 @@ impl FileStorage {
 
     /// Serialize the given `BTreeMap` and write it to the JSON file
     fn write_json(&self, dict: &BTreeMap<String, Authentication>) -> Result<(), FileStorageError> {
-        let parent = self.path.parent().ok_or(FileStorageError::IOError(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "Parent directory not found",
-        )))?;
+        let parent = self
+            .path
+            .parent()
+            .ok_or(FileStorageError::IOError(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Parent directory not found",
+            )))?;
         std::fs::create_dir_all(parent)?;
         let write_guard: std::result::Result<
             RwLockWriteGuard<File>,
@@ -125,7 +128,11 @@ impl FileStorage {
 }
 
 impl StorageBackend for FileStorage {
-    fn store(&self, host: &str, authentication: &crate::Authentication) -> Result<(), AuthenticationStorageError> {
+    fn store(
+        &self,
+        host: &str,
+        authentication: &crate::Authentication,
+    ) -> Result<(), AuthenticationStorageError> {
         let mut dict: BTreeMap<String, Authentication> = self.read_json()?;
         dict.insert(host.to_string(), authentication.clone());
         Ok(self.write_json(&dict)?)

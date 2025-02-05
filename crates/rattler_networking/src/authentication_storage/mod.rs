@@ -13,7 +13,9 @@ pub enum AuthenticationStorageError {
     FileStorageError(#[from] crate::authentication_storage::backends::file::FileStorageError),
     /// An error occurred when accessing the keyring storage
     #[error("KeyringStorageError")]
-    KeyringStorageError(#[from] crate::authentication_storage::backends::keyring::KeyringAuthenticationStorageError),
+    KeyringStorageError(
+        #[from] crate::authentication_storage::backends::keyring::KeyringAuthenticationStorageError,
+    ),
     /// An error occurred when accessing the netrc storage
     #[error("NetRcStorageError")]
     NetRcStorageError(#[from] crate::authentication_storage::backends::netrc::NetRcStorageError),
@@ -22,7 +24,11 @@ pub enum AuthenticationStorageError {
 /// A trait that defines the interface for authentication storage backends
 pub trait StorageBackend: std::fmt::Debug {
     /// Store the given authentication information for the given host
-    fn store(&self, host: &str, authentication: &Authentication) -> Result<(), AuthenticationStorageError>;
+    fn store(
+        &self,
+        host: &str,
+        authentication: &Authentication,
+    ) -> Result<(), AuthenticationStorageError>;
 
     /// Retrieve the authentication information for the given host
     fn get(&self, host: &str) -> Result<Option<Authentication>, AuthenticationStorageError>;
