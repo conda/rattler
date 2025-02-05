@@ -103,7 +103,8 @@ pub enum AuthenticationCLIError {
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
     // parse as url and extract host without scheme or port
-    let host = if url.contains("http://") || url.contains("https://") {
+    let host = if url.contains("://")
+    {
         url::Url::parse(url)?.host_str().unwrap().to_string()
     } else {
         url.to_string()
@@ -120,9 +121,6 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
 }
 
 fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
-    let host = get_url(&args.host)?;
-    println!("Authenticating with {host}");
-
     let auth = if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
     } else if let Some(username) = args.username {
@@ -147,21 +145,22 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
         return Err(AuthenticationCLIError::NoAuthenticationMethod);
     };
 
-    if host.contains("prefix.dev") && !matches!(auth, Authentication::BearerToken(_)) {
+    if args.host.contains("prefix.dev") && !matches!(auth, Authentication::BearerToken(_)) {
         return Err(AuthenticationCLIError::PrefixDevBadMethod);
     }
 
-    if host.contains("anaconda.org") && !matches!(auth, Authentication::CondaToken(_)) {
+    if args.host.contains("anaconda.org") && !matches!(auth, Authentication::CondaToken(_)) {
         return Err(AuthenticationCLIError::AnacondaOrgBadMethod);
     }
 
-    if host.starts_with("s3://") && !matches!(auth, Authentication::S3Credentials { .. }) {
+    if args.host.contains("s3://") && !matches!(auth, Authentication::S3Credentials { .. })
+        || matches!(auth, Authentication::S3Credentials { .. }) && !args.host.contains("s3://")
+    {
         return Err(AuthenticationCLIError::S3BadMethod);
     }
 
-    if matches!(auth, Authentication::S3Credentials { .. }) && !host.starts_with("s3://") {
-        return Err(AuthenticationCLIError::S3BadMethod);
-    }
+    let host = get_url(&args.host)?;
+    eprintln!("Authenticating with {host} using {} methode", auth.methode());
 
     storage.store(&host, &auth)?;
     Ok(())

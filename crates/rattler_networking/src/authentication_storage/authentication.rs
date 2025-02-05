@@ -47,3 +47,15 @@ impl FromStr for Authentication {
         serde_json::from_str(s).map_err(|_err| AuthenticationParseError::InvalidToken)
     }
 }
+
+impl Authentication {
+    /// Get the scheme of the authentication method
+    pub fn methode(&self) -> &str {
+        match self {
+            Authentication::BearerToken(_) => "BearerToken",
+            Authentication::BasicHTTP { .. } => "BasicHTTP",
+            Authentication::CondaToken(_) => "CondaToken",
+            Authentication::S3Credentials { .. } => "S3",
+        }
+    }
+}
