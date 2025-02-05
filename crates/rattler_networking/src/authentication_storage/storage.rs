@@ -9,15 +9,13 @@ use std::{
 use url::Url;
 
 use crate::authentication_storage::{
-    backends::{file::FileStorage, keyring::KeyringAuthenticationStorageError}, AuthenticationStorageError,
+    backends::{file::FileStorage, keyring::KeyringAuthenticationStorageError},
+    AuthenticationStorageError,
 };
 
 use super::{
     authentication::Authentication,
-    backends::{
-        keyring::KeyringAuthenticationStorage,
-        netrc::NetRcStorage,
-    },
+    backends::{keyring::KeyringAuthenticationStorage, netrc::NetRcStorage},
     StorageBackend,
 };
 

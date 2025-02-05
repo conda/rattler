@@ -1,8 +1,7 @@
 //! This module contains CLI common entrypoint for authentication.
 use clap::Parser;
 use rattler_networking::{
-    authentication_storage::{backends::file::FileStorageError, AuthenticationStorageError},
-    Authentication, AuthenticationStorage,
+    authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
 };
 use thiserror;
 
