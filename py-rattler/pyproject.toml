@@ -4,6 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "py-rattler"
+dynamic = ["version"]
 requires-python = ">=3.8"
 description = "A blazing fast library to work with the conda ecosystem"
 readme = "README.md"
@@ -21,6 +22,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 
 [project.urls]
 Homepage = "https://github.com/conda/rattler"
