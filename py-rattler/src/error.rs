@@ -170,7 +170,7 @@ impl From<PyRattlerError> for PyErr {
                 ValidatePackageRecordsException::new_err(pretty_print_error(&err))
             }
             PyRattlerError::AuthenticationStorageError(err) => {
-                AuthenticationStorageError::new_err(pretty_print_error(&err))
+                AuthenticationStorageException::new_err(pretty_print_error(&err))
             }
         }
     }
