@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.2](https://github.com/conda/rattler/compare/rattler_networking-v0.22.1...rattler_networking-v0.22.2) - 2025-02-06
+
+### Fixed
+
+- create parent directories for file storage (#1045)
+
 ## [0.22.1](https://github.com/conda/rattler/compare/rattler_networking-v0.22.0...rattler_networking-v0.22.1) - 2025-02-03
 
 ### Added
