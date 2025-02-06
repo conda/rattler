@@ -117,7 +117,7 @@ def test_prefix_paths() -> None:
         size_in_bytes=1024,
     )
 
-    assert str(prefix_paths_entry.relative_path) == "foo/bar/baz"
+    assert str(prefix_paths_entry.relative_path) == str(Path("foo/bar/baz"))
     assert prefix_paths_entry.path_type.hardlink
     assert prefix_paths_entry.prefix_placeholder == "placeholder_foo_bar"
     assert prefix_paths_entry.file_mode.binary

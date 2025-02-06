@@ -1,3 +1,4 @@
+use crate::channel::PyChannel;
 use crate::match_spec::PyMatchSpec;
 use crate::version::PyVersion;
 use crate::{error::PyRattlerError, platform::PyPlatform, record::PyRecord};
@@ -9,7 +10,7 @@ use rattler_lock::{
     PackageHashes, PypiPackageData, PypiPackageEnvironmentData, DEFAULT_ENVIRONMENT_NAME,
 };
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashMap},
     path::PathBuf,
     str::FromStr,
 };
@@ -127,21 +128,23 @@ impl PyEnvironment {
 #[pymethods]
 impl PyEnvironment {
     #[new]
-    pub fn new(name: String, req: HashMap<PyPlatform, Vec<PyRecord>>) -> PyResult<Self> {
+    pub fn new(
+        name: String,
+        records: HashMap<PyPlatform, Vec<PyRecord>>,
+        channels: Vec<PyChannel>,
+    ) -> PyResult<Self> {
         let mut lock = LockFile::builder();
-        let channels = req
-            .values()
-            .flat_map(|records| {
-                records
-                    .iter()
-                    .filter_map(|r| r.channel().transpose())
-                    .collect::<Vec<PyResult<_>>>()
-            })
-            .collect::<PyResult<HashSet<_>>>()?;
 
-        lock.set_channels(&name, channels);
+        lock.set_channels(
+            &name,
+            channels.into_iter().map(|c| {
+                rattler_lock::Channel::from(
+                    c.inner.base_url.as_str().trim_end_matches('/').to_string(),
+                )
+            }),
+        );
 
-        for (platform, records) in req {
+        for (platform, records) in records {
             for record in records {
                 lock.add_conda_package(
                     &name,
