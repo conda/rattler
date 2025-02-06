@@ -16,15 +16,19 @@ class Environment:
 
     _env: PyEnvironment
 
-    def __init__(self, name: str, requirements: Dict[Platform, List[RepoDataRecord]], channels: List[LockChannel]) -> None:
+    def __init__(
+        self, name: str, requirements: Dict[Platform, List[RepoDataRecord]], channels: List[LockChannel]
+    ) -> None:
         """
         Create a new environment.
         """
         self._env = PyEnvironment(
-            name = name,
+            name=name,
             # TODO: move this logic to rust
-            records = {platform._inner: [record._record for record in records] for (platform, records) in requirements.items()},
-            channels = [channel._channel for channel in channels],
+            records={
+                platform._inner: [record._record for record in records] for (platform, records) in requirements.items()
+            },
+            channels=[channel._channel for channel in channels],
         )
 
     def platforms(self) -> List[Platform]:
