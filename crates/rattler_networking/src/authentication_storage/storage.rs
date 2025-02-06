@@ -8,13 +8,14 @@ use std::{
 };
 use url::Url;
 
+use crate::authentication_storage::{
+    backends::{file::FileStorage, keyring::KeyringAuthenticationStorageError},
+    AuthenticationStorageError,
+};
+
 use super::{
     authentication::Authentication,
-    backends::{
-        file::{FileStorage, FileStorageError},
-        keyring::KeyringAuthenticationStorage,
-        netrc::NetRcStorage,
-    },
+    backends::{keyring::KeyringAuthenticationStorage, netrc::NetRcStorage},
     StorageBackend,
 };
 
@@ -45,7 +46,7 @@ impl AuthenticationStorage {
     /// - keyring storage
     /// - file storage from the default location
     /// - netrc storage
-    pub fn from_env_and_defaults() -> Result<Self, FileStorageError> {
+    pub fn from_env_and_defaults() -> Result<Self, AuthenticationStorageError> {
         let mut storage = Self::empty();
 
         if let Ok(auth_file) = std::env::var("RATTLER_AUTH_FILE") {
@@ -83,13 +84,23 @@ impl AuthenticationStorage {
 
         for backend in &self.backends {
             if let Err(e) = backend.store(host, authentication) {
-                tracing::warn!("Error storing credentials in backend: {}", e);
+                if let AuthenticationStorageError::KeyringStorageError(
+                    KeyringAuthenticationStorageError::StorageError(_),
+                ) = e
+                {
+                    tracing::debug!("Error storing credentials in keyring: {}", e);
+                } else {
+                    tracing::warn!("Error storing credentials from backend: {}", e);
+                }
             } else {
                 return Ok(());
             }
         }
 
-        Err(anyhow!("All backends failed to store credentials"))
+        Err(anyhow!(
+            "All backends failed to store credentials. Checked the following backends: {:?}",
+            self.backends
+        ))
     }
 
     /// Retrieve the authentication information for the given host
@@ -112,7 +123,14 @@ impl AuthenticationStorage {
                     continue;
                 }
                 Err(e) => {
-                    tracing::warn!("Error retrieving credentials from backend: {}", e);
+                    if let AuthenticationStorageError::KeyringStorageError(
+                        KeyringAuthenticationStorageError::StorageError(_),
+                    ) = e
+                    {
+                        tracing::trace!("Error storing credentials in keyring: {}", e);
+                    } else {
+                        tracing::warn!("Error retrieving credentials from backend: {}", e);
+                    }
                 }
             }
         }
@@ -206,7 +224,14 @@ impl AuthenticationStorage {
 
         for backend in &self.backends {
             if let Err(e) = backend.delete(host) {
-                tracing::warn!("Error deleting credentials from backend: {}", e);
+                if let AuthenticationStorageError::KeyringStorageError(
+                    KeyringAuthenticationStorageError::StorageError(_),
+                ) = e
+                {
+                    tracing::debug!("Error deleting credentials in keyring: {}", e);
+                } else {
+                    tracing::warn!("Error deleting credentials from backend: {}", e);
+                }
             } else {
                 all_failed = false;
             }
