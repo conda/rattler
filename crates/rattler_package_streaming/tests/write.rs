@@ -31,7 +31,7 @@ enum Decoder {
 }
 
 impl Decoder {
-    fn open<'a, T: Read>(&'a self, f: &'a mut T) -> tar::Archive<Box<dyn std::io::Read + '_>> {
+    fn open<'a, T: Read>(&'a self, f: &'a mut T) -> tar::Archive<Box<dyn std::io::Read + 'a>> {
         match self {
             Decoder::TarBz2 => {
                 let d = bzip2::read::BzDecoder::new(f);
