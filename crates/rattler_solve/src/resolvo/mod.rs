@@ -74,7 +74,7 @@ impl<'a> SolverMatchSpec<'a> {
     }
 }
 
-impl<'a> From<NamelessMatchSpec> for SolverMatchSpec<'a> {
+impl From<NamelessMatchSpec> for SolverMatchSpec<'_> {
     fn from(value: NamelessMatchSpec) -> Self {
         Self {
             inner: value,
@@ -84,13 +84,13 @@ impl<'a> From<NamelessMatchSpec> for SolverMatchSpec<'a> {
     }
 }
 
-impl<'a> Display for SolverMatchSpec<'a> {
+impl Display for SolverMatchSpec<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.inner)
     }
 }
 
-impl<'a> Deref for SolverMatchSpec<'a> {
+impl Deref for SolverMatchSpec<'_> {
     type Target = NamelessMatchSpec;
 
     fn deref(&self) -> &Self::Target {
@@ -115,13 +115,13 @@ pub enum SolverPackageRecord<'a> {
     VirtualPackage(&'a GenericVirtualPackage),
 }
 
-impl<'a> PartialOrd<Self> for SolverPackageRecord<'a> {
+impl PartialOrd<Self> for SolverPackageRecord<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'a> Ord for SolverPackageRecord<'a> {
+impl Ord for SolverPackageRecord<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.name()
             .cmp(other.name())
@@ -131,7 +131,7 @@ impl<'a> Ord for SolverPackageRecord<'a> {
     }
 }
 
-impl<'a> SolverPackageRecord<'a> {
+impl SolverPackageRecord<'_> {
     fn name(&self) -> &PackageName {
         match self {
             SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => {
@@ -179,7 +179,7 @@ impl<'a> SolverPackageRecord<'a> {
     }
 }
 
-impl<'a> Display for SolverPackageRecord<'a> {
+impl Display for SolverPackageRecord<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             SolverPackageRecord::Record(rec) => {
@@ -541,7 +541,7 @@ pub enum CancelReason {
     Timeout,
 }
 
-impl<'a> Interner for CondaDependencyProvider<'a> {
+impl Interner for CondaDependencyProvider<'_> {
     fn display_solvable(&self, solvable: SolvableId) -> impl Display + '_ {
         &self.pool.resolve_solvable(solvable).record
     }
@@ -589,7 +589,7 @@ impl<'a> Interner for CondaDependencyProvider<'a> {
     }
 }
 
-impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
+impl DependencyProvider for CondaDependencyProvider<'_> {
     async fn sort_candidates(&self, solver: &SolverCache<Self>, solvables: &mut [SolvableId]) {
         if solvables.is_empty() {
             // Short circuit if there are no solvables to sort

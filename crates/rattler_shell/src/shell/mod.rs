@@ -58,7 +58,7 @@ pub trait Shell {
             && path
                 .extension()
                 .and_then(OsStr::to_str)
-                .map_or(false, |ext| ext == self.extension())
+                .is_some_and(|ext| ext == self.extension())
     }
 
     /// Executes a command in the current shell. Use [`Self::run_script`] when
@@ -336,7 +336,7 @@ impl Shell for Xonsh {
             && path
                 .extension()
                 .and_then(OsStr::to_str)
-                .map_or(false, |ext| ext == "xsh" || ext == "sh")
+                .is_some_and(|ext| ext == "xsh" || ext == "sh")
     }
 
     fn extension(&self) -> &str {

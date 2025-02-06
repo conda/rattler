@@ -192,9 +192,11 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             python_site_packages_path: value.python_site_packages_path.into_owned(),
         };
 
-        if value.location.file_name().map_or(false, |name| {
-            ArchiveIdentifier::try_from_filename(name).is_some()
-        }) {
+        if value
+            .location
+            .file_name()
+            .is_some_and(|name| ArchiveIdentifier::try_from_filename(name).is_some())
+        {
             Ok(CondaPackageData::Binary(CondaBinaryData {
                 location: value.location,
                 file_name: value

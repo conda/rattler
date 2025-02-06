@@ -349,9 +349,7 @@ where
             let reporter = reporter.as_deref().map(|r| (r, r.on_validate_start()));
 
             // If we know the revision is already valid we can return immediately.
-            if validated_revision.map_or(false, |validated_revision| {
-                validated_revision == cache_revision
-            }) {
+            if validated_revision == Some(cache_revision) {
                 if let Some((reporter, index)) = reporter {
                     reporter.on_validate_complete(index);
                 }
