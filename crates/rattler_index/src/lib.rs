@@ -9,7 +9,7 @@ use rattler_conda_types::{
 };
 use rattler_package_streaming::{read, seek};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     ffi::OsStr,
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -40,7 +40,8 @@ pub fn package_record_from_index_json<T: Read>(
         arch: index.arch,
         platform: index.platform,
         depends: index.depends,
-        extra_depends: std::collections::BTreeMap::new(),
+        extra_depends: BTreeMap::new(),
+        flags: BTreeSet::new(),
         constrains: index.constrains,
         track_features: index.track_features,
         features: index.features,

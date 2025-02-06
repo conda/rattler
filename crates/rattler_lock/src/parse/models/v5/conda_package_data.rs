@@ -1,4 +1,7 @@
-use std::{borrow::Cow, collections::BTreeSet};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+};
 
 use rattler_conda_types::{
     BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource,
@@ -117,7 +120,8 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
                 build_number: value.build_number,
                 constrains: value.constrains.into_owned(),
                 depends: value.depends.into_owned(),
-                extra_depends: std::collections::BTreeMap::new(),
+                extra_depends: BTreeMap::new(),
+                flags: BTreeSet::new(),
                 features: value.features.into_owned(),
                 legacy_bz2_md5: value.legacy_bz2_md5,
                 legacy_bz2_size: value.legacy_bz2_size.into_owned(),
