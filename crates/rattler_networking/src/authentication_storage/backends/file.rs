@@ -1,16 +1,16 @@
 //! file storage for passwords.
-use anyhow::Result;
 use async_fd_lock::{
     blocking::{LockRead, LockWrite},
     RwLockWriteGuard,
 };
 use std::collections::BTreeMap;
 use std::fs::File;
+use std::io::BufWriter;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
-use crate::authentication_storage::StorageBackend;
+use crate::authentication_storage::{AuthenticationStorageError, StorageBackend};
 use crate::Authentication;
 
 #[derive(Clone, Debug)]
@@ -99,6 +99,14 @@ impl FileStorage {
 
     /// Serialize the given `BTreeMap` and write it to the JSON file
     fn write_json(&self, dict: &BTreeMap<String, Authentication>) -> Result<(), FileStorageError> {
+        let parent = self
+            .path
+            .parent()
+            .ok_or(FileStorageError::IOError(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Parent directory not found",
+            )))?;
+        std::fs::create_dir_all(parent)?;
         let write_guard: std::result::Result<
             RwLockWriteGuard<File>,
             async_fd_lock::LockError<File>,
@@ -109,7 +117,7 @@ impl FileStorage {
             .open(&self.path)?
             .lock_write();
         let write_guard = write_guard.map_err(FileStorageError::FailedToLock)?;
-        serde_json::to_writer(write_guard, dict)?;
+        serde_json::to_writer(BufWriter::new(write_guard), dict)?;
 
         // Store the new data in the cache
         let mut cache = self.cache.write().unwrap();
@@ -121,18 +129,22 @@ impl FileStorage {
 }
 
 impl StorageBackend for FileStorage {
-    fn store(&self, host: &str, authentication: &crate::Authentication) -> Result<()> {
+    fn store(
+        &self,
+        host: &str,
+        authentication: &crate::Authentication,
+    ) -> Result<(), AuthenticationStorageError> {
         let mut dict = self.read_json()?;
         dict.insert(host.to_string(), authentication.clone());
         Ok(self.write_json(&dict)?)
     }
 
-    fn get(&self, host: &str) -> Result<Option<crate::Authentication>> {
+    fn get(&self, host: &str) -> Result<Option<crate::Authentication>, AuthenticationStorageError> {
         let cache = self.cache.read().unwrap();
         Ok(cache.content.get(host).cloned())
     }
 
-    fn delete(&self, host: &str) -> Result<()> {
+    fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
         let mut dict = self.read_json()?;
         if dict.remove(host).is_some() {
             Ok(self.write_json(&dict)?)
