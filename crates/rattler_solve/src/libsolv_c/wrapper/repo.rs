@@ -19,14 +19,14 @@ impl RepoId {
     }
 }
 
-impl<'pool> Drop for Repo<'pool> {
+impl Drop for Repo<'_> {
     fn drop(&mut self) {
         // Safe because we know that the repo is never freed manually
         unsafe { ffi::repo_free(self.0.as_mut(), 1) }
     }
 }
 
-impl<'pool> Repo<'pool> {
+impl Repo<'_> {
     /// Constructs a repo in the provided pool, associated to the given url
     pub fn new(pool: &Pool, url: impl AsRef<str>, priority: i32) -> Repo<'_> {
         let c_url = c_string(url);

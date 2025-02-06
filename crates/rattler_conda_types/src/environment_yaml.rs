@@ -41,7 +41,7 @@ pub struct EnvironmentYaml {
 #[derive(Debug, Clone, PartialEq)]
 pub enum MatchSpecOrSubSection {
     /// A Conda package match spec
-    MatchSpec(MatchSpec),
+    MatchSpec(Box<MatchSpec>),
     /// A list of specs for another package manager (pip)
     SubSection(String, Vec<String>),
 }
@@ -119,10 +119,10 @@ impl<'a> serde::Deserialize<'a> for MatchSpecOrSubSection {
     {
         serde_untagged::UntaggedEnumVisitor::new()
             .string(|v| {
-                Ok(MatchSpecOrSubSection::MatchSpec(
+                Ok(MatchSpecOrSubSection::MatchSpec(Box::new(
                     MatchSpec::from_str(v, ParseStrictness::Lenient)
                         .map_err(serde_untagged::de::Error::custom)?,
-                ))
+                )))
             })
             .map(|v| {
                 struct SubSectionVisitor;

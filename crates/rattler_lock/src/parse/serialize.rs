@@ -234,13 +234,13 @@ impl<'a> SerializablePackageSelector<'a> {
     }
 }
 
-impl<'a> PartialOrd for SerializablePackageSelector<'a> {
+impl PartialOrd for SerializablePackageSelector<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'a> Ord for SerializablePackageSelector<'a> {
+impl Ord for SerializablePackageSelector<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             (
@@ -403,7 +403,7 @@ pub enum PackageData<'a> {
     Pypi(&'a PypiPackageData),
 }
 
-impl<'a> PackageData<'a> {
+impl PackageData<'_> {
     fn source_name(&self) -> &str {
         match self {
             PackageData::Conda(p) => p.record().name.as_source(),
@@ -412,13 +412,13 @@ impl<'a> PackageData<'a> {
     }
 }
 
-impl<'a> PartialOrd<Self> for PackageData<'a> {
+impl PartialOrd<Self> for PackageData<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'a> Ord for PackageData<'a> {
+impl Ord for PackageData<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         use PackageData::{Conda, Pypi};
         self.source_name()

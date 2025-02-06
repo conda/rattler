@@ -290,10 +290,7 @@ impl<'a> JLAPResponse<'a> {
                 .map(|x| Patch::from_str(x).map_err(JLAPError::JSONParse))
                 .collect();
 
-            patches = match patches_result {
-                Ok(patches) => patches,
-                Err(error) => return Err(error),
-            };
+            patches = patches_result?;
         }
 
         Ok(JLAPResponse {
