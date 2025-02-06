@@ -159,10 +159,7 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
     }
 
     let host = get_url(&args.host)?;
-    eprintln!(
-        "Authenticating with {host} using {} methode",
-        auth.methode()
-    );
+    eprintln!("Authenticating with {host} using {} method", auth.method());
 
     storage.store(&host, &auth)?;
     Ok(())

@@ -50,7 +50,7 @@ impl FromStr for Authentication {
 
 impl Authentication {
     /// Get the scheme of the authentication method
-    pub fn methode(&self) -> &str {
+    pub fn method(&self) -> &str {
         match self {
             Authentication::BearerToken(_) => "BearerToken",
             Authentication::BasicHTTP { .. } => "BasicHTTP",

@@ -5,6 +5,7 @@ use async_fd_lock::{
 };
 use std::collections::BTreeMap;
 use std::fs::File;
+use std::io::BufWriter;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -116,7 +117,7 @@ impl FileStorage {
             .open(&self.path)?
             .lock_write();
         let write_guard = write_guard.map_err(FileStorageError::FailedToLock)?;
-        serde_json::to_writer(write_guard, dict)?;
+        serde_json::to_writer(BufWriter::new(write_guard), dict)?;
 
         // Store the new data in the cache
         let mut cache = self.cache.write().unwrap();
