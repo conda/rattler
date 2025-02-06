@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.1](https://github.com/conda/rattler/compare/rattler-v0.31.0...rattler-v0.31.1) - 2025-02-06
+
+### Other
+
+- bump rust 1.84.1 (#1053)
+
 ## [0.31.0](https://github.com/conda/rattler/compare/rattler-v0.30.0...rattler-v0.31.0) - 2025-02-06
 
 ### Fixed

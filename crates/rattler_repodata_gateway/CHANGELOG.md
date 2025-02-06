@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.36](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.35...rattler_repodata_gateway-v0.21.36) - 2025-02-06
+
+### Other
+
+- bump rust 1.84.1 (#1053)
+
 ## [0.21.35](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.34...rattler_repodata_gateway-v0.21.35) - 2025-02-06
 
 ### Other
