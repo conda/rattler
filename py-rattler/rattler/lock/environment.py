@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import Dict, List, Optional
 
-from rattler import Channel
 from rattler.lock.channel import LockChannel
 from rattler.lock.package import LockedPackage, PypiLockedPackage
 from rattler.platform.platform import Platform
