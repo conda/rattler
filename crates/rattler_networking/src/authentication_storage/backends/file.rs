@@ -48,7 +48,7 @@ impl FileStorageCache {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self {
                 content: BTreeMap::new(),
             }),
-            Err(e) => return Err(FileStorageError::IOError(e)),
+            Err(e) => Err(FileStorageError::IOError(e)),
             Ok(content) => {
                 let content = serde_json::from_str(&content)
                     .map_err(|e| FileStorageError::JSONError(path.to_path_buf(), e))?;
