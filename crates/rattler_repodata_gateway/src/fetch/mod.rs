@@ -725,7 +725,10 @@ async fn stream_and_decode_to_file(
     // Clone the file handle and create a hashing writer so we can compute a hash
     // while the content is being written to disk.
     let file = tokio_fs::File::from_std(fs_err::File::from_parts(
-        temp_file.as_file().try_clone()?,
+        temp_file
+            .as_file()
+            .try_clone()
+            .map_err(|err| FetchRepoDataError::IoError(err))?,
         temp_file.path(),
     ));
     let mut hashing_file_writer = HashingWriter::<_, Blake2b256>::new(file);
