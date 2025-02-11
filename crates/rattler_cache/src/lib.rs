@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+pub mod archive_cache;
 pub mod package_cache;
 
 pub mod validation;

@@ -119,8 +119,7 @@ async fn test_r2_download_repodata(r2_host: String, r2_credentials: Option<(Stri
     let body = result.text().await.unwrap();
     assert!(
         body.contains("my-webserver-0.1.0-pyh4616a5c_0.conda"),
-        "body does not contain package: {}",
-        body
+        "body does not contain package: {body}"
     );
 }
 
@@ -159,7 +158,6 @@ async fn test_r2_download_repodata_aws_profile(aws_config: Option<(TempDir, std:
     let body = result.text().await.unwrap();
     assert!(
         body.contains("my-webserver-0.1.0-pyh4616a5c_0.conda"),
-        "body does not contain package: {}",
-        body
+        "body does not contain package: {body}"
     );
 }
