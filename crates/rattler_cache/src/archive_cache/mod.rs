@@ -15,7 +15,7 @@ use fs_err::tokio as tokio_fs;
 use parking_lot::Mutex;
 use rattler_networking::retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy};
 use rattler_package_streaming::DownloadReporter;
-use tempfile::NamedTempFile;
+use tempfile::{NamedTempFile, PersistError};
 use tracing::instrument;
 use url::Url;
 
@@ -24,7 +24,7 @@ mod download;
 
 use cache_key::CacheKey;
 
-use crate::package_cache::{CacheReporter, PackageCacheError};
+use crate::package_cache::CacheReporter;
 
 /// A [`ArchiveCache`] manages a cache of Conda packages on disk.
 ///
@@ -89,7 +89,7 @@ impl ArchiveCache {
         &self,
         pkg: impl Into<CacheKey>,
         fetch: F,
-    ) -> Result<PathBuf, PackageCacheError>
+    ) -> Result<PathBuf, ArchiveCacheError>
     where
         F: (Fn() -> Fut) + Send + 'static,
         Fut: Future<Output = Result<NamedTempFile, E>> + Send + 'static,
@@ -116,15 +116,15 @@ impl ArchiveCache {
         // Otherwise, defer to populate method to fill our cache.
         let temp_file = fetch()
             .await
-            .map_err(|e| PackageCacheError::FetchError(Arc::new(e)))?;
+            .map_err(|e| ArchiveCacheError::Fetch(Arc::new(e)))?;
 
         if let Some(parent_dir) = cache_path.parent() {
             if !parent_dir.exists() {
-                tokio_fs::create_dir_all(parent_dir).await.unwrap();
+                tokio_fs::create_dir_all(parent_dir).await?;
             }
         }
 
-        temp_file.persist(&cache_path).unwrap();
+        temp_file.persist(&cache_path)?;
 
         Ok(cache_path)
     }
@@ -140,7 +140,7 @@ impl ArchiveCache {
         url: Url,
         client: reqwest_middleware::ClientWithMiddleware,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<PathBuf, PackageCacheError> {
+    ) -> Result<PathBuf, ArchiveCacheError> {
         self.get_or_fetch_from_url_with_retry(pkg, url, client, DoNotRetryPolicy, reporter)
             .await
     }
@@ -164,7 +164,7 @@ impl ArchiveCache {
         client: reqwest_middleware::ClientWithMiddleware,
         retry_policy: impl RetryPolicy + Send + 'static + Clone,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<PathBuf, PackageCacheError> {
+    ) -> Result<PathBuf, ArchiveCacheError> {
         let request_start = SystemTime::now();
         // Convert into cache key
         let cache_key = pkg.into();
@@ -228,6 +228,31 @@ impl ArchiveCache {
         })
             .await
     }
+}
+
+/// An error that might be returned from one of the caching function of the
+/// [`PackageCache`].
+#[derive(Debug, thiserror::Error)]
+pub enum ArchiveCacheError {
+    /// An error occurred while fetching the package.
+    #[error(transparent)]
+    Fetch(#[from] Arc<dyn std::error::Error + Send + Sync + 'static>),
+
+    /// A locking error occurred
+    #[error("{0}")]
+    Lock(String, #[source] std::io::Error),
+
+    /// An IO error occurred
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+
+    /// An error occurred while persisting the temp file
+    #[error("{0}")]
+    Persist(#[from] PersistError),
+
+    /// The operation was cancelled
+    #[error("operation was cancelled")]
+    Cancelled,
 }
 
 struct PassthroughReporter {
