@@ -27,7 +27,7 @@ pub(crate) async fn download(
     let total_bytes = response.content_length();
     // Convert the named temp file into a tokio file
     let mut file = tokio::File::from_std(fs_err::File::from_parts(
-        temp_file.as_file().try_clone().unwrap(),
+        temp_file.as_file().try_clone()?,
         temp_file.path(),
     ));
 
