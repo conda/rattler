@@ -1,15 +1,15 @@
 //! Unlinking packages from an environment.
 
-use fs_err::tokio as tokio_fs;
 use std::{
     collections::HashSet,
     ffi::OsString,
     io::ErrorKind,
     path::{Path, PathBuf},
 };
-use uuid::Uuid;
 
+use fs_err::tokio as tokio_fs;
 use rattler_conda_types::PrefixRecord;
+use uuid::Uuid;
 
 /// Error that can occur while unlinking a package.
 #[derive(Debug, thiserror::Error)]
@@ -404,10 +404,13 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn test_unlink_package_in_use() {
+        use std::{
+            env::{join_paths, split_paths, var_os},
+            io::{BufRead, BufReader},
+            process::{Command, Stdio},
+        };
+
         use itertools::chain;
-        use std::env::{join_paths, split_paths, var_os};
-        use std::io::{BufRead, BufReader};
-        use std::process::{Command, Stdio};
 
         let environment_dir = tempfile::TempDir::new().unwrap();
         let target_prefix = environment_dir.path();
@@ -485,7 +488,7 @@ mod tests {
         let mut stdout = BufReader::new(child.stdout.take().expect("failed to open stdout"));
         // Ensure program has started by waiting for it to repeat back to us.
         let mut line = String::new();
-        stdin.write("abc\n".as_bytes()).unwrap();
+        stdin.write_all(b"abc\n").unwrap();
         stdout.read_line(&mut line).unwrap();
 
         // Unlink the package

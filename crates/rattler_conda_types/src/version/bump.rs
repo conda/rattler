@@ -94,7 +94,7 @@ impl Version {
                 flags: self.flags.with_local_segment_index(0).unwrap(),
             })
         } else {
-            return Cow::Borrowed(self);
+            Cow::Borrowed(self)
         }
     }
 

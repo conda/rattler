@@ -197,7 +197,7 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
         /// Parses a group of version constraints separated by ,s
         fn parse_and_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
             input: &'a str,
-        ) -> Result<(&'a str, VersionTree<'_>), nom::Err<E>> {
+        ) -> Result<(&'a str, VersionTree<'a>), nom::Err<E>> {
             let (rest, group) =
                 separated_list1(delimited(multispace0, tag(","), multispace0), parse_term)(input)?;
             Ok((rest, flatten_group(LogicalOperator::And, group)))
@@ -206,7 +206,7 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
         /// Parses a group of version constraints
         fn parse_or_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
             input: &'a str,
-        ) -> Result<(&'a str, VersionTree<'_>), nom::Err<E>> {
+        ) -> Result<(&'a str, VersionTree<'a>), nom::Err<E>> {
             let (rest, group) = separated_list1(
                 delimited(multispace0, tag("|"), multispace0),
                 parse_and_group,

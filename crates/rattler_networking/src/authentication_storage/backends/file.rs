@@ -1,22 +1,20 @@
 //! file storage for passwords.
-use async_fd_lock::{
-    blocking::{LockRead, LockWrite},
-    RwLockWriteGuard,
+use std::{
+    collections::BTreeMap,
+    ffi::OsStr,
+    io::BufWriter,
+    path::{Path, PathBuf},
+    sync::{Arc, RwLock},
 };
-use std::collections::BTreeMap;
-use std::fs::File;
-use std::io::BufWriter;
-use std::path::Path;
-use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
 
-use crate::authentication_storage::{AuthenticationStorageError, StorageBackend};
-use crate::Authentication;
+use crate::{
+    authentication_storage::{AuthenticationStorageError, StorageBackend},
+    Authentication,
+};
 
 #[derive(Clone, Debug)]
 struct FileStorageCache {
     content: BTreeMap<String, Authentication>,
-    file_exists: bool,
 }
 
 /// A struct that implements storage and access of authentication
@@ -36,36 +34,27 @@ pub struct FileStorage {
 #[derive(thiserror::Error, Debug)]
 pub enum FileStorageError {
     /// An IO error occurred when accessing the file storage
-    #[error("IO error: {0}")]
+    #[error(transparent)]
     IOError(#[from] std::io::Error),
 
-    /// Failed to lock the file storage file
-    #[error("failed to lock file storage file: {0:?}")]
-    FailedToLock(async_fd_lock::LockError<std::fs::File>),
-
     /// An error occurred when (de)serializing the credentials
-    #[error("JSON error: {0}")]
-    JSONError(#[from] serde_json::Error),
+    #[error("failed to parse {0}: {1}")]
+    JSONError(PathBuf, serde_json::Error),
 }
 
 impl FileStorageCache {
     pub fn from_path(path: &Path) -> Result<Self, FileStorageError> {
-        let file_exists = path.exists();
-        let content = if file_exists {
-            let read_guard = File::options()
-                .read(true)
-                .open(path)?
-                .lock_read()
-                .map_err(FileStorageError::FailedToLock)?;
-            serde_json::from_reader(read_guard)?
-        } else {
-            BTreeMap::new()
-        };
-
-        Ok(Self {
-            content,
-            file_exists,
-        })
+        match fs_err::read_to_string(path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self {
+                content: BTreeMap::new(),
+            }),
+            Err(e) => Err(FileStorageError::IOError(e)),
+            Ok(content) => {
+                let content = serde_json::from_str(&content)
+                    .map_err(|e| FileStorageError::JSONError(path.to_path_buf(), e))?;
+                Ok(Self { content })
+            }
+        }
     }
 }
 
@@ -87,13 +76,12 @@ impl FileStorage {
         Self::from_path(path)
     }
 
-    /// Updates the cache by reading the JSON file and deserializing it into a `BTreeMap`, or return an empty `BTreeMap` if the
-    /// file does not exist
+    /// Updates the cache by reading the JSON file and deserializing it into a
+    /// `BTreeMap`, or return an empty `BTreeMap` if the file does not exist
     fn read_json(&self) -> Result<BTreeMap<String, Authentication>, FileStorageError> {
         let new_cache = FileStorageCache::from_path(&self.path)?;
         let mut cache = self.cache.write().unwrap();
         cache.content = new_cache.content;
-        cache.file_exists = new_cache.file_exists;
         Ok(cache.content.clone())
     }
 
@@ -107,22 +95,32 @@ impl FileStorage {
                 "Parent directory not found",
             )))?;
         std::fs::create_dir_all(parent)?;
-        let write_guard: std::result::Result<
-            RwLockWriteGuard<File>,
-            async_fd_lock::LockError<File>,
-        > = File::options()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&self.path)?
-            .lock_write();
-        let write_guard = write_guard.map_err(FileStorageError::FailedToLock)?;
-        serde_json::to_writer(BufWriter::new(write_guard), dict)?;
+
+        let prefix = self
+            .path
+            .file_stem()
+            .unwrap_or_else(|| OsStr::new("credentials"));
+        let extension = self
+            .path
+            .extension()
+            .and_then(OsStr::to_str)
+            .unwrap_or("json");
+
+        // Write the contents to a temporary file and then atomically move it to the
+        // final location.
+        let mut temp_file = tempfile::Builder::new()
+            .prefix(prefix)
+            .suffix(&format!(".{extension}"))
+            .tempfile_in(parent)?;
+        serde_json::to_writer(BufWriter::new(&mut temp_file), dict)
+            .map_err(std::io::Error::from)?;
+        temp_file
+            .persist(&self.path)
+            .map_err(std::io::Error::from)?;
 
         // Store the new data in the cache
         let mut cache = self.cache.write().unwrap();
         cache.content = dict.clone();
-        cache.file_exists = true;
 
         Ok(())
     }
@@ -156,10 +154,12 @@ impl StorageBackend for FileStorage {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use insta::assert_snapshot;
     use std::{fs, io::Write};
+
+    use insta::assert_snapshot;
     use tempfile::tempdir;
+
+    use super::*;
 
     #[test]
     fn test_file_storage() {

@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.27](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.26...rattler_package_streaming-v0.22.27) - 2025-02-06
+
+### Other
+
+- bump rust 1.84.1 (#1053)
+
+## [0.22.26](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.25...rattler_package_streaming-v0.22.26) - 2025-02-06
+
+### Other
+
+- updated the following local packages: rattler_networking
+
 ## [0.22.25](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.24...rattler_package_streaming-v0.22.25) - 2025-02-03
 
 ### Other
