@@ -6,7 +6,7 @@ pub mod package_cache;
 pub mod validation;
 
 mod consts;
-pub use consts::{PACKAGE_CACHE_DIR, REPODATA_CACHE_DIR, ARCHIVE_CACHE_DIR};
+pub use consts::{ARCHIVE_CACHE_DIR, PACKAGE_CACHE_DIR, REPODATA_CACHE_DIR};
 
 /// Determines the default cache directory for rattler.
 /// It first checks the environment variable `RATTLER_CACHE_DIR`.

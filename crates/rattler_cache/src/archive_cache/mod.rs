@@ -22,7 +22,7 @@ use url::Url;
 mod cache_key;
 mod download;
 
-pub use cache_key::CacheKey;
+pub use cache_key::{CacheKey, CacheKeyError};
 
 use crate::package_cache::CacheReporter;
 
@@ -87,7 +87,7 @@ impl ArchiveCache {
     /// request is coalesced. No duplicate fetch is performed.
     pub async fn get_or_fetch<F, Fut, E>(
         &self,
-        pkg: impl Into<CacheKey>,
+        cache_key: &CacheKey,
         fetch: F,
     ) -> Result<PathBuf, ArchiveCacheError>
     where
@@ -95,7 +95,6 @@ impl ArchiveCache {
         Fut: Future<Output = Result<NamedTempFile, E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let cache_key = pkg.into();
         let cache_path = self.inner.path.join(cache_key.to_string());
         let cache_entry = self
             .inner
@@ -136,12 +135,12 @@ impl ArchiveCache {
     /// cache.
     pub async fn get_or_fetch_from_url(
         &self,
-        pkg: impl Into<CacheKey>,
+        cache_key: &CacheKey,
         url: Url,
         client: reqwest_middleware::ClientWithMiddleware,
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<PathBuf, ArchiveCacheError> {
-        self.get_or_fetch_from_url_with_retry(pkg, url, client, DoNotRetryPolicy, reporter)
+        self.get_or_fetch_from_url_with_retry(cache_key, url, client, DoNotRetryPolicy, reporter)
             .await
     }
 
@@ -159,7 +158,7 @@ impl ArchiveCache {
     #[instrument(skip_all, fields(url=%url))]
     pub async fn get_or_fetch_from_url_with_retry(
         &self,
-        pkg: impl Into<CacheKey>,
+        cache_key: &CacheKey,
         url: Url,
         client: reqwest_middleware::ClientWithMiddleware,
         retry_policy: impl RetryPolicy + Send + 'static + Clone,
@@ -167,7 +166,6 @@ impl ArchiveCache {
     ) -> Result<PathBuf, ArchiveCacheError> {
         let request_start = SystemTime::now();
         // Convert into cache key
-        let cache_key = pkg.into();
         let download_reporter = reporter.clone();
         // Get or fetch the package, using the specified fetch function
         self.get_or_fetch(cache_key, move || {
@@ -185,7 +183,6 @@ impl ArchiveCache {
                     let result = crate::archive_cache::download::download(
                         client.clone(),
                         url.clone(),
-                        // &temp_file,
                         download_reporter.clone().map(|reporter| Arc::new(PassthroughReporter {
                             reporter,
                             index: Mutex::new(None),
@@ -312,6 +309,8 @@ mod test {
 
     use url::Url;
 
+    use crate::archive_cache::CacheKey;
+
     use super::ArchiveCache;
 
     #[tokio::test]
@@ -334,10 +333,16 @@ mod test {
             .unwrap(),
         );
 
+        let cache_key = CacheKey::new(
+            &pkg_record,
+            "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2",
+        )
+        .unwrap();
+
         // Get the package to the cache
         let cache_path = cache
             .get_or_fetch_from_url(
-                &pkg_record,
+                &cache_key,
                 package_url.clone(),
                 ClientWithMiddleware::from(Client::new()),
                 None,
@@ -420,10 +425,12 @@ mod test {
 
         let client = ClientBuilder::new(Client::default()).build();
 
+        let cache_key = CacheKey::new(package_record, archive_name).unwrap();
+
         // Do the first request without
         let result = cache
             .get_or_fetch_from_url_with_retry(
-                package_record,
+                &cache_key,
                 server_url.join(archive_name).unwrap(),
                 client.clone(),
                 DoNotRetryPolicy,
@@ -446,7 +453,7 @@ mod test {
         // The second one should fail after the 2nd try
         let result = cache
             .get_or_fetch_from_url_with_retry(
-                package_record,
+                &cache_key,
                 server_url.join(archive_name).unwrap(),
                 client,
                 retry_policy,
@@ -504,10 +511,16 @@ mod test {
         let packages_dir = tempdir().unwrap();
         let cache = ArchiveCache::new(packages_dir.path());
 
+        let cache_key = CacheKey::new(
+            &pkg_record,
+            "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2",
+        )
+        .unwrap();
+
         // Get the package to the cache
         let first_cache_path = cache
             .get_or_fetch_from_url(
-                &pkg_record,
+                &cache_key,
                 package_url.clone(),
                 ClientWithMiddleware::from(Client::new()),
                 None,
@@ -523,11 +536,17 @@ mod test {
         .unwrap();
         pkg_record.sha256 = Some(new_sha);
 
+        let cache_key = CacheKey::new(
+            &pkg_record,
+            "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2",
+        )
+        .unwrap();
+
         // Get the package again
         // and verify that the package was replaced
         let second_package_cache = cache
             .get_or_fetch_from_url(
-                &pkg_record,
+                &cache_key,
                 package_url.clone(),
                 ClientWithMiddleware::from(Client::new()),
                 None,
