@@ -13,9 +13,10 @@ use url::Url;
 pub(crate) async fn download(
     client: reqwest_middleware::ClientWithMiddleware,
     url: Url,
+    suffix: &str,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<NamedTempFile, DownloadError> {
-    let temp_file = NamedTempFile::new()?;
+    let temp_file = NamedTempFile::with_suffix(suffix)?;
 
     // Send the request for the file
     let response = client.get(url.clone()).send().await?.error_for_status()?;

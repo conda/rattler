@@ -4,7 +4,7 @@
 use std::{
     fmt::Debug,
     future::Future,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -13,9 +13,10 @@ use dashmap::DashMap;
 use download::DownloadError;
 use fs_err::tokio as tokio_fs;
 use parking_lot::Mutex;
+use rattler_conda_types::package::RunExportsJson;
 use rattler_networking::retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy};
-use rattler_package_streaming::DownloadReporter;
-use tempfile::{NamedTempFile, PersistError};
+use rattler_package_streaming::{DownloadReporter, ExtractError};
+use tempfile::PersistError;
 use tracing::instrument;
 use url::Url;
 
@@ -26,22 +27,45 @@ pub use cache_key::{CacheKey, CacheKeyError};
 
 use crate::package_cache::CacheReporter;
 
-/// A [`ArchiveCache`] manages a cache of Conda packages on disk.
+/// A [`RunExportsCache`] manages a cache of `run_exports.json`
 ///
 /// The store does not provide an implementation to get the data into the store.
-/// Instead, this is left up to the user when the package is requested. If the
-/// package is found in the cache it is returned immediately. However, if the
+/// Instead, this is left up to the user when the `run_exports.json` is requested. If the
+/// `run_exports.json` is found in the cache it is returned immediately. However, if the
 /// cache is missing a user defined function is called to populate the cache. This
 /// separates the corners between caching and fetching of the content.
 #[derive(Clone)]
-pub struct ArchiveCache {
-    inner: Arc<ArchiveCacheInner>,
+pub struct RunExportsCache {
+    inner: Arc<RunExportsCacheInner>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CacheEntry {
+    pub(crate) run_exports: Arc<Option<RunExportsJson>>,
+    pub(crate) path: PathBuf,
+}
+
+impl CacheEntry {
+    pub(crate) fn new(run_exports: Option<RunExportsJson>, path: PathBuf) -> Self {
+        Self {
+            run_exports: Arc::new(run_exports),
+            path,
+        }
+    }
+
+    pub fn run_exports(&self) -> Arc<Option<RunExportsJson>> {
+        self.run_exports.clone()
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
 }
 
 #[derive(Default)]
-struct ArchiveCacheInner {
+struct RunExportsCacheInner {
     path: PathBuf,
-    packages: DashMap<BucketKey, Arc<tokio::sync::Mutex<()>>>,
+    run_exports: DashMap<BucketKey, Arc<tokio::sync::Mutex<Option<CacheEntry>>>>,
 }
 
 /// A key that defines the actual location of the package in the cache.
@@ -64,13 +88,13 @@ impl From<CacheKey> for BucketKey {
     }
 }
 
-impl ArchiveCache {
+impl RunExportsCache {
     /// Constructs a new [`ArchiveCache`] located at the specified path.
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self {
-            inner: Arc::new(ArchiveCacheInner {
+            inner: Arc::new(RunExportsCacheInner {
                 path: path.into(),
-                packages: DashMap::default(),
+                run_exports: DashMap::default(),
             }),
         }
     }
@@ -89,33 +113,33 @@ impl ArchiveCache {
         &self,
         cache_key: &CacheKey,
         fetch: F,
-    ) -> Result<PathBuf, ArchiveCacheError>
+    ) -> Result<CacheEntry, RunExportsCacheError>
     where
         F: (Fn() -> Fut) + Send + 'static,
-        Fut: Future<Output = Result<NamedTempFile, E>> + Send + 'static,
+        Fut: Future<Output = Result<Option<RunExportsJson>, E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
         let cache_path = self.inner.path.join(cache_key.to_string());
         let cache_entry = self
             .inner
-            .packages
+            .run_exports
             .entry(cache_key.clone().into())
             .or_default()
             .clone();
 
         // Acquire the entry. From this point on we can be sure that only one task is
         // accessing the cache entry.
-        let _ = cache_entry.lock().await;
+        let mut entry = cache_entry.lock().await;
 
         // Check if the cache entry is already stored in the cache.
-        if cache_path.exists() {
-            return Ok(cache_path);
+        if let Some(run_exports) = entry.as_ref() {
+            return Ok(run_exports.clone());
         }
 
         // Otherwise, defer to populate method to fill our cache.
-        let temp_file = fetch()
+        let run_exports = fetch()
             .await
-            .map_err(|e| ArchiveCacheError::Fetch(Arc::new(e)))?;
+            .map_err(|e| RunExportsCacheError::Fetch(Arc::new(e)))?;
 
         if let Some(parent_dir) = cache_path.parent() {
             if !parent_dir.exists() {
@@ -123,9 +147,12 @@ impl ArchiveCache {
             }
         }
 
-        temp_file.persist(&cache_path)?;
+        tokio_fs::write(&cache_path, serde_json::to_string(&run_exports)?).await?;
+        let cache_entry = CacheEntry::new(run_exports, cache_path);
 
-        Ok(cache_path)
+        entry.replace(cache_entry.clone());
+
+        Ok(cache_entry)
     }
 
     /// Returns the directory that contains the specified package.
@@ -139,7 +166,7 @@ impl ArchiveCache {
         url: Url,
         client: reqwest_middleware::ClientWithMiddleware,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<PathBuf, ArchiveCacheError> {
+    ) -> Result<CacheEntry, RunExportsCacheError> {
         self.get_or_fetch_from_url_with_retry(cache_key, url, client, DoNotRetryPolicy, reporter)
             .await
     }
@@ -163,16 +190,31 @@ impl ArchiveCache {
         client: reqwest_middleware::ClientWithMiddleware,
         retry_policy: impl RetryPolicy + Send + 'static + Clone,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<PathBuf, ArchiveCacheError> {
+    ) -> Result<CacheEntry, RunExportsCacheError> {
         let request_start = SystemTime::now();
         // Convert into cache key
         let download_reporter = reporter.clone();
+
+        let extension = cache_key.extension.clone();
         // Get or fetch the package, using the specified fetch function
         self.get_or_fetch(cache_key, move || {
+
+            #[derive(Debug, thiserror::Error)]
+            enum FetchError{
+                #[error(transparent)]
+                Download(#[from] DownloadError),
+
+                #[error(transparent)]
+                Extract(#[from] ExtractError),
+
+            }
+
             let url = url.clone();
             let client = client.clone();
             let retry_policy = retry_policy.clone();
             let download_reporter = download_reporter.clone();
+            let extension = extension.clone();
+
             async move {
                 let mut current_try = 0;
                 // Retry until the retry policy says to stop
@@ -183,6 +225,7 @@ impl ArchiveCache {
                     let result = crate::archive_cache::download::download(
                         client.clone(),
                         url.clone(),
+                        &extension,
                         download_reporter.clone().map(|reporter| Arc::new(PassthroughReporter {
                             reporter,
                             index: Mutex::new(None),
@@ -190,15 +233,33 @@ impl ArchiveCache {
                     )
                         .await;
 
+
                     // Extract any potential error
                     let err = match result {
-                        Ok(result) => return Ok(result),
-                        Err(err) => err,
+                        Ok(result) => {
+                            // now extract run_exports.json from the archive without unpacking
+                            let file =
+                                rattler_package_streaming::seek::read_package_file::<RunExportsJson>(result);
+
+                            match file {
+                                Ok(run_exports) => {
+                                    return Ok(Some(run_exports));
+                                },
+                                Err(err) => {
+                                    if matches!(err, ExtractError::MissingComponent) {
+                                        return Ok(None);
+                                    }
+                                    return Err(FetchError::Extract(err));
+
+                                }
+                            }
+                        },
+                        Err(err) => FetchError::Download(err),
                     };
 
                     // Only retry on io errors. We assume that the user has
                     // middleware installed that handles connection retries.
-                    if !matches!(&err,DownloadError::Io(_)) {
+                    if !matches!(&err, FetchError::Download(_)) {
                         return Err(err);
                     }
 
@@ -230,7 +291,7 @@ impl ArchiveCache {
 /// An error that might be returned from one of the caching function of the
 /// [`ArchiveCache`].
 #[derive(Debug, thiserror::Error)]
-pub enum ArchiveCacheError {
+pub enum RunExportsCacheError {
     /// An error occurred while fetching the package.
     #[error(transparent)]
     Fetch(#[from] Arc<dyn std::error::Error + Send + Sync + 'static>),
@@ -246,6 +307,14 @@ pub enum ArchiveCacheError {
     /// An error occurred while persisting the temp file
     #[error("{0}")]
     Persist(#[from] PersistError),
+
+    /// An error occured when extracting `run_exports` from archive
+    #[error(transparent)]
+    Extract(#[from] ExtractError),
+
+    /// An error occured when serializing `run_exports`
+    #[error(transparent)]
+    Serialize(#[from] serde_json::Error),
 
     /// The operation was cancelled
     #[error("operation was cancelled")]
@@ -311,15 +380,17 @@ mod test {
 
     use crate::archive_cache::CacheKey;
 
-    use super::ArchiveCache;
+    use super::RunExportsCache;
 
     #[tokio::test]
-    pub async fn test_package_cache() {
+    pub async fn test_run_exports_cache_when_empty() {
+        // This archive does not contain a run_exports.json
+        // so we expect the cache to return None
         let package_url = Url::parse("https://conda.anaconda.org/robostack/linux-64/ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2").unwrap();
 
         let cache_dir = tempdir().unwrap().into_path();
 
-        let cache = ArchiveCache::new(&cache_dir);
+        let cache = RunExportsCache::new(&cache_dir);
 
         let mut pkg_record = PackageRecord::new(
             PackageName::from_str("ros-noetic-rosbridge-suite").unwrap(),
@@ -340,7 +411,7 @@ mod test {
         .unwrap();
 
         // Get the package to the cache
-        let cache_path = cache
+        let cached_run_exports = cache
             .get_or_fetch_from_url(
                 &cache_key,
                 package_url.clone(),
@@ -350,7 +421,41 @@ mod test {
             .await
             .unwrap();
 
-        assert!(cache_path.exists());
+        assert!(cached_run_exports.run_exports.is_none());
+    }
+
+    #[tokio::test]
+    pub async fn test_run_exports_cache_when_present() {
+        // This archive contains a run_exports.json
+        // so we expect the cache to return it
+        let package_url =
+            Url::parse("https://repo.prefix.dev/conda-forge/linux-64/zlib-1.3.1-hb9d3cd8_2.conda")
+                .unwrap();
+
+        let cache_dir = tempdir().unwrap().into_path();
+
+        let cache = RunExportsCache::new(&cache_dir);
+
+        let pkg_record = PackageRecord::new(
+            PackageName::from_str("zlib").unwrap(),
+            Version::from_str("1.3.1").unwrap(),
+            "hb9d3cd8_2".to_string(),
+        );
+
+        let cache_key = CacheKey::new(&pkg_record, "zlib-1.3.1-hb9d3cd8_2.conda").unwrap();
+
+        // Get the package to the cache
+        let cached_run_exports = cache
+            .get_or_fetch_from_url(
+                &cache_key,
+                package_url.clone(),
+                ClientWithMiddleware::from(Client::new()),
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(cached_run_exports.run_exports.is_some());
     }
 
     /// A helper middleware function that fails the first two requests.
@@ -419,7 +524,7 @@ mod test {
         tokio::spawn(axum::serve(listener, service).into_future());
 
         let packages_dir = tempdir().unwrap();
-        let cache = ArchiveCache::new(packages_dir.path());
+        let cache = RunExportsCache::new(packages_dir.path());
 
         let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
 
@@ -509,7 +614,7 @@ mod test {
 
         // Create a temporary directory to store the packages
         let packages_dir = tempdir().unwrap();
-        let cache = ArchiveCache::new(packages_dir.path());
+        let cache = RunExportsCache::new(packages_dir.path());
 
         let cache_key = CacheKey::new(
             &pkg_record,
@@ -554,6 +659,6 @@ mod test {
             .await
             .unwrap();
 
-        assert_ne!(first_cache_path, second_package_cache);
+        assert_ne!(first_cache_path.path(), second_package_cache.path());
     }
 }

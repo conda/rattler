@@ -33,6 +33,7 @@ digest.workspace = true
 fs4 = { workspace = true, features = ["fs-err3-tokio", "tokio"] }
 simple_spawn_blocking = { version = "1.0.0", path = "../simple_spawn_blocking", features = ["tokio"] }
 rayon = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 assert_matches.workspace = true
@@ -44,3 +45,4 @@ tokio-stream.workspace = true
 tower-http = { workspace = true, features = ["fs"] }
 tools = { path = "../tools" }
 reqwest-retry = { workspace = true }
+insta = { workspace = true, features = ["yaml"] }
