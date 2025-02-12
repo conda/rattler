@@ -22,7 +22,7 @@ use url::Url;
 mod cache_key;
 mod download;
 
-use cache_key::CacheKey;
+pub use cache_key::CacheKey;
 
 use crate::package_cache::CacheReporter;
 
