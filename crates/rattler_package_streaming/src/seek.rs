@@ -6,11 +6,13 @@ use crate::ExtractError;
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::package::PackageFile;
 use std::fs::File;
+use std::io::Write;
 use std::{
     io::{Read, Seek, SeekFrom},
     path::Path,
 };
 use tar::Archive;
+use tempfile::NamedTempFile;
 use zip::CompressionMethod;
 
 fn stream_conda_zip_entry<'a>(
@@ -115,4 +117,34 @@ pub fn read_package_file<P: PackageFile>(path: impl AsRef<Path>) -> Result<P, Ex
                 .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
         }
     }
+}
+
+/// Get a [`PackageFile`] from temporary archive and return it as a temporary file.
+pub fn get_package_file<P: PackageFile>(
+    named_temp_file: NamedTempFile,
+) -> Result<NamedTempFile, ExtractError> {
+    let mut tmp_file = NamedTempFile::new()?;
+
+    match ArchiveType::try_from(named_temp_file.path())
+        .ok_or(ExtractError::UnsupportedArchiveType)?
+    {
+        ArchiveType::TarBz2 => {
+            let mut archive = stream_tar_bz2(named_temp_file);
+            let buf = get_file_from_archive(&mut archive, P::package_path())?;
+
+            let mut tmp_file = NamedTempFile::new()?;
+
+            tmp_file.write_all(&buf)?;
+        }
+        ArchiveType::Conda => {
+            let mut info_archive = stream_conda_info(named_temp_file).unwrap();
+            let buf = get_file_from_archive(&mut info_archive, P::package_path())?;
+
+            tmp_file.write_all(&buf)?;
+        }
+    }
+
+    tmp_file.flush()?;
+
+    Ok(tmp_file)
 }

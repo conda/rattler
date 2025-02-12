@@ -13,10 +13,10 @@ use dashmap::DashMap;
 use download::DownloadError;
 use fs_err::tokio as tokio_fs;
 use parking_lot::Mutex;
-use rattler_conda_types::package::RunExportsJson;
+use rattler_conda_types::package::{PackageFile, RunExportsJson};
 use rattler_networking::retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy};
 use rattler_package_streaming::{DownloadReporter, ExtractError};
-use tempfile::PersistError;
+use tempfile::{NamedTempFile, PersistError};
 use tracing::instrument;
 use url::Url;
 
@@ -122,7 +122,7 @@ impl RunExportsCache {
     ) -> Result<CacheEntry, RunExportsCacheError>
     where
         F: (Fn() -> Fut) + Send + 'static,
-        Fut: Future<Output = Result<Option<RunExportsJson>, E>> + Send + 'static,
+        Fut: Future<Output = Result<Option<NamedTempFile>, E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
         let cache_path = self.inner.path.join(cache_key.to_string());
@@ -143,7 +143,7 @@ impl RunExportsCache {
         }
 
         // Otherwise, defer to populate method to fill our cache.
-        let run_exports = fetch()
+        let run_exports_file = fetch()
             .await
             .map_err(|e| RunExportsCacheError::Fetch(Arc::new(e)))?;
 
@@ -153,7 +153,15 @@ impl RunExportsCache {
             }
         }
 
-        tokio_fs::write(&cache_path, serde_json::to_string(&run_exports)?).await?;
+        let run_exports = if let Some(file) = run_exports_file {
+            file.persist(&cache_path)?;
+
+            let run_exports_str = tokio_fs::read_to_string(&cache_path).await?;
+            Some(RunExportsJson::from_str(&run_exports_str)?)
+        } else {
+            None
+        };
+
         let cache_entry = CacheEntry::new(run_exports, cache_path);
 
         entry.replace(cache_entry.clone());
@@ -239,13 +247,12 @@ impl RunExportsCache {
                     )
                         .await;
 
-
                     // Extract any potential error
                     let err = match result {
                         Ok(result) => {
                             // now extract run_exports.json from the archive without unpacking
                             let file =
-                                rattler_package_streaming::seek::read_package_file::<RunExportsJson>(result);
+                                rattler_package_streaming::seek::get_package_file::<RunExportsJson>(result);
 
                             match file {
                                 Ok(run_exports) => {

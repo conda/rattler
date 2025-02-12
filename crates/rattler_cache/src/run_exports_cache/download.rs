@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ::tokio::io::AsyncWriteExt;
+use ::tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use fs_err::tokio;
 use futures::StreamExt;
 use rattler_package_streaming::DownloadReporter;
@@ -46,6 +46,8 @@ pub(crate) async fn download(
     }
 
     file.flush().await?;
+
+    file.rewind().await?;
 
     Ok(temp_file)
 }
