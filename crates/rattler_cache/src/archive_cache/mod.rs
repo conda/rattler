@@ -39,13 +39,17 @@ pub struct RunExportsCache {
     inner: Arc<RunExportsCacheInner>,
 }
 
+/// A cache entry that contains the path to the package and the `run_exports.json`
 #[derive(Clone, Debug)]
 pub struct CacheEntry {
+    /// The `run_exports.json` of the package.
     pub(crate) run_exports: Arc<Option<RunExportsJson>>,
+    /// The path to the file on disk.
     pub(crate) path: PathBuf,
 }
 
 impl CacheEntry {
+    /// Create a new cache entry.
     pub(crate) fn new(run_exports: Option<RunExportsJson>, path: PathBuf) -> Self {
         Self {
             run_exports: Arc::new(run_exports),
@@ -53,10 +57,12 @@ impl CacheEntry {
         }
     }
 
+    /// Returns the `run_exports.json` of the package.
     pub fn run_exports(&self) -> Arc<Option<RunExportsJson>> {
         self.run_exports.clone()
     }
 
+    /// Returns the path to the file on disk.
     pub fn path(&self) -> &Path {
         &self.path
     }
