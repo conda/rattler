@@ -728,7 +728,7 @@ async fn stream_and_decode_to_file(
         temp_file
             .as_file()
             .try_clone()
-            .map_err(|err| FetchRepoDataError::IoError(err))?,
+            .map_err(FetchRepoDataError::IoError)?,
         temp_file.path(),
     ));
     let mut hashing_file_writer = HashingWriter::<_, Blake2b256>::new(file);

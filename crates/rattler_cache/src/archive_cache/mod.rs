@@ -1,5 +1,5 @@
 //! This module provides functionality to cache extracted Conda packages. See
-//! [`PackageCache`].
+//! [`ArchiveCache`].
 
 use std::{
     fmt::Debug,
@@ -231,7 +231,7 @@ impl ArchiveCache {
 }
 
 /// An error that might be returned from one of the caching function of the
-/// [`PackageCache`].
+/// [`ArchiveCache`].
 #[derive(Debug, thiserror::Error)]
 pub enum ArchiveCacheError {
     /// An error occurred while fetching the package.
