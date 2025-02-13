@@ -234,8 +234,6 @@ impl PrefixRecord {
         path: impl AsRef<Path>,
         pretty: bool,
     ) -> Result<(), std::io::Error> {
-        const BUFFER_SIZE: usize = 64 * 1024;
-
         let path = path.as_ref();
         let parent = path.parent().ok_or_else(|| {
             std::io::Error::new(
@@ -255,7 +253,7 @@ impl PrefixRecord {
         })?;
 
         // Write to temp file with buffered writer
-        let writer = BufWriter::with_capacity(BUFFER_SIZE, &temp_file);
+        let writer = BufWriter::with_capacity(64 * 1024, &temp_file);
         self.write_to(writer, pretty)?;
 
         // Ensure all data is written before persisting
