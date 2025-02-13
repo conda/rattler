@@ -39,23 +39,33 @@ fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCErro
     // Run `ldd --version` to detect the libc version and family on the system.
     // `ldd` is shipped with libc so if an error occurred during its execution we
     // can assume no libc is available on the system.
-    let output = match std::process::Command::new("ldd").arg("--version").output() {
-        Err(e) => {
-            tracing::info!(
-                "failed to execute `ldd --version`: {e}. Assuming libc is not available."
-            );
-            return Ok(None);
-        }
-        Ok(output) => output,
-    };
 
-    Ok(
-        parse_glibc_ldd_version(&String::from_utf8_lossy(&output.stdout))?
-            .map(|version| (String::from("glibc"), version)),
-    )
+    #[cfg(target_os = "linux")]
+    {
+        let output = match std::process::Command::new("ldd").arg("--version").output() {
+            Err(e) => {
+                tracing::info!(
+                    "failed to execute `ldd --version`: {e}. Assuming libc is not available."
+                );
+                return Ok(None);
+            }
+            Ok(output) => output,
+        };
+
+        Ok(
+            parse_glibc_ldd_version(&String::from_utf8_lossy(&output.stdout))?
+                .map(|version| (String::from("glibc"), version)),
+        )
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        Ok(None)
+    }
 }
 
 #[cfg(any(test, unix))]
+#[allow(dead_code)] // not used on macOS
 fn parse_glibc_ldd_version(input: &str) -> Result<Option<Version>, DetectLibCError> {
     static GNU_LIBC_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
         regex::Regex::new("(?mi)(?:glibc|gentoo|gnu libc|solus).*?([0-9]+(:?.[0-9]+)*)$").unwrap()
