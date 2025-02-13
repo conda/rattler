@@ -65,7 +65,7 @@ fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCErro
 }
 
 #[cfg(any(test, unix))]
-#[allow(dead_code)]  // not used on macOS
+#[allow(dead_code)] // not used on macOS
 fn parse_glibc_ldd_version(input: &str) -> Result<Option<Version>, DetectLibCError> {
     static GNU_LIBC_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
         regex::Regex::new("(?mi)(?:glibc|gentoo|gnu libc|solus).*?([0-9]+(:?.[0-9]+)*)$").unwrap()
