@@ -251,8 +251,9 @@ impl RunExportsCache {
                     let err = match result {
                         Ok(result) => {
                             // now extract run_exports.json from the archive without unpacking
-                            let file =
-                                rattler_package_streaming::seek::get_package_file::<RunExportsJson>(result);
+                            let file = simple_spawn_blocking::tokio::run_blocking_task(move || {
+                                rattler_package_streaming::seek::get_package_file::<RunExportsJson>(result)
+                            }).await;
 
                             match file {
                                 Ok(run_exports) => {

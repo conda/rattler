@@ -86,6 +86,25 @@ fn get_file_from_archive(
     Err(ExtractError::MissingComponent)
 }
 
+/// Read a package file content from archive
+fn read_package_file_content<P: PackageFile>(
+    file: &File,
+    path: impl AsRef<Path>,
+) -> Result<Vec<u8>, ExtractError> {
+    match ArchiveType::try_from(&path).ok_or(ExtractError::UnsupportedArchiveType)? {
+        ArchiveType::TarBz2 => {
+            let mut archive = stream_tar_bz2(file);
+            let buf = get_file_from_archive(&mut archive, P::package_path())?;
+            Ok(buf)
+        }
+        ArchiveType::Conda => {
+            let mut info_archive = stream_conda_info(file).unwrap();
+            let buf = get_file_from_archive(&mut info_archive, P::package_path())?;
+            Ok(buf)
+        }
+    }
+}
+
 /// Read a package file from archive
 /// Note: If you want to extract multiple `info/*` files then this will be slightly
 ///       slower than manually iterating over the archive entries with
@@ -102,49 +121,26 @@ fn get_file_from_archive(
 pub fn read_package_file<P: PackageFile>(path: impl AsRef<Path>) -> Result<P, ExtractError> {
     // stream extract the file from a package
     let file = File::open(&path)?;
+    let content = read_package_file_content::<P>(&file, &path)?;
 
-    match ArchiveType::try_from(&path).ok_or(ExtractError::UnsupportedArchiveType)? {
-        ArchiveType::TarBz2 => {
-            let mut archive = stream_tar_bz2(file);
-            let buf = get_file_from_archive(&mut archive, P::package_path())?;
-            P::from_str(&String::from_utf8_lossy(&buf))
-                .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
-        }
-        ArchiveType::Conda => {
-            let mut info_archive = stream_conda_info(file).unwrap();
-            let buf = get_file_from_archive(&mut info_archive, P::package_path())?;
-            P::from_str(&String::from_utf8_lossy(&buf))
-                .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
-        }
-    }
+    P::from_str(&String::from_utf8_lossy(&content))
+        .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
 }
 
 /// Get a [`PackageFile`] from temporary archive and return it as a temporary file.
 pub fn get_package_file<P: PackageFile>(
-    named_temp_file: NamedTempFile,
+    archive_temp_file: NamedTempFile,
 ) -> Result<NamedTempFile, ExtractError> {
-    let mut tmp_file = NamedTempFile::new()?;
+    let mut output_file = NamedTempFile::new()?;
 
-    match ArchiveType::try_from(named_temp_file.path())
-        .ok_or(ExtractError::UnsupportedArchiveType)?
-    {
-        ArchiveType::TarBz2 => {
-            let mut archive = stream_tar_bz2(named_temp_file);
-            let buf = get_file_from_archive(&mut archive, P::package_path())?;
+    let content =
+        read_package_file_content::<P>(archive_temp_file.as_file(), archive_temp_file.path())?;
 
-            let mut tmp_file = NamedTempFile::new()?;
+    output_file.write_all(&content)?;
 
-            tmp_file.write_all(&buf)?;
-        }
-        ArchiveType::Conda => {
-            let mut info_archive = stream_conda_info(named_temp_file).unwrap();
-            let buf = get_file_from_archive(&mut info_archive, P::package_path())?;
+    output_file.flush()?;
 
-            tmp_file.write_all(&buf)?;
-        }
-    }
+    output_file.rewind()?;
 
-    tmp_file.flush()?;
-
-    Ok(tmp_file)
+    Ok(output_file)
 }
