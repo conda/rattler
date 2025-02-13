@@ -12,6 +12,7 @@ use serde_with::serde_as;
 use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use tempfile::NamedTempFile;
 
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
@@ -234,8 +235,41 @@ impl PrefixRecord {
         path: impl AsRef<Path>,
         pretty: bool,
     ) -> Result<(), std::io::Error> {
-        let file = File::create(path.as_ref())?;
-        self.write_to(BufWriter::with_capacity(50 * 1024, file), pretty)
+        const BUFFER_SIZE: usize = 64 * 1024;
+
+        let path = path.as_ref();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+
+            // Use a temporary file in the same directory for atomic writes
+            let temp_file =
+                NamedTempFile::with_prefix_in("prefix_record_", parent).map_err(|e| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Failed to create temporary file: {}", e),
+                    )
+                })?;
+
+            // Write to temp file with buffered writer
+            let writer = BufWriter::with_capacity(BUFFER_SIZE, &temp_file);
+            self.write_to(writer, pretty)?;
+
+            // Ensure all data is written before persisting
+            temp_file.as_file().sync_all()?;
+
+            // Atomically rename the temp file to the target path
+            temp_file.persist(path).map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to persist file: {}", e),
+                )
+            })?;
+        } else {
+            let file = File::create(path)?;
+            let writer = BufWriter::with_capacity(BUFFER_SIZE, file);
+            self.write_to(writer, pretty)?;
+        }
+        Ok(())
     }
 
     /// Writes the contents of this instance to the file at the specified location.
