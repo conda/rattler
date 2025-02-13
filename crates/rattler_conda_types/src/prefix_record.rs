@@ -4,7 +4,6 @@ use crate::package::FileMode;
 use crate::repo_data::RecordFromPath;
 use crate::repo_data_record::RepoDataRecord;
 use crate::PackageRecord;
-use fs_err::File;
 use rattler_digest::serde::SerializableHash;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -238,37 +237,38 @@ impl PrefixRecord {
         const BUFFER_SIZE: usize = 64 * 1024;
 
         let path = path.as_ref();
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+        let parent = path.parent().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to get parent directory of path",
+            )
+        })?;
 
-            // Use a temporary file in the same directory for atomic writes
-            let temp_file =
-                NamedTempFile::with_prefix_in("prefix_record_", parent).map_err(|e| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Failed to create temporary file: {}", e),
-                    )
-                })?;
+        fs_err::create_dir_all(parent)?;
 
-            // Write to temp file with buffered writer
-            let writer = BufWriter::with_capacity(BUFFER_SIZE, &temp_file);
-            self.write_to(writer, pretty)?;
+        // Use a temporary file in the same directory for atomic writes
+        let temp_file = NamedTempFile::with_prefix_in("prefix_record_", parent).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to create temporary file: {}", e),
+            )
+        })?;
 
-            // Ensure all data is written before persisting
-            temp_file.as_file().sync_all()?;
+        // Write to temp file with buffered writer
+        let writer = BufWriter::with_capacity(BUFFER_SIZE, &temp_file);
+        self.write_to(writer, pretty)?;
 
-            // Atomically rename the temp file to the target path
-            temp_file.persist(path).map_err(|e| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to persist file: {}", e),
-                )
-            })?;
-        } else {
-            let file = File::create(path)?;
-            let writer = BufWriter::with_capacity(BUFFER_SIZE, file);
-            self.write_to(writer, pretty)?;
-        }
+        // Ensure all data is written before persisting
+        temp_file.as_file().sync_all()?;
+
+        // Atomically rename the temp file to the target path
+        temp_file.persist(path).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to persist file {}: {}", path.display(), e),
+            )
+        })?;
+
         Ok(())
     }
 
