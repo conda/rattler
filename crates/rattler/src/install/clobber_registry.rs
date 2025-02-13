@@ -245,7 +245,6 @@ impl ClobberRegistry {
         let mut prefix_records_to_rewrite = HashSet::new();
         let mut result = HashMap::new();
 
-        tracing::info!("Unclobbering {} files", self.clobbers.len());
         for (path, clobbered_by) in self.clobbers.iter() {
             let clobbered_by_names = clobbered_by
                 .iter()
