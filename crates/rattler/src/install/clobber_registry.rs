@@ -245,6 +245,7 @@ impl ClobberRegistry {
         let mut prefix_records_to_rewrite = HashSet::new();
         let mut result = HashMap::new();
 
+        tracing::info!("Unclobbering {} files", self.clobbers.len());
         for (path, clobbered_by) in self.clobbers.iter() {
             let clobbered_by_names = clobbered_by
                 .iter()
@@ -518,7 +519,6 @@ mod tests {
                 }
             })
             .collect::<Vec<_>>();
-        println!("Files: {:#?}", files);
         assert_eq!(files.len(), expected_files.len());
         for file in &files {
             assert!(
