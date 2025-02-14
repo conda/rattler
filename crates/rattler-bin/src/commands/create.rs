@@ -19,8 +19,8 @@ use rattler::{
     package_cache::PackageCache,
 };
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageName, ParseStrictness,
-    Platform, PrefixRecord, RepoDataRecord, Version,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
+    ParseStrictness, Platform, PrefixRecord, RepoDataRecord, Version,
 };
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
@@ -60,6 +60,12 @@ pub struct Opt {
 
     #[clap(long)]
     strategy: Option<SolveStrategy>,
+
+    #[clap(long, group = "deps_mode")]
+    only_deps: bool,
+
+    #[clap(long, group = "deps_mode")]
+    no_deps: bool,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -254,7 +260,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let solver_task = SolverTask {
         locked_packages,
         virtual_packages,
-        specs,
+        specs: specs.clone(),
         timeout: opt.timeout.map(Duration::from_millis),
         strategy: opt.strategy.map_or_else(Default::default, Into::into),
         ..SolverTask::from_iter(&repo_data)
@@ -269,7 +275,13 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
             Solver::LibSolv => libsolv_c::Solver.solve(solver_task),
         })?;
 
-    let required_packages: Vec<RepoDataRecord> = solver_result.records;
+    let mut required_packages: Vec<RepoDataRecord> = solver_result.records;
+
+    if opt.no_deps {
+        required_packages.retain(|r| specs.iter().any(|s| s.matches(&r.package_record)));
+    } else if opt.only_deps {
+        required_packages.retain(|r| !specs.iter().any(|s| s.matches(&r.package_record)));
+    };
 
     if opt.dry_run {
         // Construct a transaction to
