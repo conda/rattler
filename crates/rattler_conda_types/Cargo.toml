@@ -36,6 +36,7 @@ serde-untagged = { workspace = true }
 serde_yaml = { workspace = true }
 smallvec = { workspace = true, features = ["serde", "const_new", "const_generics", "union"] }
 strum = { workspace = true, features = ["derive"] }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 typed-path = { workspace = true }
@@ -50,7 +51,6 @@ fs-err = { workspace = true }
 rand = { workspace = true }
 insta = { workspace = true, features = ["yaml", "redactions", "toml", "glob", "filters"] }
 rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = ["rustls-tls"] }
-tempfile = { workspace = true }
 rstest = { workspace = true }
 assert_matches = { workspace = true }
 hex-literal = { workspace = true }
