@@ -53,9 +53,8 @@ use itertools::Itertools;
 pub use link::{link_file, LinkFileError, LinkMethod};
 pub use python::PythonInfo;
 use rattler_conda_types::{
-    package::{IndexJson, LinkJson, NoArchLinks, PackageFile, PathsJson},
-    prefix_record::PathsEntry,
-    Platform,
+    package::{IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
+    prefix_record, Platform,
 };
 use rayon::{
     iter::Either,
@@ -248,6 +247,12 @@ pub struct InstallOptions {
     pub apple_codesign_behavior: AppleCodeSignBehavior,
 }
 
+struct LinkPath {
+    entry: PathsEntry,
+    computed_path: PathBuf,
+    clobber_path: Option<PathBuf>,
+}
+
 /// Given an extracted package archive (`package_dir`), installs its files to
 /// the `target_dir`.
 ///
@@ -260,7 +265,7 @@ pub async fn link_package(
     target_dir: &Path,
     driver: &InstallDriver,
     options: InstallOptions,
-) -> Result<Vec<PathsEntry>, InstallError> {
+) -> Result<Vec<prefix_record::PathsEntry>, InstallError> {
     // Determine the target prefix for linking
     let target_prefix = options
         .target_prefix
@@ -319,7 +324,7 @@ pub async fn link_package(
     let platform = options.platform.unwrap_or(Platform::current());
 
     // compute all path renames
-    let mut final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
+    let final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
 
     // register all paths in the install driver path registry
     let clobber_paths = Arc::new(
@@ -328,16 +333,23 @@ pub async fn link_package(
             .register_paths(&index_json, &final_paths),
     );
 
-    for (_, computed_path) in final_paths.iter_mut() {
-        if let Some(clobber_rename) = clobber_paths.get(computed_path) {
-            *computed_path = clobber_rename.clone();
-        }
-    }
+    let final_paths: Vec<LinkPath> = final_paths
+        .into_iter()
+        .map(|el| {
+            let (entry, computed_path) = el;
+            let clobber_path = clobber_paths.get(&computed_path).cloned();
+            LinkPath {
+                entry,
+                computed_path,
+                clobber_path,
+            }
+        })
+        .collect();
 
     // Figure out all the directories that we are going to need
     let mut directories_to_construct = HashSet::new();
-    for (_, computed_path) in final_paths.iter() {
-        let mut current_path = computed_path.parent();
+    for link_path in &final_paths {
+        let mut current_path = link_path.computed_path.parent();
         while let Some(path) = current_path {
             if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
                 current_path = path.parent();
@@ -369,12 +381,12 @@ pub async fn link_package(
     // Start linking all package files in parallel
     let mut pending_futures = FuturesUnordered::new();
     let mut number_of_paths_entries = 0;
-    for (entry, computed_path) in final_paths {
+    for link_path in final_paths {
+        let entry = link_path.entry;
         let package_dir = package_dir.to_owned();
         let target_dir = target_dir.to_owned();
         let target_prefix = target_prefix.clone();
 
-        let clobber_rename = clobber_paths.get(&entry.relative_path).cloned();
         let install_future = async move {
             let _permit = driver.acquire_io_permit().await;
 
@@ -382,10 +394,11 @@ pub async fn link_package(
             // because filesystem access is blocking anyway so its more
             // efficient to group them together in a single blocking call.
             let cloned_entry = entry.clone();
+            let is_clobber = link_path.clobber_path.is_some();
             let result = match tokio::task::spawn_blocking(move || {
                 link_file(
                     &cloned_entry,
-                    computed_path,
+                    link_path.clobber_path.unwrap_or(link_path.computed_path),
                     &package_dir,
                     &target_dir,
                     &target_prefix,
@@ -408,9 +421,9 @@ pub async fn link_package(
             };
 
             // Construct a `PathsEntry` from the result of the linking operation
-            let paths_entry = PathsEntry {
+            let paths_entry = prefix_record::PathsEntry {
                 relative_path: result.relative_path,
-                original_path: if clobber_rename.is_some() {
+                original_path: if is_clobber {
                     Some(entry.relative_path)
                 } else {
                     None
@@ -513,7 +526,8 @@ pub async fn link_package(
     // What makes this loop special is that it also aborts if any of the returned
     // results indicate a failure.
     let mut paths = Vec::with_capacity(number_of_paths_entries);
-    let mut out_of_order_queue = BinaryHeap::<OrderWrapper<PathsEntry>>::with_capacity(100);
+    let mut out_of_order_queue =
+        BinaryHeap::<OrderWrapper<prefix_record::PathsEntry>>::with_capacity(100);
     while let Some(link_result) = pending_futures.next().await {
         for (index, data) in link_result? {
             if index == paths.len() {
@@ -560,7 +574,7 @@ pub fn link_package_sync(
     target_dir: &Path,
     clobber_registry: Arc<Mutex<ClobberRegistry>>,
     options: InstallOptions,
-) -> Result<Vec<PathsEntry>, InstallError> {
+) -> Result<Vec<prefix_record::PathsEntry>, InstallError> {
     // Determine the target prefix for linking
     let target_prefix = options
         .target_prefix
@@ -639,7 +653,7 @@ pub fn link_package_sync(
     let platform = options.platform.unwrap_or(Platform::current());
 
     // compute all path renames
-    let mut final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
+    let final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
 
     // register all paths in the install driver path registry
     let clobber_paths = clobber_registry
@@ -647,17 +661,21 @@ pub fn link_package_sync(
         .unwrap()
         .register_paths(&index_json, &final_paths);
 
-    for (_, computed_path) in final_paths.iter_mut() {
-        if let Some(clobber_rename) = clobber_paths.get(computed_path) {
-            *computed_path = clobber_rename.clone();
+    let final_paths = final_paths.into_iter().map(|el| {
+        let (entry, computed_path) = el;
+        let clobber_path = clobber_paths.get(&computed_path).cloned();
+        LinkPath {
+            entry,
+            computed_path,
+            clobber_path,
         }
-    }
+    });
 
     // Figure out all the directories that we are going to need
     let mut directories_to_construct = HashSet::new();
     let mut paths_by_directory = HashMap::new();
-    for (entry, computed_path) in final_paths {
-        let Some(entry_parent) = computed_path.parent() else {
+    for link_path in final_paths {
+        let Some(entry_parent) = link_path.computed_path.parent() else {
             continue;
         };
 
@@ -675,7 +693,7 @@ pub fn link_package_sync(
         paths_by_directory
             .entry(entry_parent.to_path_buf())
             .or_insert_with(Vec::new)
-            .push((entry, computed_path));
+            .push(link_path);
     }
 
     let mut created_directories = HashSet::new();
@@ -737,19 +755,20 @@ pub fn link_package_sync(
         // files that are either in the clobber map or contain a placeholder,
         // we defer to the regular linking that comes after this block
         // and re-add them to the paths_by_directory map
-        for file in files {
-            if clobber_paths.contains_key(&file.1) || file.0.prefix_placeholder.is_some() {
+        for link_path in files {
+            if link_path.clobber_path.is_some() || link_path.entry.prefix_placeholder.is_some() {
                 paths_by_directory
                     .entry(parent_dir.clone())
                     .or_insert_with(Vec::new)
-                    .push(file);
+                    .push(link_path);
             } else {
-                reflinked_paths_entries.push(PathsEntry {
-                    relative_path: file.0.relative_path,
-                    path_type: file.0.path_type.into(),
-                    no_link: file.0.no_link,
-                    sha256: file.0.sha256,
-                    size_in_bytes: file.0.size_in_bytes,
+                let entry = link_path.entry;
+                reflinked_paths_entries.push(prefix_record::PathsEntry {
+                    relative_path: entry.relative_path,
+                    path_type: entry.path_type.into(),
+                    no_link: entry.no_link,
+                    sha256: entry.sha256,
+                    size_in_bytes: entry.size_in_bytes,
                     // No placeholder, no clobbering, so these are none for sure
                     original_path: None,
                     sha256_in_prefix: None,
@@ -775,12 +794,15 @@ pub fn link_package_sync(
         .with_min_len(100)
         .flat_map(move |entries_in_subdir| {
             let mut path_entries = Vec::with_capacity(entries_in_subdir.len());
-            for (entry, computed_path) in entries_in_subdir {
-                let clobber_rename = clobber_paths.get(&entry.relative_path).cloned();
+            for link_path in entries_in_subdir {
+                let entry = link_path.entry;
 
+                let is_clobber = link_path.clobber_path.is_some();
                 let link_result = link_file(
                     &entry,
-                    computed_path.clone(),
+                    link_path
+                        .clobber_path
+                        .unwrap_or(link_path.computed_path.clone()),
                     &package_dir,
                     &link_target_dir,
                     &link_target_prefix,
@@ -802,10 +824,10 @@ pub fn link_package_sync(
                 };
 
                 // Construct a `PathsEntry` from the result of the linking operation
-                path_entries.push(Ok(PathsEntry {
+                path_entries.push(Ok(prefix_record::PathsEntry {
                     relative_path: result.relative_path,
-                    original_path: if clobber_rename.is_some() {
-                        Some(entry.relative_path.clone())
+                    original_path: if is_clobber {
+                        Some(link_path.computed_path)
                     } else {
                         None
                     },
