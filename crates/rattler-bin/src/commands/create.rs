@@ -61,10 +61,10 @@ pub struct Opt {
     #[clap(long)]
     strategy: Option<SolveStrategy>,
 
-    #[clap(long)]
+    #[clap(long, group = "deps_mode")]
     only_deps: bool,
 
-    #[clap(long)]
+    #[clap(long, group = "deps_mode")]
     no_deps: bool,
 }
 
