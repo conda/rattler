@@ -2,6 +2,7 @@
 
 //! This crate provides the ability to extract a Conda package archive or specific parts of it.
 
+use simple_spawn_blocking::Cancelled;
 use std::path::PathBuf;
 use zip::result::ZipError;
 
@@ -59,6 +60,12 @@ impl From<ZipError> for ExtractError {
             ZipError::Io(io) => Self::IoError(io),
             e => Self::ZipError(e),
         }
+    }
+}
+
+impl From<Cancelled> for ExtractError {
+    fn from(_value: Cancelled) -> Self {
+        Self::Cancelled
     }
 }
 

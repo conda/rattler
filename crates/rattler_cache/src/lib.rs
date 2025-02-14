@@ -1,11 +1,12 @@
 use std::path::PathBuf;
 
 pub mod package_cache;
+pub mod run_exports_cache;
 
 pub mod validation;
 
 mod consts;
-pub use consts::{PACKAGE_CACHE_DIR, REPODATA_CACHE_DIR};
+pub use consts::{PACKAGE_CACHE_DIR, REPODATA_CACHE_DIR, RUN_EXPORTS_CACHE_DIR};
 
 /// Determines the default cache directory for rattler.
 /// It first checks the environment variable `RATTLER_CACHE_DIR`.
