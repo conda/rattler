@@ -337,7 +337,7 @@ pub async fn link_package(
         .into_iter()
         .map(|el| {
             let (entry, computed_path) = el;
-            let clobber_path = clobber_paths.get(&entry.relative_path).cloned();
+            let clobber_path = clobber_paths.get(&computed_path).cloned();
             LinkPath {
                 entry,
                 computed_path,
@@ -345,8 +345,6 @@ pub async fn link_package(
             }
         })
         .collect();
-
-    // drop(clobber_paths);
 
     // Figure out all the directories that we are going to need
     let mut directories_to_construct = HashSet::new();
@@ -665,16 +663,13 @@ pub fn link_package_sync(
 
     let final_paths = final_paths.into_iter().map(|el| {
         let (entry, computed_path) = el;
-        let clobber_path = clobber_paths.get(&entry.relative_path).cloned();
+        let clobber_path = clobber_paths.get(&computed_path).cloned();
         LinkPath {
             entry,
             computed_path,
             clobber_path,
         }
     });
-
-    // We can already drop this
-    // drop(clobber_paths);
 
     // Figure out all the directories that we are going to need
     let mut directories_to_construct = HashSet::new();

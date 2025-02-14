@@ -518,6 +518,7 @@ mod tests {
                 }
             })
             .collect::<Vec<_>>();
+        println!("Files: {:#?}", files);
         assert_eq!(files.len(), expected_files.len());
         for file in &files {
             assert!(
