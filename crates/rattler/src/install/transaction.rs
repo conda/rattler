@@ -34,7 +34,12 @@ pub enum TransactionOperation<Old, New> {
     /// Reinstall a package. This can happen if the Python version changed in
     /// the environment, we need to relink all noarch python packages in
     /// that case.
-    Reinstall(Old),
+    Reinstall {
+        /// The old record to remove
+        old: Old,
+        /// The new record to install
+        new: New,
+    },
 
     /// Completely remove a package
     Remove(Old),
@@ -48,7 +53,7 @@ impl<Old: AsRef<New>, New> TransactionOperation<Old, New> {
         match self {
             TransactionOperation::Install(record) => Some(record),
             TransactionOperation::Change { new, .. } => Some(new),
-            TransactionOperation::Reinstall(old) => Some(old.as_ref()),
+            TransactionOperation::Reinstall { old: _, new } => Some(new),
             TransactionOperation::Remove(_) => None,
         }
     }
@@ -62,7 +67,7 @@ impl<Old, New> TransactionOperation<Old, New> {
         match self {
             TransactionOperation::Install(_) => None,
             TransactionOperation::Change { old, .. }
-            | TransactionOperation::Reinstall(old)
+            | TransactionOperation::Reinstall { old, new: _ }
             | TransactionOperation::Remove(old) => Some(old),
         }
     }
@@ -182,7 +187,10 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
                 } else if needs_python_relink && old_record.as_ref().noarch.is_python() {
                     // when the python version changed, we need to relink all noarch packages
                     // to recompile the bytecode
-                    operations.push(TransactionOperation::Reinstall(old_record));
+                    operations.push(TransactionOperation::Reinstall {
+                        old: old_record,
+                        new: record,
+                    });
                 }
                 // if the content is the same, we dont need to do anything
             } else {
