@@ -34,6 +34,7 @@ pub enum TransactionOperation<Old, New> {
     /// Reinstall a package. This can happen if the Python version changed in
     /// the environment, we need to relink all noarch python packages in
     /// that case.
+    /// Includes old and new as fields like the channel may have changed between installations
     Reinstall {
         /// The old record to remove
         old: Old,
