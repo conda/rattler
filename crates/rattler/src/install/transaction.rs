@@ -34,7 +34,7 @@ pub enum TransactionOperation<Old, New> {
     /// Reinstall a package. This can happen if the Python version changed in
     /// the environment, we need to relink all noarch python packages in
     /// that case.
-    /// Includes old and new as fields like the channel may have changed between installations
+    /// Includes old and new because certains fields like the channel/url may have changed between installations
     Reinstall {
         /// The old record to remove
         old: Old,
@@ -53,8 +53,8 @@ impl<Old: AsRef<New>, New> TransactionOperation<Old, New> {
     pub fn record_to_install(&self) -> Option<&New> {
         match self {
             TransactionOperation::Install(record) => Some(record),
-            TransactionOperation::Change { new, .. } => Some(new),
-            TransactionOperation::Reinstall { old: _, new } => Some(new),
+            TransactionOperation::Change { new, .. }
+            | TransactionOperation::Reinstall { new, .. } => Some(new),
             TransactionOperation::Remove(_) => None,
         }
     }
