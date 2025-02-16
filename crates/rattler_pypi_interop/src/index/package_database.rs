@@ -413,7 +413,7 @@ mod test {
             .unwrap();
 
         // Get the first wheel artifact
-        let artifact_info = artifacts
+        let _artifact_info = artifacts
             .iter()
             .flat_map(|(_, artifacts)| artifacts.iter().cloned())
             .collect::<Vec<_>>();

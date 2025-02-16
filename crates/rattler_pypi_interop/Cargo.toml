@@ -14,7 +14,6 @@ native-tls = ['reqwest/native-tls']
 rustls-tls = ['reqwest/rustls-tls']
 
 [dependencies]
-async-trait = { workspace = true }
 bytes = { workspace = true }
 ciborium = "0.2.2"
 csv = "1.3.0"
@@ -26,7 +25,6 @@ elsa = "1.10.0"
 fs4 = "0.8.2"
 futures = { workspace = true }
 html-escape = "0.2.13"
-# reqwest needs an update to 1.0.0
 http = { workspace = true }
 http-cache-semantics = { workspace = true, default-features = false, features = ["serde", "reqwest"] }
 include_dir = "0.7.3"
@@ -39,7 +37,6 @@ parking_lot = { workspace = true }
 peg = "0.8.2"
 pep440_rs = { version = "0.4.0", features = ["serde"] }
 pep508_rs = { version = "0.3.0", features = ["serde"] }
-pin-project-lite = { workspace = true }
 rattler_digest = { path="../rattler_digest", version = "1.0.5", features = ["serde"] }
 regex = { workspace = true }
 reqwest = { workspace = true, default-features = false, features = ["json", "stream", "blocking", "rustls-tls"] }
@@ -47,7 +44,6 @@ reqwest-middleware = { workspace = true }
 serde = {workspace = true }
 serde_json = { workspace = true }
 serde_with = {workspace = true }
-smallvec = { workspace = true, features = ["const_generics", "const_new"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tl = "0.7.8"
@@ -56,17 +52,13 @@ tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true, default-features = false, features = ["attributes"] }
 url = { workspace = true, features = ["serde"] }
 zip = { workspace = true }
-resolvo = { workspace = true, default-features = false, features = ["tokio"] }
 pathdiff = { workspace = true }
 async_zip = { version = "0.0.16", features = ["tokio", "deflate"] }
 tar = { workspace = true }
 flate2 = "1.0.28"
 pyproject-toml = "0.9.0"
-async-once-cell = "0.5.3"
 configparser = "3.0.4"
-cacache = { version = "13.0.0", default-features = false, features = ["tokio-runtime", "mmap"] }
 fs-err = "2.11.0"
-fs_extra = "1.3.0"
 async_http_range_reader = "0.9.1"
 which = "6.0.1"
 
