@@ -104,17 +104,6 @@ impl FileStore {
         }
     }
 
-    /// Gets readable access to the data with the specified key. Returns `None` if no such key
-    /// exists in the store.
-    pub async fn get<K: CacheKey>(&self, key: &K) -> Option<impl Read + Seek> {
-        if let Some(lock) = self.lock_if_exists(key).await {
-            if let Some(reader) = lock.reader() {
-                return Some(reader.detach_unlocked());
-            }
-        }
-        None
-    }
-
     /// Locks a certain file in the cache for exclusive access.
     pub async fn lock<K: CacheKey>(&self, key: &K) -> io::Result<FileLock> {
         let path = self.base.join(key.key());
@@ -124,22 +113,6 @@ impl FileStore {
             _lock_file: lock,
             path,
         })
-    }
-
-    /// Locks a certain file in the cache for exclusive access if it exists only.
-    ///
-    /// This function exists to ensure that we don't create tons of directories just to check if an
-    /// entry exists or not.
-    pub async fn lock_if_exists<K: CacheKey>(&self, key: &K) -> Option<FileLock> {
-        let path = self.base.join(key.key());
-        lock(&path, LockMode::IfExists)
-            .await
-            .ok()
-            .map(|lock| FileLock {
-                tmp: self.tmp.clone(),
-                _lock_file: lock,
-                path,
-            })
     }
 }
 
@@ -225,7 +198,7 @@ pub struct FileLock {
 impl FileLock {
     /// Creates a reader to read the contents of the locked file. Returns `None` if the file could
     /// not be opened.
-    pub fn reader(&self) -> Option<LockedReader> {
+    pub fn reader(&self) -> Option<LockedReader<'_>> {
         Some(LockedReader {
             file: fs::File::open(&self.path).ok()?,
             _data: Default::default(),
@@ -234,7 +207,7 @@ impl FileLock {
 
     /// Starts writing the contents of the file returning a writer. Call [`LockedWriter::commit`] to
     /// persist the data in the store.
-    pub fn begin(&self) -> io::Result<LockedWriter> {
+    pub fn begin<'a>(&'a self) -> io::Result<LockedWriter<'a>> {
         Ok(LockedWriter {
             path: &self.path,
             f: tempfile::NamedTempFile::new_in(&self.tmp)?,
@@ -250,8 +223,7 @@ impl FileLock {
 
 #[derive(Eq, PartialEq)]
 enum LockMode {
-    Lock,
-    IfExists,
+    Lock
 }
 
 /// Create a `.lock` file for the file at the specified `path`. Only a single process has access to

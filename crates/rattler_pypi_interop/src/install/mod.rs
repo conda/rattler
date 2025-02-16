@@ -122,7 +122,7 @@ pub fn install_wheel(
     dest: &Path,
     paths: &InstallPaths,
     python_executable: &Path,
-    options: &InstallWheelOptions,
+    options: &InstallWheelOptions<'_>,
 ) -> Result<InstalledWheel, InstallError> {
     let mut archive = wheel.archive.lock();
 
@@ -820,7 +820,6 @@ impl<'a> WheelPathTransformer<'a> {
 mod test {
     use super::*;
     use crate::{
-        artifacts::wheel::*,
         python_env::{system_python_executable, ByteCodeCompiler, PythonLocation, VEnv, WheelTags},
         types::{
             DirectUrlHashes, DirectUrlJson, DirectUrlSource, NormalizedPackageName, WheelFilename,
@@ -832,7 +831,7 @@ mod test {
     use std::path::{Path, PathBuf};
     use std::str::FromStr;
     use tempfile::{tempdir, TempDir};
-    use test_utils::download_and_cache_file_async;
+    use crate::utils::{download_and_cache_file_async, download_and_cache_file};
     use url::Url;
 
     const INSTALLER: &str = "pixi_test";
@@ -842,7 +841,7 @@ mod test {
     #[case("https://files.pythonhosted.org/packages/1e/27/47f73510c6b80d1ff0829474947537ae9ab8d516cc48c6320b7f3677fa54/selenium-2.53.2-py2.py3-none-any.whl", "fa8333cf3013497e60d87ba68cae65ead8e7fa208be88ab9c561556103f540ef")]
     fn test_wheels(#[case] url: Url, #[case] sha256: &str) {
         test_wheel_unpack(
-            test_utils::download_and_cache_file(url, sha256).unwrap(),
+            download_and_cache_file(url, sha256).unwrap(),
             &"selenium".parse().unwrap(),
         );
     }
@@ -938,7 +937,7 @@ mod test {
     #[test]
     fn test_byte_code_compilation() {
         // We check this specific package because some of the files will fail to compile.
-        let package_path = test_utils::download_and_cache_file(
+        let package_path = download_and_cache_file(
             "https://files.pythonhosted.org/packages/2a/e8/4e05b0daceb19463339b2616bdb9d5ad6573e6259e4e665239e663c7ac3b/debugpy-1.5.1-cp38-cp38-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl".parse().unwrap(),
             "b2df2c373e85871086bd55271c929670cd4e1dba63e94a08d442db830646203b").unwrap();
 
@@ -966,7 +965,7 @@ mod test {
         let venv = VEnv::create(tmpdir.path(), PythonLocation::System).unwrap();
 
         // Download our wheel file and install it in the virtual environment we just created
-        let package_path = test_utils::download_and_cache_file(
+        let package_path = download_and_cache_file(
             "https://files.pythonhosted.org/packages/02/72/36fb2c35547fdf473629579fc35d9a2034592ea3f01710702d81ef596e16/greenlet-3.0.1-cp310-cp310-win_amd64.whl".parse().unwrap(),
             "52e93b28db27ae7d208748f45d2db8a7b6a380e0d703f099c949d0f0d80b70e9").unwrap();
         let wheel = Wheel::from_path(&package_path, &"greenlet".parse().unwrap()).unwrap();
@@ -982,7 +981,7 @@ mod test {
         let venv = VEnv::create(tmpdir.path(), PythonLocation::System).unwrap();
 
         // Download our wheel file and install it in the virtual environment we just created
-        let package_path = test_utils::download_and_cache_file(
+        let package_path = download_and_cache_file(
             "https://files.pythonhosted.org/packages/02/72/36fb2c35547fdf473629579fc35d9a2034592ea3f01710702d81ef596e16/greenlet-3.0.1-cp310-cp310-win_amd64.whl".parse().unwrap(),
             "52e93b28db27ae7d208748f45d2db8a7b6a380e0d703f099c949d0f0d80b70e9").unwrap();
         let wheel = Wheel::from_path(&package_path, &"greenlet".parse().unwrap()).unwrap();
@@ -1016,7 +1015,7 @@ mod test {
         let venv = VEnv::create(tmpdir.path(), PythonLocation::System).unwrap();
 
         // Download our wheel file and install it in the virtual environment we just created
-        let package_path = test_utils::download_and_cache_file(
+        let package_path = download_and_cache_file(
             "https://files.pythonhosted.org/packages/29/a2/76daec910034d765f1018d22660c0970fb99f77143a42841d067b522903e/cowpy-1.1.5-py3-none-any.whl".parse().unwrap(),
             "de5ae7646dd30b4936013666c6bd019af9cf411cc3b377c8538cfd8414262921").unwrap();
         let wheel = Wheel::from_path(&package_path, &"cowpy".parse().unwrap()).unwrap();

@@ -58,7 +58,7 @@ impl Record {
     }
 
     /// Returns an iterator over the entries in this instance.
-    pub fn iter(&self) -> std::slice::Iter<RecordEntry> {
+    pub fn iter(&self) -> std::slice::Iter<'_, RecordEntry> {
         self.entries.iter()
     }
 }

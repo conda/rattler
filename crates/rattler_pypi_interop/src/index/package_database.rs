@@ -1,22 +1,16 @@
-use crate::artifacts::{SDist, STree, Wheel};
 use crate::index::file_store::FileStore;
 
 use crate::index::html::{parse_package_names_html, parse_project_info_html};
 use crate::index::http::{CacheMode, Http, HttpRequestError};
 use crate::index::package_sources::PackageSources;
-use crate::resolve::PypiVersion;
 use crate::types::{
-    ArtifactInfo, ArtifactType, DirectUrlHashes, DirectUrlJson, DirectUrlSource, ProjectInfo,
-    STreeFilename, WheelCoreMetadata,
+    ArtifactInfo, ProjectInfo, PypiVersion, WheelCoreMetadata,
 };
 
-use crate::wheel_builder::{WheelBuildError, WheelBuilder, WheelCache};
 use crate::{
-    types::ArtifactFromBytes, types::InnerAsArtifactName, types::NormalizedPackageName,
-    types::WheelFilename,
+    types::InnerAsArtifactName, types::NormalizedPackageName, types::WheelFilename,
 };
 use async_http_range_reader::{AsyncHttpRangeReader, CheckSupportMethod};
-use async_recursion::async_recursion;
 use elsa::sync::FrozenMap;
 use futures::{pin_mut, stream, StreamExt};
 use indexmap::IndexMap;
@@ -51,9 +45,6 @@ pub struct PackageDb {
     /// A cache of package name to version to artifacts.
     artifacts: FrozenMap<NormalizedPackageName, Box<VersionArtifacts>>,
 
-    /// Cache to locally built wheels
-    local_wheel_cache: WheelCache,
-
     /// Reference to the cache directory for all caches
     cache_dir: PathBuf,
 
@@ -64,16 +55,7 @@ pub struct PackageDb {
 /// Type of request to get from the `available_artifacts` function.
 pub enum ArtifactRequest {
     /// Get the available artifacts from the index.
-    FromIndex(NormalizedPackageName),
-    /// Get the artifact from a direct URL.
-    DirectUrl {
-        /// The name of the package
-        name: NormalizedPackageName,
-        /// The URL of the artifact
-        url: Url,
-        /// The wheel builder to use to build the artifact if its an SDist or STree
-        wheel_builder: Arc<WheelBuilder>,
-    },
+    FromIndex(NormalizedPackageName)
 }
 
 /// Specifies if we always want to check if there are new available artifacts
@@ -85,14 +67,6 @@ pub enum CheckAvailablePackages {
     Always,
     /// Trust the time that the server says the request is fresh
     UseServerTime,
-}
-
-pub(crate) struct DirectUrlArtifactResponse {
-    pub(crate) artifact_info: Arc<ArtifactInfo>,
-    pub(crate) artifact_versions: VersionArtifacts,
-    pub(crate) metadata: (Vec<u8>, WheelCoreMetadata),
-    pub(crate) artifact: ArtifactType,
-    pub(crate) direct_url_json: DirectUrlJson,
 }
 
 impl PackageDb {
@@ -109,14 +83,12 @@ impl PackageDb {
         );
 
         let metadata_cache = FileStore::new(&cache_dir.join("metadata")).into_diagnostic()?;
-        let local_wheel_cache = WheelCache::new(cache_dir.join("local_wheels"));
 
         Ok(Self {
             http,
             sources: package_sources,
             metadata_cache,
             artifacts: Default::default(),
-            local_wheel_cache,
             cache_dir: cache_dir.to_owned(),
             check_available_artifacts,
         })
@@ -127,12 +99,10 @@ impl PackageDb {
         &self.cache_dir
     }
 
-    /// Returns the local wheel cache
-    pub fn local_wheel_cache(&self) -> &WheelCache {
-        &self.local_wheel_cache
-    }
-
     /// Downloads and caches information about available artifacts of a package from the index.
+    /// 
+    /// TOO: This probably doesn't make sense to keep as an enum/match statement when only a single
+    ///      option is defined.
     pub async fn available_artifacts(
         &self,
         request: ArtifactRequest,
@@ -185,184 +155,7 @@ impl PackageDb {
 
                 Ok(self.artifacts.insert(p.clone(), Box::new(result)))
             }
-            ArtifactRequest::DirectUrl {
-                name,
-                url,
-                wheel_builder,
-            } => {
-                self.get_artifact_by_direct_url(name, url, &wheel_builder)
-                    .await
-            }
         }
-    }
-
-    /// Returns the metadata from a set of artifacts. This function assumes that metadata is
-    /// consistent for all artifacts of a single version.
-    pub async fn get_metadata<'a, A: Borrow<ArtifactInfo>>(
-        &self,
-        artifacts: &'a [A],
-        wheel_builder: Option<&Arc<WheelBuilder>>,
-    ) -> miette::Result<Option<(&'a A, WheelCoreMetadata)>> {
-        // Check if we already have information about any of the artifacts cached.
-        // Return if we do
-        for artifact_info in artifacts.iter() {
-            if let Some(metadata_bytes) = self.metadata_from_cache(artifact_info.borrow()).await {
-                return Ok(Some((
-                    artifact_info,
-                    WheelCoreMetadata::try_from(metadata_bytes.as_slice()).into_diagnostic()?,
-                )));
-            }
-        }
-
-        // Apparently we dont have any metadata cached yet.
-        // Next up check if we have downloaded any artifacts but do not have the metadata stored yet
-        // In this case we can just return it
-        let result = self.metadata_for_cached_artifacts(artifacts).await?;
-        if result.is_some() {
-            return Ok(result);
-        }
-
-        // We have exhausted all options to read the metadata from the cache. We'll have to hit the
-        // network to get to the information.
-        // Let's try to get information for any wheels that we have
-        // first
-        let result = self.get_metadata_wheels(artifacts, wheel_builder).await?;
-        if result.is_some() {
-            return Ok(result);
-        }
-
-        // No wheels found with metadata, try to get metadata from sdists
-        // by building them or using the appropriate hooks
-        if let Some(wheel_builder) = wheel_builder {
-            let sdist = self.get_metadata_sdists(artifacts, wheel_builder).await?;
-            if sdist.is_some() {
-                return Ok(sdist);
-            }
-
-            let stree = self.get_metadata_stree(artifacts, wheel_builder).await?;
-            if stree.is_some() {
-                return Ok(stree);
-            }
-        }
-
-        // Ok literally nothing seems to work, so we'll just return None
-        Ok(None)
-    }
-
-    /// Opens the specified artifact info. Downloads the artifact data from the remote location if
-    /// the information is not already cached.
-    #[async_recursion]
-    pub async fn get_wheel(
-        &self,
-        artifact_info: &ArtifactInfo,
-        builder: Option<Arc<WheelBuilder>>,
-    ) -> miette::Result<(Wheel, Option<DirectUrlJson>)> {
-        // TODO: add support for this currently there are not saved
-        if artifact_info.is_direct_url {
-            if let Some(builder) = builder {
-                let response = super::direct_url::fetch_artifact_and_metadata_by_direct_url(
-                    &self.http,
-                    artifact_info.filename.distribution_name(),
-                    artifact_info.url.clone(),
-                    &builder,
-                )
-                .await?;
-
-                let whl = match response.artifact {
-                    ArtifactType::Wheel(wheel) => wheel,
-                    ArtifactType::SDist(sdist) => {
-                        builder.build_wheel(&sdist).await.into_diagnostic()?
-                    }
-                    ArtifactType::STree(stree) => {
-                        builder.build_wheel(&stree).await.into_diagnostic()?
-                    }
-                };
-
-                return Ok((whl, Some(response.direct_url_json)));
-            } else {
-                miette::bail!("cannot build wheel without a wheel builder");
-            }
-        }
-
-        // Try to build the wheel for this SDist if possible
-        if artifact_info.is::<SDist>() {
-            if let Some(builder) = builder {
-                let sdist = self
-                    .get_cached_artifact::<SDist>(artifact_info, CacheMode::Default)
-                    .await?;
-
-                let whl = builder.build_wheel(&sdist).await.into_diagnostic()?;
-
-                let direct_url = if artifact_info.is_direct_url {
-                    let direct_url_hash = if let Some(hash) = artifact_info.hashes.clone() {
-                        if let Some(sha256) = hash.sha256 {
-                            let str = format!("{:x}", sha256);
-                            Some(DirectUrlHashes { sha256: str })
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    };
-                    Some(DirectUrlJson {
-                        url: artifact_info.url.clone(),
-                        source: DirectUrlSource::Archive {
-                            hashes: direct_url_hash,
-                        },
-                    })
-                } else {
-                    None
-                };
-
-                return Ok((whl, direct_url));
-            } else {
-                miette::bail!("cannot build wheel without a wheel builder");
-            }
-        }
-
-        // Otherwise just retrieve the wheel
-        let cached_whl = self
-            .get_cached_artifact::<Wheel>(artifact_info, CacheMode::Default)
-            .await?;
-        Ok((cached_whl, None))
-    }
-
-    /// Get artifact directly from file, vcs, or url
-    async fn get_artifact_by_direct_url<P: Into<NormalizedPackageName>>(
-        &self,
-        p: P,
-        url: Url,
-        wheel_builder: &Arc<WheelBuilder>,
-    ) -> miette::Result<&IndexMap<PypiVersion, Vec<Arc<ArtifactInfo>>>> {
-        let p = p.into();
-
-        if let Some(cached) = self.artifacts.get(&p) {
-            return Ok(cached);
-        }
-
-        let response = super::direct_url::fetch_artifact_and_metadata_by_direct_url(
-            &self.http,
-            p.clone(),
-            url,
-            wheel_builder,
-        )
-        .await?;
-
-        self.put_metadata_in_cache(&response.artifact_info, &response.metadata.0)
-            .await?;
-
-        Ok(self
-            .artifacts
-            .insert(p, Box::new(response.artifact_versions)))
-    }
-
-    /// Reads the metadata for the given artifact from the cache or return `None` if the metadata
-    /// could not be found in the cache.
-    async fn metadata_from_cache(&self, ai: &ArtifactInfo) -> Option<Vec<u8>> {
-        let mut data = self.metadata_cache.get(&ai.hashes.as_ref()?).await?;
-        let mut bytes = Vec::new();
-        data.read_to_end(&mut bytes).ok()?;
-        Some(bytes)
     }
 
     /// Writes the metadata for the given artifact into the cache. If the metadata already exists
@@ -377,249 +170,7 @@ impl PackageDb {
         Ok(())
     }
 
-    /// Check if we already have one of the artifacts cached. Only do this if we have more than
-    /// one artifact because otherwise, we'll do a request anyway if we dont have the file
-    /// cached.
-    async fn metadata_for_cached_artifacts<'a, A: Borrow<ArtifactInfo>>(
-        &self,
-        artifacts: &'a [A],
-    ) -> miette::Result<Option<(&'a A, WheelCoreMetadata)>> {
-        for artifact_info in artifacts.iter() {
-            let artifact_info_ref = artifact_info.borrow();
-            if artifact_info_ref.is::<Wheel>() && !artifact_info_ref.is_direct_url {
-                let result = self
-                    .get_cached_artifact::<Wheel>(artifact_info_ref, CacheMode::OnlyIfCached)
-                    .await;
-                match result {
-                    Ok(artifact) => {
-                        // Apparently the artifact has been downloaded, but its metadata has not been
-                        // cached yet. Lets store it there.
-                        let metadata = artifact.metadata();
-                        match metadata {
-                            Ok((blob, metadata)) => {
-                                self.put_metadata_in_cache(artifact_info_ref, &blob).await?;
-                                return Ok(Some((artifact_info, metadata)));
-                            }
-                            Err(err) => {
-                                tracing::warn!(
-                                    "Error reading metadata from artifact '{}' skipping ({:?})",
-                                    artifact_info_ref.filename,
-                                    err
-                                );
-                                continue;
-                            }
-                        }
-                    }
-                    Err(err) => match err.downcast_ref::<HttpRequestError>() {
-                        Some(HttpRequestError::NotCached(_)) => continue,
-                        _ => return Err(err),
-                    },
-                }
-            }
-            // We know that it is an sdist
-            else if artifact_info_ref.is::<SDist>() && !artifact_info_ref.is_direct_url {
-                let result = self
-                    .get_cached_artifact::<SDist>(artifact_info_ref, CacheMode::OnlyIfCached)
-                    .await;
-
-                match result {
-                    Ok(sdist) => {
-                        // Save the pep643 metadata in the cache if it is available
-                        let metadata = sdist.pep643_metadata().into_diagnostic()?;
-                        if let Some((bytes, _)) = metadata {
-                            self.put_metadata_in_cache(artifact_info_ref, &bytes)
-                                .await?;
-                        }
-                    }
-                    Err(err) => match err.downcast_ref::<HttpRequestError>() {
-                        Some(HttpRequestError::NotCached(_)) => continue,
-                        _ => return Err(err),
-                    },
-                }
-            }
-        }
-        Ok(None)
-    }
-
-    async fn get_metadata_wheels<'a, A: Borrow<ArtifactInfo>>(
-        &self,
-        artifacts: &'a [A],
-        wheel_builder: Option<&Arc<WheelBuilder>>,
-    ) -> miette::Result<Option<(&'a A, WheelCoreMetadata)>> {
-        let wheels = artifacts
-            .iter()
-            .filter(|artifact_info| (*artifact_info).borrow().is::<Wheel>());
-
-        // Get the information from the first artifact. We assume the metadata is consistent across
-        // all matching artifacts
-        for artifact_info in wheels {
-            let ai = artifact_info.borrow();
-
-            // Retrieve the metadata instead of the entire wheel
-            // If the dist-info is available separately, we can use that instead
-            if ai.dist_info_metadata.available {
-                return Ok(Some(self.get_pep658_metadata(artifact_info).await?));
-            }
-
-            // Try to load the data by sparsely reading the artifact (if supported)
-            if let Some(metadata) = self.get_lazy_metadata_wheel(ai).await? {
-                return Ok(Some((artifact_info, metadata)));
-            }
-
-            let metadata = if ai.is_direct_url {
-                if let Some(wheel_builder) = wheel_builder {
-                    let response = super::direct_url::fetch_artifact_and_metadata_by_direct_url(
-                        &self.http,
-                        ai.filename.distribution_name(),
-                        ai.url.clone(),
-                        wheel_builder,
-                    )
-                    .await;
-                    match response {
-                        Err(err) => Err(miette::miette!(err.to_string())),
-                        Ok(response) => Ok(response.metadata),
-                    }
-                } else {
-                    miette::bail!("cannot build wheel without a wheel builder");
-                }
-            } else {
-                // Otherwise download the entire artifact
-                let artifact = self
-                    .get_cached_artifact::<Wheel>(ai, CacheMode::Default)
-                    .await?;
-                artifact.metadata().into_diagnostic()
-            };
-
-            match metadata {
-                Ok((blob, metadata)) => {
-                    self.put_metadata_in_cache(ai, &blob).await?;
-                    return Ok(Some((artifact_info, metadata)));
-                }
-                Err(err) => {
-                    tracing::warn!(
-                        "Error reading metadata from artifact '{}' skipping ({:?})",
-                        ai.filename,
-                        err
-                    );
-                    continue;
-                }
-            }
-        }
-        Ok(None)
-    }
-
-    async fn get_metadata_sdists<'a, A: Borrow<ArtifactInfo>>(
-        &self,
-        artifacts: &'a [A],
-        wheel_builder: &Arc<WheelBuilder>,
-    ) -> miette::Result<Option<(&'a A, WheelCoreMetadata)>> {
-        let sdists = artifacts
-            .iter()
-            .filter(|artifact_info| (*artifact_info).borrow().is::<SDist>());
-
-        // Keep track of errors
-        // only print these if we have not been able to find any metadata
-        let mut errors = Vec::new();
-        for ai in sdists {
-            let artifact_info: &ArtifactInfo = ai.borrow();
-            let metadata = if artifact_info.is_direct_url {
-                let response = super::direct_url::fetch_artifact_and_metadata_by_direct_url(
-                    &self.http,
-                    artifact_info.filename.distribution_name(),
-                    artifact_info.url.clone(),
-                    wheel_builder,
-                )
-                .await;
-                match response {
-                    Err(err) => Err(WheelBuildError::Error(err.to_string())),
-                    Ok(response) => Ok(response.metadata),
-                }
-            } else {
-                let artifact = self
-                    .get_cached_artifact::<SDist>(artifact_info, CacheMode::Default)
-                    .await?;
-                wheel_builder.get_sdist_metadata(&artifact).await
-            };
-
-            match metadata {
-                Ok((blob, metadata)) => {
-                    self.put_metadata_in_cache(artifact_info, &blob).await?;
-                    return Ok(Some((ai, metadata)));
-                }
-                Err(err) => {
-                    errors.push(format!(
-                        "error while processing source distribution '{}': \n {}",
-                        artifact_info.filename, err
-                    ));
-                    continue;
-                }
-            }
-        }
-
-        // Check if errors is empty and if not return an error
-        if !errors.is_empty() {
-            miette::bail!("{}", errors.join("\n"));
-        }
-
-        Ok(None)
-    }
-
-    async fn get_metadata_stree<'a, A: Borrow<ArtifactInfo>>(
-        &self,
-        artifacts: &'a [A],
-        wheel_builder: &Arc<WheelBuilder>,
-    ) -> miette::Result<Option<(&'a A, WheelCoreMetadata)>> {
-        let stree = artifacts
-            .iter()
-            .filter(|artifact_info| (*artifact_info).borrow().is::<STree>());
-
-        // Keep track of errors
-        // only print these if we have not been able to find any metadata
-        let mut errors = Vec::new();
-        for ai in stree {
-            let artifact_info: &ArtifactInfo = ai.borrow();
-            let stree_name = artifact_info
-                .filename
-                .as_inner::<STreeFilename>()
-                .unwrap_or_else(|| {
-                    panic!(
-                        "the specified artifact '{}' does not refer to type requested to read",
-                        artifact_info.filename
-                    )
-                });
-            let response = super::direct_url::fetch_artifact_and_metadata_by_direct_url(
-                &self.http,
-                stree_name.distribution.clone(),
-                artifact_info.url.clone(),
-                wheel_builder,
-            )
-            .await;
-
-            match response {
-                Ok(direct_response) => {
-                    let metadata_and_bytes = direct_response.metadata;
-                    self.put_metadata_in_cache(artifact_info, &metadata_and_bytes.0)
-                        .await?;
-                    return Ok(Some((ai, metadata_and_bytes.1)));
-                }
-                Err(err) => {
-                    errors.push(format!(
-                        "error while processing source tree '{}': \n {}",
-                        artifact_info.filename, err
-                    ));
-                    continue;
-                }
-            }
-        }
-
-        if !errors.is_empty() {
-            miette::bail!("{}", errors.join("\n"));
-        }
-
-        Ok(None)
-    }
-
-    async fn get_lazy_metadata_wheel(
+    pub async fn get_lazy_metadata_wheel(
         &self,
         artifact_info: &ArtifactInfo,
     ) -> miette::Result<Option<WheelCoreMetadata>> {
@@ -658,7 +209,7 @@ impl PackageDb {
     /// Retrieve the PEP658 metadata for the given artifact.
     /// This assumes that the metadata is available in the repository
     /// This can be checked with the ArtifactInfo
-    async fn get_pep658_metadata<'a, A: Borrow<ArtifactInfo>>(
+    pub async fn get_pep658_metadata<'a, A: Borrow<ArtifactInfo>>(
         &self,
         artifact_info: &'a A,
     ) -> miette::Result<(&'a A, WheelCoreMetadata)> {
@@ -703,44 +254,6 @@ impl PackageDb {
         let mut source = String::new();
         bytes.read_to_string(&mut source).into_diagnostic()?;
         parse_package_names_html(&source)
-    }
-
-    /// Opens the specified artifact info. Depending on the specified `cache_mode`, downloads the
-    /// artifact data from the remote location if the information is not already cached.
-    async fn get_cached_artifact<A: ArtifactFromBytes>(
-        &self,
-        artifact_info: &ArtifactInfo,
-        cache_mode: CacheMode,
-    ) -> miette::Result<A> {
-        // Check if the artifact is the same type as the info.
-        let name = artifact_info
-            .filename
-            .as_inner::<A::Name>()
-            .unwrap_or_else(|| {
-                panic!(
-                    "the specified artifact '{}' does not refer to type requested to read",
-                    artifact_info.filename
-                )
-            });
-
-        // Get the contents of the artifact
-        let artifact_bytes = self
-            .http
-            .request(
-                artifact_info.url.clone(),
-                Method::GET,
-                HeaderMap::default(),
-                cache_mode,
-            )
-            .await?;
-
-        // Turn the response into a seekable response.
-        let bytes = artifact_bytes
-            .into_body()
-            .into_local()
-            .await
-            .into_diagnostic()?;
-        A::from_bytes(name.clone(), bytes)
     }
 }
 
@@ -904,12 +417,6 @@ mod test {
             .iter()
             .flat_map(|(_, artifacts)| artifacts.iter().cloned())
             .collect::<Vec<_>>();
-
-        let (_artifact, _metadata) = package_db
-            .get_metadata(&artifact_info, None)
-            .await
-            .unwrap()
-            .unwrap();
     }
 
     #[tokio::test]
