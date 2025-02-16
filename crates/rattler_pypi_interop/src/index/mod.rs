@@ -2,8 +2,7 @@
 
 mod file_store;
 
-mod direct_url;
-mod git_interop;
+// mod git_interop;
 pub mod html;
 mod http;
 mod lazy_metadata;

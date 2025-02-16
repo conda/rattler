@@ -27,7 +27,7 @@ pub fn parse_hash(s: &str) -> Option<ArtifactHashes> {
 fn into_artifact_info(
     base: &Url,
     normalized_package_name: &NormalizedPackageName,
-    tag: &HTMLTag,
+    tag: &HTMLTag<'_>,
 ) -> Option<ArtifactInfo> {
     let attributes = tag.attributes();
     // Get first href attribute to use as filename

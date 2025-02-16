@@ -16,8 +16,14 @@ mod entry_points;
 
 mod project_info;
 
+mod pypi_version_types;
+
+mod solve_options;
+
 mod direct_url_json;
 mod rfc822ish;
+
+mod install_paths;
 
 pub use artifact::{ArtifactFromBytes, ArtifactFromSource, HasArtifactName, ReadPyProjectError};
 
@@ -39,6 +45,12 @@ pub use extra::Extra;
 pub use entry_points::{EntryPoint, ParseEntryPointError};
 
 pub use project_info::{ArtifactHashes, ArtifactInfo, DistInfoMetadata, Meta, ProjectInfo, Yanked};
+
+pub use pypi_version_types::{PypiVersion, PypiPackageName, PypiVersionSet};
+
+pub use solve_options::{PreReleaseResolution, ResolveOptions, SDistResolution, OnWheelBuildFailure};
+
+pub use install_paths::InstallPaths;
 
 pub(crate) use rfc822ish::RFC822ish;
 

@@ -1,6 +1,5 @@
 use super::artifact_name::InnerAsArtifactName;
-use crate::resolve::PypiVersion;
-use crate::types::SourceArtifactName;
+use crate::types::{SourceArtifactName, PypiVersion};
 use crate::utils::ReadAndSeek;
 use std::path::Path;
 

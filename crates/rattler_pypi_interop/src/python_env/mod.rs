@@ -25,4 +25,5 @@ pub use env_markers::Pep508EnvMakers;
 pub(crate) use system_python::{system_python_executable, FindPythonError};
 pub use system_python::{ParsePythonInterpreterVersionError, PythonInterpreterVersion};
 pub use uninstall::{uninstall_distribution, UninstallDistributionError};
-pub use venv::{PythonLocation, VEnv, VEnvError};
+// pub use venv::{PythonLocation, VEnv, VEnvError};
+pub use venv::PythonLocation;

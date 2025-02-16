@@ -16,9 +16,10 @@ use parking_lot::Mutex;
 use pep508_rs::MarkerEnvironment;
 
 use crate::python_env::{ParsePythonInterpreterVersionError, PythonInterpreterVersion};
-use crate::resolve::solve_options::{OnWheelBuildFailure, ResolveOptions};
-use crate::types::ArtifactFromSource;
-use crate::types::{NormalizedPackageName, PackageName, SourceArtifactName, WheelFilename};
+use crate::types::{
+    ArtifactFromSource, NormalizedPackageName, PackageName, OnWheelBuildFailure, ResolveOptions,
+    SourceArtifactName, WheelFilename,
+};
 use crate::wheel_builder::build_environment::BuildEnvironment;
 pub use crate::wheel_builder::wheel_cache::{WheelCache, WheelCacheKey};
 use crate::{artifacts::Wheel, index::PackageDb, python_env::WheelTags, types::WheelCoreMetadata};
@@ -377,7 +378,7 @@ mod tests {
     use crate::artifacts::SDist;
     use crate::index::{PackageDb, PackageSourcesBuilder};
     use crate::python_env::{Pep508EnvMakers, PythonInterpreterVersion};
-    use crate::resolve::solve_options::{OnWheelBuildFailure, ResolveOptions};
+    use crate::types::{OnWheelBuildFailure, ResolveOptions};
     use crate::wheel_builder::wheel_cache::WheelCacheKey;
     use crate::wheel_builder::WheelBuilder;
     use futures::future::TryJoinAll;

@@ -1,14 +1,35 @@
 //! Contains the options that can be passed to the [`super::solve::resolve`] function.
 
-use crate::{python_env::PythonLocation, types::NormalizedPackageName};
+use crate::python_env::PythonLocation;
+use crate::types::{NormalizedPackageName, PackageName, Version, Extra, ArtifactInfo};
+
 use pep508_rs::{Requirement, VersionOrUrl};
 use std::sync::Arc;
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::{HashMap, HashSet}, str::FromStr};
 use tokio::sync::Semaphore;
+use url::Url;
 
-use crate::types::PackageName;
+/// Represents a single locked down distribution (python package) after calling [`resolve`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PinnedPackage {
+    /// The name of the package
+    pub name: NormalizedPackageName,
 
-use super::PinnedPackage;
+    /// The selected version
+    pub version: Version,
+
+    /// The possible direct URL for it
+    pub url: Option<Url>,
+
+    /// The extras that where selected either by the user or as part of the resolution.
+    pub extras: HashSet<Extra>,
+
+    /// The applicable artifacts for this package. These have been ordered by compatibility if
+    /// `compatible_tags` have been provided to the solver.
+    ///
+    /// This list may be empty if the package was locked or favored.
+    pub artifacts: Vec<Arc<ArtifactInfo>>,
+}
 
 /// Defines how to handle sdists during resolution.
 #[derive(Default, Debug, Clone, Copy, Eq, PartialOrd, PartialEq)]
@@ -156,7 +177,7 @@ impl PreReleaseResolution {
             match &spec.version_or_url {
                 Some(VersionOrUrl::VersionSpecifier(v)) => {
                     if v.iter().any(|s| s.version().any_prerelease()) {
-                        let name = PackageName::from_str(&spec.name).expect("invalid package name");
+                        let name = PackageName::from_str(&spec.name.to_string()).expect("invalid package name");
                         allow_names.push(name.as_str().to_string());
                     }
                 }

@@ -2,11 +2,9 @@
 //! these are used by the [`resolvo`] crate to resolve dependencies.
 //! This module, in combination with the [`super::dependency_provider`] modules is used to make the PyPI ecosystem compatible with the [`resolvo`] crate.
 
-use crate::resolve::solve_options::PreReleaseResolution;
 use crate::types::{Extra, NormalizedPackageName};
 use pep440_rs::Version;
 use pep508_rs::VersionOrUrl;
-use resolvo::VersionSet;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use url::Url;
@@ -23,37 +21,6 @@ pub struct PypiVersionSet {
     /// We pre-compute if any of the items in the specifiers contains a pre-release and store
     /// this as a boolean which is later used during matching.
     allows_prerelease: bool,
-}
-
-impl PypiVersionSet {
-    /// Create a PyPiVersionSeet from VersionOrUrl specifier
-    pub fn from_spec(spec: Option<VersionOrUrl>, prerelease_option: &PreReleaseResolution) -> Self {
-        let allows_prerelease = match prerelease_option {
-            PreReleaseResolution::Disallow => false,
-            PreReleaseResolution::AllowIfNoOtherVersionsOrEnabled { .. } => match spec.as_ref() {
-                Some(VersionOrUrl::VersionSpecifier(v)) => {
-                    v.iter().any(|s| s.version().any_prerelease())
-                }
-                _ => false,
-            },
-            PreReleaseResolution::Allow => true,
-        };
-
-        Self {
-            spec,
-            allows_prerelease,
-        }
-    }
-}
-
-impl Display for PypiVersionSet {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.spec {
-            None => write!(f, "*"),
-            Some(VersionOrUrl::Url(url)) => write!(f, "{url}"),
-            Some(VersionOrUrl::VersionSpecifier(spec)) => write!(f, "{spec}"),
-        }
-    }
 }
 
 /// This is a wrapper around [`Version`] that serves a version
@@ -99,38 +66,6 @@ impl PypiVersion {
     }
 }
 
-impl VersionSet for PypiVersionSet {
-    type V = PypiVersion;
-
-    fn contains(&self, v: &Self::V) -> bool {
-        match (self.spec.as_ref(), v) {
-            (Some(VersionOrUrl::Url(a)), PypiVersion::Url(b)) => a == b,
-            (
-                Some(VersionOrUrl::VersionSpecifier(spec)),
-                PypiVersion::Version {
-                    version,
-                    package_allows_prerelease,
-                },
-            ) => {
-                spec.contains(version)
-                    // pre-releases are allowed only when the versionset allows them (jupyterlab==3.0.0a1)
-                    // or there are no other versions available (foo-1.0.0a1, foo-1.0.0a2)
-                    // or alternatively if the user has enabled all pre-releases or this specific (this is encoded in the allows_prerelease field)
-                    && (self.allows_prerelease || *package_allows_prerelease || !version.any_prerelease())
-            }
-            (
-                None,
-                PypiVersion::Version {
-                    version,
-                    package_allows_prerelease,
-                },
-            ) => self.allows_prerelease || *package_allows_prerelease || !version.any_prerelease(),
-            (None, PypiVersion::Url(_)) => true,
-            _ => false,
-        }
-    }
-}
-
 impl Display for PypiVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -143,7 +78,7 @@ impl Display for PypiVersion {
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 /// This can either be a base package name or with an extra
 /// this is used to support optional dependencies
-pub(crate) enum PypiPackageName {
+pub enum PypiPackageName {
     /// Regular dependency
     Base(NormalizedPackageName),
     /// Optional dependency
