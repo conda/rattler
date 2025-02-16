@@ -273,7 +273,7 @@ mod tests {
     pub fn read_rich_build_info() {
         // Read path
         let path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/sdists/rich-13.6.0.tar.gz");
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data/sdists/rich-13.6.0.tar.gz");
 
         // Load sdist
         let sdist = super::SDist::from_path(&path, &"rich".parse().unwrap()).unwrap();
@@ -294,7 +294,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     pub async fn read_zip_archive_for_a_file() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../test-data/sdists/zip_read_package-1.0.0.zip");
+            .join("test-data/sdists/zip_read_package-1.0.0.zip");
 
         let sdist = SDist::from_path(&path, &"zip_read_package".parse().unwrap()).unwrap();
 
@@ -315,7 +315,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     pub async fn read_tar_gz_archive_for_a_file() {
         let path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/sdists/rich-13.6.0.tar.gz");
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data/sdists/rich-13.6.0.tar.gz");
 
         let sdist = SDist::from_path(&path, &"rich".parse().unwrap()).unwrap();
 
