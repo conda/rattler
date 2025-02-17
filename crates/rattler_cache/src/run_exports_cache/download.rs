@@ -5,7 +5,6 @@ use fs_err::tokio;
 use futures::StreamExt;
 use rattler_package_streaming::DownloadReporter;
 use tempfile::NamedTempFile;
-// use tokio_stream::StreamExt;
 use url::Url;
 
 /// Download the contents of the archive from the specified remote location

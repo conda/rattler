@@ -87,8 +87,8 @@ fn get_file_from_archive(
 }
 
 /// Read a package file content from archive
-fn read_package_file_content<P: PackageFile>(
-    file: &File,
+fn read_package_file_content<'a, P: PackageFile>(
+    file: impl Read + Seek + 'a,
     path: impl AsRef<Path>,
 ) -> Result<Vec<u8>, ExtractError> {
     match ArchiveType::try_from(&path).ok_or(ExtractError::UnsupportedArchiveType)? {
@@ -127,20 +127,17 @@ pub fn read_package_file<P: PackageFile>(path: impl AsRef<Path>) -> Result<P, Ex
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
 }
 
-/// Get a [`PackageFile`] from temporary archive and return it as a temporary file.
-pub fn get_package_file<P: PackageFile>(
-    archive_temp_file: NamedTempFile,
-) -> Result<NamedTempFile, ExtractError> {
-    let mut output_file = NamedTempFile::new()?;
+/// Get a [`PackageFile`] from temporary archive and extract it to a writer
+pub fn extract_package_file<'a, P: PackageFile>(
+    reader: impl Read + Seek + 'a,
+    location: &Path,
+    writer: &mut impl Write,
+) -> Result<(), ExtractError> {
+    let content = read_package_file_content::<P>(reader, location)?;
 
-    let content =
-        read_package_file_content::<P>(archive_temp_file.as_file(), archive_temp_file.path())?;
+    writer.write_all(&content)?;
 
-    output_file.write_all(&content)?;
+    writer.flush()?;
 
-    output_file.flush()?;
-
-    output_file.rewind()?;
-
-    Ok(output_file)
+    Ok(())
 }

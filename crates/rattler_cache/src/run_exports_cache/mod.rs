@@ -43,7 +43,7 @@ pub struct RunExportsCache {
 #[derive(Clone, Debug)]
 pub struct CacheEntry {
     /// The `run_exports.json` of the package.
-    pub(crate) run_exports: Arc<Option<RunExportsJson>>,
+    pub(crate) run_exports: Option<RunExportsJson>,
     /// The path to the file on disk.
     pub(crate) path: PathBuf,
 }
@@ -52,13 +52,13 @@ impl CacheEntry {
     /// Create a new cache entry.
     pub(crate) fn new(run_exports: Option<RunExportsJson>, path: PathBuf) -> Self {
         Self {
-            run_exports: Arc::new(run_exports),
+            run_exports: run_exports,
             path,
         }
     }
 
     /// Returns the `run_exports.json` of the package.
-    pub fn run_exports(&self) -> Arc<Option<RunExportsJson>> {
+    pub fn run_exports(&self) -> Option<RunExportsJson> {
         self.run_exports.clone()
     }
 
@@ -221,6 +221,9 @@ impl RunExportsCache {
                 #[error(transparent)]
                 Extract(#[from] ExtractError),
 
+                #[error(transparent)]
+                Io(#[from] std::io::Error),
+
             }
 
             let url = url.clone();
@@ -250,14 +253,17 @@ impl RunExportsCache {
                     // Extract any potential error
                     let err = match result {
                         Ok(result) => {
+                            let temp_file = NamedTempFile::new()?;
+                            // Clone the file handler to be able to pass it to the blocking task
+                            let mut file_handler = temp_file.as_file().try_clone()?;
                             // now extract run_exports.json from the archive without unpacking
-                            let file = simple_spawn_blocking::tokio::run_blocking_task(move || {
-                                rattler_package_streaming::seek::get_package_file::<RunExportsJson>(result)
+                            let result = simple_spawn_blocking::tokio::run_blocking_task(move || {
+                                rattler_package_streaming::seek::extract_package_file::<RunExportsJson>(result.as_file(), result.path(), &mut file_handler)
                             }).await;
 
-                            match file {
-                                Ok(run_exports) => {
-                                    return Ok(Some(run_exports));
+                            match result {
+                                Ok(()) => {
+                                    return Ok(Some(temp_file));
                                 },
                                 Err(err) => {
                                     if matches!(err, ExtractError::MissingComponent) {

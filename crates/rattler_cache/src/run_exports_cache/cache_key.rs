@@ -1,5 +1,5 @@
 use rattler_conda_types::{package::ArchiveIdentifier, PackageRecord};
-use rattler_digest::Sha256Hash;
+use rattler_digest::{Md5Hash, Sha256Hash};
 use std::fmt::{Display, Formatter};
 
 /// Provides a unique identifier for packages in the cache.
@@ -10,19 +10,20 @@ pub struct CacheKey {
     pub(crate) version: String,
     pub(crate) build_string: String,
     pub(crate) sha256: Option<Sha256Hash>,
+    pub(crate) md5: Option<Md5Hash>,
     pub(crate) extension: String,
 }
 
 impl CacheKey {
-    /// Adds a sha256 hash of the archive.
-    pub fn with_sha256(mut self, sha256: Sha256Hash) -> Self {
-        self.sha256 = Some(sha256);
-        self
-    }
-
     /// Potentially adds a sha256 hash of the archive.
     pub fn with_opt_sha256(mut self, sha256: Option<Sha256Hash>) -> Self {
         self.sha256 = sha256;
+        self
+    }
+
+    /// Potentially adds a md5 hash of the archive.
+    pub fn with_opt_md5(mut self, md5: Option<Md5Hash>) -> Self {
+        self.md5 = md5;
         self
     }
 }
@@ -31,6 +32,11 @@ impl CacheKey {
     /// Return the sha256 hash of the package if it is known.
     pub fn sha256(&self) -> Option<Sha256Hash> {
         self.sha256
+    }
+
+    /// Return the md5 hash of the package if it is known.
+    pub fn md5(&self) -> Option<Md5Hash> {
+        self.md5
     }
 
     /// Return the sha256 hash string of the package if it is known.
@@ -50,6 +56,7 @@ impl CacheKey {
             version: record.version.to_string(),
             build_string: record.build.clone(),
             sha256: record.sha256,
+            md5: record.md5,
             extension: archive_identifier.archive_type.extension().to_string(),
         })
     }
@@ -63,14 +70,18 @@ pub enum CacheKeyError {
 
 impl Display for CacheKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // we need to use either sha256 or md5 hash to display the key
+        // if both are none, we ignore them
+        let display_key = match (self.sha256(), self.md5()) {
+            (Some(sha256), _) => format!("-{sha256:x}"),
+            (_, Some(md5)) => format!("-{md5:x}"),
+            _ => "".to_string(),
+        };
+
         write!(
             f,
-            "{}-{}-{}-{}{}",
-            &self.name,
-            &self.version,
-            &self.build_string,
-            self.sha256_str(),
-            self.extension
+            "{}-{}-{}{}{}",
+            &self.name, &self.version, &self.build_string, display_key, self.extension
         )
     }
 }
