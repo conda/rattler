@@ -446,12 +446,10 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
         inner.package_sizes.reserve(transaction.operations.len());
         for operation in &transaction.operations {
             let record = match operation {
-                TransactionOperation::Install(new) | TransactionOperation::Change { new, .. } => {
-                    &new.package_record
-                }
-                TransactionOperation::Reinstall(old) | TransactionOperation::Remove(old) => {
-                    &old.repodata_record.package_record
-                }
+                TransactionOperation::Install(new)
+                | TransactionOperation::Change { new, .. }
+                | TransactionOperation::Reinstall { new, .. } => &new.package_record,
+                TransactionOperation::Remove(old) => &old.repodata_record.package_record,
             };
             inner
                 .package_names
