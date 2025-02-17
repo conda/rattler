@@ -261,6 +261,9 @@ impl PrefixRecord {
         let writer = BufWriter::with_capacity(64 * 1024, &temp_file);
         self.write_to(writer, pretty)?;
 
+        // Make sure that all data is written to disk
+        temp_file.as_file().sync_all()?;
+
         // Atomically rename the temp file to the target path
         temp_file.persist(path).map_err(|e| {
             std::io::Error::new(
