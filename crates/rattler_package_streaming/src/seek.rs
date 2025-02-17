@@ -12,7 +12,6 @@ use std::{
     path::Path,
 };
 use tar::Archive;
-use tempfile::NamedTempFile;
 use zip::CompressionMethod;
 
 fn stream_conda_zip_entry<'a>(

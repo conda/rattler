@@ -48,7 +48,7 @@ impl CacheEntry {
     /// Create a new cache entry.
     pub(crate) fn new(run_exports: Option<RunExportsJson>, path: PathBuf) -> Self {
         Self {
-            run_exports: run_exports,
+            run_exports,
             path,
         }
     }
@@ -254,9 +254,9 @@ impl RunExportsCache {
                             let mut file_handler = temp_file.as_file().try_clone()?;
                             // now extract run_exports.json from the archive without unpacking
                             let result = simple_spawn_blocking::tokio::run_blocking_task(move || {
-                                let op_result = rattler_package_streaming::seek::extract_package_file::<RunExportsJson>(result.as_file(), result.path(), &mut file_handler)?;
+                                rattler_package_streaming::seek::extract_package_file::<RunExportsJson>(result.as_file(), result.path(), &mut file_handler)?;
                                 file_handler.rewind()?;
-                                Ok(op_result)
+                                Ok(())
                             }).await;
 
                             match result {
