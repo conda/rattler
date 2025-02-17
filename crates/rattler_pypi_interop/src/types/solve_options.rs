@@ -1,11 +1,14 @@
 //! Contains the options that can be passed to the [`super::solve::resolve`] function.
 
 use crate::python_env::PythonLocation;
-use crate::types::{NormalizedPackageName, PackageName, Version, Extra, ArtifactInfo};
+use crate::types::{ArtifactInfo, Extra, NormalizedPackageName, PackageName, Version};
 
 use pep508_rs::{Requirement, VersionOrUrl};
 use std::sync::Arc;
-use std::{collections::{HashMap, HashSet}, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 use tokio::sync::Semaphore;
 use url::Url;
 
@@ -177,7 +180,8 @@ impl PreReleaseResolution {
             match &spec.version_or_url {
                 Some(VersionOrUrl::VersionSpecifier(v)) => {
                     if v.iter().any(|s| s.version().any_prerelease()) {
-                        let name = PackageName::from_str(&spec.name.to_string()).expect("invalid package name");
+                        let name = PackageName::from_str(&spec.name.to_string())
+                            .expect("invalid package name");
                         allow_names.push(name.as_str().to_string());
                     }
                 }

@@ -3,13 +3,9 @@ use crate::index::file_store::FileStore;
 use crate::index::html::{parse_package_names_html, parse_project_info_html};
 use crate::index::http::{CacheMode, Http, HttpRequestError};
 use crate::index::package_sources::PackageSources;
-use crate::types::{
-    ArtifactInfo, ProjectInfo, PypiVersion, WheelCoreMetadata,
-};
+use crate::types::{ArtifactInfo, ProjectInfo, PypiVersion, WheelCoreMetadata};
 
-use crate::{
-    types::InnerAsArtifactName, types::NormalizedPackageName, types::WheelFilename,
-};
+use crate::{types::InnerAsArtifactName, types::NormalizedPackageName, types::WheelFilename};
 use async_http_range_reader::{AsyncHttpRangeReader, CheckSupportMethod};
 use elsa::sync::FrozenMap;
 use futures::{pin_mut, stream, StreamExt};
@@ -55,7 +51,7 @@ pub struct PackageDb {
 /// Type of request to get from the `available_artifacts` function.
 pub enum ArtifactRequest {
     /// Get the available artifacts from the index.
-    FromIndex(NormalizedPackageName)
+    FromIndex(NormalizedPackageName),
 }
 
 /// Specifies if we always want to check if there are new available artifacts
@@ -100,7 +96,7 @@ impl PackageDb {
     }
 
     /// Downloads and caches information about available artifacts of a package from the index.
-    /// 
+    ///
     /// TOO: This probably doesn't make sense to keep as an enum/match statement when only a single
     ///      option is defined.
     pub async fn available_artifacts(

@@ -46,9 +46,11 @@ pub use entry_points::{EntryPoint, ParseEntryPointError};
 
 pub use project_info::{ArtifactHashes, ArtifactInfo, DistInfoMetadata, Meta, ProjectInfo, Yanked};
 
-pub use pypi_version_types::{PypiVersion, PypiPackageName, PypiVersionSet};
+pub use pypi_version_types::{PypiPackageName, PypiVersion, PypiVersionSet};
 
-pub use solve_options::{PreReleaseResolution, ResolveOptions, SDistResolution, OnWheelBuildFailure};
+pub use solve_options::{
+    OnWheelBuildFailure, PreReleaseResolution, ResolveOptions, SDistResolution,
+};
 
 pub use install_paths::InstallPaths;
 
