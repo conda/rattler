@@ -223,7 +223,7 @@ impl FileLock {
 
 #[derive(Eq, PartialEq)]
 enum LockMode {
-    Lock
+    Lock,
 }
 
 /// Create a `.lock` file for the file at the specified `path`. Only a single process has access to

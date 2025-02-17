@@ -96,7 +96,11 @@ impl InstallPaths {
     }
 
     /// Matches the different categories to their install paths.
-    pub fn match_category<'a>(&'a self, category: &str, distribution_name: &str) -> Option<Cow<'a, Path>> {
+    pub fn match_category<'a>(
+        &'a self,
+        category: &str,
+        distribution_name: &str,
+    ) -> Option<Cow<'a, Path>> {
         match category {
             "purelib" => Some(self.purelib().into()),
             "platlib" => Some(self.platlib().into()),

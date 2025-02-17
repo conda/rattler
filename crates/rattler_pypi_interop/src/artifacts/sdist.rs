@@ -1,6 +1,6 @@
 use crate::types::{
     ArtifactFromBytes, ArtifactFromSource, HasArtifactName, NormalizedPackageName, PackageInfo,
-    ReadPyProjectError, SDistFilename, SDistFormat, SourceArtifactName, PypiVersion
+    PypiVersion, ReadPyProjectError, SDistFilename, SDistFormat, SourceArtifactName,
 };
 use crate::types::{WheelCoreMetaDataError, WheelCoreMetadata};
 use crate::utils::ReadAndSeek;

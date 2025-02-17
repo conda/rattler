@@ -1,4 +1,7 @@
-use crate::types::{HasArtifactName, STreeFilename, SourceArtifactName, PypiVersion, ArtifactFromSource, ReadPyProjectError};
+use crate::types::{
+    ArtifactFromSource, HasArtifactName, PypiVersion, ReadPyProjectError, STreeFilename,
+    SourceArtifactName,
+};
 use fs_err as fs;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
