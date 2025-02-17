@@ -238,26 +238,28 @@ impl PrefixRecord {
         let parent = path.parent().ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
-                "Failed to get parent directory of path",
+                format!(
+                    "Failed to get parent directory of path '{}'",
+                    path.display()
+                ),
             )
         })?;
-
-        fs_err::create_dir_all(parent)?;
 
         // Use a temporary file in the same directory for atomic writes
         let temp_file = NamedTempFile::with_prefix_in("prefix_record_", parent).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to create temporary file: {}", e),
+                format!(
+                    "Failed to create temporary file in '{}': {}",
+                    parent.display(),
+                    e
+                ),
             )
         })?;
 
         // Write to temp file with buffered writer
         let writer = BufWriter::with_capacity(64 * 1024, &temp_file);
         self.write_to(writer, pretty)?;
-
-        // Ensure all data is written before persisting
-        temp_file.as_file().sync_all()?;
 
         // Atomically rename the temp file to the target path
         temp_file.persist(path).map_err(|e| {
