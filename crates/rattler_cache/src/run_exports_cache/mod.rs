@@ -2,7 +2,12 @@
 //! [`RunExportsCache`].
 
 use std::{
-    fmt::Debug, future::Future, io::Seek, path::{Path, PathBuf}, sync::Arc, time::{Duration, SystemTime}
+    fmt::Debug,
+    future::Future,
+    io::Seek,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::{Duration, SystemTime},
 };
 
 use dashmap::DashMap;
@@ -47,10 +52,7 @@ pub struct CacheEntry {
 impl CacheEntry {
     /// Create a new cache entry.
     pub(crate) fn new(run_exports: Option<RunExportsJson>, path: PathBuf) -> Self {
-        Self {
-            run_exports,
-            path,
-        }
+        Self { run_exports, path }
     }
 
     /// Returns the `run_exports.json` of the package.
@@ -422,7 +424,7 @@ mod test {
             .unwrap(),
         );
 
-        let cache_key = CacheKey::new(
+        let cache_key = CacheKey::create(
             &pkg_record,
             "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2",
         )
@@ -460,7 +462,7 @@ mod test {
             "hb9d3cd8_2".to_string(),
         );
 
-        let cache_key = CacheKey::new(&pkg_record, "zlib-1.3.1-hb9d3cd8_2.conda").unwrap();
+        let cache_key = CacheKey::create(&pkg_record, "zlib-1.3.1-hb9d3cd8_2.conda").unwrap();
 
         // Get the package to the cache
         let cached_run_exports = cache
@@ -548,7 +550,7 @@ mod test {
 
         let client = ClientBuilder::new(Client::default()).build();
 
-        let cache_key = CacheKey::new(package_record, archive_name).unwrap();
+        let cache_key = CacheKey::create(package_record, archive_name).unwrap();
 
         // Do the first request without
         let result = cache
@@ -634,7 +636,7 @@ mod test {
         let packages_dir = tempdir().unwrap();
         let cache = RunExportsCache::new(packages_dir.path());
 
-        let cache_key = CacheKey::new(
+        let cache_key = CacheKey::create(
             &pkg_record,
             "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2",
         )
@@ -659,7 +661,7 @@ mod test {
         .unwrap();
         pkg_record.sha256 = Some(new_sha);
 
-        let cache_key = CacheKey::new(
+        let cache_key = CacheKey::create(
             &pkg_record,
             "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2",
         )

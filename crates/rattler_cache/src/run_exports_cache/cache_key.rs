@@ -3,7 +3,6 @@ use rattler_digest::{Md5Hash, Sha256Hash};
 use std::fmt::{Display, Formatter};
 
 /// Provides a unique identifier for packages in the cache.
-/// TODO: This could not be unique over multiple subdir. How to handle?
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
 pub struct CacheKey {
     pub(crate) name: String,
@@ -47,7 +46,7 @@ impl CacheKey {
     }
 
     /// Try to create a new cache key from a package record and a filename.
-    pub fn new(record: &PackageRecord, filename: &str) -> Result<Self, CacheKeyError> {
+    pub fn create(record: &PackageRecord, filename: &str) -> Result<Self, CacheKeyError> {
         let archive_identifier = ArchiveIdentifier::try_from_filename(filename)
             .ok_or_else(|| CacheKeyError::InvalidArchiveIdentifier(filename.to_string()))?;
 
