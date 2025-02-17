@@ -376,11 +376,11 @@ fn print_transaction(
                     format_record(new)
                 );
             }
-            TransactionOperation::Reinstall(r) => {
+            TransactionOperation::Reinstall { old, .. } => {
                 println!(
                     "{} {}",
                     console::style("~").yellow(),
-                    format_record(&r.repodata_record)
+                    format_record(&old.repodata_record)
                 );
             }
             TransactionOperation::Remove(r) => {
