@@ -64,7 +64,7 @@ impl CacheKey {
 
 #[derive(Debug, thiserror::Error)]
 pub enum CacheKeyError {
-    #[error("Could not identify the archive type from the name: {0}")]
+    #[error("could not identify the archive type from the name: {0}")]
     InvalidArchiveIdentifier(String),
 }
 
