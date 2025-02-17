@@ -2,11 +2,7 @@
 //! [`RunExportsCache`].
 
 use std::{
-    fmt::Debug,
-    future::Future,
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::{Duration, SystemTime},
+    fmt::Debug, future::Future, io::Seek, path::{Path, PathBuf}, sync::Arc, time::{Duration, SystemTime}
 };
 
 use dashmap::DashMap;
@@ -258,7 +254,9 @@ impl RunExportsCache {
                             let mut file_handler = temp_file.as_file().try_clone()?;
                             // now extract run_exports.json from the archive without unpacking
                             let result = simple_spawn_blocking::tokio::run_blocking_task(move || {
-                                rattler_package_streaming::seek::extract_package_file::<RunExportsJson>(result.as_file(), result.path(), &mut file_handler)
+                                let op_result = rattler_package_streaming::seek::extract_package_file::<RunExportsJson>(result.as_file(), result.path(), &mut file_handler)?;
+                                file_handler.rewind()?;
+                                Ok(op_result)
                             }).await;
 
                             match result {
