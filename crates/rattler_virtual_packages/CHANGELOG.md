@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.3](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.2...rattler_virtual_packages-v2.0.3) - 2025-02-18
+
+### Fixed
+
+- do not try to call `ldd` on non-linux systems (#1064)
+
 ## [2.0.2](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.1...rattler_virtual_packages-v2.0.2) - 2025-02-06
 
 ### Other
