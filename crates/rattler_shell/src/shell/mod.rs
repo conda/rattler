@@ -675,8 +675,7 @@ impl ShellEnum {
             let parent_process_name = parent_process
                 .name()
                 .to_string_lossy()
-                .to_lowercase()
-                .to_string();
+                .to_lowercase();
 
             let shell: Option<ShellEnum> = if parent_process_name.contains("bash") {
                 Some(Bash.into())
@@ -700,7 +699,7 @@ impl ShellEnum {
             {
                 Some(
                     PowerShell {
-                        executable_path: parent_process_name.to_string(),
+                        executable_path: parent_process_name.clone(),
                     }
                     .into(),
                 )

@@ -337,7 +337,7 @@ mod test {
         }
 
         // shuffle the data
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         paths.shuffle(&mut rng);
 
         insta::assert_yaml_snapshot!(PathsJson {
