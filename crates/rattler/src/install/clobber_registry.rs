@@ -653,7 +653,7 @@ mod tests {
         for _ in 0..3 {
             let mut operations = test_operations();
             // randomize the order of the operations
-            operations.shuffle(&mut rand::thread_rng());
+            operations.shuffle(&mut rand::rng());
 
             let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
                 operations,
@@ -736,7 +736,7 @@ mod tests {
         for _ in 0..3 {
             let mut operations = test_operations_nested();
             // randomize the order of the operations
-            operations.shuffle(&mut rand::thread_rng());
+            operations.shuffle(&mut rand::rng());
 
             let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
                 operations,
