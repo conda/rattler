@@ -672,11 +672,7 @@ impl ShellEnum {
             system_info
                 .refresh_processes(sysinfo::ProcessesToUpdate::Some(&[parent_process_id]), true);
             let parent_process = system_info.process(parent_process_id)?;
-            let parent_process_name = parent_process
-                .name()
-                .to_string_lossy()
-                .to_lowercase()
-                .to_string();
+            let parent_process_name = parent_process.name().to_string_lossy().to_lowercase();
 
             let shell: Option<ShellEnum> = if parent_process_name.contains("bash") {
                 Some(Bash.into())
@@ -700,7 +696,7 @@ impl ShellEnum {
             {
                 Some(
                     PowerShell {
-                        executable_path: parent_process_name.to_string(),
+                        executable_path: parent_process_name.clone(),
                     }
                     .into(),
                 )
