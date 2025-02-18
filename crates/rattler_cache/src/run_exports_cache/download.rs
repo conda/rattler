@@ -25,11 +25,9 @@ pub(crate) async fn download(
     }
 
     let total_bytes = response.content_length();
+    let (tmp_file_handle, tmp_path) = temp_file.into_parts();
     // Convert the named temp file into a tokio file
-    let mut file = tokio::File::from_std(fs_err::File::from_parts(
-        temp_file.as_file().try_clone()?,
-        temp_file.path(),
-    ));
+    let mut file = tokio::File::from_std(fs_err::File::from_parts(tmp_file_handle, &tmp_path));
 
     let mut stream = response.bytes_stream();
 
@@ -48,7 +46,9 @@ pub(crate) async fn download(
 
     file.rewind().await?;
 
-    Ok(temp_file)
+    let file_handle = file.into_parts().0.into_std().await;
+
+    Ok(NamedTempFile::from_parts(file_handle, tmp_path))
 }
 
 /// An error that can occur when downloading an archive.
