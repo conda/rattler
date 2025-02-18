@@ -22,6 +22,7 @@ rattler_networking = { path = "../rattler_networking", version = "0.22.4", defau
 rattler_redaction = { version = "0.1.6", path = "../rattler_redaction", features = ["reqwest", "reqwest-middleware"] }
 reqwest = { workspace = true, features = ["stream"], optional = true }
 reqwest-middleware = { workspace = true, optional = true }
+simple_spawn_blocking = { version = "1.0.0", path = "../simple_spawn_blocking", features = ["tokio"] }
 serde_json = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
