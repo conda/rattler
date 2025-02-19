@@ -439,7 +439,8 @@ pub(crate) fn install_menu_item(
     placeholders: &BaseMenuItemPlaceholders,
     menu_mode: MenuMode,
 ) -> Result<WindowsTracker, MenuInstError> {
-    let mut tracker = WindowsTracker::default();
+    let mut tracker = WindowsTracker::new(menu_mode);
+    tracker.menu_mode = menu_mode;
     let menu = WindowsMenu::new(
         prefix,
         windows_item,
