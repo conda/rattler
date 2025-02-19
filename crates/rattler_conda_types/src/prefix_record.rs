@@ -4,7 +4,6 @@ use crate::package::FileMode;
 use crate::repo_data::RecordFromPath;
 use crate::repo_data_record::RepoDataRecord;
 use crate::PackageRecord;
-use fs_err::File;
 use rattler_digest::serde::SerializableHash;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -12,6 +11,7 @@ use serde_with::serde_as;
 use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use tempfile::NamedTempFile;
 
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
@@ -234,8 +234,45 @@ impl PrefixRecord {
         path: impl AsRef<Path>,
         pretty: bool,
     ) -> Result<(), std::io::Error> {
-        let file = File::create(path.as_ref())?;
-        self.write_to(BufWriter::with_capacity(50 * 1024, file), pretty)
+        let path = path.as_ref();
+        let parent = path.parent().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "Failed to get parent directory of path '{}'",
+                    path.display()
+                ),
+            )
+        })?;
+
+        // Use a temporary file in the same directory for atomic writes
+        let temp_file = NamedTempFile::with_prefix_in("prefix_record_", parent).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "Failed to create temporary file in '{}': {}",
+                    parent.display(),
+                    e
+                ),
+            )
+        })?;
+
+        // Write to temp file with buffered writer
+        let writer = BufWriter::with_capacity(64 * 1024, &temp_file);
+        self.write_to(writer, pretty)?;
+
+        // Make sure that all data is written to disk
+        temp_file.as_file().sync_all()?;
+
+        // Atomically rename the temp file to the target path
+        temp_file.persist(path).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to persist file {}: {}", path.display(), e),
+            )
+        })?;
+
+        Ok(())
     }
 
     /// Writes the contents of this instance to the file at the specified location.

@@ -55,7 +55,7 @@ pub struct CacheRwLock {
 impl Drop for CacheRwLock {
     fn drop(&mut self) {
         // Ensure that the lock is released when the lock is dropped.
-        let _ = self.file.lock().unlock();
+        let _ = fs4::fs_std::FileExt::unlock(&*self.file.lock());
     }
 }
 
@@ -80,7 +80,7 @@ impl CacheRwLock {
                     )
                 })?;
 
-            file.lock_shared().map_err(move |e| {
+            fs4::fs_std::FileExt::lock_shared(&file).map_err(move |e| {
                 PackageCacheError::LockError(
                     format!(
                         "failed to acquire read lock on cache lock file: '{}'",

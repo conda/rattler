@@ -245,7 +245,7 @@ impl MatchSpec {
     pub fn is_virtual(&self) -> bool {
         self.name
             .as_ref()
-            .map_or(false, |name| name.as_normalized().starts_with("__"))
+            .is_some_and(|name| name.as_normalized().starts_with("__"))
     }
 }
 

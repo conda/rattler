@@ -1,6 +1,6 @@
 [package]
 name = "py-rattler"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2021"
 license = "BSD-3-Clause"
 publish = false
@@ -38,6 +38,7 @@ rattler_conda_types = { path = "../crates/rattler_conda_types", default-features
 rattler_digest = { path = "../crates/rattler_digest" }
 rattler_networking = { path = "../crates/rattler_networking", default-features = false, features = [
     "gcs",
+    "s3",
 ] }
 rattler_shell = { path = "../crates/rattler_shell", default-features = false }
 rattler_virtual_packages = { path = "../crates/rattler_virtual_packages", default-features = false }

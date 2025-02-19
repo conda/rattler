@@ -1,7 +1,7 @@
 //! This module contains CLI common entrypoint for authentication.
 use clap::Parser;
 use rattler_networking::{
-    authentication_storage::backends::file::FileStorageError, Authentication, AuthenticationStorage,
+    authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
 };
 use thiserror;
 
@@ -26,6 +26,18 @@ pub struct LoginArgs {
     /// The token to use on anaconda.org / quetz authentication
     #[clap(long)]
     conda_token: Option<String>,
+
+    /// The S3 access key ID
+    #[clap(long, requires_all = ["s3_secret_access_key"], conflicts_with_all = ["token", "username", "password", "conda_token"])]
+    s3_access_key_id: Option<String>,
+
+    /// The S3 secret access key
+    #[clap(long, requires_all = ["s3_access_key_id"])]
+    s3_secret_access_key: Option<String>,
+
+    /// The S3 session token
+    #[clap(long, requires_all = ["s3_access_key_id"])]
+    s3_session_token: Option<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -73,15 +85,20 @@ pub enum AuthenticationCLIError {
     #[error("Authentication with anaconda.org requires a conda token. Use `--conda-token` to provide one")]
     AnacondaOrgBadMethod,
 
+    /// Bad authentication method when using S3
+    #[error("Authentication with S3 requires a S3 access key ID and a secret access key. Use `--s3-access-key-id` and `--s3-secret-access-key` to provide them")]
+    S3BadMethod,
+
+    // TODO: rework this
     /// Wrapper for errors that are generated from the underlying storage system
     /// (keyring or file system)
-    #[error("Failed to initialize the authentication storage system")]
-    InitializeStorageError(#[source] FileStorageError),
+    #[error("Failed to interact with the authentication storage system")]
+    AnyhowError(#[from] anyhow::Error),
 
     /// Wrapper for errors that are generated from the underlying storage system
     /// (keyring or file system)
     #[error("Failed to interact with the authentication storage system")]
-    StorageError(#[source] anyhow::Error),
+    AuthenticationStorageError(#[from] AuthenticationStorageError),
 }
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
@@ -103,9 +120,6 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
 }
 
 fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
-    let host = get_url(&args.host)?;
-    println!("Authenticating with {host}");
-
     let auth = if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
     } else if let Some(username) = args.username {
@@ -117,21 +131,37 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
         }
     } else if let Some(token) = args.token {
         Authentication::BearerToken(token)
+    } else if let (Some(access_key_id), Some(secret_access_key)) =
+        (args.s3_access_key_id, args.s3_secret_access_key)
+    {
+        let session_token = args.s3_session_token;
+        Authentication::S3Credentials {
+            access_key_id,
+            secret_access_key,
+            session_token,
+        }
     } else {
         return Err(AuthenticationCLIError::NoAuthenticationMethod);
     };
 
-    if host.contains("prefix.dev") && !matches!(auth, Authentication::BearerToken(_)) {
+    if args.host.contains("prefix.dev") && !matches!(auth, Authentication::BearerToken(_)) {
         return Err(AuthenticationCLIError::PrefixDevBadMethod);
     }
 
-    if host.contains("anaconda.org") && !matches!(auth, Authentication::CondaToken(_)) {
+    if args.host.contains("anaconda.org") && !matches!(auth, Authentication::CondaToken(_)) {
         return Err(AuthenticationCLIError::AnacondaOrgBadMethod);
     }
 
-    storage
-        .store(&host, &auth)
-        .map_err(AuthenticationCLIError::StorageError)?;
+    if args.host.contains("s3://") && !matches!(auth, Authentication::S3Credentials { .. })
+        || matches!(auth, Authentication::S3Credentials { .. }) && !args.host.contains("s3://")
+    {
+        return Err(AuthenticationCLIError::S3BadMethod);
+    }
+
+    let host = get_url(&args.host)?;
+    eprintln!("Authenticating with {host} using {} method", auth.method());
+
+    storage.store(&host, &auth)?;
     Ok(())
 }
 
@@ -140,16 +170,13 @@ fn logout(args: LogoutArgs, storage: AuthenticationStorage) -> Result<(), Authen
 
     println!("Removing authentication for {host}");
 
-    storage
-        .delete(&host)
-        .map_err(AuthenticationCLIError::StorageError)?;
+    storage.delete(&host)?;
     Ok(())
 }
 
 /// CLI entrypoint for authentication
 pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
-    let storage = AuthenticationStorage::from_env_and_defaults()
-        .map_err(AuthenticationCLIError::InitializeStorageError)?;
+    let storage = AuthenticationStorage::from_env_and_defaults()?;
 
     match args.subcommand {
         Subcommand::Login(args) => login(args, storage),

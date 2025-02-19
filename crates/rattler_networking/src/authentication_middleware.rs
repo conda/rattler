@@ -1,5 +1,5 @@
 //! `reqwest` middleware that authenticates requests with data from the `AuthenticationStorage`
-use crate::authentication_storage::backends::file::FileStorageError;
+use crate::authentication_storage::AuthenticationStorageError;
 use crate::{Authentication, AuthenticationStorage};
 use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD;
@@ -55,7 +55,7 @@ impl AuthenticationMiddleware {
     }
 
     /// Create a new authentication middleware with the default authentication storage
-    pub fn from_env_and_defaults() -> Result<Self, FileStorageError> {
+    pub fn from_env_and_defaults() -> Result<Self, AuthenticationStorageError> {
         Ok(Self {
             auth_storage: AuthenticationStorage::from_env_and_defaults()?,
         })
@@ -113,7 +113,7 @@ impl AuthenticationMiddleware {
                         .insert(reqwest::header::AUTHORIZATION, header_value);
                     Ok(req)
                 }
-                Authentication::CondaToken(_) => Ok(req),
+                Authentication::CondaToken(_) | Authentication::S3Credentials { .. } => Ok(req),
             }
         } else {
             Ok(req)

@@ -52,7 +52,8 @@ use match_spec::PyMatchSpec;
 use meta::get_rattler_version;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::middleware::{
-    PyAuthenticationMiddleware, PyGCSMiddleware, PyMirrorMiddleware, PyOciMiddleware,
+    PyAuthenticationMiddleware, PyGCSMiddleware, PyMirrorMiddleware, PyOciMiddleware, PyS3Config,
+    PyS3Middleware,
 };
 use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
@@ -63,7 +64,7 @@ use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
 use pyo3::prelude::*;
 use record::PyRecord;
 use repo_data::{
-    gateway::{PyGateway, PySourceConfig},
+    gateway::{PyFetchRepoDataOptions, PyGateway, PySourceConfig},
     patch_instructions::PyPatchInstructions,
     sparse::PySparseRepoData,
     PyRepoData,
@@ -107,6 +108,8 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyAuthenticationMiddleware>()?;
     m.add_class::<PyOciMiddleware>()?;
     m.add_class::<PyGCSMiddleware>()?;
+    m.add_class::<PyS3Middleware>()?;
+    m.add_class::<PyS3Config>()?;
     m.add_class::<PyClientWithMiddleware>()?;
 
     // Shell activation things
@@ -120,6 +123,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyPatchInstructions>()?;
     m.add_class::<PyGateway>()?;
     m.add_class::<PySourceConfig>()?;
+    m.add_class::<PyFetchRepoDataOptions>()?;
 
     m.add_class::<PyRecord>()?;
 

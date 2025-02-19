@@ -1,12 +1,13 @@
 use chrono::{DateTime, Utc};
 use fxhash::FxHashMap;
-use serde::de::Error as _;
-use serde::ser::Error;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{de::Error as _, ser::Error, Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, SerializeAs};
-use std::collections::BTreeMap;
-use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
+use std::borrow::Cow;
+use std::{
+    collections::BTreeMap,
+    marker::PhantomData,
+    path::{Path, PathBuf},
+};
 use url::Url;
 
 /// A helper struct that serializes Paths in a normalized way.
@@ -75,7 +76,8 @@ impl<'de> DeserializeAs<'de, Option<Url>> for LossyUrl {
     }
 }
 
-/// A helper type that parses a string either as a string or a vector of strings.
+/// A helper type that parses a string either as a string or a vector of
+/// strings.
 pub(crate) struct MultiLineString;
 
 impl<'de> DeserializeAs<'de, String> for MultiLineString {
@@ -139,7 +141,8 @@ impl SerializeAs<chrono::DateTime<chrono::Utc>> for Timestamp {
     }
 }
 
-/// A helper struct to deserialize types from a string without checking the string.
+/// A helper struct to deserialize types from a string without checking the
+/// string.
 pub struct DeserializeFromStrUnchecked;
 
 /// A helper function used to sort map alphabetically when serializing.
@@ -151,4 +154,46 @@ pub(crate) fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(
         .iter()
         .collect::<BTreeMap<_, _>>()
         .serialize(serializer)
+}
+
+/// A helper to serialize and deserialize `track_features` in repodata. Track
+/// features are expected to be a space seperated list. However, in the past we
+/// have serialized and deserialized them as a list of strings so for
+/// deserialization that behavior is retained.
+pub struct Features;
+
+impl SerializeAs<Vec<String>> for Features {
+    fn serialize_as<S>(source: &Vec<String>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        source.join(" ").serialize(serializer)
+    }
+}
+
+impl<'de> DeserializeAs<'de, Vec<String>> for Features {
+    fn deserialize_as<D>(deserializer: D) -> Result<Vec<String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        serde_untagged::UntaggedEnumVisitor::new()
+            .expecting("a string or a sequence of strings")
+            .string(|str| {
+                Ok(str
+                    .split([',', ' '])
+                    .map(str::trim)
+                    .map(String::from)
+                    .collect())
+            })
+            .seq(|seq| {
+                let vec: Vec<Cow<'de, str>> = seq.deserialize()?;
+                Ok(vec
+                    .iter()
+                    .map(Cow::as_ref)
+                    .map(str::trim)
+                    .map(String::from)
+                    .collect())
+            })
+            .deserialize(deserializer)
+    }
 }

@@ -725,7 +725,10 @@ async fn stream_and_decode_to_file(
     // Clone the file handle and create a hashing writer so we can compute a hash
     // while the content is being written to disk.
     let file = tokio_fs::File::from_std(fs_err::File::from_parts(
-        temp_file.as_file().try_clone().unwrap(),
+        temp_file
+            .as_file()
+            .try_clone()
+            .map_err(FetchRepoDataError::IoError)?,
         temp_file.path(),
     ));
     let mut hashing_file_writer = HashingWriter::<_, Blake2b256>::new(file);
@@ -760,19 +763,19 @@ impl VariantAvailability {
     /// Returns true if there is a Zst variant available, regardless of when it
     /// was checked
     pub fn has_zst(&self) -> bool {
-        self.has_zst.as_ref().map_or(false, |state| state.value)
+        self.has_zst.as_ref().is_some_and(|state| state.value)
     }
 
     /// Returns true if there is a Bz2 variant available, regardless of when it
     /// was checked
     pub fn has_bz2(&self) -> bool {
-        self.has_bz2.as_ref().map_or(false, |state| state.value)
+        self.has_bz2.as_ref().is_some_and(|state| state.value)
     }
 
     /// Returns true if there is a JLAP variant available, regardless of when it
     /// was checked
     pub fn has_jlap(&self) -> bool {
-        self.has_jlap.as_ref().map_or(false, |state| state.value)
+        self.has_jlap.as_ref().is_some_and(|state| state.value)
     }
 }
 

@@ -11,7 +11,7 @@ use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use crate::{
     channel::PyChannel, error::PyRattlerError, platform::PyPlatform,
-    repo_data::sparse::PySparseRepoData,
+    repo_data::gateway::PyFetchRepoDataOptions, repo_data::sparse::PySparseRepoData,
 };
 use client::PyClientWithMiddleware;
 use rattler_repodata_gateway::Reporter;
@@ -23,7 +23,7 @@ pub mod middleware;
 /// High-level function to fetch repodata for all the subdirectory of channels and platform.
 /// Returns a list of `PyRepoData`.
 #[pyfunction]
-#[pyo3(signature = (channels, platforms, cache_path, callback=None, client=None))]
+#[pyo3(signature = (channels, platforms, cache_path, callback=None, client=None, fetch_options=None))]
 pub fn py_fetch_repo_data<'a>(
     py: Python<'a>,
     channels: Vec<PyChannel>,
@@ -31,10 +31,13 @@ pub fn py_fetch_repo_data<'a>(
     cache_path: PathBuf,
     callback: Option<Bound<'a, PyAny>>,
     client: Option<PyClientWithMiddleware>,
+    fetch_options: Option<PyFetchRepoDataOptions>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let mut meta_futures = Vec::new();
     let client = client.unwrap_or(PyClientWithMiddleware::new(None)?);
-
+    let fetch_options = fetch_options.unwrap_or(PyFetchRepoDataOptions {
+        inner: FetchRepoDataOptions::default(),
+    });
     for (subdir, chan, platform) in get_subdir_urls(channels, platforms)? {
         let callback = callback.as_ref().map(|callback| {
             Arc::new(ProgressReporter {
@@ -43,6 +46,7 @@ pub fn py_fetch_repo_data<'a>(
         });
         let cache_path = cache_path.clone();
         let client = client.clone();
+        let fetch_options = fetch_options.clone();
 
         // Push all the future into meta_future vec to be resolve later
         meta_futures.push(async move {
@@ -51,7 +55,7 @@ pub fn py_fetch_repo_data<'a>(
                     subdir,
                     client.into(),
                     cache_path,
-                    FetchRepoDataOptions::default(),
+                    fetch_options.into(),
                     callback,
                 )
                 .await?,

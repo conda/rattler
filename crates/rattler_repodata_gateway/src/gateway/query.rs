@@ -117,7 +117,7 @@ impl RepoDataQuery {
                 let name = spec
                     .name
                     .clone()
-                    .ok_or(GatewayError::MatchSpecWithoutName(spec.clone()))?;
+                    .ok_or(GatewayError::MatchSpecWithoutName(Box::new(spec.clone())))?;
                 seen.insert(name.clone());
                 direct_url_specs.push((spec.clone(), url, name));
             } else if let Some(name) = &spec.name {

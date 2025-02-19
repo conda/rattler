@@ -7,7 +7,7 @@ authors = [
     "Tim de Jager <tim@prefix.dev>",
     "Ruben Arts <ruben@prefix.dev>",
 ]
-channels = ["conda-forge"]
+channels = ["https://prefix.dev/conda-forge"]
 platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
 license = "BSD-3-Clause"
 
@@ -24,7 +24,7 @@ cxx-compiler = "~=1.6.0"
 openssl = "~=3.1"
 make = "~=4.3"
 pkg-config = "~=0.29.2"
-rust = "~=1.80.0"
+rust = "~=1.84.0"
 cmake = "~=3.26.4"
 
 [target.linux-64.dependencies]
@@ -45,4 +45,6 @@ pre-commit-install = "pre-commit install"
 pre-commit-run = "pre-commit run"
 
 [environments]
-lint = { features = ["lint"], no-default-feature = true, solve-group = "default" }
+lint = { features = [
+    "lint",
+], no-default-feature = true, solve-group = "default" }
