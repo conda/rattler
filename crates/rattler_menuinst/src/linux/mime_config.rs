@@ -36,11 +36,6 @@ impl MimeConfig {
         self.config.write(&self.path)
     }
 
-    #[cfg(test)]
-    pub fn to_string(&self) -> String {
-        self.config.writes()
-    }
-
     pub fn register_mime_type(&mut self, mime_type: &str, application: &str) {
         // Only set default if not already set
         if self.config.get("Default Applications", mime_type).is_none() {
@@ -292,7 +287,7 @@ mod tests {
         mimeapps.register_mime_type("text/pixi", "pixi-app.desktop");
 
         insta::assert_debug_snapshot!(mimeapps.config.get_map());
-        insta::assert_snapshot!(mimeapps.to_string());
+        insta::assert_snapshot!(mimeapps.config.writes());
 
         // Test removing an application
         mimeapps.deregister_mime_type("text/html", "google-chrome.desktop");
