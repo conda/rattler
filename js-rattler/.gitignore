@@ -5,3 +5,4 @@ pkg/
 dist/
 node_modules/
 wasm-pack.log
+!Cargo.lock

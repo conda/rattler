@@ -2,7 +2,8 @@
 name = "js-rattler"
 version = "0.1.0"
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
-edition = "2018"
+edition = "2021"
+description = "WASM bindings to the rattler library"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -64,11 +64,11 @@ impl JsVersion {
     }
 
     pub fn starts_with(&self, other: &Self) -> bool {
-        self.as_ref().starts_with(&other.as_ref())
+        self.as_ref().starts_with(other.as_ref())
     }
 
     pub fn compatible_with(&self, other: &Self) -> bool {
-        self.as_ref().compatible_with(&other.as_ref())
+        self.as_ref().compatible_with(other.as_ref())
     }
 
     pub fn pop_segments(&self, n: usize) -> Option<Self> {

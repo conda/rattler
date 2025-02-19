@@ -199,18 +199,18 @@ describe("Version", () => {
     describe("bumpMajor", () => {
         it("should return a new version where the major segment has been bumped", () => {
             expect(new Version("1").bumpMajor().toString()).toBe("2");
-            expect(new Version("1.2.3").bumpMajor().toString()).toBe("2.2.3");
+            expect(new Version("1.2.3").bumpMajor().toString()).toBe("2.0.0");
             expect(new Version("1!1.2.3").bumpMajor().toString()).toBe(
-                "1!2.2.3",
+                "1!2.0.0",
             );
         });
     });
     describe("bumpMinor", () => {
         it("should return a new version where the minor segment has been bumped", () => {
             expect(new Version("1").bumpMinor().toString()).toBe("1.1");
-            expect(new Version("1.2.3").bumpMinor().toString()).toBe("1.3.3");
+            expect(new Version("1.2.3").bumpMinor().toString()).toBe("1.3.0");
             expect(new Version("1!1.2.3").bumpMinor().toString()).toBe(
-                "1!1.3.3",
+                "1!1.3.0",
             );
         });
     });
