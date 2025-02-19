@@ -1,10 +1,10 @@
+mod error;
 mod utils;
 mod version;
 mod version_spec;
-mod error;
 
-use rattler_conda_types::ParseStrictness;
 pub use error::{JsError, JsResult};
+use rattler_conda_types::ParseStrictness;
 
 use wasm_bindgen::prelude::*;
 
