@@ -610,12 +610,8 @@ pub fn remove_menu_item(tracker: &LinuxTracker) -> Result<(), MenuInstError> {
     }
 
     for path in &tracker.registered_mime_files {
-        let _ = xdg_mime(
-            &path,
-            tracker.install_mode.clone(),
-            XdgMimeOperation::Uninstall,
-        )
-        .map_err(|e| tracing::warn!("Could not uninstall mime type: {}", e));
+        let _ = xdg_mime(path, tracker.install_mode, XdgMimeOperation::Uninstall)
+            .map_err(|e| tracing::warn!("Could not uninstall mime type: {}", e));
     }
 
     // invoke xdg-mime uninstall ...
