@@ -76,11 +76,7 @@ pub fn install_menuitems(
     let menu_inst: MenuInstSchema = serde_json::from_str(&text)?;
     let placeholders = BaseMenuItemPlaceholders::new(base_prefix, prefix, platform);
 
-    // if platform.is_linux() {
-    //     #[cfg(target_os = "linux")]
-    //     linux::install_menu(&menu_inst.menu_name, prefix, menu_mode)?;
-    // }
-    let trackers = Vec::new();
+    let mut trackers = Vec::new();
     for item in menu_inst.menu_items {
         if platform.is_linux() {
             #[cfg(target_os = "linux")]
@@ -113,13 +109,14 @@ pub fn install_menuitems(
             #[cfg(target_os = "windows")]
             if let Some(windows_item) = item.platforms.win {
                 let command = item.command.merge(windows_item.base);
-                windows::install_menu_item(
+                let tracker = windows::install_menu_item(
                     prefix,
                     windows_item.specific,
                     command,
                     &placeholders,
                     menu_mode,
                 )?;
+                trackers.push(MenuinstTracker::Windows(tracker));
             }
         }
     }
