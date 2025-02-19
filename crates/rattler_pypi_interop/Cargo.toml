@@ -26,7 +26,7 @@ fs4 = "0.8.2"
 futures = { workspace = true }
 html-escape = "0.2.13"
 http = { workspace = true }
-http-cache-semantics = { workspace = true, default-features = false, features = ["serde", "reqwest"] }
+http-cache-semantics = { workspace = true, features = ["serde", "reqwest"] }
 include_dir = "0.7.3"
 indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
@@ -49,9 +49,9 @@ thiserror = { workspace = true }
 tl = "0.7.8"
 tokio = { workspace = true, features = ["process", "rt-multi-thread"] }
 tokio-util = { workspace = true, features = ["compat"] }
-tracing = { workspace = true, default-features = false, features = ["attributes"] }
+tracing = { workspace = true, features = ["attributes"] }
 url = { workspace = true, features = ["serde"] }
-zip = { workspace = true }
+zip = { workspace = true, default-features = true }
 pathdiff = { workspace = true }
 async_zip = { version = "0.0.16", features = ["tokio", "deflate"] }
 tar = { workspace = true }
@@ -70,7 +70,6 @@ insta = { version = "1.38.0", features = ["ron", "redactions"] }
 miette = { version = "7.2.0", features = ["fancy"] }
 once_cell = "1.19.0"
 rstest = "0.19.0"
-# test-utils = { path = "../test-utils" }
 tokio = { version = "1.37.0", features = ["rt", "macros", "rt-multi-thread"] }
 tokio-test = "0.4.4"
 tower-http = { version = "0.5.2", features = ["add-extension"] }

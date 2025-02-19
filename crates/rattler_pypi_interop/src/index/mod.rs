@@ -1,14 +1,16 @@
 //! This module contains functions for working with PyPA packaging repositories.
+//! 
+//! TODO: Examples to inlcude:
+//!          - PackageDb
 
 mod file_store;
 
-// mod git_interop;
-pub mod html;
 mod http;
 mod lazy_metadata;
 mod package_database;
 mod package_sources;
 
+pub mod html;
 pub use package_database::{ArtifactRequest, CheckAvailablePackages, PackageDb};
 pub use package_sources::{PackageSources, PackageSourcesBuilder};
 
