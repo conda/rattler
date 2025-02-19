@@ -166,6 +166,7 @@ impl PackageDb {
         Ok(())
     }
 
+    /// Fetch metadata by only retrieving chunks of the wheel via HTTP range requests
     pub async fn get_lazy_metadata_wheel(
         &self,
         artifact_info: &ArtifactInfo,

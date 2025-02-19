@@ -40,7 +40,7 @@ impl EntryPoint {
     /// ```rust
     /// # use std::{collections::HashSet, str::FromStr};
     /// # use itertools::assert_equal;
-    /// # use rattler_installs_packages::types::{EntryPoint, Extra};
+    /// # use rattler_pypi_interop::types::{EntryPoint, Extra};
     /// let entry_point = EntryPoint::parse(String::from("blackd"), "blackd:patched_main", None).unwrap().unwrap();
     /// assert_eq!(entry_point.script_name, "blackd");
     /// assert_eq!(entry_point.module, "blackd");
