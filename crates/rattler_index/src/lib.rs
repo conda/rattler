@@ -2,7 +2,9 @@
 //! files
 #![deny(missing_docs)]
 
-use fs_err as fs;
+use anyhow::Result;
+use fs_err::{self as fs, metadata};
+use futures::future::try_join_all;
 use rattler_conda_types::{
     package::{ArchiveType, IndexJson, PackageFile},
     ChannelInfo, PackageRecord, Platform, RepoData,
@@ -10,22 +12,20 @@ use rattler_conda_types::{
 use rattler_package_streaming::{read, seek};
 use std::{
     collections::{HashMap, HashSet},
-    ffi::OsStr,
-    io::{Read, Write},
-    path::{Path, PathBuf},
+    future,
+    io::Read,
+    path::Path,
+    str::FromStr,
 };
 
-use fs_err::File;
-use opendal::{
-    raw::{oio::List, Access, OpList},
-    Builder, Configurator,
-};
-use rattler_conda_types::{
-    package::{ArchiveType, IndexJson, PackageFile},
-    ChannelInfo, PackageRecord, Platform, RepoData,
-};
-use rattler_package_streaming::{read, seek};
-use walkdir::WalkDir;
+// use fs_err::File;
+use opendal::{Configurator, Operator};
+// use rattler_conda_types::{
+//     package::{ArchiveType, IndexJson, PackageFile},
+//     ChannelInfo, PackageRecord, Platform, RepoData,
+// };
+// use rattler_package_streaming::{read, seek};
+// use walkdir::WalkDir;
 
 /// Extract the package record from an `index.json` file.
 pub fn package_record_from_index_json<T: Read>(
@@ -107,29 +107,150 @@ pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> 
     ))
 }
 
+async fn index_subdir(subdir: Platform, op: Operator, force: bool) -> Result<()> {
+    let mut registered_packages = HashMap::default();
+    if !force {
+        let repodata_path = format!("{}/repodata.json", subdir);
+        let repodata_bytes = op.read(&repodata_path).await?;
+        let repodata: RepoData = serde_json::from_slice(&repodata_bytes.to_vec())?;
+        registered_packages.extend(repodata.packages.into_iter());
+    }
+    let uploaded_packages: HashSet<String> = op
+        .list_with(subdir.as_str())
+        .recursive(false)
+        .await?
+        .into_iter()
+        .filter_map(|entry| {
+            if entry.metadata().mode().is_file() {
+                let filename = entry.name().to_string();
+                // Check if the file is an archive package file.
+                ArchiveType::try_from(&filename).map(|t| filename)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let packages_to_add = uploaded_packages
+        .difference(&registered_packages.keys().cloned().collect::<HashSet<_>>())
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let packages_to_delete = registered_packages
+        .keys()
+        .cloned()
+        .collect::<HashSet<_>>()
+        .difference(&uploaded_packages)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let tasks = packages_to_add
+        .iter()
+        .map(|filename| {
+            let op = op.clone();
+            let subdir = subdir.clone();
+            let filename = filename.clone();
+            async move {
+                let file_path = format!("{}/{}", subdir, filename);
+                // TODO: Check how we use streaming here
+                let bytes = op.read(&file_path).await?;
+                let archive_type = ArchiveType::try_from(&filename).unwrap();
+                // TODO: Rewrite package_record* functions to support streaming
+                let record = match archive_type {
+                    ArchiveType::TarBz2 => package_record_from_tar_bz2(&file_path),
+                    ArchiveType::Conda => package_record_from_conda(&file_path),
+                }?;
+                registered_packages.insert(filename.clone(), record);
+                Ok(())
+            }
+        })
+        .collect::<Vec<_>>();
+    try_join_all(tasks).await?;
+
+    for filename in packages_to_delete {
+        registered_packages.remove(&filename);
+    }
+
+    let repodata = RepoData {
+        info: Some(ChannelInfo {
+            subdir: subdir.to_string(),
+            base_url: None,
+        }),
+        packages: registered_packages,
+        conda_packages: HashMap::default(),
+        removed: HashSet::default(),
+        version: Some(2),
+    };
+
+    let repodata_path = format!("{}/repodata.json", subdir);
+    let repodata_bytes = serde_json::to_vec(&repodata)?;
+    op.write(&repodata_path, &repodata_bytes.into()).await?;
+
+    Ok(())
+}
+
 /// Create a new `repodata.json` for all packages in the given output folder. If
 /// `target_platform` is `Some`, only that specific subdir is indexed. Otherwise
 /// indexes all subdirs and creates a `repodata.json` for each.
 pub async fn index<T: Configurator>(
-    channel_dir: &String,
     target_platform: Option<&Platform>,
     config: T,
-) -> Result<(), std::io::Error> {
-    let mut builder = config.into_builder();
+    force: bool,
+) -> anyhow::Result<()> {
+    let builder = config.into_builder();
 
-    // Iterate over all entries in the output folder.
-    let access = builder.build()?;
-    let op_list = OpList::new().with_concurrent(1);
-    let result = access.list(channel_dir, op_list).await?;
-    let rp_list = result.0;
-    let mut lister = result.1;
-    let mut entries = Vec::new();
+    // 1. Get all subdirs
+    // 2. If not noarch in subdirs, create
+    // 3. If target_platform is Some and in subdirs, create
+    // 4. For all subdirs
+    //      1. Init `registered_packages` HashMap<String, PackageRecord> (key = filename)
+    //      if `--force`, we want to set this to empty hashmap
+    //      2. Read repodata.json (if exists) and fill `registered_packages`
+    //      3. Init `uploaded_packages` HashSet<String> (filenames)
+    //      4. For all files in subdir
+    //            1. Add filename to `uploaded_packages`
+    //      5. `to_add = uploaded_packages - registered_packages.keys()`
+    //      6. `to_delete = registered_packages.keys() - uploaded_packages`
+    //      7. For all files in `to_add`
+    //           1. Stream file
+    //           2. Add to `registered_packages`
+    //      8. For all files in `to_delete`
+    //           1. Remove from `registered_packages`
+    //      9. Write `registered_packages` to repodata.json
 
-    while let Ok(entry) = lister.next().await {
-        entries.push(entry);
+    // Get all subdirs
+    let op = Operator::new(builder)?.finish();
+    let entries = op.list_with("").recursive(false).await?;
+    let mut subdirs = entries
+        .iter()
+        .filter_map(|entry| {
+            entry.metadata().mode().is_dir().then(|| {
+                // Directory entries always end with `/`.
+                entry.name().trim_end_matches('/').to_string()
+            })
+        })
+        .map(|s| Platform::from_str(&s))
+        .collect::<Result<HashSet<_>, _>>()?;
+
+    // If `noarch` subdir does not exist, we create it.
+    if !subdirs.contains(&Platform::NoArch) {
+        op.create_dir(Platform::NoArch.as_str()).await?;
+        subdirs.insert(Platform::NoArch);
     }
 
-    panic!("List of contents: {:?}", entries);
+    // If requested `target_platform` subdir does not exist, we create it.
+    if let Some(target_platform) = target_platform {
+        if !subdirs.contains(&target_platform) {
+            op.create_dir(target_platform.as_str()).await?;
+            subdirs.insert(*target_platform);
+        }
+    }
+
+    let tasks = subdirs
+        .iter()
+        .map(|subdir| index_subdir(*subdir, op.clone(), force))
+        .collect::<Vec<_>>();
+    try_join_all(tasks).await?;
 
     // let entries = WalkDir::new(channel_dir).into_iter();
     // let entries: Vec<(PathBuf, ArchiveType)> = entries

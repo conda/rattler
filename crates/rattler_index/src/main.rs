@@ -1,6 +1,6 @@
 use clap::{arg, Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
-use opendal::services::FsConfig;
+use opendal::services::{FsConfig, S3Config};
 use rattler_conda_types::Platform;
 use rattler_index::index;
 use tracing_log::AsTrace;
@@ -33,9 +33,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Index a channel stored on the filesystem.
+    #[command(name = "fs")]
     FileSystem {
         /// The path to the channel directory.
-        #[arg(long)]
+        #[arg()]
         channel: std::path::PathBuf,
     },
 
@@ -46,16 +47,33 @@ enum Commands {
         channel: Url,
 
         /// The endpoint URL of the S3 backend
-        #[arg(short, long, env = "S3_ENDPOINT_URL", requires_all = ["region", "force_path_style"])]
-        endpoint_url: Option<Url>,
+        #[arg(
+            short,
+            long,
+            env = "S3_ENDPOINT_URL",
+            default_value = "https://s3.amazonaws.com"
+        )]
+        endpoint_url: Url,
 
         /// The region of the S3 backend
-        #[arg(short, long, env = "S3_REGION", requires_all = ["endpoint_url", "force_path_style"])]
-        region: Option<String>,
+        #[arg(short, long, env = "S3_REGION", default_value = "eu-central-1")]
+        region: String,
 
         /// Whether to use path-style S3 URLs
-        #[arg(short, long, env = "S3_FORCE_PATH_STYLE", requires_all = ["endpoint_url", "region"])]
-        force_path_style: Option<bool>,
+        #[arg(short, long, env = "S3_FORCE_PATH_STYLE", default_value = "false")]
+        force_path_style: bool,
+
+        /// The access key ID for the S3 bucket.
+        #[arg(long, env = "S3_ACCESS_KEY_ID", requires_all = ["secret_access_key"])]
+        access_key_id: Option<String>,
+
+        /// The secret access key for the S3 bucket.
+        #[arg(long, env = "S3_SECRET_ACCESS_KEY", requires_all = ["access_key_id"])]
+        secret_access_key: Option<String>,
+
+        /// The session token for the S3 bucket.
+        #[arg(long, env = "S3_SESSION_TOKEN", requires_all = ["access_key_id", "secret_access_key"])]
+        session_token: Option<String>,
     },
 }
 
@@ -71,10 +89,10 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::FileSystem { channel } => {
-            let channel = &channel.to_string_lossy().to_string();
+            let channel = &channel.canonicalize()?.to_string_lossy().to_string();
             let mut fs_config = FsConfig::default();
             fs_config.root = Some(channel.clone());
-            index(&channel, None, fs_config).await?;
+            index(None, fs_config).await?;
             Ok(())
         }
         Commands::S3 {
@@ -82,8 +100,28 @@ async fn main() -> anyhow::Result<()> {
             region,
             endpoint_url,
             force_path_style,
+            access_key_id,
+            secret_access_key,
+            session_token,
         } => {
-            todo!();
+            let mut s3_config = S3Config::default();
+            s3_config.root = Some(channel.path().to_string());
+            s3_config.bucket = channel
+                .host_str()
+                .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
+                .to_string();
+            s3_config.region = Some(region);
+            s3_config.endpoint = Some(endpoint_url.to_string());
+            s3_config.enable_virtual_host_style = !force_path_style;
+            if let (Some(access_key_id), Some(secret_access_key)) =
+                (access_key_id, secret_access_key)
+            {
+                s3_config.secret_access_key = Some(secret_access_key);
+                s3_config.access_key_id = Some(access_key_id);
+                s3_config.session_token = session_token;
+            }
+            // TODO: Read from rattler auth store
+            index(None, s3_config).await?;
             Ok(())
         }
     }

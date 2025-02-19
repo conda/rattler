@@ -109,7 +109,7 @@ memmap2 = "0.9.5"
 netrc-rs = "0.1.2"
 nom = "7.1.3"
 num_cpus = "1.16.0"
-opendal = { version = "0.51.1", features = ["services-s3", "services-fs"] }
+opendal = { version = "0.51.2" }
 once_cell = "1.20.3"
 ouroboros = "0.18.5"
 pathdiff = "0.2.3"
