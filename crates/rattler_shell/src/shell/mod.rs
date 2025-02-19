@@ -162,6 +162,13 @@ pub trait Shell {
     fn line_ending(&self) -> &str {
         "\n"
     }
+
+    /// Return the location where completion scripts should be placed in
+    /// the prefix. For example, for bash, this would be `etc/bash_completion.d`.
+    /// The return value must be joined with `prefix.join(completion_script_location())`.
+    fn completion_script_location(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 /// Convert a native PATH on Windows to a Unix style path using cygpath.
@@ -258,6 +265,10 @@ impl Shell for Bash {
         "sh"
     }
 
+    fn completion_script_location(&self) -> Option<PathBuf> {
+        Some(PathBuf::from("share/bash-completion/completions"))
+    }
+
     fn executable(&self) -> &str {
         "bash"
     }
@@ -307,6 +318,10 @@ impl Shell for Zsh {
         cmd.arg(path);
         cmd
     }
+
+    fn completion_script_location(&self) -> Option<PathBuf> {
+        Some(PathBuf::from("share/zsh/site-functions"))
+    }
 }
 
 /// A [`Shell`] implementation for the Xonsh shell.
@@ -351,6 +366,10 @@ impl Shell for Xonsh {
         let mut cmd = Command::new(self.executable());
         cmd.arg(path);
         cmd
+    }
+
+    fn completion_script_location(&self) -> Option<PathBuf> {
+        None
     }
 }
 
@@ -527,6 +546,10 @@ impl Shell for Fish {
         cmd.arg(path);
         cmd
     }
+
+    fn completion_script_location(&self) -> Option<PathBuf> {
+        Some(PathBuf::from("share/fish/vendor_completions"))
+    }
 }
 
 fn escape_backslashes(s: &str) -> String {
@@ -602,6 +625,11 @@ impl Shell for NuShell {
         let mut cmd = Command::new(self.executable());
         cmd.arg(path);
         cmd
+    }
+
+    fn completion_script_location(&self) -> Option<PathBuf> {
+        // Need to find out the correct location for completions
+        None
     }
 }
 
