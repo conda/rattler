@@ -13,7 +13,7 @@ use rattler_package_streaming::{read, seek};
 use std::{
     collections::{HashMap, HashSet},
     future,
-    io::Read,
+    io::{Cursor, Read, Seek},
     path::Path,
     str::FromStr,
 };
@@ -29,14 +29,14 @@ use opendal::{Configurator, Operator};
 
 /// Extract the package record from an `index.json` file.
 pub fn package_record_from_index_json<T: Read>(
-    file: &Path,
+    bytes: impl AsRef<[u8]>,
     index_json_reader: &mut T,
 ) -> std::io::Result<PackageRecord> {
     let index = IndexJson::from_reader(index_json_reader)?;
 
-    let sha256_result = rattler_digest::compute_file_digest::<rattler_digest::Sha256>(file)?;
-    let md5_result = rattler_digest::compute_file_digest::<rattler_digest::Md5>(file)?;
-    let size = fs::metadata(file)?.len();
+    let sha256_result = rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&bytes);
+    let md5_result = rattler_digest::compute_bytes_digest::<rattler_digest::Md5>(&bytes);
+    let size = bytes.as_ref().len();
 
     let package_record = PackageRecord {
         name: index.name,
@@ -46,7 +46,7 @@ pub fn package_record_from_index_json<T: Read>(
         subdir: index.subdir.unwrap_or_else(|| "unknown".to_string()),
         md5: Some(md5_result),
         sha256: Some(sha256_result),
-        size: Some(size),
+        size: Some(size as u64),
         arch: index.arch,
         platform: index.platform,
         depends: index.depends,
@@ -73,12 +73,21 @@ pub fn package_record_from_index_json<T: Read>(
 /// and extract the package record from it.
 pub fn package_record_from_tar_bz2(file: &Path) -> std::io::Result<PackageRecord> {
     let reader = fs::File::open(file)?;
+    package_record_from_tar_bz2_reader(reader)
+}
+
+/// Extract the package record from a `.tar.bz2` package file.
+/// This function will look for the `info/index.json` file in the conda package
+/// and extract the package record from it.
+pub fn package_record_from_tar_bz2_reader(reader: impl Read) -> std::io::Result<PackageRecord> {
+    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
+    let reader = Cursor::new(bytes.clone());
     let mut archive = read::stream_tar_bz2(reader);
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            return package_record_from_index_json(file, &mut entry);
+            return package_record_from_index_json(bytes, &mut entry);
         }
     }
     Err(std::io::Error::new(
@@ -92,6 +101,13 @@ pub fn package_record_from_tar_bz2(file: &Path) -> std::io::Result<PackageRecord
 /// and extract the package record from it.
 pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> {
     let reader = fs::File::open(file)?;
+    package_record_from_conda_reader(reader)
+}
+
+pub fn package_record_from_conda_reader<'a>(
+    reader: impl Read + Seek + 'a,
+) -> std::io::Result<PackageRecord> {
+    let bytes = reader.bytes().collect::<Vec<_>>();
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
 
     for entry in archive.entries()?.flatten() {
@@ -152,12 +168,14 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool) -> Result<()>
             let filename = filename.clone();
             async move {
                 let file_path = format!("{}/{}", subdir, filename);
+
                 // TODO: Check how we use streaming here
                 let bytes = op.read(&file_path).await?;
-                let archive_type = ArchiveType::try_from(&filename).unwrap();
-                // TODO: Rewrite package_record* functions to support streaming
+                let reader = Cursor::new(bytes);
+                let archive_type = ArchiveType::try_from(&filename).unwrap(); // we already know it's not None
+                                                                              // TODO: Rewrite package_record* functions to support streaming
                 let record = match archive_type {
-                    ArchiveType::TarBz2 => package_record_from_tar_bz2(&file_path),
+                    ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
                     ArchiveType::Conda => package_record_from_conda(&file_path),
                 }?;
                 registered_packages.insert(filename.clone(), record);
