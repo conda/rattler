@@ -250,7 +250,7 @@ impl InstallDriver {
         if let Ok(read_dir) = target_prefix.join("Menu").read_dir() {
             for file in read_dir.flatten() {
                 let file = file.path();
-                if file.is_file() && file.extension().map_or(false, |ext| ext == "json") {
+                if file.is_file() && file.extension().is_some_and(|ext| ext == "json") {
                     rattler_menuinst::install_menuitems(
                         &file,
                         target_prefix,
