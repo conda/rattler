@@ -23,40 +23,45 @@ pub struct ShellCompletionActivator<T: Shell + 'static> {
 }
 
 /// Collect completion scripts from a given path and shell type.
-pub fn collect_completion_scripts(prefix: &Path, shell_type: impl Shell) -> Vec<PathBuf> {
+pub fn collect_completion_scripts(
+    prefix: &Path,
+    shell_type: &impl Shell,
+) -> std::io::Result<Vec<PathBuf>> {
     if let Some(location) = shell_type.completion_script_location() {
         let folder = prefix.join(location);
         let mut scripts = vec![];
         if folder.exists() {
-            for entry in folder.read_dir().expect("Failed to read directory") {
-                if let Ok(entry) = entry {
-                    scripts.push(entry.path());
-                }
+            for entry in fs_err::read_dir(folder)?.flatten() {
+                scripts.push(entry.path());
             }
         }
-        scripts
+        Ok(scripts)
     } else {
-        vec![]
+        Ok(vec![])
     }
 }
 
 impl<T: Shell + Clone> ShellCompletionActivator<T> {
     /// Create a new `ShellCompletionActivator` from a given path, shell type and platform.
-    pub fn from_path(target_prefix: PathBuf, shell_type: T, platform: Platform) -> Self {
-        let completion_scripts = collect_completion_scripts(&target_prefix, shell_type.clone());
-        Self {
+    pub fn from_path(
+        target_prefix: PathBuf,
+        shell_type: T,
+        platform: Platform,
+    ) -> std::io::Result<Self> {
+        let completion_scripts = collect_completion_scripts(&target_prefix, &shell_type)?;
+        Ok(Self {
             target_prefix,
             shell_type,
             completion_scripts,
             platform,
-        }
+        })
     }
 
     /// Return a `ShellScript` that runs all the completion scripts.
     pub fn to_script(&self) -> Result<ShellScript<T>, fmt::Error> {
         let mut script = ShellScript::new(self.shell_type.clone(), self.platform);
         for completion_script in &self.completion_scripts {
-            script.run_script(&completion_script)?;
+            script.run_script(completion_script)?;
         }
         Ok(script)
     }
