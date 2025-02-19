@@ -18,6 +18,7 @@ mod windows;
 pub mod tracker;
 
 pub mod slugify;
+use serde::{Deserialize, Serialize};
 pub use slugify::slugify;
 use tracker::MenuinstTracker;
 
@@ -25,9 +26,10 @@ use crate::{render::BaseMenuItemPlaceholders, schema::MenuInstSchema};
 
 pub mod utils;
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Default, Debug, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum MenuMode {
     System,
+    #[default]
     User,
 }
 
@@ -84,7 +86,7 @@ pub fn install_menuitems(
             #[cfg(target_os = "linux")]
             if let Some(linux_item) = item.platforms.linux {
                 let command = item.command.merge(linux_item.base);
-                linux::install_menu_item(
+                let linux_tracker = linux::install_menu_item(
                     &menu_inst.menu_name,
                     prefix,
                     linux_item.specific,
@@ -92,6 +94,7 @@ pub fn install_menuitems(
                     &placeholders,
                     menu_mode,
                 )?;
+                trackers.push(MenuinstTracker::Linux(linux_tracker));
             }
         } else if platform.is_osx() {
             #[cfg(target_os = "macos")]
@@ -131,11 +134,12 @@ pub fn remove_menu_items(tracker: &serde_json::Value) -> Result<(), MenuInstErro
     #[allow(unused)]
     match tracker {
         MenuinstTracker::MacOs(tracker) => {
+            #[cfg(target_os = "macos")]
             macos::remove_menu_item(&tracker).unwrap();
         }
         MenuinstTracker::Linux(tracker) => {
             #[cfg(target_os = "linux")]
-            linux::remove_menu_item(&tracker)?;
+            linux::remove_menu_item(&tracker).unwrap();
         }
         MenuinstTracker::Windows(tracker) => {
             #[cfg(target_os = "windows")]
