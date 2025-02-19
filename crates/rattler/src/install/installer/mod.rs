@@ -50,6 +50,7 @@ pub struct Installer {
     target_platform: Option<Platform>,
     apple_code_sign_behavior: AppleCodeSignBehavior,
     alternative_target_prefix: Option<PathBuf>,
+    install_menu_items: bool,
     // TODO: Determine upfront if these are possible.
     // allow_symbolic_links: Option<bool>,
     // allow_hard_links: Option<bool>,
@@ -130,6 +131,15 @@ impl Installer {
     pub fn with_execute_link_scripts(self, execute: bool) -> Self {
         Self {
             execute_link_scripts: execute,
+            ..self
+        }
+    }
+
+    /// Sets whether menu items should be installed or not
+    #[must_use]
+    pub fn with_install_menu_items(self, install_menu_items: bool) -> Self {
+        Self {
+            install_menu_items,
             ..self
         }
     }
@@ -303,6 +313,7 @@ impl Installer {
         // Construct a driver.
         let driver = InstallDriver::builder()
             .execute_link_scripts(self.execute_link_scripts)
+            .install_menu_items(self.install_menu_items)
             .with_io_concurrency_semaphore(
                 self.io_semaphore.unwrap_or(Arc::new(Semaphore::new(100))),
             )

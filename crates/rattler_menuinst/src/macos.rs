@@ -75,22 +75,14 @@ impl Directories {
         needs_appkit_launcher: bool,
         tracker: &mut MacOsTracker,
     ) -> Result<(), MenuInstError> {
+        tracker.app_folder = self.location.clone();
+
         fs::create_dir_all(self.location.join("Contents/Resources"))?;
         fs::create_dir_all(self.location.join("Contents/MacOS"))?;
-
-        tracker.paths.push(self.location.join("Contents/Resources"));
-        tracker.paths.push(self.location.join("Contents/MacOS"));
 
         if needs_appkit_launcher {
             fs::create_dir_all(self.nested_location.join("Contents/Resources"))?;
             fs::create_dir_all(self.nested_location.join("Contents/MacOS"))?;
-
-            tracker
-                .paths
-                .push(self.nested_location.join("Contents/Resources"));
-            tracker
-                .paths
-                .push(self.nested_location.join("Contents/MacOS"));
         }
 
         Ok(())
@@ -782,16 +774,12 @@ pub(crate) fn install_menu_item(
 pub(crate) fn remove_menu_item(tracker: &MacOsTracker) -> Result<Vec<PathBuf>, Vec<MenuInstError>> {
     let mut removed = Vec::new();
     let mut errors = Vec::new();
-    for path in &tracker.paths {
-        if path.exists() {
-            match fs_err::remove_dir_all(path) {
-                Ok(_) => {
-                    removed.push(path.clone());
-                }
-                Err(e) => {
-                    errors.push(e.into());
-                }
-            }
+    match fs_err::remove_dir_all(&tracker.app_folder) {
+        Ok(_) => {
+            removed.push(tracker.app_folder.clone());
+        }
+        Err(e) => {
+            errors.push(e.into());
         }
     }
 
@@ -812,7 +800,7 @@ pub(crate) fn remove_menu_item(tracker: &MacOsTracker) -> Result<Vec<PathBuf>, V
 
 #[cfg(test)]
 mod tests {
-    use crate::{schema::MenuInstSchema, test::test_data, MenuMode};
+    use crate::{schema::MenuInstSchema, test::test_data, tracker::MacOsTracker, MenuMode};
     use std::{
         collections::HashMap,
         fs,
@@ -926,7 +914,8 @@ mod tests {
             &placeholders,
             dirs.clone(),
         );
-        menu.install().unwrap();
+        let mut tracker = MacOsTracker::default();
+        menu.install(&mut tracker).unwrap();
 
         assert!(dirs.location.exists());
         assert!(dirs.nested_location.exists());
