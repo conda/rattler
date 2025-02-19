@@ -22,19 +22,10 @@ pub struct LinuxTracker {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WindowsTracker {}
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MacOsTracker {
     pub paths: Vec<PathBuf>,
     pub lsregister: Option<PathBuf>,
-}
-
-impl MacOsTracker {
-    pub fn new() -> Self {
-        Self {
-            paths: vec![],
-            lsregister: None,
-        }
-    }
 }
 
 /// Errors that can occur when saving or loading the menu installation tracker

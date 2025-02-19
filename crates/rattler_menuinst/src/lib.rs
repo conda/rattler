@@ -125,8 +125,8 @@ pub fn install_menuitems(
 }
 
 /// Remove menu items from a given schema file
-pub fn remove_menu_items(tracker: &Path) -> Result<(), MenuInstError> {
-    let tracker = MenuinstTracker::load_from(tracker).expect("Could not load tracker file");
+pub fn remove_menu_items(tracker: &serde_json::Value) -> Result<(), MenuInstError> {
+    let tracker = serde_json::from_value(tracker.clone())?;
 
     #[allow(unused)]
     match tracker {

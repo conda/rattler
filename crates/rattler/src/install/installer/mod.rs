@@ -512,6 +512,7 @@ async fn link_package(
                     // ...
                     link_type: Some(LinkType::HardLink),
                 }),
+                menuinst_tracker: None,
             };
 
             let conda_meta_path = target_prefix.join("conda-meta");
