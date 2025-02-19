@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
+
+#[cfg(target_os = "linux")]
+use std::path::PathBuf;
 
 use rattler_conda_types::Platform;
 
@@ -12,8 +15,11 @@ mod util;
 #[cfg(target_os = "windows")]
 mod windows;
 
+pub mod tracker;
+
 pub mod slugify;
 pub use slugify::slugify;
+use tracker::MenuinstTracker;
 
 use crate::{render::BaseMenuItemPlaceholders, schema::MenuInstSchema};
 
@@ -63,7 +69,7 @@ pub fn install_menuitems(
     base_prefix: &Path,
     platform: Platform,
     menu_mode: MenuMode,
-) -> Result<(), MenuInstError> {
+) -> Result<Vec<MenuinstTracker>, MenuInstError> {
     let text = std::fs::read_to_string(file)?;
     let menu_inst: MenuInstSchema = serde_json::from_str(&text)?;
     let placeholders = BaseMenuItemPlaceholders::new(base_prefix, prefix, platform);
@@ -72,7 +78,7 @@ pub fn install_menuitems(
     //     #[cfg(target_os = "linux")]
     //     linux::install_menu(&menu_inst.menu_name, prefix, menu_mode)?;
     // }
-
+    let mut trackers = Vec::new();
     for item in menu_inst.menu_items {
         if platform.is_linux() {
             #[cfg(target_os = "linux")]
@@ -91,14 +97,15 @@ pub fn install_menuitems(
             #[cfg(target_os = "macos")]
             if let Some(macos_item) = item.platforms.osx {
                 let command = item.command.merge(macos_item.base);
-                macos::install_menu_item(
+                let macos_tracker = macos::install_menu_item(
                     prefix,
                     macos_item.specific,
                     command,
                     &placeholders,
                     menu_mode,
                 )?;
-            }
+                trackers.push(MenuinstTracker::MacOs(macos_tracker));
+            };
         } else if platform.is_windows() {
             #[cfg(target_os = "windows")]
             if let Some(windows_item) = item.platforms.win {
@@ -114,59 +121,25 @@ pub fn install_menuitems(
         }
     }
 
-    Ok(())
+    Ok(trackers)
 }
 
 /// Remove menu items from a given schema file
-pub fn remove_menu_items(
-    file: &Path,
-    prefix: &Path,
-    base_prefix: &Path,
-    platform: Platform,
-    menu_mode: MenuMode,
-) -> Result<(), MenuInstError> {
-    let text = std::fs::read_to_string(file)?;
-    let menu_inst: MenuInstSchema = serde_json::from_str(&text)?;
-    let placeholders = BaseMenuItemPlaceholders::new(base_prefix, prefix, platform);
+pub fn remove_menu_items(tracker: &Path) -> Result<(), MenuInstError> {
+    let tracker = MenuinstTracker::load_from(tracker).expect("Could not load tracker file");
 
-    for item in menu_inst.menu_items {
-        if platform.is_linux() {
+    #[allow(unused)]
+    match tracker {
+        MenuinstTracker::MacOs(tracker) => {
+            macos::remove_menu_item(&tracker).unwrap();
+        }
+        MenuinstTracker::Linux(tracker) => {
             #[cfg(target_os = "linux")]
-            if let Some(linux_item) = item.platforms.linux {
-                let command = item.command.merge(linux_item.base);
-                linux::remove_menu_item(
-                    &menu_inst.menu_name,
-                    prefix,
-                    linux_item.specific,
-                    command,
-                    &placeholders,
-                    menu_mode,
-                )?;
-            }
-        } else if platform.is_osx() {
-            #[cfg(target_os = "macos")]
-            if let Some(macos_item) = item.platforms.osx {
-                let command = item.command.merge(macos_item.base);
-                macos::remove_menu_item(
-                    prefix,
-                    macos_item.specific,
-                    command,
-                    &placeholders,
-                    menu_mode,
-                )?;
-            }
-        } else if platform.is_windows() {
+            linux::remove_menu_item(&tracker)?;
+        }
+        MenuinstTracker::Windows(tracker) => {
             #[cfg(target_os = "windows")]
-            if let Some(windows_item) = item.platforms.win {
-                let command = item.command.merge(windows_item.base);
-                windows::remove_menu_item(
-                    prefix,
-                    windows_item.specific,
-                    command,
-                    &placeholders,
-                    menu_mode,
-                )?;
-            }
+            windows::remove_menu_item(&tracker)?;
         }
     }
 

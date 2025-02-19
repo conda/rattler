@@ -22,6 +22,7 @@ use crate::{
         UTTypeDeclarationModel,
     },
     slugify,
+    tracker::MacOsTracker,
     util::run_pre_create_command,
     utils, MenuInstError, MenuMode,
 };
@@ -69,13 +70,27 @@ impl Directories {
         self.nested_location.join("Contents/Resources")
     }
 
-    pub fn create_directories(&self, needs_appkit_launcher: bool) -> Result<(), MenuInstError> {
+    pub fn create_directories(
+        &self,
+        needs_appkit_launcher: bool,
+        tracker: &mut MacOsTracker,
+    ) -> Result<(), MenuInstError> {
         fs::create_dir_all(self.location.join("Contents/Resources"))?;
         fs::create_dir_all(self.location.join("Contents/MacOS"))?;
+
+        tracker.paths.push(self.location.join("Contents/Resources"));
+        tracker.paths.push(self.location.join("Contents/MacOS"));
 
         if needs_appkit_launcher {
             fs::create_dir_all(self.nested_location.join("Contents/Resources"))?;
             fs::create_dir_all(self.nested_location.join("Contents/MacOS"))?;
+
+            tracker
+                .paths
+                .push(self.nested_location.join("Contents/Resources"));
+            tracker
+                .paths
+                .push(self.nested_location.join("Contents/MacOS"));
         }
 
         Ok(())
@@ -204,6 +219,26 @@ impl CFBundleURLTypesModel {
 
         Value::Dictionary(type_dict)
     }
+}
+
+/// Call `lsregister` with args
+fn lsregister(args: &[&str], directory: &Path) -> Result<(), MenuInstError> {
+    let exe = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
+    tracing::debug!("Calling lsregister with args: {:?}", args);
+    let output = Command::new(exe)
+        .args(args)
+        .arg(directory)
+        .output()
+        .map_err(|e| MenuInstError::InstallError(format!("failed to execute lsregister: {e}")))?;
+
+    if !output.status.success() {
+        return Err(MenuInstError::InstallError(format!(
+            "lsregister failed with exit code: {}",
+            output.status
+        )));
+    }
+
+    Ok(())
 }
 
 impl MacOSMenu {
@@ -704,43 +739,19 @@ impl MacOSMenu {
         }
     }
 
-    fn maybe_register_with_launchservices(&self, register: bool) -> Result<(), MenuInstError> {
+    fn register_launchservice(&self, tracker: &mut MacOsTracker) -> Result<(), MenuInstError> {
         if !self.needs_appkit_launcher() {
             return Ok(());
         }
 
-        if register {
-            Self::lsregister(&["-R", self.directories.location.to_str().unwrap()])
-        } else {
-            Self::lsregister(&[
-                "-R",
-                "-u",
-                "-all",
-                self.directories.location.to_str().unwrap(),
-            ])
-        }
-    }
-
-    fn lsregister(args: &[&str]) -> Result<(), MenuInstError> {
-        let exe = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
-        tracing::debug!("Calling lsregister with args: {:?}", args);
-        let output = Command::new(exe).args(args).output().map_err(|e| {
-            MenuInstError::InstallError(format!("Failed to execute lsregister: {e}"))
-        })?;
-
-        if !output.status.success() {
-            return Err(MenuInstError::InstallError(format!(
-                "lsregister failed with exit code: {}",
-                output.status
-            )));
-        }
-
+        lsregister(&["-R"], &self.directories.location)?;
+        tracker.lsregister = Some(self.directories.location.clone());
         Ok(())
     }
 
-    pub fn install(&self) -> Result<(), MenuInstError> {
+    pub fn install(&self, tracker: &mut MacOsTracker) -> Result<(), MenuInstError> {
         self.directories
-            .create_directories(self.needs_appkit_launcher())?;
+            .create_directories(self.needs_appkit_launcher(), tracker)?;
         self.precreate()?;
         self.install_icon()?;
         self.write_pkg_info()?;
@@ -749,22 +760,9 @@ impl MacOSMenu {
         self.write_launcher()?;
         self.write_script(None)?;
         self.write_event_handler(None)?;
-        self.maybe_register_with_launchservices(true)?;
+        self.register_launchservice(tracker)?;
         self.sign_with_entitlements()?;
         Ok(())
-    }
-
-    pub fn remove(&self) -> Result<Vec<PathBuf>, MenuInstError> {
-        tracing::info!("Removing menu item {}", self.directories.location.display());
-        self.maybe_register_with_launchservices(false)?;
-        if self.directories.location.exists() {
-            fs_err::remove_dir_all(&self.directories.location).unwrap_or_else(|e| {
-                tracing::warn!("Failed to remove directory: {e}. Ignoring error.");
-            });
-            Ok(vec![self.directories.location.clone()])
-        } else {
-            Ok(vec![])
-        }
     }
 }
 
@@ -774,20 +772,42 @@ pub(crate) fn install_menu_item(
     command: MenuItemCommand,
     placeholders: &BaseMenuItemPlaceholders,
     menu_mode: MenuMode,
-) -> Result<(), MenuInstError> {
+) -> Result<MacOsTracker, MenuInstError> {
     let menu = MacOSMenu::new(prefix, macos_item, command, menu_mode, placeholders);
-    menu.install()
+    let mut tracker = MacOsTracker::new();
+    menu.install(&mut tracker)?;
+    Ok(tracker)
 }
 
-pub(crate) fn remove_menu_item(
-    prefix: &Path,
-    macos_item: MacOS,
-    command: MenuItemCommand,
-    placeholders: &BaseMenuItemPlaceholders,
-    menu_mode: MenuMode,
-) -> Result<Vec<PathBuf>, MenuInstError> {
-    let menu = MacOSMenu::new(prefix, macos_item, command, menu_mode, placeholders);
-    menu.remove()
+pub(crate) fn remove_menu_item(tracker: &MacOsTracker) -> Result<Vec<PathBuf>, Vec<MenuInstError>> {
+    let mut removed = Vec::new();
+    let mut errors = Vec::new();
+    for path in &tracker.paths {
+        if path.exists() {
+            match fs_err::remove_dir_all(path) {
+                Ok(_) => {
+                    removed.push(path.clone());
+                }
+                Err(e) => {
+                    errors.push(e.into());
+                }
+            }
+        }
+    }
+
+    if let Some(lsregister_path) = &tracker.lsregister {
+        match lsregister(&["-R", "-u", "-all"], lsregister_path) {
+            Ok(_) => {}
+            Err(e) => {
+                tracing::warn!("Failed to unregister with lsregister: {}", e);
+                errors.push(e);
+            }
+        }
+    }
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    Ok(removed)
 }
 
 #[cfg(test)]

@@ -10,6 +10,7 @@ use indexmap::IndexSet;
 use itertools::Itertools;
 use rattler_conda_types::{prefix_record::PathType, PackageRecord, Platform, PrefixRecord};
 use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
+use tempfile::NamedTempFile;
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
 
@@ -172,15 +173,10 @@ impl InstallDriver {
         for record in transaction.removed_packages().map(Borrow::borrow) {
             for path in record.paths_data.paths.iter() {
                 if path.relative_path.starts_with("Menu")
-                    && path.relative_path.extension() == Some(OsStr::new("json"))
+                    && path.relative_path.extension() == Some(OsStr::new(".menuist-tracker"))
                 {
-                    match rattler_menuinst::remove_menu_items(
-                        &target_prefix.join(&path.relative_path),
-                        target_prefix,
-                        target_prefix,
-                        Platform::current(),
-                        rattler_menuinst::MenuMode::User,
-                    ) {
+                    let record_path = target_prefix.join(&path.relative_path);
+                    match rattler_menuinst::remove_menu_items(&record_path) {
                         Ok(_) => {}
                         Err(e) => {
                             tracing::warn!("Failed to remove menu item: {}", e);
@@ -251,16 +247,29 @@ impl InstallDriver {
             for file in read_dir.flatten() {
                 let file = file.path();
                 if file.is_file() && file.extension().is_some_and(|ext| ext == "json") {
-                    rattler_menuinst::install_menuitems(
+                    let Ok(tracker) = rattler_menuinst::install_menuitems(
                         &file,
                         target_prefix,
                         target_prefix,
                         Platform::current(),
                         rattler_menuinst::MenuMode::User,
-                    )
-                    .unwrap_or_else(|e| {
-                        tracing::warn!("Failed to install menu item: {} (ignored)", e);
-                    });
+                    ) else {
+                        tracing::warn!("Failed to install menu items for: {}", file.display());
+                        continue;
+                    };
+
+                    // TODO store tracker in conda-meta?
+                    for elem in tracker {
+                        let file = NamedTempFile::with_suffix_in(
+                            target_prefix.join("conda-meta"),
+                            ".menuinst-tracker",
+                        )
+                        .unwrap();
+                        // TODO get rid of expect
+                        elem.save_to(file.path())
+                            .expect("Failed to save menuinst tracker");
+                        file.keep().unwrap();
+                    }
                 }
             }
         }
