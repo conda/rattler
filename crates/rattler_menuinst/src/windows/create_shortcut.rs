@@ -1,30 +1,47 @@
 use std::path::Path;
 
 use windows::{
-    core::*, Win32::Storage::EnhancedStorage::PKEY_AppUserModel_ID,
-    Win32::System::Com::StructuredStorage::*, Win32::System::Com::*, Win32::UI::Shell::*,
+    core::{Interface, Result, GUID, HSTRING},
+    Win32::Storage::EnhancedStorage::PKEY_AppUserModel_ID,
+    Win32::System::Com::StructuredStorage::{InitPropVariantFromStringAsVector, PropVariantClear},
+    Win32::System::Com::{
+        CoCreateInstance, CoInitialize, CoUninitialize, IPersistFile, CLSCTX_INPROC_SERVER,
+    },
+    Win32::UI::Shell::{IShellLinkW, PropertiesSystem, ShellLink},
 };
 use PropertiesSystem::IPropertyStore;
 
+#[derive(Debug, Clone, Copy)]
+pub struct Shortcut<'a> {
+    pub path: &'a str,
+    pub description: &'a str,
+    pub filename: &'a Path,
+    pub arguments: Option<&'a str>,
+    pub workdir: Option<&'a str>,
+    pub iconpath: Option<&'a str>,
+    pub iconindex: Option<i32>,
+    pub app_id: Option<&'a str>,
+}
+
 /// Create a Windows `.lnk` shortcut file at the specified path.
-pub fn create_shortcut(
-    path: &str,
-    description: &str,
-    filename: &Path,
-    arguments: Option<&str>,
-    workdir: Option<&str>,
-    iconpath: Option<&str>,
-    iconindex: Option<i32>,
-    app_id: Option<&str>,
-) -> Result<()> {
+pub fn create_shortcut(shortcut: Shortcut<'_>) -> Result<()> {
+    let Shortcut {
+        path,
+        description,
+        filename,
+        arguments,
+        workdir,
+        iconpath,
+        iconindex,
+        app_id,
+    } = shortcut;
+
     tracing::info!("Creating shortcut: {:?} at {}", filename, path);
 
     unsafe {
         // Initialize COM
         let co = CoInitialize(None);
-        if co.is_err() {
-            panic!("Failed to initialize COM");
-        }
+        assert!(!co.is_err(), "Failed to initialize COM");
 
         let shell_link: IShellLinkW =
             CoCreateInstance(&ShellLink as *const GUID, None, CLSCTX_INPROC_SERVER)?;
@@ -72,54 +89,60 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
+    fn create_test_shortcut(filename: &'static str) -> Shortcut<'static> {
+        Shortcut {
+            path: r"C:\Windows\notepad.exe",
+            description: "Test Shortcut",
+            filename: Path::new(filename),
+            arguments: None,
+            workdir: None,
+            iconpath: None,
+            iconindex: None,
+            app_id: None,
+        }
+    }
+
+    fn cleanup(filename: &str) {
+        let path = Path::new(filename);
+        if path.exists() {
+            fs::remove_file(path).unwrap();
+        }
+    }
+
     #[test]
     fn test_basic_shortcut_creation() {
-        let result = create_shortcut(
-            "C:\\Windows\\notepad.exe",
-            "Notepad Shortcut",
-            "test_basic.lnk",
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        let shortcut = create_test_shortcut("test_basic.lnk");
+        let result = create_shortcut(shortcut);
 
         assert!(result.is_ok());
-        assert!(Path::new("test_basic.lnk").exists());
-        fs::remove_file("test_basic.lnk").unwrap();
+        assert!(shortcut.filename.exists());
+        cleanup("test_basic.lnk");
     }
 
     #[test]
     fn test_shortcut_with_arguments() {
-        let result = create_shortcut(
-            "C:\\Windows\\notepad.exe",
-            "Notepad with Args",
-            "test_args.lnk",
-            Some("/A test.txt"),
-            None,
-            None,
-            None,
-            None,
-        );
+        let mut shortcut = create_test_shortcut("test_args.lnk");
+        shortcut.arguments = Some("/A test.txt");
+        let result = create_shortcut(shortcut);
 
         assert!(result.is_ok());
-        assert!(Path::new("test_args.lnk").exists());
-        fs::remove_file("test_args.lnk").unwrap();
+        assert!(shortcut.filename.exists());
+        cleanup("test_args.lnk");
     }
 
     #[test]
     fn test_shortcut_with_all_options() {
-        let result = create_shortcut(
-            "C:\\Windows\\notepad.exe",
-            "Full Options Shortcut",
-            "test_full.lnk",
-            Some("/A"),
-            Some("C:\\Temp"),
-            Some("C:\\Windows\\notepad.exe"),
-            Some(0),
-            Some("MyApp.TestShortcut"),
-        );
+        let shortcut = Shortcut {
+            path: r"C:\Windows\notepad.exe",
+            description: "Full Options Shortcut",
+            filename: Path::new("test_full.lnk"),
+            arguments: Some("/A"),
+            workdir: Some(r"C:\Temp"),
+            iconpath: Some(r"C:\Windows\notepad.exe"),
+            iconindex: Some(0),
+            app_id: Some("MyApp.TestShortcut"),
+        };
+        let result = create_shortcut(shortcut);
 
         assert!(result.is_ok());
         assert!(Path::new("test_full.lnk").exists());
@@ -128,35 +151,27 @@ mod tests {
 
     #[test]
     fn test_invalid_path() {
-        let result = create_shortcut(
-            "C:\\NonExistent\\fake.exe",
-            "Invalid Path",
-            "test_invalid.lnk",
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        let mut shortcut = create_test_shortcut("test_invalid.lnk");
+        shortcut.path = r"C:\NonExistent\fake.exe";
+        let result = create_shortcut(shortcut);
 
         assert!(result.is_ok()); // Note: Windows API doesn't validate path existence
-        if Path::new("test_invalid.lnk").exists() {
-            fs::remove_file("test_invalid.lnk").unwrap();
-        }
+        cleanup("test_invalid.lnk");
     }
 
     #[test]
     fn test_invalid_save_location() {
-        let result = create_shortcut(
-            "C:\\Windows\\notepad.exe",
-            "Invalid Save",
-            "C:\\NonExistent\\Directory\\test.lnk",
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        let shortcut = Shortcut {
+            path: r"C:\Windows\notepad.exe",
+            description: "Invalid Save",
+            filename: Path::new(r"C:\NonExistent\Directory\test.lnk"),
+            arguments: None,
+            workdir: None,
+            iconpath: None,
+            iconindex: None,
+            app_id: None,
+        };
+        let result = create_shortcut(shortcut);
 
         assert!(result.is_err());
     }

@@ -116,13 +116,13 @@ mod tests {
         for (folder, handle) in test_folders {
             match folders.get_folder_path(folder, handle) {
                 Ok(path) => {
-                    println!("{} path for {:?}: {:?}", folder, handle, path);
+                    println!("{folder} path for {handle:?}: {path:?}");
                     match folders.verify_path(&path) {
                         Ok(_) => println!("  Path verified successfully"),
-                        Err(e) => println!("  Path verification failed: {:?}", e),
+                        Err(e) => println!("  Path verification failed: {e:?}"),
                     }
                 }
-                Err(e) => println!("Error getting {} path for {:?}: {:?}", folder, handle, e),
+                Err(e) => println!("Error getting {folder} path for {handle:?}: {e:?}"),
             }
         }
     }

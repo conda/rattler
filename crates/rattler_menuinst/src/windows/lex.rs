@@ -14,7 +14,7 @@ pub fn quote_args(args: &[String]) -> Vec<String> {
             .join(" ");
         vec![cmd, flag, format!("\"{}\"", quoted_args)]
     } else {
-        args.into_iter().map(|s| quote_string(&s)).collect()
+        args.iter().map(|s| quote_string(s)).collect()
     }
 }
 
@@ -23,7 +23,7 @@ pub fn quote_string(s: &str) -> String {
     if s.starts_with('-') || s.starts_with(' ') {
         s
     } else if s.contains(' ') || s.contains('/') {
-        format!("\"{}\"", s)
+        format!("\"{s}\"")
     } else {
         s
     }
@@ -33,7 +33,7 @@ pub fn ensure_pad(name: &str, pad: char) -> String {
     if name.is_empty() || (name.starts_with(pad) && name.ends_with(pad)) {
         name.to_string()
     } else {
-        format!("{}{}{}", pad, name, pad)
+        format!("{pad}{name}{pad}")
     }
 }
 

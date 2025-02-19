@@ -26,8 +26,13 @@ pub struct LinuxTracker {
     pub registered_mime_files: Vec<PathBuf>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct WindowsTracker {}
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WindowsTracker {
+    pub menu_mode: MenuMode,
+    pub files: Vec<PathBuf>,
+    pub file_extensions: Vec<(String, String)>,
+    pub url_protocols: Vec<(String, String)>,
+}
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MacOsTracker {
