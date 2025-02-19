@@ -6,6 +6,8 @@ use std::{
 };
 use thiserror::Error;
 
+use crate::MenuMode;
+
 /// Track the installation of menu items on the system and make it easy to remove them
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum MenuinstTracker {
@@ -14,9 +16,14 @@ pub enum MenuinstTracker {
     MacOs(MacOsTracker),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LinuxTracker {
+    pub install_mode: MenuMode,
     pub paths: Vec<PathBuf>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mime_types: Vec<(String, String)>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub registered_mime_files: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

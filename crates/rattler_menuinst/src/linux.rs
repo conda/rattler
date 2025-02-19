@@ -16,6 +16,7 @@ use rattler_shell::shell;
 
 use crate::render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString};
 use crate::slugify;
+use crate::tracker::LinuxTracker;
 use crate::util::{log_output, run_pre_create_command};
 use crate::{
     schema::{Linux, MenuItemCommand},
@@ -135,6 +136,76 @@ impl Directories {
     }
 }
 
+/// Update the mime database for a given directory
+fn update_mime_database(directory: &Path) -> Result<(), MenuInstError> {
+    if let Ok(update_mime_database) = which::which("update-mime-database") {
+        let output = Command::new(update_mime_database)
+            .arg("-V")
+            .arg(directory)
+            .output()?;
+
+        if !output.status.success() {
+            tracing::warn!("Could not update mime database");
+            log_output("update-mime-database", output);
+        }
+    }
+    Ok(())
+}
+
+enum XdgMimeOperation {
+    Install,
+    Uninstall,
+}
+
+/// XDG Mime invocation error
+#[derive(Debug, thiserror::Error)]
+pub enum XdgMimeError {
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+}
+
+fn xdg_mime(
+    xml_file: &Path,
+    mode: MenuMode,
+    operation: XdgMimeOperation,
+) -> Result<(), XdgMimeError> {
+    let mut command = Command::new("xdg-mime");
+
+    let mode = match mode {
+        MenuMode::System => "system",
+        MenuMode::User => "user",
+    };
+
+    let operation = match operation {
+        XdgMimeOperation::Install => "install",
+        XdgMimeOperation::Uninstall => "uninstall",
+    };
+
+    command
+        .arg(operation)
+        .arg("--mode")
+        .arg(mode)
+        .arg("--novendor")
+        .arg(xml_file);
+
+    let output = command.output()?;
+
+    if !output.status.success() {
+        tracing::warn!(
+            "Could not un/register MIME type with xdg-mime. Writing to '{}' as a fallback.",
+            xml_file.display()
+        );
+        log_output("xdg-mime", output);
+
+        return Err(XdgMimeError::IoError(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "xdg-mime failed",
+        )));
+    }
+
+    Ok(())
+}
+
 impl LinuxMenu {
     fn new(
         menu_name: &str,
@@ -242,7 +313,10 @@ impl LinuxMenu {
 
         let command = parts.join(" && ");
 
-        format!("bash -c {}", shlex::try_quote(&command).unwrap())
+        format!(
+            "bash -c {}",
+            shlex::try_quote(&command).expect("could not quote command")
+        )
     }
 
     fn resolve_and_join(&self, items: &[PlaceholderString]) -> String {
@@ -254,11 +328,13 @@ impl LinuxMenu {
         res
     }
 
-    fn create_desktop_entry(&self) -> Result<(), MenuInstError> {
+    fn create_desktop_entry(&self, tracker: &mut LinuxTracker) -> Result<(), MenuInstError> {
         let file = self.location();
         tracing::info!("Creating desktop entry at {}", file.display());
-        let writer = File::create(file)?;
+        let writer = File::create(&file)?;
         let mut writer = std::io::BufWriter::new(writer);
+
+        tracker.paths.push(file);
 
         writeln!(writer, "[Desktop Entry]")?;
         writeln!(writer, "Type=Application")?;
@@ -365,39 +441,25 @@ impl LinuxMenu {
         Ok(())
     }
 
-    fn install(&self) -> Result<(), MenuInstError> {
+    fn install(&self, tracker: &mut LinuxTracker) -> Result<(), MenuInstError> {
         self.directories.ensure_directories_exist()?;
         self.pre_create()?;
-        self.create_desktop_entry()?;
-        self.maybe_register_mime_types(true)?;
+        self.create_desktop_entry(tracker)?;
+        self.register_mime_types(tracker)?;
         Self::update_desktop_database()?;
         Ok(())
     }
 
-    fn remove(&self) -> Result<(), MenuInstError> {
-        let paths = self.paths();
-        for path in paths {
-            fs::remove_file(path)?;
-        }
-        Ok(())
-    }
+    fn register_mime_types(&self, tracker: &mut LinuxTracker) -> Result<(), MenuInstError> {
+        let Some(mime_types) = self.item.mime_type.as_ref() else {
+            return Ok(());
+        };
 
-    fn maybe_register_mime_types(&self, register: bool) -> Result<(), MenuInstError> {
-        if let Some(mime_types) = self.item.mime_type.as_ref() {
-            let resolved_mime_types = mime_types
-                .iter()
-                .map(|s| s.resolve(&self.placeholders))
-                .collect::<Vec<String>>();
-            self.register_mime_types(&resolved_mime_types, register)?;
-        }
-        Ok(())
-    }
+        let mime_types = mime_types
+            .iter()
+            .map(|s| s.resolve(&self.placeholders))
+            .collect::<Vec<String>>();
 
-    fn register_mime_types(
-        &self,
-        mime_types: &[String],
-        register: bool,
-    ) -> Result<(), MenuInstError> {
         tracing::info!("Registering mime types {:?}", mime_types);
         let mut resolved_globs = HashMap::<String, String>::new();
 
@@ -407,41 +469,26 @@ impl LinuxMenu {
             }
         }
 
-        for mime_type in mime_types {
+        for mime_type in &mime_types {
             if let Some(glob_pattern) = resolved_globs.get(mime_type) {
-                self.glob_pattern_for_mime_type(mime_type, glob_pattern, register)?;
+                self.glob_pattern_for_mime_type(mime_type, glob_pattern, tracker)?;
             }
         }
 
         let mimeapps = self.directories.config_directory.join("mimeapps.list");
 
-        if register {
-            let mut config = MimeConfig::new(mimeapps);
-            config.load()?;
-            for mime_type in mime_types {
-                tracing::info!("Registering mime type {} for {}", mime_type, &self.name);
-                config.register_mime_type(mime_type, &self.name);
-            }
-            config.save()?;
-        } else if mimeapps.exists() {
-            // in this case we remove the mime type from the mimeapps.list file
-            let mut config = MimeConfig::new(mimeapps);
-            for mime_type in mime_types {
-                tracing::info!("Deregistering mime type {} for {}", mime_type, &self.name);
-                config.deregister_mime_type(mime_type, &self.name);
-            }
-            config.save()?;
+        let mut config = MimeConfig::new(mimeapps);
+        config.load()?;
+        for mime_type in mime_types {
+            tracing::info!("Registering mime type {} for {}", mime_type, &self.name);
+            config.register_mime_type(&mime_type, &self.name);
+            tracker
+                .mime_types
+                .push((mime_type.clone(), self.name.clone()));
         }
+        config.save()?;
 
-        if let Ok(update_mime_database) = which::which("update-mime-database") {
-            let mut command = Command::new(update_mime_database);
-            command.arg("-V").arg(self.directories.mime_directory());
-            let output = command.output()?;
-            if !output.status.success() {
-                tracing::warn!("Could not update mime database");
-                log_output("update-mime-database", output);
-            }
-        }
+        update_mime_database(&self.directories.mime_directory())?;
 
         Ok(())
     }
@@ -455,14 +502,10 @@ impl LinuxMenu {
 
         let xml_files: Vec<PathBuf> = fs::read_dir(&mime_directory)?
             .filter_map(|entry| {
-                let path = entry.unwrap().path();
-                if path
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .contains(&basename)
-                {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                let file_name = path.file_name()?.to_str()?;
+                if file_name.contains(&basename) {
                     Some(path)
                 } else {
                     None
@@ -487,11 +530,12 @@ impl LinuxMenu {
         &self,
         mime_type: &str,
         glob_pattern: &str,
-        install: bool,
-    ) -> Result<PathBuf, MenuInstError> {
-        let (xml_path, exists) = self.xml_path_for_mime_type(mime_type).unwrap();
+        tracker: &mut LinuxTracker,
+    ) -> Result<(), MenuInstError> {
+        let (xml_path, exists) = self.xml_path_for_mime_type(mime_type)?;
         if exists {
-            return Ok(xml_path);
+            // Already registered this mime type
+            return Ok(());
         }
 
         // Write the XML that binds our current mime type to the glob pattern
@@ -510,73 +554,31 @@ impl LinuxMenu {
 </mime-info>"#
         );
 
-        let subcommand = if install { "install" } else { "uninstall" };
         // Install the XML file and register it as default for our app
-        let tmp_dir = TempDir::new()?;
-        let tmp_path = tmp_dir.path().join(xml_path.file_name().unwrap());
-        let mut file = fs::File::create(&tmp_path)?;
+        let file_name = xml_path.file_name().expect("we should have a filename");
+        let mime_dir_in_prefix = self.prefix.join("Menu/registered-mimetypes");
+        fs::create_dir_all(&mime_dir_in_prefix)?;
+
+        let temp_dir = TempDir::new_in(&mime_dir_in_prefix)?;
+        let file_path = temp_dir.path().join(file_name);
+        let mut file = File::create(&file_path)?;
         file.write_all(xml.as_bytes())?;
+        file.flush()?;
 
-        let mut command = Command::new("xdg-mime");
-        let mode = match self.mode {
-            MenuMode::System => "system",
-            MenuMode::User => "user",
-        };
-
-        command
-            .arg(subcommand)
-            .arg("--mode")
-            .arg(mode)
-            .arg("--novendor")
-            .arg(tmp_path);
-        let output = command.output()?;
-
-        if !output.status.success() {
-            tracing::warn!(
-                "Could not un/register MIME type {} with xdg-mime. Writing to '{}' as a fallback.",
-                mime_type,
-                xml_path.display()
-            );
-            tracing::info!(
-                "xdg-mime stdout output: {}",
-                String::from_utf8_lossy(&output.stdout)
-            );
-            tracing::info!(
-                "xdg-mime stderr output: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-
-            let mut file = fs::File::create(&xml_path)?;
-            file.write_all(xml.as_bytes())?;
-        }
-
-        Ok(xml_path)
-    }
-
-    /// All paths that are installed for removal
-    fn paths(&self) -> Vec<PathBuf> {
-        let mut paths = vec![self.location()];
-
-        if let Some(mime_types) = &self.item.mime_type {
-            let resolved = mime_types
-                .iter()
-                .map(|s| s.resolve(&self.placeholders))
-                .collect::<Vec<String>>();
-
-            for mime in resolved {
-                let (xml_path, exists) = self.xml_path_for_mime_type(&mime).unwrap();
-                if !exists {
-                    continue;
-                }
-
-                if let Ok(content) = fs::read_to_string(&xml_path) {
-                    if content.contains("registered by menuinst") {
-                        paths.push(xml_path);
-                    }
-                }
+        match xdg_mime(file.path(), self.mode, XdgMimeOperation::Install) {
+            Ok(_) => {
+                // keep temp dir in prefix around and the temp file
+                // because we re-use it when unregistering the mime type.
+                let _ = temp_dir.into_path();
+                tracker.registered_mime_files.push(file_path);
+            }
+            Err(_) => {
+                fs::write(&xml_path, xml)?;
+                tracker.paths.push(xml_path);
             }
         }
-        paths
+
+        Ok(())
     }
 }
 
@@ -588,22 +590,53 @@ pub fn install_menu_item(
     command: MenuItemCommand,
     placeholders: &BaseMenuItemPlaceholders,
     menu_mode: MenuMode,
-) -> Result<(), MenuInstError> {
+) -> Result<LinuxTracker, MenuInstError> {
+    let mut tracker = LinuxTracker::default();
     let menu = LinuxMenu::new(menu_name, prefix, item, command, placeholders, menu_mode);
-    menu.install()
+    menu.install(&mut tracker)?;
+
+    Ok(tracker)
 }
 
 /// Remove a menu item on Linux.
-pub fn remove_menu_item(
-    menu_name: &str,
-    prefix: &Path,
-    item: Linux,
-    command: MenuItemCommand,
-    placeholders: &BaseMenuItemPlaceholders,
-    menu_mode: MenuMode,
-) -> Result<(), MenuInstError> {
-    let menu = LinuxMenu::new(menu_name, prefix, item, command, placeholders, menu_mode);
-    menu.remove()
+pub fn remove_menu_item(tracker: &LinuxTracker) -> Result<(), MenuInstError> {
+    for path in &tracker.paths {
+        match fs::remove_file(path) {
+            Ok(_) => {}
+            Err(e) => {
+                tracing::warn!("Could not remove file {}: {}", path.display(), e);
+            }
+        }
+    }
+
+    for path in &tracker.registered_mime_files {
+        let _ = xdg_mime(
+            &path,
+            tracker.install_mode.clone(),
+            XdgMimeOperation::Uninstall,
+        )
+        .map_err(|e| tracing::warn!("Could not uninstall mime type: {}", e));
+    }
+
+    // invoke xdg-mime uninstall ...
+    if !tracker.mime_types.is_empty() {
+        // load mimetype config
+        // TODO - store path to mime config
+        let mut config = MimeConfig::new(PathBuf::from("/tmp/mimeapps.list"));
+        for mime_type in &tracker.mime_types {
+            tracing::info!(
+                "Unregistering mime type {} for {}",
+                mime_type.0,
+                mime_type.1
+            );
+            config.deregister_mime_type(&mime_type.0, &mime_type.1);
+        }
+        config.save()?;
+        // TODO use `mime directory`.
+        update_mime_database(&PathBuf::from("/tmp/mime"))?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -615,7 +648,7 @@ mod tests {
     };
     use tempfile::TempDir;
 
-    use crate::{schema::MenuInstSchema, test::test_data};
+    use crate::{schema::MenuInstSchema, test::test_data, tracker::LinuxTracker};
 
     use super::{Directories, LinuxMenu};
 
@@ -755,7 +788,8 @@ mod tests {
             dirs.directories().clone(),
         );
 
-        linux_menu.install().unwrap();
+        let mut tracker = LinuxTracker::default();
+        linux_menu.install(&mut tracker).unwrap();
 
         // check snapshot of desktop file
         let desktop_file = dirs.directories().desktop_file();
