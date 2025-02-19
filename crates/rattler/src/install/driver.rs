@@ -1,7 +1,6 @@
 use std::{
     borrow::Borrow,
     collections::{HashMap, HashSet},
-    ffi::OsStr,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, MutexGuard},
 };
@@ -10,7 +9,6 @@ use indexmap::IndexSet;
 use itertools::Itertools;
 use rattler_conda_types::{prefix_record::PathType, PackageRecord, Platform, PrefixRecord};
 use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
-use tempfile::NamedTempFile;
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
 
@@ -33,6 +31,7 @@ pub struct InstallDriver {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     pub(crate) clobber_registry: Arc<Mutex<ClobberRegistry>>,
     execute_link_scripts: bool,
+    install_menu_items: bool,
 }
 
 impl Default for InstallDriver {
@@ -40,6 +39,7 @@ impl Default for InstallDriver {
         Self::builder()
             .execute_link_scripts(false)
             .with_io_concurrency_limit(100)
+            .install_menu_items(true)
             .finish()
     }
 }
@@ -50,6 +50,7 @@ pub struct InstallDriverBuilder {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     clobber_registry: Option<ClobberRegistry>,
     execute_link_scripts: bool,
+    install_menu_items: bool,
 }
 
 /// The result of the post-processing step.
@@ -115,6 +116,14 @@ impl InstallDriverBuilder {
         }
     }
 
+    /// Whether to install menu items or not.
+    pub fn install_menu_items(self, install_menu_items: bool) -> Self {
+        Self {
+            install_menu_items,
+            ..self
+        }
+    }
+
     pub fn finish(self) -> InstallDriver {
         InstallDriver {
             io_concurrency_semaphore: self.io_concurrency_semaphore,
@@ -124,6 +133,7 @@ impl InstallDriverBuilder {
                 .map(Arc::new)
                 .unwrap_or_default(),
             execute_link_scripts: self.execute_link_scripts,
+            install_menu_items: self.install_menu_items,
         }
     }
 }
@@ -170,17 +180,13 @@ impl InstallDriver {
         }
 
         // For all packages that are removed, we need to remove menuinst entries as well
-        for record in transaction.removed_packages().map(Borrow::borrow) {
-            for path in record.paths_data.paths.iter() {
-                if path.relative_path.starts_with("Menu")
-                    && path.relative_path.extension() == Some(OsStr::new(".menuist-tracker"))
-                {
-                    let record_path = target_prefix.join(&path.relative_path);
-                    match rattler_menuinst::remove_menu_items(&record_path) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            tracing::warn!("Failed to remove menu item: {}", e);
-                        }
+        for record in transaction.removed_packages() {
+            let prefix_record = record.borrow();
+            if let Some(data) = &prefix_record.menuinst_tracker {
+                match rattler_menuinst::remove_menu_items(data) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        tracing::warn!("Failed to remove menu item: {}", e);
                     }
                 }
             }
@@ -242,33 +248,58 @@ impl InstallDriver {
             None
         };
 
-        // find all files in `$PREFIX/Menu/*.json` and install them with `menuinst`
-        if let Ok(read_dir) = target_prefix.join("Menu").read_dir() {
-            for file in read_dir.flatten() {
-                let file = file.path();
-                if file.is_file() && file.extension().is_some_and(|ext| ext == "json") {
-                    let Ok(tracker) = rattler_menuinst::install_menuitems(
-                        &file,
-                        target_prefix,
-                        target_prefix,
-                        Platform::current(),
-                        rattler_menuinst::MenuMode::User,
-                    ) else {
-                        tracing::warn!("Failed to install menu items for: {}", file.display());
-                        continue;
-                    };
+        // TODO this would overwrite prefix records that were changed in the `unclobber`
+        // code path
 
-                    // TODO store tracker in conda-meta?
-                    for elem in tracker {
-                        let file = NamedTempFile::with_suffix_in(
-                            target_prefix.join("conda-meta"),
-                            ".menuinst-tracker",
-                        )
-                        .unwrap();
-                        // TODO get rid of expect
-                        elem.save_to(file.path())
-                            .expect("Failed to save menuinst tracker");
-                        file.keep().unwrap();
+        if self.install_menu_items {
+            // Install menu items from prefix records
+            for record in prefix_records.iter() {
+                // Look for Menu/*.json files in the package paths
+                let menu_files: Vec<_> = record
+                    .paths_data
+                    .paths
+                    .iter()
+                    .filter(|path| {
+                        path.relative_path.starts_with("Menu/")
+                            && path
+                                .relative_path
+                                .extension()
+                                .is_some_and(|ext| ext == "json")
+                    })
+                    .collect();
+
+                if !menu_files.is_empty() {
+                    for menu_file in menu_files {
+                        let full_path = target_prefix.join(&menu_file.relative_path);
+                        match rattler_menuinst::install_menuitems(
+                            &full_path,
+                            target_prefix,
+                            target_prefix,
+                            Platform::current(),
+                            rattler_menuinst::MenuMode::User,
+                        ) {
+                            Ok(tracker_vec) => {
+                                // Store tracker in the prefix record
+                                let mut record = record.clone();
+                                record.menuinst_tracker =
+                                    Some(serde_json::to_value(tracker_vec).unwrap());
+
+                                // Save the updated prefix record
+                                record
+                                    .write_to_path(
+                                        target_prefix.join("conda-meta").join(record.file_name()),
+                                        true,
+                                    )
+                                    .expect("Failed to write prefix record");
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to install menu items for {}: {}",
+                                    full_path.display(),
+                                    e
+                                );
+                            }
+                        }
                     }
                 }
             }

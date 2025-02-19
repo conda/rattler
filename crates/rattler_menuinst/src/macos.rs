@@ -774,7 +774,7 @@ pub(crate) fn install_menu_item(
     menu_mode: MenuMode,
 ) -> Result<MacOsTracker, MenuInstError> {
     let menu = MacOSMenu::new(prefix, macos_item, command, menu_mode, placeholders);
-    let mut tracker = MacOsTracker::new();
+    let mut tracker = MacOsTracker::default();
     menu.install(&mut tracker)?;
     Ok(tracker)
 }
