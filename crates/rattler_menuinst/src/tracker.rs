@@ -31,7 +31,7 @@ pub struct WindowsTracker {}
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MacOsTracker {
-    pub paths: Vec<PathBuf>,
+    pub app_folder: PathBuf,
     pub lsregister: Option<PathBuf>,
 }
 

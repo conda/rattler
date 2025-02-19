@@ -129,21 +129,23 @@ pub fn install_menuitems(
 
 /// Remove menu items from a given schema file
 pub fn remove_menu_items(tracker: &serde_json::Value) -> Result<(), MenuInstError> {
-    let tracker = serde_json::from_value(tracker.clone())?;
+    let tracker: Vec<MenuinstTracker> = serde_json::from_value(tracker.clone())?;
 
-    #[allow(unused)]
-    match tracker {
-        MenuinstTracker::MacOs(tracker) => {
-            #[cfg(target_os = "macos")]
-            macos::remove_menu_item(&tracker).unwrap();
-        }
-        MenuinstTracker::Linux(tracker) => {
-            #[cfg(target_os = "linux")]
-            linux::remove_menu_item(&tracker).unwrap();
-        }
-        MenuinstTracker::Windows(tracker) => {
-            #[cfg(target_os = "windows")]
-            windows::remove_menu_item(&tracker)?;
+    for el in tracker {
+        #[allow(unused)]
+        match el {
+            MenuinstTracker::MacOs(tracker) => {
+                #[cfg(target_os = "macos")]
+                macos::remove_menu_item(&tracker).unwrap();
+            }
+            MenuinstTracker::Linux(tracker) => {
+                #[cfg(target_os = "linux")]
+                linux::remove_menu_item(&tracker).unwrap();
+            }
+            MenuinstTracker::Windows(tracker) => {
+                #[cfg(target_os = "windows")]
+                windows::remove_menu_item(&tracker)?;
+            }
         }
     }
 
