@@ -1,10 +1,11 @@
+use create_shortcut::Shortcut;
 use fs_err as fs;
 use rattler_conda_types::Platform;
 use rattler_shell::{
     activation::{ActivationVariables, Activator},
     shell,
 };
-use registry::notify_shell_changes;
+use registry::{notify_shell_changes, FileExtension, UrlProtocol};
 use std::{
     io::Write as _,
     path::{Path, PathBuf},
@@ -14,6 +15,7 @@ use crate::{
     render::{BaseMenuItemPlaceholders, MenuItemPlaceholders},
     schema::{Environment, MenuItemCommand, Windows},
     slugify,
+    tracker::WindowsTracker,
     util::log_output,
     MenuInstError, MenuMode,
 };
@@ -33,13 +35,13 @@ pub struct Directories {
 
 fn shortcut_filename(name: &str, env_name: Option<&String>, ext: Option<&str>) -> String {
     let env = if let Some(env_name) = env_name {
-        format!(" ({})", env_name)
+        format!(" ({env_name})")
     } else {
         "".to_string()
     };
 
-    let ext = ext.unwrap_or_else(|| "lnk");
-    format!("{}{}{}", name, env, ext)
+    let ext = ext.unwrap_or("lnk");
+    format!("{name}{env}{ext}")
 }
 
 /// On Windows we can create shortcuts in several places:
@@ -186,7 +188,7 @@ impl WindowsMenu {
             if self.command.terminal.unwrap_or(false) {
                 let mut command = [&cmd_exe, "/D", "/K"]
                     .iter()
-                    .map(|s| s.to_string())
+                    .map(|s| (*s).to_string())
                     .collect::<Vec<String>>();
 
                 // add script path with quotes
@@ -220,7 +222,7 @@ impl WindowsMenu {
                     "hidden",
                 ]
                 .iter()
-                .map(|s| s.to_string())
+                .map(ToString::to_string)
                 .collect::<Vec<String>>();
 
                 command.push(format!(
@@ -253,12 +255,15 @@ impl WindowsMenu {
                 return Ok(());
             }
 
-            let temp_file = tempfile::NamedTempFile::with_suffix(".bat")?;
-            fs::write(temp_file.path(), precreate_code)?;
+            let mut temp_file = tempfile::NamedTempFile::with_suffix(".bat")?;
+            temp_file.write_all(precreate_code.as_bytes())?;
+
+            // Close file and keep temporary path around
+            let path = temp_file.into_temp_path();
 
             let output = std::process::Command::new("cmd")
                 .arg("/c")
-                .arg(temp_file.path())
+                .arg(&path)
                 .output()?;
 
             log_output("precreate", output);
@@ -280,8 +285,11 @@ impl WindowsMenu {
         }
     }
 
-    fn create_shortcut(&self, args: &[String]) -> Result<Vec<PathBuf>, MenuInstError> {
-        let mut created_files = Vec::new();
+    fn create_shortcut(
+        &self,
+        args: &[String],
+        tracker: &mut WindowsTracker,
+    ) -> Result<(), MenuInstError> {
         let icon = self
             .command
             .icon
@@ -307,36 +315,40 @@ impl WindowsMenu {
         let link_name = format!("{}.lnk", self.name);
         if self.item.desktop.unwrap_or(true) {
             let desktop_link_path = self.directories.desktop.join(&link_name);
-            create_shortcut::create_shortcut(
-                &command,
-                &self.command.description.resolve(&self.placeholders),
-                &desktop_link_path,
-                Some(&args),
-                Some(&workdir),
-                icon.as_deref(),
-                Some(0),
-                Some(&app_id),
-            )?;
-            created_files.push(desktop_link_path);
+            let shortcut = Shortcut {
+                path: command,
+                description: &self.command.description.resolve(&self.placeholders),
+                filename: &desktop_link_path,
+                arguments: Some(&args),
+                workdir: Some(&workdir),
+                iconpath: icon.as_deref(),
+                iconindex: Some(0),
+                app_id: Some(&app_id),
+            };
+
+            create_shortcut::create_shortcut(shortcut)?;
+            tracker.files.push(desktop_link_path.clone());
         }
 
         if let Some(quick_launch_dir) = self.directories.quick_launch.as_ref() {
             if self.item.quicklaunch.unwrap_or(true) {
                 let quicklaunch_link_path = quick_launch_dir.join(link_name);
-                create_shortcut::create_shortcut(
-                    &self.name,
-                    &self.command.description.resolve(&self.placeholders),
-                    &quicklaunch_link_path,
-                    Some(&args),
-                    Some(&workdir),
-                    icon.as_deref(),
-                    Some(0),
-                    Some(&app_id),
-                )?;
-                created_files.push(quicklaunch_link_path);
+                let shortcut = Shortcut {
+                    path: &self.name,
+                    description: &self.command.description.resolve(&self.placeholders),
+                    filename: &quicklaunch_link_path,
+                    arguments: Some(&args),
+                    workdir: Some(&workdir),
+                    iconpath: icon.as_deref(),
+                    iconindex: Some(0),
+                    app_id: Some(&app_id),
+                };
+
+                create_shortcut::create_shortcut(shortcut)?;
+                tracker.files.push(quicklaunch_link_path.clone());
             }
         }
-        Ok(created_files)
+        Ok(())
     }
 
     fn icon(&self) -> Option<String> {
@@ -346,7 +358,7 @@ impl WindowsMenu {
             .map(|s| s.resolve(&self.placeholders))
     }
 
-    fn register_file_extensions(&self) -> Result<(), MenuInstError> {
+    fn register_file_extensions(&self, tracker: &mut WindowsTracker) -> Result<(), MenuInstError> {
         let Some(extensions) = &self.item.file_extensions else {
             return Ok(());
         };
@@ -358,22 +370,28 @@ impl WindowsMenu {
 
         for extension in extensions {
             let identifier = format!("{name}.AssocFile{extension}");
-            registry::register_file_extension(
+
+            let file_extension = FileExtension {
                 extension,
-                &identifier,
-                &command,
-                icon.as_deref(),
-                Some(name),
-                Some(&app_user_model_id),
-                None, // friendly type name currently not set
-                self.menu_mode,
-            )?;
+                identifier: &identifier,
+                command: &command,
+                icon: icon.as_deref(),
+                app_name: Some(name),
+                app_user_model_id: Some(&app_user_model_id),
+                friendly_type_name: None,
+            };
+
+            registry::register_file_extension(file_extension, self.menu_mode)?;
+
+            tracker
+                .file_extensions
+                .push((extension.clone(), identifier));
         }
 
         Ok(())
     }
 
-    fn register_url_protocols(&self) -> Result<bool, MenuInstError> {
+    fn register_url_protocols(&self, tracker: &mut WindowsTracker) -> Result<bool, MenuInstError> {
         let protocols = match &self.item.url_protocols {
             Some(protocols) if !protocols.is_empty() => protocols,
             _ => return Ok(false),
@@ -386,32 +404,31 @@ impl WindowsMenu {
 
         for protocol in protocols {
             let identifier = format!("{name}.Protocol{protocol}");
-            registry::register_url_protocol(
+
+            let url_protocol = UrlProtocol {
                 protocol,
-                &command,
-                Some(&identifier),
-                icon.as_deref(),
-                Some(name),
-                Some(&app_user_model_id),
-                self.menu_mode,
-            )?;
+                command: &command,
+                identifier: &identifier,
+                icon: icon.as_deref(),
+                app_name: Some(name),
+                app_user_model_id: Some(&app_user_model_id),
+            };
+
+            registry::register_url_protocol(url_protocol, self.menu_mode)?;
+            tracker.url_protocols.push((protocol.clone(), identifier));
         }
 
         Ok(true)
     }
 
-    pub fn install(&self) -> Result<(), MenuInstError> {
+    pub fn install(&self, tracker: &mut WindowsTracker) -> Result<(), MenuInstError> {
         let args = self.build_command(false)?;
         self.precreate()?;
-        self.create_shortcut(&args)?;
-        self.register_file_extensions()?;
-        self.register_url_protocols()?;
+        self.create_shortcut(&args, tracker)?;
+        self.register_file_extensions(tracker)?;
+        self.register_url_protocols(tracker)?;
         notify_shell_changes();
         Ok(())
-    }
-
-    pub fn remove(&self) -> Result<(), MenuInstError> {
-        todo!()
     }
 }
 
@@ -421,7 +438,8 @@ pub(crate) fn install_menu_item(
     command: MenuItemCommand,
     placeholders: &BaseMenuItemPlaceholders,
     menu_mode: MenuMode,
-) -> Result<(), MenuInstError> {
+) -> Result<WindowsTracker, MenuInstError> {
+    let mut tracker = WindowsTracker::default();
     let menu = WindowsMenu::new(
         prefix,
         windows_item,
@@ -430,23 +448,24 @@ pub(crate) fn install_menu_item(
         placeholders,
         menu_mode,
     );
-    menu.install()
+    menu.install(&mut tracker)?;
+    Ok(tracker)
 }
 
-pub(crate) fn remove_menu_item(
-    prefix: &Path,
-    specific: Windows,
-    command: MenuItemCommand,
-    placeholders: &BaseMenuItemPlaceholders,
-    menu_mode: MenuMode,
-) -> Result<(), MenuInstError> {
-    let menu = WindowsMenu::new(
-        prefix,
-        specific,
-        command,
-        Directories::create(menu_mode),
-        placeholders,
-        menu_mode,
-    );
-    menu.remove()
+pub(crate) fn remove_menu_item(tracker: &WindowsTracker) -> Result<(), MenuInstError> {
+    for file in &tracker.files {
+        fs::remove_file(file)?;
+    }
+
+    let menu_mode = tracker.menu_mode;
+    for (extension, identifier) in &tracker.file_extensions {
+        registry::unregister_file_extension(extension, identifier, menu_mode)?;
+    }
+
+    for (protocol, identifier) in &tracker.url_protocols {
+        registry::unregister_url_protocol(protocol, identifier, menu_mode)?;
+    }
+
+    notify_shell_changes();
+    Ok(())
 }

@@ -1,19 +1,34 @@
 use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
-use winreg::enums::*;
+use winreg::enums::{HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_ALL_ACCESS};
 use winreg::RegKey;
 
 use crate::MenuMode;
 
+#[derive(Debug, Clone, Copy)]
+pub struct FileExtension<'a> {
+    pub extension: &'a str,
+    pub identifier: &'a str,
+    pub command: &'a str,
+    pub icon: Option<&'a str>,
+    pub app_name: Option<&'a str>,
+    pub app_user_model_id: Option<&'a str>,
+    pub friendly_type_name: Option<&'a str>,
+}
+
 pub fn register_file_extension(
-    extension: &str,
-    identifier: &str,
-    command: &str,
-    icon: Option<&str>,
-    app_name: Option<&str>,
-    app_user_model_id: Option<&str>,
-    friendly_type_name: Option<&str>,
+    file_extension: FileExtension<'_>,
     mode: MenuMode,
 ) -> Result<(), std::io::Error> {
+    let FileExtension {
+        extension,
+        identifier,
+        command,
+        icon,
+        app_name,
+        app_user_model_id,
+        friendly_type_name,
+    } = file_extension;
+
     let hkey = if mode == MenuMode::System {
         HKEY_LOCAL_MACHINE
     } else {
@@ -24,30 +39,30 @@ pub fn register_file_extension(
         RegKey::predef(hkey).open_subkey_with_flags("Software\\Classes", KEY_ALL_ACCESS)?;
 
     // Associate extension with handler
-    let ext_key = classes.create_subkey(&format!("{}\\OpenWithProgids", extension))?;
+    let ext_key = classes.create_subkey(format!("{extension}\\OpenWithProgids"))?;
     ext_key.0.set_value(identifier, &"")?;
 
     // Register the handler
-    let handler_desc = format!("{} {} file", extension, identifier);
+    let handler_desc = format!("{extension} {identifier} file");
     classes
         .create_subkey(identifier)?
         .0
         .set_value("", &handler_desc)?;
 
     // Set the 'open' command
-    let command_key = classes.create_subkey(&format!("{}\\shell\\open\\command", identifier))?;
+    let command_key = classes.create_subkey(format!("{identifier}\\shell\\open\\command"))?;
     command_key.0.set_value("", &command)?;
 
     // Set app name related values if provided
     if let Some(name) = app_name {
-        let open_key = classes.create_subkey(&format!("{}\\shell\\open", identifier))?;
+        let open_key = classes.create_subkey(format!("{identifier}\\shell\\open"))?;
         open_key.0.set_value("", &name)?;
         classes
             .create_subkey(identifier)?
             .0
             .set_value("FriendlyAppName", &name)?;
         classes
-            .create_subkey(&format!("{}\\shell\\open", identifier))?
+            .create_subkey(format!("{identifier}\\shell\\open"))?
             .0
             .set_value("FriendlyAppName", &name)?;
     }
@@ -68,7 +83,7 @@ pub fn register_file_extension(
             .0
             .set_value("DefaultIcon", &icon_path)?;
         classes
-            .create_subkey(&format!("{}\\shell\\open", identifier))?
+            .create_subkey(format!("{identifier}\\shell\\open"))?
             .0
             .set_value("Icon", &icon_path)?;
     }
@@ -104,7 +119,7 @@ pub fn unregister_file_extension(
 
     // Remove the association in OpenWithProgids
     let ext_key =
-        classes.open_subkey_with_flags(&format!("{}\\OpenWithProgids", extension), KEY_ALL_ACCESS);
+        classes.open_subkey_with_flags(format!("{extension}\\OpenWithProgids"), KEY_ALL_ACCESS);
 
     match ext_key {
         Ok(key) => {
@@ -120,7 +135,7 @@ pub fn unregister_file_extension(
         }
         Err(e) => {
             tracing::error!("Could not check key '{}' for deletion: {}", extension, e);
-            return Err(e.into());
+            return Err(e);
         }
     }
 
@@ -146,25 +161,39 @@ fn title_case(s: &str) -> String {
     result
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct UrlProtocol<'a> {
+    pub protocol: &'a str,
+    pub command: &'a str,
+    pub identifier: &'a str,
+    pub icon: Option<&'a str>,
+    pub app_name: Option<&'a str>,
+    pub app_user_model_id: Option<&'a str>,
+}
+
 pub fn register_url_protocol(
-    protocol: &str,
-    command: &str,
-    identifier: Option<&str>,
-    icon: Option<&str>,
-    app_name: Option<&str>,
-    app_user_model_id: Option<&str>,
+    url_protocol: UrlProtocol<'_>,
     mode: MenuMode,
 ) -> Result<(), std::io::Error> {
-    let base_path = if mode == MenuMode::System {
-        format!("Software\\Classes\\{}", protocol)
-    } else {
-        format!("Software\\Classes\\{}", protocol)
-    };
+    let UrlProtocol {
+        protocol,
+        command,
+        identifier,
+        icon,
+        app_name,
+        app_user_model_id,
+    } = url_protocol;
 
     let hkey = if mode == MenuMode::System {
-        HKEY_LOCAL_MACHINE
+        HKEY_CLASSES_ROOT
     } else {
         HKEY_CURRENT_USER
+    };
+
+    let base_path = if mode == MenuMode::System {
+        protocol.to_string()
+    } else {
+        format!("Software\\Classes\\{protocol}")
     };
 
     let classes = RegKey::predef(hkey);
@@ -195,32 +224,32 @@ pub fn register_url_protocol(
         protocol_key.0.set_value("AppUserModelId", &aumi)?;
     }
 
-    if let Some(id) = identifier {
-        protocol_key.0.set_value("_menuinst", &id)?;
-    }
+    protocol_key.0.set_value("_menuinst", &identifier)?;
 
     Ok(())
 }
 
 pub fn unregister_url_protocol(
     protocol: &str,
-    identifier: Option<&str>,
+    identifier: &str,
     mode: MenuMode,
 ) -> Result<(), std::io::Error> {
     let hkey = if mode == MenuMode::System {
-        HKEY_LOCAL_MACHINE
+        HKEY_CLASSES_ROOT
     } else {
         HKEY_CURRENT_USER
     };
 
-    let base_path = format!("Software\\Classes\\{}", protocol);
+    let base_path = if mode == MenuMode::System {
+        protocol.to_string()
+    } else {
+        format!("Software\\Classes\\{protocol}")
+    };
 
     if let Ok(key) = RegKey::predef(hkey).open_subkey(&base_path) {
-        if let Some(id) = identifier {
-            if let Ok(value) = key.get_value::<String, _>("_menuinst") {
-                if value != id {
-                    return Ok(());
-                }
+        if let Ok(value) = key.get_value::<String, _>("_menuinst") {
+            if value != identifier {
+                return Ok(());
             }
         }
         let _ = RegKey::predef(hkey).delete_subkey_all(&base_path);
@@ -244,7 +273,7 @@ mod tests {
         let _ = unregister_file_extension(extension, identifier, mode);
     }
 
-    fn cleanup_protocol(protocol: &str, identifier: Option<&str>, mode: MenuMode) {
+    fn cleanup_protocol(protocol: &str, identifier: &str, mode: MenuMode) {
         let _ = unregister_url_protocol(protocol, identifier, mode);
     }
 
@@ -256,23 +285,32 @@ mod tests {
         let mode = MenuMode::User;
 
         // Cleanup before test
-        cleanup_registry(extension, identifier, MenuMode::User);
+        cleanup_registry(extension, identifier, mode);
 
+        let file_extension = FileExtension {
+            extension,
+            identifier,
+            command,
+            icon: None,
+            app_name: None,
+            app_user_model_id: None,
+            friendly_type_name: None,
+        };
         // Test registration
-        register_file_extension(extension, identifier, command, None, None, None, None, mode)?;
+        register_file_extension(file_extension, mode)?;
 
         // Verify registration
         let classes = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Software\\Classes")?;
 
-        let ext_key = classes.open_subkey(&format!("{}\\OpenWithProgids", extension))?;
+        let ext_key = classes.open_subkey(format!("{extension}\\OpenWithProgids"))?;
         assert!(ext_key.get_value::<String, _>(identifier).is_ok());
 
-        let cmd_key = classes.open_subkey(&format!("{}\\shell\\open\\command", identifier))?;
+        let cmd_key = classes.open_subkey(format!("{identifier}\\shell\\open\\command"))?;
         let cmd_value: String = cmd_key.get_value("")?;
         assert_eq!(cmd_value, command);
 
         // Cleanup
-        cleanup_registry(extension, identifier, MenuMode::User);
+        cleanup_registry(extension, identifier, mode);
         Ok(())
     }
 
@@ -287,17 +325,18 @@ mod tests {
         let app_user_model_id = Some("TestApp");
         let friendly_type_name = Some("Test App File");
 
-        // Test registration with icon
-        register_file_extension(
+        let file_extension = FileExtension {
             extension,
             identifier,
             command,
-            Some(icon),
+            icon: Some(icon),
             app_name,
             app_user_model_id,
             friendly_type_name,
-            mode,
-        )?;
+        };
+
+        // Test registration with icon
+        register_file_extension(file_extension, mode)?;
 
         // Verify icon
         let classes = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Software\\Classes")?;
@@ -317,8 +356,18 @@ mod tests {
         let command = "\"C:\\Test\\App.exe\" \"%1\"";
         let mode = MenuMode::User;
 
+        let file_extension = FileExtension {
+            extension,
+            identifier,
+            command,
+            icon: None,
+            app_name: None,
+            app_user_model_id: None,
+            friendly_type_name: None,
+        };
+
         // Setup
-        register_file_extension(extension, identifier, command, None, None, None, None, mode)?;
+        register_file_extension(file_extension, mode)?;
 
         // Test unregistration
         unregister_file_extension(extension, identifier, mode)?;
@@ -335,7 +384,7 @@ mod tests {
     fn test_register_url_protocol() -> std::io::Result<()> {
         let protocol = "rattlertest";
         let command = "\"C:\\Test\\App.exe\" \"%1\"";
-        let identifier = Some("TestApp");
+        let identifier = "TestApp";
         let app_name = Some("Test App");
         let icon = Some("C:\\Test\\icon.ico");
         let app_user_model_id = Some("TestApp");
@@ -344,27 +393,28 @@ mod tests {
         // Cleanup before test
         cleanup_protocol(protocol, identifier, mode);
 
-        // Test registration
-        register_url_protocol(
+        let url_protocol = UrlProtocol {
             protocol,
             command,
             identifier,
             icon,
             app_name,
             app_user_model_id,
-            mode,
-        )?;
+        };
+
+        // Test registration
+        register_url_protocol(url_protocol, mode)?;
 
         // Verify registration
         let key = RegKey::predef(HKEY_CURRENT_USER)
-            .open_subkey(&format!("Software\\Classes\\{}", protocol))?;
+            .open_subkey(format!("Software\\Classes\\{protocol}"))?;
 
         let cmd_key = key.open_subkey(r"shell\open\command")?;
         let cmd_value: String = cmd_key.get_value("")?;
         assert_eq!(cmd_value, command);
 
         let id_value: String = key.get_value("_menuinst")?;
-        assert_eq!(id_value, identifier.unwrap());
+        assert_eq!(id_value, identifier);
 
         // Cleanup
         cleanup_protocol(protocol, identifier, mode);
@@ -375,22 +425,23 @@ mod tests {
     fn test_unregister_url_protocol() -> std::io::Result<()> {
         let protocol = "rattlertest-2";
         let command = "\"C:\\Test\\App.exe\" \"%1\"";
-        let identifier = Some("xTestApp");
+        let identifier = "xTestApp";
         let app_name = Some("Test App");
         let icon = Some("C:\\Test\\icon.ico");
         let app_user_model_id = Some("TestApp");
         let mode = MenuMode::User;
 
-        // Setup
-        register_url_protocol(
+        let url_protocol = UrlProtocol {
             protocol,
             command,
             identifier,
             icon,
             app_name,
             app_user_model_id,
-            mode,
-        )?;
+        };
+
+        // Setup
+        register_url_protocol(url_protocol, mode)?;
 
         // Test unregistration
         unregister_url_protocol(protocol, identifier, mode)?;

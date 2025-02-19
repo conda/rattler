@@ -80,7 +80,7 @@ pub fn install_menuitems(
     //     #[cfg(target_os = "linux")]
     //     linux::install_menu(&menu_inst.menu_name, prefix, menu_mode)?;
     // }
-    let mut trackers = Vec::new();
+    let trackers = Vec::new();
     for item in menu_inst.menu_items {
         if platform.is_linux() {
             #[cfg(target_os = "linux")]
@@ -156,6 +156,7 @@ pub fn remove_menu_items(tracker: &serde_json::Value) -> Result<(), MenuInstErro
 pub mod test {
     use std::path::{Path, PathBuf};
 
+    #[allow(dead_code)]
     pub(crate) fn test_data() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data")
     }
