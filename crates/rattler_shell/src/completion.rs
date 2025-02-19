@@ -35,6 +35,8 @@ pub fn collect_completion_scripts(
                 scripts.push(entry.path());
             }
         }
+        // Deterministically sort the scripts to ensure that the order is always the same.
+        scripts.sort();
         Ok(scripts)
     } else {
         Ok(vec![])
