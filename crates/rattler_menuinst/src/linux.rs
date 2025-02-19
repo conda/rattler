@@ -716,7 +716,7 @@ mod tests {
             }
 
             fs::create_dir_all(prefix_path.join("bin")).unwrap();
-            fs::write(prefix_path.join("bin/python"), &[]).unwrap();
+            fs::write(prefix_path.join("bin/python"), []).unwrap();
 
             Self {
                 _tmp_dir: tmp_dir,
@@ -761,7 +761,7 @@ mod tests {
         let desktop_file = dirs.directories().desktop_file();
         let desktop_file_content = fs::read_to_string(&desktop_file).unwrap();
         let desktop_file_content =
-            desktop_file_content.replace(&fake_prefix.prefix().to_str().unwrap(), "<PREFIX>");
+            desktop_file_content.replace(fake_prefix.prefix().to_str().unwrap(), "<PREFIX>");
         insta::assert_snapshot!(desktop_file_content);
 
         // check mimeapps.list

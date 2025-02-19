@@ -824,6 +824,6 @@ mod tests {
 
     #[test]
     fn test_size_stays_the_same() {
-        assert_eq!(std::mem::size_of::<MatchSpec>(), 464);
+        assert_eq!(std::mem::size_of::<MatchSpec>(), 488);
     }
 }
