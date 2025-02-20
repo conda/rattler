@@ -1,3 +1,3 @@
-import { JsVersion, JsVersionSpec, ParseStrictness } from '../pkg/'
+import { JsVersion, JsVersionSpec, ParseStrictness } from "../pkg/";
 
-export { JsVersion, JsVersionSpec, ParseStrictness }
+export { JsVersion, JsVersionSpec, ParseStrictness };
