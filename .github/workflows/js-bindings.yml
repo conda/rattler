@@ -55,7 +55,7 @@ jobs:
 
       - run: npm ci
         working-directory: js-rattler
-      - run: npm run fmt
+      - run: npm run fmt:check
         working-directory: js-rattler
       - run: npm run build --if-present
         working-directory: js-rattler
