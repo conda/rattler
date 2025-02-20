@@ -195,4 +195,13 @@ export class Version {
     public withAlpha(): Version {
         return Version.fromNative(this.native.with_alpha());
     }
+
+    /**
+     * Compare two versions.
+     *
+     * Returns `-1` if this < other, `0` if this == other, `1` if this > other
+     */
+    public compare(other: Version): number {
+        return this.native.compare(other.native);
+    }
 }
