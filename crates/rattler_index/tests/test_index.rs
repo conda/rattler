@@ -63,7 +63,7 @@ async fn test_index() {
     let mut fs_config = FsConfig::default();
     fs_config.root = Some(channel.clone());
 
-    let res = index(Some(&Platform::Win64), fs_config, true).await;
+    let res = index(Some(Platform::Win64), fs_config, true, 100).await;
     assert!(res.is_ok());
 
     let repodata_path = temp_dir.path().join(subdir_path).join("repodata.json");
@@ -72,8 +72,6 @@ async fn test_index() {
     let expected_repodata_entry: Value =
         serde_json::from_reader(File::open(test_data_dir().join(index_json_path)).unwrap())
             .unwrap();
-
-    println!("{:?}", repodata_json);
 
     assert_eq!(
         repodata_json
@@ -108,7 +106,7 @@ async fn test_index_empty_directory_creates_noarch_repodata() {
     let noarch_path = temp_dir.path().join("noarch");
     let repodata_path = noarch_path.join("repodata.json");
 
-    let res = index(None, fs_config, true).await;
+    let res = index(None, fs_config, true, 100).await;
 
     assert!(res.is_ok());
     assert!(noarch_path.is_dir());

@@ -19,17 +19,19 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 clap-verbosity-flag = { workspace = true }
+console = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 indicatif = { workspace = true }
 opendal = { workspace = true, features = ["services-s3", "services-fs"] }
+rattler_networking = { path = "../rattler_networking", version = "0.22.4", default-features = false }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.30.3", default-features = false }
 rattler_digest = { path = "../rattler_digest", version = "1.0.6", default-features = false }
 rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.28", default-features = false }
 rayon = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 tracing-log = { workspace = true }

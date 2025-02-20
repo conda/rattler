@@ -16,7 +16,9 @@ use std::{
     io::{Cursor, Read},
     path::Path,
     str::FromStr,
+    sync::Arc,
 };
+use tokio::sync::Semaphore;
 
 use opendal::{Configurator, Operator};
 
@@ -117,10 +119,16 @@ pub fn package_record_from_conda_reader(reader: impl Read) -> std::io::Result<Pa
     ))
 }
 
-async fn index_subdir(subdir: Platform, op: Operator, force: bool, progress: &MultiProgress) -> Result<()> {
+async fn index_subdir(
+    subdir: Platform,
+    op: Operator,
+    force: bool,
+    progress: MultiProgress,
+    semaphore: Arc<Semaphore>,
+) -> Result<()> {
     let mut registered_packages = HashMap::default();
     if !force {
-        let repodata_path = format!("{}/repodata.json", subdir);
+        let repodata_path = format!("{subdir}/repodata.json");
         let repodata_bytes = op.read(&repodata_path).await;
         let repodata: RepoData = match repodata_bytes {
             Ok(bytes) => serde_json::from_slice(&bytes.to_vec())?,
@@ -133,8 +141,7 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool, progress: &Mu
                     info: Some(ChannelInfo {
                         subdir: subdir.to_string(),
                         base_url: None,
-                    })
-                    .into(),
+                    }),
                     packages: HashMap::default(),
                     conda_packages: HashMap::default(),
                     removed: HashSet::default(),
@@ -199,35 +206,52 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool, progress: &Mu
         subdir
     );
 
-    let pb = std::sync::Arc::new(progress.add(ProgressBar::new(packages_to_add.len() as u64)));
-    let sty = ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}").unwrap().progress_chars("##-");
+    let pb = Arc::new(progress.add(ProgressBar::new(packages_to_add.len() as u64)));
+    let sty = ProgressStyle::with_template(
+        "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .progress_chars("##-");
     pb.set_style(sty);
-    pb.set_message(format!("Indexing {}", subdir.as_str()));
 
     let tasks = packages_to_add
         .iter()
         .map(|filename| {
-            let op = op.clone();
-            let subdir = subdir.clone();
-            let filename = filename.clone();
-            let pb = pb.clone();
-            async move {
-                let file_path = format!("{}/{}", subdir, filename);
-                // TODO: Check how we use streaming here
-                let buffer = op.read(&file_path).await?;
-                let bytes = buffer.to_vec();
-                let cursor = Cursor::new(bytes);
-                // We already know it's not None
-                let archive_type = ArchiveType::try_from(&filename).unwrap();
-                let record = match archive_type {
-                    ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(cursor),
-                    ArchiveType::Conda => package_record_from_conda_reader(cursor),
-                }?;
-                pb.inc(1);
-                Ok::<(String, PackageRecord), std::io::Error>((filename.clone(), record))
-            }
+            tokio::spawn({
+                let op = op.clone();
+                let filename = filename.clone();
+                let pb = pb.clone();
+                let semaphore = semaphore.clone();
+                {
+                    async move {
+                        let _permit = semaphore
+                            .acquire()
+                            .await
+                            .expect("Semaphore was unexpectedly closed");
+                        pb.set_message(format!(
+                            "Indexing {} {}",
+                            subdir.as_str(),
+                            console::style(filename.clone()).dim()
+                        ));
+                        let file_path = format!("{subdir}/{filename}");
+                        // TODO: Check how we use streaming here
+                        let buffer = op.read(&file_path).await?;
+                        let bytes = buffer.to_vec();
+                        let cursor = Cursor::new(bytes);
+                        // We already know it's not None
+                        let archive_type = ArchiveType::try_from(&filename).unwrap();
+                        let record = match archive_type {
+                            ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(cursor),
+                            ArchiveType::Conda => package_record_from_conda_reader(cursor),
+                        }?;
+                        pb.inc(1);
+                        Ok::<(String, PackageRecord), std::io::Error>((filename.clone(), record))
+                    }
+                }
+            })
         })
         .collect::<Vec<_>>();
+    // TODO: Limit to 10 packages in parallel here to avoid overloading RAM
     let results = try_join_all(tasks).await?;
 
     pb.finish_with_message(format!("Finished {}", subdir.as_str()));
@@ -238,7 +262,8 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool, progress: &Mu
         subdir
     );
 
-    for (filename, record) in results {
+    for result in results {
+        let (filename, record) = result?;
         registered_packages.insert(filename, record);
     }
 
@@ -253,7 +278,7 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool, progress: &Mu
         version: Some(2),
     };
 
-    let repodata_path = format!("{}/repodata.json", subdir);
+    let repodata_path = format!("{subdir}/repodata.json");
     let repodata_bytes = serde_json::to_vec(&repodata)?;
     op.write(&repodata_path, repodata_bytes).await?;
 
@@ -265,28 +290,18 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool, progress: &Mu
 /// Otherwise indexes all subdirs and creates a `repodata.json` for each.
 ///
 /// The process is the following:
-/// 1. Get all subdirs
-/// 2. If not noarch in subdirs, create
-/// 3. If target_platform is Some and in subdirs, create
-/// 4. For all subdirs
-///      1. Init `registered_packages` HashMap<String, PackageRecord> (key = filename)
-///      if `--force`, we want to set this to empty hashmap
-///      2. Read repodata.json (if exists) and fill `registered_packages`
-///      3. Init `uploaded_packages` HashSet<String> (filenames)
-///      4. For all files in subdir
-///            1. Add filename to `uploaded_packages`
-///      5. `to_add = uploaded_packages - registered_packages.keys()`
-///      6. `to_delete = registered_packages.keys() - uploaded_packages`
-///      7. For all files in `to_add`
-///           1. Stream file
-///           2. Add to `registered_packages`
-///      8. For all files in `to_delete`
-///           1. Remove from `registered_packages`
-///      9. Write `registered_packages` to repodata.json
+/// 1. Get all subdirs and create `noarch` and `target_platform` if they do not exist.
+/// 2. Iterate subdirs and index each subdir.
+///    Therefore, we need to:
+///    1. Collect all uploaded packages in subdir
+///    2. Collect all registered packages from `repodata.json` (if exists)
+///    3. Determine which packages to add to and to delete from `repodata.json`
+///    4. Write `repodata.json` back to disk
 pub async fn index<T: Configurator>(
-    target_platform: Option<&Platform>,
+    target_platform: Option<Platform>,
     config: T,
     force: bool,
+    max_parallel: usize,
 ) -> anyhow::Result<()> {
     let builder = config.into_builder();
 
@@ -320,15 +335,25 @@ pub async fn index<T: Configurator>(
         if !subdirs.contains(&target_platform) {
             op.create_dir(&format!("{}/", target_platform.as_str()))
                 .await?;
-            subdirs.insert(*target_platform);
+            subdirs.insert(target_platform);
         }
     }
 
     let multi_progress = MultiProgress::new();
+    let semaphore = Semaphore::new(max_parallel);
+    let semaphore = Arc::new(semaphore);
 
     let tasks = subdirs
         .iter()
-        .map(|subdir| index_subdir(*subdir, op.clone(), force, &multi_progress))
+        .map(|subdir| {
+            tokio::spawn(index_subdir(
+                *subdir,
+                op.clone(),
+                force,
+                multi_progress.clone(),
+                semaphore.clone(),
+            ))
+        })
         .collect::<Vec<_>>();
     try_join_all(tasks).await?;
 
