@@ -1,3 +1,4 @@
+//! Module for with data types for working with Python wheel files.
 use crate::types::HasArtifactName;
 use crate::{
     types::{

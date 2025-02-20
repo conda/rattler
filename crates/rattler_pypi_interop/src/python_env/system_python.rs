@@ -16,7 +16,7 @@ pub enum FindPythonError {
 
 /// Return cached python executable.
 /// Try to find the python executable in the current environment.
-/// Using sys.executable aproach will return original interpretator path
+/// Using sys.executable approach will return original interpretator path
 /// and not the shim in case of using which.
 pub fn system_python_executable() -> Result<&'static PathBuf, FindPythonError> {
     static SYSTEM_PYTHON_EXECUTABLE: OnceCell<PathBuf> = OnceCell::new();

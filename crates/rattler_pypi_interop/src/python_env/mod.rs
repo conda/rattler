@@ -1,13 +1,13 @@
 //! Module for working with python environments.
 //! Contains functionality for querying python environments.
 
-mod tags;
+mod byte_code_compiler;
 mod distribution_finder;
 mod env_markers;
 mod system_python;
+mod tags;
 mod uninstall;
 mod venv;
-mod byte_code_compiler;
 
 pub use tags::{WheelTag, WheelTags};
 

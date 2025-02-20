@@ -1,6 +1,6 @@
 //! This module contains functions for working with PyPA packaging repositories.
-//! 
-//! TODO: Examples to inlcude:
+//!
+//! TODO: Examples to include:
 //!          - PackageDb
 
 mod file_store;
