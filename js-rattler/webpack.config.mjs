@@ -18,7 +18,7 @@ const options = {
         ],
     },
     optimization: {
-        minimize: false
+        minimize: false,
     },
     resolve: {
         extensions: [".ts", ".js"],
