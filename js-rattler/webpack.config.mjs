@@ -43,7 +43,7 @@ export default [
             clean: true,
             path: path.resolve(__dirname, "dist/umd/"),
             filename: "[name].js",
-            library: "js-rattler",
+            library: "rattler",
             libraryTarget: "umd",
             umdNamedDefine: true,
         },
