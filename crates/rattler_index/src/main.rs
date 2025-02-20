@@ -27,6 +27,11 @@ struct Cli {
 
     #[command(flatten)]
     verbose: Verbosity,
+
+    /// Whether to force the re-indexing of all packages.
+    /// Note that this will create a new repodata.json instead of updating the existing one.
+    #[arg(short, long, default_value = "false")]
+    force: bool,
 }
 
 /// The subcommands for the pixi-pack CLI.
@@ -92,7 +97,7 @@ async fn main() -> anyhow::Result<()> {
             let channel = &channel.canonicalize()?.to_string_lossy().to_string();
             let mut fs_config = FsConfig::default();
             fs_config.root = Some(channel.clone());
-            index(None, fs_config).await?;
+            index(None, fs_config, cli.force).await?;
             Ok(())
         }
         Commands::S3 {
@@ -121,7 +126,7 @@ async fn main() -> anyhow::Result<()> {
                 s3_config.session_token = session_token;
             }
             // TODO: Read from rattler auth store
-            index(None, s3_config).await?;
+            index(None, s3_config, cli.force).await?;
             Ok(())
         }
     }
