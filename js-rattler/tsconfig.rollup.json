@@ -6,8 +6,6 @@
         "target": "ES2022",
         "moduleResolution": "node",
         "esModuleInterop": true,
-        "declaration": false,
-        "declarationMap": false,
         "strict": true,
         "sourceMap": true,
         "stripInternal": true
