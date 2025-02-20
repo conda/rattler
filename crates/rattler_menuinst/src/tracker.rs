@@ -32,6 +32,7 @@ pub struct WindowsTracker {
     pub files: Vec<PathBuf>,
     pub file_extensions: Vec<(String, String)>,
     pub url_protocols: Vec<(String, String)>,
+    pub terminal_profiles: Vec<(String, PathBuf)>,
 }
 
 impl WindowsTracker {
@@ -41,6 +42,7 @@ impl WindowsTracker {
             files: Vec::new(),
             file_extensions: Vec::new(),
             url_protocols: Vec::new(),
+            terminal_profiles: Vec::new(),
         }
     }
 }

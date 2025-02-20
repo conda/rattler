@@ -1,8 +1,5 @@
-use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
-use winreg::enums::{HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_ALL_ACCESS};
-use winreg::RegKey;
-
 use crate::MenuMode;
+use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
 
 #[derive(Debug, Clone, Copy)]
 pub struct FileExtension<'a> {
@@ -28,73 +25,61 @@ pub fn register_file_extension(
         app_user_model_id,
         friendly_type_name,
     } = file_extension;
-
     let hkey = if mode == MenuMode::System {
-        HKEY_LOCAL_MACHINE
+        windows_registry::LOCAL_MACHINE
     } else {
-        HKEY_CURRENT_USER
+        windows_registry::CURRENT_USER
     };
 
-    let classes =
-        RegKey::predef(hkey).open_subkey_with_flags("Software\\Classes", KEY_ALL_ACCESS)?;
+    let classes = hkey.create(r"Software\Classes")?;
 
     // Associate extension with handler
-    let ext_key = classes.create_subkey(format!("{extension}\\OpenWithProgids"))?;
-    ext_key.0.set_value(identifier, &"")?;
+    let ext_key = classes.create(format!(r"{extension}\OpenWithProgids"))?;
+    ext_key.set_string(identifier, "")?;
 
     // Register the handler
     let handler_desc = format!("{extension} {identifier} file");
-    classes
-        .create_subkey(identifier)?
-        .0
-        .set_value("", &handler_desc)?;
+    classes.create(identifier)?.set_string("", &handler_desc)?;
 
     // Set the 'open' command
-    let command_key = classes.create_subkey(format!("{identifier}\\shell\\open\\command"))?;
-    command_key.0.set_value("", &command)?;
+    classes
+        .create(format!(r"{identifier}\shell\open\command"))?
+        .set_string("", command)?;
 
     // Set app name related values if provided
     if let Some(name) = app_name {
-        let open_key = classes.create_subkey(format!("{identifier}\\shell\\open"))?;
-        open_key.0.set_value("", &name)?;
+        let open_key = classes.create(format!(r"{identifier}\shell\open"))?;
+        open_key.set_string("", name)?;
+        open_key.set_string("FriendlyAppName", name)?;
         classes
-            .create_subkey(identifier)?
-            .0
-            .set_value("FriendlyAppName", &name)?;
-        classes
-            .create_subkey(format!("{identifier}\\shell\\open"))?
-            .0
-            .set_value("FriendlyAppName", &name)?;
+            .create(identifier)?
+            .set_string("FriendlyAppName", name)?;
     }
 
     // Set app user model ID if provided
     if let Some(id) = app_user_model_id {
         classes
-            .create_subkey(identifier)?
-            .0
-            .set_value("AppUserModelID", &id)?;
+            .create(identifier)?
+            .set_string("AppUserModelID", id)?;
     }
 
     // Set icon if provided
     if let Some(icon_path) = icon {
         // Set default icon and shell open icon
         classes
-            .create_subkey(identifier)?
-            .0
-            .set_value("DefaultIcon", &icon_path)?;
+            .create(identifier)?
+            .set_string("DefaultIcon", icon_path)?;
         classes
-            .create_subkey(format!("{identifier}\\shell\\open"))?
-            .0
-            .set_value("Icon", &icon_path)?;
+            .create(format!(r"{identifier}\shell\open"))?
+            .set_string("Icon", icon_path)?;
     }
 
     // Set friendly type name if provided
     // NOTE: Windows <10 requires the string in a PE file, but we just set the raw string
     if let Some(friendly_name) = friendly_type_name {
         classes
-            .create_subkey(identifier)?
-            .0
-            .set_value("FriendlyTypeName", &friendly_name)?;
+            .create(identifier)?
+            .set_string("FriendlyTypeName", friendly_name)?;
     }
 
     Ok(())
@@ -106,36 +91,34 @@ pub fn unregister_file_extension(
     mode: MenuMode,
 ) -> Result<(), std::io::Error> {
     let hkey = if mode == MenuMode::System {
-        HKEY_LOCAL_MACHINE
+        windows_registry::LOCAL_MACHINE
     } else {
-        HKEY_CURRENT_USER
+        windows_registry::CURRENT_USER
     };
 
-    let classes =
-        RegKey::predef(hkey).open_subkey_with_flags("Software\\Classes", KEY_ALL_ACCESS)?;
+    let classes = hkey.create(r"Software\Classes")?;
 
     // Delete the identifier key
-    classes.delete_subkey_all(identifier)?;
+    classes.remove_tree(identifier)?;
 
     // Remove the association in OpenWithProgids
-    let ext_key =
-        classes.open_subkey_with_flags(format!("{extension}\\OpenWithProgids"), KEY_ALL_ACCESS);
+    let ext_key = classes.create(format!(r"{extension}\OpenWithProgids"));
 
     match ext_key {
         Ok(key) => {
-            if key.get_value::<String, _>(identifier).is_err() {
+            if key.get_string(identifier).is_err() {
                 tracing::debug!(
                     "Handler '{}' is not associated with extension '{}'",
                     identifier,
                     extension
                 );
             } else {
-                key.delete_value(identifier)?;
+                key.remove_value(identifier)?;
             }
         }
         Err(e) => {
             tracing::error!("Could not check key '{}' for deletion: {}", extension, e);
-            return Err(e);
+            return Err(e.into());
         }
     }
 
@@ -185,46 +168,45 @@ pub fn register_url_protocol(
     } = url_protocol;
 
     let hkey = if mode == MenuMode::System {
-        HKEY_CLASSES_ROOT
+        windows_registry::CLASSES_ROOT
     } else {
-        HKEY_CURRENT_USER
+        windows_registry::CURRENT_USER
     };
 
     let base_path = if mode == MenuMode::System {
         protocol.to_string()
     } else {
-        format!("Software\\Classes\\{protocol}")
+        format!(r"Software\Classes\{protocol}")
     };
 
-    let classes = RegKey::predef(hkey);
-    let protocol_key = classes.create_subkey(&base_path)?;
+    let protocol_key = hkey.create(base_path)?;
+
+    protocol_key.set_string("", &format!("URL:{}", title_case(protocol)))?;
+    protocol_key.set_string("URL Protocol", "")?;
 
     protocol_key
-        .0
-        .set_value("", &format!("URL:{}", title_case(protocol)))?;
-    protocol_key.0.set_value("URL Protocol", &"")?;
-
-    let command_key = protocol_key.0.create_subkey("shell\\open\\command")?;
-    command_key.0.set_value("", &command)?;
+        .create(r"shell\open\command")?
+        .set_string("", command)?;
 
     if let Some(name) = app_name {
-        let open_key = protocol_key.0.create_subkey("shell\\open")?;
-        open_key.0.set_value("", &name)?;
-        protocol_key.0.set_value("FriendlyAppName", &name)?;
-        open_key.0.set_value("FriendlyAppName", &name)?;
+        // let open_key = command_key.create(r"shell\open")?;
+        let open_key = protocol_key.create(r"shell\open")?;
+        open_key.set_string("", name)?;
+        open_key.set_string("FriendlyAppName", name)?;
+        protocol_key.set_string("FriendlyAppName", name)?;
     }
 
     if let Some(icon_path) = icon {
-        protocol_key.0.set_value("DefaultIcon", &icon_path)?;
-        let open_key = protocol_key.0.create_subkey("shell\\open")?;
-        open_key.0.set_value("Icon", &icon_path)?;
+        protocol_key.set_string("DefaultIcon", icon_path)?;
+        let open_key = protocol_key.create(r"shell\open")?;
+        open_key.set_string("Icon", icon_path)?;
     }
 
     if let Some(aumi) = app_user_model_id {
-        protocol_key.0.set_value("AppUserModelId", &aumi)?;
+        protocol_key.set_string("AppUserModelId", aumi)?;
     }
 
-    protocol_key.0.set_value("_menuinst", &identifier)?;
+    protocol_key.set_string("_menuinst", identifier)?;
 
     Ok(())
 }
@@ -235,24 +217,25 @@ pub fn unregister_url_protocol(
     mode: MenuMode,
 ) -> Result<(), std::io::Error> {
     let hkey = if mode == MenuMode::System {
-        HKEY_CLASSES_ROOT
+        windows_registry::CLASSES_ROOT
     } else {
-        HKEY_CURRENT_USER
+        windows_registry::CURRENT_USER
     };
 
     let base_path = if mode == MenuMode::System {
         protocol.to_string()
     } else {
-        format!("Software\\Classes\\{protocol}")
+        format!(r"Software\Classes\{protocol}")
     };
 
-    if let Ok(key) = RegKey::predef(hkey).open_subkey(&base_path) {
-        if let Ok(value) = key.get_value::<String, _>("_menuinst") {
-            if value != identifier {
+    if let Ok(key) = hkey.create(&base_path) {
+        if let Ok(value) = key.get_string("_menuinst") {
+            if value == identifier {
+                hkey.remove_tree(&base_path)?;
+            } else {
                 return Ok(());
             }
         }
-        let _ = RegKey::predef(hkey).delete_subkey_all(&base_path);
     }
 
     Ok(())
@@ -267,8 +250,6 @@ pub fn notify_shell_changes() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use winreg::RegKey;
-
     fn cleanup_registry(extension: &str, identifier: &str, mode: MenuMode) {
         let _ = unregister_file_extension(extension, identifier, mode);
     }
@@ -300,13 +281,13 @@ mod tests {
         register_file_extension(file_extension, mode)?;
 
         // Verify registration
-        let classes = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Software\\Classes")?;
+        let classes = windows_registry::CURRENT_USER.open(r"Software\Classes")?;
 
-        let ext_key = classes.open_subkey(format!("{extension}\\OpenWithProgids"))?;
-        assert!(ext_key.get_value::<String, _>(identifier).is_ok());
+        let ext_key = classes.open(format!("{extension}\\OpenWithProgids"))?;
+        assert!(ext_key.get_string(identifier).is_ok());
 
-        let cmd_key = classes.open_subkey(format!("{identifier}\\shell\\open\\command"))?;
-        let cmd_value: String = cmd_key.get_value("")?;
+        let cmd_key = classes.open(format!("{identifier}\\shell\\open\\command"))?;
+        let cmd_value: String = cmd_key.get_string("")?;
         assert_eq!(cmd_value, command);
 
         // Cleanup
@@ -339,9 +320,9 @@ mod tests {
         register_file_extension(file_extension, mode)?;
 
         // Verify icon
-        let classes = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Software\\Classes")?;
-        let icon_key = classes.open_subkey(identifier)?;
-        let icon_value: String = icon_key.get_value("DefaultIcon")?;
+        let classes = windows_registry::CURRENT_USER.open(r"Software\Classes")?;
+        let icon_key = classes.open(identifier)?;
+        let icon_value = icon_key.get_string("DefaultIcon")?;
         assert_eq!(icon_value, icon);
 
         // Cleanup
@@ -373,9 +354,9 @@ mod tests {
         unregister_file_extension(extension, identifier, mode)?;
 
         // Verify removal
-        let classes = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Software\\Classes")?;
+        let classes = windows_registry::CURRENT_USER.open(r"Software\Classes")?;
 
-        assert!(classes.open_subkey(identifier).is_err());
+        assert!(classes.open(identifier).is_err());
 
         Ok(())
     }
@@ -406,14 +387,13 @@ mod tests {
         register_url_protocol(url_protocol, mode)?;
 
         // Verify registration
-        let key = RegKey::predef(HKEY_CURRENT_USER)
-            .open_subkey(format!("Software\\Classes\\{protocol}"))?;
+        let key = windows_registry::CURRENT_USER.open(format!(r"Software\Classes\{protocol}"))?;
 
-        let cmd_key = key.open_subkey(r"shell\open\command")?;
-        let cmd_value: String = cmd_key.get_value("")?;
+        let cmd_key = key.open(r"shell\open\command")?;
+        let cmd_value = cmd_key.get_string("")?;
         assert_eq!(cmd_value, command);
 
-        let id_value: String = key.get_value("_menuinst")?;
+        let id_value: String = key.get_string("_menuinst")?;
         assert_eq!(id_value, identifier);
 
         // Cleanup
@@ -447,8 +427,8 @@ mod tests {
         unregister_url_protocol(protocol, identifier, mode)?;
 
         // Verify removal
-        let key = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Software\\Classes")?;
-        assert!(key.open_subkey(protocol).is_err());
+        let key = windows_registry::CURRENT_USER.open(r"Software\Classes")?;
+        assert!(key.open(protocol).is_err());
 
         Ok(())
     }

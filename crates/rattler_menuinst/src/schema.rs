@@ -128,17 +128,17 @@ pub struct Windows {
     pub quicklaunch: Option<bool>,
 
     /// Windows Terminal profile configuration.
-    pub terminal_profile: Option<String>,
+    pub terminal_profile: Option<PlaceholderString>,
 
     /// URL protocols that will be associated with this program.
     ///
     /// Each protocol must contain no whitespace characters.
-    pub url_protocols: Option<Vec<String>>,
+    pub url_protocols: Option<Vec<PlaceholderString>>,
 
     /// File extensions that will be associated with this program.
     ///
     /// Each extension must start with a dot and contain no whitespace.
-    pub file_extensions: Option<Vec<String>>,
+    pub file_extensions: Option<Vec<PlaceholderString>>,
 
     /// Application User Model ID for Windows 7 and above.
     ///
