@@ -2,7 +2,7 @@ name: JS bindings CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
     paths:
       # When we change pyproject.toml, we want to ensure that the maturin builds still work
@@ -11,10 +11,10 @@ on:
       - Cargo.*
 
       # When something in the bindings themselves changes
-      - 'js-rattler/**/*'
+      - "js-rattler/**/*"
 
       # Or when this workflow changes
-      - '.github/workflows/js-bindings.yml'
+      - ".github/workflows/js-bindings.yml"
   workflow_dispatch:
 
 concurrency:
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [ '20.x' ]
+        node-version: ["20.x"]
 
     steps:
       - uses: actions/checkout@v4
@@ -64,5 +64,9 @@ jobs:
         working-directory: js-rattler
 
       # some e2e test to make sure our build works
-      - run: node ./e2e/main.cjs
+      - run: |
+          set -euxo pipefail
+
+          node ./e2e/main.cjs
+          node ./e2e/main.mjs
         working-directory: js-rattler

@@ -21,16 +21,17 @@
         ".": {
             "types": "./dist/index.d.ts",
             "node": {
+                "import": "./dist/rattler.node.mjs",
                 "require": "./dist/rattler.node.cjs"
             },
             "default": "./dist/umd.js"
         }
     },
     "scripts": {
-        "build:wasm": "wasm-pack build  --mode normal --release",
+        "build:wasm": "wasm-pack build --mode normal --release",
         "build:umd": "npm run build:wasm -- --target bundler && webpack --mode=production",
-        "build:cjs": "npm run build:wasm -- --target nodejs  && rollup -c rollup.config.cjs.mjs && cp ./pkg/js_rattler_bg.wasm ./dist/",
-        "build": "rimraf dist pkg && npm run build:umd && npm run build:cjs && api-extractor run --verbose",
+        "build:nodejs": "npm run build:wasm -- --target nodejs  && rollup -c rollup.config.mjs && cp ./pkg/js_rattler_bg.wasm ./dist/",
+        "build": "rimraf dist pkg && npm run build:umd && npm run build:nodejs && api-extractor run --verbose",
         "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
         "fmt": "prettier --write .",
         "fmt:check": "prettier --check ."
@@ -39,6 +40,7 @@
         "@jest/globals": "^29.7.0",
         "@microsoft/api-extractor": "^7.50.0",
         "@rollup/plugin-commonjs": "^28.0.2",
+        "@rollup/plugin-esm-shim": "^0.1.7",
         "@rollup/plugin-node-resolve": "^16.0.0",
         "@rollup/plugin-typescript": "^12.1.2",
         "@rollup/plugin-wasm": "^6.2.2",
