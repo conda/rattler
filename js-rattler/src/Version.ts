@@ -1,12 +1,18 @@
 import { JsVersion } from "../pkg";
 
+/**
+ * Represents a version in the conda ecosystem.
+ *
+ * @public
+ */
 export class Version {
+    /** @internal */
     native: JsVersion;
 
     /**
      * Constructs a new Version object from a string representation.
      *
-     * @param version The string representation of the version.
+     * @param version - The string representation of the version.
      */
     constructor(version: string) {
         this.native = new JsVersion(version);
@@ -15,7 +21,7 @@ export class Version {
     /**
      * Constructs a new instance from a rust native object.
      *
-     * @private
+     * @internal
      */
     private static fromNative(version: JsVersion): Version {
         const result: Version = Object.create(Version.prototype);
@@ -30,7 +36,7 @@ export class Version {
      * Note that two version strings can be considered equal even if they are
      * not exactly the same. For example, `1.0` and `1` are considered equal.
      *
-     * @param other The version to compare with.
+     * @param other - The version to compare with.
      */
     equals(other: Version): boolean {
         return this.native.equals(other.native);
@@ -83,7 +89,7 @@ export class Version {
      * Returns true if this version starts with the other version. This is
      * defined as the other version being a prefix of this version.
      *
-     * @param other The version to check if this version starts with.
+     * @param other - He version to check if this version starts with.
      */
     public startsWith(other: Version): boolean {
         return this.native.starts_with(other.native);
@@ -92,7 +98,7 @@ export class Version {
     /**
      * Returns true if this version is compatible with the other version.
      *
-     * @param other The version to check if this version is compatible with.
+     * @param other - The version to check if this version is compatible with.
      */
     public compatibleWith(other: Version): boolean {
         return this.native.compatible_with(other.native);
@@ -101,7 +107,7 @@ export class Version {
     /**
      * Pop the last `n` segments from the version.
      *
-     * @param n The number of segments to pop from the version.
+     * @param n - The number of segments to pop from the version.
      */
     public popSegments(n: number): Version | undefined {
         let native = this.native.pop_segments(n);
@@ -116,7 +122,7 @@ export class Version {
      * already at the specified length or longer the original version will be
      * returned.
      *
-     * @param length The length to extend the version to.
+     * @param length - The length to extend the version to.
      */
     public extendToLength(length: number): Version {
         return Version.fromNative(this.native.extend_to_length(length));
@@ -127,8 +133,8 @@ export class Version {
      *
      * Returns undefined if the start or end index is out of bounds.
      *
-     * @param start The start index of the segment.
-     * @param end The end index of the segment.
+     * @param start - The start index of the segment.
+     * @param end - The end index of the segment.
      */
     public withSegments(start: number, end: number): Version | undefined {
         let native = this.native.with_segments(start, end);

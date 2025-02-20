@@ -1,6 +1,6 @@
 {
     "name": "@baszalmstra/rattler",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Javascript bindings to the rattler library",
     "repository": {
         "type": "git",
@@ -19,7 +19,7 @@
     ],
     "scripts": {
         "build:wasm": "wasm-pack build --target bundler --mode normal --release",
-        "build": "webpack --mode=production",
+        "build": "webpack --mode=production && api-extractor run --verbose",
         "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
         "fmt": "prettier --write ."
     },
@@ -38,5 +38,8 @@
         "webpack": "^5.96.1",
         "webpack-cli": "^5.1.4"
     },
-    "type": "module"
+    "type": "module",
+    "dependencies": {
+        "@microsoft/api-extractor": "^7.50.0"
+    }
 }

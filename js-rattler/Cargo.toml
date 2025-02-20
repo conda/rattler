@@ -1,6 +1,6 @@
 [package]
 name = "js-rattler"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 edition = "2021"
 description = "WASM bindings to the rattler library"
