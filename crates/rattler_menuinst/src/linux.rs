@@ -1,6 +1,7 @@
 use fs_err as fs;
 use fs_err::File;
 use mime_config::MimeConfig;
+use rattler_conda_types::menuinst::{LinuxRegisteredMimeFile, LinuxTracker, MenuMode};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -16,11 +17,10 @@ use rattler_shell::shell;
 
 use crate::render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString};
 use crate::slugify;
-use crate::tracker::LinuxTracker;
 use crate::util::{log_output, run_pre_create_command};
 use crate::{
     schema::{Linux, MenuItemCommand},
-    MenuInstError, MenuMode,
+    MenuInstError,
 };
 
 pub struct LinuxMenu {
@@ -164,6 +164,7 @@ pub enum XdgMimeError {
     IoError(#[from] std::io::Error),
 }
 
+/// Run `xdg-mime` with the given arguments
 fn xdg_mime(
     xml_file: &Path,
     mode: MenuMode,
@@ -202,6 +203,14 @@ fn xdg_mime(
             "xdg-mime failed",
         )));
     }
+
+    Ok(())
+}
+
+/// Update the desktop database by running `update-desktop-database`
+fn update_desktop_database() -> Result<(), MenuInstError> {
+    // We don't care about the output of update-desktop-database
+    let _ = Command::new("update-desktop-database").output();
 
     Ok(())
 }
@@ -434,19 +443,12 @@ impl LinuxMenu {
         Ok(())
     }
 
-    fn update_desktop_database() -> Result<(), MenuInstError> {
-        // We don't care about the output of update-desktop-database
-        let _ = Command::new("update-desktop-database").output();
-
-        Ok(())
-    }
-
     fn install(&self, tracker: &mut LinuxTracker) -> Result<(), MenuInstError> {
         self.directories.ensure_directories_exist()?;
         self.pre_create()?;
         self.create_desktop_entry(tracker)?;
         self.register_mime_types(tracker)?;
-        Self::update_desktop_database()?;
+        update_desktop_database()?;
         Ok(())
     }
 
@@ -477,16 +479,20 @@ impl LinuxMenu {
 
         let mimeapps = self.directories.config_directory.join("mimeapps.list");
 
-        let mut config = MimeConfig::new(mimeapps);
-        config.load()?;
-        for mime_type in mime_types {
+        let mut config = MimeConfig::load(&mimeapps)?;
+        for mime_type in &mime_types {
             tracing::info!("Registering mime type {} for {}", mime_type, &self.name);
-            config.register_mime_type(&mime_type, &self.name);
-            tracker
-                .mime_types
-                .push((mime_type.clone(), self.name.clone()));
+            config.register_mime_type(mime_type, &self.name);
         }
         config.save()?;
+
+        // Store the data so that we can remove it later
+        tracker.mime_types = Some(LinuxRegisteredMimeFile {
+            mime_types: mime_types.clone(),
+            database_path: self.directories.mime_directory(),
+            application: self.name.clone(),
+            config_file: mimeapps,
+        });
 
         update_mime_database(&self.directories.mime_directory())?;
 
@@ -575,6 +581,9 @@ impl LinuxMenu {
                 tracker.registered_mime_files.push(file_path);
             }
             Err(_) => {
+                if let Some(parent) = xml_path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
                 fs::write(&xml_path, xml)?;
                 tracker.paths.push(xml_path);
             }
@@ -612,26 +621,26 @@ pub fn remove_menu_item(tracker: &LinuxTracker) -> Result<(), MenuInstError> {
     }
 
     for path in &tracker.registered_mime_files {
-        let _ = xdg_mime(path, tracker.install_mode, XdgMimeOperation::Uninstall)
-            .map_err(|e| tracing::warn!("Could not uninstall mime type: {}", e));
+        match xdg_mime(path, tracker.install_mode, XdgMimeOperation::Uninstall) {
+            Ok(_) => {}
+            Err(e) => {
+                tracing::warn!("Could not uninstall mime type: {}", e);
+            }
+        }
+        // Remove the temporary directory we created for the glob file
+        fs::remove_dir_all(path.parent().unwrap())?;
     }
 
-    // invoke xdg-mime uninstall ...
-    if !tracker.mime_types.is_empty() {
+    if let Some(installed_mime_types) = tracker.mime_types.as_ref() {
         // load mimetype config
-        // TODO - store path to mime config
-        let mut config = MimeConfig::new(PathBuf::from("/tmp/mimeapps.list"));
-        for mime_type in &tracker.mime_types {
-            tracing::info!(
-                "Unregistering mime type {} for {}",
-                mime_type.0,
-                mime_type.1
-            );
-            config.deregister_mime_type(&mime_type.0, &mime_type.1);
+        let mut config = MimeConfig::load(&installed_mime_types.config_file)?;
+        let application = &installed_mime_types.application;
+        for mime_type in &installed_mime_types.mime_types {
+            config.deregister_mime_type(&mime_type, &application);
         }
         config.save()?;
-        // TODO use `mime directory`.
-        update_mime_database(&PathBuf::from("/tmp/mime"))?;
+
+        update_mime_database(&installed_mime_types.database_path)?;
     }
 
     Ok(())
@@ -640,13 +649,14 @@ pub fn remove_menu_item(tracker: &LinuxTracker) -> Result<(), MenuInstError> {
 #[cfg(test)]
 mod tests {
     use fs_err as fs;
+    use rattler_conda_types::menuinst::LinuxTracker;
     use std::{
         collections::HashMap,
         path::{Path, PathBuf},
     };
     use tempfile::TempDir;
 
-    use crate::{schema::MenuInstSchema, test::test_data, tracker::LinuxTracker};
+    use crate::{schema::MenuInstSchema, test::test_data};
 
     use super::{Directories, LinuxMenu};
 

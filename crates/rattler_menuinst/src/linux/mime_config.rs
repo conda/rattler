@@ -17,19 +17,21 @@ pub struct MimeConfig {
 impl MimeConfig {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         Self {
-            // cs == case-sensitive
             config: Ini::new_cs(),
             path: path.as_ref().to_path_buf(),
         }
     }
 
-    pub fn load(&mut self) -> Result<(), std::io::Error> {
-        if self.path.exists() {
-            self.config
-                .load(&self.path)
+    /// Create a new MimeConfig instance and load the configuration from the given path
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, std::io::Error> {
+        let mut this = Self::new(path);
+
+        if this.path.exists() {
+            this.config
+                .load(&this.path)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         }
-        Ok(())
+        Ok(this)
     }
 
     pub fn save(&self) -> Result<(), std::io::Error> {
@@ -169,8 +171,7 @@ mod tests {
         config.register_mime_type("text/plain", "notepad.desktop");
         config.save()?;
 
-        let mut new_config = MimeConfig::new(file.path());
-        new_config.load()?;
+        let new_config = MimeConfig::load(file.path())?;
 
         assert_eq!(
             new_config.get_default_application("text/plain"),
@@ -278,8 +279,7 @@ mod tests {
     fn test_existing_mimeapps() {
         // load from test-data/linux/mimeapps.list
         let path = test_data().join("linux-menu/mimeapps.list");
-        let mut mimeapps = MimeConfig::new(path);
-        mimeapps.load().unwrap();
+        let mut mimeapps = MimeConfig::load(path).unwrap();
 
         insta::assert_debug_snapshot!(mimeapps.config.get_map());
 

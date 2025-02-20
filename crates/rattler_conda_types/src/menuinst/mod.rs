@@ -30,6 +30,8 @@ pub enum Tracker {
 pub struct LinuxRegisteredMimeFile {
     /// The application that was registered
     pub application: String,
+    /// Path to use when calling `update-mime-database`
+    pub database_path: PathBuf,
     /// The location of the config file that was edited
     pub config_file: PathBuf,
     /// The MIME types that were associated to the application

@@ -3,7 +3,10 @@ use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::path::PathBuf;
 
-use rattler_conda_types::{menuinst::Tracker, Platform};
+use rattler_conda_types::{
+    menuinst::{MenuMode, Tracker},
+    Platform,
+};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -16,19 +19,11 @@ mod util;
 mod windows;
 
 pub mod slugify;
-use serde::{Deserialize, Serialize};
 pub use slugify::slugify;
 
 use crate::{render::BaseMenuItemPlaceholders, schema::MenuInstSchema};
 
 pub mod utils;
-
-#[derive(Default, Debug, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub enum MenuMode {
-    System,
-    #[default]
-    User,
-}
 
 #[derive(thiserror::Error, Debug)]
 pub enum MenuInstError {

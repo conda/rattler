@@ -43,7 +43,7 @@ pub async fn install_package_to_environment(
         paths_data: paths.into(),
         requested_spec: None,
         link: None,
-        menuinst_tracker: None,
+        installed_system_menus: Vec::new(),
     };
 
     // Create the conda-meta directory if it doesnt exist yet.
