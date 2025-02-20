@@ -885,7 +885,14 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/xz-5.2.6-h166bdaf_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstandard-0.23.0-py39h08a7858_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.6-ha6fb4c9_0.conda
+      - pypi: https://files.pythonhosted.org/packages/ac/6e/faf7c6c3ae59641c75023fb5dcc8a02c33752ac8ccadf9931e8d8364f2fe/boto3-1.7.84-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/01/b7/cb08cd1af2bb0d0dfb393101a93b6ab6fb80f109ab7b37f2f34386c11351/botocore-1.10.84-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/8f/d7/9322c609343d929e75e7e5e6255e614fcc67572cfd083959cdef3b7aad79/docutils-0.21.2-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/07/cb/5f001272b6faeb23c1c9e0acc04d48eaaf5c862c17709d20e3469c6e0139/jmespath-0.10.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7a/7c/d7b2a0417af6428440c0ad7cb9799073e507b1a465f827d058b826236964/numpy-1.24.4-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d7/14/2a0004d487464d120c9fb85313a75cd3d71a7506955be458eebfe19a6b1d/s3transfer-0.1.13-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c4/83/07c5cd92ead27ecf48e3d12d0164ac0f6a7990b4d0d47c297398c285627a/types_networkx-3.3.0.20241020-py3-none-any.whl
       osx-64:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/brotli-python-1.1.0-py39h7c0e7c0_2.conda
@@ -946,7 +953,14 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/xz-5.2.6-h775f41a_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstandard-0.23.0-py39hc23f734_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstd-1.5.6-h915ae27_0.conda
+      - pypi: https://files.pythonhosted.org/packages/ac/6e/faf7c6c3ae59641c75023fb5dcc8a02c33752ac8ccadf9931e8d8364f2fe/boto3-1.7.84-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/01/b7/cb08cd1af2bb0d0dfb393101a93b6ab6fb80f109ab7b37f2f34386c11351/botocore-1.10.84-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/8f/d7/9322c609343d929e75e7e5e6255e614fcc67572cfd083959cdef3b7aad79/docutils-0.21.2-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/07/cb/5f001272b6faeb23c1c9e0acc04d48eaaf5c862c17709d20e3469c6e0139/jmespath-0.10.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/9a/cd/d5b0402b801c8a8b56b04c1e85c6165efab298d2f0ab741c2406516ede3a/numpy-1.24.4-cp39-cp39-macosx_10_9_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d7/14/2a0004d487464d120c9fb85313a75cd3d71a7506955be458eebfe19a6b1d/s3transfer-0.1.13-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c4/83/07c5cd92ead27ecf48e3d12d0164ac0f6a7990b4d0d47c297398c285627a/types_networkx-3.3.0.20241020-py3-none-any.whl
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/brotli-python-1.1.0-py39hfa9831e_2.conda
@@ -1007,7 +1021,14 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/xz-5.2.6-h57fd34a_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstandard-0.23.0-py39hcf1bb16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.6-hb46c0d2_0.conda
+      - pypi: https://files.pythonhosted.org/packages/ac/6e/faf7c6c3ae59641c75023fb5dcc8a02c33752ac8ccadf9931e8d8364f2fe/boto3-1.7.84-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/01/b7/cb08cd1af2bb0d0dfb393101a93b6ab6fb80f109ab7b37f2f34386c11351/botocore-1.10.84-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/8f/d7/9322c609343d929e75e7e5e6255e614fcc67572cfd083959cdef3b7aad79/docutils-0.21.2-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/07/cb/5f001272b6faeb23c1c9e0acc04d48eaaf5c862c17709d20e3469c6e0139/jmespath-0.10.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/14/27/638aaa446f39113a3ed38b37a66243e21b38110d021bfcb940c383e120f2/numpy-1.24.4-cp39-cp39-macosx_11_0_arm64.whl
+      - pypi: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d7/14/2a0004d487464d120c9fb85313a75cd3d71a7506955be458eebfe19a6b1d/s3transfer-0.1.13-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c4/83/07c5cd92ead27ecf48e3d12d0164ac0f6a7990b4d0d47c297398c285627a/types_networkx-3.3.0.20241020-py3-none-any.whl
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/win-64/brotli-python-1.1.0-py39ha51f57c_2.conda
@@ -1076,7 +1097,14 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/xz-5.2.6-h8d14728_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstandard-0.23.0-py39h9bf74da_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.6-h0ea2cb4_0.conda
+      - pypi: https://files.pythonhosted.org/packages/ac/6e/faf7c6c3ae59641c75023fb5dcc8a02c33752ac8ccadf9931e8d8364f2fe/boto3-1.7.84-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/01/b7/cb08cd1af2bb0d0dfb393101a93b6ab6fb80f109ab7b37f2f34386c11351/botocore-1.10.84-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/8f/d7/9322c609343d929e75e7e5e6255e614fcc67572cfd083959cdef3b7aad79/docutils-0.21.2-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/07/cb/5f001272b6faeb23c1c9e0acc04d48eaaf5c862c17709d20e3469c6e0139/jmespath-0.10.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/63/38/6cc19d6b8bfa1d1a459daf2b3fe325453153ca7019976274b6f33d8b5663/numpy-1.24.4-cp39-cp39-win_amd64.whl
+      - pypi: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d7/14/2a0004d487464d120c9fb85313a75cd3d71a7506955be458eebfe19a6b1d/s3transfer-0.1.13-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c4/83/07c5cd92ead27ecf48e3d12d0164ac0f6a7990b4d0d47c297398c285627a/types_networkx-3.3.0.20241020-py3-none-any.whl
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2
@@ -1143,6 +1171,25 @@ packages:
   purls: []
   size: 5682777
   timestamp: 1729655371045
+- pypi: https://files.pythonhosted.org/packages/ac/6e/faf7c6c3ae59641c75023fb5dcc8a02c33752ac8ccadf9931e8d8364f2fe/boto3-1.7.84-py2.py3-none-any.whl
+  name: boto3
+  version: 1.7.84
+  sha256: 0ed4b107c3b4550547aaec3c9bb17df068ff92d1f6f4781205800e2cb8a66de5
+  requires_dist:
+  - botocore>=1.10.84,<1.11.0
+  - jmespath>=0.7.1,<1.0.0
+  - s3transfer>=0.1.10,<0.2.0
+- pypi: https://files.pythonhosted.org/packages/01/b7/cb08cd1af2bb0d0dfb393101a93b6ab6fb80f109ab7b37f2f34386c11351/botocore-1.10.84-py2.py3-none-any.whl
+  name: botocore
+  version: 1.10.84
+  sha256: 380852e1adb9ba4ba9ff096af61f88a6888197b86e580e1bd786f04ebe6f9c0c
+  requires_dist:
+  - python-dateutil>=2.1,<2.7.0 ; python_full_version == '2.6.*'
+  - python-dateutil>=2.1,<3.0.0 ; python_full_version >= '2.7'
+  - jmespath>=0.7.1,<1.0.0
+  - docutils>=0.10
+  - ordereddict==1.1 ; python_full_version == '2.6.*'
+  - simplejson==3.3.0 ; python_full_version == '2.6.*'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/brotli-python-1.1.0-py312h2ec8cdc_2.conda
   sha256: f2a59ccd20b4816dea9a2a5cb917eb69728271dbf1aeab4e1b7e609330a50b6f
   md5: b0b867af6fc74b2a0aa206da29c0f3cf
@@ -1659,6 +1706,11 @@ packages:
   license_family: PSF
   size: 24062
   timestamp: 1615232388757
+- pypi: https://files.pythonhosted.org/packages/8f/d7/9322c609343d929e75e7e5e6255e614fcc67572cfd083959cdef3b7aad79/docutils-0.21.2-py3-none-any.whl
+  name: docutils
+  version: 0.21.2
+  sha256: dafca5b9e384f0e419294eb4d2ff9fa826435bf15f15b7bd45723e8ad76811b2
+  requires_python: '>=3.9'
 - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.2.2-pyhd8ed1ab_0.conda
   sha256: e0edd30c4b7144406bb4da975e6bb97d6bc9c0e999aa4efe66ae108cada5d5b5
   md5: d02ae936e42063ca46af6cdad2dbd1e0
@@ -2066,6 +2118,11 @@ packages:
   license_family: BSD
   size: 111565
   timestamp: 1715127275924
+- pypi: https://files.pythonhosted.org/packages/07/cb/5f001272b6faeb23c1c9e0acc04d48eaaf5c862c17709d20e3469c6e0139/jmespath-0.10.0-py2.py3-none-any.whl
+  name: jmespath
+  version: 0.10.0
+  sha256: cdf6525904cc597730141d61b36f2e4b8ecc257c420fa2f4549bac2c2d0cb72f
+  requires_python: '>=2.6,!=3.0.*,!=3.1.*,!=3.2.*'
 - conda: https://conda.anaconda.org/conda-forge/noarch/kernel-headers_linux-64-3.10.0-he073ed8_17.conda
   sha256: c28d69ca84533f0e2093f17ae6d3e19ee3661dd397618630830b1b9afc3bfb4d
   md5: 285931bd28b3b8f176d46dd9fd627a09
@@ -4329,6 +4386,13 @@ packages:
   purls: []
   size: 17024927
   timestamp: 1727718943163
+- pypi: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
+  name: python-dateutil
+  version: 2.9.0.post0
+  sha256: a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427
+  requires_dist:
+  - six>=1.5
+  requires_python: '>=2.7,!=3.0.*,!=3.1.*,!=3.2.*'
 - conda: https://conda.anaconda.org/conda-forge/noarch/python-dateutil-2.9.0-pyhd8ed1ab_0.conda
   sha256: f3ceef02ac164a8d3a080d0d32f8e2ebe10dd29e3a685d240e38b3599e146320
   md5: 2cf4264fffb9e6eff6031c5b6884d61c
@@ -4819,6 +4883,13 @@ packages:
   purls: []
   size: 34828353
   timestamp: 1726504171219
+- pypi: https://files.pythonhosted.org/packages/d7/14/2a0004d487464d120c9fb85313a75cd3d71a7506955be458eebfe19a6b1d/s3transfer-0.1.13-py2.py3-none-any.whl
+  name: s3transfer
+  version: 0.1.13
+  sha256: c7a9ec356982d5e9ab2d4b46391a7d6a950e2b04c472419f5fdec70cc0ada72f
+  requires_dist:
+  - botocore>=1.3.0,<2.0.0
+  - futures>=2.2.0,<4.0.0 ; python_full_version >= '2.6' and python_full_version < '2.8'
 - conda: https://conda.anaconda.org/conda-forge/noarch/setuptools-75.1.0-pyhd8ed1ab_0.conda
   sha256: 6725235722095c547edd24275053c615158d6163f396550840aebd6e209e4738
   md5: d5cd48392c67fb6849ba459c2c2b671f
@@ -4839,6 +4910,11 @@ packages:
   - pkg:pypi/shellingham?source=hash-mapping
   size: 14568
   timestamp: 1698144516278
+- pypi: https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl
+  name: six
+  version: 1.17.0
+  sha256: 4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274
+  requires_python: '>=2.7,!=3.0.*,!=3.1.*,!=3.2.*'
 - conda: https://conda.anaconda.org/conda-forge/noarch/six-1.16.0-pyh6c4a22f_0.tar.bz2
   sha256: a85c38227b446f42c5b90d9b642f2c0567880c15d72492d8da074a59c8f91dd6
   md5: e5f25f8dbc060e9a8d912e432202afc2
