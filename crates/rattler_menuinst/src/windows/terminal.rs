@@ -48,7 +48,7 @@ pub enum TerminalUpdateError {
 ///
 /// # Arguments
 /// * `location` - Path to the settings.json file
-/// * `profile` - The TerminalProfile to add or update
+/// * `profile` - The `TerminalProfile` to add or update
 ///
 /// # Errors
 /// Returns a `TerminalUpdateError` if file operations or JSON serialization/deserialization fail.
@@ -156,7 +156,7 @@ pub fn remove_terminal_profile(location: &Path, name: &str) -> Result<(), Termin
 ///
 /// # Arguments
 /// * `mode` - The `MenuMode` specifying the context; only `User` mode is supported.
-/// * `folders` - A `Folders` instance providing access to known folder paths (e.g., LocalAppData).
+/// * `folders` - A `Folders` instance providing access to known folder paths (e.g., `LocalAppData`).
 ///
 /// # Returns
 /// A vector of `PathBuf` objects representing the locations of `settings.json` files.

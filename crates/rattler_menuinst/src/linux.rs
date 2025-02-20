@@ -636,7 +636,7 @@ pub fn remove_menu_item(tracker: &LinuxTracker) -> Result<(), MenuInstError> {
         let mut config = MimeConfig::load(&installed_mime_types.config_file)?;
         let application = &installed_mime_types.application;
         for mime_type in &installed_mime_types.mime_types {
-            config.deregister_mime_type(&mime_type, &application);
+            config.deregister_mime_type(mime_type, application);
         }
         config.save()?;
 
