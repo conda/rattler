@@ -1,6 +1,5 @@
 import path from "path";
 import { fileURLToPath } from "url";
-import WasmPackPlugin from "@wasm-tool/wasm-pack-plugin";
 import { merge } from "webpack-merge";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -23,14 +22,6 @@ const options = {
     resolve: {
         extensions: [".ts", ".js"],
     },
-    plugins: [
-        new WasmPackPlugin({
-            crateDirectory: path.resolve(__dirname, "crate"),
-            args: "--log-level warn",
-            extraArgs: "--target bundler --mode normal --release",
-            forceMode: "production",
-        }),
-    ],
     experiments: {
         asyncWebAssembly: true,
     },
