@@ -25,7 +25,7 @@ mod knownfolders;
 mod lex;
 mod registry;
 
-use knownfolders::UserHandle;
+use knownfolders::{Folder, UserHandle};
 
 pub struct Directories {
     start_menu: PathBuf,
@@ -56,16 +56,18 @@ impl Directories {
         };
 
         let known_folders = knownfolders::Folders::new();
-        let start_menu = known_folders.get_folder_path("start", user_handle).unwrap();
+        let start_menu = known_folders
+            .get_folder_path(Folder::Start, user_handle)
+            .unwrap();
         let quick_launch = if menu_mode == MenuMode::User {
             known_folders
-                .get_folder_path("quick_launch", user_handle)
+                .get_folder_path(Folder::QuickLaunch, user_handle)
                 .ok()
         } else {
             None
         };
         let desktop = known_folders
-            .get_folder_path("desktop", user_handle)
+            .get_folder_path(Folder::Desktop, user_handle)
             .unwrap();
 
         Directories {
@@ -440,7 +442,6 @@ pub(crate) fn install_menu_item(
     menu_mode: MenuMode,
 ) -> Result<WindowsTracker, MenuInstError> {
     let mut tracker = WindowsTracker::new(menu_mode);
-    tracker.menu_mode = menu_mode;
     let menu = WindowsMenu::new(
         prefix,
         windows_item,
