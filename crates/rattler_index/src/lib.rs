@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use fs_err::{self as fs};
-use futures::{future::try_join_all, TryStreamExt};
+use futures::future::try_join_all;
 use rattler_conda_types::{
     package::{ArchiveType, IndexJson, PackageFile},
     ChannelInfo, PackageRecord, Platform, RepoData,
@@ -12,7 +12,7 @@ use rattler_conda_types::{
 use rattler_package_streaming::{read, seek};
 use std::{
     collections::{HashMap, HashSet},
-    io::{Cursor, Read, Seek},
+    io::{Cursor, Read},
     path::Path,
     str::FromStr,
 };
@@ -123,12 +123,16 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool) -> Result<()>
         let repodata_bytes = op.read(&repodata_path).await?;
         let repodata: RepoData = serde_json::from_slice(&repodata_bytes.to_vec())?;
         registered_packages.extend(repodata.packages.into_iter());
+        tracing::debug!(
+            "Found {} already registered packages in {}/repodata.json.",
+            registered_packages.len(),
+            subdir
+        );
     }
     let uploaded_packages: HashSet<String> = op
-        .list_with(subdir.as_str())
-        .recursive(false)
+        .list_with(&format!("{}/", subdir.as_str()))
         .await?
-        .into_iter()
+        .iter()
         .filter_map(|entry| {
             if entry.metadata().mode().is_file() {
                 let filename = entry.name().to_string();
@@ -140,10 +144,11 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool) -> Result<()>
         })
         .collect();
 
-    let packages_to_add = uploaded_packages
-        .difference(&registered_packages.keys().cloned().collect::<HashSet<_>>())
-        .cloned()
-        .collect::<Vec<_>>();
+    tracing::debug!(
+        "Found {} already uploaded packages in subdir {}.",
+        uploaded_packages.len(),
+        subdir
+    );
 
     let packages_to_delete = registered_packages
         .keys()
@@ -152,6 +157,27 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool) -> Result<()>
         .difference(&uploaded_packages)
         .cloned()
         .collect::<Vec<_>>();
+
+    tracing::debug!(
+        "Deleting {} packages from subdir {}.",
+        packages_to_delete.len(),
+        subdir
+    );
+
+    for filename in packages_to_delete {
+        registered_packages.remove(&filename);
+    }
+
+    let packages_to_add = uploaded_packages
+        .difference(&registered_packages.keys().cloned().collect::<HashSet<_>>())
+        .cloned()
+        .collect::<Vec<_>>();
+
+    tracing::debug!(
+        "Adding {} packages to subdir {}.",
+        packages_to_add.len(),
+        subdir
+    );
 
     let tasks = packages_to_add
         .iter()
@@ -177,12 +203,14 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool) -> Result<()>
         .collect::<Vec<_>>();
     let results = try_join_all(tasks).await?;
 
+    tracing::debug!(
+        "Successfully added {} packages to subdir {}.",
+        results.len(),
+        subdir
+    );
+
     for (filename, record) in results {
         registered_packages.insert(filename, record);
-    }
-
-    for filename in packages_to_delete {
-        registered_packages.remove(&filename);
     }
 
     let repodata = RepoData {
@@ -235,28 +263,34 @@ pub async fn index<T: Configurator>(
 
     // Get all subdirs
     let op = Operator::new(builder)?.finish();
-    let entries = op.list_with("").recursive(false).await?;
+    let entries = op.list_with("").await?;
     let mut subdirs = entries
         .iter()
         .filter_map(|entry| {
-            entry.metadata().mode().is_dir().then(|| {
+            if entry.metadata().mode().is_dir() && entry.name() != "/" {
                 // Directory entries always end with `/`.
-                entry.name().trim_end_matches('/').to_string()
-            })
+                Some(entry.name().trim_end_matches('/').to_string())
+            } else {
+                None
+            }
         })
         .map(|s| Platform::from_str(&s))
         .collect::<Result<HashSet<_>, _>>()?;
 
     // If `noarch` subdir does not exist, we create it.
     if !subdirs.contains(&Platform::NoArch) {
-        op.create_dir(Platform::NoArch.as_str()).await?;
+        tracing::debug!("Did not find noarch subdir, creating.");
+        op.create_dir(&format!("{}/", Platform::NoArch.as_str()))
+            .await?;
         subdirs.insert(Platform::NoArch);
     }
 
     // If requested `target_platform` subdir does not exist, we create it.
     if let Some(target_platform) = target_platform {
+        tracing::debug!("Did not find {target_platform} subdir, creating.");
         if !subdirs.contains(&target_platform) {
-            op.create_dir(target_platform.as_str()).await?;
+            op.create_dir(&format!("{}/", target_platform.as_str()))
+                .await?;
             subdirs.insert(*target_platform);
         }
     }

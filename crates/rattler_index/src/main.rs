@@ -1,7 +1,6 @@
 use clap::{arg, Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use opendal::services::{FsConfig, S3Config};
-use rattler_conda_types::Platform;
 use rattler_index::index;
 use tracing_log::AsTrace;
 use url::Url;
@@ -88,6 +87,8 @@ async fn main() -> anyhow::Result<()> {
     // Parse the command line arguments
     let cli = Cli::parse();
 
+    // console_subscriber::init();
+
     tracing_subscriber::FmtSubscriber::builder()
         .with_max_level(cli.verbose.log_level_filter().as_trace())
         .init();
@@ -97,6 +98,7 @@ async fn main() -> anyhow::Result<()> {
             let channel = &channel.canonicalize()?.to_string_lossy().to_string();
             let mut fs_config = FsConfig::default();
             fs_config.root = Some(channel.clone());
+            tracing::info!("Indexing channel at {}", channel);
             index(None, fs_config, cli.force).await?;
             Ok(())
         }
