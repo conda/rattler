@@ -5,6 +5,7 @@
 use anyhow::Result;
 use fs_err::{self as fs};
 use futures::future::try_join_all;
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rattler_conda_types::{
     package::{ArchiveType, IndexJson, PackageFile},
     ChannelInfo, PackageRecord, Platform, RepoData,
@@ -116,7 +117,7 @@ pub fn package_record_from_conda_reader(reader: impl Read) -> std::io::Result<Pa
     ))
 }
 
-async fn index_subdir(subdir: Platform, op: Operator, force: bool) -> Result<()> {
+async fn index_subdir(subdir: Platform, op: Operator, force: bool, progress: &MultiProgress) -> Result<()> {
     let mut registered_packages = HashMap::default();
     if !force {
         let repodata_path = format!("{}/repodata.json", subdir);
@@ -156,7 +157,7 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool) -> Result<()>
             if entry.metadata().mode().is_file() {
                 let filename = entry.name().to_string();
                 // Check if the file is an archive package file.
-                ArchiveType::try_from(&filename).map(|t| filename)
+                ArchiveType::try_from(&filename).map(|_| filename)
             } else {
                 None
             }
@@ -198,12 +199,18 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool) -> Result<()>
         subdir
     );
 
+    let pb = std::sync::Arc::new(progress.add(ProgressBar::new(packages_to_add.len() as u64)));
+    let sty = ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}").unwrap().progress_chars("##-");
+    pb.set_style(sty);
+    pb.set_message(format!("Indexing {}", subdir.as_str()));
+
     let tasks = packages_to_add
         .iter()
         .map(|filename| {
             let op = op.clone();
             let subdir = subdir.clone();
             let filename = filename.clone();
+            let pb = pb.clone();
             async move {
                 let file_path = format!("{}/{}", subdir, filename);
                 // TODO: Check how we use streaming here
@@ -216,11 +223,14 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool) -> Result<()>
                     ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(cursor),
                     ArchiveType::Conda => package_record_from_conda_reader(cursor),
                 }?;
+                pb.inc(1);
                 Ok::<(String, PackageRecord), std::io::Error>((filename.clone(), record))
             }
         })
         .collect::<Vec<_>>();
     let results = try_join_all(tasks).await?;
+
+    pb.finish_with_message(format!("Finished {}", subdir.as_str()));
 
     tracing::debug!(
         "Successfully added {} packages to subdir {}.",
@@ -314,9 +324,11 @@ pub async fn index<T: Configurator>(
         }
     }
 
+    let multi_progress = MultiProgress::new();
+
     let tasks = subdirs
         .iter()
-        .map(|subdir| index_subdir(*subdir, op.clone(), force))
+        .map(|subdir| index_subdir(*subdir, op.clone(), force, &multi_progress))
         .collect::<Vec<_>>();
     try_join_all(tasks).await?;
 

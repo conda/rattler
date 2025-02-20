@@ -21,6 +21,7 @@ clap = { workspace = true, features = ["derive", "env"] }
 clap-verbosity-flag = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
+indicatif = { workspace = true }
 opendal = { workspace = true, features = ["services-s3", "services-fs"] }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.30.3", default-features = false }
 rattler_digest = { path = "../rattler_digest", version = "1.0.6", default-features = false }
