@@ -12,7 +12,7 @@
         "url": "https://github.com/conda/rattler/issues"
     },
     "homepage": "https://github.com/conda/rattler#readme",
-    "main": "./dist/umd/main.js",
+    "main": "./dist/umd.js",
     "types": "./dist/index.d.ts",
     "files": [
         "dist/**/*"
@@ -20,8 +20,8 @@
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
-            "import": "./dist/module/main.mjs",
-            "default": "./dist/umd/main.js"
+            "import": "./dist/esm.mjs",
+            "default": "./dist/umd.js"
         }
     },
     "scripts": {

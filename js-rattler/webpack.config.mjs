@@ -40,9 +40,9 @@ export default [
     merge(options, {
         output: {
             assetModuleFilename: "[name][ext]",
-            clean: true,
-            path: path.resolve(__dirname, "dist/umd/"),
-            filename: "[name].js",
+            clean: false,
+            path: path.resolve(__dirname, "dist/"),
+            filename: "umd.js",
             library: "rattler",
             libraryTarget: "umd",
             umdNamedDefine: true,
@@ -51,9 +51,9 @@ export default [
     merge(options, {
         output: {
             assetModuleFilename: "[name][ext]",
-            clean: true,
-            path: path.resolve(__dirname, "dist/module/"),
-            filename: "[name].mjs",
+            clean: false,
+            path: path.resolve(__dirname, "dist/"),
+            filename: "esm.mjs",
             libraryTarget: "module",
             umdNamedDefine: false,
         },
