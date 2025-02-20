@@ -237,23 +237,31 @@ impl RunExportsCache {
                     current_try += 1;
                     tracing::debug!("downloading {}", &url);
                     // Extract the package
-                    let result = crate::run_exports_cache::download::download(
-                        client.clone(),
-                        url.clone(),
-                        &extension,
-                        download_reporter.clone().map(|reporter| Arc::new(PassthroughReporter {
-                            reporter,
-                            index: Mutex::new(None),
-                        }) as Arc::<dyn DownloadReporter>),
-                    )
-                        .await;
+
+                    let temp_file = if url.scheme() == "file" {
+                        let path = url.to_file_path().map_err(|_err| FetchError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid file path")))?;
+                        let temp_file = NamedTempFile::with_suffix(&extension)?;
+                        tokio_fs::copy(path, temp_file.path()).await?;
+                        Ok(temp_file)
+                    } else {
+                        crate::run_exports_cache::download::download(
+                            client.clone(),
+                            url.clone(),
+                            &extension,
+                            download_reporter.clone().map(|reporter| Arc::new(PassthroughReporter {
+                                reporter,
+                                index: Mutex::new(None),
+                            }) as Arc::<dyn DownloadReporter>),
+                        )
+                            .await
+                    };
 
                     // Extract any potential error
-                    let err = match result {
+                    let err = match temp_file {
                         Ok(result) => {
-                            let temp_file = NamedTempFile::new()?;
+                            let output_temp_file = NamedTempFile::new()?;
                             // Clone the file handler to be able to pass it to the blocking task
-                            let mut file_handler = temp_file.as_file().try_clone()?;
+                            let mut file_handler = output_temp_file.as_file().try_clone()?;
                             // now extract run_exports.json from the archive without unpacking
                             let result = simple_spawn_blocking::tokio::run_blocking_task(move || {
                                 rattler_package_streaming::seek::extract_package_file::<RunExportsJson>(result.as_file(), result.path(), &mut file_handler)?;
@@ -263,7 +271,7 @@ impl RunExportsCache {
 
                             match result {
                                 Ok(()) => {
-                                    return Ok(Some(temp_file));
+                                    return Ok(Some(output_temp_file));
                                 },
                                 Err(err) => {
                                     if matches!(err, ExtractError::MissingComponent) {
@@ -680,5 +688,43 @@ mod test {
             .unwrap();
 
         assert_ne!(first_cache_path.path(), second_package_cache.path());
+    }
+
+    #[tokio::test]
+    // Test caching a run exports file by file:// URL
+    pub async fn test_file_path_archive() {
+        let package_path = tools::download_and_cache_file_async(
+            "https://repo.prefix.dev/conda-forge/linux-64/zlib-1.3.1-hb9d3cd8_2.conda"
+                .parse()
+                .unwrap(),
+            "5d7c0e5f0005f74112a34a7425179f4eb6e73c92f5d109e6af4ddeca407c92ab",
+        )
+        .await
+        .unwrap();
+
+        let cache_dir = tempdir().unwrap().into_path();
+
+        let cache = RunExportsCache::new(&cache_dir);
+
+        let pkg_record = PackageRecord::new(
+            PackageName::from_str("zlib").unwrap(),
+            Version::from_str("1.3.1").unwrap(),
+            "hb9d3cd8_2".to_string(),
+        );
+
+        let cache_key = CacheKey::create(&pkg_record, "zlib-1.3.1-hb9d3cd8_2.conda").unwrap();
+
+        // Get the package to the cache
+        let cached_run_exports = cache
+            .get_or_fetch_from_url(
+                &cache_key,
+                Url::from_file_path(package_path).expect("we have a valid file path"),
+                ClientWithMiddleware::from(Client::new()),
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(cached_run_exports.run_exports.is_some());
     }
 }
