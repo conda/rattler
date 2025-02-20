@@ -89,7 +89,7 @@ export class Version {
      * Returns true if this version starts with the other version. This is
      * defined as the other version being a prefix of this version.
      *
-     * @param other - He version to check if this version starts with.
+     * @param other - The version to check if this version starts with.
      */
     public startsWith(other: Version): boolean {
         return this.native.starts_with(other.native);
