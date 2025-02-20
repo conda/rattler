@@ -1,4 +1,4 @@
-//! Define types that can be serialized into a [`PrefixRecord`] to track
+//! Define types that can be serialized into a `PrefixRecord` to track
 //! menu entries installed into the system.
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
