@@ -107,7 +107,6 @@ async fn main() -> anyhow::Result<()> {
             let channel = &channel.canonicalize()?.to_string_lossy().to_string();
             let mut fs_config = FsConfig::default();
             fs_config.root = Some(channel.clone());
-            tracing::info!("Indexing channel at {}", channel);
             index(cli.target_platform, fs_config, cli.force, cli.max_parallel).await?;
             Ok(())
         }
