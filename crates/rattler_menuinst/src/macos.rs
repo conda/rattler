@@ -9,7 +9,7 @@ use std::{
 use fs_err as fs;
 use fs_err::File;
 use plist::Value;
-use rattler_conda_types::Platform;
+use rattler_conda_types::{menuinst::MacOsTracker, Platform};
 use rattler_shell::{
     activation::{ActivationVariables, Activator},
     shell,
@@ -22,7 +22,6 @@ use crate::{
         UTTypeDeclarationModel,
     },
     slugify,
-    tracker::MacOsTracker,
     util::run_pre_create_command,
     utils, MenuInstError, MenuMode,
 };

@@ -3,7 +3,7 @@ use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::path::PathBuf;
 
-use rattler_conda_types::Platform;
+use rattler_conda_types::{menuinst::Tracker, Platform};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -15,12 +15,9 @@ mod util;
 #[cfg(target_os = "windows")]
 mod windows;
 
-pub mod tracker;
-
 pub mod slugify;
 use serde::{Deserialize, Serialize};
 pub use slugify::slugify;
-use tracker::MenuinstTracker;
 
 use crate::{render::BaseMenuItemPlaceholders, schema::MenuInstSchema};
 
@@ -71,7 +68,7 @@ pub fn install_menuitems(
     base_prefix: &Path,
     platform: Platform,
     menu_mode: MenuMode,
-) -> Result<Vec<MenuinstTracker>, MenuInstError> {
+) -> Result<Vec<Tracker>, MenuInstError> {
     let text = std::fs::read_to_string(file)?;
     let menu_inst: MenuInstSchema = serde_json::from_str(&text)?;
     let placeholders = BaseMenuItemPlaceholders::new(base_prefix, prefix, platform);
@@ -90,7 +87,7 @@ pub fn install_menuitems(
                     &placeholders,
                     menu_mode,
                 )?;
-                trackers.push(MenuinstTracker::Linux(linux_tracker));
+                trackers.push(Tracker::Linux(linux_tracker));
             }
         } else if platform.is_osx() {
             #[cfg(target_os = "macos")]
@@ -103,7 +100,7 @@ pub fn install_menuitems(
                     &placeholders,
                     menu_mode,
                 )?;
-                trackers.push(MenuinstTracker::MacOs(macos_tracker));
+                trackers.push(Tracker::MacOs(macos_tracker));
             };
         } else if platform.is_windows() {
             #[cfg(target_os = "windows")]
@@ -116,7 +113,7 @@ pub fn install_menuitems(
                     &placeholders,
                     menu_mode,
                 )?;
-                trackers.push(MenuinstTracker::Windows(tracker));
+                trackers.push(Tracker::Windows(tracker));
             }
         }
     }
@@ -125,21 +122,19 @@ pub fn install_menuitems(
 }
 
 /// Remove menu items from a given schema file
-pub fn remove_menu_items(tracker: &serde_json::Value) -> Result<(), MenuInstError> {
-    let tracker: Vec<MenuinstTracker> = serde_json::from_value(tracker.clone())?;
-
+pub fn remove_menu_items(tracker: &Vec<Tracker>) -> Result<(), MenuInstError> {
     for el in tracker {
         #[allow(unused)]
         match el {
-            MenuinstTracker::MacOs(tracker) => {
+            Tracker::MacOs(tracker) => {
                 #[cfg(target_os = "macos")]
                 macos::remove_menu_item(&tracker).unwrap();
             }
-            MenuinstTracker::Linux(tracker) => {
+            Tracker::Linux(tracker) => {
                 #[cfg(target_os = "linux")]
                 linux::remove_menu_item(&tracker).unwrap();
             }
-            MenuinstTracker::Windows(tracker) => {
+            Tracker::Windows(tracker) => {
                 #[cfg(target_os = "windows")]
                 windows::remove_menu_item(&tracker)?;
             }

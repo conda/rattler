@@ -559,6 +559,8 @@ impl LinuxMenu {
         let mime_dir_in_prefix = self.prefix.join("Menu/registered-mimetypes");
         fs::create_dir_all(&mime_dir_in_prefix)?;
 
+        // We store the mime file in a temporary dir inside the prefix, but we actually keep
+        // the file + directory around for eventual removal (just use tempdir for unique folder)
         let temp_dir = TempDir::new_in(&mime_dir_in_prefix)?;
         let file_path = temp_dir.path().join(file_name);
         let mut file = File::create(&file_path)?;
