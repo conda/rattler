@@ -20,6 +20,8 @@ pub fn start() {
     utils::set_panic_hook();
 }
 
+/// Defines how strict a parser should be when parsing an object from a string.
+/// @public
 #[wasm_bindgen(js_name=ParseStrictness)]
 pub enum JsParseStrictness {
     Strict,
