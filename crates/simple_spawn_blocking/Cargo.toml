@@ -1,6 +1,6 @@
 [package]
 name = "simple_spawn_blocking"
-version = "1.0.0"
+version = "1.1.0"
 description = "A simple crate to make spawning blocking tasks more ergonomic"
 categories.workspace = true
 homepage.workspace = true
