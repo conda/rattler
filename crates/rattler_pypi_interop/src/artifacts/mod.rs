@@ -1,5 +1,5 @@
 //! Module containing artifacts that can be resolved and installed.
-//! 
+//!
 mod sdist;
 mod stree;
 
