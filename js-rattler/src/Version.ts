@@ -205,7 +205,9 @@ export class Version {
     /**
      * Compare two versions.
      *
-     * Returns `-1` if this < other, `0` if this == other, `1` if this > other
+     * Returns `-1` if this instance should be ordered before `other`, `0` if
+     * this version and `other` are considered equal, `1` if this version should
+     * be ordered after `other`.
      */
     public compare(other: Version): number {
         return this.native.compare(other.native);
