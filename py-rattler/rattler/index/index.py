@@ -60,9 +60,9 @@ async def index_s3(
         region: The region of the S3 bucket.
         endpoint_url: The endpoint URL of the S3 bucket.
         force_path_style: Whether to use path-style addressing for S3.
-        access_key_id: The access key ID to use for authentication.
-        secret_access_key: The secret access key to use for authentication.
-        session_token: The session token to use for authentication.
+        access_key_id(optional): The access key ID to use for authentication.
+        secret_access_key(optional): The secret access key to use for authentication.
+        session_token(optional): The session token to use for authentication.
         target_platform(optional): A `Platform` to index dependencies for.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
