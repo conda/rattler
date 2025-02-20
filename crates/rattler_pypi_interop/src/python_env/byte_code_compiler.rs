@@ -145,9 +145,9 @@ impl ByteCodeCompiler {
                             Some(callbacks) => {
                                 for callback in callbacks {
                                     callback(match &response.output_path {
-                                        Some(output_path) => Ok(output_path.to_path_buf()),
+                                        Some(output_path) => Ok(output_path.clone()),
                                         None => Err(CompilationError::FailedToCompile),
-                                    })
+                                    });
                                 }
                             }
                         };
@@ -171,7 +171,7 @@ impl ByteCodeCompiler {
                 .expect("only we can drop the callbacks");
             for (_, callbacks) in callbacks {
                 for callback in callbacks {
-                    callback(Err(CompilationError::HostQuit))
+                    callback(Err(CompilationError::HostQuit));
                 }
             }
         });
@@ -217,7 +217,7 @@ impl ByteCodeCompiler {
             .as_ref()
             .expect("the channel is only dropped on drop")
             .send(source_path.to_owned())
-            .map_err(|_| CompilationError::HostQuit)
+            .map_err(|_err| CompilationError::HostQuit)
     }
 
     /// Compile the specified python file and wait for the compilation to finish.

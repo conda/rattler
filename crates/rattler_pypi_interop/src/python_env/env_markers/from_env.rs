@@ -75,7 +75,7 @@ mod test {
             Ok(env) => {
                 println!(
                     "Found the following environment markers on the current system:\n\n{env:#?}"
-                )
+                );
             }
         }
     }

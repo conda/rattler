@@ -32,8 +32,8 @@ impl PackageSourcesBuilder {
     pub fn new(base_index_url: Url) -> Self {
         Self {
             base_source: base_index_url,
-            extra_sources: Default::default(),
-            overrides: Default::default(),
+            extra_sources: Vec::default(),
+            overrides: BTreeMap::default(),
         }
     }
 
@@ -129,7 +129,7 @@ impl From<Url> for PackageSources {
     fn from(url: Url) -> Self {
         PackageSources {
             index_urls: (url, vec![]),
-            artifact_to_index: Default::default(),
+            artifact_to_index: BTreeMap::default(),
         }
     }
 }

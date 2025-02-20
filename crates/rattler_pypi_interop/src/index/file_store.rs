@@ -54,7 +54,7 @@ impl CacheKey for ArtifactHashes {
         let mut path = PathBuf::new();
         if let Some(sha256) = &self.sha256 {
             path.push("sha256");
-            path.push(bytes_to_path_suffix(sha256.as_slice()))
+            path.push(bytes_to_path_suffix(sha256.as_slice()));
         } else {
             unreachable!("should never have an artifact hash without any hashes")
         }
@@ -152,7 +152,7 @@ impl<'a> LockedWriter<'a> {
         file.rewind()?;
         Ok(LockedReader {
             file,
-            _data: Default::default(),
+            _data: PhantomData,
         })
     }
 }
@@ -201,13 +201,13 @@ impl FileLock {
     pub fn reader(&self) -> Option<LockedReader<'_>> {
         Some(LockedReader {
             file: fs::File::open(&self.path).ok()?,
-            _data: Default::default(),
+            _data: PhantomData,
         })
     }
 
     /// Starts writing the contents of the file returning a writer. Call [`LockedWriter::commit`] to
     /// persist the data in the store.
-    pub fn begin<'a>(&'a self) -> io::Result<LockedWriter<'a>> {
+    pub fn begin(&self) -> io::Result<LockedWriter<'_>> {
         Ok(LockedWriter {
             path: &self.path,
             f: tempfile::NamedTempFile::new_in(&self.tmp)?,

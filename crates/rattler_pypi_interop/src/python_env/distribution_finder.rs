@@ -73,7 +73,7 @@ pub fn find_distributions_in_directory(
                     dist_info: pathdiff::diff_paths(&dist.dist_info, search_dir)
                         .unwrap_or(dist.dist_info),
                     ..dist
-                })
+                });
             }
         }
     }
@@ -161,7 +161,7 @@ fn analyze_distribution(
                 .into_iter()
                 .map(|tag| {
                     WheelTag::from_compound_string(&tag)
-                        .map_err(|_| FindDistributionError::FailedToParseWheelTag(tag))
+                        .map_err(|_err| FindDistributionError::FailedToParseWheelTag(tag))
                 })
                 .flatten_ok()
                 .collect::<Result<IndexSet<_>, _>>()?,

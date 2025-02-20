@@ -17,7 +17,7 @@ pub trait HasArtifactName {
     fn name(&self) -> &Self::Name;
 }
 
-/// Trait that represents an artifact type in the PyPI ecosystem.
+/// Trait that represents an artifact type in the `PyPI` ecosystem.
 /// That is a single file like a wheel, sdist.
 pub trait ArtifactFromBytes: HasArtifactName + Sized {
     /// Construct a new artifact from the given bytes
@@ -38,7 +38,7 @@ pub enum ReadPyProjectError {
     PyProjectTomlParseError(String),
 }
 
-/// SDist or STree act as a SourceArtifact
+/// `SDist` o`STree`ee act a`SourceArtifact`fact
 /// so we can use it in methods where we expect sdist
 /// to extract metadata
 pub trait ArtifactFromSource: HasArtifactName + Sync {
@@ -58,9 +58,6 @@ pub trait ArtifactFromSource: HasArtifactName + Sync {
     /// Read the build system info from the pyproject.toml
     fn read_pyproject_toml(&self) -> Result<pyproject_toml::PyProjectToml, ReadPyProjectError>;
 
-    /// extract to a specific location
-    /// for sdist we unpack it
-    /// for stree we move it
-    /// as example this method is used by install_build_files
+    /// Extract to a specific location. For sdist, we unpack it. For stree, we move it.
     fn extract_to(&self, work_dir: &Path) -> std::io::Result<()>;
 }

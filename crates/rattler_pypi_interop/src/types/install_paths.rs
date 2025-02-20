@@ -50,7 +50,7 @@ impl InstallPaths {
         }
     }
 
-    /// Determines whether this is a windows InstallPath
+    /// Determines whether this is a windows `InstallPath`
     pub fn is_windows(&self) -> bool {
         self.windows
     }

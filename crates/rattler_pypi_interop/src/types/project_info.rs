@@ -82,7 +82,7 @@ pub struct DistInfoMetadata {
 }
 
 /// An optional key that indicates that metadata for this file is available, via the same location
-/// as specified in PEP 658 ({file_url}.metadata). Where this is present, it MUST be either a
+/// as specified in PEP 658 (`{file_url}.metadata`). Where this is present, it MUST be either a
 /// boolean to indicate if the file has an associated metadata file, or a dictionary mapping hash
 /// names to a hex encoded digest of the metadata’s hash.
 #[derive(Debug, Clone, Deserialize)]
@@ -95,11 +95,11 @@ enum RawDistInfoMetadata {
 impl From<Option<RawDistInfoMetadata>> for DistInfoMetadata {
     fn from(maybe_raw: Option<RawDistInfoMetadata>) -> Self {
         match maybe_raw {
-            None => Default::default(),
+            None => DistInfoMetadata::default(),
             Some(raw) => match raw {
                 RawDistInfoMetadata::NoHashes(available) => Self {
                     available,
-                    hashes: Default::default(),
+                    hashes: ArtifactHashes::default(),
                 },
                 RawDistInfoMetadata::WithHashes(hashes) => Self {
                     available: true,

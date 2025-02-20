@@ -81,7 +81,7 @@ impl FromStr for Extra {
 
 impl Hash for Extra {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.normalized.hash(state)
+        self.normalized.hash(state);
     }
 }
 

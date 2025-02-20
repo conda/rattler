@@ -71,7 +71,7 @@ impl FromStr for PackageName {
 
 impl Hash for PackageName {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.normalized.hash(state)
+        self.normalized.hash(state);
     }
 }
 
