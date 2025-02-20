@@ -11,7 +11,7 @@
     "bugs": {
         "url": "https://github.com/conda/rattler/issues"
     },
-    "homepage": "https://github.com/conda/rattler/tree/js/chore/readme/js-rattler#readme",
+    "homepage": "https://github.com/conda/rattler/tree/main/js-rattler#readme",
     "main": "./dist/umd.js",
     "types": "./dist/index.d.ts",
     "files": [
