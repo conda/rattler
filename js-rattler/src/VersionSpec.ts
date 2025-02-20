@@ -1,4 +1,4 @@
-import { ParseStrictness, JsVersionSpec } from "./stub";
+import { ParseStrictness, JsVersionSpec } from "../pkg";
 import { Version } from "./Version";
 
 /**
