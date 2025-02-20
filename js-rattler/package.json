@@ -29,7 +29,7 @@
     "scripts": {
         "build:wasm": "wasm-pack build  --mode normal --release",
         "build:umd": "npm run build:wasm -- --target bundler && webpack --mode=production",
-        "build:cjs": "npm run build:wasm -- --target nodejs  && rollup -c rollup.config.commonjs.mjs && cp ./pkg/js_rattler_bg.wasm ./dist/",
+        "build:cjs": "npm run build:wasm -- --target nodejs  && rollup -c rollup.config.cjs.mjs && cp ./pkg/js_rattler_bg.wasm ./dist/",
         "build": "rimraf dist pkg && npm run build:umd && npm run build:cjs && api-extractor run --verbose",
         "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
         "fmt": "prettier --write .",
