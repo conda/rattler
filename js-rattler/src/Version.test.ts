@@ -251,4 +251,12 @@ describe("Version", () => {
             expect(new Version("1.2.3a").withAlpha().toString()).toBe("1.2.3a");
         });
     });
+
+    describe("compare", () => {
+        it("should compare version with expected order", () => {
+            expect(new Version("1.2.3").compare(new Version("1.2.3"))).toBe(0);
+            expect(new Version("1.2.0").compare(new Version("1.2.3"))).toBe(-1);
+            expect(new Version("1.2.4").compare(new Version("1.2.3"))).toBe(1);
+        });
+    });
 });
