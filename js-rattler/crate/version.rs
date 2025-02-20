@@ -1,6 +1,6 @@
 use crate::JsResult;
 use rattler_conda_types::{Version, VersionBumpType};
-use std::str::FromStr;
+use std::{cmp::Ordering, str::FromStr};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen]
@@ -129,5 +129,13 @@ impl JsVersion {
 
     pub fn equals(&self, other: &Self) -> bool {
         self.as_ref() == other.as_ref()
+    }
+
+    pub fn compare(&self, other: &Self) -> i8 {
+        match self.as_ref().cmp(other.as_ref()) {
+            Ordering::Less => -1,
+            Ordering::Equal => 0,
+            Ordering::Greater => 1,
+        }
     }
 }
