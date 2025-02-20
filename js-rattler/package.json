@@ -26,8 +26,8 @@
     },
     "scripts": {
         "build:wasm": "wasm-pack build --mode normal --release",
-        "build:esm": "npm run build:wasm -- --target web && rollup -c rollup.config.esm.mjs",
-        "build:nodejs": "npm run build:wasm -- --target nodejs  && rollup -c rollup.config.cjs.mjs",
+        "build:esm": "npm run build:wasm -- --target web       && rollup -c rollup.config.esm.mjs",
+        "build:nodejs": "npm run build:wasm -- --target nodejs && rollup -c rollup.config.cjs.mjs",
         "build": "node build/build.mjs",
         "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
         "fmt": "prettier --write .",
