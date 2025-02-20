@@ -197,7 +197,7 @@ export class Version {
     }
 
     /**
-     * Compare 2 versions.
+     * Compare two versions.
      *
      * Returns `-1` if self<other, `0` if self == other, `1` if self > other
      */
