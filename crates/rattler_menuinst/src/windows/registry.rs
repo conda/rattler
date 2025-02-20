@@ -12,6 +12,32 @@ pub struct FileExtension<'a> {
     pub friendly_type_name: Option<&'a str>,
 }
 
+/// Registers a file extension handler in the Windows Registry.
+///
+/// Associates a file extension with a command and optional metadata (e.g., icon, app name) under
+/// either the system-wide (`HKEY_LOCAL_MACHINE`) or current user (`HKEY_CURRENT_USER`) registry hive,
+/// depending on the `mode`.
+///
+/// # Arguments
+/// * `file_extension` - A `FileExtension` struct containing registration details.
+/// * `mode` - The `MenuMode` specifying whether to register system-wide (`System`) or for the current user (`User`).
+///
+/// # Errors
+/// Returns a `std::io::Error` if registry operations fail (e.g., insufficient permissions or invalid keys).
+///
+/// # Examples
+/// ```ignore
+/// let file_ext = FileExtension {
+///     extension: ".test",
+///     identifier: "TestApp.File",
+///     command: "\"C:\\Test\\App.exe\" \"%1\"",
+///     icon: Some("C:\\Test\\icon.ico"),
+///     app_name: Some("Test App"),
+///     app_user_model_id: None,
+///     friendly_type_name: Some("Test File"),
+/// };
+/// register_file_extension(file_ext, MenuMode::User)?;
+/// ```
 pub fn register_file_extension(
     file_extension: FileExtension<'_>,
     mode: MenuMode,
@@ -85,6 +111,23 @@ pub fn register_file_extension(
     Ok(())
 }
 
+/// Unregisters a file extension handler from the Windows Registry.
+///
+/// Removes the association between a file extension and its identifier, as well as the handler's registry entries,
+/// based on the specified `mode` (system-wide or current user).
+///
+/// # Arguments
+/// * `extension` - The file extension (e.g., `.test`) to unregister.
+/// * `identifier` - The identifier of the handler (e.g., `TestApp.File`) to remove.
+/// * `mode` - The `MenuMode` specifying the registry hive (`System` or `User`).
+///
+/// # Errors
+/// Returns a `std::io::Error` if registry operations fail (e.g., insufficient permissions or key not found).
+///
+/// # Examples
+/// ```ignore
+/// unregister_file_extension(".test", "TestApp.File", MenuMode::User)?;
+/// ```
 pub fn unregister_file_extension(
     extension: &str,
     identifier: &str,
@@ -125,6 +168,22 @@ pub fn unregister_file_extension(
     Ok(())
 }
 
+/// Converts a string to title case, capitalizing the first letter of each word.
+///
+/// Words are separated by whitespace, hyphens, or underscores. This is used internally
+/// to format URL protocol names.
+///
+/// # Arguments
+/// * `s` - The input string to convert.
+///
+/// # Returns
+/// A new `String` in title case.
+///
+/// # Examples
+/// ```ignore
+/// assert_eq!(title_case("hello-world"), "Hello-World");
+/// assert_eq!(title_case("my_url"), "My_Url");
+/// ```
 fn title_case(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut capitalize_next = true;
@@ -144,16 +203,50 @@ fn title_case(s: &str) -> String {
     result
 }
 
+/// Represents a URL protocol registration with associated metadata.
+///
+/// This struct defines the properties needed to register a custom URL protocol handler in the Windows Registry,
+/// such as a command to execute and optional application details.
 #[derive(Debug, Clone, Copy)]
 pub struct UrlProtocol<'a> {
+    /// The URL protocol name (e.g., `rattlertest`).
     pub protocol: &'a str,
+    /// The command to execute when the protocol is invoked.
     pub command: &'a str,
+    /// The identifier for the protocol handler.
     pub identifier: &'a str,
+    /// The path to an icon file to associate with the protocol.
     pub icon: Option<&'a str>,
+    /// The friendly name of the application.
     pub app_name: Option<&'a str>,
+    /// The application user model ID (AUMI) for the protocol handler.
     pub app_user_model_id: Option<&'a str>,
 }
 
+/// Registers a custom URL protocol handler in the Windows Registry.
+///
+/// Creates registry entries for a URL protocol (e.g., `myapp://`) with a command and optional metadata,
+/// under either `HKEY_CLASSES_ROOT` (system-wide) or `HKEY_CURRENT_USER` (user-specific) based on `mode`.
+///
+/// # Arguments
+/// * `url_protocol` - A `UrlProtocol` struct containing registration details.
+/// * `mode` - The `MenuMode` specifying the registry hive (`System` or `User`).
+///
+/// # Errors
+/// Returns a `std::io::Error` if registry operations fail (e.g., insufficient permissions).
+///
+/// # Examples
+/// ```ignore
+/// let url_proto = UrlProtocol {
+///     protocol: "myapp",
+///     command: "\"C:\\MyApp\\App.exe\" \"%1\"",
+///     identifier: "MyApp",
+///     icon: Some("C:\\MyApp\\icon.ico"),
+///     app_name: Some("My App"),
+///     app_user_model_id: None,
+/// };
+/// register_url_protocol(url_proto, MenuMode::User)?;
+/// ```
 pub fn register_url_protocol(
     url_protocol: UrlProtocol<'_>,
     mode: MenuMode,
@@ -211,6 +304,23 @@ pub fn register_url_protocol(
     Ok(())
 }
 
+/// Unregisters a URL protocol handler from the Windows Registry.
+///
+/// Removes the registry entries for a URL protocol if the identifier matches, based on the specified `mode`.
+/// Does nothing if the protocol or identifier doesn’t exist or doesn’t match.
+///
+/// # Arguments
+/// * `protocol` - The protocol name (e.g., `myapp`) to unregister.
+/// * `identifier` - The identifier of the handler to verify before removal.
+/// * `mode` - The `MenuMode` specifying the registry hive (`System` or `User`).
+///
+/// # Errors
+/// Returns a `std::io::Error` if registry operations fail (e.g., insufficient permissions).
+///
+/// # Examples
+/// ```ignore
+/// unregister_url_protocol("myapp", "MyApp", MenuMode::User)?;
+/// ```
 pub fn unregister_url_protocol(
     protocol: &str,
     identifier: &str,
@@ -241,6 +351,20 @@ pub fn unregister_url_protocol(
     Ok(())
 }
 
+/// Notifies the Windows shell of changes to file associations or protocols.
+///
+/// Calls `SHChangeNotify` with `SHCNE_ASSOCCHANGED` to refresh the shell’s understanding of registered
+/// file extensions or URL protocols. This is typically called after registration/unregistration.
+///
+/// # Safety
+/// This function uses an unsafe Windows API call but is safe under normal conditions as it passes
+/// valid parameters.
+///
+/// # Examples
+/// ```ignore
+/// register_file_extension(file_ext, MenuMode::User)?;
+/// notify_shell_changes();
+/// ```
 pub fn notify_shell_changes() {
     unsafe {
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
@@ -256,6 +380,21 @@ mod tests {
 
     fn cleanup_protocol(protocol: &str, identifier: &str, mode: MenuMode) {
         let _ = unregister_url_protocol(protocol, identifier, mode);
+    }
+
+    #[test]
+    fn test_title_case() {
+        let inputs = [
+            ("hello-world", "Hello-World"),
+            ("my_url", "My_Url"),
+            ("my_url_protocol", "My_Url_Protocol"),
+            ("my_url_protocol_test", "My_Url_Protocol_Test"),
+            ("my_url_protocol_test_2", "My_Url_Protocol_Test_2"),
+        ];
+
+        for (input, expected) in inputs.iter() {
+            assert_eq!(title_case(input), *expected);
+        }
     }
 
     #[test]
