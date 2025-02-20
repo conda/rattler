@@ -24,14 +24,14 @@
                 "import": "./dist/rattler.node.mjs",
                 "require": "./dist/rattler.node.cjs"
             },
-            "default": "./dist/umd.js"
+            "import": "./dist/rattler.bundler.mjs"
         }
     },
     "scripts": {
         "build:wasm": "wasm-pack build --mode normal --release",
-        "build:umd": "npm run build:wasm -- --target bundler && webpack --mode=production",
+        "build:esm": "npm run build:wasm -- --target web && rollup -c rollup.config.esm.mjs",
         "build:nodejs": "npm run build:wasm -- --target nodejs  && rollup -c rollup.config.mjs && cp ./pkg/js_rattler_bg.wasm ./dist/",
-        "build": "rimraf dist pkg && npm run build:umd && npm run build:nodejs && api-extractor run --verbose",
+        "build": "rimraf dist pkg && npm run build:esm && npm run build:nodejs && api-extractor run --verbose",
         "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
         "fmt": "prettier --write .",
         "fmt:check": "prettier --check ."
@@ -51,13 +51,9 @@
         "rimraf": "^6.0.1",
         "rollup": "^4.34.8",
         "ts-jest": "^29.2.5",
-        "ts-loader": "^9.5.1",
         "ts-node": "^10.9.2",
         "tslib": "^2.8.1",
         "typescript": "^5.6.3",
-        "wasm-pack": "^0.13.1",
-        "webpack": "^5.96.1",
-        "webpack-cli": "^6.0.1",
-        "webpack-merge": "^6.0.1"
+        "wasm-pack": "^0.13.1"
     }
 }
