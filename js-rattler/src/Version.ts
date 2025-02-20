@@ -1,4 +1,4 @@
-import { JsVersion } from "../pkg";
+import { JsVersion } from "./stub";
 
 /**
  * Represents a version in the conda ecosystem.

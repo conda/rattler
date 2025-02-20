@@ -24,6 +24,7 @@ const options = {
     },
     experiments: {
         asyncWebAssembly: true,
+        syncWebAssembly: true,
     },
 };
 
@@ -34,32 +35,9 @@ export default [
             clean: false,
             path: path.resolve(__dirname, "dist/"),
             filename: "umd.js",
-            globalObject: "typeof self !== 'undefined' ? self : this",
             library: "rattler",
             libraryTarget: "umd",
             umdNamedDefine: true,
-        },
-    }),
-    merge(options, {
-        output: {
-            assetModuleFilename: "[name][ext]",
-            clean: false,
-            path: path.resolve(__dirname, "dist/"),
-            filename: "rattler.cjs",
-            libraryTarget: "commonjs",
-        },
-    }),
-    merge(options, {
-        output: {
-            assetModuleFilename: "[name][ext]",
-            clean: false,
-            path: path.resolve(__dirname, "dist/"),
-            filename: "esm.mjs",
-            libraryTarget: "module",
-            umdNamedDefine: false,
-        },
-        experiments: {
-            outputModule: true,
         },
     }),
 ];
