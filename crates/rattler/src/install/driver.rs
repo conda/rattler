@@ -182,8 +182,8 @@ impl InstallDriver {
         // For all packages that are removed, we need to remove menuinst entries as well
         for record in transaction.removed_packages() {
             let prefix_record = record.borrow();
-            if let Some(data) = &prefix_record.menuinst_tracker {
-                match rattler_menuinst::remove_menu_items(data) {
+            if !prefix_record.installed_system_menus.is_empty() {
+                match rattler_menuinst::remove_menu_items(&prefix_record.installed_system_menus) {
                     Ok(_) => {}
                     Err(e) => {
                         tracing::warn!("Failed to remove menu item: {}", e);
@@ -281,8 +281,7 @@ impl InstallDriver {
                             Ok(tracker_vec) => {
                                 // Store tracker in the prefix record
                                 let mut record = record.clone();
-                                record.menuinst_tracker =
-                                    Some(serde_json::to_value(tracker_vec).unwrap());
+                                record.installed_system_menus = tracker_vec;
 
                                 // Save the updated prefix record
                                 record
