@@ -199,7 +199,7 @@ export class Version {
     /**
      * Compare two versions.
      *
-     * Returns `-1` if self<other, `0` if self == other, `1` if self > other
+     * Returns `-1` if this<other, `0` if this == other, `1` if this > other
      */
     public compare(other: Version): number {
         return this.native.compare(other.native);
