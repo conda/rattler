@@ -12,11 +12,18 @@
         "url": "https://github.com/conda/rattler/issues"
     },
     "homepage": "https://github.com/conda/rattler#readme",
-    "main": "./dist/main.js",
+    "main": "./dist/umd/main.js",
     "types": "./dist/index.d.ts",
     "files": [
         "dist/**/*"
     ],
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/module/main.mjs",
+            "default": "./dist/umd/main.js"
+        }
+    },
     "scripts": {
         "build:wasm": "wasm-pack build --target bundler --mode normal --release",
         "build": "webpack --mode=production && api-extractor run --verbose",
@@ -25,6 +32,7 @@
         "fmt:check": "prettier --check ."
     },
     "devDependencies": {
+        "@microsoft/api-extractor": "^7.50.0",
         "@jest/globals": "^29.7.0",
         "@wasm-tool/wasm-pack-plugin": "1.7.0",
         "cross-env": "^7.0.3",
@@ -38,6 +46,6 @@
         "wasm-pack": "^0.13.1",
         "webpack": "^5.96.1",
         "webpack-cli": "^5.1.4",
-        "@microsoft/api-extractor": "^7.50.0"
+        "webpack-merge": "^6.0.1"
     }
 }

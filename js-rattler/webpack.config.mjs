@@ -1,11 +1,12 @@
 import path from "path";
 import { fileURLToPath } from "url";
 import WasmPackPlugin from "@wasm-tool/wasm-pack-plugin";
+import { merge } from "webpack-merge";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export default {
+const options = {
     entry: "./src/index.ts",
     module: {
         rules: [
@@ -16,17 +17,11 @@ export default {
             },
         ],
     },
+    optimization: {
+        minimize: false
+    },
     resolve: {
         extensions: [".ts", ".js"],
-    },
-    output: {
-        assetModuleFilename: "[name][ext]",
-        clean: true,
-        path: path.resolve(__dirname, "dist"),
-        filename: "[name].js",
-        library: "js-rattler",
-        libraryTarget: "umd",
-        umdNamedDefine: true,
     },
     plugins: [
         new WasmPackPlugin({
@@ -40,3 +35,30 @@ export default {
         asyncWebAssembly: true,
     },
 };
+
+export default [
+    merge(options, {
+        output: {
+            assetModuleFilename: "[name][ext]",
+            clean: true,
+            path: path.resolve(__dirname, "dist/umd/"),
+            filename: "[name].js",
+            library: "js-rattler",
+            libraryTarget: "umd",
+            umdNamedDefine: true,
+        },
+    }),
+    merge(options, {
+        output: {
+            assetModuleFilename: "[name][ext]",
+            clean: true,
+            path: path.resolve(__dirname, "dist/module/"),
+            filename: "[name].mjs",
+            libraryTarget: "module",
+            umdNamedDefine: false,
+        },
+        experiments: {
+            outputModule: true,
+        },
+    }),
+];
