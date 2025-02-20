@@ -1,0 +1,8 @@
+{
+    "tabWidth": 4,
+    "semi": true,
+    "trailingComma": "all",
+    "useTabs": false,
+    "plugins": ["prettier-plugin-jsdoc"],
+    "tsdoc": true
+}
