@@ -21,6 +21,7 @@
         ".": {
             "types": "./dist/index.d.ts",
             "import": "./dist/esm.mjs",
+            "require": "./dist/rattler.cjs",
             "default": "./dist/umd.js"
         }
     },

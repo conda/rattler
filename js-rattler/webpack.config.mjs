@@ -45,6 +45,15 @@ export default [
             assetModuleFilename: "[name][ext]",
             clean: false,
             path: path.resolve(__dirname, "dist/"),
+            filename: "rattler.cjs",
+            libraryTarget: "commonjs",
+        },
+    }),
+    merge(options, {
+        output: {
+            assetModuleFilename: "[name][ext]",
+            clean: false,
+            path: path.resolve(__dirname, "dist/"),
             filename: "esm.mjs",
             libraryTarget: "module",
             umdNamedDefine: false,
