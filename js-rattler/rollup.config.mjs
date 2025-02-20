@@ -6,6 +6,22 @@ import { nodeResolve } from "@rollup/plugin-node-resolve";
 import commonjs from "@rollup/plugin-commonjs";
 import esmShim from "@rollup/plugin-esm-shim";
 
+const commonPlugins = [
+    commonjs(),
+    wasm({
+        targetEnv: "auto-inline",
+        sync: ["pkg/js_rattler_bg.wasm"],
+    }),
+    nodeResolve(),
+    typescript({
+        sourceMap: false,
+        declaration: false,
+        declarationMap: false,
+        inlineSources: false,
+        tsconfig: "./tsconfig.rollup.json",
+    }),
+]
+
 export default [
     {
         input: "src/index.ts",
@@ -16,19 +32,7 @@ export default [
         },
         plugins: [
             esmShim(),
-            commonjs(),
-            wasm({
-                targetEnv: "auto-inline",
-                sync: ["pkg/js_rattler_bg.wasm"],
-            }),
-            nodeResolve(),
-            typescript({
-                sourceMap: false,
-                declaration: false,
-                declarationMap: false,
-                inlineSources: false,
-                tsconfig: "./tsconfig.rollup.json",
-            }),
+            ...commonPlugins,
         ],
     },
     {
@@ -39,19 +43,7 @@ export default [
             format: "commonjs",
         },
         plugins: [
-            commonjs(),
-            wasm({
-                targetEnv: "auto-inline",
-                sync: ["pkg/js_rattler_bg.wasm"],
-            }),
-            nodeResolve(),
-            typescript({
-                sourceMap: false,
-                declaration: false,
-                declarationMap: false,
-                inlineSources: false,
-                tsconfig: "./tsconfig.rollup.json",
-            }),
+            ...commonPlugins,
         ],
     },
 ];
