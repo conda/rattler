@@ -20,7 +20,9 @@ export default {
             targetEnv: "auto-inline",
             sync: ["pkg/js_rattler_bg.wasm"],
         }),
-        nodeResolve({ extensions: ['.mjs', '.js', '.json', '.node', '.ts', '.cts'] }),
+        nodeResolve({
+            extensions: [".mjs", ".js", ".json", ".node", ".ts", ".cts"],
+        }),
         typescript({
             sourceMap: false,
             declaration: false,
@@ -29,5 +31,4 @@ export default {
             tsconfig: "./tsconfig.rollup.json",
         }),
     ],
-}
-
+};

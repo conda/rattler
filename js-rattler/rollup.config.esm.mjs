@@ -18,7 +18,9 @@ export default {
             targetEnv: "auto-inline",
             sync: ["pkg/js_rattler_bg.wasm"],
         }),
-        nodeResolve({ extensions: ['.mjs', '.js', '.json', '.node', '.ts', '.mts'] }),
+        nodeResolve({
+            extensions: [".mjs", ".js", ".json", ".node", ".ts", ".mts"],
+        }),
         typescript({
             sourceMap: false,
             declaration: false,
