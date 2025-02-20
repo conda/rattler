@@ -21,7 +21,8 @@
         "build:wasm": "wasm-pack build --target bundler --mode normal --release",
         "build": "webpack --mode=production && api-extractor run --verbose",
         "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
-        "fmt": "prettier --write ."
+        "fmt": "prettier --write .",
+        "fmt:check": "prettier --check ."
     },
     "devDependencies": {
         "@jest/globals": "^29.7.0",
