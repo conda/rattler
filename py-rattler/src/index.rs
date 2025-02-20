@@ -19,7 +19,6 @@ pub fn py_index_fs(
 ) -> PyResult<Bound<'_, PyAny>> {
     future_into_py(py, async move {
         let target_platform = target_platform.map(Platform::from);
-        eprintln!("Target platform: {:?}", target_platform);
         match index_fs(channel_directory, target_platform, force, max_parallel).await {
             Ok(_v) => Ok(()),
             Err(e) => Err(PyRattlerError::from(e).into()),
@@ -43,8 +42,8 @@ pub fn py_index_s3(
     force: bool,
     max_parallel: usize,
 ) -> PyResult<Bound<'_, PyAny>> {
-    let channel_url = Url::parse(&channel_url).map_err(|e| PyRattlerError::from(e))?;
-    let endpoint_url = Url::parse(&endpoint_url).map_err(|e| PyRattlerError::from(e))?;
+    let channel_url = Url::parse(&channel_url).map_err(PyRattlerError::from)?;
+    let endpoint_url = Url::parse(&endpoint_url).map_err(PyRattlerError::from)?;
     let target_platform = target_platform.map(Platform::from);
     future_into_py(py, async move {
         match index_s3(
