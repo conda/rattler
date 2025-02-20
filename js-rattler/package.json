@@ -28,7 +28,7 @@
         "build:wasm": "wasm-pack build --mode normal --release",
         "build:esm": "npm run build:wasm -- --target web    && rollup -c rollup.config.esm.mjs",
         "build:cjs": "npm run build:wasm -- --target nodejs && rollup -c rollup.config.cjs.mjs",
-        "build": "rimraf dist pkg && npm run build:esm && npm run build:cjs && cp pkg/js_rattler_bg.wasm ./dist/",
+        "build": "rimraf dist pkg && npm run build:esm && npm run build:cjs && cp pkg/js_rattler_bg.wasm ./dist/ && api-extractor run --verbose",
         "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
         "fmt": "prettier --write .",
         "fmt:check": "prettier --check ."
