@@ -1,6 +1,6 @@
 {
     "name": "@baszalmstra/rattler",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "Javascript bindings to the rattler library",
     "repository": {
         "type": "git",
@@ -12,7 +12,6 @@
         "url": "https://github.com/conda/rattler/issues"
     },
     "homepage": "https://github.com/conda/rattler/tree/main/js-rattler#readme",
-    "main": "./dist/umd.js",
     "types": "./dist/index.d.ts",
     "files": [
         "dist/**/*"
@@ -29,7 +28,7 @@
         "build:esm": "npm run build:wasm -- --target web    && rollup -c rollup.config.esm.mjs",
         "build:cjs": "npm run build:wasm -- --target nodejs && rollup -c rollup.config.cjs.mjs",
         "build:types": "tsc && api-extractor run --verbose",
-        "build": "rimraf dist pkg && npm run build:esm && npm run build:cjs && cp pkg/js_rattler_bg.wasm ./dist/ && npm run build:types",
+        "build": "rimraf dist pkg && npm run build:esm && npm run build:cjs && shx cp pkg/js_rattler_bg.wasm ./dist/ && npm run build:types",
         "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
         "fmt": "prettier --write .",
         "fmt:check": "prettier --check ."
@@ -48,6 +47,7 @@
         "prettier-plugin-jsdoc": "^1.3.0",
         "rimraf": "^6.0.1",
         "rollup": "^4.34.8",
+        "shx": "^0.3.4",
         "ts-jest": "^29.2.5",
         "ts-node": "^10.9.2",
         "typescript": "^5.6.3",
