@@ -34,6 +34,7 @@ export default [
             clean: false,
             path: path.resolve(__dirname, "dist/"),
             filename: "umd.js",
+            globalObject: "typeof self !== 'undefined' ? self : this",
             library: "rattler",
             libraryTarget: "umd",
             umdNamedDefine: true,
