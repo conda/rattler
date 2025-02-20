@@ -62,3 +62,7 @@ jobs:
         working-directory: js-rattler
       - run: npm test
         working-directory: js-rattler
+
+      # some e2e test to make sure our build works
+      - run: node ./e2e/main.cjs
+        working-directory: js-rattler
