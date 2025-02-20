@@ -21,6 +21,7 @@ clap = { workspace = true, features = ["derive", "env"] }
 clap-verbosity-flag = { workspace = true }
 console = { workspace = true }
 fs-err = { workspace = true }
+fxhash = { workspace = true }
 futures = { workspace = true }
 indicatif = { workspace = true }
 opendal = { workspace = true, features = ["services-s3", "services-fs"] }

@@ -5,6 +5,7 @@
 use anyhow::Result;
 use fs_err::{self as fs};
 use futures::future::try_join_all;
+use fxhash::FxHashMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rattler_conda_types::{
     package::{ArchiveType, IndexJson, PackageFile},
@@ -100,7 +101,9 @@ pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> 
     package_record_from_conda_reader(reader)
 }
 
-/// TODO
+/// Extract the package record from a `.conda` package file content.
+/// /// This function will look for the `info/index.json` file in the conda package
+/// and extract the package record from it.
 pub fn package_record_from_conda_reader(reader: impl Read) -> std::io::Result<PackageRecord> {
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
     let reader = Cursor::new(bytes.clone());
@@ -126,7 +129,7 @@ async fn index_subdir(
     progress: MultiProgress,
     semaphore: Arc<Semaphore>,
 ) -> Result<()> {
-    let mut registered_packages = HashMap::default();
+    let mut registered_packages: FxHashMap<String, PackageRecord> = HashMap::default();
     if !force {
         let repodata_path = format!("{subdir}/repodata.json");
         let repodata_bytes = op.read(&repodata_path).await;
@@ -150,6 +153,7 @@ async fn index_subdir(
             }
         };
         registered_packages.extend(repodata.packages.into_iter());
+        registered_packages.extend(repodata.conda_packages.into_iter());
         tracing::debug!(
             "Found {} already registered packages in {}/repodata.json.",
             registered_packages.len(),
@@ -234,7 +238,6 @@ async fn index_subdir(
                             console::style(filename.clone()).dim()
                         ));
                         let file_path = format!("{subdir}/{filename}");
-                        // TODO: Check how we use streaming here
                         let buffer = op.read(&file_path).await?;
                         let bytes = buffer.to_vec();
                         let cursor = Cursor::new(bytes);
@@ -251,7 +254,6 @@ async fn index_subdir(
             })
         })
         .collect::<Vec<_>>();
-    // TODO: Limit to 10 packages in parallel here to avoid overloading RAM
     let results = try_join_all(tasks).await?;
 
     pb.finish_with_message(format!("Finished {}", subdir.as_str()));
@@ -267,13 +269,27 @@ async fn index_subdir(
         registered_packages.insert(filename, record);
     }
 
+    let mut packages: FxHashMap<String, PackageRecord> = HashMap::default();
+    let mut conda_packages: FxHashMap<String, PackageRecord> = HashMap::default();
+    for (filename, package) in registered_packages {
+        match ArchiveType::try_from(&filename) {
+            Some(ArchiveType::TarBz2) => {
+                packages.insert(filename, package);
+            }
+            Some(ArchiveType::Conda) => {
+                conda_packages.insert(filename, package);
+            }
+            _ => panic!("Unknown archive type"),
+        }
+    }
+
     let repodata = RepoData {
         info: Some(ChannelInfo {
             subdir: subdir.to_string(),
             base_url: None,
         }),
-        packages: registered_packages,
-        conda_packages: HashMap::default(),
+        packages,
+        conda_packages,
         removed: HashSet::default(),
         version: Some(2),
     };
