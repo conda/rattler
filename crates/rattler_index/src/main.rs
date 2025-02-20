@@ -100,10 +100,9 @@ async fn main() -> anyhow::Result<()> {
         .with_max_level(cli.verbose.log_level_filter().as_trace())
         .init();
 
-    let result = match cli.command {
+    match cli.command {
         Commands::FileSystem { channel } => {
-            index_fs(channel, cli.target_platform, cli.force, cli.max_parallel).await?;
-            Ok(())
+            index_fs(channel, cli.target_platform, cli.force, cli.max_parallel).await
         }
         Commands::S3 {
             channel,
@@ -126,10 +125,9 @@ async fn main() -> anyhow::Result<()> {
                 cli.force,
                 cli.max_parallel,
             )
-            .await?;
-            Ok(())
+            .await
         }
-    };
-    println!("Finished indexing channel...");
-    result
+    }?;
+    println!("Finished indexing channel.");
+    Ok(())
 }
