@@ -83,14 +83,12 @@ impl ArtifactFromSource for STree {
         if let Ok(bytes) = fs::read(location) {
             let source = String::from_utf8(bytes).map_err(|e| {
                 ReadPyProjectError::PyProjectTomlParseError(format!(
-                    "could not parse pyproject.toml (bad encoding): {}",
-                    e
+                    "could not parse pyproject.toml (bad encoding): {e}",
                 ))
             })?;
             let project = pyproject_toml::PyProjectToml::new(&source).map_err(|e| {
                 ReadPyProjectError::PyProjectTomlParseError(format!(
-                    "could not parse pyproject.toml (bad toml): {}",
-                    e
+                    "could not parse pyproject.toml (bad toml): {e}",
                 ))
             })?;
             Ok(project)

@@ -13,13 +13,13 @@ use std::str::FromStr;
 /// A representation of a tag triple for a wheel.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, SerializeDisplay, DeserializeFromStr)]
 pub struct WheelTag {
-    /// The interpreter name, e.g. "py"
+    /// The interpreter name, e.g. `py`
     pub interpreter: String,
 
-    /// The ABI that a wheel supports, e.g. "cp37m"
+    /// The ABI that a wheel supports, e.g. `cp37m`
     pub abi: String,
 
-    /// The OS/platform the wheel supports, e.g. "win_am64".
+    /// The OS/platform the wheel supports, e.g. `win_am64`.
     pub platform: String,
 }
 

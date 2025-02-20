@@ -15,14 +15,14 @@ use url::Url;
 /// derived simply from the name.
 ///
 /// An artifact is a packaged form of a software project that can be easily distributed and
-/// installed. In the context of this enum, an artifact can be either a wheel or a source
-/// distribution (sdist).
+/// installed. In the context of this enum, an artifact can be either a wheel ([`Wheel`]) or a source
+/// distribution [`SDist`].
 ///
 /// A wheel is a binary distribution format specific to Python. It contains pre-compiled code
 /// that can be directly installed on compatible systems, eliminating the need for compilation.
 /// Wheels provide faster installation and better compatibility, especially for binary dependencies.
 ///
-/// On the other hand, a source distribution (sdist) is a package format that includes the source
+/// On the other hand, a source distribution is a package format that includes the source
 /// code of the software project, along with any required build scripts or configuration files.
 /// Source distributions are platform-independent and can be built and installed on various systems,
 /// but they require compilation and might have additional dependencies that need to be resolved.
@@ -31,11 +31,11 @@ use url::Url;
 /// providing flexibility and clarity when working with Python package distributions.
 #[derive(Debug, Clone, PartialOrd, Ord, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ArtifactName {
-    /// Wheel artifact
+    /// `Wheel` artifact
     Wheel(WheelFilename),
-    /// Sdist artifact
+    /// `SDist` artifact
     SDist(SDistFilename),
-    /// STree artifact
+    /// `STree` artifact
     STree(STreeFilename),
 }
 
@@ -53,16 +53,14 @@ impl ArtifactName {
     pub fn as_wheel(&self) -> Option<&WheelFilename> {
         match self {
             ArtifactName::Wheel(wheel) => Some(wheel),
-            ArtifactName::SDist(_) => None,
-            ArtifactName::STree(_) => None,
+            ArtifactName::SDist(_) | ArtifactName::STree(_) => None,
         }
     }
 
     /// Returns this name as a wheel name
     pub fn as_sdist(&self) -> Option<&SDistFilename> {
         match self {
-            ArtifactName::Wheel(_) => None,
-            ArtifactName::STree(_) => None,
+            ArtifactName::Wheel(_) | ArtifactName::STree(_) => None,
             ArtifactName::SDist(sdist) => Some(sdist),
         }
     }
@@ -70,9 +68,8 @@ impl ArtifactName {
     /// Returns this name as a source tree name
     pub fn as_stree(&self) -> Option<&STreeFilename> {
         match self {
-            ArtifactName::Wheel(_) => None,
+            ArtifactName::Wheel(_) | ArtifactName::SDist(_) => None,
             ArtifactName::STree(name) => Some(name),
-            ArtifactName::SDist(_) => None,
         }
     }
 
@@ -94,9 +91,9 @@ impl ArtifactName {
 impl Display for ArtifactName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ArtifactName::Wheel(name) => write!(f, "{}", name),
-            ArtifactName::SDist(name) => write!(f, "{}", name),
-            ArtifactName::STree(name) => write!(f, "{}", name),
+            ArtifactName::Wheel(name) => write!(f, "{name}"),
+            ArtifactName::SDist(name) => write!(f, "{name}"),
+            ArtifactName::STree(name) => write!(f, "{name}"),
         }
     }
 }
@@ -107,32 +104,32 @@ impl Display for ArtifactName {
 /// for more details regarding the structure of a wheel name.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct WheelFilename {
-    /// Distribution name, e.g. ‘django’, ‘pyramid’.
+    /// Distribution name, e.g. `django`, `pyramid`.
     pub distribution: PackageName,
 
-    /// Distribution version, e.g. 1.0.
+    /// Distribution version, e.g. `1.0`.
     pub version: Version,
 
     /// Optional build number.
     pub build_tag: Option<BuildTag>,
 
     /// Language implementation and version tag
-    /// E.g. ‘py27’, ‘py2’, ‘py3’.
+    /// E.g. `py27`, `py2`, `py3`.
     pub py_tags: Vec<String>,
 
     /// ABI specific tags
-    /// E.g. ‘cp33m’, ‘abi3’, ‘none’.
+    /// E.g. `cp33m`, `abi3`, `none`.
     pub abi_tags: Vec<String>,
 
     /// Architecture specific tags
-    /// E.g. ‘linux_x86_64’, ‘any’, ‘manylinux_2_17_x86_64’
+    /// E.g. `linux_x86_64`, `any`, `manylinux_2_17_x86_64`
     pub arch_tags: Vec<String>,
 }
 
 impl WheelFilename {
     /// Creates a set of all tags that are contained in this wheel name.
     pub fn all_tags(&self) -> HashSet<WheelTag> {
-        HashSet::from_iter(self.all_tags_iter())
+        self.all_tags_iter().collect::<HashSet<_>>()
     }
 
     /// Returns an iterator over all the tags that are contained in this wheel name. Note that there
@@ -213,7 +210,7 @@ pub struct STreeFilename {
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize, Deserialize)]
-/// SourceArtifactName
+/// `SourceArtifactName`s of `SourceArtifactName` that are possible
 pub enum SourceArtifactName {
     /// SDIST
     SDist(SDistFilename),
@@ -224,8 +221,8 @@ pub enum SourceArtifactName {
 impl Display for SourceArtifactName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SourceArtifactName::SDist(sdist) => write!(f, "{}", sdist),
-            SourceArtifactName::STree(stree) => write!(f, "{}", stree),
+            SourceArtifactName::SDist(sdist) => write!(f, "{sdist}"),
+            SourceArtifactName::STree(stree) => write!(f, "{stree}"),
         }
     }
 }
@@ -266,12 +263,12 @@ pub enum SDistFormat {
 }
 
 impl SDistFormat {
-    /// In RIP we currently only support TarGz and Tar
+    /// In RIP we currently only support `TarGz` and Tar
     pub fn is_supported(&self) -> bool {
         matches!(self, Self::TarGz | Self::Tar | Self::Zip)
     }
 
-    /// Get extension of SDist
+    /// Get extension of `SDist`
     pub fn get_extension(path: &str) -> Result<SDistFormat, ParseArtifactNameError> {
         let format = if path.strip_suffix(".zip").is_some() {
             SDistFormat::Zip
@@ -342,7 +339,7 @@ impl FromStr for BuildTag {
         Ok(Self {
             number: digits
                 .parse()
-                .map_err(|_| ParseArtifactNameError::BuildTagMustStartWithDigit(s.to_owned()))?,
+                .map_err(|_err| ParseArtifactNameError::BuildTagMustStartWithDigit(s.to_owned()))?,
             name: name.to_owned(),
         })
     }
@@ -550,9 +547,9 @@ impl InnerAsArtifactName for STreeFilename {
 }
 
 /// Enum that contains the different artifacts types:
-///    * SDist is a python source distribution
+///    * `SDist` is a python source distribution
 ///    * Wheel is a python binary distribution
-///    * STree (is not an official PyPa name) but represents a source code tree
+///    * `STree` (is not an official pypa name) but represents a source code tree
 #[allow(missing_docs)]
 pub enum ArtifactType {
     Wheel(Wheel),
@@ -573,17 +570,15 @@ impl ArtifactType {
     /// Returns this artifact as wheel
     pub fn as_wheel(self) -> Option<Wheel> {
         match self {
+            ArtifactType::SDist(_) | ArtifactType::STree(_) => None,
             ArtifactType::Wheel(wheel) => Some(wheel),
-            ArtifactType::SDist(_) => None,
-            ArtifactType::STree(_) => None,
         }
     }
 
     /// Returns this name as a wheel name
     pub fn as_sdist(self) -> Option<SDist> {
         match self {
-            ArtifactType::Wheel(_) => None,
-            ArtifactType::STree(_) => None,
+            ArtifactType::STree(_) | ArtifactType::Wheel(_) => None,
             ArtifactType::SDist(sdist) => Some(sdist),
         }
     }
@@ -591,9 +586,8 @@ impl ArtifactType {
     /// Returns this name as a source tree name
     pub fn as_stree(self) -> Option<STree> {
         match self {
-            ArtifactType::Wheel(_) => None,
+            ArtifactType::Wheel(_) | ArtifactType::SDist(_) => None,
             ArtifactType::STree(stree) => Some(stree),
-            ArtifactType::SDist(_) => None,
         }
     }
 }

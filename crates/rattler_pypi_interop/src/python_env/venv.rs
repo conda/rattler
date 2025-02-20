@@ -27,8 +27,9 @@ impl PythonLocation {
     pub fn executable(&self) -> Result<PathBuf, FindPythonError> {
         match self {
             PythonLocation::System => system_python_executable().cloned(),
-            PythonLocation::Custom(path) => Ok(path.clone()),
-            PythonLocation::CustomWithVersion(path, _) => Ok(path.clone()),
+            PythonLocation::Custom(path) | PythonLocation::CustomWithVersion(path, _) => {
+                Ok(path.clone())
+            }
         }
     }
 

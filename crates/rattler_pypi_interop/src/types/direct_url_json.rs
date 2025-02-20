@@ -52,7 +52,7 @@ pub struct DirectUrlHashes {
     pub sha256: String,
 }
 
-/// Name of the VCS in a DirectUrlSource
+/// Name of the VCS in a `DirectUrlSource`
 #[derive(Debug, Serialize, Deserialize)]
 #[allow(missing_docs)]
 pub enum DirectUrlVcs {
@@ -71,7 +71,7 @@ mod tests {
     use crate::types::direct_url_json::DirectUrlJson;
 
     /// Tests if json outputs aligns with the examples at:
-    /// https://packaging.python.org/en/latest/specifications/direct-url-data-structure/
+    /// <https://packaging.python.org/en/latest/specifications/direct-url-data-structure>
     /// try to parse the example cases from there
     #[test]
     pub fn test_examples_pypa() {

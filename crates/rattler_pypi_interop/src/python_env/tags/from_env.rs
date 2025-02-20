@@ -25,6 +25,13 @@ pub enum FromPythonError {
     FailedToRun(ExitStatus),
 }
 
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum EnvResult {
+    Tags(Vec<(String, String, String)>),
+    Error(String),
+}
+
 impl WheelTags {
     /// Try to determine the platform tags by executing the python command and extracting `sys_tags`
     /// using the vendored `packaging` module.
@@ -63,17 +70,10 @@ impl WheelTags {
             return Err(FromPythonError::FailedToRun(output.status));
         }
 
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum Result {
-            Tags(Vec<(String, String, String)>),
-            Error(String),
-        }
-
         // Convert the JSON
         let stdout = String::from_utf8_lossy(&output.stdout);
         match serde_json::from_str(stdout.trim())? {
-            Result::Tags(tags) => Ok(Self {
+            EnvResult::Tags(tags) => Ok(Self {
                 tags: tags
                     .into_iter()
                     .map(|(interpreter, abi, platform)| WheelTag {
@@ -83,7 +83,7 @@ impl WheelTags {
                     })
                     .collect(),
             }),
-            Result::Error(err) => Err(FromPythonError::PythonError(err)),
+            EnvResult::Error(err) => Err(FromPythonError::PythonError(err)),
         }
     }
 }
@@ -100,14 +100,14 @@ mod test {
                 // This is fine, the test machine does not include a python binary.
             }
             Err(FromPythonError::PythonError(e)) => {
-                println!("{e}")
+                println!("{e}");
             }
             Err(e) => panic!("{e:?}"),
             Ok(tags) => {
                 println!(
                     "Found the following platform tags on the current system:\n{}",
                     tags.tags.iter().format(", ")
-                )
+                );
             }
         }
     }

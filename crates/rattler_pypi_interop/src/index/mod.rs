@@ -1,7 +1,7 @@
-//! This module contains functions for working with PyPA packaging repositories.
+//! This module contains functions for working with pypi packaging repositories.
 //!
 //! TODO: Examples to include:
-//!          - PackageDb
+//!   - [`PackageDb`]
 
 mod file_store;
 

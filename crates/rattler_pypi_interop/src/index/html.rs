@@ -1,4 +1,4 @@
-//! Module for parsing different HTML pages from PyPI repository
+//! Module for parsing different HTML pages from a pypi repository
 use std::str::FromStr;
 use std::{borrow::Borrow, default::Default};
 
@@ -112,7 +112,7 @@ pub fn parse_project_info_html(base: &Url, body: &str) -> miette::Result<Project
         segments
             .rev()
             .find(|segment| !segment.is_empty())
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
     });
 
     // Turn into a normalized package name

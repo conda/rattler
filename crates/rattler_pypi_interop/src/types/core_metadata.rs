@@ -27,7 +27,7 @@ impl PackageInfo {
         })
     }
 
-    /// Create a new PackageInfo from a parsed RFC822ish.
+    /// Create a new `PackageInfo` from a parsed `RFC822ish`.
     pub fn new(parsed: RFC822ish) -> Self {
         Self { parsed }
     }
@@ -121,10 +121,10 @@ impl TryFrom<PackageInfo> for WheelCoreMetadata {
         let (name, version, metadata_version, mut parsed) = parse_common(value)?;
 
         let mut requires_dist = Vec::new();
-        for req_str in parsed.take_all("Requires-Dist").into_iter() {
+        for req_str in parsed.take_all("Requires-Dist") {
             match req_str.parse() {
                 Err(e) => {
-                    tracing::warn!("ignoring Requires-Dist: {req_str}, failed to parse: {e}")
+                    tracing::warn!("ignoring Requires-Dist: {req_str}, failed to parse: {e}");
                 }
                 Ok(req) => requires_dist.push(req),
             }
@@ -132,7 +132,7 @@ impl TryFrom<PackageInfo> for WheelCoreMetadata {
 
         let requires_python = parsed
             .maybe_take("Requires-Python")
-            .map_err(|_| WheelCoreMetaDataError::DuplicateKey(String::from("Requires-Python")))?
+            .map_err(|_err| WheelCoreMetaDataError::DuplicateKey(String::from("Requires-Python")))?
             .as_deref()
             .map(VersionSpecifiers::from_str)
             .transpose()
@@ -163,8 +163,7 @@ fn parse_common(
 ) -> Result<(PackageName, Version, MetadataVersion, RFC822ish), WheelCoreMetaDataError> {
     let mut parsed = input.parsed;
 
-    static NEXT_MAJOR_METADATA_VERSION: Lazy<Version> =
-        Lazy::new(|| Version::from_str("3").unwrap());
+    let next_major_metadata_version: Lazy<Version> = Lazy::new(|| Version::from_str("3").unwrap());
 
     // Quoth https://packaging.python.org/specifications/core-metadata:
     // "Automated tools consuming metadata SHOULD warn if metadata_version
@@ -185,22 +184,22 @@ fn parse_common(
     // about it it's because the tool is abandoned anyway.
     let metadata_version = parsed
         .take("Metadata-Version")
-        .map_err(|_| WheelCoreMetaDataError::MissingKey(String::from("Metadata-Version")))?;
+        .map_err(|_err| WheelCoreMetaDataError::MissingKey(String::from("Metadata-Version")))?;
     let metadata_version: Version = metadata_version
         .parse()
         .map_err(WheelCoreMetaDataError::InvalidMetadataVersion)?;
-    if metadata_version >= *NEXT_MAJOR_METADATA_VERSION {
+    if metadata_version >= *next_major_metadata_version {
         return Err(WheelCoreMetaDataError::UnsupportedVersion(metadata_version));
     }
 
     let version_str = parsed
         .take("Version")
-        .map_err(|_| WheelCoreMetaDataError::MissingKey(String::from("Version")))?;
+        .map_err(|_err| WheelCoreMetaDataError::MissingKey(String::from("Version")))?;
 
     Ok((
         parsed
             .take("Name")
-            .map_err(|_| WheelCoreMetaDataError::MissingKey(String::from("Name")))?
+            .map_err(|_err| WheelCoreMetaDataError::MissingKey(String::from("Name")))?
             .parse()?,
         version_str
             .parse()

@@ -1,5 +1,5 @@
-//! This module contains all the types for working with PyPA packaging repositories.
-//! We have tried to follow the PEP's and PyPA packaging guide as closely as possible.
+//! This module contains all the types for working with `PyPA` packaging repositories.
+//! We have tried to follow the PEP's and `PyPA` packaging guide as closely as possible.
 mod artifact;
 
 mod artifact_name;
@@ -12,15 +12,12 @@ mod record;
 
 mod extra;
 
-mod entry_points;
-
 mod project_info;
 
 mod pypi_version_types;
 
-mod solve_options;
-
 mod direct_url_json;
+
 mod rfc822ish;
 
 mod install_paths;
@@ -42,15 +39,9 @@ pub use package_name::{NormalizedPackageName, PackageName, ParsePackageNameError
 
 pub use extra::Extra;
 
-pub use entry_points::{EntryPoint, ParseEntryPointError};
-
 pub use project_info::{ArtifactHashes, ArtifactInfo, DistInfoMetadata, Meta, ProjectInfo, Yanked};
 
-pub use pypi_version_types::{PypiPackageName, PypiVersion, PypiVersionSet};
-
-pub use solve_options::{
-    OnWheelBuildFailure, PreReleaseResolution, ResolveOptions, SDistResolution,
-};
+pub use pypi_version_types::{PypiPackageName, PypiVersion};
 
 pub use install_paths::InstallPaths;
 

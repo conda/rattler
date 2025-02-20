@@ -1,30 +1,13 @@
 //! This module contains types that are used to represent versions and version sets
 //! these are used by the [`resolvo`] crate to resolve dependencies.
-//! This module, in combination with the [`super::dependency_provider`] modules is used to make the PyPI ecosystem compatible with the [`resolvo`] crate.
 
 use crate::types::{Extra, NormalizedPackageName};
 use pep440_rs::Version;
-use pep508_rs::VersionOrUrl;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use url::Url;
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
-/// This is a wrapper around Specifiers that implements [`VersionSet`]
-pub struct PypiVersionSet {
-    /// The spec to match against
-    spec: Option<VersionOrUrl>,
-    /// If the VersionOrUrl is a Version specifier and any of the specifiers contains a
-    /// prerelease, then pre-releases are allowed. For example,
-    /// `jupyterlab==3.0.0a1` allows pre-releases, but `jupyterlab==3.0.0` does not.
-    ///
-    /// We pre-compute if any of the items in the specifiers contains a pre-release and store
-    /// this as a boolean which is later used during matching.
-    allows_prerelease: bool,
-}
-
-/// This is a wrapper around [`Version`] that serves a version
-/// within the [`PypiVersionSet`] version set.
+/// This is a wrapper around [`Version`]. It can also be a direct url to a package.
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum PypiVersion {
     /// Version of artifact
@@ -32,10 +15,9 @@ pub enum PypiVersion {
         /// Version of Artifact
         version: Version,
 
-        /// Given that the [`PreReleaseResolution`] is
-        /// AllowIfNoOtherVersionsOrEnabled, this field is true if there are
-        /// only pre-releases available for this package or if a spec explicitly
-        /// enabled pre-releases for this package. For example, if the package
+        /// This field is true if there are only pre-releases available for this
+        /// package or if a spec explicitly enabled pre-releases for this package.
+        /// For example, if the package
         /// `foo` has only versions `foo-1.0.0a1` and `foo-1.0.0a2` then this
         /// will be true. This allows us later to match against this version and
         /// allow the selection of pre-releases. Additionally, this is also true
@@ -89,8 +71,7 @@ impl PypiPackageName {
     /// Returns the actual package (normalized) name without the extra
     pub fn base(&self) -> &NormalizedPackageName {
         match self {
-            PypiPackageName::Base(normalized) => normalized,
-            PypiPackageName::Extra(normalized, _) => normalized,
+            PypiPackageName::Base(normalized) | PypiPackageName::Extra(normalized, _) => normalized,
         }
     }
 
@@ -106,8 +87,8 @@ impl PypiPackageName {
 impl Display for PypiPackageName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            PypiPackageName::Base(name) => write!(f, "{}", name),
-            PypiPackageName::Extra(name, extra) => write!(f, "{}[{}]", name, extra.as_str()),
+            PypiPackageName::Base(name) => write!(f, "{name}"),
+            PypiPackageName::Extra(name, extra) => write!(f, "{name}[{}]", extra.as_str()),
         }
     }
 }

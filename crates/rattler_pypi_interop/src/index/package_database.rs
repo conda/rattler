@@ -84,7 +84,7 @@ impl PackageDb {
             http,
             sources: package_sources,
             metadata_cache,
-            artifacts: Default::default(),
+            artifacts: FrozenMap::default(),
             cache_dir: cache_dir.to_owned(),
             check_available_artifacts,
         })
@@ -205,7 +205,7 @@ impl PackageDb {
 
     /// Retrieve the PEP658 metadata for the given artifact.
     /// This assumes that the metadata is available in the repository
-    /// This can be checked with the ArtifactInfo
+    /// This can be checked with the [`ArtifactInfo`] struct.
     pub async fn get_pep658_metadata<'a, A: Borrow<ArtifactInfo>>(
         &self,
         artifact_info: &'a A,
@@ -267,7 +267,7 @@ async fn fetch_simple_api(
     }
 
     let response = match http
-        .request(url.to_owned(), Method::GET, headers, CacheMode::Default)
+        .request(url.clone(), Method::GET, headers, CacheMode::Default)
         .await
     {
         Ok(response) => response,
@@ -338,7 +338,7 @@ mod test {
         "#
         );
 
-        let html = format!("<html><body>{}</body></html>", package_list);
+        let html = format!("<html><body>{package_list}</body></html>");
         Html(html)
     }
 
@@ -347,14 +347,14 @@ mod test {
         axum::extract::Path(requested_package): axum::extract::Path<String>,
     ) -> impl IntoResponse {
         if served_package == requested_package {
-            let wheel_name = format!("{}-1.0-py3-none-any.whl", served_package);
+            let wheel_name = format!("{served_package}-1.0-py3-none-any.whl");
             let link_list = format!(
                 r#"
                 <a href="/files/{wheel_name}">{wheel_name}</a>
             "#
             );
 
-            let html = format!("<html><body>{}</body></html>", link_list);
+            let html = format!("<html><body>{link_list}</body></html>");
             Html(html).into_response()
         } else {
             axum::http::StatusCode::NOT_FOUND.into_response()
@@ -379,7 +379,7 @@ mod test {
         let join_handle = tokio::spawn(server);
 
         println!("Server started");
-        let url = format!("http://{}/simple/", address).parse()?;
+        let url = format!("http://{address}/simple/").parse()?;
         Ok((url, join_handle))
     }
 
@@ -443,7 +443,7 @@ mod test {
             sources,
             ClientWithMiddleware::from(Client::new()),
             cache_dir.path(),
-            Default::default(),
+            CheckAvailablePackages::default(),
         )
         .unwrap();
 
@@ -455,8 +455,7 @@ mod test {
         // Should not fail because 404s are skipped
         assert!(
             pytest_result.is_ok(),
-            "`pytest_result` not ok: {:?}",
-            pytest_result
+            "`pytest_result` not ok: {pytest_result:?}"
         );
 
         let test_package_result = package_db
@@ -464,24 +463,14 @@ mod test {
             .await
             .unwrap();
 
-        assert_debug_snapshot!(test_package_result.keys(), @r###"
+        assert_debug_snapshot!(test_package_result.keys(), @r#"
         [
             Version {
-                version: Version {
-                    epoch: 0,
-                    release: [
-                        1,
-                        0,
-                    ],
-                    pre: None,
-                    post: None,
-                    dev: None,
-                    local: None,
-                },
+                version: "1.0",
                 package_allows_prerelease: false,
             },
         ]
-        "###);
+        "#);
 
         Ok(())
     }

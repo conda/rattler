@@ -26,7 +26,7 @@ pub fn system_python_executable() -> Result<&'static PathBuf, FindPythonError> {
         // For windows it should just be python
         let path = which::which("python3")
             .or_else(|_| which::which("python"))
-            .map_err(|_| FindPythonError::NotFound)?;
+            .map_err(|_err| FindPythonError::NotFound)?;
 
         // The found binary may not actually refer to the actual python executable,
         // this can be because its symlinked, or it's actually a script that invokes python.
@@ -116,7 +116,7 @@ impl PythonInterpreterVersion {
             .map(str::trim)
             .map(FromStr::from_str)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| InvalidVersion(version_str.to_owned()))?;
+            .map_err(|_err| InvalidVersion(version_str.to_owned()))?;
 
         // Extract the major, minor and patch version
         let Some((major, minor, patch)) = parts.into_iter().collect_tuple() else {
@@ -126,7 +126,7 @@ impl PythonInterpreterVersion {
         Ok(Self::new(major, minor, patch))
     }
 
-    /// Creates a PythonInterpreterVersion from its constituent parts.
+    /// Creates a `PythonInterpreterVersion` from its constituent parts.
     pub fn new(major: u32, minor: u32, patch: u32) -> Self {
         Self {
             major,
@@ -146,7 +146,7 @@ impl PythonInterpreterVersion {
         let output = std::process::Command::new(path)
             .arg("--version")
             .output()
-            .map_err(|_| FindPythonError::NotFound)?;
+            .map_err(|_err| FindPythonError::NotFound)?;
         let version_str = String::from_utf8_lossy(&output.stdout);
         Self::from_python_output(&version_str)
     }

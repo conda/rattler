@@ -34,8 +34,8 @@ pub enum UninstallDistributionError {
 
 /// Uninstall a python distribution from an environment
 ///
-/// * site_packages_dir: The absolute path to the site-packages directory
-/// * dist_info_dir: The path off the `.dist-info` dir relative to `site_packages_dir`.
+/// * `site_packages_dir`: The absolute path to the site-packages directory
+/// * `dist_info_dir`: The path off the `.dist-info` dir relative to `site_packages_dir`.
 ///
 /// This function will delete all the files specified in the `RECORD` file of the distribution.
 pub fn uninstall_distribution(
@@ -58,7 +58,7 @@ pub fn uninstall_distribution(
 
     // Delete all the files specified in the RECORD file
     let mut directories = HashSet::new();
-    for entry in record.into_iter() {
+    for entry in record {
         let entry_path = site_packages_dir.join(&entry.path);
         if let Err(e) = fs::remove_file(&entry_path) {
             if e.kind() != std::io::ErrorKind::NotFound {
@@ -113,7 +113,7 @@ mod test {
         let site_packages_dir = temp_dir.path().join("site-packages");
         fs::create_dir(&site_packages_dir).unwrap();
         let dist_info_dir = Path::new("test-1.0.0.dist-info");
-        fs::create_dir(&site_packages_dir.join(dist_info_dir)).unwrap();
+        fs::create_dir(site_packages_dir.join(dist_info_dir)).unwrap();
 
         let files = [
             "test-1.0.0.dist-info/RECORD",

@@ -39,6 +39,11 @@ pub enum SDistError {
     WheelCoreMetaDataError(#[from] WheelCoreMetaDataError),
 }
 
+/// Utility function to skip the first component of a path
+fn skip_first_component(path: &Path) -> PathBuf {
+    path.components().skip(1).collect()
+}
+
 impl SDist {
     /// Create this struct from a path
     #[allow(dead_code)]
@@ -60,10 +65,6 @@ impl SDist {
     fn find_entry(&self, name: impl AsRef<Path>) -> std::io::Result<Option<Vec<u8>>> {
         let mut lock = self.file.lock();
         let archives = generic_archive_reader(&mut lock, self.name.format)?;
-
-        fn skip_first_component(path: &Path) -> PathBuf {
-            path.components().skip(1).collect()
-        }
 
         match archives {
             Archives::TarArchive(mut archive) => {
@@ -182,14 +183,12 @@ impl ArtifactFromSource for SDist {
         if let Some(bytes) = self.find_entry("pyproject.toml")? {
             let source = String::from_utf8(bytes).map_err(|e| {
                 ReadPyProjectError::PyProjectTomlParseError(format!(
-                    "could not parse pyproject.toml (bad encoding): {}",
-                    e
+                    "could not parse pyproject.toml (bad encoding): {e}"
                 ))
             })?;
             let project = pyproject_toml::PyProjectToml::new(&source).map_err(|e| {
                 ReadPyProjectError::PyProjectTomlParseError(format!(
-                    "could not parse pyproject.toml (bad toml): {}",
-                    e
+                    "could not parse pyproject.toml (bad toml): {e}"
                 ))
             })?;
             Ok(project)
@@ -239,10 +238,10 @@ enum Archives<'a> {
     Zip(Box<ZipArchive<&'a mut Box<dyn ReadAndSeek + Send>>>),
 }
 
-fn generic_archive_reader<'a>(
-    file: &'a mut Box<dyn ReadAndSeek + Send>,
+fn generic_archive_reader(
+    file: &mut Box<dyn ReadAndSeek + Send>,
     format: SDistFormat,
-) -> std::io::Result<Archives<'a>> {
+) -> std::io::Result<Archives<'_>> {
     file.rewind()?;
 
     match format {
@@ -280,15 +279,15 @@ mod tests {
 
         let build_system = sdist.read_pyproject_toml().unwrap().build_system.unwrap();
 
-        assert_ron_snapshot!(build_system, @r###"
+        assert_ron_snapshot!(build_system, @r#"
         BuildSystem(
           requires: [
-            "poetry-core >=1.0.0",
+            "poetry-core>=1.0.0",
           ],
           r#build-backend: Some("poetry.core.masonry.api"),
           r#backend-path: None,
         )
-        "###);
+        "#);
     }
 
     #[tokio::test(flavor = "multi_thread")]

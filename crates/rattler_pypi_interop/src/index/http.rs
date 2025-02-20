@@ -221,7 +221,7 @@ fn make_response(
 /// Construct a key from an http request that we can use to store and retrieve stuff from a
 /// [`FileStore`].
 fn key_for_request(url: &Url, method: Method, headers: &HeaderMap) -> Vec<u8> {
-    let mut key: Vec<u8> = Default::default();
+    let mut key: Vec<u8> = Vec::default();
     let method = method.to_string().into_bytes();
     key.extend(method.len().to_le_bytes());
     key.extend(method);
@@ -282,7 +282,7 @@ struct CacheData {
 
 /// Write cache BOM and metadata and return it's current position after writing
 /// BOM and metadata of cache is represented by:
-/// [BOM]--[VERSION]--[SIZE_OF_HEADERS_STRUCT]
+/// [BOM]--[VERSION]--[SIZE\_OF\_HEADERS\_STRUCT]
 fn write_cache_bom_and_metadata<W: Write + Seek>(
     writer: &mut W,
     bom_key: &str,

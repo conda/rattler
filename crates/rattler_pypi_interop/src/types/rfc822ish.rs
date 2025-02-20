@@ -13,10 +13,9 @@ pub struct RFC822ish {
 
 impl RFC822ish {
     pub fn take_all(&mut self, key: &str) -> Vec<String> {
-        match self.fields.remove(&key.to_ascii_lowercase()) {
-            Some(vec) => vec,
-            None => Vec::new(),
-        }
+        self.fields
+            .remove(&key.to_ascii_lowercase())
+            .unwrap_or_default()
     }
 
     pub fn maybe_take(&mut self, key: &str) -> miette::Result<Option<String>> {
@@ -112,7 +111,7 @@ peg::parser! {
                  {
                      let mut fields = Fields::new();
                      for (name, value) in f {
-                         fields.entry(name).or_default().push(value)
+                         fields.entry(name).or_default().push(value);
                      };
                      RFC822ish { fields, body, }
                  }

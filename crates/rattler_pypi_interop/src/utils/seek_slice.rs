@@ -67,17 +67,19 @@ mod test {
     use super::*;
     use std::io::Cursor;
 
+    fn next_byte<T: Read>(value: T) -> u8 {
+        value.bytes().next().unwrap().unwrap()
+    }
+
     #[test]
     fn test_seek_slice() {
         let buf: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let mut cursor = Cursor::new(&buf);
         let mut slice = SeekSlice::new(&mut cursor, 2, 8).unwrap();
+
         // starts at offset zero
         assert_eq!(slice.stream_position().unwrap(), 0);
         // reading advances position as expected
-        fn next_byte<T: Read>(value: T) -> u8 {
-            value.bytes().next().unwrap().unwrap()
-        }
         assert_eq!(next_byte(&mut slice), 2u8);
         assert_eq!(next_byte(&mut slice), 3u8);
         assert_eq!(slice.stream_position().unwrap(), 2);
