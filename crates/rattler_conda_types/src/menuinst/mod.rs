@@ -76,7 +76,7 @@ pub struct WindowsUrlProtocol {
 
 /// Terminal profile that was installed
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct TerminalProfile {
+pub struct WindowsTerminalProfile {
     /// The name of the terminal profile
     pub configuration_file: PathBuf,
     /// The identifier of the terminal profile
@@ -103,7 +103,7 @@ pub struct WindowsTracker {
 
     /// List of terminal profiles that were installed
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub terminal_profiles: Vec<TerminalProfile>,
+    pub terminal_profiles: Vec<WindowsTerminalProfile>,
 }
 
 impl WindowsTracker {

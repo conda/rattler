@@ -1,6 +1,9 @@
 use create_shortcut::Shortcut;
 use fs_err as fs;
-use rattler_conda_types::Platform;
+use rattler_conda_types::{
+    menuinst::{WindowsFileExtension, WindowsTerminalProfile, WindowsTracker, WindowsUrlProtocol},
+    Platform,
+};
 use rattler_shell::{
     activation::{ActivationVariables, Activator},
     shell,
@@ -16,7 +19,6 @@ use crate::{
     render::{BaseMenuItemPlaceholders, MenuItemPlaceholders},
     schema::{Environment, MenuItemCommand, Windows},
     slugify,
-    tracker::WindowsTracker,
     util::log_output,
     MenuInstError, MenuMode,
 };
@@ -333,7 +335,7 @@ impl WindowsMenu {
             };
 
             create_shortcut::create_shortcut(shortcut)?;
-            tracker.files.push(desktop_link_path.clone());
+            tracker.shortcuts.push(desktop_link_path.clone());
         }
 
         if let Some(quick_launch_dir) = self.directories.quick_launch.as_ref() {
@@ -351,7 +353,7 @@ impl WindowsMenu {
                 };
 
                 create_shortcut::create_shortcut(shortcut)?;
-                tracker.files.push(quicklaunch_link_path.clone());
+                tracker.shortcuts.push(quicklaunch_link_path.clone());
             }
         }
         Ok(())
@@ -389,9 +391,10 @@ impl WindowsMenu {
 
             registry::register_file_extension(file_extension, self.menu_mode)?;
 
-            tracker
-                .file_extensions
-                .push((extension.clone(), identifier));
+            tracker.file_extensions.push(WindowsFileExtension {
+                extension: extension.clone(),
+                identifier: identifier.clone(),
+            });
         }
 
         Ok(())
@@ -422,7 +425,10 @@ impl WindowsMenu {
             };
 
             registry::register_url_protocol(url_protocol, self.menu_mode)?;
-            tracker.url_protocols.push((protocol.clone(), identifier));
+            tracker.url_protocols.push(WindowsUrlProtocol {
+                protocol: protocol.clone(),
+                identifier: identifier.clone(),
+            });
         }
 
         Ok(true)
@@ -452,9 +458,10 @@ impl WindowsMenu {
         ) {
             // TODO get rid of unwrap :)
             terminal::add_windows_terminal_profile(&location, &profile).unwrap();
-            tracker
-                .terminal_profiles
-                .push((profile.name.clone(), location));
+            tracker.terminal_profiles.push(WindowsTerminalProfile {
+                configuration_file: location,
+                identifier: profile.name.clone(),
+            });
         }
 
         Ok(())
@@ -493,22 +500,57 @@ pub(crate) fn install_menu_item(
 }
 
 pub(crate) fn remove_menu_item(tracker: &WindowsTracker) -> Result<(), MenuInstError> {
-    for file in &tracker.files {
-        fs::remove_file(file)?;
+    for file in &tracker.shortcuts {
+        match fs::remove_file(file) {
+            Ok(_) => {}
+            Err(e) => {
+                tracing::warn!("Failed to remove shortcut {}: {}", file.display(), e);
+            }
+        }
     }
 
     let menu_mode = tracker.menu_mode;
-    for (extension, identifier) in &tracker.file_extensions {
-        registry::unregister_file_extension(extension, identifier, menu_mode)?;
+    for ext in &tracker.file_extensions {
+        match registry::unregister_file_extension(&ext.extension, &ext.identifier, menu_mode) {
+            Ok(_) => {}
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to remove file extension {} with identifier {}: {}",
+                    ext.extension,
+                    ext.identifier,
+                    e
+                );
+            }
+        }
     }
 
-    for (protocol, identifier) in &tracker.url_protocols {
-        registry::unregister_url_protocol(protocol, identifier, menu_mode)?;
+    for protocol in &tracker.url_protocols {
+        match registry::unregister_url_protocol(&protocol.protocol, &protocol.identifier, menu_mode)
+        {
+            Ok(_) => {}
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to remove URL protocol {} with identifier {}: {}",
+                    protocol.protocol,
+                    protocol.identifier,
+                    e
+                );
+            }
+        }
     }
 
-    for (profile, location) in &tracker.terminal_profiles {
-        // TODO get rid of unwrap
-        terminal::remove_terminal_profile(location, profile).unwrap();
+    for profile in &tracker.terminal_profiles {
+        match terminal::remove_terminal_profile(&profile.configuration_file, &profile.identifier) {
+            Ok(_) => {}
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to remove terminal profile {} in {}: {}",
+                    profile.identifier,
+                    profile.configuration_file.display(),
+                    e
+                );
+            }
+        }
     }
 
     notify_shell_changes();
