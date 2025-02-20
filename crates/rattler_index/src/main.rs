@@ -44,7 +44,7 @@ struct Cli {
     target_platform: Option<Platform>,
 }
 
-/// The subcommands for the pixi-pack CLI.
+/// The subcommands for the `rattler-index` CLI.
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 enum Commands {
