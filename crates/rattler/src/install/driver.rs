@@ -7,7 +7,9 @@ use std::{
 
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::{prefix_record::PathType, PackageRecord, Platform, PrefixRecord};
+use rattler_conda_types::{
+    menuinst::MenuMode, prefix_record::PathType, PackageRecord, Platform, PrefixRecord,
+};
 use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
@@ -276,7 +278,7 @@ impl InstallDriver {
                             target_prefix,
                             target_prefix,
                             Platform::current(),
-                            rattler_menuinst::MenuMode::User,
+                            MenuMode::User,
                         ) {
                             Ok(tracker_vec) => {
                                 // Store tracker in the prefix record
