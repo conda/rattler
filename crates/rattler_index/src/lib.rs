@@ -11,17 +11,22 @@ use rattler_conda_types::{
     package::{ArchiveType, IndexJson, PackageFile},
     ChannelInfo, PackageRecord, Platform, RepoData,
 };
+use rattler_networking::{Authentication, AuthenticationStorage};
 use rattler_package_streaming::{read, seek};
 use std::{
     collections::{HashMap, HashSet},
     io::{Cursor, Read},
-    path::Path,
+    path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
 };
 use tokio::sync::Semaphore;
+use url::Url;
 
-use opendal::{Configurator, Operator};
+use opendal::{
+    services::{FsConfig, S3Config},
+    Configurator, Operator,
+};
 
 /// Extract the package record from an `index.json` file.
 pub fn package_record_from_index_json<T: Read>(
@@ -301,6 +306,67 @@ async fn index_subdir(
     Ok(())
 }
 
+/// Create a new `repodata.json` for all packages in the channel at the given directory.
+pub async fn index_fs(
+    channel: impl Into<PathBuf>,
+    target_platform: Option<Platform>,
+    force: bool,
+    max_parallel: usize,
+) -> anyhow::Result<()> {
+    let mut config = FsConfig::default();
+    config.root = Some(channel.into().canonicalize()?.to_string_lossy().to_string());
+    index(target_platform, config, force, max_parallel).await
+}
+
+/// Create a new `repodata.json` for all packages in the channel at the given S3 URL.
+#[allow(clippy::too_many_arguments)]
+pub async fn index_s3(
+    channel: Url,
+    region: String,
+    endpoint_url: Url,
+    force_path_style: bool,
+    access_key_id: Option<String>,
+    secret_access_key: Option<String>,
+    session_token: Option<String>,
+    target_platform: Option<Platform>,
+    force: bool,
+    max_parallel: usize,
+) -> anyhow::Result<()> {
+    let mut s3_config = S3Config::default();
+    s3_config.root = Some(channel.path().to_string());
+    s3_config.bucket = channel
+        .host_str()
+        .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
+        .to_string();
+    s3_config.region = Some(region);
+    s3_config.endpoint = Some(endpoint_url.to_string());
+    s3_config.enable_virtual_host_style = !force_path_style;
+    // Use credentials from the CLI if they are provided.
+    if let (Some(access_key_id), Some(secret_access_key)) = (access_key_id, secret_access_key) {
+        s3_config.secret_access_key = Some(secret_access_key);
+        s3_config.access_key_id = Some(access_key_id);
+        s3_config.session_token = session_token;
+    } else {
+        // If they're not provided, check rattler authentication storage for credentials.
+        let auth_storage = AuthenticationStorage::from_env_and_defaults()?;
+        let auth = auth_storage.get_by_url(channel)?;
+        if let (
+            _,
+            Some(Authentication::S3Credentials {
+                access_key_id,
+                secret_access_key,
+                session_token,
+            }),
+        ) = auth
+        {
+            s3_config.access_key_id = Some(access_key_id);
+            s3_config.secret_access_key = Some(secret_access_key);
+            s3_config.session_token = session_token;
+        }
+    }
+    index(target_platform, s3_config, force, max_parallel).await
+}
+
 /// Create a new `repodata.json` for all packages in the given configurator's root.
 /// If `target_platform` is `Some`, only that specific subdir is indexed.
 /// Otherwise indexes all subdirs and creates a `repodata.json` for each.
@@ -337,22 +403,22 @@ pub async fn index<T: Configurator>(
         .map(|s| Platform::from_str(&s))
         .collect::<Result<HashSet<_>, _>>()?;
 
-    // If `noarch` subdir does not exist, we create it.
-    if !subdirs.contains(&Platform::NoArch) {
-        tracing::debug!("Did not find noarch subdir, creating.");
-        op.create_dir(&format!("{}/", Platform::NoArch.as_str()))
-            .await?;
-        subdirs.insert(Platform::NoArch);
-    }
-
     // If requested `target_platform` subdir does not exist, we create it.
     if let Some(target_platform) = target_platform {
         tracing::debug!("Did not find {target_platform} subdir, creating.");
         if !subdirs.contains(&target_platform) {
             op.create_dir(&format!("{}/", target_platform.as_str()))
                 .await?;
-            subdirs.insert(target_platform);
         }
+        // Limit subdirs to only the requested `target_platform`.
+        subdirs = HashSet::default();
+        subdirs.insert(target_platform);
+    } else if !subdirs.contains(&Platform::NoArch) {
+        // If `noarch` subdir does not exist, we create it.
+        tracing::debug!("Did not find noarch subdir, creating.");
+        op.create_dir(&format!("{}/", Platform::NoArch.as_str()))
+            .await?;
+        subdirs.insert(Platform::NoArch);
     }
 
     let multi_progress = MultiProgress::new();

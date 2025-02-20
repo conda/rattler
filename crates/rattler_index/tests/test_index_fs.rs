@@ -4,9 +4,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use opendal::services::FsConfig;
 use rattler_conda_types::Platform;
-use rattler_index::index;
+use rattler_index::index_fs;
 use serde_json::Value;
 
 fn test_data_dir() -> PathBuf {
@@ -59,11 +58,7 @@ async fn test_index() {
     )
     .unwrap();
 
-    let channel = &temp_dir.path().to_string_lossy().to_string();
-    let mut fs_config = FsConfig::default();
-    fs_config.root = Some(channel.clone());
-
-    let res = index(Some(Platform::Win64), fs_config, true, 100).await;
+    let res = index_fs(temp_dir.path(), Some(Platform::Win64), true, 100).await;
     assert!(res.is_ok());
 
     let repodata_path = temp_dir.path().join(subdir_path).join("repodata.json");
@@ -100,13 +95,10 @@ async fn test_index() {
 #[tokio::test]
 async fn test_index_empty_directory_creates_noarch_repodata() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let channel = &temp_dir.path().to_string_lossy().to_string();
-    let mut fs_config = FsConfig::default();
-    fs_config.root = Some(channel.clone());
     let noarch_path = temp_dir.path().join("noarch");
     let repodata_path = noarch_path.join("repodata.json");
 
-    let res = index(None, fs_config, true, 100).await;
+    let res = index_fs(temp_dir.path(), None, true, 100).await;
 
     assert!(res.is_ok());
     assert!(noarch_path.is_dir());

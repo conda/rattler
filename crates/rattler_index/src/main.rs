@@ -1,9 +1,7 @@
 use clap::{arg, Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
-use opendal::services::{FsConfig, S3Config};
 use rattler_conda_types::Platform;
-use rattler_index::index;
-use rattler_networking::{Authentication, AuthenticationStorage};
+use rattler_index::{index_fs, index_s3};
 use tracing_log::AsTrace;
 use url::Url;
 
@@ -104,10 +102,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::FileSystem { channel } => {
-            let channel = &channel.canonicalize()?.to_string_lossy().to_string();
-            let mut fs_config = FsConfig::default();
-            fs_config.root = Some(channel.clone());
-            index(cli.target_platform, fs_config, cli.force, cli.max_parallel).await?;
+            index_fs(channel, cli.target_platform, cli.force, cli.max_parallel).await?;
             Ok(())
         }
         Commands::S3 {
@@ -119,41 +114,19 @@ async fn main() -> anyhow::Result<()> {
             secret_access_key,
             session_token,
         } => {
-            let mut s3_config = S3Config::default();
-            s3_config.root = Some(channel.path().to_string());
-            s3_config.bucket = channel
-                .host_str()
-                .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
-                .to_string();
-            s3_config.region = Some(region);
-            s3_config.endpoint = Some(endpoint_url.to_string());
-            s3_config.enable_virtual_host_style = !force_path_style;
-            // Use credentials from the CLI if they are provided.
-            if let (Some(access_key_id), Some(secret_access_key)) =
-                (access_key_id, secret_access_key)
-            {
-                s3_config.secret_access_key = Some(secret_access_key);
-                s3_config.access_key_id = Some(access_key_id);
-                s3_config.session_token = session_token;
-            } else {
-                // If they're not provided, check rattler authentication storage for credentials.
-                let auth_storage = AuthenticationStorage::from_env_and_defaults()?;
-                let auth = auth_storage.get_by_url(channel)?;
-                if let (
-                    _,
-                    Some(Authentication::S3Credentials {
-                        access_key_id,
-                        secret_access_key,
-                        session_token,
-                    }),
-                ) = auth
-                {
-                    s3_config.access_key_id = Some(access_key_id);
-                    s3_config.secret_access_key = Some(secret_access_key);
-                    s3_config.session_token = session_token;
-                }
-            }
-            index(cli.target_platform, s3_config, cli.force, cli.max_parallel).await?;
+            index_s3(
+                channel,
+                region,
+                endpoint_url,
+                force_path_style,
+                access_key_id,
+                secret_access_key,
+                session_token,
+                cli.target_platform,
+                cli.force,
+                cli.max_parallel,
+            )
+            .await?;
             Ok(())
         }
     }
