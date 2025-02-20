@@ -20,7 +20,7 @@ const commonPlugins = [
         inlineSources: false,
         tsconfig: "./tsconfig.rollup.json",
     }),
-]
+];
 
 export default [
     {
@@ -30,10 +30,7 @@ export default [
             sourcemap: false,
             format: "esm",
         },
-        plugins: [
-            esmShim(),
-            ...commonPlugins,
-        ],
+        plugins: [esmShim(), ...commonPlugins],
     },
     {
         input: "src/index.ts",
@@ -42,8 +39,6 @@ export default [
             sourcemap: false,
             format: "commonjs",
         },
-        plugins: [
-            ...commonPlugins,
-        ],
+        plugins: [...commonPlugins],
     },
 ];
