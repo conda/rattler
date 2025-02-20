@@ -43,6 +43,7 @@ jobs:
         with:
           components: clippy, rustfmt
           target: wasm32-unknown-unknown
+          cache-workspaces: js-rattler -> target
 
       - name: Run rustfmt
         uses: actions-rust-lang/rustfmt@v1
