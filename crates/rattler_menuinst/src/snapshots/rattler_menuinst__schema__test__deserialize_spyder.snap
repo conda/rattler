@@ -524,12 +524,24 @@ MenuInstSchema {
                             url_protocols: None,
                             file_extensions: Some(
                                 [
-                                    ".enaml",
-                                    ".ipy",
-                                    ".py",
-                                    ".pyi",
-                                    ".pyw",
-                                    ".pyx",
+                                    PlaceholderString(
+                                        ".enaml",
+                                    ),
+                                    PlaceholderString(
+                                        ".ipy",
+                                    ),
+                                    PlaceholderString(
+                                        ".py",
+                                    ),
+                                    PlaceholderString(
+                                        ".pyi",
+                                    ),
+                                    PlaceholderString(
+                                        ".pyw",
+                                    ),
+                                    PlaceholderString(
+                                        ".pyx",
+                                    ),
                                 ],
                             ),
                             app_user_model_id: Some(

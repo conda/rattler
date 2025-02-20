@@ -10,6 +10,7 @@ use std::{
     io::Write as _,
     path::{Path, PathBuf},
 };
+use terminal::TerminalProfile;
 
 use crate::{
     render::{BaseMenuItemPlaceholders, MenuItemPlaceholders},
@@ -24,6 +25,7 @@ mod create_shortcut;
 mod knownfolders;
 mod lex;
 mod registry;
+mod terminal;
 
 use knownfolders::{Folder, UserHandle};
 
@@ -31,6 +33,7 @@ pub struct Directories {
     start_menu: PathBuf,
     quick_launch: Option<PathBuf>,
     desktop: PathBuf,
+    pub known_folders: knownfolders::Folders,
 }
 
 fn shortcut_filename(name: &str, env_name: Option<&String>, ext: Option<&str>) -> String {
@@ -74,6 +77,7 @@ impl Directories {
             start_menu,
             quick_launch,
             desktop,
+            known_folders,
         }
     }
 }
@@ -371,10 +375,10 @@ impl WindowsMenu {
         let app_user_model_id = self.app_id();
 
         for extension in extensions {
+            let extension = extension.resolve(&self.placeholders);
             let identifier = format!("{name}.AssocFile{extension}");
-
             let file_extension = FileExtension {
-                extension,
+                extension: &extension,
                 identifier: &identifier,
                 command: &command,
                 icon: icon.as_deref(),
@@ -405,10 +409,11 @@ impl WindowsMenu {
         let app_user_model_id = format!("{name}.Protocol");
 
         for protocol in protocols {
+            let protocol = protocol.resolve(&self.placeholders);
             let identifier = format!("{name}.Protocol{protocol}");
 
             let url_protocol = UrlProtocol {
-                protocol,
+                protocol: &protocol,
                 command: &command,
                 identifier: &identifier,
                 icon: icon.as_deref(),
@@ -423,12 +428,45 @@ impl WindowsMenu {
         Ok(true)
     }
 
+    fn register_windows_terminal(&self, tracker: &mut WindowsTracker) -> Result<(), MenuInstError> {
+        let Some(terminal_profile) = self.item.terminal_profile.as_ref() else {
+            return Ok(());
+        };
+
+        let terminal_profile = terminal_profile.resolve(&self.placeholders);
+
+        let profile = TerminalProfile {
+            name: terminal_profile,
+            icon: self.icon(),
+            commandline: self.build_command(true)?.join(" "),
+            starting_directory: self
+                .command
+                .working_dir
+                .as_ref()
+                .map(|s| s.resolve(&self.placeholders)),
+        };
+
+        for location in terminal::windows_terminal_settings_files(
+            self.menu_mode,
+            &self.directories.known_folders,
+        ) {
+            // TODO get rid of unwrap :)
+            terminal::add_windows_terminal_profile(&location, &profile).unwrap();
+            tracker
+                .terminal_profiles
+                .push((profile.name.clone(), location));
+        }
+
+        Ok(())
+    }
+
     pub fn install(&self, tracker: &mut WindowsTracker) -> Result<(), MenuInstError> {
         let args = self.build_command(false)?;
         self.precreate()?;
         self.create_shortcut(&args, tracker)?;
         self.register_file_extensions(tracker)?;
         self.register_url_protocols(tracker)?;
+        self.register_windows_terminal(tracker)?;
         notify_shell_changes();
         Ok(())
     }
@@ -466,6 +504,11 @@ pub(crate) fn remove_menu_item(tracker: &WindowsTracker) -> Result<(), MenuInstE
 
     for (protocol, identifier) in &tracker.url_protocols {
         registry::unregister_url_protocol(protocol, identifier, menu_mode)?;
+    }
+
+    for (profile, location) in &tracker.terminal_profiles {
+        // TODO get rid of unwrap
+        terminal::remove_terminal_profile(location, profile).unwrap();
     }
 
     notify_shell_changes();
