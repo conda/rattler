@@ -20,23 +20,21 @@
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
-            "node": {
-                "import": "./dist/rattler.node.mjs",
-                "require": "./dist/rattler.node.cjs"
-            },
+            "require": "./dist/rattler.node.cjs",
             "import": "./dist/rattler.bundler.mjs"
         }
     },
     "scripts": {
         "build:wasm": "wasm-pack build --mode normal --release",
         "build:esm": "npm run build:wasm -- --target web && rollup -c rollup.config.esm.mjs",
-        "build:nodejs": "npm run build:wasm -- --target nodejs  && rollup -c rollup.config.mjs && cp ./pkg/js_rattler_bg.wasm ./dist/",
-        "build": "rimraf dist pkg && npm run build:esm && npm run build:nodejs && api-extractor run --verbose",
+        "build:nodejs": "npm run build:wasm -- --target nodejs  && rollup -c rollup.config.cjs.mjs",
+        "build": "node build/build.mjs",
         "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
         "fmt": "prettier --write .",
         "fmt:check": "prettier --check ."
     },
     "devDependencies": {
+        "@actions/exec": "^1.1.1",
         "@jest/globals": "^29.7.0",
         "@microsoft/api-extractor": "^7.50.0",
         "@rollup/plugin-commonjs": "^28.0.2",

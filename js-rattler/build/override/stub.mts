@@ -1,11 +1,12 @@
-import init, {
+import mod from "../pkg/js_rattler_bg.wasm";
+
+import {
+    initSync,
     JsVersion,
     JsVersionSpec,
     ParseStrictness,
 } from "../pkg/js_rattler";
 
-import wasmModule from "../pkg/js_rattler_bg.wasm";
-
-await init(wasmModule());
+await initSync({ module: await mod() });
 
 export { JsVersion, JsVersionSpec, ParseStrictness };

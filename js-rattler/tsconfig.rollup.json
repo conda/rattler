@@ -3,7 +3,7 @@
         "outDir": "./dist/",
         "noImplicitAny": true,
         "module": "ES2022",
-        "target": "es6",
+        "target": "ES2022",
         "moduleResolution": "node",
         "esModuleInterop": true,
         "declaration": false,
