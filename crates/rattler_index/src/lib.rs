@@ -120,8 +120,27 @@ async fn index_subdir(subdir: Platform, op: Operator, force: bool) -> Result<()>
     let mut registered_packages = HashMap::default();
     if !force {
         let repodata_path = format!("{}/repodata.json", subdir);
-        let repodata_bytes = op.read(&repodata_path).await?;
-        let repodata: RepoData = serde_json::from_slice(&repodata_bytes.to_vec())?;
+        let repodata_bytes = op.read(&repodata_path).await;
+        let repodata: RepoData = match repodata_bytes {
+            Ok(bytes) => serde_json::from_slice(&bytes.to_vec())?,
+            Err(e) => {
+                if e.kind() != opendal::ErrorKind::NotFound {
+                    return Err(e.into());
+                }
+                tracing::info!("Could not find repodata.json. Creating new one.");
+                RepoData {
+                    info: Some(ChannelInfo {
+                        subdir: subdir.to_string(),
+                        base_url: None,
+                    })
+                    .into(),
+                    packages: HashMap::default(),
+                    conda_packages: HashMap::default(),
+                    removed: HashSet::default(),
+                    version: Some(2),
+                }
+            }
+        };
         registered_packages.extend(repodata.packages.into_iter());
         tracing::debug!(
             "Found {} already registered packages in {}/repodata.json.",
