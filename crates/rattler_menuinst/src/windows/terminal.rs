@@ -43,6 +43,26 @@ pub enum TerminalUpdateError {
     Serde(#[from] serde_json::Error),
 }
 
+/// Adds or updates a Windows Terminal profile in the settings file at the specified location.
+/// If a profile with the same name exists, it is overwritten.
+///
+/// # Arguments
+/// * `location` - Path to the settings.json file
+/// * `profile` - The TerminalProfile to add or update
+///
+/// # Errors
+/// Returns a `TerminalUpdateError` if file operations or JSON serialization/deserialization fail.
+///
+/// # Examples
+/// ```ignore
+/// let profile = TerminalProfile {
+///     commandline: "cmd.exe".to_string(),
+///     name: "My Profile".to_string(),
+///     icon: Some("icon.png".to_string()),
+///     starting_directory: None,
+/// };
+/// add_windows_terminal_profile(Path::new("settings.json"), &profile)?;
+/// ```
 pub fn add_windows_terminal_profile(
     location: &Path,
     profile: &TerminalProfile,
@@ -85,6 +105,25 @@ pub fn add_windows_terminal_profile(
     Ok(())
 }
 
+/// Removes a profile with the specified name from the Windows Terminal settings file.
+///
+/// If the file or the named profile does not exist, this function does nothing and returns
+/// successfully. The updated settings are written back to the file.
+///
+/// # Arguments
+/// * `location` - Path to the `settings.json` file from which to remove the profile.
+/// * `name` - The name of the profile to remove.
+///
+/// # Errors
+/// Returns a `TerminalUpdateError` if:
+/// - The file cannot be read or written (e.g., insufficient permissions).
+/// - The existing settings file contains invalid JSON.
+/// - Serialization to JSON fails.
+///
+/// # Examples
+/// ```ignore
+/// remove_terminal_profile(Path::new("settings.json"), "My Profile")?;
+/// ```
 pub fn remove_terminal_profile(location: &Path, name: &str) -> Result<(), TerminalUpdateError> {
     // Read existing settings or return early if no file exists
     let mut settings: Settings = if location.exists() {
@@ -109,6 +148,27 @@ pub fn remove_terminal_profile(location: &Path, name: &str) -> Result<(), Termin
     Ok(())
 }
 
+/// Retrieves a list of potential Windows Terminal settings file locations for the current user.
+///
+/// This function searches for settings files in both packaged (Microsoft Store) and unpackaged
+/// (e.g., Scoop, Chocolatey) installations of Windows Terminal, including stable and preview
+/// versions. Returns an empty vector if not in `User` mode or if folder paths cannot be retrieved.
+///
+/// # Arguments
+/// * `mode` - The `MenuMode` specifying the context; only `User` mode is supported.
+/// * `folders` - A `Folders` instance providing access to known folder paths (e.g., LocalAppData).
+///
+/// # Returns
+/// A vector of `PathBuf` objects representing the locations of `settings.json` files.
+///
+/// # Examples
+/// ```ignore
+/// let folders = Folders::new(); // Assuming Folders impl
+/// let paths = windows_terminal_settings_files(MenuMode::User, &folders);
+/// for path in paths {
+///     println!("Found settings at: {:?}", path);
+/// }
+/// ```
 pub fn windows_terminal_settings_files(mode: MenuMode, folders: &Folders) -> Vec<PathBuf> {
     if mode != MenuMode::User {
         return Vec::new();
@@ -139,10 +199,7 @@ pub fn windows_terminal_settings_files(mode: MenuMode, folders: &Folders) -> Vec
     }
 
     // Unpackaged (Scoop, Chocolatey, etc.)
-    let unpackaged_path = localappdata
-        .join("Microsoft")
-        .join("Windows Terminal")
-        .join("settings.json");
+    let unpackaged_path = localappdata.join("Microsoft/Windows Terminal/settings.json");
 
     if unpackaged_path.parent().is_some_and(Path::exists) {
         profile_locations.push(unpackaged_path);
