@@ -31,6 +31,12 @@ wee_alloc = { version = "0.4.5", optional = true }
 thiserror = "2.0.3"
 
 rattler_conda_types = { path = "../crates/rattler_conda_types" }
+rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway" }
+
+# By adding the `libbz2-rs-sys` feature we ensure that bzip2 is using the rust
+# implementation. This is important because the C implementation is not
+# compatible with wasm.
+bzip2 = { version = "0.5.1", features = ["libbz2-rs-sys"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.45"
