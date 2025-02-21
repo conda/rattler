@@ -396,7 +396,7 @@ impl Serialize for MacOSVersion {
     {
         self.0
             .iter()
-            .map(|v| v.to_string())
+            .map(ToString::to_string)
             .collect::<Vec<String>>()
             .join(".")
             .serialize(serializer)
@@ -411,7 +411,7 @@ impl<'de> Deserialize<'de> for MacOSVersion {
         let s = String::deserialize(deserializer)?;
         let version = s
             .split('.')
-            .map(|s| s.parse())
+            .map(str::parse)
             .collect::<Result<Vec<u32>, _>>()
             .map_err(serde::de::Error::custom)?;
 
@@ -430,7 +430,7 @@ impl MacOSVersion {
         plist::Value::String(
             self.0
                 .iter()
-                .map(|v| v.to_string())
+                .map(ToString::to_string)
                 .collect::<Vec<String>>()
                 .join("."),
         )
