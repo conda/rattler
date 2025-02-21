@@ -156,7 +156,7 @@ impl CFBundleDocumentTypesModel {
         }
 
         if let Some(role) = &self.cf_bundle_type_role {
-            type_dict.insert("CFBundleTypeRole".into(), Value::String(role.clone()));
+            type_dict.insert("CFBundleTypeRole".into(), role.to_value());
         }
 
         type_dict.insert(
@@ -169,10 +169,7 @@ impl CFBundleDocumentTypesModel {
             ),
         );
 
-        type_dict.insert(
-            "LSHandlerRank".into(),
-            Value::String(self.ls_handler_rank.clone()),
-        );
+        type_dict.insert("LSHandlerRank".into(), self.ls_handler_rank.to_value());
 
         Value::Dictionary(type_dict)
     }
@@ -183,7 +180,7 @@ impl CFBundleURLTypesModel {
         let mut type_dict = plist::Dictionary::new();
 
         if let Some(role) = self.cf_bundle_type_role.clone() {
-            type_dict.insert("CFBundleTypeRole".into(), role.into());
+            type_dict.insert("CFBundleTypeRole".into(), role.to_value());
         }
 
         type_dict.insert(
@@ -490,10 +487,7 @@ impl MacOSMenu {
         }
 
         if let Some(version) = self.item.ls_minimum_system_version.as_ref() {
-            pl.insert(
-                "LSMinimumSystemVersion".into(),
-                Value::String(version.clone()),
-            );
+            pl.insert("LSMinimumSystemVersion".into(), version.to_value());
         }
 
         if let Some(prohibited) = self.item.ls_multiple_instances_prohibited {
