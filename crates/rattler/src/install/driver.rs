@@ -7,7 +7,9 @@ use std::{
 
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::{prefix_record::PathType, PackageRecord, PrefixRecord};
+use rattler_conda_types::{
+    menuinst::MenuMode, prefix_record::PathType, PackageRecord, Platform, PrefixRecord,
+};
 use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
@@ -31,6 +33,7 @@ pub struct InstallDriver {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     pub(crate) clobber_registry: Arc<Mutex<ClobberRegistry>>,
     execute_link_scripts: bool,
+    install_menu_items: bool,
 }
 
 impl Default for InstallDriver {
@@ -38,6 +41,7 @@ impl Default for InstallDriver {
         Self::builder()
             .execute_link_scripts(false)
             .with_io_concurrency_limit(100)
+            .install_menu_items(true)
             .finish()
     }
 }
@@ -48,6 +52,7 @@ pub struct InstallDriverBuilder {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     clobber_registry: Option<ClobberRegistry>,
     execute_link_scripts: bool,
+    install_menu_items: bool,
 }
 
 /// The result of the post-processing step.
@@ -113,6 +118,14 @@ impl InstallDriverBuilder {
         }
     }
 
+    /// Whether to install menu items or not.
+    pub fn install_menu_items(self, install_menu_items: bool) -> Self {
+        Self {
+            install_menu_items,
+            ..self
+        }
+    }
+
     pub fn finish(self) -> InstallDriver {
         InstallDriver {
             io_concurrency_semaphore: self.io_concurrency_semaphore,
@@ -122,6 +135,7 @@ impl InstallDriverBuilder {
                 .map(Arc::new)
                 .unwrap_or_default(),
             execute_link_scripts: self.execute_link_scripts,
+            install_menu_items: self.install_menu_items,
         }
     }
 }
@@ -155,10 +169,11 @@ impl InstallDriver {
         transaction: &Transaction<Old, New>,
         target_prefix: &Path,
     ) -> Result<Option<PrePostLinkResult>, PrePostLinkError> {
+        let mut result = None;
         if self.execute_link_scripts {
             match self.run_pre_unlink_scripts(transaction, target_prefix) {
                 Ok(res) => {
-                    return Ok(Some(res));
+                    result = Some(res);
                 }
                 Err(e) => {
                     tracing::error!("Error running pre-unlink scripts: {:?}", e);
@@ -166,7 +181,20 @@ impl InstallDriver {
             }
         }
 
-        Ok(None)
+        // For all packages that are removed, we need to remove menuinst entries as well
+        for record in transaction.removed_packages() {
+            let prefix_record = record.borrow();
+            if !prefix_record.installed_system_menus.is_empty() {
+                match rattler_menuinst::remove_menu_items(&prefix_record.installed_system_menus) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        tracing::warn!("Failed to remove menu item: {}", e);
+                    }
+                }
+            }
+        }
+
+        Ok(result)
     }
 
     /// Runs a blocking task that will execute on a separate thread. The task is
@@ -221,6 +249,62 @@ impl InstallDriver {
         } else {
             None
         };
+
+        // TODO this would overwrite prefix records that were changed in the `unclobber`
+        // code path
+
+        if self.install_menu_items {
+            // Install menu items from prefix records
+            for record in prefix_records.iter() {
+                // Look for Menu/*.json files in the package paths
+                let menu_files: Vec<_> = record
+                    .paths_data
+                    .paths
+                    .iter()
+                    .filter(|path| {
+                        path.relative_path.starts_with("Menu/")
+                            && path
+                                .relative_path
+                                .extension()
+                                .is_some_and(|ext| ext == "json")
+                    })
+                    .collect();
+
+                if !menu_files.is_empty() {
+                    for menu_file in menu_files {
+                        let full_path = target_prefix.join(&menu_file.relative_path);
+                        match rattler_menuinst::install_menuitems(
+                            &full_path,
+                            target_prefix,
+                            target_prefix,
+                            Platform::current(),
+                            MenuMode::User,
+                        ) {
+                            Ok(tracker_vec) => {
+                                // Store tracker in the prefix record
+                                let mut record = record.clone();
+                                record.installed_system_menus = tracker_vec;
+
+                                // Save the updated prefix record
+                                record
+                                    .write_to_path(
+                                        target_prefix.join("conda-meta").join(record.file_name()),
+                                        true,
+                                    )
+                                    .expect("Failed to write prefix record");
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to install menu items for {}: {}",
+                                    full_path.display(),
+                                    e
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         Ok(PostProcessResult {
             post_link_result,

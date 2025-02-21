@@ -1,0 +1,17 @@
+package:
+  name: pixi-editor
+  version: "0.1.0"
+
+build:
+  noarch: generic
+  script:
+    - if: unix
+      then:
+        - mkdir -p $PREFIX/Menu
+        - cp $RECIPE_DIR/menu/menu.json $PREFIX/Menu/pixi-editor.json
+        - cp $RECIPE_DIR/menu/pixi-icon.* $PREFIX/Menu/
+    - if: win
+      then:
+        - if not exist "%PREFIX%\Menu" mkdir "%PREFIX%\Menu"
+        - copy "%RECIPE_DIR%\menu\menu.json" "%PREFIX%\Menu\pixi-editor.json"
+        - copy "%RECIPE_DIR%\menu\pixi-icon.ico" "%PREFIX%\Menu\"
