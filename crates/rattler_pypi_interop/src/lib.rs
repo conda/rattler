@@ -1,12 +1,22 @@
 #![deny(missing_docs, dead_code)]
 
-//! This crate provides a set of libraries for working with Python packages installed via
-//! `PyPI` compatible installers (e.g. `pip`, `uv`, `poetry`, etc.). This crate is a subset
-//! of libraries that were originally published in the `rattler_installs_packages` crate.
+//! This crate provides a set of functions and data types for working with Python packages installed via
+//! `PyPI` compatible installers (e.g. `pip`, `uv`, `poetry`, etc.).
 //!
-//! TODO: Go through the public modules listed here and think about providing usage examples
-//!       of the structs and such listed there.
+//! Some of the things you can do with this crate include:
 //!
+//! - Querying a `PyPI` repository for package metadata.
+//! - Reading Python package metadata from locally installed packages.
+//!
+//! <div class="warning">
+//!
+//!   This crate ports over a subset of functionality originally available in the
+//!   [`rattler_installs_packages`] crate that was also part of the [`rip`] CLI tool.
+//!
+//! </div>
+//!
+//! [`rip`]: https://github.com/prefix-dev/rip/
+//! [`rattler_installs_packages`]: https://docs.rs/rattler_installs_packages/latest/rattler_installs_packages/
 
 // Private modules
 mod utils;
