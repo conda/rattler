@@ -18,7 +18,8 @@ use rattler_shell::{
 use crate::{
     render::{resolve, BaseMenuItemPlaceholders, MenuItemPlaceholders},
     schema::{
-        CFBundleDocumentTypesModel, CFBundleTypeRole, CFBundleURLTypesModel, LSHandlerRank, MacOS, MacOSVersion, MenuItemCommand, UTTypeDeclarationModel
+        CFBundleDocumentTypesModel, CFBundleTypeRole, CFBundleURLTypesModel, LSHandlerRank, MacOS,
+        MacOSVersion, MenuItemCommand, UTTypeDeclarationModel,
     },
     slugify,
     util::run_pre_create_command,
