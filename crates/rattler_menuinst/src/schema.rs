@@ -254,20 +254,6 @@ pub enum CFBundleTypeRole {
     None,
 }
 
-impl CFBundleTypeRole {
-    pub fn to_value(&self) -> plist::Value {
-        plist::Value::String(
-            match self {
-                CFBundleTypeRole::Editor => "Editor",
-                CFBundleTypeRole::Viewer => "Viewer",
-                CFBundleTypeRole::Shell => "Shell",
-                CFBundleTypeRole::QLGenerator => "QLGenerator",
-                CFBundleTypeRole::None => "None",
-            }
-            .to_string(),
-        )
-    }
-}
 /// Describes a URL scheme associated with the app.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -303,19 +289,6 @@ pub enum LSHandlerRank {
     None,
 }
 
-impl LSHandlerRank {
-    pub fn to_value(&self) -> plist::Value {
-        plist::Value::String(
-            match self {
-                LSHandlerRank::Owner => "Owner",
-                LSHandlerRank::Default => "Default",
-                LSHandlerRank::Alternate => "Alternate",
-                LSHandlerRank::None => "None",
-            }
-            .to_string(),
-        )
-    }
-}
 /// Describes a document type associated with the app.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -387,7 +360,7 @@ pub struct UTTypeDeclarationModel {
 
 /// macOS version number.
 #[derive(Debug, Clone)]
-pub struct MacOSVersion(Vec<u32>);
+pub struct MacOSVersion(pub(crate) Vec<u32>);
 
 impl Serialize for MacOSVersion {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -424,19 +397,6 @@ impl<'de> Deserialize<'de> for MacOSVersion {
         Ok(MacOSVersion(version))
     }
 }
-
-impl MacOSVersion {
-    pub fn to_value(&self) -> plist::Value {
-        plist::Value::String(
-            self.0
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<String>>()
-                .join("."),
-        )
-    }
-}
-
 /// macOS specific fields in the menuinst. For more information on the keys, read the following URLs
 ///
 /// - `CF*` keys: see `Core Foundation Keys <https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html>`
@@ -710,19 +670,5 @@ mod test {
         let schema_str = std::fs::read_to_string(schema_path).unwrap();
         let schema: super::MenuInstSchema = serde_json::from_str(&schema_str).unwrap();
         insta::assert_debug_snapshot!(schema);
-    }
-
-    /// Test macOS version parsing
-    #[test]
-    fn test_macos_version() {
-        let version = super::MacOSVersion(vec![10, 15, 0]);
-        assert_eq!(
-            version.to_value(),
-            plist::Value::String("10.15.0".to_string())
-        );
-
-        // parsing from string
-        let version: super::MacOSVersion = serde_json::from_str("\"10.15.0\"").unwrap();
-        assert_eq!(version.0, vec![10, 15, 0]);
     }
 }

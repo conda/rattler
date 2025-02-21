@@ -18,8 +18,7 @@ use rattler_shell::{
 use crate::{
     render::{resolve, BaseMenuItemPlaceholders, MenuItemPlaceholders},
     schema::{
-        CFBundleDocumentTypesModel, CFBundleURLTypesModel, MacOS, MenuItemCommand,
-        UTTypeDeclarationModel,
+        CFBundleDocumentTypesModel, CFBundleTypeRole, CFBundleURLTypesModel, LSHandlerRank, MacOS, MacOSVersion, MenuItemCommand, UTTypeDeclarationModel
     },
     slugify,
     util::run_pre_create_command,
@@ -156,7 +155,7 @@ impl CFBundleDocumentTypesModel {
         }
 
         if let Some(role) = &self.cf_bundle_type_role {
-            type_dict.insert("CFBundleTypeRole".into(), role.to_value());
+            type_dict.insert("CFBundleTypeRole".into(), role.to_plist());
         }
 
         type_dict.insert(
@@ -169,7 +168,7 @@ impl CFBundleDocumentTypesModel {
             ),
         );
 
-        type_dict.insert("LSHandlerRank".into(), self.ls_handler_rank.to_value());
+        type_dict.insert("LSHandlerRank".into(), self.ls_handler_rank.to_plist());
 
         Value::Dictionary(type_dict)
     }
@@ -180,7 +179,7 @@ impl CFBundleURLTypesModel {
         let mut type_dict = plist::Dictionary::new();
 
         if let Some(role) = self.cf_bundle_type_role.clone() {
-            type_dict.insert("CFBundleTypeRole".into(), role.to_value());
+            type_dict.insert("CFBundleTypeRole".into(), role.to_plist());
         }
 
         type_dict.insert(
@@ -206,6 +205,47 @@ impl CFBundleURLTypesModel {
         }
 
         Value::Dictionary(type_dict)
+    }
+}
+
+impl MacOSVersion {
+    pub fn to_plist(&self) -> plist::Value {
+        plist::Value::String(
+            self.0
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<String>>()
+                .join("."),
+        )
+    }
+}
+
+impl LSHandlerRank {
+    pub fn to_plist(&self) -> plist::Value {
+        plist::Value::String(
+            match self {
+                LSHandlerRank::Owner => "Owner",
+                LSHandlerRank::Default => "Default",
+                LSHandlerRank::Alternate => "Alternate",
+                LSHandlerRank::None => "None",
+            }
+            .to_string(),
+        )
+    }
+}
+
+impl CFBundleTypeRole {
+    pub fn to_plist(&self) -> plist::Value {
+        plist::Value::String(
+            match self {
+                CFBundleTypeRole::Editor => "Editor",
+                CFBundleTypeRole::Viewer => "Viewer",
+                CFBundleTypeRole::Shell => "Shell",
+                CFBundleTypeRole::QLGenerator => "QLGenerator",
+                CFBundleTypeRole::None => "None",
+            }
+            .to_string(),
+        )
     }
 }
 
@@ -487,7 +527,7 @@ impl MacOSMenu {
         }
 
         if let Some(version) = self.item.ls_minimum_system_version.as_ref() {
-            pl.insert("LSMinimumSystemVersion".into(), version.to_value());
+            pl.insert("LSMinimumSystemVersion".into(), version.to_plist());
         }
 
         if let Some(prohibited) = self.item.ls_multiple_instances_prohibited {
@@ -918,5 +958,19 @@ mod tests {
         insta::assert_snapshot!(
             fs::read_to_string(dirs.location.join("Contents/Info.plist")).unwrap()
         );
+    }
+
+    /// Test macOS version parsing
+    #[test]
+    fn test_macos_version() {
+        let version = super::MacOSVersion(vec![10, 15, 0]);
+        assert_eq!(
+            version.to_plist(),
+            plist::Value::String("10.15.0".to_string())
+        );
+
+        // parsing from string
+        let version: super::MacOSVersion = serde_json::from_str("\"10.15.0\"").unwrap();
+        assert_eq!(version.0, vec![10, 15, 0]);
     }
 }
