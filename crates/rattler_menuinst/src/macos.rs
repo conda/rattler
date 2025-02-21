@@ -800,12 +800,12 @@ pub(crate) fn remove_menu_item(tracker: &MacOsTracker) -> Result<Vec<PathBuf>, V
 #[cfg(test)]
 mod tests {
     use crate::{schema::MenuInstSchema, test::test_data, MenuMode};
+    use rattler_conda_types::menuinst::MacOsTracker;
     use std::{
         collections::HashMap,
         fs,
         path::{Path, PathBuf},
     };
-    use rattler_conda_types::menuinst::MacOsTracker;
     use tempfile::TempDir;
 
     impl super::Directories {
