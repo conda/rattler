@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.30.2...rattler_conda_types-v0.30.3) - 2025-02-18
+
+### Added
+
+- write prefix record atomically (#1063)
+
+### Other
+
+- update dependencies (#1069)
+
+## [0.30.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.30.1...rattler_conda_types-v0.30.2) - 2025-02-06
+
+### Other
+
+- bump rust 1.84.1 (#1053)
+
 ## [0.30.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.30.0...rattler_conda_types-v0.30.1) - 2025-02-03
 
 ### Fixed

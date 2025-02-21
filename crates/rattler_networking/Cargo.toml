@@ -1,6 +1,6 @@
 [package]
 name = "rattler_networking"
-version = "0.22.2"
+version = "0.22.4"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Authenticated requests in the conda ecosystem"
@@ -19,11 +19,10 @@ s3 = ["aws-config", "aws-sdk-s3"]
 
 [dependencies]
 anyhow = { workspace = true }
-async-fd-lock = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
-chrono = { workspace = true }
 dirs = { workspace = true }
+fs-err = { workspace = true }
 google-cloud-auth = { workspace = true, optional = true }
 google-cloud-token = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true }
@@ -43,12 +42,13 @@ reqwest-middleware = { workspace = true }
 retry-policies = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 
 [target.'cfg( target_arch = "wasm32" )'.dependencies]
-getrandom = { workspace = true, features = ["js"] }
+getrandom = { workspace = true, features = ["wasm_js"] }
 
 [dev-dependencies]
 anyhow = { workspace = true }
@@ -60,4 +60,3 @@ reqwest-retry = { workspace = true }
 sha2 = { workspace = true }
 temp-env = { workspace = true }
 rstest = { workspace = true }
-rand = { workspace = true }

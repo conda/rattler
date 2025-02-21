@@ -40,7 +40,7 @@ pub enum GatewayError {
     DirectUrlQueryError(String, #[source] DirectUrlQueryError),
 
     #[error("the match spec '{0}' does not specify a name")]
-    MatchSpecWithoutName(MatchSpec),
+    MatchSpecWithoutName(Box<MatchSpec>),
 
     #[error("the package from url '{0}', doesn't have the same name as the match spec filename intents '{1}'")]
     UrlRecordNameMismatch(String, String),

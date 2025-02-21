@@ -1067,7 +1067,7 @@ mod tests {
         #[serde(untagged)]
         enum MatchSpecOrError {
             Error { error: String },
-            MatchSpec(MatchSpec),
+            MatchSpec(Box<MatchSpec>),
         }
 
         // A list of matchspecs to parse.
@@ -1115,7 +1115,7 @@ mod tests {
                         |err| MatchSpecOrError::Error {
                             error: err.to_string(),
                         },
-                        MatchSpecOrError::MatchSpec,
+                        |err| MatchSpecOrError::MatchSpec(Box::new(err)),
                     ),
                 )
             })
@@ -1144,7 +1144,7 @@ mod tests {
         #[serde(untagged)]
         enum NamelessSpecOrError {
             Error { error: String },
-            Spec(NamelessMatchSpec),
+            Spec(Box<NamelessMatchSpec>),
         }
 
         // A list of matchspecs to parse.
@@ -1187,7 +1187,7 @@ mod tests {
                         |err| NamelessSpecOrError::Error {
                             error: err.to_string(),
                         },
-                        NamelessSpecOrError::Spec,
+                        |err| NamelessSpecOrError::Spec(Box::new(err)),
                     ),
                 )
             })

@@ -10,6 +10,7 @@ updates:
     commit-message:
       prefix: "bump"
     open-pull-requests-limit: 10
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -18,3 +19,16 @@ updates:
       - "dependencies"
     commit-message:
       prefix: "chore(ci)"
+
+  - package-ecosystem: "npm"
+    directory: "js-rattler"
+    schedule:
+      interval: "daily"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"

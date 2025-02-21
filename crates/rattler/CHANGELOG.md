@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0](https://github.com/conda/rattler/compare/rattler-v0.31.1...rattler-v0.32.0) - 2025-02-18
+
+### Fixed
+
+- use new PackageRecord when issuing reinstallation in `Transaction::from_current_and_desired` (#1070)
+- clobber issue where path was not correctly searched for in clobbered paths (#1066)
+
+### Other
+
+- update dependencies (#1069)
+
+## [0.31.1](https://github.com/conda/rattler/compare/rattler-v0.31.0...rattler-v0.31.1) - 2025-02-06
+
+### Other
+
+- bump rust 1.84.1 (#1053)
+
 ## [0.31.0](https://github.com/conda/rattler/compare/rattler-v0.30.0...rattler-v0.31.0) - 2025-02-06
 
 ### Fixed

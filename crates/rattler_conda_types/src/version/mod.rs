@@ -1172,7 +1172,7 @@ mod test {
         let parsed_versions: Vec<Version> =
             version_strs.iter().map(|v| v.parse().unwrap()).collect();
         let mut random_versions = parsed_versions.clone();
-        random_versions.shuffle(&mut rand::thread_rng());
+        random_versions.shuffle(&mut rand::rng());
         random_versions.sort();
         assert_eq!(random_versions, parsed_versions);
     }
@@ -1240,7 +1240,7 @@ mod test {
 
         let parsed_versions: Vec<Version> = versions.iter().map(|v| v.parse().unwrap()).collect();
         let mut random_versions = parsed_versions.clone();
-        random_versions.shuffle(&mut rand::thread_rng());
+        random_versions.shuffle(&mut rand::rng());
         random_versions.sort();
         assert_eq!(random_versions, parsed_versions);
     }

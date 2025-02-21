@@ -117,7 +117,7 @@ impl RepoDataQuery {
                 let name = spec
                     .name
                     .clone()
-                    .ok_or(GatewayError::MatchSpecWithoutName(spec.clone()))?;
+                    .ok_or(GatewayError::MatchSpecWithoutName(Box::new(spec.clone())))?;
                 seen.insert(name.clone());
                 direct_url_specs.push((spec.clone(), url, name));
             } else if let Some(name) = &spec.name {
@@ -268,7 +268,7 @@ impl RepoDataQuery {
 
                             for (_, dependencies) in record.package_record.extra_depends.iter() {
                                 for dependency in dependencies {
-                                    let dependency_name = PackageName::new_unchecked(dependency.split_once(' ').unwrap_or((dependency, "")).0);
+                                    let dependency_name = package_name_from_match_spec_str(dependency);
                                     if seen.insert(dependency_name.clone()) {
                                         pending_package_specs.insert(dependency_name.clone(), SourceSpecs::Transitive);
                                     }
@@ -410,5 +410,27 @@ impl IntoFuture for NamesQuery {
 
     fn into_future(self) -> Self::IntoFuture {
         self.execute().boxed()
+    }
+}
+
+fn package_name_from_match_spec_str(spec: &str) -> PackageName {
+    let package_name_str = spec
+        .split_once(|c: char| c.is_whitespace() || matches!(c, '>' | '<' | '=' | '!' | '~'))
+        .map_or(spec, |(name, _)| name);
+    PackageName::new_unchecked(package_name_str)
+}
+
+#[cfg(test)]
+mod test {
+    use rstest::*;
+
+    #[rstest]
+    #[case("pillow", "pillow")]
+    #[case("pillow >=10", "pillow")]
+    #[case("pillow>=10,<12", "pillow")]
+    #[case("pillow >=10, <12", "pillow")]
+    fn test_package_name_from_match_spec_str(#[case] spec: &str, #[case] expected: &str) {
+        let package_name = super::package_name_from_match_spec_str(spec);
+        assert_eq!(package_name.as_source(), expected);
     }
 }
