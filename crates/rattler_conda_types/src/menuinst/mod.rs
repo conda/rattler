@@ -16,6 +16,7 @@ pub enum MenuMode {
 
 /// Tracker for menu entries installed into the system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Tracker {
     /// Linux tracker
     Linux(LinuxTracker),
