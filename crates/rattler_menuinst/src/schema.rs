@@ -239,6 +239,35 @@ pub struct Linux {
     pub glob_patterns: Option<HashMap<PlaceholderString, PlaceholderString>>,
 }
 
+// Enum for CFBundleTypeRole with validation
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum CFBundleTypeRole {
+    /// The app is the creator/owner of this file type
+    Editor,
+    /// The app is a viewer of this file type
+    Viewer,
+    /// The app is a shell for this file type
+    Shell,
+    /// Quick Look Generator
+    QLGenerator,
+    /// The app is not a handler for this file type
+    None,
+}
+
+impl CFBundleTypeRole {
+    pub fn to_value(&self) -> plist::Value {
+        plist::Value::String(
+            match self {
+                CFBundleTypeRole::Editor => "Editor",
+                CFBundleTypeRole::Viewer => "Viewer",
+                CFBundleTypeRole::Shell => "Shell",
+                CFBundleTypeRole::QLGenerator => "QLGenerator",
+                CFBundleTypeRole::None => "None",
+            }
+            .to_string(),
+        )
+    }
+}
 /// Describes a URL scheme associated with the app.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -246,7 +275,7 @@ pub struct CFBundleURLTypesModel {
     /// This key specifies the app's role with respect to the URL.
     /// Can be one of `Editor`, `Viewer`, `Shell`, `None`
     #[serde(rename = "CFBundleTypeRole")]
-    pub cf_bundle_type_role: Option<String>,
+    pub cf_bundle_type_role: Option<CFBundleTypeRole>,
 
     /// URL schemes / protocols handled by this type (e.g. 'mailto').
     #[serde(rename = "CFBundleURLSchemes")]
@@ -261,6 +290,32 @@ pub struct CFBundleURLTypesModel {
     pub cf_bundle_url_icon_file: Option<PlaceholderString>,
 }
 
+// Enum for LSHandlerRank with validation
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum LSHandlerRank {
+    /// The app is the creator/owner of this file type
+    Owner,
+    /// The app is the default handler for this file type
+    Default,
+    /// The app is an alternate handler for this file type
+    Alternate,
+    /// The app is not a handler for this file type
+    None,
+}
+
+impl LSHandlerRank {
+    pub fn to_value(&self) -> plist::Value {
+        plist::Value::String(
+            match self {
+                LSHandlerRank::Owner => "Owner",
+                LSHandlerRank::Default => "Default",
+                LSHandlerRank::Alternate => "Alternate",
+                LSHandlerRank::None => "None",
+            }
+            .to_string(),
+        )
+    }
+}
 /// Describes a document type associated with the app.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -276,7 +331,7 @@ pub struct CFBundleDocumentTypesModel {
     /// This key specifies the app's role with respect to the type.
     /// Can be one of `Editor`, `Viewer`, `Shell`, `None`
     #[serde(rename = "CFBundleTypeRole")]
-    pub cf_bundle_type_role: Option<String>,
+    pub cf_bundle_type_role: Option<CFBundleTypeRole>,
 
     /// List of UTI (Uniform Type Identifier) strings defining supported file types.
     ///
@@ -296,9 +351,9 @@ pub struct CFBundleDocumentTypesModel {
 
     /// Determines how Launch Services ranks this app among the apps
     /// that declare themselves editors or viewers of files of this type.
-    /// Can be one of `Owner`, `Default` or `Alternate`
+    /// Can be one of `Owner`, `Default`, `Alternate` or `None`
     #[serde(rename = "LSHandlerRank")]
-    pub ls_handler_rank: String, // TODO implement validation
+    pub ls_handler_rank: LSHandlerRank,
 }
 
 /// A model representing a Uniform Type Identifier (UTI) declaration.
@@ -328,6 +383,58 @@ pub struct UTTypeDeclarationModel {
     /// A dictionary defining one or more equivalent type identifiers.
     #[serde(rename = "UTTypeTagSpecification")]
     pub ut_type_tag_specification: HashMap<PlaceholderString, Vec<PlaceholderString>>,
+}
+
+/// macOS version number.
+#[derive(Debug, Clone)]
+pub struct MacOSVersion(Vec<u32>);
+
+impl Serialize for MacOSVersion {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<String>>()
+            .join(".")
+            .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for MacOSVersion {
+    fn deserialize<D>(deserializer: D) -> Result<MacOSVersion, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let version = s
+            .split('.')
+            .map(|s| s.parse())
+            .collect::<Result<Vec<u32>, _>>()
+            .map_err(serde::de::Error::custom)?;
+
+        if version.len() > 3 {
+            return Err(serde::de::Error::custom(
+                "Version number must have at most 3 components",
+            ));
+        }
+
+        Ok(MacOSVersion(version))
+    }
+}
+
+impl MacOSVersion {
+    pub fn to_value(&self) -> plist::Value {
+        plist::Value::String(
+            self.0
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<String>>()
+                .join("."),
+        )
+    }
 }
 
 /// macOS specific fields in the menuinst. For more information on the keys, read the following URLs
@@ -389,7 +496,7 @@ pub struct MacOS {
     /// Minimum version of macOS required for this app to run, as `x.y.z`.
     /// For example, for macOS v10.4 and later, use `10.4.0`. (TODO: implement proper parsing)
     #[serde(rename = "LSMinimumSystemVersion")]
-    pub ls_minimum_system_version: Option<String>,
+    pub ls_minimum_system_version: Option<MacOSVersion>,
 
     /// Whether an app is prohibited from running simultaneously in multiple user sessions.
     #[serde(rename = "LSMultipleInstancesProhibited")]
@@ -603,5 +710,19 @@ mod test {
         let schema_str = std::fs::read_to_string(schema_path).unwrap();
         let schema: super::MenuInstSchema = serde_json::from_str(&schema_str).unwrap();
         insta::assert_debug_snapshot!(schema);
+    }
+
+    /// Test macOS version parsing
+    #[test]
+    fn test_macos_version() {
+        let version = super::MacOSVersion(vec![10, 15, 0]);
+        assert_eq!(
+            version.to_value(),
+            plist::Value::String("10.15.0".to_string())
+        );
+
+        // parsing from string
+        let version: super::MacOSVersion = serde_json::from_str("\"10.15.0\"").unwrap();
+        assert_eq!(version.0, vec![10, 15, 0]);
     }
 }
