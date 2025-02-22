@@ -224,7 +224,7 @@ enum RawAndGzReader<'a> {
     Gz(GzDecoder<&'a mut Box<dyn ReadAndSeek + Send>>),
 }
 
-impl<'a> Read for RawAndGzReader<'a> {
+impl Read for RawAndGzReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
             Self::Raw(r) => r.read(buf),

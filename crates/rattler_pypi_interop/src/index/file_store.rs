@@ -127,7 +127,7 @@ pub struct LockedWriter<'a> {
     f: tempfile::NamedTempFile,
 }
 
-impl<'a> Write for LockedWriter<'a> {
+impl Write for LockedWriter<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.f.write(buf)
     }
@@ -137,7 +137,7 @@ impl<'a> Write for LockedWriter<'a> {
     }
 }
 
-impl<'a> Seek for LockedWriter<'a> {
+impl Seek for LockedWriter<'_> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         self.f.seek(pos)
     }
@@ -164,19 +164,19 @@ pub struct LockedReader<'a> {
     _data: PhantomData<&'a ()>,
 }
 
-impl<'a> Read for LockedReader<'a> {
+impl Read for LockedReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.file.read(buf)
     }
 }
 
-impl<'a> Seek for LockedReader<'a> {
+impl Seek for LockedReader<'_> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         self.file.seek(pos)
     }
 }
 
-impl<'a> LockedReader<'a> {
+impl LockedReader<'_> {
     /// Returns access to the underlying file ignoring the lock file.
     pub fn detach_unlocked(self) -> fs::File {
         self.file
