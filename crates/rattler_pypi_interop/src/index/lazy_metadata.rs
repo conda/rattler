@@ -50,7 +50,7 @@ pub(crate) async fn lazy_read_wheel_metadata(
     // The zip archive uses as BufReader which reads in chunks of 8192. To ensure we prefetch
     // enough data we round the size up to the nearest multiple of the buffer size.
     let buffer_size = 8192;
-    let size = ((size + buffer_size - 1) / buffer_size) * buffer_size;
+    let size = size.div_ceil(buffer_size) * buffer_size;
 
     // Fetch the bytes from the zip archive that contain the requested file.
     reader
