@@ -1,6 +1,31 @@
-//! Module for with data types for working with Python wheel files.
+//! Module with data types for working with Python wheel files.
 //!
+//! This can be used to retrieve metadata from wheel files by either passing
+//! in the path to the wheel file and the package name via the [`Wheel::from_path`] method
+//! or  by passing in a URL, package name and bytes of the wheel file to the
+//! [`Wheel::from_url_and_bytes`] method.
 //!
+//! Example for retrieving metadata from a wheel file using [`Wheel::from_path`]:
+//!
+//! ```rust
+//! use std::str::FromStr;
+//! use std::path::PathBuf;
+//! use rattler_pypi_interop::artifacts::Wheel;
+//! use rattler_pypi_interop::types::NormalizedPackageName;
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")?;
+//!
+//!     let test_data_dir = PathBuf::from(manifest_dir).join(PathBuf::from("test-data/wheels"));
+//!     let path_to_wheel = test_data_dir.join(PathBuf::from("miniblack-23.1.0-py3-none-any.whl"));
+//!     let normalized_package_name = NormalizedPackageName::from_str("miniblack")?;
+//!
+//!     let wheel = Wheel::from_path(&path_to_wheel, &normalized_package_name)?;
+//!     println!("{:?}", wheel.metadata()?);
+//!
+//!     Ok(())
+//! }
+//! ```
 use crate::types::HasArtifactName;
 use crate::{
     types::{
