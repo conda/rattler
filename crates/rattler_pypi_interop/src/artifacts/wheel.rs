@@ -1,6 +1,6 @@
 //! Module with data types for working with Python wheel files.
 //!
-//! This can be used to retrieve metadata from wheel files by either passing
+//! This module can be used to retrieve metadata from wheel files by either passing
 //! in the path to the wheel file and the package name via the [`Wheel::from_path`] method
 //! or  by passing in a URL, package name and bytes of the wheel file to the
 //! [`Wheel::from_url_and_bytes`] method.
