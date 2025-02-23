@@ -50,7 +50,6 @@ fs-err = { workspace = true }
 [dev-dependencies]
 rand = { workspace = true }
 insta = { workspace = true, features = ["yaml", "redactions", "toml", "glob", "filters"] }
-rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = ["rustls-tls"] }
 rstest = { workspace = true }
 assert_matches = { workspace = true }
 hex-literal = { workspace = true }

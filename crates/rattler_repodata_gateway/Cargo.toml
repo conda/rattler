@@ -13,7 +13,6 @@ readme.workspace = true
 [dependencies]
 fs-err = { workspace = true}
 anyhow = { workspace = true }
-async-fd-lock = { workspace = true }
 async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
 async-trait = { workspace = true, optional = true }
 blake2 = { workspace = true }
@@ -64,6 +63,9 @@ libc = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO"] }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+async-fd-lock = { workspace = true }
+
 [dev-dependencies]
 assert_matches = { workspace = true }
 axum = { workspace = true, features = ["tokio"] }
@@ -71,7 +73,6 @@ fslock = { workspace = true }
 hex-literal = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
 rattler_conda_types = { path = "../rattler_conda_types", default-features = false }
-rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = ["reqwest"] }
 rstest = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tools = { path="../tools" }

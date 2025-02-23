@@ -46,5 +46,13 @@ wasm-bindgen-test = "0.3.45"
 opt-level = "s"
 lto = true
 
+[patch.crates-io]
+# We want to use version 0.4.19 but its not released yet.
+# https://github.com/Nullus157/async-compression/pull/319
+async-compression = { git = "https://github.com/Nullus157/async-compression.git" }
+bzip2 = { git = "https://github.com/baszalmstra/bzip2-rs.git", branch="fix/wasm" }
+
+reqwest-middleware = { git = "https://github.com/TrueLayer/reqwest-middleware.git" }
+
 # Prevent package from thinking it's in the workspace
 [workspace]

@@ -14,7 +14,7 @@ readme.workspace = true
 fs-err = { workspace = true }
 rattler_conda_types = { path="../rattler_conda_types", version = "0.31.0", default-features = false }
 rattler_digest = { path="../rattler_digest", version = "1.0.6", default-features = false }
-rattler_package_streaming = { path="../rattler_package_streaming", version = "0.22.29", default-features = false }
+rattler_package_streaming = { path="../rattler_package_streaming", version = "0.22.29", default-features = false, features = ["zstdmt"] }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }

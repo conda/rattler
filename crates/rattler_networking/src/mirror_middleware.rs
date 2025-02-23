@@ -6,7 +6,7 @@ use std::{
 
 use http::{Extensions, StatusCode};
 use itertools::Itertools;
-use reqwest::{Request, Response, ResponseBuilderExt};
+use reqwest::{Body, Request, Response, ResponseBuilderExt};
 use reqwest_middleware::{Middleware, Next, Result};
 use url::Url;
 
@@ -97,7 +97,8 @@ fn select_mirror(mirrors: &[MirrorState]) -> Option<&MirrorState> {
     Some(&mirrors[min_failures_index])
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 impl Middleware for MirrorMiddleware {
     async fn handle(
         &self,
