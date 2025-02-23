@@ -302,6 +302,8 @@ async fn index_subdir(
     let repodata_path = format!("{subdir}/repodata.json");
     let repodata_bytes = serde_json::to_vec(&repodata)?;
     op.write(&repodata_path, repodata_bytes).await?;
+    // todo: also write repodata.json.bz2, repodata.json.zst, repodata.json.jlap and sharded repodata once available in rattler
+    // https://github.com/conda/rattler/issues/1096
 
     Ok(())
 }
