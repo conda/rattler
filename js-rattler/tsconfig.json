@@ -1,18 +1,9 @@
 {
+    "extends": "./tsconfig.rollup.json",
     "compilerOptions": {
-        "outDir": "./dist/",
-        "noImplicitAny": true,
-        "module": "es6",
-        "target": "es5",
-        "moduleResolution": "node",
-        "esModuleInterop": true,
         "declaration": true,
         "declarationMap": true,
         "declarationDir": "types",
-        "strict": true,
-        "sourceMap": true,
-        "stripInternal": true
-    },
-    "include": ["src"],
-    "exclude": ["node_modules", "**/*.test.ts"]
+        "emitDeclarationOnly": true
+    }
 }
