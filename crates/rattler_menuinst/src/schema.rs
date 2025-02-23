@@ -482,12 +482,14 @@ pub struct MacOS {
     /// List of permissions to request for the launched application.
     /// See `the entitlements docs <https://developer.apple.com/documentation/bundleresources/entitlements>`
     /// for a full list of possible values.
-    pub entitlements: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entitlements: Vec<String>,
 
     /// Paths that should be symlinked into the shortcut app bundle.
     /// It takes a mapping of source to destination paths. Destination paths must be
     /// relative. Placeholder `{{ MENU_ITEM_LOCATION }}` can be useful.
-    pub link_in_bundle: Option<HashMap<PlaceholderString, PlaceholderString>>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub link_in_bundle: HashMap<PlaceholderString, PlaceholderString>,
 
     /// Required shell script logic to handle opened URL payloads.
     pub event_handler: Option<PlaceholderString>,

@@ -127,7 +127,7 @@ pub fn remove_menu_items(tracker: &Vec<Tracker>) -> Result<(), MenuInstError> {
             }
             Tracker::Linux(tracker) => {
                 #[cfg(target_os = "linux")]
-                linux::remove_menu_item(tracker).unwrap();
+                linux::remove_menu_item(tracker)?;
             }
             Tracker::Windows(tracker) => {
                 #[cfg(target_os = "windows")]

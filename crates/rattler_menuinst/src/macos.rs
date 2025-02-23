@@ -1,6 +1,5 @@
 use std::{
-    collections::HashMap,
-    io::{BufWriter, Write},
+    io::Write,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::Command,
@@ -11,7 +10,7 @@ use fs_err::File;
 use plist::Value;
 use rattler_conda_types::{menuinst::MacOsTracker, Platform};
 use rattler_shell::{
-    activation::{ActivationVariables, Activator},
+    activation::{ActivationError, ActivationVariables, Activator},
     shell,
 };
 
@@ -347,13 +346,7 @@ impl MacOSMenu {
             run_pre_create_command(&pre_create_command)?;
         }
 
-        for (src, dest) in self
-            .item
-            .link_in_bundle
-            .as_ref()
-            .unwrap_or(&HashMap::new())
-            .iter()
-        {
+        for (src, dest) in &self.item.link_in_bundle {
             let src = src.resolve(&self.placeholders);
             let dest = dest.resolve(&self.placeholders);
             let rendered_dest = self.directories.location.join(&dest);
@@ -584,35 +577,28 @@ impl MacOSMenu {
             pl.insert("CFBundleURLTypes".into(), Value::Array(url_array));
         }
 
-        tracing::info!(
-            "Writing plist to {}",
-            self.directories
-                .location
-                .join("Contents/Info.plist")
-                .display()
-        );
-        plist::to_file_xml(self.directories.location.join("Contents/Info.plist"), &pl)?;
-
-        Ok(())
+        let plist_target = self.directories.location.join("Contents/Info.plist");
+        tracing::info!("Writing plist to {:?}", plist_target);
+        Ok(plist::to_file_xml(plist_target, &pl)?)
     }
 
     fn sign_with_entitlements(&self) -> Result<(), MenuInstError> {
         // write a plist file with the entitlements to the filesystem
-        let mut entitlements = plist::Dictionary::new();
-        if let Some(entitlements_list) = &self.item.entitlements {
-            for e in entitlements_list {
-                entitlements.insert(e.to_string(), Value::Boolean(true));
-            }
-        } else {
+        if self.item.entitlements.is_empty() {
             return Ok(());
+        }
+
+        let mut entitlements = plist::Dictionary::new();
+
+        for e in &self.item.entitlements {
+            entitlements.insert(e.to_string(), Value::Boolean(true));
         }
 
         let entitlements_file = self
             .directories
             .location
             .join("Contents/Entitlements.plist");
-        let writer = BufWriter::new(File::create(&entitlements_file)?);
-        plist::to_writer_xml(writer, &entitlements)?;
+        plist::to_file_xml(&entitlements_file, &entitlements)?;
 
         // sign the .app directory with the entitlements
         let _codesign = Command::new("/usr/bin/codesign")
@@ -627,13 +613,13 @@ impl MacOSMenu {
             .arg(format!("com.{}", slugify(&self.name)))
             .arg("--entitlements")
             .arg(&entitlements_file)
-            .arg(self.directories.location.to_str().unwrap())
+            .arg(&self.directories.location)
             .output()?;
 
         Ok(())
     }
 
-    fn command(&self) -> String {
+    fn command(&self) -> Result<String, ActivationError> {
         let mut lines = vec!["#!/bin/sh".to_string()];
 
         if self.command.terminal.unwrap_or(false) {
@@ -658,11 +644,8 @@ impl MacOSMenu {
         // Run a cached activation
         if self.command.activate.unwrap_or(false) {
             // create a bash activation script and emit it into the script
-            let activator =
-                Activator::from_path(&self.prefix, shell::Bash, Platform::current()).unwrap();
-            let activation_env = activator
-                .run_activation(ActivationVariables::default(), None)
-                .unwrap();
+            let activator = Activator::from_path(&self.prefix, shell::Bash, Platform::current())?;
+            let activation_env = activator.run_activation(ActivationVariables::default(), None)?;
 
             for (k, v) in activation_env {
                 lines.push(format!(r#"export {k}="{v}""#));
@@ -676,20 +659,17 @@ impl MacOSMenu {
             .map(|s| s.resolve(&self.placeholders));
         lines.push(utils::quote_args(command).join(" "));
 
-        lines.join("\n")
+        Ok(lines.join("\n"))
     }
 
     fn write_appkit_launcher(&self) -> Result<PathBuf, MenuInstError> {
-        // let launcher_path = launcher_path.unwrap_or_else(||
-        // self.default_appkit_launcher_path());
         #[cfg(target_arch = "aarch64")]
         let launcher_bytes = include_bytes!("../data/appkit_launcher_arm64");
         #[cfg(target_arch = "x86_64")]
         let launcher_bytes = include_bytes!("../data/appkit_launcher_x86_64");
 
         let launcher_path = self.default_appkit_launcher_path();
-        let mut file = File::create(&launcher_path)?;
-        file.write_all(launcher_bytes)?;
+        fs::write(&launcher_path, launcher_bytes)?;
         fs::set_permissions(&launcher_path, std::fs::Permissions::from_mode(0o755))?;
 
         Ok(launcher_path)
@@ -718,7 +698,7 @@ impl MacOSMenu {
         });
         tracing::info!("Writing script to {}", script_path.display());
         let mut file = File::create(&script_path)?;
-        file.write_all(self.command().as_bytes())?;
+        file.write_all(self.command()?.as_bytes())?;
         fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))?;
         Ok(script_path)
     }
