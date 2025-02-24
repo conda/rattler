@@ -16,8 +16,7 @@ use rattler_shell::activation::{ActivationVariables, Activator};
 use rattler_shell::shell;
 
 use crate::render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString};
-use crate::slugify;
-use crate::util::{log_output, run_pre_create_command};
+use crate::utils::{log_output, run_pre_create_command, slugify};
 use crate::{
     schema::{Linux, MenuItemCommand},
     MenuInstError,

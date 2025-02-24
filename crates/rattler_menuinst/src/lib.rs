@@ -31,6 +31,7 @@ pub enum MenuInstError {
     #[error("Failed to install menu item: {0}")]
     InstallError(String),
 
+    #[cfg(target_os = "macos")]
     #[error("Failed to create plist: {0}")]
     PlistError(#[from] plist::Error),
     #[error("Failed to sign plist: {0}")]

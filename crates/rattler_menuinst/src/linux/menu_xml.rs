@@ -1,12 +1,10 @@
-#![allow(dead_code)]
 use chrono::Utc;
 use fs_err::{self as fs, File};
-use quick_xml::events::Event;
-use quick_xml::{Reader, Writer};
+use quick_xml::{events::Event, Reader, Writer};
 use std::io::Write;
 use std::path::PathBuf;
 
-use crate::{slugify, MenuInstError};
+use crate::{utils::slugify, MenuInstError};
 
 pub struct MenuXml {
     menu_config_location: PathBuf,
