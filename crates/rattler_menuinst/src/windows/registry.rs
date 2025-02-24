@@ -274,7 +274,7 @@ pub fn register_url_protocol(
 
     let protocol_key = hkey.create(base_path)?;
 
-    protocol_key.set_string("", &format!("URL:{}", title_case(protocol)))?;
+    protocol_key.set_string("", format!("URL:{}", title_case(protocol)))?;
     protocol_key.set_string("URL Protocol", "")?;
 
     protocol_key

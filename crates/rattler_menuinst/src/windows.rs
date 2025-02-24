@@ -14,12 +14,12 @@ use std::{
     path::{Path, PathBuf},
 };
 use terminal::TerminalProfile;
+pub use terminal::TerminalUpdateError;
 
 use crate::{
     render::{BaseMenuItemPlaceholders, MenuItemPlaceholders},
     schema::{Environment, MenuItemCommand, Windows},
-    slugify,
-    util::log_output,
+    utils::{log_output, slugify},
     MenuInstError, MenuMode,
 };
 
@@ -317,7 +317,9 @@ impl WindowsMenu {
         let app_id = self.app_id();
 
         // split args into command and arguments
-        let (command, args) = args.split_first().unwrap();
+        let Some((command, args)) = args.split_first() else {
+            return Ok(());
+        };
         let args = lex::quote_args(args).join(" ");
 
         let link_name = format!("{}.lnk", self.name);
@@ -456,8 +458,7 @@ impl WindowsMenu {
             self.menu_mode,
             &self.directories.known_folders,
         ) {
-            // TODO get rid of unwrap :)
-            terminal::add_windows_terminal_profile(&location, &profile).unwrap();
+            terminal::add_windows_terminal_profile(&location, &profile)?;
             tracker.terminal_profiles.push(WindowsTerminalProfile {
                 configuration_file: location,
                 identifier: profile.name.clone(),

@@ -1,7 +1,4 @@
-use std::path::Path;
-
-#[cfg(target_os = "linux")]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use rattler_conda_types::{
     menuinst::{MenuMode, Tracker},
@@ -54,6 +51,10 @@ pub enum MenuInstError {
     #[cfg(target_os = "windows")]
     #[error("Failed to install menu item: {0}")]
     WindowsError(#[from] ::windows::core::Error),
+
+    #[cfg(target_os = "windows")]
+    #[error("Failed to register terminal profile: {0}")]
+    TerminalProfileError(#[from] windows::TerminalUpdateError),
 
     #[cfg(target_os = "linux")]
     #[error("Menu config location is not a file: {0:?}")]
