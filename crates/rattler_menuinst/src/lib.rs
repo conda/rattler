@@ -22,6 +22,7 @@ pub mod utils;
 pub enum MenuInstError {
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+
     #[error("deserialization error: {0}")]
     SerdeError(#[from] serde_json::Error),
 
@@ -38,6 +39,8 @@ pub enum MenuInstError {
     #[cfg(target_os = "macos")]
     #[error("failed to create plist: {0}")]
     PlistError(#[from] plist::Error),
+
+    #[cfg(target_os = "macos")]
     #[error("failed to sign plist: {0}")]
     SigningFailed(String),
 
@@ -57,7 +60,7 @@ pub enum MenuInstError {
     TerminalProfileError(#[from] windows::TerminalUpdateError),
 
     #[cfg(target_os = "linux")]
-    #[error("fenu config location is not a file: {0:?}")]
+    #[error("menu config location is not a file: {0:?}")]
     MenuConfigNotAFile(PathBuf),
 }
 
