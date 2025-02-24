@@ -17,10 +17,8 @@ use tokio::{
 use url::Url;
 
 use super::ShardedRepodata;
-use crate::{
-    fetch::CacheAction, reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError,
-    Reporter,
-};
+use crate::fetch::with_cache::CacheAction;
+use crate::{reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError, Reporter};
 
 /// Magic number that identifies the cache file format.
 const MAGIC_NUMBER: &[u8] = b"SHARD-CACHE-V1";

@@ -4,9 +4,9 @@ use std::{
     sync::atomic::{self, AtomicUsize},
 };
 
-use http::{Extensions, StatusCode};
+use http::Extensions;
 use itertools::Itertools;
-use reqwest::{Body, Request, Response, ResponseBuilderExt};
+use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result};
 use url::Url;
 
@@ -161,14 +161,21 @@ impl Middleware for MirrorMiddleware {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
+    use reqwest::ResponseBuilderExt;
     Response::from(
         http::response::Builder::new()
-            .status(StatusCode::NOT_FOUND)
+            .status(http::StatusCode::NOT_FOUND)
             .url(url.clone())
             .body(body.to_string())
             .unwrap(),
     )
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn create_404_response(_url: &Url, _body: &str) -> Response {
+    todo!("This is not implemented in reqwest, we need to contribute that.")
 }
 
 #[cfg(test)]

@@ -29,7 +29,7 @@ pub use repo_data::RepoData;
 use reqwest_middleware::ClientWithMiddleware;
 use subdir::Subdir;
 use tokio::sync::broadcast;
-use tracing::{instrument, Level};
+use tracing::instrument;
 use url::Url;
 
 use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
@@ -308,8 +308,8 @@ mod test {
     use rstest::rstest;
     use url::Url;
 
+    use crate::fetch::with_cache::CacheAction;
     use crate::{
-        fetch::CacheAction,
         gateway::Gateway,
         utils::{simple_channel_server::SimpleChannelServer, test::fetch_repo_data},
         GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,

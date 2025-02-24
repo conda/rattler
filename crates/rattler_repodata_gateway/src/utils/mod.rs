@@ -3,7 +3,6 @@ use std::fmt::Write;
 use ::url::Url;
 pub use body::BodyStreamExt;
 pub use encoding::{AsyncEncoding, Encoding};
-pub use flock::LockedFile;
 
 mod encoding;
 
@@ -11,7 +10,11 @@ mod encoding;
 pub(crate) mod simple_channel_server;
 
 mod body;
+#[cfg(not(target_arch = "wasm32"))]
 mod flock;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub use flock::LockedFile;
 
 /// Convert a URL to a cache filename
 pub(crate) fn url_to_cache_filename(url: &Url) -> String {

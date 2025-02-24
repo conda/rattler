@@ -1,7 +1,8 @@
 use std::{borrow::Cow, io::Write, path::PathBuf, sync::Arc};
 
+use crate::fetch::with_cache::CacheAction;
 use crate::{
-    fetch::{CacheAction, FetchRepoDataError},
+    fetch::FetchRepoDataError,
     gateway::{error::SubdirNotFoundError, subdir::SubdirClient},
     reporter::ResponseReporterExt,
     GatewayError, Reporter,

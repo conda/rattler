@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use rattler_conda_types::ChannelUrl;
 use url::Url;
 
-use crate::fetch::CacheAction;
+use crate::fetch::with_cache::CacheAction;
 
 /// Describes additional properties that influence how the gateway fetches
 /// repodata for a specific channel.

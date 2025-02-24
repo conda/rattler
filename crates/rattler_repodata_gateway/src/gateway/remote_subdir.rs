@@ -4,8 +4,9 @@ use rattler_conda_types::{Channel, PackageName, Platform, RepoDataRecord};
 use reqwest_middleware::ClientWithMiddleware;
 
 use super::{local_subdir::LocalSubdirClient, GatewayError, SourceConfig};
+use crate::fetch::with_cache::{fetch_repo_data, FetchRepoDataOptions};
 use crate::{
-    fetch::{fetch_repo_data, FetchRepoDataError, FetchRepoDataOptions},
+    fetch::FetchRepoDataError,
     gateway::{error::SubdirNotFoundError, subdir::SubdirClient},
     Reporter,
 };
