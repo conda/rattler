@@ -787,15 +787,14 @@ pub(crate) fn install_menu_item(
     Ok(tracker)
 }
 
-pub(crate) fn remove_menu_item(tracker: &MacOsTracker) -> Result<Vec<PathBuf>, Vec<MenuInstError>> {
+pub(crate) fn remove_menu_item(tracker: &MacOsTracker) -> Result<Vec<PathBuf>, MenuInstError> {
     let mut removed = Vec::new();
-    let mut errors = Vec::new();
     match fs_err::remove_dir_all(&tracker.app_folder) {
         Ok(_) => {
             removed.push(tracker.app_folder.clone());
         }
         Err(e) => {
-            errors.push(e.into());
+            tracing::warn!("Failed to remove app folder: {}", e);
         }
     }
 
@@ -804,12 +803,8 @@ pub(crate) fn remove_menu_item(tracker: &MacOsTracker) -> Result<Vec<PathBuf>, V
             Ok(_) => {}
             Err(e) => {
                 tracing::warn!("Failed to unregister with lsregister: {}", e);
-                errors.push(e);
             }
         }
-    }
-    if !errors.is_empty() {
-        return Err(errors);
     }
     Ok(removed)
 }

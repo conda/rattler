@@ -131,7 +131,7 @@ pub fn remove_menu_items(tracker: &Vec<Tracker>) -> Result<(), MenuInstError> {
         match el {
             Tracker::MacOs(tracker) => {
                 #[cfg(target_os = "macos")]
-                macos::remove_menu_item(tracker).unwrap();
+                macos::remove_menu_item(tracker)?;
             }
             Tracker::Linux(tracker) => {
                 #[cfg(target_os = "linux")]
