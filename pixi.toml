@@ -23,7 +23,7 @@ rattler = "cargo run --bin rattler --release --"
 
 [dependencies]
 cxx-compiler = "~=1.6.0"
-openssl = "~=3.1"
+openssl = "<=3.3,<3.4"
 make = "~=4.3"
 pkg-config = "~=0.29.2"
 rust = "~=1.84.0"
@@ -33,7 +33,7 @@ cargo-nextest = ">=0.9.91,<0.10"
 [target.linux-64.dependencies]
 clang = ">=18.1.8,<19.0"
 compilers = ">=1.6.0"
-mold = ">=2.33.0,<3.0"
+mold = "*"
 [target.linux-64.activation]
 scripts = ["scripts/activate_linux.sh"]
 

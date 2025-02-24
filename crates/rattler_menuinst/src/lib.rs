@@ -70,6 +70,8 @@ pub enum MenuInstError {
 pub fn install_menuitems_for_record(
     target_prefix: &Path,
     prefix_record: &PrefixRecord,
+    platform: Platform,
+    menu_mode: MenuMode,
 ) -> Result<(), MenuInstError> {
     // Look for Menu/*.json files in the package paths
     let menu_files: Vec<_> = prefix_record
@@ -85,39 +87,29 @@ pub fn install_menuitems_for_record(
         })
         .collect();
 
-    if !menu_files.is_empty() {
-        for menu_file in menu_files {
-            let full_path = target_prefix.join(&menu_file.relative_path);
-            match install_menuitems(
-                &full_path,
-                target_prefix,
-                target_prefix,
-                Platform::current(),
-                MenuMode::User,
-            ) {
-                Ok(tracker_vec) => {
-                    // Store tracker in the prefix record
-                    let mut record = prefix_record.clone();
-                    record.installed_system_menus = tracker_vec;
+    for menu_file in menu_files {
+        let full_path = target_prefix.join(&menu_file.relative_path);
+        let tracker_vec = install_menuitems(
+            &full_path,
+            target_prefix,
+            target_prefix,
+            platform,
+            menu_mode,
+        )?;
 
-                    // Save the updated prefix record
-                    record
-                        .write_to_path(
-                            target_prefix.join("conda-meta").join(record.file_name()),
-                            true,
-                        )
-                        .expect("Failed to write prefix record");
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to install menu items for {}: {}",
-                        full_path.display(),
-                        e
-                    );
-                }
-            }
-        }
+        // Store tracker in the prefix record
+        let mut record = prefix_record.clone();
+        record.installed_system_menus = tracker_vec;
+
+        // Save the updated prefix record
+        record
+            .write_to_path(
+                target_prefix.join("conda-meta").join(record.file_name()),
+                true,
+            )
+            .expect("Failed to write prefix record");
     }
+
     Ok(())
 }
 

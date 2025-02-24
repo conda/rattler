@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use rattler_conda_types::{PackageName, PrefixRecord};
+use rattler_conda_types::{menuinst::MenuMode, PackageName, Platform, PrefixRecord};
 use std::{fs, path::PathBuf};
 
 #[derive(Debug, Parser)]
@@ -28,7 +28,12 @@ pub async fn install_menu(opts: InstallOpt) -> Result<()> {
             )
         })?;
     let prefix = fs::canonicalize(&opts.target_prefix)?;
-    rattler_menuinst::install_menuitems_for_record(&prefix, record)?;
+    rattler_menuinst::install_menuitems_for_record(
+        &prefix,
+        record,
+        Platform::current(),
+        MenuMode::User,
+    )?;
 
     Ok(())
 }
