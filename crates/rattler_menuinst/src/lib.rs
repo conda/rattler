@@ -22,42 +22,42 @@ pub mod utils;
 pub enum MenuInstError {
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
-    #[error("Deserialization error: {0}")]
+    #[error("deserialization error: {0}")]
     SerdeError(#[from] serde_json::Error),
 
-    #[error("Failed to install menu item: {0}")]
+    #[error("failed to install menu item: {0}")]
     InstallError(String),
 
-    #[error("Invalid path: {0}")]
+    #[error("invalid path: {0}")]
     InvalidPath(PathBuf),
 
     #[cfg(target_os = "linux")]
-    #[error("Could not quote command with shlex: {0}")]
+    #[error("could not quote command with shlex: {0}")]
     ShlexQuoteError(#[from] shlex::QuoteError),
 
     #[cfg(target_os = "macos")]
-    #[error("Failed to create plist: {0}")]
+    #[error("failed to create plist: {0}")]
     PlistError(#[from] plist::Error),
-    #[error("Failed to sign plist: {0}")]
+    #[error("failed to sign plist: {0}")]
     SigningFailed(String),
 
-    #[error("Failed to install menu item: {0}")]
+    #[error("failed to install menu item: {0}")]
     ActivationError(#[from] rattler_shell::activation::ActivationError),
 
     #[cfg(target_os = "linux")]
-    #[error("Failed to install menu item: {0}")]
+    #[error("failed to install menu item: {0}")]
     XmlError(#[from] quick_xml::Error),
 
     #[cfg(target_os = "windows")]
-    #[error("Failed to install menu item: {0}")]
+    #[error("failed to install menu item: {0}")]
     WindowsError(#[from] ::windows::core::Error),
 
     #[cfg(target_os = "windows")]
-    #[error("Failed to register terminal profile: {0}")]
+    #[error("failed to register terminal profile: {0}")]
     TerminalProfileError(#[from] windows::TerminalUpdateError),
 
     #[cfg(target_os = "linux")]
-    #[error("Menu config location is not a file: {0:?}")]
+    #[error("fenu config location is not a file: {0:?}")]
     MenuConfigNotAFile(PathBuf),
 }
 
