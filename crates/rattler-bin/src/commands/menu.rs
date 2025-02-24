@@ -28,7 +28,7 @@ pub async fn install_menu(opts: InstallOpt) -> Result<()> {
             )
         })?;
     let prefix = fs::canonicalize(&opts.target_prefix)?;
-    rattler_menuinst::install_menuitems_for_record(&prefix, &record)?;
+    rattler_menuinst::install_menuitems_for_record(&prefix, record)?;
 
     Ok(())
 }
