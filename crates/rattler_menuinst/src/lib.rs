@@ -31,6 +31,13 @@ pub enum MenuInstError {
     #[error("Failed to install menu item: {0}")]
     InstallError(String),
 
+    #[error("Invalid path: {0}")]
+    InvalidPath(PathBuf),
+
+    #[cfg(target_os = "linux")]
+    #[error("Could not quote command with shlex: {0}")]
+    ShlexQuoteError(#[from] shlex::QuoteError),
+
     #[cfg(target_os = "macos")]
     #[error("Failed to create plist: {0}")]
     PlistError(#[from] plist::Error),

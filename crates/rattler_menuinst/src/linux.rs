@@ -83,8 +83,8 @@ impl Directories {
             )
         } else {
             (
-                dirs::config_dir().expect("Could not get config dir"),
-                dirs::data_dir().expect("Could not get data dir"),
+                dirs::config_dir().expect("could not get config dir"),
+                dirs::data_dir().expect("could not get data dir"),
             )
         };
 
@@ -106,12 +106,13 @@ impl Directories {
         fs::create_dir_all(&self.config_directory)?;
 
         let paths = vec![
-            self.menu_config_location.parent().unwrap().to_path_buf(),
-            self.desktop_entries_location.clone(),
+            self.menu_config_location
+                .parent()
+                .ok_or_else(|| MenuInstError::InvalidPath(self.menu_config_location.clone()))?,
+            &self.desktop_entries_location,
             self.directory_entry_location
                 .parent()
-                .unwrap()
-                .to_path_buf(),
+                .ok_or_else(|| MenuInstError::InvalidPath(self.directory_entry_location.clone()))?,
         ];
 
         for path in paths {
@@ -288,21 +289,17 @@ impl LinuxMenu {
         Ok(())
     }
 
-    fn command(&self) -> String {
+    fn command(&self) -> Result<String, MenuInstError> {
         let mut parts = Vec::new();
         if let Some(pre_command) = &self.command.precommand {
             parts.push(pre_command.resolve(&self.placeholders));
         }
 
-        // TODO we should use `env` to set the environment variables in the `.desktop` file
         let mut envs = Vec::new();
         if self.command.activate.unwrap_or(false) {
             // create a bash activation script and emit it into the script
-            let activator =
-                Activator::from_path(&self.prefix, shell::Bash, Platform::current()).unwrap();
-            let activation_env = activator
-                .run_activation(ActivationVariables::default(), None)
-                .unwrap();
+            let activator = Activator::from_path(&self.prefix, shell::Bash, Platform::current())?;
+            let activation_env = activator.run_activation(ActivationVariables::default(), None)?;
 
             for (k, v) in activation_env {
                 envs.push(format!(r#"{k}="{v}""#));
@@ -320,11 +317,12 @@ impl LinuxMenu {
         parts.push(command);
 
         let command = parts.join(" && ");
-
-        format!(
-            "bash -c {}",
-            shlex::try_quote(&command).expect("could not quote command")
-        )
+        let bash_command = format!("bash -c {}", shlex::try_quote(&command)?);
+        if envs.is_empty() {
+            Ok(bash_command)
+        } else {
+            Ok(format!("env {} {}", envs.join(" "), bash_command))
+        }
     }
 
     fn resolve_and_join(&self, items: &[PlaceholderString]) -> String {
@@ -348,7 +346,7 @@ impl LinuxMenu {
         writeln!(writer, "Type=Application")?;
         writeln!(writer, "Encoding=UTF-8")?;
         writeln!(writer, "Name={}", self.name)?;
-        writeln!(writer, "Exec={}", self.command())?;
+        writeln!(writer, "Exec={}", self.command()?)?;
         writeln!(
             writer,
             "Terminal={}",
@@ -568,11 +566,9 @@ impl LinuxMenu {
         // the file + directory around for eventual removal (just use tempdir for unique folder)
         let temp_dir = TempDir::new_in(&mime_dir_in_prefix)?;
         let file_path = temp_dir.path().join(file_name);
-        let mut file = File::create(&file_path)?;
-        file.write_all(xml.as_bytes())?;
-        file.flush()?;
+        fs::write(&file_path, &xml)?;
 
-        match xdg_mime(file.path(), self.mode, XdgMimeOperation::Install) {
+        match xdg_mime(&file_path, self.mode, XdgMimeOperation::Install) {
             Ok(_) => {
                 // keep temp dir in prefix around and the temp file
                 // because we re-use it when unregistering the mime type.
@@ -627,7 +623,9 @@ pub fn remove_menu_item(tracker: &LinuxTracker) -> Result<(), MenuInstError> {
             }
         }
         // Remove the temporary directory we created for the glob file
-        fs::remove_dir_all(path.parent().unwrap())?;
+        if let Some(parent) = path.parent() {
+            fs::remove_dir_all(parent)?;
+        }
     }
 
     if let Some(installed_mime_types) = tracker.mime_types.as_ref() {

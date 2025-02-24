@@ -13,7 +13,6 @@ readme.workspace = true
 [dependencies]
 dirs = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-shlex = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 rattler_conda_types = { path = "../rattler_conda_types", default-features = false }
@@ -33,6 +32,7 @@ sha2 = { workspace = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 quick-xml = "0.37.2"
 configparser = { version = "3.1.0" }
+shlex = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 known-folders = "1.2.0"
