@@ -548,7 +548,7 @@ impl Shell for Fish {
     }
 
     fn completion_script_location(&self) -> Option<PathBuf> {
-        Some(PathBuf::from("share/fish/vendor_completions"))
+        Some(PathBuf::from("share/fish/vendor_completions.d"))
     }
 }
 
