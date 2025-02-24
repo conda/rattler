@@ -352,25 +352,24 @@ impl MacOSMenu {
         for (src, dest) in link_in_bundle {
             let src = src.resolve(&self.placeholders);
             let dest = dest.resolve(&self.placeholders);
-            let rendered_dest = self.directories.location.join(&dest);
-            if !rendered_dest.starts_with(&self.directories.location) {
+            let dest = self.directories.location.join(&dest);
+            if !dest.starts_with(&self.directories.location) {
                 return Err(MenuInstError::InstallError(format!(
                     "'link_in_bundle' destinations MUST be created inside the .app bundle ({}), but it points to '{}'.",
                     self.directories.location.display(),
-                    rendered_dest.display()
+                    dest.display()
                 )));
             }
 
-            if let Some(parent) = rendered_dest.parent() {
+            if let Some(parent) = dest.parent() {
                 fs::create_dir_all(parent)?;
             }
 
-            fs_err::os::unix::fs::symlink(&src, &rendered_dest)?;
+            let src = fs::canonicalize(src)?;
 
-            tracing::info!(
-                "MenuInst: link finished {src} to {}",
-                rendered_dest.display()
-            );
+            fs_err::os::unix::fs::symlink(&src, &dest)?;
+
+            tracing::info!("Symlinked  {src:?} to {dest:?}",);
         }
 
         Ok(())
@@ -789,8 +788,10 @@ pub(crate) fn install_menu_item(
 
 pub(crate) fn remove_menu_item(tracker: &MacOsTracker) -> Result<Vec<PathBuf>, MenuInstError> {
     let mut removed = Vec::new();
+    tracing::info!("Removing macOS menu item");
     match fs_err::remove_dir_all(&tracker.app_folder) {
         Ok(_) => {
+            tracing::info!("Removed app folder: {}", tracker.app_folder.display());
             removed.push(tracker.app_folder.clone());
         }
         Err(e) => {
@@ -800,7 +801,12 @@ pub(crate) fn remove_menu_item(tracker: &MacOsTracker) -> Result<Vec<PathBuf>, M
 
     if let Some(lsregister_path) = &tracker.lsregister {
         match lsregister(&["-R", "-u", "-all"], lsregister_path) {
-            Ok(_) => {}
+            Ok(_) => {
+                tracing::info!(
+                    "Unregistered with lsregister: {}",
+                    lsregister_path.display()
+                );
+            }
             Err(e) => {
                 tracing::warn!("Failed to unregister with lsregister: {}", e);
             }
