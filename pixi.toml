@@ -16,7 +16,7 @@ build = "cargo build"
 fmt = "cargo fmt"
 lint = "cargo clippy"
 check = "cargo check"
-test = "cargo test"
+test = "cargo nextest run --workspace --no-default-features --features=rustls-tls -E 'not test(libsolv_bindings_up_to_date)'"
 rattler = "cargo run --bin rattler --release --"
 
 [dependencies]
@@ -26,6 +26,7 @@ make = "~=4.3"
 pkg-config = "~=0.29.2"
 rust = "~=1.84.0"
 cmake = "~=3.26.4"
+cargo-nextest = ">=0.9.91,<0.10"
 
 [target.linux-64.dependencies]
 clang = ">=18.1.8,<19.0"
