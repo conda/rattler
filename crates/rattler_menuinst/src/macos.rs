@@ -21,10 +21,11 @@ use crate::{
         CFBundleDocumentTypesModel, CFBundleTypeRole, CFBundleURLTypesModel, LSHandlerRank, MacOS,
         MacOSVersion, MenuItemCommand, UTTypeDeclarationModel,
     },
-    slugify,
-    util::run_pre_create_command,
-    utils, MenuInstError, MenuMode,
+    utils::{self, log_output, run_pre_create_command},
+    MenuInstError, MenuMode,
 };
+
+use crate::utils::slugify;
 
 #[derive(Debug, Clone)]
 pub struct MacOSMenu {
@@ -261,10 +262,7 @@ fn lsregister(args: &[&str], directory: &Path) -> Result<(), MenuInstError> {
         .map_err(|e| MenuInstError::InstallError(format!("failed to execute lsregister: {e}")))?;
 
     if !output.status.success() {
-        return Err(MenuInstError::InstallError(format!(
-            "lsregister failed with exit code: {}",
-            output.status
-        )));
+        log_output("lsregister", output);
     }
 
     Ok(())
@@ -347,7 +345,11 @@ impl MacOSMenu {
             run_pre_create_command(&pre_create_command)?;
         }
 
-        for (src, dest) in &self.item.link_in_bundle {
+        let Some(link_in_bundle) = &self.item.link_in_bundle else {
+            return Ok(());
+        };
+
+        for (src, dest) in link_in_bundle {
             let src = src.resolve(&self.placeholders);
             let dest = dest.resolve(&self.placeholders);
             let rendered_dest = self.directories.location.join(&dest);
@@ -370,6 +372,7 @@ impl MacOSMenu {
                 rendered_dest.display()
             );
         }
+
         Ok(())
     }
 
@@ -583,14 +586,14 @@ impl MacOSMenu {
 
     fn sign_with_entitlements(&self) -> Result<(), MenuInstError> {
         // write a plist file with the entitlements to the filesystem
-        if self.item.entitlements.is_empty() {
+        let Some(item_entitlements) = &self.item.entitlements else {
             return Ok(());
-        }
+        };
 
         let mut entitlements = plist::Dictionary::new();
 
-        for e in &self.item.entitlements {
-            entitlements.insert(e.to_string(), Value::Boolean(true));
+        for e in item_entitlements {
+            entitlements.insert(e.clone(), Value::Boolean(true));
         }
 
         let entitlements_file = self

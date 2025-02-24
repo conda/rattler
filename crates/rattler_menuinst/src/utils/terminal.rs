@@ -1,4 +1,6 @@
-#[allow(dead_code)]
+//! Utility functions for working with the terminal output
+
+/// Log the output of a command to terminal
 pub fn log_output(cmd_info: &str, output: std::process::Output) {
     tracing::info!("{}: status {}", cmd_info, output.status);
     tracing::info!(

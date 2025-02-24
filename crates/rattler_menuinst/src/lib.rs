@@ -14,12 +14,8 @@ mod linux;
 mod macos;
 mod render;
 mod schema;
-mod util;
 #[cfg(target_os = "windows")]
 mod windows;
-
-pub mod slugify;
-pub use slugify::slugify;
 
 use crate::{render::BaseMenuItemPlaceholders, schema::MenuInstSchema};
 

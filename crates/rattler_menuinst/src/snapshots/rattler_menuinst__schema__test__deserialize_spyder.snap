@@ -480,15 +480,13 @@ MenuInstSchema {
                             ut_imported_type_declarations: None,
                             ns_supports_automatic_graphics_switching: None,
                             entitlements: None,
-                            link_in_bundle: Some(
-                                {
-                                    PlaceholderString(
-                                        "{{ PREFIX }}/bin/python",
-                                    ): PlaceholderString(
-                                        "{{ MENU_ITEM_LOCATION }}/Contents/MacOS/python",
-                                    ),
-                                },
-                            ),
+                            link_in_bundle: {
+                                PlaceholderString(
+                                    "{{ PREFIX }}/bin/python",
+                                ): PlaceholderString(
+                                    "{{ MENU_ITEM_LOCATION }}/Contents/MacOS/python",
+                                ),
+                            },
                             event_handler: None,
                         },
                     },

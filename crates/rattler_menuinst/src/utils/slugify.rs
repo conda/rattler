@@ -6,12 +6,12 @@ pub fn slugify(text: &str) -> String {
     let normalized = text.nfkd().filter(char::is_ascii).collect::<String>();
 
     // Remove special characters, convert to lowercase, and trim
-    let re_special = Regex::new(r"[^\w\s-]").unwrap();
+    let re_special = Regex::new(r"[^\w\s-]").expect("Invalid regex");
     let without_special = re_special.replace_all(&normalized, "").to_string();
     let trimmed = without_special.trim().to_lowercase();
 
     // Replace whitespace and hyphens with a single hyphen
-    let re_spaces = Regex::new(r"[_\s-]+").unwrap();
+    let re_spaces = Regex::new(r"[_\s-]+").expect("Invalid regex");
     re_spaces.replace_all(&trimmed, "-").to_string()
 }
 

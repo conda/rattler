@@ -128,23 +128,3 @@ fn replace_placeholders(mut text: String, replacements: &HashMap<String, String>
     }
     text
 }
-
-#[cfg(test)]
-mod test {
-    // use crate::render::render;
-
-    // #[test]
-    // fn test_render_gnuradio() {
-    //     let test_data = crate::test::test_data();
-    //     let schema_path = test_data.join("gnuradio/gnuradio-grc.json");
-    //
-    //     let placeholders = crate::render::placeholders(
-    //         Path::new("/home/base_prefix"),
-    //         Path::new("/home/prefix"),
-    //         &rattler_conda_types::Platform::Linux64,
-    //     );
-    //
-    //     let schema = render(&schema_path, &placeholders).unwrap();
-    //     insta::assert_debug_snapshot!(schema);
-    // }
-}
