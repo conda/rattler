@@ -7,9 +7,7 @@ use std::{
 
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::{
-    menuinst::MenuMode, prefix_record::PathType, PackageRecord, Platform, PrefixRecord,
-};
+use rattler_conda_types::{prefix_record::PathType, PackageRecord, PrefixRecord};
 use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
@@ -33,7 +31,6 @@ pub struct InstallDriver {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     pub(crate) clobber_registry: Arc<Mutex<ClobberRegistry>>,
     execute_link_scripts: bool,
-    install_menu_items: bool,
 }
 
 impl Default for InstallDriver {
@@ -41,7 +38,6 @@ impl Default for InstallDriver {
         Self::builder()
             .execute_link_scripts(false)
             .with_io_concurrency_limit(100)
-            .install_menu_items(true)
             .finish()
     }
 }
@@ -52,7 +48,6 @@ pub struct InstallDriverBuilder {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     clobber_registry: Option<ClobberRegistry>,
     execute_link_scripts: bool,
-    install_menu_items: bool,
 }
 
 /// The result of the post-processing step.
@@ -118,14 +113,6 @@ impl InstallDriverBuilder {
         }
     }
 
-    /// Whether to install menu items or not.
-    pub fn install_menu_items(self, install_menu_items: bool) -> Self {
-        Self {
-            install_menu_items,
-            ..self
-        }
-    }
-
     pub fn finish(self) -> InstallDriver {
         InstallDriver {
             io_concurrency_semaphore: self.io_concurrency_semaphore,
@@ -135,7 +122,6 @@ impl InstallDriverBuilder {
                 .map(Arc::new)
                 .unwrap_or_default(),
             execute_link_scripts: self.execute_link_scripts,
-            install_menu_items: self.install_menu_items,
         }
     }
 }
@@ -249,62 +235,6 @@ impl InstallDriver {
         } else {
             None
         };
-
-        // TODO this would overwrite prefix records that were changed in the `unclobber`
-        // code path
-
-        if self.install_menu_items {
-            // Install menu items from prefix records
-            for record in prefix_records.iter() {
-                // Look for Menu/*.json files in the package paths
-                let menu_files: Vec<_> = record
-                    .paths_data
-                    .paths
-                    .iter()
-                    .filter(|path| {
-                        path.relative_path.starts_with("Menu/")
-                            && path
-                                .relative_path
-                                .extension()
-                                .is_some_and(|ext| ext == "json")
-                    })
-                    .collect();
-
-                if !menu_files.is_empty() {
-                    for menu_file in menu_files {
-                        let full_path = target_prefix.join(&menu_file.relative_path);
-                        match rattler_menuinst::install_menuitems(
-                            &full_path,
-                            target_prefix,
-                            target_prefix,
-                            Platform::current(),
-                            MenuMode::User,
-                        ) {
-                            Ok(tracker_vec) => {
-                                // Store tracker in the prefix record
-                                let mut record = record.clone();
-                                record.installed_system_menus = tracker_vec;
-
-                                // Save the updated prefix record
-                                record
-                                    .write_to_path(
-                                        target_prefix.join("conda-meta").join(record.file_name()),
-                                        true,
-                                    )
-                                    .expect("Failed to write prefix record");
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    "Failed to install menu items for {}: {}",
-                                    full_path.display(),
-                                    e
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         Ok(PostProcessResult {
             post_link_result,

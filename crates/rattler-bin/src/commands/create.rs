@@ -306,7 +306,6 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .with_target_platform(install_platform)
         .with_installed_packages(installed_packages)
         .with_execute_link_scripts(true)
-        .with_install_menu_items(true)
         .with_reporter(
             IndicatifReporter::builder()
                 .with_multi_progress(global_multi_progress())
