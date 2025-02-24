@@ -16,6 +16,8 @@ build = "cargo build"
 fmt = "cargo fmt"
 lint = "cargo clippy"
 check = "cargo check"
+# libsolv compilation cannot find pixi's clang for some reason
+# so we skip that test for now
 test = "cargo nextest run --workspace --no-default-features --features=rustls-tls -E 'not test(libsolv_bindings_up_to_date)'"
 rattler = "cargo run --bin rattler --release --"
 
