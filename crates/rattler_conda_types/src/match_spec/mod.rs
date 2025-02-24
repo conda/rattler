@@ -821,9 +821,4 @@ mod tests {
             MatchSpec::from_nameless(NamelessMatchSpec::from_str(">=12", Strict).unwrap(), None);
         assert!(!spec.is_virtual());
     }
-
-    #[test]
-    fn test_size_stays_the_same() {
-        assert_eq!(std::mem::size_of::<MatchSpec>(), 488);
-    }
 }

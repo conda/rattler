@@ -1,6 +1,4 @@
 {
-  "id_": "https://schemas.conda.io/menuinst-1.schema.json",
-  "schema_": "https://json-schema.org/draft-07/schema",
   "menu_name": "REQUIRED",
   "menu_items": [
     {
@@ -28,6 +26,7 @@
           "NotShowIn": null,
           "OnlyShowIn": null,
           "PrefersNonDefaultGPU": null,
+          "SingleMainWindow": null,
           "StartupNotify": null,
           "StartupWMClass": null,
           "TryExec": null,
@@ -56,7 +55,7 @@
         },
         "win": {
           "desktop": true,
-          "quicklaunch": true,
+          "quicklaunch": false,
           "terminal_profile": null,
           "url_protocols": null,
           "file_extensions": null,
@@ -64,5 +63,6 @@
         }
       }
     }
-  ]
+  ],
+  "$schema": "https://schemas.conda.org/menuinst-1-1-0.schema.json"
 }
