@@ -1,18 +1,32 @@
+use once_cell::sync::Lazy;
 use regex::Regex;
 use unicode_normalization::UnicodeNormalization;
 
+/// Converts a given text to a slug.
+///
+/// This function performs the following steps:
+/// 1. Normalizes the text using Unicode normalization and removes non-ASCII characters.
+/// 2. Removes special characters, converts the text to lowercase, and trims whitespace.
+/// 3. Replaces whitespace and hyphens with a single hyphen.
+///
+/// # Examples
+///
+/// ```
+/// let slug = slugify("Hello, World!");
+/// assert_eq!(slug, "hello-world");
+/// ```
 pub fn slugify(text: &str) -> String {
     // Normalize the text and remove non-ASCII characters
     let normalized = text.nfkd().filter(char::is_ascii).collect::<String>();
 
     // Remove special characters, convert to lowercase, and trim
-    let re_special = Regex::new(r"[^\w\s-]").expect("Invalid regex");
-    let without_special = re_special.replace_all(&normalized, "").to_string();
+    static RE_SPECIAL: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^\w\s-]").expect("Invalid regex"));
+    let without_special = RE_SPECIAL.replace_all(&normalized, "").to_string();
     let trimmed = without_special.trim().to_lowercase();
 
     // Replace whitespace and hyphens with a single hyphen
-    let re_spaces = Regex::new(r"[_\s-]+").expect("Invalid regex");
-    re_spaces.replace_all(&trimmed, "-").to_string()
+    static RE_SPACES: Lazy<Regex> = Lazy::new(|| Regex::new(r"[_\s-]+").expect("Invalid regex"));
+    RE_SPACES.replace_all(&trimmed, "-").to_string()
 }
 
 #[cfg(test)]

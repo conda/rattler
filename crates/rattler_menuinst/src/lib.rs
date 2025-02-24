@@ -200,7 +200,6 @@ pub fn remove_menu_items(tracker: &Vec<Tracker>) -> Result<(), MenuInstError> {
 pub mod test {
     use std::path::{Path, PathBuf};
 
-    #[allow(dead_code)]
     pub(crate) fn test_data() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data")
     }

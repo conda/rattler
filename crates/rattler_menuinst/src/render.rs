@@ -14,18 +14,6 @@ impl PlaceholderString {
     }
 }
 
-#[allow(dead_code)]
-pub fn resolve(
-    input: &Option<PlaceholderString>,
-    placeholders: impl AsRef<HashMap<String, String>>,
-    default: &str,
-) -> String {
-    match input {
-        Some(s) => s.resolve(placeholders),
-        None => default.to_string(),
-    }
-}
-
 pub struct BaseMenuItemPlaceholders {
     placeholders: HashMap<String, String>,
 }
@@ -64,8 +52,6 @@ impl BaseMenuItemPlaceholders {
         if platform.is_osx() {
             vars.insert("PYTHONAPP", prefix.join("python.app/Contents/MacOS/python"));
         }
-
-        // vars.insert("MENU_ITEM_LOCATION", menu_item_location.to_path_buf());
 
         let mut vars: HashMap<String, String> = vars
             .into_iter()

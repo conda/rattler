@@ -34,19 +34,14 @@ pub fn run_pre_create_command(pre_create_command: &str) -> Result<(), crate::Men
     };
 
     let output = cmd.output()?;
-    if !output.status.success() {
-        tracing::error!(
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(MenuInstError::InstallError(format!(
             "Failed to run pre-create command (status: {}): \nstdout: {}\nstderr: {}",
             output.status,
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
-        );
-
-        return Err(MenuInstError::InstallError(format!(
-            "Failed to run pre-create command: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )));
+        )))
     }
-
-    Ok(())
 }

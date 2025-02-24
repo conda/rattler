@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
 
-mod menu_xml;
 mod mime_config;
 
 use rattler_conda_types::Platform;
@@ -48,25 +47,27 @@ pub struct Directories {
     /// The configuration directory for the menu
     pub config_directory: PathBuf,
 
-    /// The location of the menu configuration file This is the file that is
-    /// used by the system to determine the menu layout It is usually located at
-    /// `~/.config/menus/applications.menu`
+    /// The location of the menu configuration file.
+    /// This is the file that is used by the system to determine the menu layout
+    /// It is usually located at `~/.config/menus/applications.menu`
     pub menu_config_location: PathBuf,
 
-    /// The location of the system menu configuration file This is the file that
-    /// is used by the system to determine the menu layout It is usually located
-    /// at `/etc/xdg/menus/applications.menu`
+    /// The location of the system menu configuration file
+    /// This is the file that is used by the system to determine the menu layout.
+    /// It is usually located at `/etc/xdg/menus/applications.menu`
     pub system_menu_config_location: PathBuf,
 
-    /// The location of the desktop entries This is a directory that contains
-    /// `.desktop` files that describe the applications that are shown in the
-    /// menu It is usually located at `/usr/share/applications` or
+    /// The location of the desktop entries
+    /// This is a directory that contains `.desktop` files
+    /// that describe the applications that are shown in the menu.
+    /// It is usually located at `/usr/share/applications` or
     /// `~/.local/share/applications`
     pub desktop_entries_location: PathBuf,
 
-    /// The location of the desktop-directories This is a directory that
-    /// contains `.directory` files that describe the directories that are shown
-    /// in the menu It is usually located at `/usr/share/desktop-directories` or
+    /// The location of the desktop-directories
+    /// This is a directory that contains `.directory` files
+    /// that describe the directories that are shown in the menu
+    /// It is usually located at `/usr/share/desktop-directories` or
     /// `~/.local/share/desktop-directories`
     pub directory_entry_location: PathBuf,
 }
