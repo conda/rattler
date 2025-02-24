@@ -11,6 +11,26 @@ license.workspace = true
 readme.workspace = true
 default-run = "rattler-index"
 
+[features]
+default = ["rustls-tls"]
+native-tls = [
+  "reqwest/native-tls",
+  "reqwest/native-tls-alpn",
+  "rattler_package_streaming/native-tls",
+  "rattler_networking/native-tls",
+  "rattler_conda_types/native-tls",
+  "rattler_package_streaming/native-tls",
+  "tools/native-tls",
+]
+rustls-tls = [
+  "reqwest/rustls-tls",
+  "reqwest/rustls-tls-native-roots",
+  "rattler_package_streaming/rustls-tls",
+  "rattler_conda_types/rustls-tls",
+  "rattler_package_streaming/rustls-tls",
+  "tools/rustls-tls",
+]
+
 [[bin]]
 name = "rattler-index"
 path = "src/main.rs"
@@ -28,17 +48,14 @@ opendal = { workspace = true, features = [
   "services-s3",
   "services-fs",
 ], default-features = false }
-rattler_networking = { path = "../rattler_networking", version = "0.22.4", features = [
-  "rustls-tls",
-], default-features = false }
+rattler_networking = { path = "../rattler_networking", version = "0.22.4", default-features = false }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.30.3", default-features = false }
 rattler_digest = { path = "../rattler_digest", version = "1.0.6", default-features = false }
-rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.28", features = [
-  "rustls-tls",
-], default-features = false }
-reqwest = { workspace = true, features = [
-  "rustls-tls",
-  "rustls-tls-native-roots",
+rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.28", default-features = false }
+reqwest = { workspace = true, default-features = false, features = [
+  "http2",
+  "macos-system-configuration",
+  "charset",
 ] }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
@@ -49,4 +66,4 @@ url = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-tools = { path = "../tools" }
+tools = { path = "../tools", default-features = false }

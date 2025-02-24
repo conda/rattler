@@ -11,7 +11,15 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ["rayon"]
+default = ["rayon", "rustls-tls"]
+native-tls = [
+  "rattler_redaction/native-tls",
+  "rattler_package_streaming/native-tls",
+]
+rustls-tls = [
+  "rattler_redaction/rustls-tls",
+  "rattler_package_streaming/rustls-tls",
+]
 experimental_extras = []
 
 [dependencies]
@@ -26,8 +34,9 @@ nom = { workspace = true }
 purl = { workspace = true, features = ["serde"] }
 rattler_digest = { path = "../rattler_digest", version = "1.0.6", default-features = false, features = ["serde"] }
 rattler_macros = { path = "../rattler_macros", version = "1.0.6", default-features = false }
+rattler_redaction = { version = "0.1.6", path = "../rattler_redaction", default_features = false }
 regex = { workspace = true }
-simd-json = { workspace = true , features = ["serde_impl"]}
+simd-json = { workspace = true, features = ["serde_impl"] }
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
@@ -42,7 +51,6 @@ tracing = { workspace = true }
 typed-path = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true }
-rattler_redaction = { version = "0.1.6", path = "../rattler_redaction" }
 dirs = { workspace = true }
 rayon = { workspace = true, optional = true }
 fs-err = { workspace = true }
