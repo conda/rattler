@@ -9,15 +9,13 @@
 //!
 //! ```rust
 //! use std::str::FromStr;
-//! use std::path::PathBuf;
+//! use std::path::Path;
 //! use rattler_pypi_interop::artifacts::Wheel;
 //! use rattler_pypi_interop::types::NormalizedPackageName;
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")?;
-//!
-//!     let test_data_dir = PathBuf::from(manifest_dir).join(PathBuf::from("test-data/wheels"));
-//!     let path_to_wheel = test_data_dir.join(PathBuf::from("miniblack-23.1.0-py3-none-any.whl"));
+//!     let path_to_wheel = Path::new(env!("CARGO_MANIFEST_DIR"))
+//!         .join("test-data/wheels/miniblack-23.1.0-py3-none-any.whl");
 //!     let normalized_package_name = NormalizedPackageName::from_str("miniblack")?;
 //!
 //!     let wheel = Wheel::from_path(&path_to_wheel, &normalized_package_name)?;

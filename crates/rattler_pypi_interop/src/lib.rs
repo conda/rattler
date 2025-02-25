@@ -11,7 +11,7 @@
 //! <div class="warning">
 //!
 //!   This crate ports over a subset of functionality originally available in the
-//!   [`rattler_installs_packages`] crate that was also part of the [`rip`] CLI tool.
+//!   [`rattler_installs_packages`] crate that is also part of the [`rip`] CLI tool.
 //!
 //! </div>
 //!

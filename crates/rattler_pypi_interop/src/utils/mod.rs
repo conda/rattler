@@ -3,8 +3,8 @@ mod streaming_or_local;
 
 mod seek_slice;
 
-// #[cfg(test)]
-// mod test;
+#[cfg(test)]
+pub(crate) mod test;
 
 use include_dir::{include_dir, Dir};
 

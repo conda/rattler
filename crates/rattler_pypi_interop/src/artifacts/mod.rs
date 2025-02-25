@@ -7,15 +7,13 @@
 //!
 //! ```rust
 //! use std::str::FromStr;
-//! use std::path::PathBuf;
+//! use std::path::Path;
 //! use rattler_pypi_interop::artifacts::SDist;
 //! use rattler_pypi_interop::types::NormalizedPackageName;
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")?;
-//!
-//!     let test_data_dir = PathBuf::from(manifest_dir).join(PathBuf::from("test-data/sdists"));
-//!     let path_to_wheel = test_data_dir.join(PathBuf::from("rich-13.6.0.tar.gz"));
+//!     let path_to_wheel = Path::new(env!("CARGO_MANIFEST_DIR"))
+//!         .join("test-data/sdists/rich-13.6.0.tar.gz");
 //!     let normalized_package_name = NormalizedPackageName::from_str("rich")?;
 //!
 //!     let sdist = SDist::from_path(&path_to_wheel, &normalized_package_name)?;
