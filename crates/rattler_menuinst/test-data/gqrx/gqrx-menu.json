@@ -1,0 +1,38 @@
+{
+    "$id": "https://schemas.conda.io/menuinst-1.schema.json",
+    "$schema": "https://json-schema.org/draft-07/schema",
+    "menu_name": "{{ DISTRIBUTION_NAME }}",
+    "menu_items": [
+        {
+            "name": "gqrx",
+            "description": "Software defined radio",
+            "command": [
+                "{{ PREFIX }}/Library/bin/gqrx.exe",
+                "--edit"
+            ],
+            "icon": "{{ MENU_DIR }}/gqrx.{{ ICON_EXT }}",
+            "platforms": {
+                "win": {
+                    "desktop": false,
+                    "quicklaunch": false
+                }
+            }
+        },
+        {
+            "name": "gqrx [reset]",
+            "description": "Software defined radio [reset settings]",
+            "command": [
+                "{{ PREFIX }}/Library/bin/gqrx.exe",
+                "--reset",
+                "--edit"
+            ],
+            "icon": "{{ MENU_DIR }}/gqrx.{{ ICON_EXT }}",
+            "platforms": {
+                "win": {
+                    "desktop": false,
+                    "quicklaunch": false
+                }
+            }
+        }
+    ]
+}
