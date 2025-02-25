@@ -815,6 +815,17 @@ pub(crate) fn remove_menu_item(tracker: &MacOsTracker) -> Result<Vec<PathBuf>, M
     Ok(removed)
 }
 
+fn resolve(
+    input: &Option<PlaceholderString>,
+    placeholders: impl AsRef<HashMap<String, String>>,
+    default: &str,
+) -> String {
+    match input {
+        Some(s) => s.resolve(placeholders),
+        None => default.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{schema::MenuInstSchema, test::test_data, MenuMode};
