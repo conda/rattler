@@ -182,13 +182,18 @@ fn analyze_distribution(
 #[cfg(test)]
 mod test {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn test_find_distributions() {
+    use crate::utils::test::set_snapshot_suffix;
+
+    #[rstest]
+    #[case(true)]
+    #[case(false)]
+    fn test_find_distributions(#[case] windows: bool) {
         // Describe the virtual environment
-        let venv_path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/find_distributions/");
-        let install_paths = InstallPaths::for_venv((3, 8, 5), true);
+        set_snapshot_suffix!("_windows_{}", windows);
+        let venv_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data/find_distributions/");
+        let install_paths = InstallPaths::for_venv((3, 8, 5), windows);
 
         // Find all distributions
         let mut distributions = find_distributions_in_venv(&venv_path, &install_paths).unwrap();
