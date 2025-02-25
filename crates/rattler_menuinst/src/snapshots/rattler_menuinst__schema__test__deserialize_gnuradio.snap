@@ -1,0 +1,68 @@
+---
+source: crates/rattler_menuinst/src/schema.rs
+expression: schema
+---
+MenuInstSchema {
+    schema: "https://json-schema.org/draft-07/schema",
+    menu_name: "{{ DISTRIBUTION_NAME }}",
+    menu_items: [
+        MenuItem {
+            command: MenuItemCommand {
+                name: Simple(
+                    PlaceholderString(
+                        "GNU Radio Companion",
+                    ),
+                ),
+                description: PlaceholderString(
+                    "Flowgraph builder for GNU Radio",
+                ),
+                command: [
+                    PlaceholderString(
+                        "{{ BIN_DIR }}/gnuradio-companion",
+                    ),
+                ],
+                icon: Some(
+                    PlaceholderString(
+                        "{{ MENU_DIR }}/grc.{{ ICON_EXT }}",
+                    ),
+                ),
+                precommand: None,
+                precreate: None,
+                working_dir: None,
+                activate: None,
+                terminal: None,
+            },
+            platforms: Platforms {
+                linux: None,
+                osx: None,
+                win: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: None,
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: Windows {
+                            desktop: Some(
+                                false,
+                            ),
+                            quicklaunch: Some(
+                                false,
+                            ),
+                            terminal_profile: None,
+                            url_protocols: None,
+                            file_extensions: None,
+                            app_user_model_id: None,
+                        },
+                    },
+                ),
+            },
+        },
+    ],
+}

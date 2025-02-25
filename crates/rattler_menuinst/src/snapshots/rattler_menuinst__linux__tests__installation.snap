@@ -1,0 +1,15 @@
+---
+source: crates/rattler_menuinst/src/linux.rs
+expression: desktop_file_content
+---
+[Desktop Entry]
+Type=Application
+Encoding=UTF-8
+Name=Spyder 6 (test-env)
+Exec=bash -c '<PREFIX>/bin/spyder %F'
+Terminal=false
+Icon=<PREFIX>/Menu/spyder.png
+Comment=Scientific PYthon Development EnviRonment
+Categories=Development;Science;
+MimeType=text/x-spython;
+StartupWMClass=Spyder-6.test-env

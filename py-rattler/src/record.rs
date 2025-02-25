@@ -237,6 +237,8 @@ impl PyRecord {
                 paths_data: paths_data.into(),
                 link: link.map(Into::into),
                 requested_spec,
+                // TODO wire up support
+                installed_system_menus: Vec::new(),
             }),
         })
     }
