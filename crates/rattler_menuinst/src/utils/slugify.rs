@@ -12,6 +12,7 @@ use unicode_normalization::UnicodeNormalization;
 /// # Examples
 ///
 /// ```
+/// # use rattler_menuinst::utils::slugify;
 /// let slug = slugify("Hello, World!");
 /// assert_eq!(slug, "hello-world");
 /// ```
