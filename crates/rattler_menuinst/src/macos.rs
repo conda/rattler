@@ -15,8 +15,9 @@ use rattler_shell::{
 };
 use sha2::{Digest as _, Sha256};
 
+use crate::utils::slugify;
 use crate::{
-    render::{resolve, BaseMenuItemPlaceholders, MenuItemPlaceholders},
+    render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString},
     schema::{
         CFBundleDocumentTypesModel, CFBundleTypeRole, CFBundleURLTypesModel, LSHandlerRank, MacOS,
         MacOSVersion, MenuItemCommand, UTTypeDeclarationModel,
@@ -24,8 +25,7 @@ use crate::{
     utils::{self, log_output, run_pre_create_command},
     MenuInstError, MenuMode,
 };
-
-use crate::utils::slugify;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct MacOSMenu {
