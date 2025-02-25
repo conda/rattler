@@ -11,6 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+cfg-if = { workspace = true }
 fs-err = { workspace = true }
 anyhow = { workspace = true }
 async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
@@ -86,7 +87,7 @@ tracing-test = { workspace = true }
 default = ['native-tls']
 native-tls = ['reqwest/native-tls', 'reqwest/native-tls-alpn']
 rustls-tls = ['reqwest/rustls-tls']
-sparse = ["rattler_conda_types", "memmap2", "ouroboros", "superslice", "itertools", "serde_json/raw_value"]
+sparse = ["rattler_conda_types", "ouroboros", "superslice", "itertools", "serde_json/raw_value"]
 gateway = ["sparse", "http", "http-cache-semantics", "parking_lot", "async-trait"]
 
 [package.metadata.docs.rs]

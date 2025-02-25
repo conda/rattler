@@ -1,11 +1,11 @@
-use super::GatewayError;
-use crate::gateway::PendingOrFetched;
-use crate::Reporter;
-use dashmap::mapref::entry::Entry;
-use dashmap::DashMap;
-use rattler_conda_types::{PackageName, RepoDataRecord};
 use std::sync::Arc;
-use tokio::{sync::broadcast, task::JoinError};
+
+use dashmap::{mapref::entry::Entry, DashMap};
+use rattler_conda_types::{PackageName, RepoDataRecord};
+use tokio::{sync::broadcast};
+
+use super::GatewayError;
+use crate::{gateway::PendingOrFetched, Reporter};
 
 pub enum Subdir {
     /// The subdirectory is missing from the channel, it is considered empty.
@@ -25,7 +25,8 @@ impl Subdir {
     }
 }
 
-/// Fetches and caches repodata records by package name for a specific subdirectory of a channel.
+/// Fetches and caches repodata records by package name for a specific
+/// subdirectory of a channel.
 pub struct SubdirData {
     /// The client to use to fetch repodata.
     client: Arc<dyn SubdirClient>,
@@ -107,40 +108,28 @@ impl SubdirData {
             }
         };
 
-        // At this point we have exclusive write access to this specific entry. All other tasks
-        // will find a pending entry and will wait for the records to become available.
+        // At this point we have exclusive write access to this specific entry. All
+        // other tasks will find a pending entry and will wait for the records
+        // to become available.
         //
-        // Let's start by fetching the records. If an error occurs we immediately return the error.
-        // This will drop the sender and all other waiting tasks will receive an error.
-        let records = match tokio::spawn({
-            let client = self.client.clone();
-            let name = name.clone();
-            async move {
-                client
-                    .fetch_package_records(&name, reporter.as_deref())
-                    .await
-            }
-        })
-        .await
-        .map_err(JoinError::try_into_panic)
+        // Let's start by fetching the records. If an error occurs we immediately return
+        // the error. This will drop the sender and all other waiting tasks will
+        // receive an error.
+        let records = match self
+            .client
+            .fetch_package_records(&name, reporter.as_deref())
+            .await
         {
-            Ok(Ok(records)) => records,
-            Ok(Err(err)) => return Err(err),
-            Err(Ok(panic)) => std::panic::resume_unwind(panic),
-            Err(Err(_)) => {
-                return Err(GatewayError::IoError(
-                    "fetching records was cancelled".to_string(),
-                    std::io::ErrorKind::Interrupted.into(),
-                ));
-            }
+            Ok(records) => records,
+            Err(err) => return Err(err),
         };
 
         // Store the fetched files in the entry.
         self.records
             .insert(name.clone(), PendingOrFetched::Fetched(records.clone()));
 
-        // Send the records to all waiting tasks. We don't care if there are no receivers so we
-        // drop the error.
+        // Send the records to all waiting tasks. We don't care if there are no
+        // receivers so we drop the error.
         let _ = sender.send(records.clone());
 
         Ok(records)
@@ -152,9 +141,11 @@ impl SubdirData {
 }
 
 /// A client that can be used to fetch repodata for a specific subdirectory.
-#[async_trait::async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 pub trait SubdirClient: Send + Sync {
-    /// Fetches all repodata records for the package with the given name in a channel subdirectory.
+    /// Fetches all repodata records for the package with the given name in a
+    /// channel subdirectory.
     async fn fetch_package_records(
         &self,
         name: &PackageName,

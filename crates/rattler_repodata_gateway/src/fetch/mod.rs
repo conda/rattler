@@ -132,3 +132,21 @@ impl Variant {
         }
     }
 }
+
+/// Defines how to use the repodata cache.
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
+pub enum CacheAction {
+    /// Use the cache if its up to date or fetch from the URL if there is no
+    /// valid cached value.
+    #[default]
+    CacheOrFetch,
+
+    /// Only use the cache, but error out if the cache is not up to date
+    UseCacheOnly,
+
+    /// Only use the cache, ignore whether or not it is up to date.
+    ForceCacheOnly,
+
+    /// Do not use the cache even if there is an up to date entry.
+    NoCache,
+}

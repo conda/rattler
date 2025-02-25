@@ -1,22 +1,26 @@
-use crate::gateway::error::SubdirNotFoundError;
-use crate::gateway::subdir::SubdirClient;
-use crate::gateway::GatewayError;
-use crate::sparse::SparseRepoData;
-use crate::Reporter;
+use std::{path::Path, sync::Arc};
+
+use bytes::Bytes;
 use rattler_conda_types::{Channel, PackageName, RepoDataRecord};
 use simple_spawn_blocking::tokio::run_blocking_task;
-use std::path::Path;
-use std::sync::Arc;
 
-/// A client that can be used to fetch repodata for a specific subdirectory from a local directory.
+use crate::{
+    gateway::{error::SubdirNotFoundError, subdir::SubdirClient, GatewayError},
+    sparse::SparseRepoData,
+    Reporter,
+};
+
+/// A client that can be used to fetch repodata for a specific subdirectory from
+/// a local directory.
 ///
-/// Use the [`LocalSubdirClient::from_directory`] function to create a new instance of this client.
+/// Use the [`LocalSubdirClient::from_directory`] function to create a new
+/// instance of this client.
 pub struct LocalSubdirClient {
     sparse: Arc<SparseRepoData>,
 }
 
 impl LocalSubdirClient {
-    pub async fn from_channel_subdir(
+    pub async fn from_file(
         repodata_path: &Path,
         channel: Channel,
         subdir: &str,
@@ -24,7 +28,7 @@ impl LocalSubdirClient {
         let repodata_path = repodata_path.to_path_buf();
         let subdir = subdir.to_string();
         let sparse = run_blocking_task(move || {
-            SparseRepoData::new(channel.clone(), subdir.clone(), &repodata_path, None).map_err(
+            SparseRepoData::from_file(channel.clone(), subdir.clone(), &repodata_path, None).map_err(
                 |err| {
                     if err.kind() == std::io::ErrorKind::NotFound {
                         GatewayError::SubdirNotFoundError(SubdirNotFoundError {
@@ -44,9 +48,30 @@ impl LocalSubdirClient {
             sparse: Arc::new(sparse),
         })
     }
+
+    pub async fn from_bytes(
+        bytes: Bytes,
+        channel: Channel,
+        subdir: &str,
+    ) -> Result<Self, GatewayError> {
+        let subdir = subdir.to_string();
+        let sparse = run_blocking_task(move || {
+            SparseRepoData::from_bytes(channel.clone(), subdir.clone(), bytes, None).map_err(
+                |err| {
+                    GatewayError::IoError("failed to parse repodata.json".to_string(), err.into())
+                },
+            )
+        })
+        .await?;
+
+        Ok(Self {
+            sparse: Arc::new(sparse),
+        })
+    }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 impl SubdirClient for LocalSubdirClient {
     async fn fetch_package_records(
         &self,

@@ -23,6 +23,7 @@ use url::Url;
 
 use crate::{
     fetch::{
+        CacheAction,
         cache::{CacheHeaders, Expiring, RepoDataState},
         jlap, FetchRepoDataError, RepoDataNotFoundError, Variant,
     },
@@ -30,24 +31,6 @@ use crate::{
     utils::{AsyncEncoding, Encoding, LockedFile},
     Reporter,
 };
-
-/// Defines how to use the repodata cache.
-#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
-pub enum CacheAction {
-    /// Use the cache if its up to date or fetch from the URL if there is no
-    /// valid cached value.
-    #[default]
-    CacheOrFetch,
-
-    /// Only use the cache, but error out if the cache is not up to date
-    UseCacheOnly,
-
-    /// Only use the cache, ignore whether or not it is up to date.
-    ForceCacheOnly,
-
-    /// Do not use the cache even if there is an up to date entry.
-    NoCache,
-}
 
 /// Additional knobs that allow you to tweak the behavior of
 /// [`fetch_repo_data`].

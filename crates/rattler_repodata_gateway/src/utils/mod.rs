@@ -1,6 +1,4 @@
-use std::fmt::Write;
 
-use ::url::Url;
 pub use body::BodyStreamExt;
 pub use encoding::{AsyncEncoding, Encoding};
 
@@ -17,7 +15,10 @@ mod flock;
 pub use flock::LockedFile;
 
 /// Convert a URL to a cache filename
-pub(crate) fn url_to_cache_filename(url: &Url) -> String {
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn url_to_cache_filename(url: &::url::Url) -> String {
+    use std::fmt::Write;
+
     // Start Rant:
     // This function mimics behavior from Mamba which itself mimics this behavior
     // from Conda. However, I find this function absolutely ridiculous, it

@@ -1,13 +1,17 @@
-use crate::fetch;
-use crate::fetch::{FetchRepoDataError, RepoDataNotFoundError};
-use crate::gateway::direct_url_query::DirectUrlQueryError;
+use std::{
+    fmt::{Display, Formatter},
+    io,
+};
+
 use rattler_conda_types::{Channel, InvalidPackageNameError, MatchSpec};
 use rattler_redaction::Redact;
-use reqwest_middleware::Error;
 use simple_spawn_blocking::Cancelled;
-use std::fmt::{Display, Formatter};
-use std::io;
 use thiserror::Error;
+
+use crate::{
+    fetch,
+    fetch::{FetchRepoDataError, RepoDataNotFoundError},
+};
 
 #[derive(Debug, Error)]
 #[allow(missing_docs)]
@@ -36,8 +40,12 @@ pub enum GatewayError {
     #[error("the operation was cancelled")]
     Cancelled,
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("the direct url query failed for {0}")]
-    DirectUrlQueryError(String, #[source] DirectUrlQueryError),
+    DirectUrlQueryError(
+        String,
+        #[source] super::direct_url_query::DirectUrlQueryError,
+    ),
 
     #[error("the match spec '{0}' does not specify a name")]
     MatchSpecWithoutName(Box<MatchSpec>),
@@ -50,6 +58,9 @@ pub enum GatewayError {
 
     #[error("{0}")]
     CacheError(String),
+
+    #[error("direct url queries are not supported ({0})")]
+    DirectUrlQueryNotSupported(String),
 }
 
 impl From<Cancelled> for GatewayError {
@@ -61,8 +72,8 @@ impl From<Cancelled> for GatewayError {
 impl From<reqwest_middleware::Error> for GatewayError {
     fn from(value: reqwest_middleware::Error) -> Self {
         match value {
-            Error::Reqwest(err) => err.into(),
-            Error::Middleware(err) => GatewayError::ReqwestMiddlewareError(err),
+            reqwest_middleware::Error::Reqwest(err) => err.into(),
+            reqwest_middleware::Error::Middleware(err) => GatewayError::ReqwestMiddlewareError(err),
         }
     }
 }

@@ -74,7 +74,7 @@ fn read_repodata(path: &str) -> Vec<RepoDataRecord> {
 }
 
 fn read_sparse_repodata(path: &str) -> SparseRepoData {
-    SparseRepoData::new(
+    SparseRepoData::from_file(
         Channel::from_str("dummy", &channel_config()).unwrap(),
         "dummy".to_string(),
         path,
@@ -185,7 +185,7 @@ fn read_real_world_repo_data() -> &'static Vec<SparseRepoData> {
 fn read_pytorch_sparse_repo_data() -> &'static SparseRepoData {
     static REPO_DATA: Lazy<SparseRepoData> = Lazy::new(|| {
         let pytorch = pytorch_json_path();
-        SparseRepoData::new(
+        SparseRepoData::from_file(
             Channel::from_str("pytorch", &channel_config()).unwrap(),
             "pytorch".to_string(),
             pytorch,
@@ -200,7 +200,7 @@ fn read_pytorch_sparse_repo_data() -> &'static SparseRepoData {
 fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
     static REPO_DATA: Lazy<SparseRepoData> = Lazy::new(|| {
         let conda_forge = conda_json_path();
-        SparseRepoData::new(
+        SparseRepoData::from_file(
             Channel::from_str("conda-forge", &channel_config()).unwrap(),
             "conda-forge".to_string(),
             conda_forge,

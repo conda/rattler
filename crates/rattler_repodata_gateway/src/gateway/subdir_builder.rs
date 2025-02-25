@@ -121,6 +121,7 @@ impl<'g> SubdirBuilder<'g> {
             self.channel.clone(),
             self.platform,
             self.gateway.client.clone(),
+            #[cfg(not(target_arch = "wasm32"))]
             self.gateway.cache.clone(),
             source_config.clone(),
             self.reporter.clone(),
@@ -131,14 +132,16 @@ impl<'g> SubdirBuilder<'g> {
 
     async fn build_sharded(
         &self,
-        source_config: &SourceConfig,
+        _source_config: &SourceConfig,
     ) -> Result<SubdirData, GatewayError> {
         let client = sharded_subdir::ShardedSubdir::new(
             self.channel.clone(),
             self.platform.to_string(),
             self.gateway.client.clone(),
+            #[cfg(not(target_arch = "wasm32"))]
             self.gateway.cache.clone(),
-            source_config.cache_action,
+            #[cfg(not(target_arch = "wasm32"))]
+            _source_config.cache_action,
             self.gateway.concurrent_requests_semaphore.clone(),
             self.reporter.as_deref(),
         )
@@ -148,7 +151,7 @@ impl<'g> SubdirBuilder<'g> {
     }
 
     async fn build_local(&self, path: &Path) -> Result<SubdirData, GatewayError> {
-        let client = LocalSubdirClient::from_channel_subdir(
+        let client = LocalSubdirClient::from_file(
             &path.join("repodata.json"),
             self.channel.clone(),
             self.platform.as_str(),

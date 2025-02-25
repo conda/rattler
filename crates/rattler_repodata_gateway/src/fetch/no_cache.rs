@@ -43,6 +43,17 @@ pub struct FetchRepoDataOptions {
     pub retry_policy: Option<Arc<dyn RetryPolicy + Send + Sync>>,
 }
 
+impl Default for FetchRepoDataOptions {
+    fn default() -> Self {
+        Self {
+            variant: Variant::default(),
+            zstd_enabled: true,
+            bz2_enabled: true,
+            retry_policy: None,
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 enum Compression {
     Zst,
