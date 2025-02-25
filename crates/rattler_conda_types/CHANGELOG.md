@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.30.3...rattler_conda_types-v0.31.0) - 2025-02-25
+
+### Added
+
+- add `rattler_menuinst` crate (#840)
+- initial wasm/ts/js bindings (#1079)
+
 ## [0.30.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.30.2...rattler_conda_types-v0.30.3) - 2025-02-18
 
 ### Added
