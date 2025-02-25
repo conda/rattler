@@ -15,8 +15,8 @@ dirs = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tracing = { workspace = true }
-rattler_conda_types = { path = "../rattler_conda_types", default-features = false }
-rattler_shell = { path = "../rattler_shell", default-features = false }
+rattler_conda_types = { path = "../rattler_conda_types", version = "0.30.3", default-features = false }
+rattler_shell = { path = "../rattler_shell", version = "0.22.19", default-features = false }
 thiserror = { workspace = true }
 unicode-normalization = { workspace = true }
 regex = { workspace = true }
@@ -24,7 +24,7 @@ tempfile = { workspace = true }
 fs-err = { workspace = true }
 which = { workspace = true }
 chrono = { workspace = true, features = ["clock"] }
-once_cell = {workspace = true}
+once_cell = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = { workspace = true }
@@ -42,7 +42,7 @@ windows = { version = "0.60.0", features = [
     "Win32_UI_Shell_PropertiesSystem",
     "Win32_Storage_EnhancedStorage",
     "Win32_System_Variant",
-]}
+] }
 windows-registry = "0.5.0"
 
 [dev-dependencies]
