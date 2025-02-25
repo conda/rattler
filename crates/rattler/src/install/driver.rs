@@ -155,10 +155,11 @@ impl InstallDriver {
         transaction: &Transaction<Old, New>,
         target_prefix: &Path,
     ) -> Result<Option<PrePostLinkResult>, PrePostLinkError> {
+        let mut result = None;
         if self.execute_link_scripts {
             match self.run_pre_unlink_scripts(transaction, target_prefix) {
                 Ok(res) => {
-                    return Ok(Some(res));
+                    result = Some(res);
                 }
                 Err(e) => {
                     tracing::error!("Error running pre-unlink scripts: {:?}", e);
@@ -166,7 +167,20 @@ impl InstallDriver {
             }
         }
 
-        Ok(None)
+        // For all packages that are removed, we need to remove menuinst entries as well
+        for record in transaction.removed_packages() {
+            let prefix_record = record.borrow();
+            if !prefix_record.installed_system_menus.is_empty() {
+                match rattler_menuinst::remove_menu_items(&prefix_record.installed_system_menus) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        tracing::warn!("Failed to remove menu item: {}", e);
+                    }
+                }
+            }
+        }
+
+        Ok(result)
     }
 
     /// Runs a blocking task that will execute on a separate thread. The task is

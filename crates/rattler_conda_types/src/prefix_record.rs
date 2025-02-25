@@ -3,7 +3,7 @@
 use crate::package::FileMode;
 use crate::repo_data::RecordFromPath;
 use crate::repo_data_record::RepoDataRecord;
-use crate::PackageRecord;
+use crate::{menuinst, PackageRecord};
 use rattler_digest::serde::SerializableHash;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -179,6 +179,11 @@ pub struct PrefixRecord {
     /// currently another spec was used. Note: conda seems to serialize a "None" string value instead of `null`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_spec: Option<String>,
+
+    /// If menuinst is enabled and added menu items, this field contains the menuinst tracker data.
+    /// This data is used to remove the menu items when the package is uninstalled.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub installed_system_menus: Vec<menuinst::Tracker>,
 }
 
 impl PrefixRecord {
@@ -209,6 +214,7 @@ impl PrefixRecord {
             paths_data: paths.into(),
             link,
             requested_spec,
+            installed_system_menus: Vec::new(),
         }
     }
 
