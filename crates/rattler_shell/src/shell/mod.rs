@@ -874,9 +874,9 @@ impl<T: Shell + 'static> ShellScript<T> {
         Ok(self)
     }
 
-    /// Source completion scripts for the shell from a given prefix path.
-    pub fn source_completions(&mut self, prefix: &Path) -> Result<&mut Self, std::fmt::Error> {
-        self.shell.source_completions(&mut self.contents, prefix)?;
+    /// Source completion scripts for the shell from a given directory with completion scripts.
+    pub fn source_completions(&mut self, completions_dir: &Path) -> Result<&mut Self, std::fmt::Error> {
+        self.shell.source_completions(&mut self.contents, completions_dir)?;
         Ok(self)
     }
 
