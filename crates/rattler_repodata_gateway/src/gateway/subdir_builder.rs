@@ -151,12 +151,17 @@ impl<'g> SubdirBuilder<'g> {
     }
 
     async fn build_local(&self, path: &Path) -> Result<SubdirData, GatewayError> {
-        let client = LocalSubdirClient::from_file(
+        let build_client = move || LocalSubdirClient::from_file(
             &path.join("repodata.json"),
             self.channel.clone(),
             self.platform.as_str(),
-        )
-        .await?;
+        );
+
+        #[cfg(target_arch = "wasm32")]
+        let client = build_client()?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let client = simple_spawn_blocking::tokio::run_blocking_task(build_client).await?;
+
         Ok(SubdirData::from_client(client))
     }
 }

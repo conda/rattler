@@ -1,17 +1,14 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use bytes::Bytes;
 use reqwest_middleware::ClientWithMiddleware;
-use simple_spawn_blocking::tokio::run_blocking_task;
 use url::Url;
 
 use super::ShardedRepodata;
 use crate::{
-    reporter::ResponseReporterExt, GatewayError,
+    gateway::sharded_subdir::decode_zst_bytes_async, reporter::ResponseReporterExt, GatewayError,
     Reporter,
 };
-use crate::gateway::sharded_subdir::decode_zst_bytes_async;
-
 
 const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
 
@@ -60,17 +57,14 @@ pub async fn fetch_index(
     let decoded_bytes = Bytes::from(decode_zst_bytes_async(bytes).await?);
 
     // Parse the bytes
-    let sharded_index = run_blocking_task(move || {
-        rmp_serde::from_slice(&decoded_bytes)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
-            .map_err(|e| {
-                GatewayError::IoError(
-                    format!("failed to parse shard index from {response_url}"),
-                    e,
-                )
-            })
-    })
-    .await?;
+    let sharded_index = rmp_serde::from_slice(&decoded_bytes)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+        .map_err(|e| {
+            GatewayError::IoError(
+                format!("failed to parse shard index from {response_url}"),
+                e,
+            )
+        })?;
 
     Ok(sharded_index)
 }

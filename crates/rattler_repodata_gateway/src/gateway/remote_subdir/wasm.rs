@@ -58,8 +58,7 @@ impl RemoteSubdirClient {
             repodata_bytes,
             channel.clone(),
             platform.as_str(),
-        )
-        .await?;
+        )?;
 
         Ok(Self { sparse })
     }

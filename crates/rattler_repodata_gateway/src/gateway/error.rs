@@ -5,7 +5,6 @@ use std::{
 
 use rattler_conda_types::{Channel, InvalidPackageNameError, MatchSpec};
 use rattler_redaction::Redact;
-use simple_spawn_blocking::Cancelled;
 use thiserror::Error;
 
 use crate::{
@@ -63,8 +62,9 @@ pub enum GatewayError {
     DirectUrlQueryNotSupported(String),
 }
 
-impl From<Cancelled> for GatewayError {
-    fn from(_: Cancelled) -> Self {
+#[cfg(not(target_arch = "wasm32"))]
+impl From<simple_spawn_blocking::Cancelled> for GatewayError {
+    fn from(_: simple_spawn_blocking::Cancelled) -> Self {
         GatewayError::Cancelled
     }
 }

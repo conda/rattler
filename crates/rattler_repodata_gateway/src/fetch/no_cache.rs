@@ -1,8 +1,7 @@
 //! Provides methods to download repodata from a given channel URL but does not
 //! perform any form of caching.
 
-use std::{io::ErrorKind, sync::Arc, time::SystemTime};
-
+use std::{io::ErrorKind, sync::Arc};
 use bytes::Bytes;
 use futures::TryStreamExt;
 use rattler_networking::retry_policies::default_retry_policy;
@@ -16,6 +15,7 @@ use tokio::io::AsyncReadExt;
 use tokio_util::io::StreamReader;
 use tracing::{instrument, Level};
 use url::Url;
+use wasmtimer::std::SystemTime;
 
 use crate::{
     fetch::{FetchRepoDataError, RepoDataNotFoundError, Variant},
@@ -243,9 +243,16 @@ pub async fn fetch_repo_data(
                 }
             };
 
+        let since_epoch = request_start_time.elapsed().unwrap();
+
         // Check if we can retry
-        let execute_after = match retry_behavior.should_retry(request_start_time, retry_count) {
-            RetryDecision::Retry { execute_after } => execute_after,
+        let execute_after = match retry_behavior.should_retry(
+            std::time::SystemTime::UNIX_EPOCH.checked_add(since_epoch).unwrap(),
+            retry_count,
+        ) {
+            RetryDecision::Retry { execute_after } => {
+                SystemTime::UNIX_EPOCH.checked_add(execute_after.elapsed().unwrap()).unwrap()
+            },
             RetryDecision::DoNotRetry => {
                 return Err(FetchRepoDataError::FailedToDownload(
                     download_url,

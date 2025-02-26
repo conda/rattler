@@ -2,7 +2,6 @@ use std::{path::Path, sync::Arc};
 
 use bytes::Bytes;
 use rattler_conda_types::{Channel, PackageName, RepoDataRecord};
-use simple_spawn_blocking::tokio::run_blocking_task;
 
 use crate::{
     gateway::{error::SubdirNotFoundError, subdir::SubdirClient, GatewayError},
@@ -20,16 +19,16 @@ pub struct LocalSubdirClient {
 }
 
 impl LocalSubdirClient {
-    pub async fn from_file(
+    pub fn from_file(
         repodata_path: &Path,
         channel: Channel,
         subdir: &str,
     ) -> Result<Self, GatewayError> {
         let repodata_path = repodata_path.to_path_buf();
         let subdir = subdir.to_string();
-        let sparse = run_blocking_task(move || {
-            SparseRepoData::from_file(channel.clone(), subdir.clone(), &repodata_path, None).map_err(
-                |err| {
+        let sparse =
+            SparseRepoData::from_file(channel.clone(), subdir.clone(), &repodata_path, None)
+                .map_err(|err| {
                     if err.kind() == std::io::ErrorKind::NotFound {
                         GatewayError::SubdirNotFoundError(SubdirNotFoundError {
                             channel: channel.clone(),
@@ -39,30 +38,19 @@ impl LocalSubdirClient {
                     } else {
                         GatewayError::IoError("failed to parse repodata.json".to_string(), err)
                     }
-                },
-            )
-        })
-        .await?;
+                })?;
 
         Ok(Self {
             sparse: Arc::new(sparse),
         })
     }
 
-    pub async fn from_bytes(
-        bytes: Bytes,
-        channel: Channel,
-        subdir: &str,
-    ) -> Result<Self, GatewayError> {
+    pub fn from_bytes(bytes: Bytes, channel: Channel, subdir: &str) -> Result<Self, GatewayError> {
         let subdir = subdir.to_string();
-        let sparse = run_blocking_task(move || {
-            SparseRepoData::from_bytes(channel.clone(), subdir.clone(), bytes, None).map_err(
-                |err| {
-                    GatewayError::IoError("failed to parse repodata.json".to_string(), err.into())
-                },
-            )
-        })
-        .await?;
+        let sparse = SparseRepoData::from_bytes(channel.clone(), subdir.clone(), bytes, None)
+            .map_err(|err| {
+                GatewayError::IoError("failed to parse repodata.json".to_string(), err.into())
+            })?;
 
         Ok(Self {
             sparse: Arc::new(sparse),
@@ -80,14 +68,19 @@ impl SubdirClient for LocalSubdirClient {
     ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
         let sparse_repodata = self.sparse.clone();
         let name = name.clone();
-        run_blocking_task(move || match sparse_repodata.load_records(&name) {
+
+        let load_records = move || match sparse_repodata.load_records(&name) {
             Ok(records) => Ok(records.into()),
             Err(err) => Err(GatewayError::IoError(
                 "failed to extract repodata records from sparse repodata".to_string(),
                 err,
             )),
-        })
-        .await
+        };
+
+        #[cfg(target_arch = "wasm32")]
+        return load_records();
+        #[cfg(not(target_arch = "wasm32"))]
+        simple_spawn_blocking::tokio::run_blocking_task(load_records).await
     }
 
     fn package_names(&self) -> Vec<String> {

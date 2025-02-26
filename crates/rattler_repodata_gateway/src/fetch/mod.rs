@@ -5,11 +5,13 @@ use rattler_redaction::Redact;
 use url::Url;
 
 mod cache;
-pub mod jlap;
 pub mod no_cache;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod with_cache;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod jlap;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use with_cache::*;

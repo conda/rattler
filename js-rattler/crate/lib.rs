@@ -2,6 +2,7 @@ mod error;
 mod utils;
 mod version;
 mod version_spec;
+mod solve;
 
 pub use error::{JsError, JsResult};
 use rattler_conda_types::ParseStrictness;

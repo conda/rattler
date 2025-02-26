@@ -1,11 +1,11 @@
 use std::borrow::Cow;
+
 use cfg_if::cfg_if;
-use url::Url;
 use rattler_conda_types::{ChannelUrl, RepoDataRecord, Shard};
 use rattler_redaction::Redact;
-use simple_spawn_blocking::tokio::run_blocking_task;
-use crate::fetch::FetchRepoDataError;
-use crate::GatewayError;
+use url::Url;
+
+use crate::{fetch::FetchRepoDataError, GatewayError};
 
 cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
@@ -29,18 +29,22 @@ fn add_trailing_slash(url: &Url) -> Cow<'_, Url> {
     }
 }
 
-
 async fn decode_zst_bytes_async<R: AsRef<[u8]> + Send + 'static>(
     bytes: R,
 ) -> Result<Vec<u8>, GatewayError> {
-    run_blocking_task(move || match zstd::decode_all(bytes.as_ref()) {
+    let decode = move || match zstd::decode_all(bytes.as_ref()) {
         Ok(decoded) => Ok(decoded),
         Err(err) => Err(GatewayError::IoError(
             "failed to decode zstd shard".to_string(),
             err,
         )),
-    })
-        .await
+    };
+
+    #[cfg(target_arch = "wasm32")]
+    return decode();
+
+    #[cfg(not(target_arch = "wasm32"))]
+    simple_spawn_blocking::tokio::run_blocking_task(decode).await
 }
 
 async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
@@ -48,7 +52,7 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     channel_base_url: ChannelUrl,
     base_url: Url,
 ) -> Result<Vec<RepoDataRecord>, GatewayError> {
-    run_blocking_task(move || {
+    let parse = move || {
         // let shard =
         // serde_json::from_slice::<Shard>(bytes.as_ref()).
         // map_err(std::io::Error::from)?;
@@ -68,6 +72,11 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                 file_name,
             })
             .collect())
-    })
-        .await
+    };
+
+    #[cfg(target_arch = "wasm32")]
+    return parse();
+
+    #[cfg(not(target_arch = "wasm32"))]
+    simple_spawn_blocking::tokio::run_blocking_task(parse).await
 }
