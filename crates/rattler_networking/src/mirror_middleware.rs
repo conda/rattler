@@ -86,12 +86,7 @@ fn select_mirror(mirrors: &[MirrorState]) -> Option<&MirrorState> {
 
     for (i, mirror) in mirrors.iter().enumerate() {
         let failures = mirror.failures.load(atomic::Ordering::Relaxed);
-        if failures < min_failures
-            && mirror
-                .mirror
-                .max_failures
-                .map_or(true, |max| failures < max)
-        {
+        if failures < min_failures && mirror.mirror.max_failures.is_none_or(|max| failures < max) {
             min_failures = failures;
             min_failures_index = i;
         }

@@ -17,16 +17,17 @@ use unicode_normalization::UnicodeNormalization;
 /// assert_eq!(slug, "hello-world");
 /// ```
 pub fn slugify(text: &str) -> String {
+    static RE_SPECIAL: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^\w\s-]").expect("Invalid regex"));
+    static RE_SPACES: Lazy<Regex> = Lazy::new(|| Regex::new(r"[_\s-]+").expect("Invalid regex"));
+
     // Normalize the text and remove non-ASCII characters
     let normalized = text.nfkd().filter(char::is_ascii).collect::<String>();
 
     // Remove special characters, convert to lowercase, and trim
-    static RE_SPECIAL: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^\w\s-]").expect("Invalid regex"));
     let without_special = RE_SPECIAL.replace_all(&normalized, "").to_string();
     let trimmed = without_special.trim().to_lowercase();
 
     // Replace whitespace and hyphens with a single hyphen
-    static RE_SPACES: Lazy<Regex> = Lazy::new(|| Regex::new(r"[_\s-]+").expect("Invalid regex"));
     RE_SPACES.replace_all(&trimmed, "-").to_string()
 }
 
