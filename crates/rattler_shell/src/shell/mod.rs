@@ -51,6 +51,11 @@ pub trait Shell {
     /// Run a script in the current shell.
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result;
 
+    /// Source completion scripts for the shell from a given prefix path.
+    fn source_completions(&self, _f: &mut impl Write, _prefix: &Path) -> std::fmt::Result {
+        Ok(())
+    }
+
     /// Test to see if the path can be executed by the shell, based on the
     /// extension of the path.
     fn can_run_script(&self, path: &Path) -> bool {
@@ -269,6 +274,20 @@ impl Shell for Bash {
         Some(PathBuf::from("share/bash-completion/completions"))
     }
 
+    fn source_completions(&self, f: &mut impl Write, prefix: &Path) -> std::fmt::Result {
+        if prefix
+            .join(self.completion_script_location().unwrap())
+            .exists()
+        {
+            writeln!(
+                f,
+                "source {prefix}/share/bash-completion/completions/*",
+                prefix = prefix.to_string_lossy()
+            )?;
+        }
+        Ok(())
+    }
+
     fn executable(&self) -> &str {
         "bash"
     }
@@ -321,6 +340,22 @@ impl Shell for Zsh {
 
     fn completion_script_location(&self) -> Option<PathBuf> {
         Some(PathBuf::from("share/zsh/site-functions"))
+    }
+
+    fn source_completions(&self, f: &mut impl Write, prefix: &Path) -> std::fmt::Result {
+        if prefix
+            .join(self.completion_script_location().unwrap())
+            .exists()
+        {
+            writeln!(
+                f,
+                "fpath+=({prefix}/share/zsh/site-functions)",
+                prefix = prefix.to_string_lossy()
+            )?;
+            writeln!(f, "autoload -Uz compinit")?;
+            writeln!(f, "compinit")?;
+        }
+        Ok(())
     }
 }
 
@@ -549,6 +584,20 @@ impl Shell for Fish {
 
     fn completion_script_location(&self) -> Option<PathBuf> {
         Some(PathBuf::from("share/fish/vendor_completions.d"))
+    }
+
+    fn source_completions(&self, f: &mut impl Write, prefix: &Path) -> std::fmt::Result {
+        let completion_dir = prefix.join(self.completion_script_location().unwrap_or_default());
+        if completion_dir.exists() {
+            writeln!(
+                f,
+                "for file in {}/share/fish/vendor_completions.d/*",
+                prefix.to_string_lossy()
+            )?;
+            writeln!(f, "    source $file")?;
+            writeln!(f, "end")?;
+        }
+        Ok(())
     }
 }
 
@@ -835,6 +884,12 @@ impl<T: Shell + 'static> ShellScript<T> {
     /// Run a script in the generated shell script.
     pub fn run_script(&mut self, path: &Path) -> Result<&mut Self, std::fmt::Error> {
         self.shell.run_script(&mut self.contents, path)?;
+        Ok(self)
+    }
+
+    /// Source completion scripts for the shell from a given prefix path.
+    pub fn source_completions(&mut self, prefix: &Path) -> Result<&mut Self, std::fmt::Error> {
+        self.shell.source_completions(&mut self.contents, prefix)?;
         Ok(self)
     }
 
