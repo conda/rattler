@@ -282,19 +282,18 @@ fn parse_from_lock<P>(
                                                         let conda_package = &conda_packages[*idx];
                                                         name.as_ref().is_none_or(|name| {
                                                             name == &conda_package.record().name
-                                                        }) && version.as_ref().is_none_or(|version| {
+                                                        }) && version.as_ref().is_none_or(
+                                                            |version| {
                                                                 version
                                                                     == &conda_package
                                                                         .record()
                                                                         .version
-                                                            }) && build.as_ref().is_none_or(|build| {
+                                                            },
+                                                        ) && build.as_ref().is_none_or(|build| {
                                                             build == &conda_package.record().build
                                                         }) && subdir.as_ref().is_none_or(|subdir| {
-                                                                subdir
-                                                                    == &conda_package
-                                                                        .record()
-                                                                        .subdir
-                                                            })
+                                                            subdir == &conda_package.record().subdir
+                                                        })
                                                     })
                                                     .copied()
                                             };
