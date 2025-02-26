@@ -897,16 +897,16 @@ mod tests {
             for item in &parsed_schema.menu_items {
                 let icon = item.command.icon.as_ref().unwrap();
                 for ext in &["icns", "png", "svg"] {
-                    placeholders.insert("ICON_EXT".to_string(), ext.to_string());
+                    placeholders.insert("ICON_EXT".to_string(), (*ext).to_string());
                     let icon_path = icon.resolve(FakePlaceholders {
                         placeholders: placeholders.clone(),
                     });
-                    fs::write(&icon_path, &[]).unwrap();
+                    fs::write(&icon_path, []).unwrap();
                 }
             }
 
             fs::create_dir_all(prefix_path.join("bin")).unwrap();
-            fs::write(prefix_path.join("bin/python"), &[]).unwrap();
+            fs::write(prefix_path.join("bin/python"), []).unwrap();
 
             Self {
                 _tmp_dir: tmp_dir,
@@ -926,8 +926,8 @@ mod tests {
         let fake_prefix = FakePrefix::new(Path::new("spyder/menu.json"));
 
         let placeholders = super::BaseMenuItemPlaceholders::new(
-            &fake_prefix.prefix(),
-            &fake_prefix.prefix(),
+            fake_prefix.prefix(),
+            fake_prefix.prefix(),
             rattler_conda_types::Platform::current(),
         );
 

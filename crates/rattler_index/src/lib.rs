@@ -380,7 +380,7 @@ pub async fn index_s3(
 ///    1. Collect all uploaded packages in subdir
 ///    2. Collect all registered packages from `repodata.json` (if exists)
 ///    3. Determine which packages to add to and to delete from `repodata.json`
-///    4. Write `repodata.json` back to disk
+///    4. Write `repodata.json` back
 pub async fn index<T: Configurator>(
     target_platform: Option<Platform>,
     config: T,
