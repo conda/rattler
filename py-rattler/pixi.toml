@@ -2,8 +2,8 @@
 name = "py-rattler"
 description = "Add a short description here"
 authors = [
-    "Bas Zalmstra <bas@prefix.dev>",
-    "Tarun Pratap Singh <pratapsinghtarun9@gmail.com>",
+  "Bas Zalmstra <bas@prefix.dev>",
+  "Tarun Pratap Singh <pratapsinghtarun9@gmail.com>",
 ]
 channels = ["conda-forge"]
 platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
@@ -14,7 +14,8 @@ license = "BSD-3-Clause"
 [feature.build.dependencies]
 maturin = "~=1.2.2"
 pip = "~=23.2.1"
-rust = "~=1.81.0"
+# wait for https://github.com/conda-forge/rust-activation-feedstock/pull/72
+# rust = "==1.85.0"
 
 [feature.build.tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
