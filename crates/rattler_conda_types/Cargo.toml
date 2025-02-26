@@ -11,15 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ["rayon", "rustls-tls"]
-native-tls = [
-  "rattler_redaction/native-tls",
-  "rattler_package_streaming/native-tls",
-]
-rustls-tls = [
-  "rattler_redaction/rustls-tls",
-  "rattler_package_streaming/rustls-tls",
-]
+default = ["rayon"]
 experimental_extras = []
 
 [dependencies]
@@ -32,7 +24,9 @@ itertools = { workspace = true }
 lazy-regex = { workspace = true }
 nom = { workspace = true }
 purl = { workspace = true, features = ["serde"] }
-rattler_digest = { path = "../rattler_digest", version = "1.0.6", default-features = false, features = ["serde"] }
+rattler_digest = { path = "../rattler_digest", version = "1.0.6", default-features = false, features = [
+  "serde",
+] }
 rattler_macros = { path = "../rattler_macros", version = "1.0.6", default-features = false }
 rattler_redaction = { version = "0.1.6", path = "../rattler_redaction", default-features = false }
 regex = { workspace = true }
@@ -43,7 +37,12 @@ serde_repr = { workspace = true }
 serde_with = { workspace = true, features = ["indexmap_2"] }
 serde-untagged = { workspace = true }
 serde_yaml = { workspace = true }
-smallvec = { workspace = true, features = ["serde", "const_new", "const_generics", "union"] }
+smallvec = { workspace = true, features = [
+  "serde",
+  "const_new",
+  "const_generics",
+  "union",
+] }
 strum = { workspace = true, features = ["derive"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
@@ -57,8 +56,16 @@ fs-err = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true }
-insta = { workspace = true, features = ["yaml", "redactions", "toml", "glob", "filters"] }
-rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = ["rustls-tls"] }
+insta = { workspace = true, features = [
+  "yaml",
+  "redactions",
+  "toml",
+  "glob",
+  "filters",
+] }
+rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = [
+  "rustls-tls",
+] }
 rstest = { workspace = true }
 assert_matches = { workspace = true }
 hex-literal = { workspace = true }

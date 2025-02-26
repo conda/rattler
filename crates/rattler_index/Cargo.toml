@@ -18,16 +18,13 @@ native-tls = [
   "reqwest/native-tls-alpn",
   "rattler_package_streaming/native-tls",
   "rattler_networking/native-tls",
-  "rattler_conda_types/native-tls",
-  "rattler_package_streaming/native-tls",
   "tools/native-tls",
 ]
 rustls-tls = [
   "reqwest/rustls-tls",
   "reqwest/rustls-tls-native-roots",
   "rattler_package_streaming/rustls-tls",
-  "rattler_conda_types/rustls-tls",
-  "rattler_package_streaming/rustls-tls",
+  "rattler_networking/rustls-tls",
   "tools/rustls-tls",
 ]
 
@@ -49,7 +46,7 @@ opendal = { workspace = true, features = [
   "services-fs",
 ], default-features = false }
 rattler_networking = { path = "../rattler_networking", version = "0.22.4", default-features = false }
-rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.0", default-features = false }
+rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.0" }
 rattler_digest = { path = "../rattler_digest", version = "1.0.6", default-features = false }
 rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.29", default-features = false }
 reqwest = { workspace = true, default-features = false, features = [
