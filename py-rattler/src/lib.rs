@@ -41,7 +41,7 @@ use error::{
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
-use index::py_index;
+use index::{py_index_fs, py_index_s3};
 use index_json::PyIndexJson;
 use installer::py_install;
 use lock::{
@@ -160,7 +160,8 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_solve_with_sparse_repodata, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(get_rattler_version, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_install, &m).unwrap())?;
-    m.add_function(wrap_pyfunction!(py_index, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(py_index_fs, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(py_index_s3, &m).unwrap())?;
 
     m.add_function(wrap_pyfunction!(package_streaming::extract_tar_bz2, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(package_streaming::extract, &m).unwrap())?;
