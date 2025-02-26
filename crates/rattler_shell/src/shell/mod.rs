@@ -52,7 +52,10 @@ pub trait Shell {
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result;
 
     /// Source completion scripts for the shell from a given prefix path.
-    fn source_completions(&self, _f: &mut impl Write, _prefix: &Path) -> std::fmt::Result {
+    /// Note: the `completions_dir` is the directory where the completions are stored.
+    /// You can use [`Self::completion_script_location`] to get the correct location for a given
+    /// shell type.
+    fn source_completions(&self, _f: &mut impl Write, _completions_dir: &Path) -> std::fmt::Result {
         Ok(())
     }
 
@@ -274,16 +277,10 @@ impl Shell for Bash {
         Some(PathBuf::from("share/bash-completion/completions"))
     }
 
-    fn source_completions(&self, f: &mut impl Write, prefix: &Path) -> std::fmt::Result {
-        if prefix
-            .join(self.completion_script_location().unwrap())
-            .exists()
-        {
-            writeln!(
-                f,
-                "source {prefix}/share/bash-completion/completions/*",
-                prefix = prefix.to_string_lossy()
-            )?;
+    fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> std::fmt::Result {
+        if completions_dir.exists() {
+            let completions_glob = completions_dir.join("*");
+            writeln!(f, "source {}", completions_glob.to_string_lossy())?;
         }
         Ok(())
     }
@@ -342,16 +339,9 @@ impl Shell for Zsh {
         Some(PathBuf::from("share/zsh/site-functions"))
     }
 
-    fn source_completions(&self, f: &mut impl Write, prefix: &Path) -> std::fmt::Result {
-        if prefix
-            .join(self.completion_script_location().unwrap())
-            .exists()
-        {
-            writeln!(
-                f,
-                "fpath+=({prefix}/share/zsh/site-functions)",
-                prefix = prefix.to_string_lossy()
-            )?;
+    fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> std::fmt::Result {
+        if completions_dir.exists() {
+            writeln!(f, "fpath+=({})", completions_dir.to_string_lossy())?;
             writeln!(f, "autoload -Uz compinit")?;
             writeln!(f, "compinit")?;
         }
@@ -586,14 +576,11 @@ impl Shell for Fish {
         Some(PathBuf::from("share/fish/vendor_completions.d"))
     }
 
-    fn source_completions(&self, f: &mut impl Write, prefix: &Path) -> std::fmt::Result {
-        let completion_dir = prefix.join(self.completion_script_location().unwrap_or_default());
-        if completion_dir.exists() {
-            writeln!(
-                f,
-                "for file in {}/share/fish/vendor_completions.d/*",
-                prefix.to_string_lossy()
-            )?;
+    fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> std::fmt::Result {
+        if completions_dir.exists() {
+            // glob all files in the completions directory using fish
+            let completions_glob = completions_dir.join("*");
+            writeln!(f, "for file in {}", completions_glob.to_string_lossy())?;
             writeln!(f, "    source $file")?;
             writeln!(f, "end")?;
         }
