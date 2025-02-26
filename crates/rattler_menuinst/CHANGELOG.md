@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/conda/rattler/compare/rattler_menuinst-v0.1.0...rattler_menuinst-v0.1.1) - 2025-02-26
+
+### Fixed
+
+- clippy lint (#1105)
+
 ## [0.1.0](https://github.com/conda/rattler/releases/tag/rattler_menuinst-v0.1.0) - 2025-02-25
 
 ### Added
