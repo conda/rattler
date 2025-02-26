@@ -875,8 +875,12 @@ impl<T: Shell + 'static> ShellScript<T> {
     }
 
     /// Source completion scripts for the shell from a given directory with completion scripts.
-    pub fn source_completions(&mut self, completions_dir: &Path) -> Result<&mut Self, std::fmt::Error> {
-        self.shell.source_completions(&mut self.contents, completions_dir)?;
+    pub fn source_completions(
+        &mut self,
+        completions_dir: &Path,
+    ) -> Result<&mut Self, std::fmt::Error> {
+        self.shell
+            .source_completions(&mut self.contents, completions_dir)?;
         Ok(self)
     }
 
