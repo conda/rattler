@@ -169,8 +169,10 @@ tracing-test = { version = "0.2.5" }
 trybuild = { version = "1.0.103" }
 typed-path = { version = "0.10.0" }
 url = { version = "2.5.4" }
+unicode-normalization = "0.1.24"
 uuid = { version = "1.13.1", default-features = false }
 walkdir = "2.5.0"
+which = "7.0.2"
 windows-sys = { version = "0.59.0", default-features = false }
 winver = { version = "1.0.0" }
 zip = { version = "2.2.2", default-features = false }

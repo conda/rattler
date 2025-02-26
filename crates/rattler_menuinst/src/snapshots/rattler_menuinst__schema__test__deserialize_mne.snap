@@ -1,0 +1,849 @@
+---
+source: crates/rattler_menuinst/src/schema.rs
+expression: schema
+---
+MenuInstSchema {
+    schema: "https://json-schema.org/draft-07/schema",
+    menu_name: "MNE-Python (__PKG_VERSION__)",
+    menu_items: [
+        MenuItem {
+            command: MenuItemCommand {
+                name: Simple(
+                    PlaceholderString(
+                        "Spyder (MNE)",
+                    ),
+                ),
+                description: PlaceholderString(
+                    "The Spyder development environment",
+                ),
+                command: [
+                    PlaceholderString(
+                        "will be overridden in platforms section",
+                    ),
+                ],
+                icon: Some(
+                    PlaceholderString(
+                        "{{ MENU_DIR }}/spyder.{{ ICON_EXT }}",
+                    ),
+                ),
+                precommand: None,
+                precreate: None,
+                working_dir: None,
+                activate: Some(
+                    true,
+                ),
+                terminal: Some(
+                    false,
+                ),
+            },
+            platforms: Platforms {
+                linux: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "spyder",
+                                    ),
+                                ],
+                            ),
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: Linux {
+                            categories: Some(
+                                [
+                                    PlaceholderString(
+                                        "Science",
+                                    ),
+                                ],
+                            ),
+                            dbus_activatable: None,
+                            generic_name: None,
+                            hidden: None,
+                            implements: None,
+                            keywords: None,
+                            single_main_window: None,
+                            mime_type: None,
+                            no_display: None,
+                            not_show_in: None,
+                            only_show_in: None,
+                            prefers_non_default_gpu: None,
+                            startup_notify: None,
+                            startup_wm_class: None,
+                            try_exec: None,
+                            glob_patterns: None,
+                        },
+                    },
+                ),
+                osx: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "spyder",
+                                    ),
+                                ],
+                            ),
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: MacOS {
+                            cf_bundle_display_name: Some(
+                                PlaceholderString(
+                                    "Spyder (MNE-Python __PKG_VERSION__)",
+                                ),
+                            ),
+                            cf_bundle_identifier: None,
+                            cf_bundle_name: Some(
+                                PlaceholderString(
+                                    "Spyder (MNE-Python __PKG_VERSION__)",
+                                ),
+                            ),
+                            cf_bundle_spoken_name: None,
+                            cf_bundle_version: Some(
+                                PlaceholderString(
+                                    "__PKG_VERSION__",
+                                ),
+                            ),
+                            cf_bundle_url_types: None,
+                            cf_bundle_document_types: None,
+                            ls_application_category_type: None,
+                            ls_background_only: None,
+                            ls_environment: None,
+                            ls_minimum_system_version: None,
+                            ls_multiple_instances_prohibited: None,
+                            ls_requires_native_execution: None,
+                            ut_exported_type_declarations: None,
+                            ut_imported_type_declarations: None,
+                            ns_supports_automatic_graphics_switching: None,
+                            entitlements: None,
+                            link_in_bundle: None,
+                            event_handler: None,
+                        },
+                    },
+                ),
+                win: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "{{ PYTHONW }}",
+                                    ),
+                                    PlaceholderString(
+                                        "{{ SCRIPTS_DIR }}\\spyder-script.py",
+                                    ),
+                                ],
+                            ),
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: Windows {
+                            desktop: Some(
+                                false,
+                            ),
+                            quicklaunch: None,
+                            terminal_profile: None,
+                            url_protocols: None,
+                            file_extensions: None,
+                            app_user_model_id: None,
+                        },
+                    },
+                ),
+            },
+        },
+        MenuItem {
+            command: MenuItemCommand {
+                name: Simple(
+                    PlaceholderString(
+                        "System Info (MNE)",
+                    ),
+                ),
+                description: PlaceholderString(
+                    "Information on the MNE-Python runtime environment",
+                ),
+                command: [
+                    PlaceholderString(
+                        "{{ PYTHON }}",
+                    ),
+                    PlaceholderString(
+                        "{{ MENU_DIR }}/mne_sys_info.py",
+                    ),
+                ],
+                icon: Some(
+                    PlaceholderString(
+                        "{{ MENU_DIR }}/info.{{ ICON_EXT }}",
+                    ),
+                ),
+                precommand: None,
+                precreate: None,
+                working_dir: None,
+                activate: Some(
+                    true,
+                ),
+                terminal: Some(
+                    true,
+                ),
+            },
+            platforms: Platforms {
+                linux: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: None,
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: Linux {
+                            categories: Some(
+                                [
+                                    PlaceholderString(
+                                        "Science",
+                                    ),
+                                ],
+                            ),
+                            dbus_activatable: None,
+                            generic_name: None,
+                            hidden: None,
+                            implements: None,
+                            keywords: None,
+                            single_main_window: None,
+                            mime_type: None,
+                            no_display: None,
+                            not_show_in: None,
+                            only_show_in: None,
+                            prefers_non_default_gpu: None,
+                            startup_notify: None,
+                            startup_wm_class: None,
+                            try_exec: None,
+                            glob_patterns: None,
+                        },
+                    },
+                ),
+                osx: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: None,
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: MacOS {
+                            cf_bundle_display_name: Some(
+                                PlaceholderString(
+                                    "System Information (MNE-Python __PKG_VERSION__)",
+                                ),
+                            ),
+                            cf_bundle_identifier: None,
+                            cf_bundle_name: Some(
+                                PlaceholderString(
+                                    "System Information (MNE-Python __PKG_VERSION__)",
+                                ),
+                            ),
+                            cf_bundle_spoken_name: None,
+                            cf_bundle_version: Some(
+                                PlaceholderString(
+                                    "__PKG_VERSION__",
+                                ),
+                            ),
+                            cf_bundle_url_types: None,
+                            cf_bundle_document_types: None,
+                            ls_application_category_type: None,
+                            ls_background_only: None,
+                            ls_environment: None,
+                            ls_minimum_system_version: None,
+                            ls_multiple_instances_prohibited: None,
+                            ls_requires_native_execution: None,
+                            ut_exported_type_declarations: None,
+                            ut_imported_type_declarations: None,
+                            ns_supports_automatic_graphics_switching: None,
+                            entitlements: None,
+                            link_in_bundle: None,
+                            event_handler: None,
+                        },
+                    },
+                ),
+                win: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: None,
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: Windows {
+                            desktop: Some(
+                                false,
+                            ),
+                            quicklaunch: None,
+                            terminal_profile: None,
+                            url_protocols: None,
+                            file_extensions: None,
+                            app_user_model_id: None,
+                        },
+                    },
+                ),
+            },
+        },
+        MenuItem {
+            command: MenuItemCommand {
+                name: Simple(
+                    PlaceholderString(
+                        "Prompt (MNE)",
+                    ),
+                ),
+                description: PlaceholderString(
+                    "MNE-Python console prompt",
+                ),
+                command: [
+                    PlaceholderString(
+                        "will be overridden in platforms section",
+                    ),
+                ],
+                icon: Some(
+                    PlaceholderString(
+                        "{{ MENU_DIR }}/console.{{ ICON_EXT }}",
+                    ),
+                ),
+                precommand: None,
+                precreate: None,
+                working_dir: None,
+                activate: Some(
+                    true,
+                ),
+                terminal: Some(
+                    true,
+                ),
+            },
+            platforms: Platforms {
+                linux: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "exec",
+                                    ),
+                                    PlaceholderString(
+                                        "bash",
+                                    ),
+                                    PlaceholderString(
+                                        "--init-file",
+                                    ),
+                                    PlaceholderString(
+                                        "{{ MENU_DIR }}/mne_open_prompt.sh",
+                                    ),
+                                ],
+                            ),
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: Linux {
+                            categories: Some(
+                                [
+                                    PlaceholderString(
+                                        "Science",
+                                    ),
+                                ],
+                            ),
+                            dbus_activatable: None,
+                            generic_name: None,
+                            hidden: None,
+                            implements: None,
+                            keywords: None,
+                            single_main_window: None,
+                            mime_type: None,
+                            no_display: None,
+                            not_show_in: None,
+                            only_show_in: None,
+                            prefers_non_default_gpu: None,
+                            startup_notify: None,
+                            startup_wm_class: None,
+                            try_exec: None,
+                            glob_patterns: None,
+                        },
+                    },
+                ),
+                osx: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "osascript",
+                                    ),
+                                    PlaceholderString(
+                                        "{{ MENU_DIR }}/mne_open_prompt.applescript",
+                                    ),
+                                ],
+                            ),
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: MacOS {
+                            cf_bundle_display_name: Some(
+                                PlaceholderString(
+                                    "Prompt (MNE-Python __PKG_VERSION__)",
+                                ),
+                            ),
+                            cf_bundle_identifier: None,
+                            cf_bundle_name: Some(
+                                PlaceholderString(
+                                    "Prompt (MNE-Python __PKG_VERSION__)",
+                                ),
+                            ),
+                            cf_bundle_spoken_name: None,
+                            cf_bundle_version: Some(
+                                PlaceholderString(
+                                    "__PKG_VERSION__",
+                                ),
+                            ),
+                            cf_bundle_url_types: None,
+                            cf_bundle_document_types: None,
+                            ls_application_category_type: None,
+                            ls_background_only: None,
+                            ls_environment: None,
+                            ls_minimum_system_version: None,
+                            ls_multiple_instances_prohibited: None,
+                            ls_requires_native_execution: None,
+                            ut_exported_type_declarations: None,
+                            ut_imported_type_declarations: None,
+                            ns_supports_automatic_graphics_switching: None,
+                            entitlements: None,
+                            link_in_bundle: None,
+                            event_handler: None,
+                        },
+                    },
+                ),
+                win: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "%SystemRoot%\\system32\\cmd.exe",
+                                    ),
+                                    PlaceholderString(
+                                        "/K",
+                                    ),
+                                    PlaceholderString(
+                                        "{{ MENU_DIR }}\\mne_open_prompt.bat",
+                                    ),
+                                ],
+                            ),
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: Windows {
+                            desktop: Some(
+                                false,
+                            ),
+                            quicklaunch: None,
+                            terminal_profile: None,
+                            url_protocols: None,
+                            file_extensions: None,
+                            app_user_model_id: None,
+                        },
+                    },
+                ),
+            },
+        },
+        MenuItem {
+            command: MenuItemCommand {
+                name: Simple(
+                    PlaceholderString(
+                        "Tutorials (MNE)",
+                    ),
+                ),
+                description: PlaceholderString(
+                    "MNE-Python online tutorials",
+                ),
+                command: [
+                    PlaceholderString(
+                        "will be overridden in platforms section",
+                    ),
+                ],
+                icon: Some(
+                    PlaceholderString(
+                        "{{ MENU_DIR }}/web.{{ ICON_EXT }}",
+                    ),
+                ),
+                precommand: None,
+                precreate: None,
+                working_dir: None,
+                activate: Some(
+                    false,
+                ),
+                terminal: Some(
+                    false,
+                ),
+            },
+            platforms: Platforms {
+                linux: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "xdg-open",
+                                    ),
+                                    PlaceholderString(
+                                        "https://mne.tools/stable/auto_tutorials/",
+                                    ),
+                                ],
+                            ),
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: Linux {
+                            categories: Some(
+                                [
+                                    PlaceholderString(
+                                        "Science",
+                                    ),
+                                ],
+                            ),
+                            dbus_activatable: None,
+                            generic_name: None,
+                            hidden: None,
+                            implements: None,
+                            keywords: None,
+                            single_main_window: None,
+                            mime_type: None,
+                            no_display: None,
+                            not_show_in: None,
+                            only_show_in: None,
+                            prefers_non_default_gpu: None,
+                            startup_notify: None,
+                            startup_wm_class: None,
+                            try_exec: None,
+                            glob_patterns: None,
+                        },
+                    },
+                ),
+                osx: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "open",
+                                    ),
+                                    PlaceholderString(
+                                        "https://mne.tools/stable/auto_tutorials/",
+                                    ),
+                                ],
+                            ),
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: MacOS {
+                            cf_bundle_display_name: Some(
+                                PlaceholderString(
+                                    "Tutorials (MNE-Python __PKG_VERSION__)",
+                                ),
+                            ),
+                            cf_bundle_identifier: None,
+                            cf_bundle_name: Some(
+                                PlaceholderString(
+                                    "Tutorials (MNE-Python __PKG_VERSION__)",
+                                ),
+                            ),
+                            cf_bundle_spoken_name: None,
+                            cf_bundle_version: Some(
+                                PlaceholderString(
+                                    "__PKG_VERSION__",
+                                ),
+                            ),
+                            cf_bundle_url_types: None,
+                            cf_bundle_document_types: None,
+                            ls_application_category_type: None,
+                            ls_background_only: None,
+                            ls_environment: None,
+                            ls_minimum_system_version: None,
+                            ls_multiple_instances_prohibited: None,
+                            ls_requires_native_execution: None,
+                            ut_exported_type_declarations: None,
+                            ut_imported_type_declarations: None,
+                            ns_supports_automatic_graphics_switching: None,
+                            entitlements: None,
+                            link_in_bundle: None,
+                            event_handler: None,
+                        },
+                    },
+                ),
+                win: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                                    ),
+                                    PlaceholderString(
+                                        "\"start https://mne.tools/stable/auto_tutorials -WindowStyle hidden\"",
+                                    ),
+                                ],
+                            ),
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: Windows {
+                            desktop: Some(
+                                false,
+                            ),
+                            quicklaunch: None,
+                            terminal_profile: None,
+                            url_protocols: None,
+                            file_extensions: None,
+                            app_user_model_id: None,
+                        },
+                    },
+                ),
+            },
+        },
+        MenuItem {
+            command: MenuItemCommand {
+                name: Simple(
+                    PlaceholderString(
+                        "User Forum (MNE)",
+                    ),
+                ),
+                description: PlaceholderString(
+                    "MNE-Python forum for discussions, problem solving, and information exchange",
+                ),
+                command: [
+                    PlaceholderString(
+                        "will be overridden in platforms section",
+                    ),
+                ],
+                icon: Some(
+                    PlaceholderString(
+                        "{{ MENU_DIR }}/forum.{{ ICON_EXT }}",
+                    ),
+                ),
+                precommand: None,
+                precreate: None,
+                working_dir: None,
+                activate: Some(
+                    false,
+                ),
+                terminal: Some(
+                    false,
+                ),
+            },
+            platforms: Platforms {
+                linux: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "xdg-open",
+                                    ),
+                                    PlaceholderString(
+                                        "https://mne.discourse.group",
+                                    ),
+                                ],
+                            ),
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: Linux {
+                            categories: Some(
+                                [
+                                    PlaceholderString(
+                                        "Science",
+                                    ),
+                                ],
+                            ),
+                            dbus_activatable: None,
+                            generic_name: None,
+                            hidden: None,
+                            implements: None,
+                            keywords: None,
+                            single_main_window: None,
+                            mime_type: None,
+                            no_display: None,
+                            not_show_in: None,
+                            only_show_in: None,
+                            prefers_non_default_gpu: None,
+                            startup_notify: None,
+                            startup_wm_class: None,
+                            try_exec: None,
+                            glob_patterns: None,
+                        },
+                    },
+                ),
+                osx: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "open",
+                                    ),
+                                    PlaceholderString(
+                                        "https://mne.discourse.group",
+                                    ),
+                                ],
+                            ),
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: MacOS {
+                            cf_bundle_display_name: Some(
+                                PlaceholderString(
+                                    "Forum (MNE-Python __PKG_VERSION__)",
+                                ),
+                            ),
+                            cf_bundle_identifier: None,
+                            cf_bundle_name: Some(
+                                PlaceholderString(
+                                    "Forum (MNE-Python __PKG_VERSION__)",
+                                ),
+                            ),
+                            cf_bundle_spoken_name: None,
+                            cf_bundle_version: Some(
+                                PlaceholderString(
+                                    "__PKG_VERSION__",
+                                ),
+                            ),
+                            cf_bundle_url_types: None,
+                            cf_bundle_document_types: None,
+                            ls_application_category_type: None,
+                            ls_background_only: None,
+                            ls_environment: None,
+                            ls_minimum_system_version: None,
+                            ls_multiple_instances_prohibited: None,
+                            ls_requires_native_execution: None,
+                            ut_exported_type_declarations: None,
+                            ut_imported_type_declarations: None,
+                            ns_supports_automatic_graphics_switching: None,
+                            entitlements: None,
+                            link_in_bundle: None,
+                            event_handler: None,
+                        },
+                    },
+                ),
+                win: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: Some(
+                                [
+                                    PlaceholderString(
+                                        "%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                                    ),
+                                    PlaceholderString(
+                                        "\"start https://mne.discourse.group -WindowStyle hidden\"",
+                                    ),
+                                ],
+                            ),
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: Windows {
+                            desktop: Some(
+                                false,
+                            ),
+                            quicklaunch: None,
+                            terminal_profile: None,
+                            url_protocols: None,
+                            file_extensions: None,
+                            app_user_model_id: None,
+                        },
+                    },
+                ),
+            },
+        },
+    ],
+}

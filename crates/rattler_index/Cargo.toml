@@ -1,6 +1,6 @@
 [package]
 name = "rattler_index"
-version = "0.20.12"
+version = "0.20.13"
 edition.workspace = true
 authors = []
 description = "A crate to index conda channels and create a repodata.json file."
@@ -49,9 +49,9 @@ opendal = { workspace = true, features = [
   "services-fs",
 ], default-features = false }
 rattler_networking = { path = "../rattler_networking", version = "0.22.4", default-features = false }
-rattler_conda_types = { path = "../rattler_conda_types", version = "0.30.3", default-features = false }
+rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.0", default-features = false }
 rattler_digest = { path = "../rattler_digest", version = "1.0.6", default-features = false }
-rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.28", default-features = false }
+rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.29", default-features = false }
 reqwest = { workspace = true, default-features = false, features = [
   "http2",
   "macos-system-configuration",

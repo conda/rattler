@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.38](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.37...rattler_repodata_gateway-v0.21.38) - 2025-02-25
+
+### Added
+
+- add run_exports cache (#1060)
+
+### Fixed
+
+- split matchspec on start of constraint (#1094)
+
 ## [0.21.37](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.36...rattler_repodata_gateway-v0.21.37) - 2025-02-18
 
 ### Other
