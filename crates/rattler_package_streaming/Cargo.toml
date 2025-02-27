@@ -33,11 +33,12 @@ url = { workspace = true }
 zip = { workspace = true, features = ["deflate", "time"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-zstd = { workspace = true, features = ["zstdmt"] }
 num_cpus = { workspace = true }
+tokio = { workspace = true, features = ["fs"] }
+zstd = { workspace = true, features = ["zstdmt"] }
 
 [features]
-default = ["native-tls", "tokio/fs"]
+default = ["native-tls"]
 native-tls = ["rattler_networking/native-tls"]
 rustls-tls = ["rattler_networking/rustls-tls"]
 reqwest = ["dep:reqwest-middleware", "dep:reqwest"]

@@ -95,7 +95,6 @@ itertools = "0.14.0"
 json-patch = "3.0.1"
 keyring = "3.6.1"
 lazy-regex = "3.4.1"
-lazy_static = "1.5.0"
 libc = { version = "0.2" }
 libloading = "0.8.6"
 libz-sys = { version = "1.1.21", default-features = false }
@@ -106,7 +105,6 @@ netrc-rs = "0.1.2"
 nom = "7.1.3"
 num_cpus = "1.16.0"
 once_cell = "1.20.3"
-ouroboros = "0.18.5"
 parking_lot = "0.12.3"
 pathdiff = "0.2.3"
 pep440_rs = { version = "0.7.3" }
