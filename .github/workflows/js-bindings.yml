@@ -27,7 +27,7 @@ permissions:
 env:
   RUST_LOG: info
   RUST_BACKTRACE: 1
-  RUSTFLAGS: "-D warnings --cfg getrandom_backend=wasm_js"
+  RUSTFLAGS: "-D warnings --cfg getrandom_backend=\"wasm_js\""
 
 jobs:
   format_lint_test:
