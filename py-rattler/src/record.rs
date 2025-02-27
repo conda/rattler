@@ -348,7 +348,7 @@ impl PyRecord {
     pub fn legacy_bz2_md5<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
         self.as_package_record()
             .legacy_bz2_md5
-            .map(|md5| PyBytes::new_bound(py, &md5))
+            .map(|md5| PyBytes::new(py, &md5))
     }
 
     #[setter]
@@ -395,7 +395,7 @@ impl PyRecord {
     pub fn md5<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
         self.as_package_record()
             .md5
-            .map(|md5| PyBytes::new_bound(py, &md5))
+            .map(|md5| PyBytes::new(py, &md5))
     }
 
     #[setter]
@@ -431,7 +431,7 @@ impl PyRecord {
     pub fn sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
         self.as_package_record()
             .sha256
-            .map(|sha| PyBytes::new_bound(py, &sha))
+            .map(|sha| PyBytes::new(py, &sha))
     }
 
     /// Optionally a SHA256 hash of the package archive.

@@ -253,7 +253,7 @@ impl PyPrefixPathsEntry {
     /// any placeholders were replaced
     #[getter]
     pub fn sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
-        self.inner.sha256.map(|sha| PyBytes::new_bound(py, &sha))
+        self.inner.sha256.map(|sha| PyBytes::new(py, &sha))
     }
 
     // #[setter]
@@ -268,7 +268,7 @@ impl PyPrefixPathsEntry {
     pub fn sha256_in_prefix<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
         self.inner
             .sha256_in_prefix
-            .map(|shla| PyBytes::new_bound(py, &shla))
+            .map(|shla| PyBytes::new(py, &shla))
     }
 
     // #[setter]

@@ -247,7 +247,7 @@ impl PyPathsEntry {
     /// This entry is only present in version 1 of the paths.json file.
     #[getter]
     pub fn sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
-        self.inner.sha256.map(|sha| PyBytes::new_bound(py, &sha))
+        self.inner.sha256.map(|sha| PyBytes::new(py, &sha))
     }
 
     /// Set the SHA256 hash of the contents of the file
