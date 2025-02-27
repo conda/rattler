@@ -63,7 +63,7 @@ jobs:
         working-directory: js-rattler
       - run: npm run fmt:check
         working-directory: js-rattler
-      - run: npm run build --if-present
+      - run: npm run build
         working-directory: js-rattler
       - run: npm test
         working-directory: js-rattler

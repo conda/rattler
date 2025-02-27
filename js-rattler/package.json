@@ -24,8 +24,11 @@
         }
     },
     "scripts": {
+        "fix:types": "shx sed -i '^.*LIBBZ2_RS_SYS.*$' '' pkg/js_rattler_bg.wasm.d.ts pkg/js_rattler.d.ts",
         "build:wasm": "wasm-pack build --mode normal --release",
         "build:wasm:debug": "wasm-pack build --mode normal --debug",
+        "postbuild:wasm": "npm run fix:types",
+        "postbuild:wasm:debug": "npm run fix:types",
         "build:esm": "npm run build:wasm -- --target web    && rollup -c rollup.config.esm.mjs",
         "build:cjs": "npm run build:wasm -- --target nodejs && rollup -c rollup.config.cjs.mjs",
         "build:types": "tsc && api-extractor run --verbose",
@@ -51,6 +54,7 @@
         "shx": "^0.3.4",
         "ts-jest": "^29.2.5",
         "ts-node": "^10.9.2",
+        "tslib": "^2.8.1",
         "typescript": "^5.6.3",
         "wasm-pack": "^0.13.1"
     }
