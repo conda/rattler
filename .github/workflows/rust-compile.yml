@@ -142,8 +142,8 @@ jobs:
         if: ${{ !matrix.skip-tests }}
         env:
           GOOGLE_CLOUD_TEST_KEY_JSON: ${{ secrets.GOOGLE_CLOUD_TEST_KEY_JSON }}
-          RATTLER_TEST_R2_ACCESS_KEY_ID: ${{ secrets.RATTLER_TEST_R2_ACCESS_KEY_ID }}
-          RATTLER_TEST_R2_SECRET_ACCESS_KEY: ${{ secrets.RATTLER_TEST_R2_SECRET_ACCESS_KEY }}
+          RATTLER_TEST_R2_READONLY_ACCESS_KEY_ID: ${{ secrets.RATTLER_TEST_R2_READONLY_ACCESS_KEY_ID }}
+          RATTLER_TEST_R2_READONLY_SECRET_ACCESS_KEY: ${{ secrets.RATTLER_TEST_R2_READONLY_SECRET_ACCESS_KEY }}
         run: >
           cargo nextest run
           --workspace
