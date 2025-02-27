@@ -31,7 +31,6 @@ humansize = { workspace = true }
 humantime = { workspace = true }
 itertools = { workspace = true, optional = true }
 json-patch = { workspace = true }
-md-5 = { workspace = true }
 self_cell = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
 pin-project-lite = { workspace = true }
