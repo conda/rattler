@@ -22,10 +22,20 @@ use crate::{
         CFBundleDocumentTypesModel, CFBundleTypeRole, CFBundleURLTypesModel, LSHandlerRank, MacOS,
         MacOSVersion, MenuItemCommand, UTTypeDeclarationModel,
     },
-    utils::{self, log_output, run_pre_create_command},
+    utils::{log_output, run_pre_create_command},
     MenuInstError, MenuMode,
 };
 use std::collections::HashMap;
+
+pub fn quote_args<I, S>(args: I) -> Vec<String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    args.into_iter()
+        .map(|arg| format!(r#""{}""#, arg.as_ref()))
+        .collect()
+}
 
 #[derive(Debug, Clone)]
 pub struct MacOSMenu {
@@ -658,7 +668,7 @@ impl MacOSMenu {
             .command
             .iter()
             .map(|s| s.resolve(&self.placeholders));
-        lines.push(utils::quote_args(command).join(" "));
+        lines.push(quote_args(command).join(" "));
 
         Ok(lines.join("\n"))
     }
