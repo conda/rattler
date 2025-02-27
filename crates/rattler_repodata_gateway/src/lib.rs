@@ -2,7 +2,7 @@
 
 //! `rattler_repodata_gateway` is a crate that provides functionality to interact with Conda
 //! repodata. It currently provides functionality to download and cache `repodata.json` files
-//! through the [`with_cache::fetch_repo_data`] function.
+//! through the [`fetch::fetch_repo_data`] function.
 //!
 //! In the future this crate will also provide more high-level functionality to query information
 //! about specific packages from different sources.
@@ -23,7 +23,7 @@
 //!
 //! # Examples
 //! Below is a basic example that shows how to retrieve and cache the repodata for a conda channel
-//! using the [`with_cache::fetch_repo_data`] function:
+//! using the [`fetch::fetch_repo_data`] function:
 //!
 //! ```no_run
 //! use std::{default::Default, path::PathBuf};
