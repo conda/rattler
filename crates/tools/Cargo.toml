@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[features]
+default = ["rustls-tls"]
+native-tls = ["reqwest/native-tls"]
+rustls-tls = ["reqwest/rustls-tls"]
+
 [dependencies]
 anyhow = { workspace = true }
 bindgen = { workspace = true }
@@ -15,7 +20,9 @@ fslock = { workspace = true }
 dirs = { workspace = true }
 thiserror = { workspace = true }
 rattler_digest = { path = "../rattler_digest" }
-reqwest = { workspace = true, default-features = false, features = ["blocking", "rustls-tls"] }
+reqwest = { workspace = true, default-features = false, features = [
+  "blocking",
+] }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 

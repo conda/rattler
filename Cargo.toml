@@ -52,6 +52,7 @@ chrono = { version = "0.4.39", default-features = false, features = [
     "alloc",
 ] }
 clap = { version = "4.5.29", features = ["derive"] }
+clap-verbosity-flag = "3.0.1"
 cmake = "0.1.54"
 console = { version = "0.15.10", features = ["windows-console-colors"] }
 criterion = "0.5"
@@ -104,6 +105,7 @@ memmap2 = "0.9.5"
 netrc-rs = "0.1.2"
 nom = "7.1.3"
 num_cpus = "1.16.0"
+opendal = { version = "0.51.2", default-features = false }
 once_cell = "1.20.3"
 parking_lot = "0.12.3"
 pathdiff = "0.2.3"
@@ -160,6 +162,7 @@ tokio-util = "0.7.13"
 tower = { version = "0.5.2", default-features = false }
 tower-http = { version = "0.6.2", default-features = false }
 tracing = "0.1.41"
+tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.19", default-features = false }
 tracing-test = { version = "0.2.5" }
 trybuild = { version = "1.0.103" }
