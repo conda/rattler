@@ -1,1 +1,1 @@
-export { simple_solve } from "../pkg";
+export { simple_solve, SolvedPackage } from "../pkg";
