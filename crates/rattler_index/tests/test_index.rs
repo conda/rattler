@@ -58,7 +58,7 @@ async fn test_index() {
     )
     .unwrap();
 
-    let res = index_fs(temp_dir.path(), Some(Platform::Win64), true, 100).await;
+    let res = index_fs(temp_dir.path(), Some(Platform::Win64), true, 100, None).await;
     assert!(res.is_ok());
 
     let repodata_path = temp_dir.path().join(subdir_path).join("repodata.json");
@@ -98,7 +98,7 @@ async fn test_index_empty_directory_creates_noarch_repodata() {
     let noarch_path = temp_dir.path().join("noarch");
     let repodata_path = noarch_path.join("repodata.json");
 
-    let res = index_fs(temp_dir.path(), None, true, 100).await;
+    let res = index_fs(temp_dir.path(), None, true, 100, None).await;
 
     assert!(res.is_ok());
     assert!(noarch_path.is_dir());
