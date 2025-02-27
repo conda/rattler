@@ -171,10 +171,14 @@ pub trait Shell {
         "\n"
     }
 
-    /// Return the location where completion scripts should be placed in
-    /// the prefix. For example, for bash, this would be `etc/bash_completion.d`.
+    /// Return the location where completion scripts are found in a Conda environment.
+    ///
+    /// - bash: `share/bash-completion/completions`
+    /// - zsh: `share/zsh/site-functions`
+    /// - fish: `share/fish/vendor_completions.d`
+    ///
     /// The return value must be joined with `prefix.join(completion_script_location())`.
-    fn completion_script_location(&self) -> Option<PathBuf> {
+    fn completion_script_location(&self) -> Option<&'static Path> {
         None
     }
 }
@@ -273,8 +277,8 @@ impl Shell for Bash {
         "sh"
     }
 
-    fn completion_script_location(&self) -> Option<PathBuf> {
-        Some(PathBuf::from("share/bash-completion/completions"))
+    fn completion_script_location(&self) -> Option<&'static Path> {
+        Some(Path::new("share/bash-completion/completions"))
     }
 
     fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> std::fmt::Result {
@@ -335,8 +339,8 @@ impl Shell for Zsh {
         cmd
     }
 
-    fn completion_script_location(&self) -> Option<PathBuf> {
-        Some(PathBuf::from("share/zsh/site-functions"))
+    fn completion_script_location(&self) -> Option<&'static Path> {
+        Some(Path::new("share/zsh/site-functions"))
     }
 
     fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> std::fmt::Result {
@@ -393,7 +397,7 @@ impl Shell for Xonsh {
         cmd
     }
 
-    fn completion_script_location(&self) -> Option<PathBuf> {
+    fn completion_script_location(&self) -> Option<&'static Path> {
         None
     }
 }
@@ -572,8 +576,8 @@ impl Shell for Fish {
         cmd
     }
 
-    fn completion_script_location(&self) -> Option<PathBuf> {
-        Some(PathBuf::from("share/fish/vendor_completions.d"))
+    fn completion_script_location(&self) -> Option<&'static Path> {
+        Some(Path::new("share/fish/vendor_completions.d"))
     }
 
     fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> std::fmt::Result {
@@ -663,8 +667,7 @@ impl Shell for NuShell {
         cmd
     }
 
-    fn completion_script_location(&self) -> Option<PathBuf> {
-        // Need to find out the correct location for completions
+    fn completion_script_location(&self) -> Option<&'static Path> {
         None
     }
 }
