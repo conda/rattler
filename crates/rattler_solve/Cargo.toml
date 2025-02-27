@@ -24,14 +24,14 @@ rattler_libsolv_c = { path = "../rattler_libsolv_c", version = "1.1.2", default-
 resolvo = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
-indexmap = { workspace = true}
+indexmap = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
 once_cell = { workspace = true }
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
-    "sparse", "memmap2"
+    "sparse"
 ] }
 rstest = { workspace = true }
 serde_json = { workspace = true }
