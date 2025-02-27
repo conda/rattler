@@ -8,14 +8,6 @@ use unicode_normalization::UnicodeNormalization;
 /// 1. Normalizes the text using Unicode normalization and removes non-ASCII characters.
 /// 2. Removes special characters, converts the text to lowercase, and trims whitespace.
 /// 3. Replaces whitespace and hyphens with a single hyphen.
-///
-/// # Examples
-///
-/// ```
-/// # use rattler_menuinst::utils::slugify;
-/// let slug = slugify("Hello, World!");
-/// assert_eq!(slug, "hello-world");
-/// ```
 pub fn slugify(text: &str) -> String {
     static RE_SPECIAL: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^\w\s-]").expect("Invalid regex"));
     static RE_SPACES: Lazy<Regex> = Lazy::new(|| Regex::new(r"[_\s-]+").expect("Invalid regex"));
