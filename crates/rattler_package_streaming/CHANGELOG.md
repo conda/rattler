@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.30](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.29...rattler_package_streaming-v0.22.30) - 2025-02-27
+
+### Added
+
+- Use `opendal` in `rattler-index` and add executable (#1076)
+
 ## [0.22.29](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.28...rattler_package_streaming-v0.22.29) - 2025-02-25
 
 ### Added
