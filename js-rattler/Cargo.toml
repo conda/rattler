@@ -49,10 +49,6 @@ opt-level = "s"
 lto = true
 
 [patch.crates-io]
-# We want to use version 0.4.19 but its not released yet.
-# https://github.com/Nullus157/async-compression/pull/319
-async-compression = { git = "https://github.com/Nullus157/async-compression.git" }
-
 # Just waiting for a release on this one!
 bzip2 = { git = "https://github.com/trifectatechfoundation/bzip2-rs" }
 

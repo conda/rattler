@@ -112,8 +112,9 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.18"
-source = "git+https://github.com/Nullus157/async-compression.git#04141de06e925c99cfff871da201842106c4af27"
+version = "0.4.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06575e6a9673580f52661c92107baabffbf41e2141373441cbcdc47cb733003c"
 dependencies = [
  "bzip2",
  "flate2",
