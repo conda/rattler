@@ -24,6 +24,11 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  RUST_LOG: info
+  RUST_BACKTRACE: 1
+  RUSTFLAGS: "-D warnings --cfg getrandom_backend=wasm_js"
+
 jobs:
   format_lint_test:
     name: Format, Lint and Test the JS bindings
@@ -51,7 +56,7 @@ jobs:
           manifest-path: js-rattler/Cargo.toml
 
       - name: Run clippy
-        run: cargo clippy --all-targets
+        run: cargo clippy --all-targets --locked
         working-directory: js-rattler
 
       - run: npm ci
