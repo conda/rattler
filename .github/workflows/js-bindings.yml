@@ -56,7 +56,7 @@ jobs:
           manifest-path: js-rattler/Cargo.toml
 
       - name: Run clippy
-        run: cargo clippy --all-targets --locked
+        run: cargo clippy --all-targets
         working-directory: js-rattler
 
       - run: npm ci
