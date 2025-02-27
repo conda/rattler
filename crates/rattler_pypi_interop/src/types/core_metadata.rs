@@ -33,7 +33,7 @@ impl PackageInfo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 
 /// The core metadata of a wheel.
 pub struct WheelCoreMetadata {
@@ -52,7 +52,7 @@ pub struct WheelCoreMetadata {
     pub extras: HashSet<Extra>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 /// Wrapper around a PEP440 version
 /// specifically for the metadata version
 pub struct MetadataVersion(pub Version);
