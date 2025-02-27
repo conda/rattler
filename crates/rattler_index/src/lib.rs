@@ -392,30 +392,32 @@ pub async fn index<T: Configurator>(
     // Get all subdirs
     let op = Operator::new(builder)?.finish();
     let entries = op.list_with("").await?;
-    let mut subdirs = entries
-        .iter()
-        .filter_map(|entry| {
-            if entry.metadata().mode().is_dir() && entry.name() != "/" {
-                // Directory entries always end with `/`.
-                Some(entry.name().trim_end_matches('/').to_string())
-            } else {
-                None
-            }
-        })
-        .map(|s| Platform::from_str(&s))
-        .collect::<Result<HashSet<_>, _>>()?;
 
     // If requested `target_platform` subdir does not exist, we create it.
-    if let Some(target_platform) = target_platform {
-        tracing::debug!("Did not find {target_platform} subdir, creating.");
-        if !subdirs.contains(&target_platform) {
+    let mut subdirs = if let Some(target_platform) = target_platform {
+        if !op.exists(&format!("{}/", target_platform.as_str())).await? {
+            tracing::debug!("Did not find {target_platform} subdir, creating.");
             op.create_dir(&format!("{}/", target_platform.as_str()))
                 .await?;
         }
         // Limit subdirs to only the requested `target_platform`.
-        subdirs = HashSet::default();
-        subdirs.insert(target_platform);
-    } else if !subdirs.contains(&Platform::NoArch) {
+        HashSet::from([target_platform])
+    } else {
+        entries
+            .iter()
+            .filter_map(|entry| {
+                if entry.metadata().mode().is_dir() && entry.name() != "/" {
+                    // Directory entries always end with `/`.
+                    Some(entry.name().trim_end_matches('/').to_string())
+                } else {
+                    None
+                }
+            })
+            .filter_map(|s| Platform::from_str(&s).ok())
+            .collect::<HashSet<_>>()
+    };
+
+    if !op.exists(&format!("{}/", Platform::NoArch.as_str())).await? {
         // If `noarch` subdir does not exist, we create it.
         tracing::debug!("Did not find noarch subdir, creating.");
         op.create_dir(&format!("{}/", Platform::NoArch.as_str()))
