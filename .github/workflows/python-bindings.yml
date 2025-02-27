@@ -45,6 +45,9 @@ jobs:
           pixi run -e test lint
           pixi run -e test fmt-check
       - name: Run tests
+        env:
+          RATTLER_TEST_R2_ACCESS_KEY_ID: ${{ secrets.RATTLER_TEST_R2_ACCESS_KEY_ID }}
+          RATTLER_TEST_R2_SECRET_ACCESS_KEY: ${{ secrets.RATTLER_TEST_R2_SECRET_ACCESS_KEY }}
         run: |
           cd py-rattler
           pixi run -e test test --color=yes
