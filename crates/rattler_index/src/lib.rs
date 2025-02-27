@@ -417,7 +417,10 @@ pub async fn index<T: Configurator>(
             .collect::<HashSet<_>>()
     };
 
-    if !op.exists(&format!("{}/", Platform::NoArch.as_str())).await? {
+    if !op
+        .exists(&format!("{}/", Platform::NoArch.as_str()))
+        .await?
+    {
         // If `noarch` subdir does not exist, we create it.
         tracing::debug!("Did not find noarch subdir, creating.");
         op.create_dir(&format!("{}/", Platform::NoArch.as_str()))
