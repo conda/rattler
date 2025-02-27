@@ -17,7 +17,7 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
 
 /// The `rattler-index` CLI.
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(name = "rattler-index", version, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
