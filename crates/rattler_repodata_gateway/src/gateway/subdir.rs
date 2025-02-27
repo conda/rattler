@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use dashmap::{mapref::entry::Entry, DashMap};
 use rattler_conda_types::{PackageName, RepoDataRecord};
-use tokio::{sync::broadcast};
+use tokio::sync::broadcast;
 
 use super::GatewayError;
 use crate::{gateway::PendingOrFetched, Reporter};
@@ -117,7 +117,7 @@ impl SubdirData {
         // receive an error.
         let records = match self
             .client
-            .fetch_package_records(&name, reporter.as_deref())
+            .fetch_package_records(name, reporter.as_deref())
             .await
         {
             Ok(records) => records,

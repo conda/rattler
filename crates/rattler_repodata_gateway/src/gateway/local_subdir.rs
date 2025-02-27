@@ -1,6 +1,5 @@
 use std::{path::Path, sync::Arc};
 
-use bytes::Bytes;
 use rattler_conda_types::{Channel, PackageName, RepoDataRecord};
 
 use crate::{
@@ -30,11 +29,11 @@ impl LocalSubdirClient {
             SparseRepoData::from_file(channel.clone(), subdir.clone(), &repodata_path, None)
                 .map_err(|err| {
                     if err.kind() == std::io::ErrorKind::NotFound {
-                        GatewayError::SubdirNotFoundError(SubdirNotFoundError {
+                        GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
                             channel: channel.clone(),
                             subdir: subdir.clone(),
                             source: err.into(),
-                        })
+                        }))
                     } else {
                         GatewayError::IoError("failed to parse repodata.json".to_string(), err)
                     }
@@ -45,7 +44,12 @@ impl LocalSubdirClient {
         })
     }
 
-    pub fn from_bytes(bytes: Bytes, channel: Channel, subdir: &str) -> Result<Self, GatewayError> {
+    #[cfg(target_arch = "wasm32")]
+    pub fn from_bytes(
+        bytes: bytes::Bytes,
+        channel: Channel,
+        subdir: &str,
+    ) -> Result<Self, GatewayError> {
         let subdir = subdir.to_string();
         let sparse = SparseRepoData::from_bytes(channel.clone(), subdir.clone(), bytes, None)
             .map_err(|err| {

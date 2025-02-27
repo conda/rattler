@@ -34,7 +34,7 @@ pub enum GatewayError {
     Generic(String),
 
     #[error(transparent)]
-    SubdirNotFoundError(#[from] SubdirNotFoundError),
+    SubdirNotFoundError(#[from] Box<SubdirNotFoundError>),
 
     #[error("the operation was cancelled")]
     Cancelled,

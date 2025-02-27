@@ -23,9 +23,8 @@ use url::Url;
 
 use crate::{
     fetch::{
-        CacheAction,
         cache::{CacheHeaders, Expiring, RepoDataState},
-        jlap, FetchRepoDataError, RepoDataNotFoundError, Variant,
+        jlap, CacheAction, FetchRepoDataError, RepoDataNotFoundError, Variant,
     },
     reporter::ResponseReporterExt,
     utils::{AsyncEncoding, Encoding, LockedFile},

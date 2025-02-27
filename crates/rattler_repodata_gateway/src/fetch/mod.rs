@@ -1,20 +1,20 @@
 //! This module provides functionality to download and cache `repodata.json`
 //! from a remote location.
 
+use cfg_if::cfg_if;
 use rattler_redaction::Redact;
 use url::Url;
 
-mod cache;
 pub mod no_cache;
 
-#[cfg(not(target_arch = "wasm32"))]
-mod with_cache;
-
-#[cfg(not(target_arch = "wasm32"))]
-pub mod jlap;
-
-#[cfg(not(target_arch = "wasm32"))]
-pub use with_cache::*;
+cfg_if! {
+    if #[cfg(not(target_arch = "wasm32"))] {
+        mod cache;
+        mod with_cache;
+        pub mod jlap;
+        pub use with_cache::*;
+    }
+}
 
 /// `RepoData` could not be found for given channel and platform
 #[derive(Debug, thiserror::Error)]
@@ -83,6 +83,7 @@ impl From<reqwest::Error> for RepoDataNotFoundError {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<tokio::task::JoinError> for FetchRepoDataError {
     fn from(err: tokio::task::JoinError) -> Self {
         // Rethrow any panic

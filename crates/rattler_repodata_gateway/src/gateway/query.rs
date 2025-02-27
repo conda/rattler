@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    future::IntoFuture,
+    future::{Future, IntoFuture},
     sync::Arc,
 };
 
@@ -181,7 +181,7 @@ impl RepoDataQuery {
                 for (spec, url, name) in direct_url_specs {
                     let gateway = self.gateway.clone();
                     pending_records.push(
-                        async move {
+                        box_future(async move {
                             let query = super::direct_url_query::DirectUrlQuery::new(
                                 url.clone(),
                                 gateway.package_cache.clone(),
@@ -206,8 +206,7 @@ impl RepoDataQuery {
                             }
                             // Push the direct url in the first subdir result for channel priority logic.
                             Ok((0, SourceSpecs::Input(vec![spec]), record))
-                        }
-                        .boxed(),
+                        }),
                     );
                 }
             }
@@ -225,22 +224,19 @@ impl RepoDataQuery {
                     let specs = specs.clone();
                     let package_name = package_name.clone();
                     let reporter = self.reporter.clone();
-                    pending_records.push(
-                        async move {
-                            let barrier_cell = subdir.clone();
-                            let subdir = barrier_cell.wait().await;
-                            match subdir.as_ref() {
-                                Subdir::Found(subdir) => subdir
-                                    .get_or_fetch_package_records(&package_name, reporter)
-                                    .await
-                                    .map(|records| (subdir_idx, specs, records)),
-                                Subdir::NotFound => {
-                                    Ok((subdir_idx + direct_url_offset, specs, Arc::from(vec![])))
-                                }
+                    pending_records.push(box_future(async move {
+                        let barrier_cell = subdir.clone();
+                        let subdir = barrier_cell.wait().await;
+                        match subdir.as_ref() {
+                            Subdir::Found(subdir) => subdir
+                                .get_or_fetch_package_records(&package_name, reporter)
+                                .await
+                                .map(|records| (subdir_idx, specs, records)),
+                            Subdir::NotFound => {
+                                Ok((subdir_idx + direct_url_offset, specs, Arc::from(vec![])))
                             }
                         }
-                        .boxed_local(),
-                    );
+                    }));
                 }
             }
 
@@ -315,18 +311,28 @@ impl RepoDataQuery {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+type BoxFuture<T> = futures::future::LocalBoxFuture<'static, T>;
+
+#[cfg(target_arch = "wasm32")]
+fn box_future<T, F: Future<Output = T> + 'static>(future: F) -> BoxFuture<T> {
+    future.boxed_local()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+type BoxFuture<T> = futures::future::BoxFuture<'static, T>;
+
+#[cfg(not(target_arch = "wasm32"))]
+fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture<T> {
+    future.boxed()
+}
+
 impl IntoFuture for RepoDataQuery {
     type Output = Result<Vec<RepoData>, GatewayError>;
-    #[cfg(not(target_arch = "wasm32"))]
-    type IntoFuture = futures::future::BoxFuture<'static, Self::Output>;
-    #[cfg(target_arch = "wasm32")]
-    type IntoFuture = futures::future::LocalBoxFuture<'static, Self::Output>;
+    type IntoFuture = BoxFuture<Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {
-        #[cfg(not(target_arch = "wasm32"))]
-        return self.execute().boxed();
-        #[cfg(target_arch = "wasm32")]
-        self.execute().boxed_local()
+        box_future(self.execute())
     }
 }
 
@@ -421,16 +427,10 @@ impl NamesQuery {
 
 impl IntoFuture for NamesQuery {
     type Output = Result<Vec<PackageName>, GatewayError>;
-    #[cfg(not(target_arch = "wasm32"))]
-    type IntoFuture = futures::future::BoxFuture<'static, Self::Output>;
-    #[cfg(target_arch = "wasm32")]
-    type IntoFuture = futures::future::LocalBoxFuture<'static, Self::Output>;
+    type IntoFuture = BoxFuture<Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {
-        #[cfg(not(target_arch = "wasm32"))]
-        return self.execute().boxed();
-        #[cfg(target_arch = "wasm32")]
-        self.execute().boxed_local()
+        box_future(self.execute())
     }
 }
 

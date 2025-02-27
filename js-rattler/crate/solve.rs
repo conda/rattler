@@ -14,7 +14,7 @@ pub struct SolvedPackage {
     pub url: String,
     pub package_name: String,
     pub build_number: u64,
-    pub repo_name: Option<String>, // conda-forge / prefix.dev/emscripten-forge-dev
+    pub repo_name: Option<String>,
     pub filename: String,
     pub version: String,
 }
@@ -63,7 +63,7 @@ pub async fn simple_solve(
     // Solve
     let task = SolverTask {
         specs,
-        ..SolverTask::from_iter(repodata.iter())
+        ..repodata.iter().collect::<SolverTask<_>>()
     };
     let solved = rattler_solve::resolvo::Solver.solve(task)?;
 

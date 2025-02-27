@@ -4,22 +4,19 @@ use std::{io::Write, path::PathBuf, sync::Arc};
 
 use fs_err::tokio as tokio_fs;
 use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
-use rattler_conda_types::{
-    Channel, PackageName, RepoDataRecord, ShardedRepodata,
-};
-use rattler_redaction::Redact;
+use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata};
 use reqwest_middleware::ClientWithMiddleware;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use url::Url;
 
 use super::{add_trailing_slash, decode_zst_bytes_async, parse_records};
+use crate::fetch::CacheAction;
 use crate::{
     fetch::FetchRepoDataError,
     gateway::{error::SubdirNotFoundError, subdir::SubdirClient},
     reporter::ResponseReporterExt,
     GatewayError, Reporter,
 };
-use crate::fetch::CacheAction;
 
 pub struct ShardedSubdir {
     channel: Channel,
@@ -61,11 +58,11 @@ impl ShardedSubdir {
         .await
         .map_err(|e| match e {
             GatewayError::ReqwestError(e) if e.status() == Some(StatusCode::NOT_FOUND) => {
-                GatewayError::SubdirNotFoundError(SubdirNotFoundError {
+                GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
                     channel: channel.clone(),
                     subdir,
                     source: e.into(),
-                })
+                }))
             }
             e => e,
         })?;

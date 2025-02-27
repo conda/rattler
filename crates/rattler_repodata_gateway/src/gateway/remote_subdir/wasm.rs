@@ -1,4 +1,4 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use rattler_conda_types::{Channel, Platform};
 use reqwest_middleware::ClientWithMiddleware;
@@ -9,8 +9,7 @@ use crate::{
         FetchRepoDataError,
     },
     gateway::{
-        error::SubdirNotFoundError, local_subdir::LocalSubdirClient,
-        GatewayError, SourceConfig,
+        error::SubdirNotFoundError, local_subdir::LocalSubdirClient, GatewayError, SourceConfig,
     },
     Reporter,
 };
@@ -43,22 +42,19 @@ impl RemoteSubdirClient {
         .await
         .map_err(|e| match e {
             FetchRepoDataError::NotFound(e) => {
-                GatewayError::SubdirNotFoundError(SubdirNotFoundError {
+                GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
                     channel: channel.clone(),
                     subdir: platform.to_string(),
                     source: e.into(),
-                })
+                }))
             }
             e => GatewayError::FetchRepoDataError(e),
         })?;
 
         // Create a new sparse repodata client that can be used to read records from the
         // repodata.
-        let sparse = LocalSubdirClient::from_bytes(
-            repodata_bytes,
-            channel.clone(),
-            platform.as_str(),
-        )?;
+        let sparse =
+            LocalSubdirClient::from_bytes(repodata_bytes, channel.clone(), platform.as_str())?;
 
         Ok(Self { sparse })
     }

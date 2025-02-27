@@ -1,9 +1,12 @@
 use rattler_conda_types::version_spec::ParseVersionSpecError;
-use rattler_conda_types::{ParseChannelError, ParseMatchSpecError, ParsePlatformError, ParseVersionError, VersionBumpError, VersionExtendError};
-use thiserror::Error;
-use wasm_bindgen::JsValue;
+use rattler_conda_types::{
+    ParseChannelError, ParseMatchSpecError, ParsePlatformError, ParseVersionError,
+    VersionBumpError, VersionExtendError,
+};
 use rattler_repodata_gateway::GatewayError;
 use rattler_solve::SolveError;
+use thiserror::Error;
+use wasm_bindgen::JsValue;
 
 #[derive(Debug, Error)]
 pub enum JsError {

@@ -57,6 +57,7 @@ criterion = { workspace = true, features = ["html_reports"] }
 pathdiff = { workspace = true }
 dunce = { workspace = true }
 tools = { path = "../tools" }
+rattler_package_streaming = { path="../rattler_package_streaming" }
 
 [[bench]]
 name = "parse"

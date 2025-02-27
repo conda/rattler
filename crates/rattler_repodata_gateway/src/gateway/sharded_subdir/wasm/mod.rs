@@ -1,9 +1,7 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
-use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
-use rattler_conda_types::{
-    Channel, PackageName, RepoDataRecord, ShardedRepodata,
-};
+use http::StatusCode;
+use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata};
 use reqwest_middleware::ClientWithMiddleware;
 use url::Url;
 
@@ -12,7 +10,7 @@ use super::add_trailing_slash;
 mod index;
 
 use crate::{
-    fetch::{FetchRepoDataError},
+    fetch::FetchRepoDataError,
     gateway::{
         error::SubdirNotFoundError,
         sharded_subdir::{decode_zst_bytes_async, parse_records},
@@ -56,11 +54,11 @@ impl ShardedSubdir {
         .await
         .map_err(|e| match e {
             GatewayError::ReqwestError(e) if e.status() == Some(StatusCode::NOT_FOUND) => {
-                GatewayError::SubdirNotFoundError(SubdirNotFoundError {
+                GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
                     channel: channel.clone(),
                     subdir,
                     source: e.into(),
-                })
+                }))
             }
             e => e,
         })?;
@@ -117,7 +115,6 @@ impl SubdirClient for ShardedSubdir {
         let shard_request = self
             .client
             .get(shard_url.clone())
-            .header(CACHE_CONTROL, HeaderValue::from_static("no-store"))
             .build()
             .expect("failed to build shard request");
 

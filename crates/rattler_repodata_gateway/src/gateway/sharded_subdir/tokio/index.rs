@@ -17,12 +17,9 @@ use tokio::{
 use url::Url;
 
 use super::ShardedRepodata;
-use crate::{
-    reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError,
-    Reporter,
-};
 use crate::fetch::CacheAction;
 use crate::gateway::sharded_subdir::decode_zst_bytes_async;
+use crate::{reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError, Reporter};
 
 const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
 
@@ -326,7 +323,7 @@ struct CacheHeader {
 }
 
 /// Try reading the cache file from disk.
-pub async fn read_cached_index<R: AsyncRead + Unpin>(
+async fn read_cached_index<R: AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
 ) -> std::io::Result<CacheHeader> {
     // Read the magic from the file

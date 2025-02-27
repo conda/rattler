@@ -148,7 +148,7 @@ mod tests {
         pub captured_tx: tokio::sync::mpsc::Sender<reqwest::Request>,
     }
 
-    #[async_trait]
+    #[async_trait::async_trait]
     impl Middleware for CaptureAbortMiddleware {
         async fn handle(
             &self,

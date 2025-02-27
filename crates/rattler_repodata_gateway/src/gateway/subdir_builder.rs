@@ -102,11 +102,11 @@ impl<'g> SubdirBuilder<'g> {
                 Ok(Subdir::NotFound)
             }
             Err(GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(err))) => {
-                Err(SubdirNotFoundError {
+                Err(Box::new(SubdirNotFoundError {
                     subdir: self.platform.to_string(),
                     channel: self.channel.clone(),
                     source: err.into(),
-                }
+                })
                 .into())
             }
             Err(err) => Err(err),
@@ -151,11 +151,11 @@ impl<'g> SubdirBuilder<'g> {
     }
 
     async fn build_local(&self, path: &Path) -> Result<SubdirData, GatewayError> {
-        let build_client = move || LocalSubdirClient::from_file(
-            &path.join("repodata.json"),
-            self.channel.clone(),
-            self.platform.as_str(),
-        );
+        let channel = self.channel.clone();
+        let platform = self.platform;
+        let path = path.join("repodata.json");
+        let build_client =
+            move || LocalSubdirClient::from_file(&path, channel.clone(), platform.as_str());
 
         #[cfg(target_arch = "wasm32")]
         let client = build_client()?;

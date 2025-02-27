@@ -3,7 +3,7 @@ use std::{collections::HashSet, io::BufWriter, path::Path};
 use clap::Parser;
 use itertools::Itertools;
 use rattler_conda_types::{Channel, ChannelConfig, Platform};
-use rattler_repodata_gateway::fetch::with_cache::FetchRepoDataOptions;
+use rattler_repodata_gateway::fetch::FetchRepoDataOptions;
 use rattler_solve::{ChannelPriority, SolveStrategy};
 use reqwest::Client;
 
@@ -44,7 +44,7 @@ async fn main() {
     let mut records = Vec::new();
     for &subdir in &subdirs {
         eprintln!("fetching repodata for {subdir:?}..");
-        let repodata = rattler_repodata_gateway::fetch::with_cache::fetch_repo_data(
+        let repodata = rattler_repodata_gateway::fetch::fetch_repo_data(
             channel.platform_url(subdir),
             client.clone().into(),
             rattler_cache::default_cache_dir()

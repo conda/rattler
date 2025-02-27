@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use rattler_conda_types::{PackageName, RepoDataRecord};
 use crate::gateway::subdir::SubdirClient;
 use crate::{GatewayError, Reporter};
+use rattler_conda_types::{PackageName, RepoDataRecord};
+use std::sync::Arc;
 
 cfg_if::cfg_if! {
     if #[cfg(target_arch = "wasm32")] {

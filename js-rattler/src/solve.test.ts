@@ -4,7 +4,7 @@ import { simple_solve } from "./solve";
 describe("solving", () => {
     it("python should yield three packages", () => {
         return simple_solve(
-            ["python"],
+            ["python", "numpy", "matplotlib"],
             [
                 "https://prefix.dev/emscripten-forge-dev",
                 "https://prefix.dev/conda-forge",

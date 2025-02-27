@@ -24,12 +24,14 @@
         }
     },
     "scripts": {
-        "build:wasm": "wasm-pack build --mode normal --release",
+        "build:wasm": "wasm-pack build --target bundler --mode normal --release",
+        "build:wasm:debug": "wasm-pack build --target bundler --mode normal --dev",
         "build:esm": "npm run build:wasm -- --target web    && rollup -c rollup.config.esm.mjs",
         "build:cjs": "npm run build:wasm -- --target nodejs && rollup -c rollup.config.cjs.mjs",
         "build:types": "tsc && api-extractor run --verbose",
         "build": "shx rm -rf dist pkg types && npm run build:esm && npm run build:cjs && shx cp pkg/js_rattler_bg.wasm ./dist/ && npm run build:types",
         "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
+        "test:debug": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
         "fmt": "prettier --write .",
         "fmt:check": "prettier --check ."
     },
