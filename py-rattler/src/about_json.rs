@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use pyo3::exceptions::PyValueError;
 use pyo3::{pyclass, pymethods, PyResult};
 use rattler_conda_types::package::{AboutJson, PackageFile};
 
@@ -107,8 +108,15 @@ impl PyAboutJson {
     }
 
     #[setter]
-    pub fn set_dev_url(&mut self, value: Vec<String>) {
-        self.inner.dev_url = value.into_iter().map(|url| url.parse().unwrap()).collect();
+    pub fn set_dev_url(&mut self, value: Vec<String>) -> PyResult<()> {
+        self.inner.dev_url = value
+            .into_iter()
+            .map(|url| {
+                url.parse()
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {}", e)))
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(())
     }
 
     /// URL to the documentation of the package
@@ -123,8 +131,15 @@ impl PyAboutJson {
     }
 
     #[setter]
-    pub fn set_doc_url(&mut self, value: Vec<String>) {
-        self.inner.doc_url = value.into_iter().map(|url| url.parse().unwrap()).collect();
+    pub fn set_doc_url(&mut self, value: Vec<String>) -> PyResult<()> {
+        self.inner.doc_url = value
+            .into_iter()
+            .map(|url| {
+                url.parse()
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {}", e)))
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(())
     }
 
     /// URL to the homepage of the package
@@ -139,8 +154,15 @@ impl PyAboutJson {
     }
 
     #[setter]
-    pub fn set_home(&mut self, value: Vec<String>) {
-        self.inner.home = value.into_iter().map(|url| url.parse().unwrap()).collect();
+    pub fn set_home(&mut self, value: Vec<String>) -> PyResult<()> {
+        self.inner.home = value
+            .into_iter()
+            .map(|url| {
+                url.parse()
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {}", e)))
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(())
     }
 
     /// Optionally, the license
@@ -172,8 +194,15 @@ impl PyAboutJson {
     }
 
     #[setter]
-    pub fn set_source_url(&mut self, value: Option<String>) {
-        self.inner.source_url = value.map(|url| url.parse().unwrap());
+    pub fn set_source_url(&mut self, value: Option<String>) -> PyResult<()> {
+        self.inner.source_url = match value {
+            Some(url) => Some(
+                url.parse()
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {}", e)))?,
+            ),
+            None => None,
+        };
+        Ok(())
     }
 
     /// Short summary description

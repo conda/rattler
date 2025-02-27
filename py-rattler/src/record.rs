@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::{
     exceptions::PyTypeError, intern, pyclass, pymethods, types::PyBytes, Bound, FromPyObject,
@@ -348,7 +349,7 @@ impl PyRecord {
     pub fn legacy_bz2_md5<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
         self.as_package_record()
             .legacy_bz2_md5
-            .map(|md5| PyBytes::new(py, &md5))
+            .map(|md5| PyBytes::new_bound(py, &md5))
     }
 
     #[setter]
@@ -395,7 +396,7 @@ impl PyRecord {
     pub fn md5<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
         self.as_package_record()
             .md5
-            .map(|md5| PyBytes::new(py, &md5))
+            .map(|md5| PyBytes::new_bound(py, &md5))
     }
 
     #[setter]
@@ -431,7 +432,7 @@ impl PyRecord {
     pub fn sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
         self.as_package_record()
             .sha256
-            .map(|sha| PyBytes::new(py, &sha))
+            .map(|sha| PyBytes::new_bound(py, &sha))
     }
 
     /// Optionally a SHA256 hash of the package archive.
@@ -483,9 +484,17 @@ impl PyRecord {
     }
 
     #[setter]
-    pub fn set_timestamp(&mut self, timestamp: Option<i64>) {
-        self.as_package_record_mut().timestamp =
-            timestamp.map(|ts| chrono::DateTime::from_timestamp_millis(ts).unwrap());
+    pub fn set_timestamp(&mut self, timestamp: Option<i64>) -> PyResult<()> {
+        if let Some(ts) = timestamp {
+            self.as_package_record_mut().timestamp = Some(
+                chrono::DateTime::from_timestamp_millis(ts)
+                    .ok_or_else(|| PyValueError::new_err("Invalid timestamp"))?,
+            );
+        } else {
+            self.as_package_record_mut().timestamp = None;
+        }
+
+        Ok(())
     }
 
     /// Track features are nowadays only used to downweight packages
@@ -637,13 +646,13 @@ impl PyRecord {
         Ok(())
     }
 
-    pub fn to_json(&self) -> String {
+    pub fn to_json(&self) -> PyResult<String> {
         match &self.inner {
             RecordInner::Prefix(r) => serde_json::to_string_pretty(&r),
             RecordInner::RepoData(r) => serde_json::to_string_pretty(&r),
             RecordInner::Package(r) => serde_json::to_string_pretty(&r),
         }
-        .unwrap()
+        .map_err(|e| PyValueError::new_err(format!("Failed to serialize record to JSON: {}", e)))
     }
 }
 
