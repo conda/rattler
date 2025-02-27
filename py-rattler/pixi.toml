@@ -2,8 +2,8 @@
 name = "py-rattler"
 description = "Add a short description here"
 authors = [
-    "Bas Zalmstra <bas@prefix.dev>",
-    "Tarun Pratap Singh <pratapsinghtarun9@gmail.com>",
+  "Bas Zalmstra <bas@prefix.dev>",
+  "Tarun Pratap Singh <pratapsinghtarun9@gmail.com>",
 ]
 channels = ["conda-forge"]
 platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
@@ -39,6 +39,8 @@ typer = "*"
 
 [feature.test.pypi-dependencies]
 types-networkx = "*"
+# boto3 on conda-forge requires python >=3.10
+boto3 = "*"
 
 [feature.test.tasks]
 test = { cmd = "pytest --doctest-modules", depends-on = ["build"] }

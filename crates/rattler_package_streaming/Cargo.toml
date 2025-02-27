@@ -19,10 +19,15 @@ num_cpus = { workspace = true }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.0", default-features = false }
 rattler_digest = { path = "../rattler_digest", version = "1.0.6", default-features = false }
 rattler_networking = { path = "../rattler_networking", version = "0.22.5", default-features = false }
-rattler_redaction = { version = "0.1.6", path = "../rattler_redaction", features = ["reqwest", "reqwest-middleware"] }
+rattler_redaction = { version = "0.1.6", path = "../rattler_redaction", features = [
+  "reqwest",
+  "reqwest-middleware",
+], default-features = false }
 reqwest = { workspace = true, features = ["stream"], optional = true }
 reqwest-middleware = { workspace = true, optional = true }
-simple_spawn_blocking = { version = "1.1.0", path = "../simple_spawn_blocking", features = ["tokio"] }
+simple_spawn_blocking = { version = "1.1.0", path = "../simple_spawn_blocking", features = [
+  "tokio",
+] }
 serde_json = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
@@ -36,8 +41,8 @@ zstd = { workspace = true, features = ["zstdmt"] }
 
 [features]
 default = ["native-tls"]
-native-tls = ["rattler_networking/native-tls"]
-rustls-tls = ["rattler_networking/rustls-tls"]
+native-tls = ["rattler_networking/native-tls", "rattler_redaction/native-tls"]
+rustls-tls = ["rattler_networking/rustls-tls", "rattler_redaction/rustls-tls"]
 wasm = ["zstd/wasm"]
 reqwest = ["dep:reqwest-middleware", "dep:reqwest"]
 
