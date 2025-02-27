@@ -113,7 +113,7 @@ impl PyAboutJson {
             .into_iter()
             .map(|url| {
                 url.parse()
-                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {}", e)))
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {e}")))
             })
             .collect::<Result<_, _>>()?;
         Ok(())
@@ -136,7 +136,7 @@ impl PyAboutJson {
             .into_iter()
             .map(|url| {
                 url.parse()
-                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {}", e)))
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {e}")))
             })
             .collect::<Result<_, _>>()?;
         Ok(())
@@ -159,7 +159,7 @@ impl PyAboutJson {
             .into_iter()
             .map(|url| {
                 url.parse()
-                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {}", e)))
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {e}")))
             })
             .collect::<Result<_, _>>()?;
         Ok(())
@@ -198,7 +198,7 @@ impl PyAboutJson {
         self.inner.source_url = match value {
             Some(url) => Some(
                 url.parse()
-                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {}", e)))?,
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {e}")))?,
             ),
             None => None,
         };
