@@ -35,7 +35,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
-clap-verbosity-flag = { workspace = true }
+clap-verbosity-flag = { workspace = true, features = ["tracing"] }
 console = { workspace = true }
 fs-err = { workspace = true }
 fxhash = { workspace = true }
