@@ -54,7 +54,7 @@ lto = true
 async-compression = { git = "https://github.com/Nullus157/async-compression.git" }
 bzip2 = { git = "https://github.com/baszalmstra/bzip2-rs.git", branch = "fix/wasm" }
 
-reqwest-middleware = { git = "https://github.com/TrueLayer/reqwest-middleware.git" }
+#reqwest-middleware = { git = "https://github.com/TrueLayer/reqwest-middleware.git" }
 
 # Prevent package from thinking it's in the workspace
 [workspace]
