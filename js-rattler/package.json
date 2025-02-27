@@ -24,8 +24,8 @@
         }
     },
     "scripts": {
-        "build:wasm": "wasm-pack build --target bundler --mode normal --release",
-        "build:wasm:debug": "wasm-pack build --target bundler --mode normal --dev",
+        "build:wasm": "wasm-pack build --mode normal --release",
+        "build:wasm:debug": "wasm-pack build --mode normal --debug",
         "build:esm": "npm run build:wasm -- --target web    && rollup -c rollup.config.esm.mjs",
         "build:cjs": "npm run build:wasm -- --target nodejs && rollup -c rollup.config.cjs.mjs",
         "build:types": "tsc && api-extractor run --verbose",
