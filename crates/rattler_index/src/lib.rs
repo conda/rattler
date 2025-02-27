@@ -131,7 +131,7 @@ async fn index_subdir(
     subdir: Platform,
     op: Operator,
     force: bool,
-    progress: MultiProgress,
+    progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
 ) -> Result<()> {
     let mut registered_packages: FxHashMap<String, PackageRecord> = HashMap::default();
@@ -215,7 +215,12 @@ async fn index_subdir(
         subdir
     );
 
-    let pb = Arc::new(progress.add(ProgressBar::new(packages_to_add.len() as u64)));
+    let pb = if let Some(progress) = progress {
+        progress.add(ProgressBar::new(packages_to_add.len() as u64))
+    } else {
+        ProgressBar::hidden()
+    };
+
     let sty = ProgressStyle::with_template(
         "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
     )
@@ -314,10 +319,11 @@ pub async fn index_fs(
     target_platform: Option<Platform>,
     force: bool,
     max_parallel: usize,
+    multi_progress: Option<MultiProgress>,
 ) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
     config.root = Some(channel.into().canonicalize()?.to_string_lossy().to_string());
-    index(target_platform, config, force, max_parallel).await
+    index(target_platform, config, force, max_parallel, multi_progress).await
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given S3 URL.
@@ -333,6 +339,7 @@ pub async fn index_s3(
     target_platform: Option<Platform>,
     force: bool,
     max_parallel: usize,
+    multi_progress: Option<MultiProgress>,
 ) -> anyhow::Result<()> {
     let mut s3_config = S3Config::default();
     s3_config.root = Some(channel.path().to_string());
@@ -366,7 +373,14 @@ pub async fn index_s3(
             s3_config.session_token = session_token;
         }
     }
-    index(target_platform, s3_config, force, max_parallel).await
+    index(
+        target_platform,
+        s3_config,
+        force,
+        max_parallel,
+        multi_progress,
+    )
+    .await
 }
 
 /// Create a new `repodata.json` for all packages in the given configurator's root.
@@ -386,6 +400,7 @@ pub async fn index<T: Configurator>(
     config: T,
     force: bool,
     max_parallel: usize,
+    multi_progress: Option<MultiProgress>,
 ) -> anyhow::Result<()> {
     let builder = config.into_builder();
 
@@ -428,7 +443,6 @@ pub async fn index<T: Configurator>(
         subdirs.insert(Platform::NoArch);
     }
 
-    let multi_progress = MultiProgress::new();
     let semaphore = Semaphore::new(max_parallel);
     let semaphore = Arc::new(semaphore);
 
