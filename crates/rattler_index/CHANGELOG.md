@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0](https://github.com/conda/rattler/compare/rattler_index-v0.20.13...rattler_index-v0.21.0) - 2025-02-27
+
+### Added
+
+- fix rattler-index name (#1114)
+- Use `opendal` in `rattler-index` and add executable (#1076)
+
+### Fixed
+
+- make `menuinst` schema pub, hide utils, fix indexing for rattler-build (#1111)
+- code review in rattler-index and test fix (#1109)
+
+### Other
+
+- remove tools/* features for rattler-index (#1112)
+
 ## [0.20.13](https://github.com/conda/rattler/compare/rattler_index-v0.20.12...rattler_index-v0.20.13) - 2025-02-25
 
 ### Other

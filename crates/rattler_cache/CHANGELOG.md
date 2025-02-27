@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.11](https://github.com/conda/rattler/compare/rattler_cache-v0.3.10...rattler_cache-v0.3.11) - 2025-02-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
 ## [0.3.10](https://github.com/conda/rattler/compare/rattler_cache-v0.3.9...rattler_cache-v0.3.10) - 2025-02-25
 
 ### Added

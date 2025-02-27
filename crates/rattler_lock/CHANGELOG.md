@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.45](https://github.com/conda/rattler/compare/rattler_lock-v0.22.44...rattler_lock-v0.22.45) - 2025-02-27
+
+### Fixed
+
+- clippy lint (#1105)
+
 ## [0.22.44](https://github.com/conda/rattler/compare/rattler_lock-v0.22.43...rattler_lock-v0.22.44) - 2025-02-25
 
 ### Other
