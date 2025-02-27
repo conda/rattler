@@ -25,7 +25,7 @@
 [docs-main]: https://conda.github.io/rattler
 [py-docs-main-badge]: https://img.shields.io/badge/python_docs-main-yellow.svg?style=flat-square
 [py-docs-main]: https://conda.github.io/rattler/py-rattler
-[pixi-badge]:https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json
+[pixi-badge]:https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json&style=flat-square
 [pixi-url]: https://pixi.sh
 
 Rattler is a library that provides common functionality used within the conda ecosystem ([what is conda & conda-forge?](#what-is-conda-conda-forge)).
