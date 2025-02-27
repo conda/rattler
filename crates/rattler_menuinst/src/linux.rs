@@ -569,20 +569,17 @@ impl LinuxMenu {
         let file_path = temp_dir.path().join(file_name);
         fs::write(&file_path, &xml)?;
 
-        match xdg_mime(&file_path, self.mode, XdgMimeOperation::Install) {
-            Ok(_) => {
-                // keep temp dir in prefix around and the temp file
-                // because we re-use it when unregistering the mime type.
-                let _ = temp_dir.into_path();
-                tracker.registered_mime_files.push(file_path);
+        if xdg_mime(&file_path, self.mode, XdgMimeOperation::Install).is_ok() {
+            // keep temp dir in prefix around and the temp file
+            // because we re-use it when unregistering the mime type.
+            let _ = temp_dir.into_path();
+            tracker.registered_mime_files.push(file_path);
+        } else {
+            if let Some(parent) = xml_path.parent() {
+                fs::create_dir_all(parent)?;
             }
-            Err(_) => {
-                if let Some(parent) = xml_path.parent() {
-                    fs::create_dir_all(parent)?;
-                }
-                fs::write(&xml_path, xml)?;
-                tracker.paths.push(xml_path);
-            }
+            fs::write(&xml_path, xml)?;
+            tracker.paths.push(xml_path);
         }
 
         Ok(())
@@ -746,7 +743,7 @@ mod tests {
             for item in &parsed_schema.menu_items {
                 let icon = item.command.icon.as_ref().unwrap();
                 for ext in &["icns", "png", "svg"] {
-                    placeholders.insert("ICON_EXT".to_string(), ext.to_string());
+                    placeholders.insert("ICON_EXT".to_string(), (*ext).to_string());
                     let icon_path = icon.resolve(FakePlaceholders {
                         placeholders: placeholders.clone(),
                     });

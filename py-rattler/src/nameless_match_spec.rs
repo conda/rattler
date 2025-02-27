@@ -101,15 +101,13 @@ impl PyNamelessMatchSpec {
     /// The md5 hash of the package
     #[getter]
     pub fn md5<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
-        self.inner.md5.map(|md5| PyBytes::new_bound(py, &md5))
+        self.inner.md5.map(|md5| PyBytes::new(py, &md5))
     }
 
     /// The sha256 hash of the package
     #[getter]
     pub fn sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
-        self.inner
-            .sha256
-            .map(|sha256| PyBytes::new_bound(py, &sha256))
+        self.inner.sha256.map(|sha256| PyBytes::new(py, &sha256))
     }
 
     /// Returns a string representation of MatchSpec

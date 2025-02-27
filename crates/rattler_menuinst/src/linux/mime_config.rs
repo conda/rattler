@@ -22,7 +22,7 @@ impl MimeConfig {
         }
     }
 
-    /// Create a new MimeConfig instance and load the configuration from the given path
+    /// Create a new `MimeConfig` instance and load the configuration from the given path
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, std::io::Error> {
         let mut this = Self::new(path);
 

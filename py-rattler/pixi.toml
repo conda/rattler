@@ -14,8 +14,7 @@ license = "BSD-3-Clause"
 [feature.build.dependencies]
 maturin = "~=1.2.2"
 pip = "~=23.2.1"
-# wait for https://github.com/conda-forge/rust-activation-feedstock/pull/72
-# rust = "==1.85.0"
+rust = "~=1.85.0"
 
 [feature.build.tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
