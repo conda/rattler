@@ -1,6 +1,9 @@
 use crate::error::PyRattlerError;
 use crate::platform::PyPlatform;
-use pyo3::{exceptions::PyValueError, pyclass, pymethods, Bound, FromPyObject, PyAny, PyResult};
+use pyo3::{
+    exceptions::PyValueError, pybacked::PyBackedStr, pyclass, pymethods, types::PyAnyMethods,
+    Bound, FromPyObject, PyAny, PyResult,
+};
 use rattler_shell::{
     activation::{ActivationResult, ActivationVariables, Activator, PathModificationBehavior},
     shell::{Bash, CmdExe, Fish, PowerShell, ShellEnum, Xonsh, Zsh},
@@ -25,7 +28,8 @@ pub struct Wrap<T>(pub T);
 
 impl<'py> FromPyObject<'py> for Wrap<PathModificationBehavior> {
     fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
-        let parsed = match <&'py str>::extract_bound(ob)? {
+        let as_py_str: PyBackedStr = ob.extract()?;
+        let parsed = match as_py_str.as_ref() {
             "prepend" => PathModificationBehavior::Prepend,
             "append" => PathModificationBehavior::Append,
             "replace" => PathModificationBehavior::Replace,

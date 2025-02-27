@@ -1,6 +1,7 @@
 use chrono::DateTime;
 use pyo3::{
-    exceptions::PyValueError, pyfunction, Bound, FromPyObject, PyAny, PyErr, PyResult, Python,
+    exceptions::PyValueError, pybacked::PyBackedStr, pyfunction, types::PyAnyMethods, Bound,
+    FromPyObject, PyAny, PyErr, PyResult, Python,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::sparse::SparseRepoData;
@@ -21,7 +22,8 @@ use crate::{
 
 impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
     fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
-        let parsed = match <&'py str>::extract_bound(ob)? {
+        let parsed: PyBackedStr = ob.extract()?;
+        let parsed = match parsed.as_ref() {
             "highest" => SolveStrategy::Highest,
             "lowest" => SolveStrategy::LowestVersion,
             "lowest-direct" => SolveStrategy::LowestVersionDirect,
