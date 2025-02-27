@@ -18,14 +18,12 @@ native-tls = [
   "reqwest/native-tls-alpn",
   "rattler_package_streaming/native-tls",
   "rattler_networking/native-tls",
-  "tools/native-tls",
 ]
 rustls-tls = [
   "reqwest/rustls-tls",
   "reqwest/rustls-tls-native-roots",
   "rattler_package_streaming/rustls-tls",
   "rattler_networking/rustls-tls",
-  "tools/rustls-tls",
 ]
 
 [[bin]]
