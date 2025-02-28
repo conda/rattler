@@ -93,10 +93,17 @@ impl Directories {
             // This is for testing only, so we can ignore the result
             std::fs::write(&terminal_settings_json, "{}").unwrap();
         }
+        let start_menu = path.join("Start Menu");
+        fs::create_dir_all(&start_menu).unwrap();
+        let quick_launch = Some(path.join("Quick Launch"));
+        fs::create_dir_all(quick_launch.as_ref().unwrap()).unwrap();
+        let desktop = path.join("Desktop");
+        fs::create_dir_all(&desktop).unwrap();
+
         Directories {
-            start_menu: path.join("Start Menu"),
-            quick_launch: Some(path.join("Quick Launch")),
-            desktop: path.join("Desktop"),
+            start_menu,
+            quick_launch,
+            desktop,
             windows_terminal_settings_files: vec![terminal_settings_json],
         }
     }
