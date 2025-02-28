@@ -182,11 +182,11 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.18"
+version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df895a515f70646414f4b45c0b79082783b80552b373a68283012928df56f522"
+checksum = "06575e6a9673580f52661c92107baabffbf41e2141373441cbcdc47cb733003c"
 dependencies = [
- "bzip2 0.4.4",
+ "bzip2",
  "flate2",
  "futures-core",
  "memchr",
@@ -877,16 +877,6 @@ dependencies = [
 
 [[package]]
 name = "bzip2"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdb116a6ef3f6c3698828873ad02c3014b3c85cadb88496095628e3ef1e347f8"
-dependencies = [
- "bzip2-sys",
- "libc",
-]
-
-[[package]]
-name = "bzip2"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75b89e7c29231c673a61a46e722602bcd138298f6b9e81e71119693534585f5c"
@@ -976,9 +966,9 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chrono"
-version = "0.4.39"
+version = "0.4.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e36cc9d416881d2e24f9a963be5fb1cd90966419ac844274161d10488b3e825"
+checksum = "1a7964611d71df112cb1730f2ee67324fcf4d0fc6606acbbe9bfe06df124637c"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
@@ -986,7 +976,7 @@ dependencies = [
  "num-traits",
  "serde",
  "wasm-bindgen",
- "windows-targets 0.52.6",
+ "windows-link",
 ]
 
 [[package]]
@@ -3024,9 +3014,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.68"
+version = "0.10.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6174bc48f102d208783c2c84bf931bb75927a617866870de8a4ea85597f871f5"
+checksum = "5e14130c6a98cd258fdcb0fb6d744152343ff729cbfcb28c656a9d12b999fbcd"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -3065,9 +3055,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.104"
+version = "0.9.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45abf306cbf99debc8195b66b7346498d7b10c210de50418b5ccd7ceba08c741"
+checksum = "8bb61ea9811cc39e3c2069f40b8b8e2e70d8569b361f879786cc7ed48b777cdd"
 dependencies = [
  "cc",
  "libc",
@@ -3742,7 +3732,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.32.1"
+version = "0.32.2"
 dependencies = [
  "anyhow",
  "console",
@@ -3783,7 +3773,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.10"
+version = "0.3.11"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -3813,7 +3803,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.31.0"
+version = "0.31.1"
 dependencies = [
  "chrono",
  "dirs",
@@ -3865,7 +3855,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.20.13"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3890,7 +3880,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.22.44"
+version = "0.22.45"
 dependencies = [
  "chrono",
  "file_url",
@@ -3921,7 +3911,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "configparser",
@@ -3949,7 +3939,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.22.5"
+version = "0.22.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3978,9 +3968,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.29"
+version = "0.22.30"
 dependencies = [
- "bzip2 0.5.1",
+ "bzip2",
  "chrono",
  "fs-err",
  "futures-util",
@@ -4006,7 +3996,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "reqwest",
  "reqwest-middleware",
@@ -4015,7 +4005,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.21.38"
+version = "0.21.39"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4069,7 +4059,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.22.20"
+version = "0.22.21"
 dependencies = [
  "enum_dispatch",
  "fs-err",
@@ -4085,7 +4075,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.3.9"
+version = "1.3.10"
 dependencies = [
  "chrono",
  "futures",
@@ -4102,7 +4092,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.0.4"
+version = "2.0.5"
 dependencies = [
  "archspec",
  "libloading",
@@ -4675,9 +4665,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.217"
+version = "1.0.218"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02fc4265df13d6fa1d00ecff087228cc0a2b5f3c0e87e258d8b94a156e984c70"
+checksum = "e8dfc9d19bdbf6d17e22319da49161d5d0108e4188e8b680aef6299eed22df60"
 dependencies = [
  "serde_derive",
 ]
@@ -4705,9 +4695,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.217"
+version = "1.0.218"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a9bf7cf98d04a2b28aead066b7496853d4779c9cc183c440dbac457641e19a0"
+checksum = "f09503e191f4e797cb8aac08e9a4a4695c5edf6a2e70e376d961ddd5c969f82b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4927,9 +4917,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.13.2"
+version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
+checksum = "7fcf8323ef1faaee30a44a340193b1ac6814fd9b7b4e88e9d4519a3e4abe1cfd"
 dependencies = [
  "serde",
 ]
@@ -5097,9 +5087,9 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tar"
-version = "0.4.43"
+version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c65998313f8e17d0d553d28f91a0df93e4dbbbf770279c7bc21ca0f09ea1a1f6"
+checksum = "1d863878d212c87a19c1a610eb53bb01fe12951c0501cf5a0d65f724914a667a"
 dependencies = [
  "filetime",
  "libc",
@@ -6342,9 +6332,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "2.2.2"
+version = "2.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae9c1ea7b3a5e1f4b922ff856a129881167511563dc219869afe3787fc0c1a45"
+checksum = "b280484c454e74e5fff658bbf7df8fdbe7a07c6b2de4a53def232c15ef138f3a"
 dependencies = [
  "arbitrary",
  "crc32fast",
@@ -6374,9 +6364,9 @@ dependencies = [
 
 [[package]]
 name = "zstd"
-version = "0.13.2"
+version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcf2b778a664581e31e389454a7072dab1647606d44f7feea22cd5abb9c9f3f9"
+checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
 dependencies = [
  "zstd-safe",
 ]
