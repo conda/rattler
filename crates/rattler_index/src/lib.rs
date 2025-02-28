@@ -3,6 +3,7 @@
 #![deny(missing_docs)]
 
 use anyhow::Result;
+use bytes::buf::Buf;
 use fs_err::{self as fs};
 use futures::future::try_join_all;
 use fxhash::FxHashMap;
@@ -249,13 +250,12 @@ async fn index_subdir(
                         ));
                         let file_path = format!("{subdir}/{filename}");
                         let buffer = op.read(&file_path).await?;
-                        let bytes = buffer.to_vec();
-                        let cursor = Cursor::new(bytes);
+                        let reader = buffer.reader();
                         // We already know it's not None
                         let archive_type = ArchiveType::try_from(&filename).unwrap();
                         let record = match archive_type {
-                            ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(cursor),
-                            ArchiveType::Conda => package_record_from_conda_reader(cursor),
+                            ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
+                            ArchiveType::Conda => package_record_from_conda_reader(reader),
                         }?;
                         pb.inc(1);
                         Ok::<(String, PackageRecord), std::io::Error>((filename.clone(), record))
