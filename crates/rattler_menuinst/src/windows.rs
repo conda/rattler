@@ -475,7 +475,7 @@ impl WindowsMenu {
         for location in &self.directories.windows_terminal_settings_files {
             terminal::add_windows_terminal_profile(&location, &profile)?;
             tracker.terminal_profiles.push(WindowsTerminalProfile {
-                configuration_file: location,
+                configuration_file: location.clone(),
                 identifier: profile.name.clone(),
             });
         }
@@ -503,11 +503,17 @@ pub(crate) fn install_menu_item(
     menu_mode: MenuMode,
 ) -> Result<WindowsTracker, MenuInstError> {
     let mut tracker = WindowsTracker::new(menu_mode);
+    let directories = if let Ok(fake_dirs) = std::env::var("MENUINST_FAKE_DIRECTORIES") {
+        Directories::fake_folders(Path::new(&fake_dirs))
+    } else {
+        Directories::create(menu_mode)
+    };
+
     let menu = WindowsMenu::new(
         prefix,
         windows_item,
         command,
-        Directories::create(menu_mode),
+        directories,
         placeholders,
         menu_mode,
     );
