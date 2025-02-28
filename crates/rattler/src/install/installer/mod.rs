@@ -3,7 +3,7 @@ mod error;
 mod indicatif;
 mod reporter;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     future::ready,
     path::{Path, PathBuf},
     sync::Arc,
@@ -50,7 +50,7 @@ pub struct Installer {
     target_platform: Option<Platform>,
     apple_code_sign_behavior: AppleCodeSignBehavior,
     alternative_target_prefix: Option<PathBuf>,
-    reinstall_packages: Option<Vec<PackageName>>,
+    reinstall_packages: Option<HashSet<PackageName>>,
     // TODO: Determine upfront if these are possible.
     // allow_symbolic_links: Option<bool>,
     // allow_hard_links: Option<bool>,
@@ -219,7 +219,7 @@ impl Installer {
 
     /// Set the packages that we want explicitly to be reinstalled.
     #[must_use]
-    pub fn with_reinstall_packages(self, reinstall: Vec<PackageName>) -> Self {
+    pub fn with_reinstall_packages(self, reinstall: HashSet<PackageName>) -> Self {
         Self {
             reinstall_packages: Some(reinstall),
             ..self
@@ -229,7 +229,7 @@ impl Installer {
     /// Set the packages that we want explicitly to be reinstalled.
     /// This function is similar to [`Self::with_reinstall_packages`],but
     /// modifies an existing instance.
-    pub fn set_reinstall_packages(&mut self, reinstall: Vec<PackageName>) -> &mut Self {
+    pub fn set_reinstall_packages(&mut self, reinstall: HashSet<PackageName>) -> &mut Self {
         self.reinstall_packages = Some(reinstall);
         self
     }
@@ -332,7 +332,7 @@ impl Installer {
         let transaction = Transaction::from_current_and_desired(
             installed,
             records.into_iter().collect::<Vec<_>>(),
-            self.reinstall_packages.into_iter().flatten(),
+            self.reinstall_packages,
             target_platform,
         )?;
 

@@ -266,7 +266,7 @@ mod tests {
         let transaction = Transaction::from_current_and_desired(
             vec![prefix_record.clone()],
             Vec::<RepoDataRecord>::new().into_iter(),
-            std::iter::empty(),
+            None,
             Platform::current(),
         )
         .unwrap();
@@ -329,7 +329,7 @@ mod tests {
         let transaction = Transaction::from_current_and_desired(
             vec![prefix_record.clone()],
             Vec::<RepoDataRecord>::new().into_iter(),
-            std::iter::empty(),
+            None,
             Platform::current(),
         )
         .unwrap();

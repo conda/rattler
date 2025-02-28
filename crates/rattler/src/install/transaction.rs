@@ -125,7 +125,7 @@ impl<Old: AsRef<New>, New> Transaction<Old, New> {
 
 impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New> {
     /// Constructs a [`Transaction`] by taking the current situation and diffing
-    /// that against the desired situation. You can specify a list of package names
+    /// that against the desired situation. You can specify a set of package names
     /// that should be reinstalled even if their content has not changed.
     pub fn from_current_and_desired<
         CurIter: IntoIterator<Item = Old>,
@@ -133,7 +133,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
     >(
         current: CurIter,
         desired: NewIter,
-        reinstall: impl IntoIterator<Item = PackageName>,
+        reinstall: Option<HashSet<PackageName>>,
         platform: Platform,
     ) -> Result<Self, TransactionError>
     where
@@ -152,6 +152,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         };
 
         let mut operations = Vec::new();
+        let reinstall = reinstall.unwrap_or_default();
 
         let mut current_map = current_iter
             .clone()
@@ -171,9 +172,6 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
             }
         }
 
-        // Create a hashset of package names to reinstall
-        let reinstall_names = reinstall.into_iter().collect::<HashSet<_>>();
-
         // reverse all removals, last in first out
         operations.reverse();
 
@@ -185,7 +183,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
 
             if let Some(old_record) = old_record {
                 if !describe_same_content(record.as_ref(), old_record.as_ref())
-                    || reinstall_names.contains(&record.as_ref().name)
+                    || reinstall.contains(&record.as_ref().name)
                 {
                     // if the content changed, we need to reinstall (remove and install)
                     operations.push(TransactionOperation::Change {
@@ -259,6 +257,8 @@ fn describe_same_content(from: &PackageRecord, to: &PackageRecord) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use rattler_conda_types::Platform;
 
     use crate::install::{
@@ -282,7 +282,7 @@ mod tests {
         let transaction = Transaction::from_current_and_desired(
             vec![prefix_record.clone()],
             vec![prefix_record.clone()],
-            vec![name],
+            Some(HashSet::from_iter(vec![name])),
             Platform::current(),
         )
         .unwrap();
