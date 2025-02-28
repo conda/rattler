@@ -23,17 +23,17 @@ tag-prefix = ""
 lto = true
 
 [workspace.dependencies]
-anyhow = "1.0.95"
+anyhow = "1.0.96"
 archspec = "0.1.3"
 assert_matches = "1.5.0"
-async-compression = { version = "0.4.19", features = [
+async-compression = { version = "0.4.20", features = [
   "gzip",
   "tokio",
   "bzip2",
   "zstd",
 ] }
 async-fd-lock = "0.2.0"
-fs4 = "0.12.0"
+fs4 = "0.13.0"
 async-trait = "0.1.86"
 axum = { version = "0.8.1", default-features = false, features = [
   "tokio",
@@ -51,8 +51,8 @@ chrono = { version = "0.4.40", default-features = false, features = [
   "serde",
   "alloc",
 ] }
-clap = { version = "4.5.29", features = ["derive"] }
-clap-verbosity-flag = "3.0.1"
+clap = { version = "4.5.31", features = ["derive"] }
+clap-verbosity-flag = "3.0.2"
 cmake = "0.1.54"
 console = { version = "0.15.10", features = ["windows-console-colors"] }
 criterion = "0.5"
@@ -68,23 +68,23 @@ futures = "0.3.31"
 futures-util = "0.3.31"
 fxhash = "0.2.1"
 # lots of other crates are still stuck on older version which breaks `deserialize`
-generic-array = "0.14.7"
+generic-array = "1.2.0"
 getrandom = { version = "0.3.1", default-features = false }
 glob = "0.3.2"
-google-cloud-auth = { version = "0.17.2", default-features = false }
+google-cloud-auth = { version = "0.18.0", default-features = false }
 google-cloud-token = "0.1.2"
-aws-config = { version = "1.5.16", default-features = false, features = [
+aws-config = { version = "1.5.17", default-features = false, features = [
   "rt-tokio",
   "rustls",
   "sso",
 ] }
-aws-sdk-s3 = { version = "1.75.0", default-features = false, features = [
+aws-sdk-s3 = { version = "1.77.0", default-features = false, features = [
   "rt-tokio",
   "rustls",
   "sigv4a",
 ] }
 hex = "0.4.3"
-hex-literal = "0.4.1"
+hex-literal = "1.0.0"
 http = "1.2"
 http-cache-semantics = "2.1.0"
 humansize = "2.1.3"
@@ -93,7 +93,7 @@ indexmap = "2.7.1"
 indicatif = "0.17.11"
 insta = { version = "1.42.1" }
 itertools = "0.14.0"
-json-patch = "3.0.1"
+json-patch = "4.0.0"
 keyring = "3.6.1"
 lazy-regex = "3.4.1"
 libc = { version = "0.2" }
@@ -105,7 +105,7 @@ memmap2 = "0.9.5"
 netrc-rs = "0.1.2"
 nom = "7.1.3"
 num_cpus = "1.16.0"
-opendal = { version = "0.51.2", default-features = false }
+opendal = { version = "0.52.0", default-features = false }
 once_cell = "1.20.3"
 parking_lot = "0.12.3"
 pathdiff = "0.2.3"
@@ -118,7 +118,7 @@ purl = { version = "0.1.5", features = ["serde"] }
 quote = "1.0.38"
 rand = "0.9.0"
 rayon = "1.10.0"
-reflink-copy = "0.1.23"
+reflink-copy = "0.1.24"
 regex = "1.11.1"
 reqwest = { version = "0.12.12", default-features = false }
 reqwest-middleware = "0.4.1"
@@ -139,20 +139,20 @@ serde_yaml = "0.9.34"
 serde-untagged = "0.1.6"
 sha2 = "0.10.8"
 shlex = "1.3.0"
-similar-asserts = "1.6.1"
+similar-asserts = "1.7.0"
 smallvec = { version = "1.14.0", features = [
   "serde",
   "const_new",
   "const_generics",
   "union",
 ] }
-strum = { version = "0.27.0", features = ["derive"] }
+strum = { version = "0.27.1", features = ["derive"] }
 superslice = "1.0.0"
 syn = "2.0.98"
 sysinfo = "0.33.1"
 tar = "0.4.44"
 tempdir = "0.3.7"
-tempfile = "3.16.0"
+tempfile = "3.17.1"
 temp-env = { version = "0.3.6", features = ["async_closure"] }
 test-log = "0.2.17"
 thiserror = "2.0"
@@ -168,7 +168,7 @@ trybuild = { version = "1.0.103" }
 typed-path = { version = "0.10.0" }
 url = { version = "2.5.4" }
 unicode-normalization = "0.1.24"
-uuid = { version = "1.13.1", default-features = false }
+uuid = { version = "1.15.1", default-features = false }
 walkdir = "2.5.0"
 wasmtimer = "0.4.1"
 which = "7.0.2"
