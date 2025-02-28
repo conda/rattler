@@ -81,11 +81,6 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     // Additional properties (in semi alphabetic order but grouped by commonality)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub arch: Option<Cow<'a, Option<String>>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub platform: Option<Cow<'a, Option<String>>>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel: Option<Cow<'a, Option<Url>>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -175,8 +170,8 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                 .or(derived.name)
                 .ok_or_else(|| ConversionError::Missing("name".to_string()))?,
             noarch,
-            arch: value.arch.map_or(derived_arch, Cow::into_owned),
-            platform: value.platform.map_or(derived_platform, Cow::into_owned),
+            arch: derived_arch,
+            platform: derived_platform,
             purls: value.purls.into_owned(),
             sha256: value.sha256,
             size: value.size.into_owned(),
@@ -241,13 +236,6 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             derived.subdir.as_deref().unwrap_or(&package_record.subdir),
             derived.build.as_deref().unwrap_or(&package_record.build),
         );
-        let (derived_arch, derived_platform) = derived_fields::derive_arch_and_platform(
-            derived.subdir.as_deref().unwrap_or(&package_record.subdir),
-        );
-
-        // Polyfill the arch and platform values if they are not present.
-        let arch = package_record.arch.clone().or(derived_arch);
-        let platform = package_record.platform.clone().or(derived_platform);
 
         let channel = value.as_binary().and_then(|binary| binary.channel.as_ref());
         let file_name = value.as_binary().map(|binary| binary.file_name.as_str());
@@ -282,8 +270,6 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             depends: Cow::Borrowed(&package_record.depends),
             constrains: Cow::Borrowed(&package_record.constrains),
             extra_depends: Cow::Borrowed(&package_record.extra_depends),
-            arch: (package_record.arch != arch).then_some(Cow::Owned(arch)),
-            platform: (package_record.platform != platform).then_some(Cow::Owned(platform)),
             md5: package_record.md5,
             legacy_bz2_md5: package_record.legacy_bz2_md5,
             sha256: package_record.sha256,

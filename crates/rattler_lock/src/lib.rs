@@ -527,7 +527,7 @@ mod test {
         str::FromStr,
     };
 
-    use rattler_conda_types::Platform;
+    use rattler_conda_types::{Platform, RepoDataRecord};
     use rstest::*;
 
     use super::{LockFile, DEFAULT_ENVIRONMENT_NAME};
@@ -660,5 +660,55 @@ mod test {
             .join("v6/python-from-conda-only-lock.yml");
         let conda_lock = LockFile::from_path(&path).unwrap();
         assert!(!conda_lock.is_empty());
+    }
+
+    #[test]
+    fn solve_roundtrip() {
+        // load repodata from JSON
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/repodata-records/_libgcc_mutex-0.1-conda_forge.json");
+        let content = std::fs::read_to_string(&path).unwrap();
+        let repodata_record: RepoDataRecord = serde_json::from_str(&content).unwrap();
+
+        // check that the repodata record is as expected
+        assert_eq!(repodata_record.package_record.arch, None);
+        assert_eq!(repodata_record.package_record.platform, None);
+
+        // create a lockfile with the repodata record
+        let lock_file = LockFile::builder()
+            .with_conda_package(
+                DEFAULT_ENVIRONMENT_NAME,
+                Platform::Linux64,
+                repodata_record.clone().into(),
+            )
+            .finish();
+
+        // serialize the lockfile
+        let rendered_lock_file = lock_file.render_to_string().unwrap();
+
+        // parse the lockfile
+        let parsed_lock_file = LockFile::from_str(&rendered_lock_file).unwrap();
+        // get repodata record from parsed lockfile
+        let repodata_records = parsed_lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .conda_repodata_records(Platform::Linux64)
+            .unwrap()
+            .unwrap();
+
+        // These are not equal because the one from `repodata_records[0]` contains arch and platform.
+        let repodata_record_two = repodata_records[0].clone();
+        assert_eq!(
+            repodata_record_two.package_record.arch,
+            Some("x86_64".to_string())
+        );
+        assert_eq!(
+            repodata_record_two.package_record.platform,
+            Some("linux".to_string())
+        );
+
+        // But if we render it again, the lockfile should look the same at least
+        let rerendered_lock_file_two = parsed_lock_file.render_to_string().unwrap();
+        assert_eq!(rendered_lock_file, rerendered_lock_file_two);
     }
 }
