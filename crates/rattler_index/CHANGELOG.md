@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.1](https://github.com/conda/rattler/compare/rattler_index-v0.21.0...rattler_index-v0.21.1) - 2025-02-28
+
+### Other
+
+- create reader from opendal buffer (#1123)
+
 ## [0.21.0](https://github.com/conda/rattler/compare/rattler_index-v0.20.13...rattler_index-v0.21.0) - 2025-02-27
 
 ### Added

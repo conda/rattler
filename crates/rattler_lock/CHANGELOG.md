@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.46](https://github.com/conda/rattler/compare/rattler_lock-v0.22.45...rattler_lock-v0.22.46) - 2025-02-28
+
+### Fixed
+
+- roundtrip of arch/platform in lock files (#1124)
+
 ## [0.22.45](https://github.com/conda/rattler/compare/rattler_lock-v0.22.44...rattler_lock-v0.22.45) - 2025-02-27
 
 ### Fixed
