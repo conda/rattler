@@ -4347,6 +4347,7 @@ name = "rattler_index"
 version = "0.21.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "clap",
  "clap-verbosity-flag",
  "console",
