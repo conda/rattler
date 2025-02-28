@@ -288,6 +288,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         let transaction = Transaction::from_current_and_desired(
             installed_packages,
             required_packages,
+            std::iter::empty(),
             install_platform,
         )?;
 

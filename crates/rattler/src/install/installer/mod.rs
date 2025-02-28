@@ -16,11 +16,12 @@ pub use indicatif::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
     ProgressFormatter,
 };
+use itertools::Either;
 use itertools::Itertools;
 use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
-    Platform, PrefixRecord, RepoDataRecord,
+    PackageName, Platform, PrefixRecord, RepoDataRecord,
 };
 use rattler_networking::retry_policies::default_retry_policy;
 pub use reporter::Reporter;
@@ -50,6 +51,7 @@ pub struct Installer {
     target_platform: Option<Platform>,
     apple_code_sign_behavior: AppleCodeSignBehavior,
     alternative_target_prefix: Option<PathBuf>,
+    reinstall_packages: Option<Vec<PackageName>>,
     // TODO: Determine upfront if these are possible.
     // allow_symbolic_links: Option<bool>,
     // allow_hard_links: Option<bool>,
@@ -216,6 +218,15 @@ impl Installer {
         }
     }
 
+    /// Set the packages that we want explicitly to be reinstalled.
+    #[must_use]
+    pub fn with_reinstall_packages(self, reinstall: Vec<PackageName>) -> Self {
+        Self {
+            reinstall_packages: Some(reinstall),
+            ..self
+        }
+    }
+
     /// Sets the packages that are currently installed in the prefix. If this
     /// is not set, the installation process will first figure this out.
     ///
@@ -314,6 +325,9 @@ impl Installer {
         let transaction = Transaction::from_current_and_desired(
             installed,
             records.into_iter().collect::<Vec<_>>(),
+            self.reinstall_packages
+                .map(|p| Either::Left(p.into_iter()))
+                .unwrap_or_else(|| Either::Right(std::iter::empty())),
             target_platform,
         )?;
 
