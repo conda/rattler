@@ -15,7 +15,7 @@ enum_dispatch = { workspace = true }
 indexmap = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.31.2", default-features = false }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.31.3", default-features = false }
 serde_json = { workspace = true, features = ["preserve_order"] }
 shlex = { workspace = true }
 sysinfo = { workspace = true , optional = true }
