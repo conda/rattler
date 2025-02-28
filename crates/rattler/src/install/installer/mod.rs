@@ -16,7 +16,6 @@ pub use indicatif::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
     ProgressFormatter,
 };
-use itertools::Either;
 use itertools::Itertools;
 use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
@@ -227,10 +226,18 @@ impl Installer {
         }
     }
 
+    /// Set the packages that we want explicitly to be reinstalled.
+    /// This function is similar to [`Self::with_reinstall_packages`],but
+    /// modifies an existing instance.
+    pub fn set_reinstall_packages(&mut self, reinstall: Vec<PackageName>) -> &mut Self {
+        self.reinstall_packages = Some(reinstall);
+        self
+    }
+
     /// Sets the packages that are currently installed in the prefix. If this
     /// is not set, the installation process will first figure this out.
     ///
-    /// This function is similar to [`Self::set_installed_packages`],but
+    /// This function is similar to [`Self::with_installed_packages`],but
     /// modifies an existing instance.
     pub fn set_installed_packages(&mut self, installed: Vec<PrefixRecord>) -> &mut Self {
         self.installed = Some(installed);
@@ -325,9 +332,7 @@ impl Installer {
         let transaction = Transaction::from_current_and_desired(
             installed,
             records.into_iter().collect::<Vec<_>>(),
-            self.reinstall_packages
-                .map(|p| Either::Left(p.into_iter()))
-                .unwrap_or_else(|| Either::Right(std::iter::empty())),
+            self.reinstall_packages.into_iter().flatten(),
             target_platform,
         )?;
 
