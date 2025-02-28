@@ -1457,4 +1457,11 @@ mod test {
             }
         }
     }
+
+    #[rstest]
+    #[case("0.1.0.dev12+ga47bad07")]
+    #[test]
+    fn parsing(#[case] version: &str) {
+        assert_eq!(Version::from_str(version).unwrap().to_string(), version);
+    }
 }
