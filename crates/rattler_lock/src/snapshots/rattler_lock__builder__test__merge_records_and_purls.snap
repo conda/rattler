@@ -16,8 +16,6 @@ environments:
       - conda: https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2
 packages:
 - conda: https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2
-  arch: x86_64
-  platform: linux
   channel: null
   purls:
   - pkg:pypi/foobar@1.0.0

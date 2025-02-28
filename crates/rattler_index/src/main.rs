@@ -2,7 +2,6 @@ use clap::{arg, Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Platform;
 use rattler_index::{index_fs, index_s3};
-use tracing_log::AsTrace;
 use url::Url;
 
 fn parse_s3_url(value: &str) -> Result<Url, String> {
@@ -18,13 +17,13 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
 
 /// The `rattler-index` CLI.
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(name = "rattler-index", version, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
 
     #[command(flatten)]
-    verbose: Verbosity,
+    verbosity: Verbosity,
 
     /// Whether to force the re-indexing of all packages.
     /// Note that this will create a new repodata.json instead of updating the existing one.
@@ -97,12 +96,21 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     tracing_subscriber::FmtSubscriber::builder()
-        .with_max_level(cli.verbose.log_level_filter().as_trace())
+        .with_max_level(cli.verbosity)
         .init();
+
+    let multi_progress = indicatif::MultiProgress::new();
 
     match cli.command {
         Commands::FileSystem { channel } => {
-            index_fs(channel, cli.target_platform, cli.force, cli.max_parallel).await
+            index_fs(
+                channel,
+                cli.target_platform,
+                cli.force,
+                cli.max_parallel,
+                Some(multi_progress),
+            )
+            .await
         }
         Commands::S3 {
             channel,
@@ -124,6 +132,7 @@ async fn main() -> anyhow::Result<()> {
                 cli.target_platform,
                 cli.force,
                 cli.max_parallel,
+                Some(multi_progress),
             )
             .await
         }

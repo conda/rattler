@@ -19,9 +19,15 @@ pub fn py_index_fs(
 ) -> PyResult<Bound<'_, PyAny>> {
     future_into_py(py, async move {
         let target_platform = target_platform.map(Platform::from);
-        index_fs(channel_directory, target_platform, force, max_parallel)
-            .await
-            .map_err(|e| PyRattlerError::from(e).into())
+        index_fs(
+            channel_directory,
+            target_platform,
+            force,
+            max_parallel,
+            None,
+        )
+        .await
+        .map_err(|e| PyRattlerError::from(e).into())
     })
 }
 
@@ -56,6 +62,7 @@ pub fn py_index_s3(
             target_platform,
             force,
             max_parallel,
+            None,
         )
         .await
         .map_err(|e| PyRattlerError::from(e).into())

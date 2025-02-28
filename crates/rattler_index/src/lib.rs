@@ -3,6 +3,7 @@
 #![deny(missing_docs)]
 
 use anyhow::Result;
+use bytes::buf::Buf;
 use fs_err::{self as fs};
 use futures::future::try_join_all;
 use fxhash::FxHashMap;
@@ -131,7 +132,7 @@ async fn index_subdir(
     subdir: Platform,
     op: Operator,
     force: bool,
-    progress: MultiProgress,
+    progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
 ) -> Result<()> {
     let mut registered_packages: FxHashMap<String, PackageRecord> = HashMap::default();
@@ -215,7 +216,12 @@ async fn index_subdir(
         subdir
     );
 
-    let pb = Arc::new(progress.add(ProgressBar::new(packages_to_add.len() as u64)));
+    let pb = if let Some(progress) = progress {
+        progress.add(ProgressBar::new(packages_to_add.len() as u64))
+    } else {
+        ProgressBar::hidden()
+    };
+
     let sty = ProgressStyle::with_template(
         "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
     )
@@ -244,13 +250,12 @@ async fn index_subdir(
                         ));
                         let file_path = format!("{subdir}/{filename}");
                         let buffer = op.read(&file_path).await?;
-                        let bytes = buffer.to_vec();
-                        let cursor = Cursor::new(bytes);
+                        let reader = buffer.reader();
                         // We already know it's not None
                         let archive_type = ArchiveType::try_from(&filename).unwrap();
                         let record = match archive_type {
-                            ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(cursor),
-                            ArchiveType::Conda => package_record_from_conda_reader(cursor),
+                            ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
+                            ArchiveType::Conda => package_record_from_conda_reader(reader),
                         }?;
                         pb.inc(1);
                         Ok::<(String, PackageRecord), std::io::Error>((filename.clone(), record))
@@ -314,10 +319,11 @@ pub async fn index_fs(
     target_platform: Option<Platform>,
     force: bool,
     max_parallel: usize,
+    multi_progress: Option<MultiProgress>,
 ) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
     config.root = Some(channel.into().canonicalize()?.to_string_lossy().to_string());
-    index(target_platform, config, force, max_parallel).await
+    index(target_platform, config, force, max_parallel, multi_progress).await
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given S3 URL.
@@ -333,6 +339,7 @@ pub async fn index_s3(
     target_platform: Option<Platform>,
     force: bool,
     max_parallel: usize,
+    multi_progress: Option<MultiProgress>,
 ) -> anyhow::Result<()> {
     let mut s3_config = S3Config::default();
     s3_config.root = Some(channel.path().to_string());
@@ -366,7 +373,14 @@ pub async fn index_s3(
             s3_config.session_token = session_token;
         }
     }
-    index(target_platform, s3_config, force, max_parallel).await
+    index(
+        target_platform,
+        s3_config,
+        force,
+        max_parallel,
+        multi_progress,
+    )
+    .await
 }
 
 /// Create a new `repodata.json` for all packages in the given configurator's root.
@@ -386,36 +400,42 @@ pub async fn index<T: Configurator>(
     config: T,
     force: bool,
     max_parallel: usize,
+    multi_progress: Option<MultiProgress>,
 ) -> anyhow::Result<()> {
     let builder = config.into_builder();
 
     // Get all subdirs
     let op = Operator::new(builder)?.finish();
     let entries = op.list_with("").await?;
-    let mut subdirs = entries
-        .iter()
-        .filter_map(|entry| {
-            if entry.metadata().mode().is_dir() && entry.name() != "/" {
-                // Directory entries always end with `/`.
-                Some(entry.name().trim_end_matches('/').to_string())
-            } else {
-                None
-            }
-        })
-        .map(|s| Platform::from_str(&s))
-        .collect::<Result<HashSet<_>, _>>()?;
 
     // If requested `target_platform` subdir does not exist, we create it.
-    if let Some(target_platform) = target_platform {
-        tracing::debug!("Did not find {target_platform} subdir, creating.");
-        if !subdirs.contains(&target_platform) {
+    let mut subdirs = if let Some(target_platform) = target_platform {
+        if !op.exists(&format!("{}/", target_platform.as_str())).await? {
+            tracing::debug!("Did not find {target_platform} subdir, creating.");
             op.create_dir(&format!("{}/", target_platform.as_str()))
                 .await?;
         }
         // Limit subdirs to only the requested `target_platform`.
-        subdirs = HashSet::default();
-        subdirs.insert(target_platform);
-    } else if !subdirs.contains(&Platform::NoArch) {
+        HashSet::from([target_platform])
+    } else {
+        entries
+            .iter()
+            .filter_map(|entry| {
+                if entry.metadata().mode().is_dir() && entry.name() != "/" {
+                    // Directory entries always end with `/`.
+                    Some(entry.name().trim_end_matches('/').to_string())
+                } else {
+                    None
+                }
+            })
+            .filter_map(|s| Platform::from_str(&s).ok())
+            .collect::<HashSet<_>>()
+    };
+
+    if !op
+        .exists(&format!("{}/", Platform::NoArch.as_str()))
+        .await?
+    {
         // If `noarch` subdir does not exist, we create it.
         tracing::debug!("Did not find noarch subdir, creating.");
         op.create_dir(&format!("{}/", Platform::NoArch.as_str()))
@@ -423,7 +443,6 @@ pub async fn index<T: Configurator>(
         subdirs.insert(Platform::NoArch);
     }
 
-    let multi_progress = MultiProgress::new();
     let semaphore = Semaphore::new(max_parallel);
     let semaphore = Arc::new(semaphore);
 

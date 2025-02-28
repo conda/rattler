@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.6...rattler_redaction-v0.1.7) - 2025-02-27
+
+### Added
+
+- Use `opendal` in `rattler-index` and add executable (#1076)
+
 ## [0.1.6](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.5...rattler_redaction-v0.1.6) - 2025-01-08
 
 ### Other

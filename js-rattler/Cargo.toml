@@ -48,9 +48,5 @@ wasm-bindgen-test = "0.3.45"
 opt-level = "s"
 lto = true
 
-[patch.crates-io]
-# Just waiting for a release on this one!
-bzip2 = { git = "https://github.com/trifectatechfoundation/bzip2-rs" }
-
 # Prevent package from thinking it's in the workspace
 [workspace]
