@@ -35,7 +35,7 @@ pub struct Directories {
     start_menu: PathBuf,
     quick_launch: Option<PathBuf>,
     desktop: PathBuf,
-    pub known_folders: knownfolders::Folders,
+    windows_terminal_settings_files: Vec<PathBuf>,
 }
 
 fn shortcut_filename(name: &str, env_name: Option<&String>, ext: Option<&str>) -> String {
@@ -75,11 +75,36 @@ impl Directories {
             .get_folder_path(Folder::Desktop, user_handle)
             .unwrap();
 
+        let windows_terminal_settings_files =
+            terminal::windows_terminal_settings_files(menu_mode, &known_folders);
+
         Directories {
             start_menu,
             quick_launch,
             desktop,
-            known_folders,
+            windows_terminal_settings_files,
+        }
+    }
+
+    /// Create a fake Directories struct for testing ONLY
+    pub fn fake_folders(path: &Path) -> Directories {
+        let terminal_settings_json = path.join("terminal_settings.json");
+        if !terminal_settings_json.exists() {
+            // This is for testing only, so we can ignore the result
+            std::fs::write(&terminal_settings_json, "{}").unwrap();
+        }
+        let start_menu = path.join("Start Menu");
+        fs::create_dir_all(&start_menu).unwrap();
+        let quick_launch = Some(path.join("Quick Launch"));
+        fs::create_dir_all(quick_launch.as_ref().unwrap()).unwrap();
+        let desktop = path.join("Desktop");
+        fs::create_dir_all(&desktop).unwrap();
+
+        Directories {
+            start_menu,
+            quick_launch,
+            desktop,
+            windows_terminal_settings_files: vec![terminal_settings_json],
         }
     }
 }
@@ -454,13 +479,10 @@ impl WindowsMenu {
                 .map(|s| s.resolve(&self.placeholders)),
         };
 
-        for location in terminal::windows_terminal_settings_files(
-            self.menu_mode,
-            &self.directories.known_folders,
-        ) {
+        for location in &self.directories.windows_terminal_settings_files {
             terminal::add_windows_terminal_profile(&location, &profile)?;
             tracker.terminal_profiles.push(WindowsTerminalProfile {
-                configuration_file: location,
+                configuration_file: location.clone(),
                 identifier: profile.name.clone(),
             });
         }
@@ -488,11 +510,17 @@ pub(crate) fn install_menu_item(
     menu_mode: MenuMode,
 ) -> Result<WindowsTracker, MenuInstError> {
     let mut tracker = WindowsTracker::new(menu_mode);
+    let directories = if let Ok(fake_dirs) = std::env::var("MENUINST_FAKE_DIRECTORIES") {
+        Directories::fake_folders(Path::new(&fake_dirs))
+    } else {
+        Directories::create(menu_mode)
+    };
+
     let menu = WindowsMenu::new(
         prefix,
         windows_item,
         command,
-        Directories::create(menu_mode),
+        directories,
         placeholders,
         menu_mode,
     );
