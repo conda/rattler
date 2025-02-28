@@ -10,11 +10,14 @@ edition.workspace = true
 readme.workspace = true
 
 [dependencies]
+
+[target.'cfg(not( target_arch = "wasm32" ))'.dependencies]
 anyhow.workspace = true
 dashmap.workspace = true
 dirs.workspace = true
 futures.workspace = true
 fs-err.workspace = true
+fs4 = { workspace = true, features = ["fs-err3-tokio", "tokio"] }
 fxhash.workspace = true
 itertools.workspace = true
 parking_lot.workspace = true
@@ -30,7 +33,6 @@ url.workspace = true
 thiserror.workspace = true
 reqwest-middleware.workspace = true
 digest.workspace = true
-fs4 = { workspace = true, features = ["fs-err3-tokio", "tokio"] }
 simple_spawn_blocking = { version = "1.1.0", path = "../simple_spawn_blocking", features = ["tokio"] }
 rayon = { workspace = true }
 serde_json = { workspace = true }

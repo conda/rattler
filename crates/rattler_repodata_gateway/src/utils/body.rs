@@ -11,6 +11,7 @@ use std::{
 
 /// A helper trait to convert a stream of bytes coming from a request body into
 /// another type.
+#[allow(dead_code)]
 pub trait BodyStreamExt<E>: Sized {
     /// Reads the contents of a body stream as bytes.
     fn bytes(self) -> BytesCollect<Self, E>;

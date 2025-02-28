@@ -1,4 +1,5 @@
 mod error;
+pub mod solve;
 mod utils;
 mod version;
 mod version_spec;

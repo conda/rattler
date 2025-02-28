@@ -62,6 +62,7 @@ pub trait Reporter: Send + Sync {
     fn on_jlap_completed(&self, _index: usize) {}
 }
 
+#[allow(dead_code)]
 pub(crate) trait ResponseReporterExt {
     /// Converts a response into a stream of bytes, notifying a reporter of the progress.
     fn byte_stream_with_progress(

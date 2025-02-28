@@ -25,25 +25,26 @@ rattler_redaction = { version = "0.1.7", path = "../rattler_redaction", features
 ], default-features = false }
 reqwest = { workspace = true, features = ["stream"], optional = true }
 reqwest-middleware = { workspace = true, optional = true }
-simple_spawn_blocking = { version = "1.1.0", path = "../simple_spawn_blocking", features = [
-  "tokio",
-] }
+simple_spawn_blocking = { version = "1.1.0", path = "../simple_spawn_blocking", features = ["tokio"] }
 serde_json = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["fs"] }
+tokio = { workspace = true, features = [] }
 tokio-util = { workspace = true, features = ["io-util"] }
 tracing = { workspace = true }
 url = { workspace = true }
 zip = { workspace = true, features = ["deflate", "time"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+num_cpus = { workspace = true }
+tokio = { workspace = true, features = ["fs"] }
 zstd = { workspace = true, features = ["zstdmt"] }
 
 [features]
 default = ["native-tls"]
 native-tls = ["rattler_networking/native-tls", "rattler_redaction/native-tls"]
 rustls-tls = ["rattler_networking/rustls-tls", "rattler_redaction/rustls-tls"]
-wasm = ["zstd/wasm"]
 reqwest = ["dep:reqwest-middleware", "dep:reqwest"]
 
 [dev-dependencies]
