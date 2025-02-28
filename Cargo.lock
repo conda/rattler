@@ -4165,7 +4165,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.32.2"
+version = "0.32.3"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4241,7 +4241,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.11"
+version = "0.3.12"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4344,7 +4344,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -4447,7 +4447,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.22.6"
+version = "0.22.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4483,7 +4483,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.30"
+version = "0.22.31"
 dependencies = [
  "assert_matches",
  "bzip2",
@@ -4526,7 +4526,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.21.39"
+version = "0.21.40"
 dependencies = [
  "anyhow",
  "assert_matches",
