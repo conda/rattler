@@ -1,4 +1,5 @@
 mod error;
+mod gateway;
 pub mod solve;
 mod utils;
 mod version;
