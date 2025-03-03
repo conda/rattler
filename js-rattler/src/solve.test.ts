@@ -1,9 +1,9 @@
 import { describe, expect, it } from "@jest/globals";
-import { simple_solve } from "./solve";
+import { simpleSolve } from "./solve";
 
 describe("solving", () => {
     it("python should yield three packages", () => {
-        return simple_solve(
+        return simpleSolve(
             ["python"],
             [
                 "https://prefix.dev/emscripten-forge-dev",

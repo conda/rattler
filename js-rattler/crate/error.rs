@@ -1,7 +1,7 @@
 use rattler_conda_types::version_spec::ParseVersionSpecError;
 use rattler_conda_types::{
-    ParseChannelError, ParseMatchSpecError, ParsePlatformError, ParseVersionError,
-    VersionBumpError, VersionExtendError,
+    InvalidPackageNameError, ParseChannelError, ParseMatchSpecError, ParsePlatformError,
+    ParseVersionError, VersionBumpError, VersionExtendError,
 };
 use rattler_repodata_gateway::GatewayError;
 use rattler_solve::SolveError;
@@ -28,6 +28,10 @@ pub enum JsError {
     GatewayError(#[from] GatewayError),
     #[error(transparent)]
     SolveError(#[from] SolveError),
+    #[error(transparent)]
+    Serde(#[from] serde_wasm_bindgen::Error),
+    #[error(transparent)]
+    PackageNameError(#[from] InvalidPackageNameError),
 }
 
 pub type JsResult<T> = Result<T, JsError>;
@@ -44,6 +48,8 @@ impl From<JsError> for JsValue {
             JsError::ParseMatchSpec(error) => JsValue::from_str(&error.to_string()),
             JsError::GatewayError(error) => JsValue::from_str(&error.to_string()),
             JsError::SolveError(error) => JsValue::from_str(&error.to_string()),
+            JsError::PackageNameError(error) => JsValue::from_str(&error.to_string()),
+            JsError::Serde(error) => error.into(),
         }
     }
 }
