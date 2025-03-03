@@ -252,7 +252,7 @@ async fn index_subdir(
         .cloned()
         .collect::<Vec<_>>();
 
-    tracing::debug!(
+    tracing::info!(
         "Adding {} packages to subdir {}.",
         packages_to_add.len(),
         subdir
@@ -310,7 +310,7 @@ async fn index_subdir(
 
     pb.finish_with_message(format!("Finished {}", subdir.as_str()));
 
-    tracing::debug!(
+    tracing::info!(
         "Successfully added {} packages to subdir {}.",
         results.len(),
         subdir
@@ -346,14 +346,17 @@ async fn index_subdir(
         version: Some(2),
     };
 
+    tracing::info!("Writing repodata to {}", repodata_path);
     let repodata_bytes = serde_json::to_vec(&repodata)?;
     op.write(&repodata_path, repodata_bytes).await?;
 
     if let Some(instructions) = repodata_patch {
+        let patched_repodata_path = format!("{subdir}/repodata.json");
+        tracing::info!("Writing patched repodata to {}", patched_repodata_path);
         let mut patched_repodata = repodata.clone();
         patched_repodata.apply_patches(&instructions);
         let patched_repodata_bytes = serde_json::to_vec(&patched_repodata)?;
-        op.write(&format!("{subdir}/repodata.json"), patched_repodata_bytes)
+        op.write(&patched_repodata_path, patched_repodata_bytes)
             .await?;
     }
     // todo: also write repodata.json.bz2, repodata.json.zst, repodata.json.jlap and sharded repodata once available in rattler
@@ -530,7 +533,7 @@ pub async fn index<T: Configurator>(
             ))
         })
         .collect::<Vec<_>>();
-    try_join_all(tasks).await?;
-
+    let results = try_join_all(tasks).await?;
+    results.into_iter().collect::<anyhow::Result<Vec<_>>>()?;
     Ok(())
 }
