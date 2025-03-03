@@ -10,13 +10,16 @@ use fxhash::FxHashMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rattler_conda_types::{
     package::{ArchiveType, IndexJson, PackageFile},
-    ChannelInfo, PackageRecord, Platform, RepoData,
+    ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData,
 };
 use rattler_networking::{Authentication, AuthenticationStorage};
-use rattler_package_streaming::{read, seek};
+use rattler_package_streaming::{
+    read,
+    seek::{self, stream_conda_content},
+};
 use std::{
     collections::{HashMap, HashSet},
-    io::{Cursor, Read},
+    io::{Cursor, Read, Seek},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -69,6 +72,40 @@ pub fn package_record_from_index_json<T: Read>(
     };
 
     Ok(package_record)
+}
+
+fn repodata_patch_from_package_stream<'a>(
+    package: impl Read + Seek + 'a,
+) -> std::io::Result<rattler_conda_types::RepoDataPatch> {
+    let mut subdirs = FxHashMap::default();
+
+    // todo: what about .tar.bz2?
+    let mut content_reader = stream_conda_content(package).unwrap();
+    let entries = content_reader.entries().unwrap();
+    for entry in entries {
+        let mut entry = entry.unwrap();
+        if !entry.header().entry_type().is_file() {
+            todo!();
+        }
+        let mut buf = Vec::new();
+        entry.read_to_end(&mut buf).unwrap();
+        let path = entry.path().unwrap();
+        let components = path.components().into_iter().collect::<Vec<_>>();
+        let subdir = if components.len() != 2 {
+            todo!();
+        } else {
+            if components[1].as_os_str() != "patch_instructions.json" {
+                todo!();
+            }
+            components[0].as_os_str().to_string_lossy().to_string()
+        };
+
+        // println!("Contents: {:?}", String::from_utf8_lossy(&buf));
+        let instructions: PatchInstructions = serde_json::from_slice(&buf).unwrap();
+        subdirs.insert(subdir, instructions);
+    }
+
+    Ok(rattler_conda_types::RepoDataPatch { subdirs })
 }
 
 /// Extract the package record from a `.tar.bz2` package file.
@@ -132,12 +169,17 @@ async fn index_subdir(
     subdir: Platform,
     op: Operator,
     force: bool,
+    repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
 ) -> Result<()> {
+    let repodata_path = if repodata_patch.is_some() {
+        format!("{subdir}/repodata_from_packages.json")
+    } else {
+        format!("{subdir}/repodata.json")
+    };
     let mut registered_packages: FxHashMap<String, PackageRecord> = HashMap::default();
     if !force {
-        let repodata_path = format!("{subdir}/repodata.json");
         let repodata_bytes = op.read(&repodata_path).await;
         let repodata: RepoData = match repodata_bytes {
             Ok(bytes) => serde_json::from_slice(&bytes.to_vec())?,
@@ -304,9 +346,16 @@ async fn index_subdir(
         version: Some(2),
     };
 
-    let repodata_path = format!("{subdir}/repodata.json");
     let repodata_bytes = serde_json::to_vec(&repodata)?;
     op.write(&repodata_path, repodata_bytes).await?;
+
+    if let Some(instructions) = repodata_patch {
+        let mut patched_repodata = repodata.clone();
+        patched_repodata.apply_patches(&instructions);
+        let patched_repodata_bytes = serde_json::to_vec(&patched_repodata)?;
+        op.write(&format!("{subdir}/repodata.json"), patched_repodata_bytes)
+            .await?;
+    }
     // todo: also write repodata.json.bz2, repodata.json.zst, repodata.json.jlap and sharded repodata once available in rattler
     // https://github.com/conda/rattler/issues/1096
 
@@ -323,7 +372,15 @@ pub async fn index_fs(
 ) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
     config.root = Some(channel.into().canonicalize()?.to_string_lossy().to_string());
-    index(target_platform, config, force, max_parallel, multi_progress).await
+    index(
+        target_platform,
+        config,
+        force,
+        max_parallel,
+        multi_progress,
+        Some("conda-forge-repodata-patches-20250228.14.29.06-hd8ed1ab_1.conda"),
+    )
+    .await
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given S3 URL.
@@ -379,6 +436,7 @@ pub async fn index_s3(
         force,
         max_parallel,
         multi_progress,
+        Some("conda-forge-repodata-patches-20250228.14.29.06-hd8ed1ab_1.conda"),
     )
     .await
 }
@@ -401,6 +459,7 @@ pub async fn index<T: Configurator>(
     force: bool,
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
+    repodata_patch: Option<&str>,
 ) -> anyhow::Result<()> {
     let builder = config.into_builder();
 
@@ -443,6 +502,16 @@ pub async fn index<T: Configurator>(
         subdirs.insert(Platform::NoArch);
     }
 
+    let repodata_patch = if let Some(path) = repodata_patch {
+        let repodata_patch_path = format!("noarch/{path}");
+        let repodata_patch_bytes = op.read(&repodata_patch_path).await?.to_bytes();
+        let reader = Cursor::new(repodata_patch_bytes);
+        let repodata_patch = repodata_patch_from_package_stream(reader)?;
+        Some(repodata_patch)
+    } else {
+        None
+    };
+
     let semaphore = Semaphore::new(max_parallel);
     let semaphore = Arc::new(semaphore);
 
@@ -453,6 +522,9 @@ pub async fn index<T: Configurator>(
                 *subdir,
                 op.clone(),
                 force,
+                repodata_patch
+                    .as_ref()
+                    .and_then(|p| p.subdirs.get(&subdir.to_string()).cloned()),
                 multi_progress.clone(),
                 semaphore.clone(),
             ))
