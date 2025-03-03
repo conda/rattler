@@ -88,15 +88,21 @@ impl Directories {
 
     /// Create a fake Directories struct for testing ONLY
     pub fn fake_folders(path: &Path) -> Directories {
+        // Prepare the directories
+        fs::create_dir_all(&path).unwrap();
+
         let terminal_settings_json = path.join("terminal_settings.json");
         if !terminal_settings_json.exists() {
             // This is for testing only, so we can ignore the result
-            std::fs::write(&terminal_settings_json, "{}").unwrap();
+            fs::write(&terminal_settings_json, "{}").unwrap();
         }
+
         let start_menu = path.join("Start Menu");
         fs::create_dir_all(&start_menu).unwrap();
+
         let quick_launch = Some(path.join("Quick Launch"));
         fs::create_dir_all(quick_launch.as_ref().unwrap()).unwrap();
+
         let desktop = path.join("Desktop");
         fs::create_dir_all(&desktop).unwrap();
 
