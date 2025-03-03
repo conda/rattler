@@ -307,7 +307,12 @@ async fn index_subdir(
         })
         .collect::<Vec<_>>();
     let results = try_join_all(tasks).await?;
-
+    let results = results.into_iter().collect::<std::io::Result<Vec<_>>>();
+    if let Err(err) = results {
+        pb.set_message("Failed");
+        return Err(err.into());
+    }
+    let results = results.unwrap();
     pb.finish_with_message(format!("Finished {}", subdir.as_str()));
 
     tracing::info!(
@@ -316,8 +321,7 @@ async fn index_subdir(
         subdir
     );
 
-    for result in results {
-        let (filename, record) = result?;
+    for (filename, record) in results {
         registered_packages.insert(filename, record);
     }
 
