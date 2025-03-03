@@ -29,7 +29,7 @@ console_error_panic_hook = { version = "0.1.7", optional = true }
 # Unfortunately, `wee_alloc` requires nightly Rust when targeting wasm for now.
 wee_alloc = { version = "0.4.5", optional = true }
 
-thiserror = "2.0.3"
+thiserror = "2.0.12"
 
 rattler_conda_types = { path = "../crates/rattler_conda_types" }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", features = ["gateway"] }
