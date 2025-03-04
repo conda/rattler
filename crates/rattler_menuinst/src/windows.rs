@@ -38,13 +38,7 @@ pub struct Directories {
     windows_terminal_settings_files: Vec<PathBuf>,
 }
 
-fn shortcut_filename(name: &str, env_name: Option<&String>, ext: Option<&str>) -> String {
-    let env = if let Some(env_name) = env_name {
-        format!(" ({env_name})")
-    } else {
-        "".to_string()
-    };
-
+fn shortcut_filename(name: &str, ext: Option<&str>) -> String {
     let ext = ext.unwrap_or("lnk");
     format!("{name}{env}.{ext}")
 }
@@ -138,18 +132,13 @@ impl WindowsMenu {
     ) -> Self {
         let name = command.name.resolve(Environment::Base, placeholders);
 
-        let shortcut_name = shortcut_filename(
-            &name,
-            placeholders.as_ref().get("ENV_NAME"),
-            Some(SHORTCUT_EXTENSION),
-        );
+        let shortcut_name = shortcut_filename(&name, Some(SHORTCUT_EXTENSION));
 
         let location = directories
             .start_menu
             .join(&shortcut_name)
             .with_extension(SHORTCUT_EXTENSION);
 
-        // self.menu.start_menu_location / self._shortcut_filename()
         Self {
             prefix: prefix.to_path_buf(),
             name,
@@ -194,10 +183,6 @@ impl WindowsMenu {
         Ok(lines.join("\n"))
     }
 
-    fn shortcut_filename(&self, ext: Option<&str>) -> String {
-        shortcut_filename(&self.name, self.placeholders.as_ref().get("ENV_NAME"), ext)
-    }
-
     fn write_script(&self, path: &Path) -> Result<(), MenuInstError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -212,7 +197,7 @@ impl WindowsMenu {
     fn path_for_script(&self) -> PathBuf {
         self.prefix
             .join("Menu")
-            .join(self.shortcut_filename(Some("bat")))
+            .join(shortcut_filename(&self.name, Some("bat")))
     }
 
     fn build_command(&self, with_arg1: bool) -> Result<Vec<String>, MenuInstError> {
