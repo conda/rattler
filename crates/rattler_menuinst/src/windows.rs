@@ -46,7 +46,7 @@ fn shortcut_filename(name: &str, env_name: Option<&String>, ext: Option<&str>) -
     };
 
     let ext = ext.unwrap_or("lnk");
-    format!("{name}{env}{ext}")
+    format!("{name}{env}.{ext}")
 }
 
 /// On Windows we can create shortcuts in several places:
