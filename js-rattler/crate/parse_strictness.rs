@@ -1,6 +1,6 @@
+use rattler_conda_types::ParseStrictness;
 use serde::Deserialize;
 use wasm_bindgen::prelude::wasm_bindgen;
-use rattler_conda_types::ParseStrictness;
 
 #[wasm_bindgen(typescript_custom_section)]
 const PARSE_STRICTNESS_TS: &'static str = r#"
@@ -14,7 +14,7 @@ export type ParseStrictness = "strict" | "lenient";
 
 #[wasm_bindgen]
 extern "C" {
-    #[wasm_bindgen(js_name="ParseStrictness", typescript_type = "ParseStrictness")]
+    #[wasm_bindgen(js_name = "ParseStrictness", typescript_type = "ParseStrictness")]
     pub type JsParseStrictness;
 }
 

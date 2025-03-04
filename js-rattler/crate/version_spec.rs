@@ -1,8 +1,8 @@
 use rattler_conda_types::{ParseStrictness, VersionSpec};
-use wasm_bindgen::{prelude::wasm_bindgen};
+use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::{version::JsVersion, JsResult};
 use crate::parse_strictness::JsParseStrictness;
+use crate::{version::JsVersion, JsResult};
 
 /// Represents a version specification in the conda ecosystem.
 ///
@@ -39,9 +39,7 @@ impl JsVersionSpec {
     pub fn new(
         #[wasm_bindgen(param_description = "The string representation of the version spec.")]
         version_spec: &str,
-        #[wasm_bindgen(
-            param_description = "The strictness of the parser.",
-        )]
+        #[wasm_bindgen(param_description = "The strictness of the parser.")]
         parse_strictness: Option<JsParseStrictness>,
     ) -> JsResult<Self> {
         let parse_strictness = parse_strictness

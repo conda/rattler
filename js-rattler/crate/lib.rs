@@ -1,10 +1,10 @@
 mod error;
 mod gateway;
+mod parse_strictness;
 pub mod solve;
 mod utils;
 mod version;
 mod version_spec;
-mod parse_strictness;
 
 pub use error::{JsError, JsResult};
 

@@ -1,7 +1,7 @@
-use std::{cmp::Ordering, str::FromStr};
-use wasm_bindgen::JsValue;
 use rattler_conda_types::{Version, VersionBumpType};
+use std::{cmp::Ordering, str::FromStr};
 use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen::JsValue;
 
 use crate::JsResult;
 
@@ -85,10 +85,16 @@ impl JsVersion {
     /// represent a typical major minor version. If any of the parts are not a
     /// single number, undefined is returned.
     // TODO: Simplify when https://github.com/rustwasm/wasm-bindgen/issues/122 is fixed
-    #[wasm_bindgen(js_name = "asMajorMinor", unchecked_return_type="[number, number] | undefined")]
+    #[wasm_bindgen(
+        js_name = "asMajorMinor",
+        unchecked_return_type = "[number, number] | undefined"
+    )]
     pub fn as_major_minor(&self) -> Option<Vec<JsValue>> {
         let (major, minor) = self.as_ref().as_major_minor()?;
-        Some(vec![JsValue::from(major as usize), JsValue::from(minor as usize)])
+        Some(vec![
+            JsValue::from(major as usize),
+            JsValue::from(minor as usize),
+        ])
     }
 
     /// Returns true if this version starts with the other version. This is
