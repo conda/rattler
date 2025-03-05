@@ -25,6 +25,7 @@ async def index_fs(
         channel_directory: A `os.PathLike[str]` that is the directory containing subdirectories
                            of dependencies to index.
         target_platform(optional): A `Platform` to index dependencies for.
+        repodata_patch(optional): The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
     """
@@ -67,6 +68,7 @@ async def index_s3(
         secret_access_key(optional): The secret access key to use for authentication.
         session_token(optional): The session token to use for authentication.
         target_platform(optional): A `Platform` to index dependencies for.
+        repodata_patch(optional): The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
     """
