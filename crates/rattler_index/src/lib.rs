@@ -2,7 +2,7 @@
 //! files
 #![deny(missing_docs)]
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bytes::buf::Buf;
 use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
@@ -76,30 +76,38 @@ pub fn package_record_from_index_json<T: Read>(
 
 fn repodata_patch_from_conda_package_stream<'a>(
     package: impl Read + Seek + 'a,
-) -> std::io::Result<rattler_conda_types::RepoDataPatch> {
+) -> anyhow::Result<rattler_conda_types::RepoDataPatch> {
     let mut subdirs = FxHashMap::default();
 
-    let mut content_reader = stream_conda_content(package).unwrap();
-    let entries = content_reader.entries().unwrap();
+    let mut content_reader = stream_conda_content(package)?;
+    let entries = content_reader.entries()?;
     for entry in entries {
-        let mut entry = entry.unwrap();
+        let mut entry = entry?;
         if !entry.header().entry_type().is_file() {
-            todo!();
+            return Err(anyhow::anyhow!(
+                "Expected repodata patch package to be a file"
+            ));
         }
         let mut buf = Vec::new();
-        entry.read_to_end(&mut buf).unwrap();
-        let path = entry.path().unwrap();
+        entry.read_to_end(&mut buf)?;
+        let path = entry.path()?;
         let components = path.components().collect::<Vec<_>>();
-        let subdir = if components.len() == 2 {
-            if components[1].as_os_str() != "patch_instructions.json" {
-                todo!();
-            }
-            components[0].as_os_str().to_string_lossy().to_string()
-        } else {
-            todo!();
-        };
+        let subdir =
+            if components.len() == 2 && components[1].as_os_str() == "patch_instructions.json" {
+                let subdir_str = components[0]
+                    .as_os_str()
+                    .to_str()
+                    .context("Could not convert OsStr to str")?;
+                let _ = Platform::from_str(subdir_str)?;
+                subdir_str.to_string()
+            } else {
+                return Err(anyhow::anyhow!(
+                    "Expected files of form <subdir>/patch_instructions.json, but found {}",
+                    path.display()
+                ));
+            };
 
-        let instructions: PatchInstructions = serde_json::from_slice(&buf).unwrap();
+        let instructions: PatchInstructions = serde_json::from_slice(&buf)?;
         subdirs.insert(subdir, instructions);
     }
 
@@ -297,7 +305,6 @@ async fn index_subdir(
                         ArchiveType::Conda => package_record_from_conda_reader(reader),
                     }?;
                     pb.inc(1);
-                    // todo: make this future ok/err instead of results
                     Ok::<(String, PackageRecord), std::io::Error>((filename.clone(), record))
                 }
             }
