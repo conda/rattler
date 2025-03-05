@@ -135,6 +135,7 @@ async def test_index_s3(
         force_path_style=True,
         access_key_id=s3_config.access_key_id,
         secret_access_key=s3_config.secret_access_key,
+        repodata_patch=None,
         force=True,
     )
 
