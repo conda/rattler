@@ -398,6 +398,7 @@ async fn index_subdir(
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given directory.
+#[allow(clippy::too_many_arguments)]
 pub async fn index_fs(
     channel: impl Into<PathBuf>,
     target_platform: Option<Platform>,
@@ -411,10 +412,10 @@ pub async fn index_fs(
     index(
         target_platform,
         config,
+        repodata_patch,
         force,
         max_parallel,
         multi_progress,
-        repodata_patch,
     )
     .await
 }
@@ -470,10 +471,10 @@ pub async fn index_s3(
     index(
         target_platform,
         s3_config,
+        repodata_patch,
         force,
         max_parallel,
         multi_progress,
-        repodata_patch,
     )
     .await
 }
@@ -493,10 +494,10 @@ pub async fn index_s3(
 pub async fn index<T: Configurator>(
     target_platform: Option<Platform>,
     config: T,
+    repodata_patch: Option<String>,
     force: bool,
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
-    repodata_patch: Option<String>,
 ) -> anyhow::Result<()> {
     let builder = config.into_builder();
 

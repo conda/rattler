@@ -10,6 +10,7 @@ from rattler.rattler import py_index_fs, py_index_s3
 async def index_fs(
     channel_directory: os.PathLike[str],
     target_platform: Optional[Platform] = None,
+    repodata_patch: Optional[str] = None,
     force: bool = False,
     max_parallel: int = 128,
 ) -> None:
@@ -30,6 +31,7 @@ async def index_fs(
     await py_index_fs(
         channel_directory,
         target_platform._inner if target_platform else target_platform,
+        repodata_patch,
         force,
         max_parallel,
     )
@@ -44,6 +46,7 @@ async def index_s3(
     secret_access_key: Optional[str] = None,
     session_token: Optional[str] = None,
     target_platform: Optional[Platform] = None,
+    repodata_patch: Optional[str] = None,
     force: bool = False,
     max_parallel: int = 128,
 ) -> None:
@@ -76,6 +79,7 @@ async def index_s3(
         secret_access_key,
         session_token,
         target_platform._inner if target_platform else target_platform,
+        repodata_patch,
         force,
         max_parallel,
     )
