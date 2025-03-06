@@ -6,6 +6,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.13](https://github.com/conda/rattler/compare/rattler_cache-v0.3.12...rattler_cache-v0.3.13) - 2025-03-04
+
+### Added
+
+- *(js)* compile `rattler_solve` and `rattler_repodata_gateway` ([#1108](https://github.com/conda/rattler/pull/1108))
+
+## [0.3.12](https://github.com/conda/rattler/compare/rattler_cache-v0.3.11...rattler_cache-v0.3.12) - 2025-02-28
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.3.11](https://github.com/conda/rattler/compare/rattler_cache-v0.3.10...rattler_cache-v0.3.11) - 2025-02-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.3.10](https://github.com/conda/rattler/compare/rattler_cache-v0.3.9...rattler_cache-v0.3.10) - 2025-02-25
+
+### Added
+
+- add run_exports cache (#1060)
+
+### Fixed
+
+- support file URL for run exports cache (#1081)
+
+### Other
+
+- use run-exports (#1077)
+
 ## [0.3.9](https://github.com/conda/rattler/compare/rattler_cache-v0.3.8...rattler_cache-v0.3.9) - 2025-02-18
 
 ### Other

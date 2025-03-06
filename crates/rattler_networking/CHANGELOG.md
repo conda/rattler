@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.8](https://github.com/conda/rattler/compare/rattler_networking-v0.22.7...rattler_networking-v0.22.8) - 2025-03-04
+
+### Added
+
+- *(js)* compile `rattler_solve` and `rattler_repodata_gateway` ([#1108](https://github.com/conda/rattler/pull/1108))
+
+## [0.22.7](https://github.com/conda/rattler/compare/rattler_networking-v0.22.6...rattler_networking-v0.22.7) - 2025-02-28
+
+### Fixed
+
+- R2 key names in tests (#1115)
+
+## [0.22.6](https://github.com/conda/rattler/compare/rattler_networking-v0.22.5...rattler_networking-v0.22.6) - 2025-02-27
+
+### Fixed
+
+- clippy lint (#1105)
+
+## [0.22.5](https://github.com/conda/rattler/compare/rattler_networking-v0.22.4...rattler_networking-v0.22.5) - 2025-02-25
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.22.4](https://github.com/conda/rattler/compare/rattler_networking-v0.22.3...rattler_networking-v0.22.4) - 2025-02-18
 
 ### Other

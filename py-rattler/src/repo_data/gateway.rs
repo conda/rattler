@@ -6,6 +6,8 @@ use crate::platform::PyPlatform;
 use crate::record::PyRecord;
 use crate::{PyChannel, Wrap};
 use pyo3::exceptions::PyValueError;
+use pyo3::pybacked::PyBackedStr;
+use pyo3::types::PyAnyMethods;
 use pyo3::{pyclass, pymethods, Bound, FromPyObject, PyAny, PyResult, Python};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
@@ -166,7 +168,8 @@ impl From<SourceConfig> for PySourceConfig {
 
 impl<'py> FromPyObject<'py> for Wrap<CacheAction> {
     fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
-        let parsed = match <&'py str>::extract_bound(ob)? {
+        let as_py_str: PyBackedStr = ob.extract()?;
+        let parsed = match as_py_str.as_ref() {
             "cache-or-fetch" => CacheAction::CacheOrFetch,
             "use-cache-only" => CacheAction::UseCacheOnly,
             "force-cache-only" => CacheAction::ForceCacheOnly,
@@ -225,7 +228,8 @@ impl From<FetchRepoDataOptions> for PyFetchRepoDataOptions {
 
 impl<'py> FromPyObject<'py> for Wrap<Variant> {
     fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
-        let parsed = match <&'py str>::extract_bound(ob)? {
+        let as_py_str: PyBackedStr = ob.extract()?;
+        let parsed = match as_py_str.as_ref() {
             "after-patches" => Variant::AfterPatches,
             "from-packages" => Variant::FromPackages,
             "current" => Variant::Current,

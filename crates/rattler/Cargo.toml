@@ -1,6 +1,6 @@
 [package]
 name = "rattler"
-version = "0.32.0"
+version = "0.32.4"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust library to install conda environments"
@@ -32,20 +32,20 @@ memchr = { workspace = true }
 memmap2 = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
-rattler_cache = { path = "../rattler_cache", version = "0.3.9", default-features = false }
-rattler_conda_types = { path = "../rattler_conda_types", version = "0.30.3", default-features = false }
-rattler_digest = { path = "../rattler_digest", version = "1.0.6", default-features = false }
-rattler_networking = { path = "../rattler_networking", version = "0.22.4", default-features = false }
-rattler_shell = { path = "../rattler_shell", version = "0.22.19", default-features = false }
-rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.28", default-features = false, features = ["reqwest"] }
-rattler_menuinst = { path = "../rattler_menuinst", version = "0.1.0", default-features = false }
+rattler_cache = { path = "../rattler_cache", version = "0.3.13", default-features = false }
+rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.3", default-features = false }
+rattler_digest = { path = "../rattler_digest", version = "1.0.7", default-features = false }
+rattler_networking = { path = "../rattler_networking", version = "0.22.8", default-features = false }
+rattler_shell = { path = "../rattler_shell", version = "0.22.22", default-features = false }
+rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.32", default-features = false, features = ["reqwest"] }
+rattler_menuinst = { path = "../rattler_menuinst", version = "0.2.2", default-features = false }
 rayon = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["stream", "json", "gzip"] }
 reqwest-middleware = { workspace = true }
 smallvec = { workspace = true }
-simple_spawn_blocking = { path = "../simple_spawn_blocking", version = "1.0", default-features = false, features = ["tokio"] }
+simple_spawn_blocking = { path = "../simple_spawn_blocking", version = "1.1", default-features = false, features = ["tokio"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "io-util", "macros"] }

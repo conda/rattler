@@ -1,6 +1,6 @@
 [package]
 name = "rattler_conda_types"
-version = "0.30.3"
+version = "0.31.3"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for common types used within the Conda ecosystem"
@@ -24,17 +24,25 @@ itertools = { workspace = true }
 lazy-regex = { workspace = true }
 nom = { workspace = true }
 purl = { workspace = true, features = ["serde"] }
-rattler_digest = { path = "../rattler_digest", version = "1.0.6", default-features = false, features = ["serde"] }
+rattler_digest = { path = "../rattler_digest", version = "1.0.7", default-features = false, features = [
+  "serde",
+] }
 rattler_macros = { path = "../rattler_macros", version = "1.0.6", default-features = false }
+rattler_redaction = { version = "0.1.8", path = "../rattler_redaction", default-features = false }
 regex = { workspace = true }
-simd-json = { workspace = true , features = ["serde_impl"]}
+simd-json = { workspace = true, features = ["serde_impl"] }
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
 serde_with = { workspace = true, features = ["indexmap_2"] }
 serde-untagged = { workspace = true }
 serde_yaml = { workspace = true }
-smallvec = { workspace = true, features = ["serde", "const_new", "const_generics", "union"] }
+smallvec = { workspace = true, features = [
+  "serde",
+  "const_new",
+  "const_generics",
+  "union",
+] }
 strum = { workspace = true, features = ["derive"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
@@ -42,15 +50,22 @@ tracing = { workspace = true }
 typed-path = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true }
-rattler_redaction = { version = "0.1.6", path = "../rattler_redaction" }
 dirs = { workspace = true }
 rayon = { workspace = true, optional = true }
 fs-err = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true }
-insta = { workspace = true, features = ["yaml", "redactions", "toml", "glob", "filters"] }
-rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = ["rustls-tls"] }
+insta = { workspace = true, features = [
+  "yaml",
+  "redactions",
+  "toml",
+  "glob",
+  "filters",
+] }
+rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = [
+  "rustls-tls",
+] }
 rstest = { workspace = true }
 assert_matches = { workspace = true }
 hex-literal = { workspace = true }

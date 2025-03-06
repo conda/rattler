@@ -26,7 +26,7 @@ use crate::{
         serde::{sort_map_alphabetically, DeserializeFromStrUnchecked},
         UrlWithTrailingSlash,
     },
-    Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
+    Arch, Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
     ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
 };
 
@@ -93,7 +93,10 @@ pub trait RecordFromPath {
 #[sorted]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Hash)]
 pub struct PackageRecord {
-    /// Optionally the architecture the package supports
+    /// Optionally the architecture the package supports. This is almost
+    /// always the second part of the `subdir` string. Except for `64` which
+    /// maps to `x86_64` and `32` which maps to `x86`. This will be `None` if
+    /// the package is `noarch`.
     pub arch: Option<String>,
 
     /// The build string of the package
@@ -152,8 +155,11 @@ pub struct PackageRecord {
     #[serde(skip_serializing_if = "NoArchType::is_none")]
     pub noarch: NoArchType,
 
-    /// Optionally the platform the package supports
-    pub platform: Option<String>, // Note that this does not match the [`Platform`] enum..
+    /// Optionally the platform the package supports.
+    /// Note that this does not match the [`Platform`] enum, but is only the first
+    /// part of the platform (e.g. `linux`, `osx`, `win`, ...).
+    /// The `subdir` field contains the `Platform` enum.
+    pub platform: Option<String>,
 
     /// Package identifiers of packages that are equivalent to this package but
     /// from other ecosystems.
@@ -457,33 +463,17 @@ fn determine_subdir(
     let platform = platform.ok_or(ConvertSubdirError::PlatformEmpty)?;
     let arch = arch.ok_or(ConvertSubdirError::ArchEmpty)?;
 
-    let plat = match platform.as_ref() {
-        "linux" => match arch.as_ref() {
-            "x86" => Ok(Platform::Linux32),
-            "x86_64" => Ok(Platform::Linux64),
-            "aarch64" => Ok(Platform::LinuxAarch64),
-            "armv61" => Ok(Platform::LinuxArmV6l),
-            "armv71" => Ok(Platform::LinuxArmV7l),
-            "ppc64le" => Ok(Platform::LinuxPpc64le),
-            "ppc64" => Ok(Platform::LinuxPpc64),
-            "s390x" => Ok(Platform::LinuxS390X),
-            _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
-        },
-        "osx" => match arch.as_ref() {
-            "x86_64" => Ok(Platform::Osx64),
-            "arm64" => Ok(Platform::OsxArm64),
-            _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
-        },
-        "windows" => match arch.as_ref() {
-            "x86" => Ok(Platform::Win32),
-            "x86_64" => Ok(Platform::Win64),
-            "arm64" => Ok(Platform::WinArm64),
-            _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
-        },
-        _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
-    }?;
-    // Convert back to Platform string which should correspond to known subdirs
-    Ok(plat.to_string())
+    match arch.parse::<Arch>() {
+        Ok(arch) => {
+            let arch_str = match arch {
+                Arch::X86 => "32",
+                Arch::X86_64 => "64",
+                _ => arch.as_str(),
+            };
+            Ok(format!("{}-{}", platform, arch_str))
+        }
+        Err(_) => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
+    }
 }
 
 impl PackageRecord {

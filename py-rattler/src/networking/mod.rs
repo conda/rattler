@@ -1,5 +1,5 @@
 use futures::future::try_join_all;
-use pyo3::{pyfunction, types::PyTuple, Bound, Py, PyAny, PyResult, Python, ToPyObject};
+use pyo3::{pyfunction, types::PyTuple, Bound, Py, PyAny, PyResult, Python};
 use pyo3_async_runtimes::tokio::future_into_py;
 
 use rattler_repodata_gateway::fetch::{
@@ -41,7 +41,7 @@ pub fn py_fetch_repo_data<'a>(
     for (subdir, chan, platform) in get_subdir_urls(channels, platforms)? {
         let callback = callback.as_ref().map(|callback| {
             Arc::new(ProgressReporter {
-                callback: callback.to_object(py),
+                callback: callback.clone().unbind(),
             }) as _
         });
         let cache_path = cache_path.clone();
@@ -92,7 +92,8 @@ impl Reporter for ProgressReporter {
         total_bytes: Option<usize>,
     ) {
         Python::with_gil(|py| {
-            let args = PyTuple::new_bound(py, [Some(bytes_downloaded), total_bytes]);
+            let args = PyTuple::new(py, [Some(bytes_downloaded), total_bytes])
+                .expect("Failed to create tuple");
             self.callback.call1(py, args).expect("Callback failed!");
         });
     }

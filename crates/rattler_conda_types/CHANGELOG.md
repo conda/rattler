@@ -6,6 +6,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.31.2...rattler_conda_types-v0.31.3) - 2025-03-04
+
+### Other
+
+- updated the following local packages: rattler_redaction
+
+## [0.31.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.31.1...rattler_conda_types-v0.31.2) - 2025-02-28
+
+### Fixed
+
+- roundtrip of arch/platform in lock files (#1124)
+
+## [0.31.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.31.0...rattler_conda_types-v0.31.1) - 2025-02-27
+
+### Added
+
+- Use `opendal` in `rattler-index` and add executable (#1076)
+
+## [0.31.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.30.3...rattler_conda_types-v0.31.0) - 2025-02-25
+
+### Added
+
+- add `rattler_menuinst` crate (#840)
+- initial wasm/ts/js bindings (#1079)
+
 ## [0.30.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.30.2...rattler_conda_types-v0.30.3) - 2025-02-18
 
 ### Added

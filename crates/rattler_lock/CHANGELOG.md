@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.46](https://github.com/conda/rattler/compare/rattler_lock-v0.22.45...rattler_lock-v0.22.46) - 2025-02-28
+
+### Fixed
+
+- roundtrip of arch/platform in lock files (#1124)
+
+## [0.22.45](https://github.com/conda/rattler/compare/rattler_lock-v0.22.44...rattler_lock-v0.22.45) - 2025-02-27
+
+### Fixed
+
+- clippy lint (#1105)
+
+## [0.22.44](https://github.com/conda/rattler/compare/rattler_lock-v0.22.43...rattler_lock-v0.22.44) - 2025-02-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [0.22.43](https://github.com/conda/rattler/compare/rattler_lock-v0.22.42...rattler_lock-v0.22.43) - 2025-02-18
 
 ### Other

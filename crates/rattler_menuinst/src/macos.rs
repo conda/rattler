@@ -22,10 +22,20 @@ use crate::{
         CFBundleDocumentTypesModel, CFBundleTypeRole, CFBundleURLTypesModel, LSHandlerRank, MacOS,
         MacOSVersion, MenuItemCommand, UTTypeDeclarationModel,
     },
-    utils::{self, log_output, run_pre_create_command},
+    utils::{log_output, run_pre_create_command},
     MenuInstError, MenuMode,
 };
 use std::collections::HashMap;
+
+pub fn quote_args<I, S>(args: I) -> Vec<String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    args.into_iter()
+        .map(|arg| format!(r#""{}""#, arg.as_ref()))
+        .collect()
+}
 
 #[derive(Debug, Clone)]
 pub struct MacOSMenu {
@@ -658,7 +668,7 @@ impl MacOSMenu {
             .command
             .iter()
             .map(|s| s.resolve(&self.placeholders));
-        lines.push(utils::quote_args(command).join(" "));
+        lines.push(quote_args(command).join(" "));
 
         Ok(lines.join("\n"))
     }
@@ -897,16 +907,16 @@ mod tests {
             for item in &parsed_schema.menu_items {
                 let icon = item.command.icon.as_ref().unwrap();
                 for ext in &["icns", "png", "svg"] {
-                    placeholders.insert("ICON_EXT".to_string(), ext.to_string());
+                    placeholders.insert("ICON_EXT".to_string(), (*ext).to_string());
                     let icon_path = icon.resolve(FakePlaceholders {
                         placeholders: placeholders.clone(),
                     });
-                    fs::write(&icon_path, &[]).unwrap();
+                    fs::write(&icon_path, []).unwrap();
                 }
             }
 
             fs::create_dir_all(prefix_path.join("bin")).unwrap();
-            fs::write(prefix_path.join("bin/python"), &[]).unwrap();
+            fs::write(prefix_path.join("bin/python"), []).unwrap();
 
             Self {
                 _tmp_dir: tmp_dir,
@@ -926,8 +936,8 @@ mod tests {
         let fake_prefix = FakePrefix::new(Path::new("spyder/menu.json"));
 
         let placeholders = super::BaseMenuItemPlaceholders::new(
-            &fake_prefix.prefix(),
-            &fake_prefix.prefix(),
+            fake_prefix.prefix(),
+            fake_prefix.prefix(),
             rattler_conda_types::Platform::current(),
         );
 
