@@ -364,6 +364,10 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn test_unlink_package_in_use() {
+        use crate::get_repodata_record;
+        use crate::install::link_package;
+        use crate::install::InstallOptions;
+        use rattler_conda_types::PrefixRecord;
         use std::{
             env::{join_paths, split_paths, var_os},
             io::{BufRead, BufReader},
