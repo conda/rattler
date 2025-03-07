@@ -229,13 +229,10 @@ mod tests {
         path::Path,
     };
 
-    use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord};
+    use rattler_conda_types::{Platform, RepoDataRecord};
 
+    use crate::install::test_utils::download_and_get_prefix_record;
     use crate::install::{empty_trash, unlink_package, InstallDriver, Transaction};
-    use crate::{
-        get_repodata_record,
-        install::{link_package, test_utils::download_and_get_prefix_record, InstallOptions},
-    };
 
     #[tokio::test]
     async fn test_unlink_package() {
