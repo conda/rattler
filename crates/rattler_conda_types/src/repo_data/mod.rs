@@ -470,7 +470,7 @@ fn determine_subdir(
                 Arch::X86_64 => "64",
                 _ => arch.as_str(),
             };
-            Ok(format!("{}-{}", platform, arch_str))
+            Ok(format!("{platform}-{arch_str}"))
         }
         Err(_) => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
     }

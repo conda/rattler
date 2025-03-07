@@ -32,13 +32,18 @@ struct Cli {
 
     /// The maximum number of packages to process in-memory simultaneously.
     /// This is necessary to limit memory usage when indexing large channels.
-    #[arg(long, default_value = "128", global = true)]
+    #[arg(long, default_value = "32", global = true)]
     max_parallel: usize,
 
     /// A specific platform to index.
     /// Defaults to all platforms available in the channel.
     #[arg(long, global = true)]
     target_platform: Option<Platform>,
+
+    /// The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
+    /// For more information, see `https://prefix.dev/blog/repodata_patching`.
+    #[arg(long, global = true)]
+    repodata_patch: Option<String>,
 }
 
 /// The subcommands for the `rattler-index` CLI.
@@ -106,6 +111,7 @@ async fn main() -> anyhow::Result<()> {
             index_fs(
                 channel,
                 cli.target_platform,
+                cli.repodata_patch,
                 cli.force,
                 cli.max_parallel,
                 Some(multi_progress),
@@ -130,6 +136,7 @@ async fn main() -> anyhow::Result<()> {
                 secret_access_key,
                 session_token,
                 cli.target_platform,
+                cli.repodata_patch,
                 cli.force,
                 cli.max_parallel,
                 Some(multi_progress),
