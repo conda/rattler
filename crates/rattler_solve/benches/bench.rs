@@ -21,7 +21,7 @@ fn conda_json_path_noarch() -> String {
 }
 
 fn read_sparse_repodata(path: &str) -> SparseRepoData {
-    SparseRepoData::new(
+    SparseRepoData::from_file(
         Channel::from_str(
             "dummy",
             &ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap()),

@@ -1,7 +1,6 @@
 //! `reqwest` middleware that authenticates requests with data from the `AuthenticationStorage`
 use crate::authentication_storage::AuthenticationStorageError;
 use crate::{Authentication, AuthenticationStorage};
-use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use reqwest::{Request, Response};
@@ -16,7 +15,8 @@ pub struct AuthenticationMiddleware {
     auth_storage: AuthenticationStorage,
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 impl Middleware for AuthenticationMiddleware {
     async fn handle(
         &self,
@@ -148,7 +148,7 @@ mod tests {
         pub captured_tx: tokio::sync::mpsc::Sender<reqwest::Request>,
     }
 
-    #[async_trait]
+    #[async_trait::async_trait]
     impl Middleware for CaptureAbortMiddleware {
         async fn handle(
             &self,

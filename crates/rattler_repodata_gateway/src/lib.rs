@@ -26,7 +26,7 @@
 //! using the [`fetch::fetch_repo_data`] function:
 //!
 //! ```no_run
-//! use std::{path::PathBuf, default::Default};
+//! use std::{default::Default, path::PathBuf};
 //! use reqwest::Client;
 //! use reqwest_middleware::ClientWithMiddleware;
 //! use url::Url;
