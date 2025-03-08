@@ -1115,9 +1115,7 @@ mod test {
             .unwrap();
             #[cfg(windows)]
             {
-                let mut perms = std::fs::metadata(&layer.path)
-                    .unwrap()
-                    .permissions();
+                let mut perms = std::fs::metadata(&layer.path).unwrap().permissions();
                 perms.set_readonly(true); // Remove write permissions
                 std::fs::set_permissions(&layer.path, perms).unwrap();
             }
