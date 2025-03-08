@@ -1,5 +1,5 @@
 use futures::future::try_join_all;
-use pyo3::{pyfunction, types::PyTuple, Bound, Py, PyAny, PyResult, Python, ToPyObject};
+use pyo3::{pyfunction, types::PyTuple, Bound, Py, PyAny, PyResult, Python};
 use pyo3_async_runtimes::tokio::future_into_py;
 
 use rattler_repodata_gateway::fetch::{
@@ -11,7 +11,7 @@ use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use crate::{
     channel::PyChannel, error::PyRattlerError, platform::PyPlatform,
-    repo_data::sparse::PySparseRepoData,
+    repo_data::gateway::PyFetchRepoDataOptions, repo_data::sparse::PySparseRepoData,
 };
 use client::PyClientWithMiddleware;
 use rattler_repodata_gateway::Reporter;
@@ -23,7 +23,7 @@ pub mod middleware;
 /// High-level function to fetch repodata for all the subdirectory of channels and platform.
 /// Returns a list of `PyRepoData`.
 #[pyfunction]
-#[pyo3(signature = (channels, platforms, cache_path, callback=None, client=None))]
+#[pyo3(signature = (channels, platforms, cache_path, callback=None, client=None, fetch_options=None))]
 pub fn py_fetch_repo_data<'a>(
     py: Python<'a>,
     channels: Vec<PyChannel>,
@@ -31,18 +31,22 @@ pub fn py_fetch_repo_data<'a>(
     cache_path: PathBuf,
     callback: Option<Bound<'a, PyAny>>,
     client: Option<PyClientWithMiddleware>,
+    fetch_options: Option<PyFetchRepoDataOptions>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let mut meta_futures = Vec::new();
-    let client = client.unwrap_or(PyClientWithMiddleware::new(None));
-
-    for (subdir, chan) in get_subdir_urls(channels, platforms)? {
+    let client = client.unwrap_or(PyClientWithMiddleware::new(None)?);
+    let fetch_options = fetch_options.unwrap_or(PyFetchRepoDataOptions {
+        inner: FetchRepoDataOptions::default(),
+    });
+    for (subdir, chan, platform) in get_subdir_urls(channels, platforms)? {
         let callback = callback.as_ref().map(|callback| {
             Arc::new(ProgressReporter {
-                callback: callback.to_object(py),
+                callback: callback.clone().unbind(),
             }) as _
         });
         let cache_path = cache_path.clone();
         let client = client.clone();
+        let fetch_options = fetch_options.clone();
 
         // Push all the future into meta_future vec to be resolve later
         meta_futures.push(async move {
@@ -51,12 +55,13 @@ pub fn py_fetch_repo_data<'a>(
                     subdir,
                     client.into(),
                     cache_path,
-                    FetchRepoDataOptions::default(),
+                    fetch_options.into(),
                     callback,
                 )
                 .await?,
                 chan,
-            )) as Result<(CachedRepoData, PyChannel), FetchRepoDataError>
+                String::from(platform.inner.as_str()),
+            )) as Result<(CachedRepoData, PyChannel, String), FetchRepoDataError>
         });
     }
 
@@ -65,9 +70,8 @@ pub fn py_fetch_repo_data<'a>(
         match try_join_all(meta_futures).await {
             Ok(res) => res
                 .into_iter()
-                .map(|(cache, chan)| {
-                    let path = cache_path.to_string_lossy().into_owned();
-                    PySparseRepoData::new(chan, path, cache.repo_data_json_path)
+                .map(|(cache, chan, platform)| {
+                    PySparseRepoData::new(chan, platform, cache.repo_data_json_path)
                 })
                 .collect::<Result<Vec<_>, _>>(),
             Err(e) => Err(PyRattlerError::from(e).into()),
@@ -88,7 +92,8 @@ impl Reporter for ProgressReporter {
         total_bytes: Option<usize>,
     ) {
         Python::with_gil(|py| {
-            let args = PyTuple::new_bound(py, [Some(bytes_downloaded), total_bytes]);
+            let args = PyTuple::new(py, [Some(bytes_downloaded), total_bytes])
+                .expect("Failed to create tuple");
             self.callback.call1(py, args).expect("Callback failed!");
         });
     }
@@ -98,7 +103,7 @@ impl Reporter for ProgressReporter {
 fn get_subdir_urls(
     channels: Vec<PyChannel>,
     platforms: Vec<PyPlatform>,
-) -> PyResult<Vec<(Url, PyChannel)>> {
+) -> PyResult<Vec<(Url, PyChannel, PyPlatform)>> {
     let mut urls = Vec::new();
 
     for c in channels {
@@ -107,6 +112,7 @@ fn get_subdir_urls(
             urls.push((
                 Url::from_str(r.as_str()).map_err(PyRattlerError::from)?,
                 c.clone(),
+                *p,
             ));
         }
     }

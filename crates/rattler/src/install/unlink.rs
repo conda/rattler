@@ -1,15 +1,15 @@
 //! Unlinking packages from an environment.
 
-use fs_err::tokio as tokio_fs;
 use std::{
     collections::HashSet,
     ffi::OsString,
     io::ErrorKind,
     path::{Path, PathBuf},
 };
-use uuid::Uuid;
 
+use fs_err::tokio as tokio_fs;
 use rattler_conda_types::PrefixRecord;
+use uuid::Uuid;
 
 /// Error that can occur while unlinking a package.
 #[derive(Debug, thiserror::Error)]
@@ -227,59 +227,17 @@ mod tests {
         fs::{self, File},
         io::Write,
         path::Path,
-        str::FromStr,
     };
 
-    use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord, Version};
-    use url::Url;
+    use rattler_conda_types::{Platform, RepoDataRecord};
 
-    use crate::{
-        get_repodata_record,
-        install::{
-            empty_trash, link_package, unlink_package, InstallDriver, InstallOptions, PythonInfo,
-            Transaction,
-        },
-    };
-
-    async fn link_ruff(target_prefix: &Path, package_url: Url, sha256_hash: &str) -> PrefixRecord {
-        let package_path = tools::download_and_cache_file_async(package_url, sha256_hash)
-            .await
-            .unwrap();
-
-        let package_dir = tempfile::TempDir::new().unwrap();
-
-        // Create package cache
-        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
-
-        let py_info =
-            PythonInfo::from_version(&Version::from_str("3.10").unwrap(), None, Platform::Linux64)
-                .unwrap();
-        let install_options = InstallOptions {
-            python_info: Some(py_info),
-            ..InstallOptions::default()
-        };
-
-        let install_driver = InstallDriver::default();
-        // Link the package
-        let paths = link_package(
-            package_dir.path(),
-            target_prefix,
-            &install_driver,
-            install_options,
-        )
-        .await
-        .unwrap();
-
-        let repodata_record = get_repodata_record(&package_path);
-        // Construct a PrefixRecord for the package
-
-        PrefixRecord::from_repodata_record(repodata_record, None, None, paths, None, None)
-    }
+    use crate::install::test_utils::download_and_get_prefix_record;
+    use crate::install::{empty_trash, unlink_package, InstallDriver, Transaction};
 
     #[tokio::test]
     async fn test_unlink_package() {
         let environment_dir = tempfile::TempDir::new().unwrap();
-        let prefix_record = link_ruff(
+        let prefix_record = download_and_get_prefix_record(
             environment_dir.path(),
             "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda"
                 .parse()
@@ -308,6 +266,7 @@ mod tests {
         let transaction = Transaction::from_current_and_desired(
             vec![prefix_record.clone()],
             Vec::<RepoDataRecord>::new().into_iter(),
+            None,
             Platform::current(),
         )
         .unwrap();
@@ -328,7 +287,7 @@ mod tests {
     #[tokio::test]
     async fn test_unlink_package_python_noarch() {
         let target_prefix = tempfile::TempDir::new().unwrap();
-        let prefix_record = link_ruff(
+        let prefix_record = download_and_get_prefix_record(
             target_prefix.path(),
             "https://conda.anaconda.org/conda-forge/noarch/pytweening-1.0.4-pyhd8ed1ab_0.tar.bz2"
                 .parse()
@@ -370,6 +329,7 @@ mod tests {
         let transaction = Transaction::from_current_and_desired(
             vec![prefix_record.clone()],
             Vec::<RepoDataRecord>::new().into_iter(),
+            None,
             Platform::current(),
         )
         .unwrap();
@@ -404,10 +364,17 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn test_unlink_package_in_use() {
+        use crate::get_repodata_record;
+        use crate::install::link_package;
+        use crate::install::InstallOptions;
+        use rattler_conda_types::PrefixRecord;
+        use std::{
+            env::{join_paths, split_paths, var_os},
+            io::{BufRead, BufReader},
+            process::{Command, Stdio},
+        };
+
         use itertools::chain;
-        use std::env::{join_paths, split_paths, var_os};
-        use std::io::{BufRead, BufReader};
-        use std::process::{Command, Stdio};
 
         let environment_dir = tempfile::TempDir::new().unwrap();
         let target_prefix = environment_dir.path();
@@ -485,7 +452,7 @@ mod tests {
         let mut stdout = BufReader::new(child.stdout.take().expect("failed to open stdout"));
         // Ensure program has started by waiting for it to repeat back to us.
         let mut line = String::new();
-        stdin.write("abc\n".as_bytes()).unwrap();
+        stdin.write_all(b"abc\n").unwrap();
         stdout.read_line(&mut line).unwrap();
 
         // Unlink the package

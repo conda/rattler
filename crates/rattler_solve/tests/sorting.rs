@@ -21,7 +21,7 @@ fn load_repodata(package_name: &PackageName) -> Vec<Vec<RepoDataRecord>> {
     let repodata_json_path = channel_path.join("linux-64").join("repodata.json");
     let channel = Channel::from_directory(&channel_path);
 
-    let sparse_repo_data = SparseRepoData::new(channel, "linux-64", repodata_json_path, None)
+    let sparse_repo_data = SparseRepoData::from_file(channel, "linux-64", repodata_json_path, None)
         .expect("failed to load sparse repodata");
 
     SparseRepoData::load_records_recursive(&[sparse_repo_data], [package_name.clone()], None)

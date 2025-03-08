@@ -6,6 +6,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.22](https://github.com/conda/rattler/compare/rattler_shell-v0.22.21...rattler_shell-v0.22.22) - 2025-02-28
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.22.21](https://github.com/conda/rattler/compare/rattler_shell-v0.22.20...rattler_shell-v0.22.21) - 2025-02-27
+
+### Added
+
+- implement shell completion helpers (#1075)
+
+## [0.22.20](https://github.com/conda/rattler/compare/rattler_shell-v0.22.19...rattler_shell-v0.22.20) - 2025-02-25
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.22.19](https://github.com/conda/rattler/compare/rattler_shell-v0.22.18...rattler_shell-v0.22.19) - 2025-02-18
+
+### Other
+
+- update dependencies (#1069)
+
+## [0.22.18](https://github.com/conda/rattler/compare/rattler_shell-v0.22.17...rattler_shell-v0.22.18) - 2025-02-06
+
+### Other
+
+- bump rust 1.84.1 (#1053)
+
+## [0.22.17](https://github.com/conda/rattler/compare/rattler_shell-v0.22.16...rattler_shell-v0.22.17) - 2025-02-03
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.22.16](https://github.com/conda/rattler/compare/rattler_shell-v0.22.15...rattler_shell-v0.22.16) - 2025-01-23
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.22.15](https://github.com/conda/rattler/compare/rattler_shell-v0.22.14...rattler_shell-v0.22.15) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.22.14](https://github.com/conda/rattler/compare/rattler_shell-v0.22.13...rattler_shell-v0.22.14) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.22.13](https://github.com/conda/rattler/compare/rattler_shell-v0.22.12...rattler_shell-v0.22.13) - 2025-01-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [0.22.12](https://github.com/conda/rattler/compare/rattler_shell-v0.22.11...rattler_shell-v0.22.12) - 2024-12-20
 
 ### Other

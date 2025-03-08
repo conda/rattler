@@ -5,31 +5,39 @@ use std::{
 };
 
 use rattler_conda_types::Platform;
-use rattler_index::index;
+use rattler_index::index_fs;
 use serde_json::Value;
 
 fn test_data_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
 }
 
-#[test]
-fn test_index() {
+#[tokio::test]
+async fn test_index() {
     let temp_dir = tempfile::tempdir().unwrap();
     let subdir_path = Path::new("win-64");
-    let conda_file_path = tools::download_and_cache_file(
-        "https://conda.anaconda.org/conda-forge/win-64/conda-22.11.1-py38haa244fe_1.conda"
-            .parse()
-            .unwrap(),
-        "a8a44c5ff2b2f423546d49721ba2e3e632233c74a813c944adf8e5742834930e",
-    )
+    let conda_file_path = tokio::task::spawn_blocking(|| {
+        tools::download_and_cache_file(
+            "https://conda.anaconda.org/conda-forge/win-64/conda-22.11.1-py38haa244fe_1.conda"
+                .parse()
+                .unwrap(),
+            "a8a44c5ff2b2f423546d49721ba2e3e632233c74a813c944adf8e5742834930e",
+        )
+    })
+    .await
+    .unwrap()
     .unwrap();
     let index_json_path = Path::new("conda-22.11.1-py38haa244fe_1-index.json");
-    let tar_bz2_file_path = tools::download_and_cache_file(
-        "https://conda.anaconda.org/conda-forge/win-64/conda-22.9.0-py38haa244fe_2.tar.bz2"
-            .parse()
-            .unwrap(),
-        "3c2c2e8e81bde5fb1ac4b014f51a62411feff004580c708c97a0ec2b7058cdc4",
-    )
+    let tar_bz2_file_path = tokio::task::spawn_blocking(|| {
+        tools::download_and_cache_file(
+            "https://conda.anaconda.org/conda-forge/win-64/conda-22.9.0-py38haa244fe_2.tar.bz2"
+                .parse()
+                .unwrap(),
+            "3c2c2e8e81bde5fb1ac4b014f51a62411feff004580c708c97a0ec2b7058cdc4",
+        )
+    })
+    .await
+    .unwrap()
     .unwrap();
 
     fs::create_dir(temp_dir.path().join(subdir_path)).unwrap();
@@ -50,7 +58,7 @@ fn test_index() {
     )
     .unwrap();
 
-    let res = index(temp_dir.path(), Some(&Platform::Win64));
+    let res = index_fs(temp_dir.path(), Some(Platform::Win64), true, 100, None).await;
     assert!(res.is_ok());
 
     let repodata_path = temp_dir.path().join(subdir_path).join("repodata.json");
@@ -84,10 +92,16 @@ fn test_index() {
     );
 }
 
-#[test]
-fn test_index_empty_directory() {
+#[tokio::test]
+async fn test_index_empty_directory_creates_noarch_repodata() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let res = index(temp_dir.path(), None);
+    let noarch_path = temp_dir.path().join("noarch");
+    let repodata_path = noarch_path.join("repodata.json");
+
+    let res = index_fs(temp_dir.path(), None, true, 100, None).await;
+
     assert!(res.is_ok());
-    assert_eq!(fs::read_dir(temp_dir).unwrap().count(), 0);
+    assert!(noarch_path.is_dir());
+    assert_eq!(fs::read_dir(&noarch_path).unwrap().count(), 1);
+    assert!(repodata_path.is_file());
 }

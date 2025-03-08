@@ -6,6 +6,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.46](https://github.com/conda/rattler/compare/rattler_lock-v0.22.45...rattler_lock-v0.22.46) - 2025-02-28
+
+### Fixed
+
+- roundtrip of arch/platform in lock files (#1124)
+
+## [0.22.45](https://github.com/conda/rattler/compare/rattler_lock-v0.22.44...rattler_lock-v0.22.45) - 2025-02-27
+
+### Fixed
+
+- clippy lint (#1105)
+
+## [0.22.44](https://github.com/conda/rattler/compare/rattler_lock-v0.22.43...rattler_lock-v0.22.44) - 2025-02-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.22.43](https://github.com/conda/rattler/compare/rattler_lock-v0.22.42...rattler_lock-v0.22.43) - 2025-02-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.22.42](https://github.com/conda/rattler/compare/rattler_lock-v0.22.41...rattler_lock-v0.22.42) - 2025-02-06
+
+### Other
+
+- bump rust 1.84.1 (#1053)
+
+## [0.22.41](https://github.com/conda/rattler/compare/rattler_lock-v0.22.40...rattler_lock-v0.22.41) - 2025-02-03
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.22.40](https://github.com/conda/rattler/compare/rattler_lock-v0.22.39...rattler_lock-v0.22.40) - 2025-01-23
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.22.39](https://github.com/conda/rattler/compare/rattler_lock-v0.22.38...rattler_lock-v0.22.39) - 2025-01-09
+
+### Added
+
+- add a check function for empty lockfiles (#1023)
+- Match GenericVirtualPackage with MatchSpec (#1016)
+
+## [0.22.38](https://github.com/conda/rattler/compare/rattler_lock-v0.22.37...rattler_lock-v0.22.38) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.22.37](https://github.com/conda/rattler/compare/rattler_lock-v0.22.36...rattler_lock-v0.22.37) - 2025-01-08
+
+### Other
+
+- updated the following local packages: file_url, rattler_conda_types, rattler_digest
+
 ## [0.22.36](https://github.com/conda/rattler/compare/rattler_lock-v0.22.35...rattler_lock-v0.22.36) - 2024-12-20
 
 ### Other

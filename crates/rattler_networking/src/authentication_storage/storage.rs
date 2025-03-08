@@ -8,9 +8,14 @@ use std::{
 };
 use url::Url;
 
+use crate::authentication_storage::{
+    backends::{file::FileStorage, keyring::KeyringAuthenticationStorageError},
+    AuthenticationStorageError,
+};
+
 use super::{
     authentication::Authentication,
-    backends::{file::FileStorage, keyring::KeyringAuthenticationStorage, netrc::NetRcStorage},
+    backends::{keyring::KeyringAuthenticationStorage, netrc::NetRcStorage},
     StorageBackend,
 };
 
@@ -21,30 +26,14 @@ use super::{
 /// Credentials are stored and retrieved from the backends in the
 /// order they are added to the storage
 pub struct AuthenticationStorage {
-    backends: Vec<Arc<dyn StorageBackend + Send + Sync>>,
+    /// Authentication backends
+    pub backends: Vec<Arc<dyn StorageBackend + Send + Sync>>,
     cache: Arc<Mutex<HashMap<String, Option<Authentication>>>>,
-}
-
-impl Default for AuthenticationStorage {
-    fn default() -> Self {
-        let mut storage = Self::new();
-
-        storage.add_backend(Arc::from(KeyringAuthenticationStorage::default()));
-        storage.add_backend(Arc::from(FileStorage::default()));
-        storage.add_backend(Arc::from(NetRcStorage::from_env().unwrap_or_else(
-            |(path, err)| {
-                tracing::warn!("error reading netrc file from {}: {}", path.display(), err);
-                NetRcStorage::default()
-            },
-        )));
-
-        storage
-    }
 }
 
 impl AuthenticationStorage {
     /// Create a new authentication storage with no backends
-    pub fn new() -> Self {
+    pub fn empty() -> Self {
         Self {
             backends: vec![],
             cache: Arc::new(Mutex::new(HashMap::new())),
@@ -52,36 +41,31 @@ impl AuthenticationStorage {
     }
 
     /// Create a new authentication storage with the default backends
-    /// respecting the `RATTLER_AUTH_FILE` environment variable.
-    /// If the variable is set, the file storage backend will be used
-    /// with the path specified in the variable
-    pub fn from_env() -> Result<Self> {
+    /// Following order:
+    /// - file storage from `RATTLER_AUTH_FILE` (if set)
+    /// - keyring storage
+    /// - file storage from the default location
+    /// - netrc storage
+    pub fn from_env_and_defaults() -> Result<Self, AuthenticationStorageError> {
+        let mut storage = Self::empty();
+
         if let Ok(auth_file) = std::env::var("RATTLER_AUTH_FILE") {
             let path = std::path::Path::new(&auth_file);
-
             tracing::info!(
                 "\"RATTLER_AUTH_FILE\" environment variable set, using file storage at {}",
                 auth_file
             );
-
-            Ok(Self::from_file(path)?)
-        } else {
-            Ok(Self::default())
+            storage.add_backend(Arc::from(FileStorage::from_path(path.into())?));
         }
-    }
+        storage.add_backend(Arc::from(KeyringAuthenticationStorage::default()));
+        storage.add_backend(Arc::from(FileStorage::new()?));
+        storage.add_backend(Arc::from(NetRcStorage::from_env().unwrap_or_else(
+            |(path, err)| {
+                tracing::warn!("error reading netrc file from {}: {}", path.display(), err);
+                NetRcStorage::default()
+            },
+        )));
 
-    /// Create a new authentication storage with just a file storage backend
-    pub fn from_file(path: &std::path::Path) -> Result<Self> {
-        let mut storage = Self::new();
-        let backend = FileStorage::new(path.to_path_buf()).map_err(|e| {
-            anyhow!(
-                "Error creating file storage backend from file ({}): {}",
-                path.display(),
-                e
-            )
-        })?;
-
-        storage.add_backend(Arc::from(backend));
         Ok(storage)
     }
 
@@ -100,13 +84,23 @@ impl AuthenticationStorage {
 
         for backend in &self.backends {
             if let Err(e) = backend.store(host, authentication) {
-                tracing::warn!("Error storing credentials in backend: {}", e);
+                if let AuthenticationStorageError::KeyringStorageError(
+                    KeyringAuthenticationStorageError::StorageError(_),
+                ) = e
+                {
+                    tracing::debug!("Error storing credentials in keyring: {}", e);
+                } else {
+                    tracing::warn!("Error storing credentials from backend: {}", e);
+                }
             } else {
                 return Ok(());
             }
         }
 
-        Err(anyhow!("All backends failed to store credentials"))
+        Err(anyhow!(
+            "All backends failed to store credentials. Checked the following backends: {:?}",
+            self.backends
+        ))
     }
 
     /// Retrieve the authentication information for the given host
@@ -129,7 +123,14 @@ impl AuthenticationStorage {
                     continue;
                 }
                 Err(e) => {
-                    tracing::warn!("Error retrieving credentials from backend: {}", e);
+                    if let AuthenticationStorageError::KeyringStorageError(
+                        KeyringAuthenticationStorageError::StorageError(_),
+                    ) = e
+                    {
+                        tracing::trace!("Error storing credentials in keyring: {}", e);
+                    } else {
+                        tracing::warn!("Error retrieving credentials from backend: {}", e);
+                    }
                 }
             }
         }
@@ -158,6 +159,32 @@ impl AuthenticationStorage {
             Err(_) => return Ok((url, None)),
             Ok(Some(credentials)) => return Ok((url, Some(credentials))),
         };
+
+        // S3 protocol URLs need to be treated separately since they follow a different schema
+        if url.scheme() == "s3" {
+            let mut current_url = url.clone();
+            loop {
+                match self.get(current_url.as_str()) {
+                    Ok(None) => {
+                        let possible_rest =
+                            current_url.as_str().rsplit_once('/').map(|(rest, _)| rest);
+
+                        match possible_rest {
+                            Some(rest) => {
+                                if let Ok(new_url) = Url::parse(rest) {
+                                    current_url = new_url;
+                                } else {
+                                    return Ok((url, None));
+                                }
+                            }
+                            _ => return Ok((url, None)), // No more subpaths to check
+                        }
+                    }
+                    Ok(Some(credentials)) => return Ok((url, Some(credentials))),
+                    Err(_) => return Ok((url, None)),
+                }
+            }
+        }
 
         // Check for credentials under e.g. `*.prefix.dev`
         let Some(mut domain) = url.domain() else {
@@ -197,7 +224,14 @@ impl AuthenticationStorage {
 
         for backend in &self.backends {
             if let Err(e) = backend.delete(host) {
-                tracing::warn!("Error deleting credentials from backend: {}", e);
+                if let AuthenticationStorageError::KeyringStorageError(
+                    KeyringAuthenticationStorageError::StorageError(_),
+                ) = e
+                {
+                    tracing::debug!("Error deleting credentials in keyring: {}", e);
+                } else {
+                    tracing::warn!("Error deleting credentials from backend: {}", e);
+                }
             } else {
                 all_failed = false;
             }

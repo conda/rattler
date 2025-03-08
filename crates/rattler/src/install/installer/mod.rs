@@ -3,7 +3,7 @@ mod error;
 mod indicatif;
 mod reporter;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     future::ready,
     path::{Path, PathBuf},
     sync::Arc,
@@ -20,7 +20,7 @@ use itertools::Itertools;
 use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
-    Platform, PrefixRecord, RepoDataRecord,
+    PackageName, Platform, PrefixRecord, RepoDataRecord,
 };
 use rattler_networking::retry_policies::default_retry_policy;
 pub use reporter::Reporter;
@@ -50,6 +50,7 @@ pub struct Installer {
     target_platform: Option<Platform>,
     apple_code_sign_behavior: AppleCodeSignBehavior,
     alternative_target_prefix: Option<PathBuf>,
+    reinstall_packages: Option<HashSet<PackageName>>,
     // TODO: Determine upfront if these are possible.
     // allow_symbolic_links: Option<bool>,
     // allow_hard_links: Option<bool>,
@@ -216,10 +217,27 @@ impl Installer {
         }
     }
 
+    /// Set the packages that we want explicitly to be reinstalled.
+    #[must_use]
+    pub fn with_reinstall_packages(self, reinstall: HashSet<PackageName>) -> Self {
+        Self {
+            reinstall_packages: Some(reinstall),
+            ..self
+        }
+    }
+
+    /// Set the packages that we want explicitly to be reinstalled.
+    /// This function is similar to [`Self::with_reinstall_packages`],but
+    /// modifies an existing instance.
+    pub fn set_reinstall_packages(&mut self, reinstall: HashSet<PackageName>) -> &mut Self {
+        self.reinstall_packages = Some(reinstall);
+        self
+    }
+
     /// Sets the packages that are currently installed in the prefix. If this
     /// is not set, the installation process will first figure this out.
     ///
-    /// This function is similar to [`Self::set_installed_packages`],but
+    /// This function is similar to [`Self::with_installed_packages`],but
     /// modifies an existing instance.
     pub fn set_installed_packages(&mut self, installed: Vec<PrefixRecord>) -> &mut Self {
         self.installed = Some(installed);
@@ -314,6 +332,7 @@ impl Installer {
         let transaction = Transaction::from_current_and_desired(
             installed,
             records.into_iter().collect::<Vec<_>>(),
+            self.reinstall_packages,
             target_platform,
         )?;
 
@@ -512,6 +531,7 @@ async fn link_package(
                     // ...
                     link_type: Some(LinkType::HardLink),
                 }),
+                installed_system_menus: Vec::new(),
             };
 
             let conda_meta_path = target_prefix.join("conda-meta");

@@ -1,10 +1,10 @@
-use std::{str::FromStr, time::Instant};
+use std::{collections::BTreeMap, str::FromStr, time::Instant};
 
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
-    ParseStrictness, RepoData, RepoDataRecord, Version,
+    ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
@@ -46,6 +46,15 @@ fn dummy_channel_json_path() -> String {
     )
 }
 
+#[cfg(feature = "experimental_extras")]
+fn dummy_channel_with_optional_dependencies_json_path() -> String {
+    format!(
+        "{}/{}",
+        env!("CARGO_MANIFEST_DIR"),
+        "../../test-data/channels/dummy-optional-dependencies/noarch/repodata.json"
+    )
+}
+
 fn dummy_md5_hash() -> rattler_digest::Md5Hash {
     rattler_digest::parse_digest_from_hex::<rattler_digest::Md5>("b3af409bb8423187c75e6c7f5b683908")
         .unwrap()
@@ -65,7 +74,7 @@ fn read_repodata(path: &str) -> Vec<RepoDataRecord> {
 }
 
 fn read_sparse_repodata(path: &str) -> SparseRepoData {
-    SparseRepoData::new(
+    SparseRepoData::from_file(
         Channel::from_str("dummy", &channel_config()).unwrap(),
         "dummy".to_string(),
         path,
@@ -96,6 +105,7 @@ fn installed_package(
             sha256: Some(dummy_sha256_hash()),
             size: None,
             arch: None,
+            extra_depends: BTreeMap::new(),
             platform: None,
             depends: Vec::new(),
             constrains: Vec::new(),
@@ -132,7 +142,7 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
     };
 
     let pkgs1 = match T::default().solve(solver_task) {
-        Ok(result) => result,
+        Ok(result) => result.records,
         Err(e) => panic!("{e}"),
     };
 
@@ -175,7 +185,7 @@ fn read_real_world_repo_data() -> &'static Vec<SparseRepoData> {
 fn read_pytorch_sparse_repo_data() -> &'static SparseRepoData {
     static REPO_DATA: Lazy<SparseRepoData> = Lazy::new(|| {
         let pytorch = pytorch_json_path();
-        SparseRepoData::new(
+        SparseRepoData::from_file(
             Channel::from_str("pytorch", &channel_config()).unwrap(),
             "pytorch".to_string(),
             pytorch,
@@ -190,7 +200,7 @@ fn read_pytorch_sparse_repo_data() -> &'static SparseRepoData {
 fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
     static REPO_DATA: Lazy<SparseRepoData> = Lazy::new(|| {
         let conda_forge = conda_json_path();
-        SparseRepoData::new(
+        SparseRepoData::from_file(
             Channel::from_str("conda-forge", &channel_config()).unwrap(),
             "conda-forge".to_string(),
             conda_forge,
@@ -261,8 +271,8 @@ macro_rules! solver_backend_tests {
             )
             .unwrap();
 
-            assert_eq!(result.len(), 1);
-            assert_eq!(result[0].package_record.to_string(), "bors=1.0=bla_1");
+            assert_eq!(result.records.len(), 1);
+            assert_eq!(result.records[0].package_record.to_string(), "bors=1.0=bla_1");
         }
 
         #[test]
@@ -326,9 +336,9 @@ macro_rules! solver_backend_tests {
             )
             .unwrap();
 
-            assert_eq!(pkgs.len(), 1);
+            assert_eq!(pkgs.records.len(), 1);
 
-            let info = &pkgs[0];
+            let info = &pkgs.records[0];
             assert_eq!("bar", info.package_record.name.as_normalized());
             assert_eq!("1.2.3", &info.package_record.version.to_string());
         }
@@ -344,8 +354,8 @@ macro_rules! solver_backend_tests {
             )
             .unwrap();
 
-            assert_eq!(1, pkgs.len());
-            let info = &pkgs[0];
+            assert_eq!(1, pkgs.records.len());
+            let info = &pkgs.records[0];
 
             assert_eq!("foo-3.0.2-py36h1af98f8_3.conda", info.file_name);
             assert_eq!(
@@ -391,8 +401,8 @@ macro_rules! solver_backend_tests {
             .unwrap();
 
             // The .conda entry is selected for installing
-            assert_eq!(operations.len(), 1);
-            assert_eq!(operations[0].file_name, "foo-3.0.2-py36h1af98f8_1.conda");
+            assert_eq!(operations.records.len(), 1);
+            assert_eq!(operations.records[0].file_name, "foo-3.0.2-py36h1af98f8_1.conda");
         }
 
         #[test]
@@ -416,10 +426,10 @@ macro_rules! solver_backend_tests {
             )
             .unwrap();
 
-            assert_eq!(1, pkgs.len());
+            assert_eq!(1, pkgs.records.len());
 
             // Install
-            let info = &pkgs[0];
+            let info = &pkgs.records[0];
             assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("3.0.2", &info.package_record.version.to_string());
         }
@@ -446,7 +456,7 @@ macro_rules! solver_backend_tests {
             .unwrap();
 
             // Install
-            let info = &pkgs[0];
+            let info = &pkgs.records[0];
             assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("4.0.2", &info.package_record.version.to_string());
         }
@@ -472,10 +482,10 @@ macro_rules! solver_backend_tests {
             )
             .unwrap();
 
-            assert_eq!(pkgs.len(), 1);
+            assert_eq!(pkgs.records.len(), 1);
 
             // Uninstall
-            let info = &pkgs[0];
+            let info = &pkgs.records[0];
             assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("3.0.2", &info.package_record.version.to_string());
         }
@@ -501,7 +511,7 @@ macro_rules! solver_backend_tests {
             .unwrap();
 
             // Should be no packages!
-            assert_eq!(0, pkgs.len());
+            assert_eq!(0, pkgs.records.len());
         }
 
         #[test]
@@ -518,9 +528,9 @@ macro_rules! solver_backend_tests {
             )
             .unwrap();
 
-            assert_eq!(1, pkgs.len());
+            assert_eq!(1, pkgs.records.len());
 
-            let info = &pkgs[0];
+            let info = &pkgs.records[0];
             assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("3.0.2", &info.package_record.version.to_string(),
                 "although there is a newer version available we expect an older version of foo because we exclude the newer version based on the timestamp");
@@ -557,11 +567,11 @@ macro_rules! solver_backend_tests {
             .unwrap();
 
             // Sort operations by file name to make the test deterministic
-            operations.sort_by(|a, b| a.file_name.cmp(&b.file_name));
+            operations.records.sort_by(|a, b| a.file_name.cmp(&b.file_name));
 
-            assert_eq!(operations.len(), 2);
-            assert_eq!(operations[0].file_name, "bors-1.0-bla_1.tar.bz2");
-            assert_eq!(operations[1].file_name, "foobar-2.1-bla_1.tar.bz2");
+            assert_eq!(operations.records.len(), 2);
+            assert_eq!(operations.records[0].file_name, "bors-1.0-bla_1.tar.bz2");
+            assert_eq!(operations.records[1].file_name, "foobar-2.1-bla_1.tar.bz2");
         }
 
         #[test]
@@ -583,6 +593,7 @@ macro_rules! solver_backend_tests {
 
             let output = match result {
                 Ok(pkgs) => pkgs
+                    .records
                     .iter()
                     .format_with("\n", |pkg, f| {
                         f(&format_args!(
@@ -617,7 +628,7 @@ mod libsolv_c {
     #[test]
     #[cfg(target_family = "unix")]
     fn test_solve_with_cached_solv_file_install_new() {
-        use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
+        use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, RepoDataRecord};
         use rattler_solve::{SolverImpl, SolverTask};
 
         use super::read_repodata;
@@ -644,7 +655,7 @@ mod libsolv_c {
 
         let specs: Vec<MatchSpec> = vec!["foo<4".parse().unwrap()];
 
-        let pkgs = rattler_solve::libsolv_c::Solver
+        let pkgs: Vec<RepoDataRecord> = rattler_solve::libsolv_c::Solver
             .solve(SolverTask {
                 locked_packages: Vec::new(),
                 virtual_packages: Vec::new(),
@@ -657,7 +668,8 @@ mod libsolv_c {
                 exclude_newer: None,
                 strategy: SolveStrategy::default(),
             })
-            .unwrap();
+            .unwrap()
+            .records;
 
         if pkgs.is_empty() {
             println!("No packages in the environment!");
@@ -711,6 +723,9 @@ mod resolvo {
         dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
         GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
     };
+
+    #[cfg(feature = "experimental_extras")]
+    use super::dummy_channel_with_optional_dependencies_json_path;
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
 
@@ -779,13 +794,13 @@ mod resolvo {
         )
         .unwrap();
 
-        assert_eq!(result.len(), 1);
+        assert_eq!(result.records.len(), 1);
         assert_eq!(
-            result[0].package_record.version,
+            result.records[0].package_record.version,
             Version::from_str("3.0.2").unwrap()
         );
         assert_eq!(
-            result[0].package_record.build_number, 3,
+            result.records[0].package_record.build_number, 3,
             "expected the highest build number"
         );
     }
@@ -802,17 +817,23 @@ mod resolvo {
         )
         .unwrap();
 
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0].package_record.name.as_normalized(), "foobar");
+        assert_eq!(result.records.len(), 2);
         assert_eq!(
-            result[0].package_record.version,
+            result.records[0].package_record.name.as_normalized(),
+            "foobar"
+        );
+        assert_eq!(
+            result.records[0].package_record.version,
             Version::from_str("2.0").unwrap(),
             "expected lowest version of foobar"
         );
 
-        assert_eq!(result[1].package_record.name.as_normalized(), "bors");
         assert_eq!(
-            result[1].package_record.version,
+            result.records[1].package_record.name.as_normalized(),
+            "bors"
+        );
+        assert_eq!(
+            result.records[1].package_record.version,
             Version::from_str("1.0").unwrap(),
             "expected lowest version of bors"
         );
@@ -830,17 +851,23 @@ mod resolvo {
         )
         .unwrap();
 
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0].package_record.name.as_normalized(), "foobar");
+        assert_eq!(result.records.len(), 2);
         assert_eq!(
-            result[0].package_record.version,
+            result.records[0].package_record.name.as_normalized(),
+            "foobar"
+        );
+        assert_eq!(
+            result.records[0].package_record.version,
             Version::from_str("2.0").unwrap(),
             "expected lowest version of foobar"
         );
 
-        assert_eq!(result[1].package_record.name.as_normalized(), "bors");
         assert_eq!(
-            result[1].package_record.version,
+            result.records[1].package_record.name.as_normalized(),
+            "bors"
+        );
+        assert_eq!(
+            result.records[1].package_record.version,
             Version::from_str("1.2.1").unwrap(),
             "expected highest compatible version of bors"
         );
@@ -885,7 +912,7 @@ mod resolvo {
             ..SolverTask::from_iter([&repo_data])
         };
 
-        let pkgs = rattler_solve::resolvo::Solver.solve(task).unwrap();
+        let pkgs: Vec<RepoDataRecord> = rattler_solve::resolvo::Solver.solve(task).unwrap().records;
 
         assert_eq!(pkgs.len(), 1);
         assert_eq!(pkgs[0].package_record.name.as_normalized(), "_libgcc_mutex");
@@ -944,6 +971,362 @@ mod resolvo {
 
         insta::assert_snapshot!(result.unwrap_err());
     }
+    #[cfg(feature = "experimental_extras")]
+    /// Installs `foo` while enabling a single optional dependency `[with-latest-bors]`.
+    /// This should pull in `bors >=2.0`.
+    #[test]
+    fn test_solve_dummy_repo_extra_depends_foo_latest_bors_resolvo() {
+        let mut result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["foo[extras=[with-latest-bors]]"],
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        result
+            .records
+            .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
+
+        assert_eq!(result.records.len(), 2);
+        assert_eq!(result.records[1].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result.features.get("foo"),
+            Some(&vec!["with-latest-bors".to_string()])
+        );
+        assert_eq!(
+            result.records[1].package_record.version,
+            Version::from_str("2.0.2").unwrap(),
+            "expected lowest version of foobar"
+        );
+
+        assert_eq!(
+            result.records[0].package_record.name.as_normalized(),
+            "bors"
+        );
+        assert_eq!(
+            result.records[0].package_record.version,
+            Version::from_str("2.1").unwrap(),
+            "expected highest compatible version of bors"
+        );
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    /// Installs `cuda-version` with `[with-cudadev]` which depends on `"foo >=4.0.2", "bar >=1.2.3"`.
+    #[test]
+    fn test_solve_dummy_repo_extra_depends_cuda_dev_resolvo() {
+        let mut result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["cuda-version[extras=[with-cudadev]]"],
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        result
+            .records
+            .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
+
+        assert_eq!(result.records.len(), 3);
+        assert_eq!(result.records[0].package_record.name.as_normalized(), "bar");
+
+        assert_eq!(
+            result.records[0].package_record.version,
+            Version::from_str("1.2.3").unwrap(),
+            "expected version 1.2.3 of bar"
+        );
+
+        // The cuda-version with feature `with-cudadev`:
+        assert_eq!(
+            result.records[1].package_record.name.as_normalized(),
+            "cuda-version"
+        );
+        assert_eq!(
+            result.records[1].package_record.version,
+            Version::from_str("12.5").unwrap(),
+            "expected version 12.5 of cuda-version"
+        );
+
+        assert_eq!(
+            result.features.get("cuda-version"),
+            Some(&vec!["with-cudadev".to_string()])
+        );
+
+        assert_eq!(result.records[2].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result.records[2].package_record.version,
+            Version::from_str("4.0.2").unwrap(),
+            "expected version 4.0.2 of foo"
+        );
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    /// Attempts to enable two optional features that conflict: `[with-oldbors,with-latest-bors]`.
+    /// This should fail because one requests `bors <2.0` and the other requests `bors >=2.0`.  
+    #[test]
+    fn test_solve_dummy_repo_extra_depends_conflict_resolvo() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["foo[extras=[with-oldbors,with-latest-bors]]"],
+                ..SimpleSolveTask::default()
+            },
+        );
+
+        insta::assert_snapshot!(result.unwrap_err());
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    /// Enables multiple optional dependencies in the same spec (like `[with-baz2,with-bar]`).
+    /// This should pull in `baz >=2.0` and `bar >=1.2.3` if both can coexist.
+    #[test]
+    fn test_solve_dummy_repo_extra_depends_foo_multi_resolvo() {
+        let mut result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["foo[extras=[with-baz2,with-bar]]"],
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        result
+            .records
+            .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
+
+        assert_eq!(result.records.len(), 3);
+
+        assert_eq!(result.records[0].package_record.name.as_normalized(), "bar");
+        assert_eq!(
+            result.records[0].package_record.version,
+            Version::from_str("1.2.3").unwrap(),
+            "expected version 1.2.3 of bar"
+        );
+
+        assert_eq!(result.records[1].package_record.name.as_normalized(), "baz");
+        assert_eq!(
+            result.records[1].package_record.version,
+            Version::from_str("2.0").unwrap(),
+            "expected version 2.0 of baz"
+        );
+
+        assert_eq!(result.records[2].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result.records[2].package_record.version,
+            Version::from_str("3.0.2").unwrap(),
+            "expected version 3.0.2 of foo"
+        );
+        let mut features = result.features.get("foo").unwrap().clone();
+        features.sort();
+        result.features.insert("foo".parse().unwrap(), features);
+        assert_eq!(
+            result.features.get("foo"),
+            Some(&vec!["with-bar".to_string(), "with-baz2".to_string()])
+        );
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    /// Should install xfoo with the feature with-issue717 which requires `with-issue717[with-bors21]` hence pulling in bors 2.1 as well
+    #[test]
+    fn test_solve_dummy_repo_extra_depends_xfoo_extra_depends_with_features() {
+        let mut result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["xfoo[extras=[with-issue717]]"],
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        result
+            .records
+            .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
+
+        assert_eq!(result.records.len(), 3);
+        assert_eq!(
+            result.records[0].package_record.name.as_normalized(),
+            "bors"
+        );
+        assert_eq!(
+            result.records[0].package_record.version,
+            Version::from_str("2.1").unwrap(),
+            "expected version 2.1 of bors"
+        );
+
+        assert_eq!(
+            result.records[1].package_record.name.as_normalized(),
+            "issue_717"
+        );
+        assert_eq!(
+            result.records[1].package_record.version,
+            Version::from_str("2.1").unwrap(),
+            "expected version 2.1 of issue_717"
+        );
+
+        assert_eq!(
+            result.records[2].package_record.name.as_normalized(),
+            "xfoo"
+        );
+        assert_eq!(
+            result.records[2].package_record.version,
+            Version::from_str("2.0").unwrap(),
+            "expected version 2.0 of xfoo"
+        );
+        assert_eq!(
+            result.features.get("xfoo"),
+            Some(&vec!["with-issue717".to_string()])
+        );
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    /// Tests what happens when a feature depends on the base package but with another feature enabled
+    #[test]
+    fn test_solve_dummy_repo_extra_depends_recursive_feature() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["foo[extras=[with-recursive]]"],
+                ..SimpleSolveTask::default()
+            },
+        );
+
+        // Sort records by name for stable test results
+        insta::assert_snapshot!(result.unwrap_err());
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    /// Tests that an optional dependency can restrict the highest version of a base dependency
+    #[test]
+    fn test_solve_dummy_repo_extra_depends_version_restriction() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["foo[extras=[with-version-restrict]]"],
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.records.len(), 1);
+        // Both records should be foo
+        assert_eq!(result.records[0].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result.records[0].package_record.version,
+            Version::from_str("3.0.2").unwrap(),
+            "expected version 3.0.2 of foo due to version restriction from feature"
+        );
+        assert_eq!(
+            result.features.get("foo"),
+            Some(&vec!["with-version-restrict".to_string()])
+        );
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    /// Tests what happens if a feature introduces a dependency on the base package itself
+    #[test]
+    fn test_solve_dummy_repo_extra_depends_self_dependency() {
+        let mut result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["foo[extras=[with-self]]"],
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        // Sort records by name for stable test results
+        result
+            .records
+            .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
+
+        assert_eq!(result.records.len(), 1);
+        // Both records should be foo
+        assert_eq!(result.records[0].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result.records[0].package_record.version,
+            Version::from_str("2.0.2").unwrap(),
+            "expected version 2.0.2 of foo"
+        );
+        assert_eq!(
+            result.features.get("foo"),
+            Some(&vec!["with-self".to_string()])
+        );
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    /// Tests what happens if there are two packages for foo but only the package with the lower version has the package that is requested
+    #[test]
+    fn test_solve_dummy_repo_extra_depends_feature_only_in_older() {
+        let mut result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["foo[extras=[legacy-only]]"],
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        // Sort records by name for stable test results
+        result
+            .records
+            .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
+
+        assert_eq!(result.records.len(), 2);
+
+        // Both records should be foo
+        assert_eq!(result.records[1].package_record.name.as_normalized(), "foo");
+        assert_eq!(
+            result.records[1].package_record.version,
+            Version::from_str("2.0.2").unwrap(),
+            "expected older version 2.0.2 of foo since it has the required feature"
+        );
+        assert_eq!(
+            result.features.get("foo"),
+            Some(&vec!["legacy-only".to_string()])
+        );
+
+        assert_eq!(result.records[0].package_record.name.as_normalized(), "bar");
+        assert_eq!(
+            result.records[0].package_record.version,
+            Version::from_str("1.2.3").unwrap(),
+            "expected version 1.2.3 of bar"
+        );
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    /// Test what happens if a feature is requested that doesn't exist
+    #[test]
+    fn test_solve_dummy_repo_extra_depends_nonexistent_feature() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["foo[extras=[does-not-exist]]"],
+                ..SimpleSolveTask::default()
+            },
+        );
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Cannot solve the request because of: No candidates were found for foo[does-not-exist] *.\n"
+        );
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    /// Test what happens when the only package that provides a certain feature cannot be selected due to a conflict
+    #[test]
+    fn test_solve_dummy_repo_extra_depends_feature_conflict() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_with_optional_dependencies_json_path()],
+            SimpleSolveTask {
+                specs: &["foo[extras=[with-bar]]", "foo>=4.0"],
+                ..SimpleSolveTask::default()
+            },
+        );
+
+        insta::assert_snapshot!(result.unwrap_err());
+    }
 }
 
 #[derive(Default)]
@@ -960,7 +1343,7 @@ struct SimpleSolveTask<'a> {
 fn solve<T: SolverImpl + Default>(
     repo_path: &[String],
     task: SimpleSolveTask<'_>,
-) -> Result<Vec<RepoDataRecord>, SolveError> {
+) -> Result<SolverResult, SolveError> {
     let repo_data = repo_path
         .iter()
         .map(|path| read_repodata(path))
@@ -991,7 +1374,7 @@ fn solve<T: SolverImpl + Default>(
 
     let pkgs = T::default().solve(task)?;
 
-    if pkgs.is_empty() {
+    if pkgs.records.is_empty() {
         println!("No packages in the environment!");
     }
 
@@ -1050,7 +1433,8 @@ fn compare_solve(task: CompareTask<'_>) {
                         exclude_newer: task.exclude_newer,
                         ..SolverTask::from_iter(&available_packages)
                     })
-                    .unwrap(),
+                    .unwrap()
+                    .records,
             ),
         ));
         let end_solve = Instant::now();
@@ -1069,7 +1453,8 @@ fn compare_solve(task: CompareTask<'_>) {
                         exclude_newer: task.exclude_newer,
                         ..SolverTask::from_iter(&available_packages)
                     })
-                    .unwrap(),
+                    .unwrap()
+                    .records,
             ),
         ));
         let end_solve = Instant::now();
@@ -1153,7 +1538,7 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
         ..SolverTask::from_iter(&available_packages)
     };
 
-    let result = T::default().solve(task).unwrap();
+    let result: Vec<RepoDataRecord> = T::default().solve(task).unwrap().records;
 
     let record = result.iter().find(|record| {
         record.package_record.name.as_normalized() == spec.name.as_ref().unwrap().as_normalized()

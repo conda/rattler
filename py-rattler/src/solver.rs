@@ -1,6 +1,7 @@
 use chrono::DateTime;
 use pyo3::{
-    exceptions::PyValueError, pyfunction, Bound, FromPyObject, PyAny, PyErr, PyResult, Python,
+    exceptions::PyValueError, pybacked::PyBackedStr, pyfunction, types::PyAnyMethods, Bound,
+    FromPyObject, PyAny, PyErr, PyResult, Python,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::sparse::SparseRepoData;
@@ -21,7 +22,8 @@ use crate::{
 
 impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
     fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
-        let parsed = match <&'py str>::extract_bound(ob)? {
+        let parsed: PyBackedStr = ob.extract()?;
+        let parsed = match parsed.as_ref() {
             "highest" => SolveStrategy::Highest,
             "lowest" => SolveStrategy::LowestVersion,
             "lowest-direct" => SolveStrategy::LowestVersionDirect,
@@ -95,7 +97,12 @@ pub fn py_solve(
             Ok::<_, PyErr>(
                 Solver
                     .solve(task)
-                    .map(|res| res.into_iter().map(Into::into).collect::<Vec<PyRecord>>())
+                    .map(|res| {
+                        res.records
+                            .into_iter()
+                            .map(Into::into)
+                            .collect::<Vec<PyRecord>>()
+                    })
                     .map_err(PyRattlerError::from)?,
             )
         })
@@ -173,7 +180,12 @@ pub fn py_solve_with_sparse_repodata(
             Ok::<_, PyErr>(
                 Solver
                     .solve(task)
-                    .map(|res| res.into_iter().map(Into::into).collect::<Vec<PyRecord>>())
+                    .map(|res| {
+                        res.records
+                            .into_iter()
+                            .map(Into::into)
+                            .collect::<Vec<PyRecord>>()
+                    })
                     .map_err(PyRattlerError::from)?,
             )
         })

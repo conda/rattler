@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 266
 expression: prefix_record
 ---
 build: pyh0701188_6
@@ -98,4 +97,3 @@ link:
   source: "C:\\Users\\bas\\micromamba\\pkgs\\pysocks-1.7.1-pyh0701188_6"
   type: 1
 requested_spec: ""
-

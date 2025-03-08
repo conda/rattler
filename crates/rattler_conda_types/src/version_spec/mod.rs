@@ -6,6 +6,7 @@ pub(crate) mod parse;
 pub(crate) mod version_tree;
 
 use std::{
+    borrow::Cow,
     convert::TryFrom,
     fmt::{Display, Formatter},
     str::FromStr,
@@ -13,14 +14,14 @@ use std::{
 
 pub(crate) use constraint::is_start_of_version_constraint;
 use constraint::Constraint;
-use parse::ParseConstraintError;
+pub use parse::ParseConstraintError;
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use version_tree::VersionTree;
 
 use crate::{
     version::StrictVersion, version_spec::version_tree::ParseVersionTreeError, ParseStrictness,
-    ParseVersionError, Version,
+    ParseStrictness::Lenient, ParseVersionError, Version,
 };
 
 /// An operator to compare two versions.
@@ -118,7 +119,7 @@ impl LogicalOperator {
 
 /// A version specification.
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum VersionSpec {
     /// No version specified
     None,
@@ -137,14 +138,14 @@ pub enum VersionSpec {
 #[allow(clippy::enum_variant_names, missing_docs)]
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
 pub enum ParseVersionSpecError {
-    #[error("invalid version: {0}")]
-    InvalidVersion(#[source] ParseVersionError),
+    #[error(transparent)]
+    InvalidVersion(#[from] ParseVersionError),
 
-    #[error("invalid version tree: {0}")]
-    InvalidVersionTree(#[source] ParseVersionTreeError),
+    #[error(transparent)]
+    InvalidVersionTree(#[from] ParseVersionTreeError),
 
-    #[error("invalid version constraint: {0}")]
-    InvalidConstraint(#[source] ParseConstraintError),
+    #[error(transparent)]
+    InvalidConstraint(#[from] ParseConstraintError),
 }
 
 impl From<Constraint> for VersionSpec {
@@ -302,7 +303,17 @@ impl Serialize for VersionSpec {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&format!("{self}"))
+        self.to_string().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for VersionSpec {
+    fn deserialize<D>(deserializer: D) -> Result<VersionSpec, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = Cow::<'de, str>::deserialize(deserializer)?;
+        VersionSpec::from_str(&s, Lenient).map_err(serde::de::Error::custom)
     }
 }
 
@@ -350,15 +361,15 @@ mod tests {
     use crate::{
         version_spec::{
             parse::ParseConstraintError, EqualityOperator, LogicalOperator, ParseVersionSpecError,
-            RangeOperator,
+            RangeOperator, StrictRangeOperator,
         },
-        ParseStrictness, Version, VersionSpec,
+        ParseStrictness, StrictVersion, Version, VersionSpec,
     };
 
     #[test]
     fn test_simple() {
         assert_eq!(
-            VersionSpec::from_str("1.2.3", ParseStrictness::Strict),
+            VersionSpec::from_str("==1.2.3", ParseStrictness::Strict),
             Ok(VersionSpec::Exact(
                 EqualityOperator::Equals,
                 Version::from_str("1.2.3").unwrap(),
@@ -369,6 +380,13 @@ mod tests {
             Ok(VersionSpec::Range(
                 RangeOperator::GreaterEquals,
                 Version::from_str("1.2.3").unwrap(),
+            ))
+        );
+        assert_eq!(
+            VersionSpec::from_str("=1.2.3", ParseStrictness::Strict),
+            Ok(VersionSpec::StrictRange(
+                StrictRangeOperator::StartsWith,
+                StrictVersion::from_str("1.2.3").unwrap(),
             ))
         );
     }
@@ -422,7 +440,7 @@ mod tests {
         let vs1 = VersionSpec::from_str(">=1.2.3,<2.0.0", ParseStrictness::Strict).unwrap();
         assert!(!vs1.matches(&v1));
 
-        let vs2 = VersionSpec::from_str("1.2", ParseStrictness::Strict).unwrap();
+        let vs2 = VersionSpec::from_str("==1.2.0", ParseStrictness::Strict).unwrap();
         assert!(vs2.matches(&v1));
 
         let v2 = Version::from_str("1.2.3").unwrap();
@@ -430,13 +448,15 @@ mod tests {
         assert!(!vs2.matches(&v2));
 
         let v3 = Version::from_str("1!1.2.3").unwrap();
-        println!("{v3:?}");
 
         assert!(!vs1.matches(&v3));
         assert!(!vs2.matches(&v3));
 
         let vs3 = VersionSpec::from_str(">=1!1.2,<1!2", ParseStrictness::Strict).unwrap();
         assert!(vs3.matches(&v3));
+
+        let vs4 = VersionSpec::from_str("1!1.2.*", ParseStrictness::Strict).unwrap();
+        assert!(vs4.matches(&v3));
     }
 
     #[test]
@@ -495,6 +515,16 @@ mod tests {
         );
 
         assert!(VersionSpec::from_str("0.2.18.*.", ParseStrictness::Strict).is_err());
+    }
+
+    #[test]
+    fn issue_1004() {
+        assert_eq!(
+            VersionSpec::from_str(">=2.*.*", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::from_str(">=2", ParseStrictness::Lenient).unwrap()
+        );
+
+        assert!(VersionSpec::from_str("0.2.18.*.*", ParseStrictness::Strict).is_err());
     }
 
     #[test]

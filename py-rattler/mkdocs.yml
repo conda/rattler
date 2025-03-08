@@ -180,7 +180,10 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
+          paths:
+            - py-rattler
           options:
+            separate_signature: true
             show_source: false
 
   - search

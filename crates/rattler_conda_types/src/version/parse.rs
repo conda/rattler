@@ -369,10 +369,7 @@ pub fn version_parser(input: &str) -> IResult<&str, Version, ParseVersionErrorKi
 
     // Parse the common part of the version
     let (rest, dash_or_underscore) =
-        match version_part_parser(&mut components, &mut segments, input, None) {
-            Ok(result) => result,
-            Err(e) => return Err(e),
-        };
+        version_part_parser(&mut components, &mut segments, input, None)?;
 
     // Parse the local version part
     let rest = if let Ok((local_version_part, _)) = char::<_, (&str, ErrorKind)>('+')(rest) {

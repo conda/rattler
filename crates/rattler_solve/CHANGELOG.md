@@ -6,6 +6,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0](https://github.com/conda/rattler/compare/rattler_solve-v1.3.11...rattler_solve-v1.4.0) - 2025-03-04
+
+### Added
+
+- *(js)* compile `rattler_solve` and `rattler_repodata_gateway` ([#1108](https://github.com/conda/rattler/pull/1108))
+
+## [1.3.11](https://github.com/conda/rattler/compare/rattler_solve-v1.3.10...rattler_solve-v1.3.11) - 2025-02-28
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [1.3.10](https://github.com/conda/rattler/compare/rattler_solve-v1.3.9...rattler_solve-v1.3.10) - 2025-02-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [1.3.9](https://github.com/conda/rattler/compare/rattler_solve-v1.3.8...rattler_solve-v1.3.9) - 2025-02-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [1.3.8](https://github.com/conda/rattler/compare/rattler_solve-v1.3.7...rattler_solve-v1.3.8) - 2025-02-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [1.3.7](https://github.com/conda/rattler/compare/rattler_solve-v1.3.6...rattler_solve-v1.3.7) - 2025-02-06
+
+### Other
+
+- bump rust 1.84.1 (#1053)
+
+## [1.3.6](https://github.com/conda/rattler/compare/rattler_solve-v1.3.5...rattler_solve-v1.3.6) - 2025-02-03
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [1.3.5](https://github.com/conda/rattler/compare/rattler_solve-v1.3.4...rattler_solve-v1.3.5) - 2025-01-23
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [1.3.4](https://github.com/conda/rattler/compare/rattler_solve-v1.3.3...rattler_solve-v1.3.4) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [1.3.3](https://github.com/conda/rattler/compare/rattler_solve-v1.3.2...rattler_solve-v1.3.3) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_libsolv_c
+
+## [1.3.2](https://github.com/conda/rattler/compare/rattler_solve-v1.3.1...rattler_solve-v1.3.2) - 2025-01-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_digest
+
 ## [1.3.1](https://github.com/conda/rattler/compare/rattler_solve-v1.3.0...rattler_solve-v1.3.1) - 2024-12-20
 
 ### Other

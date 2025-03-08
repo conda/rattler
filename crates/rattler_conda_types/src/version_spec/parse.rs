@@ -55,6 +55,7 @@ fn operator_parser(input: &str) -> IResult<&str, VersionOperators, ParseVersionO
     Ok((rest, op))
 }
 
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum ParseConstraintError {
     #[error("'*' is incompatible with '{0}' operator'")]
@@ -67,6 +68,8 @@ pub enum ParseConstraintError {
     InvalidOperator(String),
     #[error(transparent)]
     InvalidVersion(#[from] ParseVersionError),
+    #[error("missing range specifier for '{0}'. Did you mean '=={0}' or '{0}.*'?")]
+    AmbiguousVersion(String),
     /// Expected a version
     #[error("expected a version")]
     ExpectedVersion,
@@ -208,16 +211,25 @@ fn logical_constraint_parser(
         let op = match (version_rest, op, strictness) {
             // The version was successfully parsed
             ("", Some(op), _) => op,
-            ("", None, _) => VersionOperators::Exact(EqualityOperator::Equals),
-
+            ("", None, _) => {
+                if strictness == Strict {
+                    return Err(nom::Err::Failure(ParseConstraintError::AmbiguousVersion(
+                        version_str.to_owned(),
+                    )));
+                } else {
+                    VersionOperators::Exact(EqualityOperator::Equals)
+                }
+            }
             // The version ends in a wildcard pattern
             (
-                "*" | ".*",
+                version_remainder,
                 Some(VersionOperators::Range(
                     RangeOperator::GreaterEquals | RangeOperator::Greater,
                 )),
                 Lenient,
-            ) => VersionOperators::Range(RangeOperator::GreaterEquals),
+            ) if is_star_or_star_dot_star(version_remainder) => {
+                VersionOperators::Range(RangeOperator::GreaterEquals)
+            }
             (
                 "*" | ".*",
                 Some(VersionOperators::Exact(EqualityOperator::NotEquals)),
@@ -227,7 +239,9 @@ fn logical_constraint_parser(
                 // even in strict mode we allow this.
                 VersionOperators::StrictRange(StrictRangeOperator::NotStartsWith)
             }
-            ("*" | ".*", Some(op), Lenient) => {
+            (version_remainder, Some(op), Lenient)
+                if is_star_or_star_dot_star(version_remainder) =>
+            {
                 // In lenient mode we simply ignore the glob.
                 op
             }
@@ -298,6 +312,18 @@ pub fn looks_like_infinite_starts_with(input: &str) -> bool {
     false
 }
 
+/// Returns true if the input is `*` or a sequence of `.*`.
+pub fn is_star_or_star_dot_star(input: &str) -> bool {
+    if input == "*" {
+        return true;
+    }
+    let mut input = input;
+    while let Some(rest) = input.strip_suffix(".*") {
+        input = rest;
+    }
+    input.is_empty()
+}
+
 /// Parses a version constraint.
 pub fn constraint_parser(
     strictness: ParseStrictness,
@@ -316,6 +342,7 @@ mod test {
     use std::str::FromStr;
 
     use assert_matches::assert_matches;
+    use insta::assert_snapshot;
     use rstest::rstest;
 
     use super::*;
@@ -401,7 +428,7 @@ mod test {
     #[rstest]
     fn parse_logical_constraint(#[values(Lenient, Strict)] strictness: ParseStrictness) {
         assert_eq!(
-            logical_constraint_parser(strictness)("3.1"),
+            logical_constraint_parser(strictness)("==3.1"),
             Ok((
                 "",
                 Constraint::Exact(EqualityOperator::Equals, Version::from_str("3.1").unwrap())
@@ -510,7 +537,14 @@ mod test {
 
     #[test]
     fn pixi_issue_278() {
-        assert!(VersionSpec::from_str("1.8.1+g6b29558", Strict).is_ok());
+        assert!(VersionSpec::from_str("=1.8.1+g6b29558", Strict).is_ok());
+    }
+
+    #[test]
+    fn test_exact_strict() {
+        assert!(VersionSpec::from_str("==3.1", Strict).is_ok());
+        assert!(VersionSpec::from_str("3.1", Strict).is_err());
+        assert_snapshot!(VersionSpec::from_str("1.2.3", Strict).unwrap_err());
     }
 
     #[test]

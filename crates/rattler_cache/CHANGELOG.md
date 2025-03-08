@@ -6,6 +6,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.13](https://github.com/conda/rattler/compare/rattler_cache-v0.3.12...rattler_cache-v0.3.13) - 2025-03-04
+
+### Added
+
+- *(js)* compile `rattler_solve` and `rattler_repodata_gateway` ([#1108](https://github.com/conda/rattler/pull/1108))
+
+## [0.3.12](https://github.com/conda/rattler/compare/rattler_cache-v0.3.11...rattler_cache-v0.3.12) - 2025-02-28
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.3.11](https://github.com/conda/rattler/compare/rattler_cache-v0.3.10...rattler_cache-v0.3.11) - 2025-02-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.3.10](https://github.com/conda/rattler/compare/rattler_cache-v0.3.9...rattler_cache-v0.3.10) - 2025-02-25
+
+### Added
+
+- add run_exports cache (#1060)
+
+### Fixed
+
+- support file URL for run exports cache (#1081)
+
+### Other
+
+- use run-exports (#1077)
+
+## [0.3.9](https://github.com/conda/rattler/compare/rattler_cache-v0.3.8...rattler_cache-v0.3.9) - 2025-02-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.3.8](https://github.com/conda/rattler/compare/rattler_cache-v0.3.7...rattler_cache-v0.3.8) - 2025-02-06
+
+### Other
+
+- bump rust 1.84.1 (#1053)
+
+## [0.3.7](https://github.com/conda/rattler/compare/rattler_cache-v0.3.6...rattler_cache-v0.3.7) - 2025-02-06
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.3.6](https://github.com/conda/rattler/compare/rattler_cache-v0.3.5...rattler_cache-v0.3.6) - 2025-02-03
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
+## [0.3.5](https://github.com/conda/rattler/compare/rattler_cache-v0.3.4...rattler_cache-v0.3.5) - 2025-01-23
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
+## [0.3.4](https://github.com/conda/rattler/compare/rattler_cache-v0.3.3...rattler_cache-v0.3.4) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.3](https://github.com/conda/rattler/compare/rattler_cache-v0.3.2...rattler_cache-v0.3.3) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.3.2](https://github.com/conda/rattler/compare/rattler_cache-v0.3.1...rattler_cache-v0.3.2) - 2025-01-08
+
+### Fixed
+
+- retry failed repodata streaming on io error (#1017)
+
+### Other
+
+- update dependencies (#1009)
+
 ## [0.3.1](https://github.com/conda/rattler/compare/rattler_cache-v0.3.0...rattler_cache-v0.3.1) - 2024-12-20
 
 ### Other

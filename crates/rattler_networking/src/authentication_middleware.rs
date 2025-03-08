@@ -1,6 +1,6 @@
 //! `reqwest` middleware that authenticates requests with data from the `AuthenticationStorage`
+use crate::authentication_storage::AuthenticationStorageError;
 use crate::{Authentication, AuthenticationStorage};
-use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use reqwest::{Request, Response};
@@ -10,12 +10,13 @@ use std::sync::OnceLock;
 use url::Url;
 
 /// `reqwest` middleware to authenticate requests
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct AuthenticationMiddleware {
     auth_storage: AuthenticationStorage,
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 impl Middleware for AuthenticationMiddleware {
     async fn handle(
         &self,
@@ -49,8 +50,15 @@ impl Middleware for AuthenticationMiddleware {
 
 impl AuthenticationMiddleware {
     /// Create a new authentication middleware with the given authentication storage
-    pub fn new(auth_storage: AuthenticationStorage) -> Self {
+    pub fn from_auth_storage(auth_storage: AuthenticationStorage) -> Self {
         Self { auth_storage }
+    }
+
+    /// Create a new authentication middleware with the default authentication storage
+    pub fn from_env_and_defaults() -> Result<Self, AuthenticationStorageError> {
+        Ok(Self {
+            auth_storage: AuthenticationStorage::from_env_and_defaults()?,
+        })
     }
 
     /// Authenticate the given URL with the given authentication information
@@ -105,7 +113,7 @@ impl AuthenticationMiddleware {
                         .insert(reqwest::header::AUTHORIZATION, header_value);
                     Ok(req)
                 }
-                Authentication::CondaToken(_) => Ok(req),
+                Authentication::CondaToken(_) | Authentication::S3Credentials { .. } => Ok(req),
             }
         } else {
             Ok(req)
@@ -140,7 +148,7 @@ mod tests {
         pub captured_tx: tokio::sync::mpsc::Sender<reqwest::Request>,
     }
 
-    #[async_trait]
+    #[async_trait::async_trait]
     impl Middleware for CaptureAbortMiddleware {
         async fn handle(
             &self,
@@ -166,7 +174,9 @@ mod tests {
     ) {
         let (captured_tx, captured_rx) = tokio::sync::mpsc::channel(1);
         let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::default())
-            .with_arc(Arc::new(AuthenticationMiddleware::new(storage.clone())))
+            .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
+                storage.clone(),
+            )))
             .with_arc(Arc::new(CaptureAbortMiddleware { captured_tx }))
             .build();
 
@@ -176,8 +186,8 @@ mod tests {
     #[test]
     fn test_store_fallback() -> anyhow::Result<()> {
         let tdir = tempdir()?;
-        let mut storage = AuthenticationStorage::new();
-        storage.add_backend(Arc::from(FileStorage::new(
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::from(FileStorage::from_path(
             tdir.path().to_path_buf().join("auth.json"),
         )?));
 
@@ -191,8 +201,8 @@ mod tests {
     #[tokio::test]
     async fn test_conda_token_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
-        let mut storage = AuthenticationStorage::new();
-        storage.add_backend(Arc::from(FileStorage::new(
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::from(FileStorage::from_path(
             tdir.path().to_path_buf().join("auth.json"),
         )?));
 
@@ -245,8 +255,8 @@ mod tests {
     #[tokio::test]
     async fn test_bearer_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
-        let mut storage = AuthenticationStorage::new();
-        storage.add_backend(Arc::from(FileStorage::new(
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::from(FileStorage::from_path(
             tdir.path().to_path_buf().join("auth.json"),
         )?));
         let host = "bearer.example.com";
@@ -305,8 +315,8 @@ mod tests {
     #[tokio::test]
     async fn test_basic_auth_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
-        let mut storage = AuthenticationStorage::new();
-        storage.add_backend(Arc::from(FileStorage::new(
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::from(FileStorage::from_path(
             tdir.path().to_path_buf().join("auth.json"),
         )?));
         let host = "basic.example.com";
@@ -383,8 +393,8 @@ mod tests {
             ("*.com", false),
         ] {
             let tdir = tempdir()?;
-            let mut storage = AuthenticationStorage::new();
-            storage.add_backend(Arc::from(FileStorage::new(
+            let mut storage = AuthenticationStorage::empty();
+            storage.add_backend(Arc::from(FileStorage::from_path(
                 tdir.path().to_path_buf().join("auth.json"),
             )?));
 
@@ -418,7 +428,7 @@ mod tests {
                     .to_str()
                     .unwrap(),
             ),
-            || AuthenticationStorage::from_env().unwrap(),
+            || AuthenticationStorage::from_env_and_defaults().unwrap(),
         );
 
         let host = "test.example.com";

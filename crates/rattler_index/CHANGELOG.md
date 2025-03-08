@@ -6,6 +6,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.2](https://github.com/conda/rattler/compare/rattler_index-v0.21.1...rattler_index-v0.21.2) - 2025-03-04
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.21.1](https://github.com/conda/rattler/compare/rattler_index-v0.21.0...rattler_index-v0.21.1) - 2025-02-28
+
+### Other
+
+- create reader from opendal buffer (#1123)
+
+## [0.21.0](https://github.com/conda/rattler/compare/rattler_index-v0.20.13...rattler_index-v0.21.0) - 2025-02-27
+
+### Added
+
+- fix rattler-index name (#1114)
+- Use `opendal` in `rattler-index` and add executable (#1076)
+
+### Fixed
+
+- make `menuinst` schema pub, hide utils, fix indexing for rattler-build (#1111)
+- code review in rattler-index and test fix (#1109)
+
+### Other
+
+- remove tools/* features for rattler-index (#1112)
+
+## [0.20.13](https://github.com/conda/rattler/compare/rattler_index-v0.20.12...rattler_index-v0.20.13) - 2025-02-25
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.20.12](https://github.com/conda/rattler/compare/rattler_index-v0.20.11...rattler_index-v0.20.12) - 2025-02-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.20.11](https://github.com/conda/rattler/compare/rattler_index-v0.20.10...rattler_index-v0.20.11) - 2025-02-06
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming
+
+## [0.20.10](https://github.com/conda/rattler/compare/rattler_index-v0.20.9...rattler_index-v0.20.10) - 2025-02-06
+
+### Other
+
+- release (#1050)
+
+## [0.20.9](https://github.com/conda/rattler/compare/rattler_index-v0.20.8...rattler_index-v0.20.9) - 2025-02-03
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.20.8](https://github.com/conda/rattler/compare/rattler_index-v0.20.7...rattler_index-v0.20.8) - 2025-01-23
+
+### Added
+
+- use tempfile and persist for repodata (#1031)
+
+## [0.20.7](https://github.com/conda/rattler/compare/rattler_index-v0.20.6...rattler_index-v0.20.7) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.20.6](https://github.com/conda/rattler/compare/rattler_index-v0.20.5...rattler_index-v0.20.6) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.20.5](https://github.com/conda/rattler/compare/rattler_index-v0.20.4...rattler_index-v0.20.5) - 2025-01-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_digest, rattler_package_streaming
+
 ## [0.20.4](https://github.com/conda/rattler/compare/rattler_index-v0.20.3...rattler_index-v0.20.4) - 2024-12-20
 
 ### Other

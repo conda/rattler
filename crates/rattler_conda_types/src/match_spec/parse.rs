@@ -10,6 +10,7 @@ use nom::{
     sequence::{delimited, preceded, separated_pair, terminated},
     Finish, IResult,
 };
+
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use smallvec::SmallVec;
 use thiserror::Error;
@@ -178,6 +179,7 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
             alt((
                 delimited(char('"'), take_until("\""), char('"')),
                 delimited(char('\''), take_until("'"), char('\'')),
+                delimited(char('['), take_until("]"), char(']')),
                 take_till1(|c| c == ',' || c == ']' || c == '\'' || c == '"'),
             )),
         ))(input)
@@ -207,7 +209,9 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
 /// Strips the brackets part of the matchspec returning the rest of the
 /// matchspec and  the contents of the brackets as a `Vec<&str>`.
 fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMatchSpecError> {
-    if let Some(matches) = lazy_regex::regex!(r#".*(?:(\[.*\]))$"#).captures(input) {
+    if let Some(matches) =
+        lazy_regex::regex!(r#".*(\[(?:[^\[\]]|\[(?:[^\[\]]|\[.*\])*\])*\])$"#).captures(input)
+    {
         let bracket_str = matches.get(1).unwrap().as_str();
         let bracket_contents = parse_bracket_list(bracket_str)?;
 
@@ -220,6 +224,32 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
         Ok((input, bracket_contents))
     } else {
         Ok((input.into(), SmallVec::new()))
+    }
+}
+
+#[cfg(feature = "experimental_extras")]
+/// Parses a list of optional dependencies from a string `feat1, feat2, feat3]` -> `vec![feat1, feat2, feat3]`.
+pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
+    use nom::{
+        combinator::{all_consuming, map},
+        multi::separated_list1,
+    };
+
+    fn parse_feature_name(i: &str) -> IResult<&str, &str> {
+        delimited(
+            multispace0,
+            take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-'),
+            multispace0,
+        )(i)
+    }
+
+    fn parse_features(i: &str) -> IResult<&str, Vec<String>> {
+        separated_list1(char(','), map(parse_feature_name, |s: &str| s.to_string()))(i)
+    }
+
+    match all_consuming(parse_features)(input).finish() {
+        Ok((_remaining, features)) => Ok(features),
+        Err(_e) => Err(ParseMatchSpecError::InvalidBracket),
     }
 }
 
@@ -248,6 +278,17 @@ fn parse_bracket_vec_into_components(
             "version" => match_spec.version = Some(VersionSpec::from_str(value, strictness)?),
             "build" => match_spec.build = Some(StringMatcher::from_str(value)?),
             "build_number" => match_spec.build_number = Some(BuildNumberSpec::from_str(value)?),
+            "extras" => {
+                // Optional features are still experimental
+                #[cfg(feature = "experimental_extras")]
+                {
+                    match_spec.extras = Some(parse_extras(value)?);
+                }
+                #[cfg(not(feature = "experimental_extras"))]
+                {
+                    return Err(ParseMatchSpecError::InvalidBracketKey("extras".to_string()));
+                }
+            }
             "sha256" => {
                 match_spec.sha256 = Some(
                     parse_digest_from_hex::<Sha256>(value)
@@ -699,6 +740,9 @@ mod tests {
         NamelessMatchSpec, ParseChannelError, ParseStrictness, ParseStrictness::*, VersionSpec,
     };
 
+    #[cfg(feature = "experimental_extras")]
+    use crate::match_spec::parse::parse_extras;
+
     fn channel_config() -> ChannelConfig {
         ChannelConfig::default_with_root_dir(
             std::env::current_dir().expect("Could not get current directory"),
@@ -804,11 +848,12 @@ mod tests {
     fn test_nameless_match_spec() {
         insta::assert_yaml_snapshot!([
             NamelessMatchSpec::from_str("3.8.* *_cpython", Strict).unwrap(),
-            NamelessMatchSpec::from_str("1.0 py27_0[fn=\"bla\"]", Strict).unwrap(),
+            NamelessMatchSpec::from_str("==1.0 py27_0[fn=\"bla\"]", Strict).unwrap(),
             NamelessMatchSpec::from_str("=1.0 py27_0", Strict).unwrap(),
             NamelessMatchSpec::from_str("*cpu*", Strict).unwrap(),
-            NamelessMatchSpec::from_str("conda-forge::foobar", Strict).unwrap(),
-            NamelessMatchSpec::from_str("foobar[channel=conda-forge]", Strict).unwrap(),
+            // the next two tests are a bit weird, the version is `foobar` and the channel is `conda-forge`
+            NamelessMatchSpec::from_str("conda-forge::==foobar", Strict).unwrap(),
+            NamelessMatchSpec::from_str("==foobar[channel=conda-forge]", Strict).unwrap(),
             NamelessMatchSpec::from_str("* [build=foo]", Strict).unwrap(),
             NamelessMatchSpec::from_str(">=1.2[build=foo]", Strict).unwrap(),
             NamelessMatchSpec::from_str("[version='>=1.2', build=foo]", Strict).unwrap(),
@@ -1022,7 +1067,7 @@ mod tests {
         #[serde(untagged)]
         enum MatchSpecOrError {
             Error { error: String },
-            MatchSpec(MatchSpec),
+            MatchSpec(Box<MatchSpec>),
         }
 
         // A list of matchspecs to parse.
@@ -1057,6 +1102,8 @@ mod tests {
             "./relative/channel::package",
             "python[channel=https://conda.anaconda.org/python/conda,version=3.9]",
             "channel/win-64::foobar[channel=conda-forge, subdir=linux-64]",
+            // Issue #1004
+            "numpy>=2.*.*",
         ];
 
         let evaluated: IndexMap<_, _> = specs
@@ -1068,7 +1115,7 @@ mod tests {
                         |err| MatchSpecOrError::Error {
                             error: err.to_string(),
                         },
-                        MatchSpecOrError::MatchSpec,
+                        |err| MatchSpecOrError::MatchSpec(Box::new(err)),
                     ),
                 )
             })
@@ -1097,7 +1144,7 @@ mod tests {
         #[serde(untagged)]
         enum NamelessSpecOrError {
             Error { error: String },
-            Spec(NamelessMatchSpec),
+            Spec(Box<NamelessMatchSpec>),
         }
 
         // A list of matchspecs to parse.
@@ -1127,6 +1174,8 @@ mod tests {
             // subdir in brackets take precedence
             "[version=3.9, subdir=linux-64]",
             "==3.9[subdir=linux-64, build_number=\"0\"]",
+            // Issue #1004
+            ">=2.*.*",
         ];
 
         let evaluated: IndexMap<_, _> = specs
@@ -1138,7 +1187,7 @@ mod tests {
                         |err| NamelessSpecOrError::Error {
                             error: err.to_string(),
                         },
-                        NamelessSpecOrError::Spec,
+                        |err| NamelessSpecOrError::Spec(Box::new(err)),
                     ),
                 )
             })
@@ -1337,6 +1386,7 @@ mod tests {
             build: "py27_0*".parse().ok(),
             build_number: Some(BuildNumberSpec::from_str(">=6").unwrap()),
             file_name: Some("foo-1.0-py27_0.tar.bz2".to_string()),
+            extras: None,
             channel: Some(
                 Channel::from_str("conda-forge", &channel_config())
                     .map(Arc::new)
@@ -1369,5 +1419,71 @@ mod tests {
             .map(|s| MatchSpec::from_str(s, Strict).unwrap())
             .collect::<Vec<_>>();
         assert_eq!(specs, parsed_specs);
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    #[test]
+    fn test_simple_extras() {
+        let spec = MatchSpec::from_str("foo[extras=[bar]]", Strict).unwrap();
+
+        assert_eq!(spec.extras, Some(vec!["bar".to_string()]));
+        assert!(MatchSpec::from_str("foo[extras=[bar,baz]", Strict).is_err());
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    #[test]
+    fn test_multiple_extras() {
+        let spec = MatchSpec::from_str("foo[extras=[bar,baz]]", Strict).unwrap();
+        assert_eq!(
+            spec.extras,
+            Some(vec!["bar".to_string(), "baz".to_string()])
+        );
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    #[test]
+    fn test_parse_extras() {
+        assert_eq!(
+            parse_extras("bar,baz").unwrap(),
+            vec!["bar".to_string(), "baz".to_string()]
+        );
+        assert_eq!(parse_extras("bar").unwrap(), vec!["bar".to_string()]);
+        assert_eq!(
+            parse_extras("bar, baz").unwrap(),
+            vec!["bar".to_string(), "baz".to_string()]
+        );
+        assert!(parse_extras("[bar,baz]").is_err());
+    }
+
+    #[cfg(feature = "experimental_extras")]
+    #[test]
+    fn test_invalid_extras() {
+        // Empty extras value
+        assert!(MatchSpec::from_str("foo[extras=]", Strict).is_err());
+
+        // Missing brackets around extras list
+        assert!(MatchSpec::from_str("foo[extras=bar,baz]", Strict).is_err());
+
+        // Trailing comma in extras list
+        assert!(MatchSpec::from_str("foo[extras=[bar,]]", Strict).is_err());
+
+        // Invalid characters in extras name
+        assert!(MatchSpec::from_str("foo[extras=[bar!,baz]]", Strict).is_err());
+
+        // Invalid characters in extras name
+        println!(
+            "{:?}",
+            MatchSpec::from_str("foo[extras=[bar!,baz]]", Strict)
+        );
+        assert!(MatchSpec::from_str("foo[extras=[bar!,baz]]", Strict).is_err());
+
+        // Empty extras item
+        assert!(MatchSpec::from_str("foo[extras=[bar,,baz]]", Strict).is_err());
+
+        // Missing closing bracket
+        assert!(MatchSpec::from_str("foo[extras=[bar,baz", Strict).is_err());
+
+        // Missing opening bracket
+        assert!(MatchSpec::from_str("foo[extras=bar,baz]]", Strict).is_err());
     }
 }

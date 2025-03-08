@@ -1,9 +1,11 @@
-use serde::{Serialize, Serializer};
-use std::hash::{Hash, Hasher};
 use std::{
+    borrow::Cow,
     fmt::{Display, Formatter},
+    hash::{Hash, Hasher},
     str::FromStr,
 };
+
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Match a given string either by exact match, glob or regex
 #[derive(Debug, Clone)]
@@ -11,12 +13,14 @@ pub enum StringMatcher {
     /// Match the string exactly
     Exact(String),
     /// Match the string by glob. A glob uses a * to match any characters.
-    /// For example, `*` matches any string, `py*` matches any string starting with `py`,
-    /// `*37` matches any string ending with `37` and `py*37` matches any string starting with `py` and ending with `37`.
+    /// For example, `*` matches any string, `py*` matches any string starting
+    /// with `py`, `*37` matches any string ending with `37` and `py*37`
+    /// matches any string starting with `py` and ending with `37`.
     Glob(glob::Pattern),
-    /// Match the string by regex. A regex starts with a `^`, ends with a `$` and uses the regex syntax.
-    /// For example, `^py.*37$` matches any string starting with `py` and ending with `37`.
-    /// Note that the regex is anchored, so it must match the entire string.
+    /// Match the string by regex. A regex starts with a `^`, ends with a `$`
+    /// and uses the regex syntax. For example, `^py.*37$` matches any
+    /// string starting with `py` and ending with `37`. Note that the regex
+    /// is anchored, so it must match the entire string.
     Regex(regex::Regex),
 }
 
@@ -109,14 +113,29 @@ impl Serialize for StringMatcher {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        match self {
+            StringMatcher::Exact(s) => s.serialize(serializer),
+            StringMatcher::Glob(s) => s.as_str().serialize(serializer),
+            StringMatcher::Regex(s) => s.as_str().serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for StringMatcher {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = Cow::<'de, str>::deserialize(deserializer)?;
+        StringMatcher::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use assert_matches::assert_matches;
+
+    use super::*;
 
     #[test]
     fn test_string_matcher() {

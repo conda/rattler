@@ -108,7 +108,7 @@ fn extract_zipfile(zip_file: ZipFile<'_>, destination: &Path) -> Result<(), Extr
         .mangled_name()
         .file_name()
         .map(OsStr::to_string_lossy)
-        .map_or(false, |file_name| file_name.ends_with(".tar.zst"))
+        .is_some_and(|file_name| file_name.ends_with(".tar.zst"))
     {
         stream_tar_zst(&mut *file)?.unpack(destination)?;
     } else {

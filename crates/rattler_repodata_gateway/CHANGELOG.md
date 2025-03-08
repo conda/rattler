@@ -6,6 +6,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.40...rattler_repodata_gateway-v0.22.0) - 2025-03-04
+
+### Added
+
+- *(js)* compile `rattler_solve` and `rattler_repodata_gateway` ([#1108](https://github.com/conda/rattler/pull/1108))
+
+## [0.21.40](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.39...rattler_repodata_gateway-v0.21.40) - 2025-02-28
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.21.39](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.38...rattler_repodata_gateway-v0.21.39) - 2025-02-27
+
+### Other
+
+- updated the following local packages: rattler_redaction, rattler_conda_types, rattler_networking
+
+## [0.21.38](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.37...rattler_repodata_gateway-v0.21.38) - 2025-02-25
+
+### Added
+
+- add run_exports cache (#1060)
+
+### Fixed
+
+- split matchspec on start of constraint (#1094)
+
+## [0.21.37](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.36...rattler_repodata_gateway-v0.21.37) - 2025-02-18
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.21.36](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.35...rattler_repodata_gateway-v0.21.36) - 2025-02-06
+
+### Other
+
+- bump rust 1.84.1 (#1053)
+
+## [0.21.35](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.34...rattler_repodata_gateway-v0.21.35) - 2025-02-06
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.21.34](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.33...rattler_repodata_gateway-v0.21.34) - 2025-02-03
+
+### Added
+
+- add S3 support (#1008)
+
+## [0.21.33](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.32...rattler_repodata_gateway-v0.21.33) - 2025-01-23
+
+### Other
+
+- Improve AuthenticationStorage (#1026)
+
+## [0.21.32](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.31...rattler_repodata_gateway-v0.21.32) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.21.31](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.30...rattler_repodata_gateway-v0.21.31) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.21.30](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.29...rattler_repodata_gateway-v0.21.30) - 2025-01-08
+
+### Fixed
+
+- retry failed repodata streaming on io error (#1017)
+
 ## [0.21.29](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.28...rattler_repodata_gateway-v0.21.29) - 2024-12-20
 
 ### Other

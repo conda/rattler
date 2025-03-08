@@ -1,6 +1,7 @@
 mod barrier_cell;
 mod builder;
 mod channel_config;
+#[cfg(not(target_arch = "wasm32"))]
 mod direct_url_query;
 mod error;
 mod local_subdir;
@@ -13,7 +14,6 @@ mod subdir_builder;
 
 use std::{
     collections::HashSet,
-    path::PathBuf,
     sync::{Arc, Weak},
 };
 
@@ -23,6 +23,7 @@ pub use channel_config::{ChannelConfig, SourceConfig};
 use dashmap::{mapref::entry::Entry, DashMap};
 pub use error::GatewayError;
 pub use query::{NamesQuery, RepoDataQuery};
+#[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, MatchSpec, Platform};
 pub use repo_data::RepoData;
@@ -158,9 +159,11 @@ struct GatewayInner {
     channel_config: ChannelConfig,
 
     /// The directory to store any cache
-    cache: PathBuf,
+    #[cfg(not(target_arch = "wasm32"))]
+    cache: std::path::PathBuf,
 
     /// The package cache, stored to reuse memory cache
+    #[cfg(not(target_arch = "wasm32"))]
     package_cache: PackageCache,
 
     /// A semaphore to limit the number of concurrent requests.
@@ -308,8 +311,8 @@ mod test {
     use rstest::rstest;
     use url::Url;
 
+    use crate::fetch::CacheAction;
     use crate::{
-        fetch::CacheAction,
         gateway::Gateway,
         utils::{simple_channel_server::SimpleChannelServer, test::fetch_repo_data},
         GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
@@ -369,6 +372,7 @@ mod test {
     }
 
     #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
     async fn test_direct_url_spec_from_gateway() {
         let gateway = Gateway::builder()
             .with_package_cache(PackageCache::new(
@@ -411,7 +415,8 @@ mod test {
             .query(
                 vec![index],
                 vec![Platform::Linux64],
-                vec![MatchSpec::from_str("openssl 3.3.1 h2466b09_1", Strict).unwrap()].into_iter(),
+                vec![MatchSpec::from_str("openssl ==3.3.1 h2466b09_1", Strict).unwrap()]
+                    .into_iter(),
             )
             .recursive(true)
             .await
@@ -454,7 +459,7 @@ mod test {
                 vec![index.clone()],
                 vec![Platform::Linux64],
                 vec![
-                    MatchSpec::from_str("mamba 0.9.2 py39h951de11_0", Strict).unwrap(),
+                    MatchSpec::from_str("mamba ==0.9.2 py39h951de11_0", Strict).unwrap(),
                     MatchSpec::from_str(openssl_url, Strict).unwrap(),
                 ]
                 .into_iter(),
@@ -491,7 +496,7 @@ mod test {
             .query(
                 vec![index.clone()],
                 vec![Platform::Linux64],
-                vec![MatchSpec::from_str("mamba 0.9.2 py39h951de11_0", Strict).unwrap()]
+                vec![MatchSpec::from_str("mamba ==0.9.2 py39h951de11_0", Strict).unwrap()]
                     .into_iter(),
             )
             .recursive(true)

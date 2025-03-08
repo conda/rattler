@@ -1,4 +1,7 @@
-use std::{borrow::Cow, collections::BTreeSet};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+};
 
 use rattler_conda_types::{
     package::ArchiveIdentifier, BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord,
@@ -73,13 +76,10 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub depends: Cow<'a, Vec<String>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub constrains: Cow<'a, Vec<String>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
 
     // Additional properties (in semi alphabetic order but grouped by commonality)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub arch: Option<Cow<'a, Option<String>>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub platform: Option<Cow<'a, Option<String>>>,
-
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel: Option<Cow<'a, Option<Url>>>,
 
@@ -157,6 +157,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             build_number,
             constrains: value.constrains.into_owned(),
             depends: value.depends.into_owned(),
+            extra_depends: value.extra_depends.into_owned(),
             features: value.features.into_owned(),
             legacy_bz2_md5: value.legacy_bz2_md5,
             legacy_bz2_size: value.legacy_bz2_size.into_owned(),
@@ -169,8 +170,8 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                 .or(derived.name)
                 .ok_or_else(|| ConversionError::Missing("name".to_string()))?,
             noarch,
-            arch: value.arch.map_or(derived_arch, Cow::into_owned),
-            platform: value.platform.map_or(derived_platform, Cow::into_owned),
+            arch: derived_arch,
+            platform: derived_platform,
             purls: value.purls.into_owned(),
             sha256: value.sha256,
             size: value.size.into_owned(),
@@ -186,9 +187,11 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             python_site_packages_path: value.python_site_packages_path.into_owned(),
         };
 
-        if value.location.file_name().map_or(false, |name| {
-            ArchiveIdentifier::try_from_filename(name).is_some()
-        }) {
+        if value
+            .location
+            .file_name()
+            .is_some_and(|name| ArchiveIdentifier::try_from_filename(name).is_some())
+        {
             Ok(CondaPackageData::Binary(CondaBinaryData {
                 location: value.location,
                 file_name: value
@@ -233,13 +236,6 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             derived.subdir.as_deref().unwrap_or(&package_record.subdir),
             derived.build.as_deref().unwrap_or(&package_record.build),
         );
-        let (derived_arch, derived_platform) = derived_fields::derive_arch_and_platform(
-            derived.subdir.as_deref().unwrap_or(&package_record.subdir),
-        );
-
-        // Polyfill the arch and platform values if they are not present.
-        let arch = package_record.arch.clone().or(derived_arch);
-        let platform = package_record.platform.clone().or(derived_platform);
 
         let channel = value.as_binary().and_then(|binary| binary.channel.as_ref());
         let file_name = value.as_binary().map(|binary| binary.file_name.as_str());
@@ -273,8 +269,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             purls: Cow::Borrowed(&package_record.purls),
             depends: Cow::Borrowed(&package_record.depends),
             constrains: Cow::Borrowed(&package_record.constrains),
-            arch: (package_record.arch != arch).then_some(Cow::Owned(arch)),
-            platform: (package_record.platform != platform).then_some(Cow::Owned(platform)),
+            extra_depends: Cow::Borrowed(&package_record.extra_depends),
             md5: package_record.md5,
             legacy_bz2_md5: package_record.legacy_bz2_md5,
             sha256: package_record.sha256,

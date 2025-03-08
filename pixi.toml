@@ -7,7 +7,7 @@ authors = [
     "Tim de Jager <tim@prefix.dev>",
     "Ruben Arts <ruben@prefix.dev>",
 ]
-channels = ["conda-forge"]
+channels = ["https://prefix.dev/conda-forge"]
 platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
 license = "BSD-3-Clause"
 
@@ -16,7 +16,9 @@ build = "cargo build"
 fmt = "cargo fmt"
 lint = "cargo clippy"
 check = "cargo check"
-test = "cargo test"
+# libsolv compilation cannot find pixi's clang for some reason
+# so we skip that test for now
+test = "cargo nextest run --workspace --no-default-features --features=rustls-tls -E 'not test(libsolv_bindings_up_to_date)'"
 rattler = "cargo run --bin rattler --release --"
 
 [dependencies]
@@ -24,8 +26,9 @@ cxx-compiler = "~=1.6.0"
 openssl = "~=3.1"
 make = "~=4.3"
 pkg-config = "~=0.29.2"
-rust = "~=1.80.0"
+rust = "~=1.84.0"
 cmake = "~=3.26.4"
+cargo-nextest = ">=0.9.91,<0.10"
 
 [target.linux-64.dependencies]
 clang = ">=18.1.8,<19.0"
@@ -45,4 +48,6 @@ pre-commit-install = "pre-commit install"
 pre-commit-run = "pre-commit run"
 
 [environments]
-lint = { features = ["lint"], no-default-feature = true, solve-group = "default" }
+lint = { features = [
+    "lint",
+], no-default-feature = true, solve-group = "default" }

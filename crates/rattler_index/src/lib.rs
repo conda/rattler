@@ -2,31 +2,44 @@
 //! files
 #![deny(missing_docs)]
 
-use std::{
-    collections::{HashMap, HashSet},
-    ffi::OsStr,
-    io::{Read, Write},
-    path::{Path, PathBuf},
-};
-
-use fs_err::File;
+use anyhow::Result;
+use bytes::buf::Buf;
+use fs_err::{self as fs};
+use futures::future::try_join_all;
+use fxhash::FxHashMap;
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rattler_conda_types::{
     package::{ArchiveType, IndexJson, PackageFile},
     ChannelInfo, PackageRecord, Platform, RepoData,
 };
+use rattler_networking::{Authentication, AuthenticationStorage};
 use rattler_package_streaming::{read, seek};
-use walkdir::WalkDir;
+use std::{
+    collections::{HashMap, HashSet},
+    io::{Cursor, Read},
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+};
+use tokio::sync::Semaphore;
+use url::Url;
+
+use opendal::{
+    services::{FsConfig, S3Config},
+    Configurator, Operator,
+};
 
 /// Extract the package record from an `index.json` file.
 pub fn package_record_from_index_json<T: Read>(
-    file: &Path,
+    package_as_bytes: impl AsRef<[u8]>,
     index_json_reader: &mut T,
-) -> Result<PackageRecord, std::io::Error> {
+) -> std::io::Result<PackageRecord> {
     let index = IndexJson::from_reader(index_json_reader)?;
 
-    let sha256_result = rattler_digest::compute_file_digest::<rattler_digest::Sha256>(file)?;
-    let md5_result = rattler_digest::compute_file_digest::<rattler_digest::Md5>(file)?;
-    let size = std::fs::metadata(file)?.len();
+    let sha256_result =
+        rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&package_as_bytes);
+    let md5_result = rattler_digest::compute_bytes_digest::<rattler_digest::Md5>(&package_as_bytes);
+    let size = package_as_bytes.as_ref().len();
 
     let package_record = PackageRecord {
         name: index.name,
@@ -36,10 +49,11 @@ pub fn package_record_from_index_json<T: Read>(
         subdir: index.subdir.unwrap_or_else(|| "unknown".to_string()),
         md5: Some(md5_result),
         sha256: Some(sha256_result),
-        size: Some(size),
+        size: Some(size as u64),
         arch: index.arch,
         platform: index.platform,
         depends: index.depends,
+        extra_depends: std::collections::BTreeMap::new(),
         constrains: index.constrains,
         track_features: index.track_features,
         features: index.features,
@@ -60,14 +74,23 @@ pub fn package_record_from_index_json<T: Read>(
 /// Extract the package record from a `.tar.bz2` package file.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
-pub fn package_record_from_tar_bz2(file: &Path) -> Result<PackageRecord, std::io::Error> {
-    let reader = std::fs::File::open(file)?;
+pub fn package_record_from_tar_bz2(file: &Path) -> std::io::Result<PackageRecord> {
+    let reader = fs::File::open(file)?;
+    package_record_from_tar_bz2_reader(reader)
+}
+
+/// Extract the package record from a `.tar.bz2` package file.
+/// This function will look for the `info/index.json` file in the conda package
+/// and extract the package record from it.
+pub fn package_record_from_tar_bz2_reader(reader: impl Read) -> std::io::Result<PackageRecord> {
+    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
+    let reader = Cursor::new(bytes.clone());
     let mut archive = read::stream_tar_bz2(reader);
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            return package_record_from_index_json(file, &mut entry);
+            return package_record_from_index_json(bytes, &mut entry);
         }
     }
     Err(std::io::Error::new(
@@ -79,15 +102,24 @@ pub fn package_record_from_tar_bz2(file: &Path) -> Result<PackageRecord, std::io
 /// Extract the package record from a `.conda` package file.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
-pub fn package_record_from_conda(file: &Path) -> Result<PackageRecord, std::io::Error> {
-    let reader = std::fs::File::open(file)?;
+pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> {
+    let reader = fs::File::open(file)?;
+    package_record_from_conda_reader(reader)
+}
+
+/// Extract the package record from a `.conda` package file content.
+/// This function will look for the `info/index.json` file in the conda package
+/// and extract the package record from it.
+pub fn package_record_from_conda_reader(reader: impl Read) -> std::io::Result<PackageRecord> {
+    let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
+    let reader = Cursor::new(bytes.clone());
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
 
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            return package_record_from_index_json(file, &mut entry);
+            return package_record_from_index_json(bytes, &mut entry);
         }
     }
     Err(std::io::Error::new(
@@ -96,117 +128,337 @@ pub fn package_record_from_conda(file: &Path) -> Result<PackageRecord, std::io::
     ))
 }
 
-/// Create a new `repodata.json` for all packages in the given output folder. If
-/// `target_platform` is `Some`, only that specific subdir is indexed. Otherwise
-/// indexes all subdirs and creates a `repodata.json` for each.
-pub fn index(
-    output_folder: &Path,
-    target_platform: Option<&Platform>,
-) -> Result<(), std::io::Error> {
-    let entries = WalkDir::new(output_folder).into_iter();
-    let entries: Vec<(PathBuf, ArchiveType)> = entries
-        .filter_entry(|e| e.depth() <= 2)
-        .filter_map(Result::ok)
-        .filter_map(|e| {
-            ArchiveType::split_str(e.path().to_string_lossy().as_ref())
-                .map(|(p, t)| (PathBuf::from(format!("{}{}", p, t.extension())), t))
+async fn index_subdir(
+    subdir: Platform,
+    op: Operator,
+    force: bool,
+    progress: Option<MultiProgress>,
+    semaphore: Arc<Semaphore>,
+) -> Result<()> {
+    let mut registered_packages: FxHashMap<String, PackageRecord> = HashMap::default();
+    if !force {
+        let repodata_path = format!("{subdir}/repodata.json");
+        let repodata_bytes = op.read(&repodata_path).await;
+        let repodata: RepoData = match repodata_bytes {
+            Ok(bytes) => serde_json::from_slice(&bytes.to_vec())?,
+            Err(e) => {
+                if e.kind() != opendal::ErrorKind::NotFound {
+                    return Err(e.into());
+                }
+                tracing::info!("Could not find repodata.json. Creating new one.");
+                RepoData {
+                    info: Some(ChannelInfo {
+                        subdir: subdir.to_string(),
+                        base_url: None,
+                    }),
+                    packages: HashMap::default(),
+                    conda_packages: HashMap::default(),
+                    removed: HashSet::default(),
+                    version: Some(2),
+                }
+            }
+        };
+        registered_packages.extend(repodata.packages.into_iter());
+        registered_packages.extend(repodata.conda_packages.into_iter());
+        tracing::debug!(
+            "Found {} already registered packages in {}/repodata.json.",
+            registered_packages.len(),
+            subdir
+        );
+    }
+    let uploaded_packages: HashSet<String> = op
+        .list_with(&format!("{}/", subdir.as_str()))
+        .await?
+        .iter()
+        .filter_map(|entry| {
+            if entry.metadata().mode().is_file() {
+                let filename = entry.name().to_string();
+                // Check if the file is an archive package file.
+                ArchiveType::try_from(&filename).map(|_| filename)
+            } else {
+                None
+            }
         })
         .collect();
 
-    // find all subdirs
-    let mut platforms = entries
+    tracing::debug!(
+        "Found {} already uploaded packages in subdir {}.",
+        uploaded_packages.len(),
+        subdir
+    );
+
+    let packages_to_delete = registered_packages
+        .keys()
+        .cloned()
+        .collect::<HashSet<_>>()
+        .difference(&uploaded_packages)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    tracing::debug!(
+        "Deleting {} packages from subdir {}.",
+        packages_to_delete.len(),
+        subdir
+    );
+
+    for filename in packages_to_delete {
+        registered_packages.remove(&filename);
+    }
+
+    let packages_to_add = uploaded_packages
+        .difference(&registered_packages.keys().cloned().collect::<HashSet<_>>())
+        .cloned()
+        .collect::<Vec<_>>();
+
+    tracing::debug!(
+        "Adding {} packages to subdir {}.",
+        packages_to_add.len(),
+        subdir
+    );
+
+    let pb = if let Some(progress) = progress {
+        progress.add(ProgressBar::new(packages_to_add.len() as u64))
+    } else {
+        ProgressBar::hidden()
+    };
+
+    let sty = ProgressStyle::with_template(
+        "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .progress_chars("##-");
+    pb.set_style(sty);
+
+    let tasks = packages_to_add
         .iter()
-        .filter_map(|(p, _)| {
-            p.parent().and_then(Path::file_name).and_then(|file_name| {
-                let name = file_name.to_string_lossy().to_string();
-                if name == "src_cache" {
-                    None
-                } else {
-                    Some(name)
+        .map(|filename| {
+            tokio::spawn({
+                let op = op.clone();
+                let filename = filename.clone();
+                let pb = pb.clone();
+                let semaphore = semaphore.clone();
+                {
+                    async move {
+                        let _permit = semaphore
+                            .acquire()
+                            .await
+                            .expect("Semaphore was unexpectedly closed");
+                        pb.set_message(format!(
+                            "Indexing {} {}",
+                            subdir.as_str(),
+                            console::style(filename.clone()).dim()
+                        ));
+                        let file_path = format!("{subdir}/{filename}");
+                        let buffer = op.read(&file_path).await?;
+                        let reader = buffer.reader();
+                        // We already know it's not None
+                        let archive_type = ArchiveType::try_from(&filename).unwrap();
+                        let record = match archive_type {
+                            ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
+                            ArchiveType::Conda => package_record_from_conda_reader(reader),
+                        }?;
+                        pb.inc(1);
+                        Ok::<(String, PackageRecord), std::io::Error>((filename.clone(), record))
+                    }
                 }
             })
         })
-        .collect::<std::collections::HashSet<_>>();
+        .collect::<Vec<_>>();
+    let results = try_join_all(tasks).await?;
 
-    // Always create noarch subdir
-    if !output_folder.join("noarch").exists() {
-        std::fs::create_dir(output_folder.join("noarch"))?;
+    pb.finish_with_message(format!("Finished {}", subdir.as_str()));
+
+    tracing::debug!(
+        "Successfully added {} packages to subdir {}.",
+        results.len(),
+        subdir
+    );
+
+    for result in results {
+        let (filename, record) = result?;
+        registered_packages.insert(filename, record);
     }
 
-    // Make sure that we index noarch if it is not already indexed
-    if !output_folder.join("noarch/repodata.json").exists() {
-        platforms.insert("noarch".to_string());
-    }
-
-    // Create target platform dir if needed
-    if let Some(target_platform) = target_platform {
-        let platform_str = target_platform.to_string();
-        if !output_folder.join(&platform_str).exists() {
-            std::fs::create_dir(output_folder.join(&platform_str))?;
-            platforms.insert(platform_str);
-        }
-    }
-
-    for platform in platforms {
-        if let Some(target_platform) = target_platform {
-            if platform != target_platform.to_string() {
-                if platform == "noarch" {
-                    // check that noarch is already indexed if it is not the target platform
-                    if output_folder.join("noarch/repodata.json").exists() {
-                        continue;
-                    }
-                } else {
-                    continue;
-                }
+    let mut packages: FxHashMap<String, PackageRecord> = HashMap::default();
+    let mut conda_packages: FxHashMap<String, PackageRecord> = HashMap::default();
+    for (filename, package) in registered_packages {
+        match ArchiveType::try_from(&filename) {
+            Some(ArchiveType::TarBz2) => {
+                packages.insert(filename, package);
             }
+            Some(ArchiveType::Conda) => {
+                conda_packages.insert(filename, package);
+            }
+            _ => panic!("Unknown archive type"),
         }
-
-        let mut repodata = RepoData {
-            info: Some(ChannelInfo {
-                subdir: platform.clone(),
-                base_url: None,
-            }),
-            packages: HashMap::default(),
-            conda_packages: HashMap::default(),
-            removed: HashSet::default(),
-            version: Some(2),
-        };
-
-        for (p, t) in entries.iter().filter_map(|(p, t)| {
-            p.parent().and_then(|parent| {
-                parent.file_name().and_then(|file_name| {
-                    if file_name == OsStr::new(&platform) {
-                        // If the file_name is the platform we're looking for, return Some((p, t))
-                        Some((p, t))
-                    } else {
-                        // Otherwise, we return None to filter out this item
-                        None
-                    }
-                })
-            })
-        }) {
-            let record = match t {
-                ArchiveType::TarBz2 => package_record_from_tar_bz2(p),
-                ArchiveType::Conda => package_record_from_conda(p),
-            };
-            let (Ok(record), Some(file_name)) = (record, p.file_name()) else {
-                tracing::info!("Could not read package record from {:?}", p);
-                continue;
-            };
-            match t {
-                ArchiveType::TarBz2 => repodata
-                    .packages
-                    .insert(file_name.to_string_lossy().to_string(), record),
-                ArchiveType::Conda => repodata
-                    .conda_packages
-                    .insert(file_name.to_string_lossy().to_string(), record),
-            };
-        }
-        let out_file = output_folder.join(platform).join("repodata.json");
-        File::create(&out_file)?.write_all(serde_json::to_string_pretty(&repodata)?.as_bytes())?;
     }
+
+    let repodata = RepoData {
+        info: Some(ChannelInfo {
+            subdir: subdir.to_string(),
+            base_url: None,
+        }),
+        packages,
+        conda_packages,
+        removed: HashSet::default(),
+        version: Some(2),
+    };
+
+    let repodata_path = format!("{subdir}/repodata.json");
+    let repodata_bytes = serde_json::to_vec(&repodata)?;
+    op.write(&repodata_path, repodata_bytes).await?;
+    // todo: also write repodata.json.bz2, repodata.json.zst, repodata.json.jlap and sharded repodata once available in rattler
+    // https://github.com/conda/rattler/issues/1096
 
     Ok(())
 }
 
-// TODO: write proper unit tests for above functions
+/// Create a new `repodata.json` for all packages in the channel at the given directory.
+pub async fn index_fs(
+    channel: impl Into<PathBuf>,
+    target_platform: Option<Platform>,
+    force: bool,
+    max_parallel: usize,
+    multi_progress: Option<MultiProgress>,
+) -> anyhow::Result<()> {
+    let mut config = FsConfig::default();
+    config.root = Some(channel.into().canonicalize()?.to_string_lossy().to_string());
+    index(target_platform, config, force, max_parallel, multi_progress).await
+}
+
+/// Create a new `repodata.json` for all packages in the channel at the given S3 URL.
+#[allow(clippy::too_many_arguments)]
+pub async fn index_s3(
+    channel: Url,
+    region: String,
+    endpoint_url: Url,
+    force_path_style: bool,
+    access_key_id: Option<String>,
+    secret_access_key: Option<String>,
+    session_token: Option<String>,
+    target_platform: Option<Platform>,
+    force: bool,
+    max_parallel: usize,
+    multi_progress: Option<MultiProgress>,
+) -> anyhow::Result<()> {
+    let mut s3_config = S3Config::default();
+    s3_config.root = Some(channel.path().to_string());
+    s3_config.bucket = channel
+        .host_str()
+        .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
+        .to_string();
+    s3_config.region = Some(region);
+    s3_config.endpoint = Some(endpoint_url.to_string());
+    s3_config.enable_virtual_host_style = !force_path_style;
+    // Use credentials from the CLI if they are provided.
+    if let (Some(access_key_id), Some(secret_access_key)) = (access_key_id, secret_access_key) {
+        s3_config.secret_access_key = Some(secret_access_key);
+        s3_config.access_key_id = Some(access_key_id);
+        s3_config.session_token = session_token;
+    } else {
+        // If they're not provided, check rattler authentication storage for credentials.
+        let auth_storage = AuthenticationStorage::from_env_and_defaults()?;
+        let auth = auth_storage.get_by_url(channel)?;
+        if let (
+            _,
+            Some(Authentication::S3Credentials {
+                access_key_id,
+                secret_access_key,
+                session_token,
+            }),
+        ) = auth
+        {
+            s3_config.access_key_id = Some(access_key_id);
+            s3_config.secret_access_key = Some(secret_access_key);
+            s3_config.session_token = session_token;
+        }
+    }
+    index(
+        target_platform,
+        s3_config,
+        force,
+        max_parallel,
+        multi_progress,
+    )
+    .await
+}
+
+/// Create a new `repodata.json` for all packages in the given configurator's root.
+/// If `target_platform` is `Some`, only that specific subdir is indexed.
+/// Otherwise indexes all subdirs and creates a `repodata.json` for each.
+///
+/// The process is the following:
+/// 1. Get all subdirs and create `noarch` and `target_platform` if they do not exist.
+/// 2. Iterate subdirs and index each subdir.
+///    Therefore, we need to:
+///    1. Collect all uploaded packages in subdir
+///    2. Collect all registered packages from `repodata.json` (if exists)
+///    3. Determine which packages to add to and to delete from `repodata.json`
+///    4. Write `repodata.json` back
+pub async fn index<T: Configurator>(
+    target_platform: Option<Platform>,
+    config: T,
+    force: bool,
+    max_parallel: usize,
+    multi_progress: Option<MultiProgress>,
+) -> anyhow::Result<()> {
+    let builder = config.into_builder();
+
+    // Get all subdirs
+    let op = Operator::new(builder)?.finish();
+    let entries = op.list_with("").await?;
+
+    // If requested `target_platform` subdir does not exist, we create it.
+    let mut subdirs = if let Some(target_platform) = target_platform {
+        if !op.exists(&format!("{}/", target_platform.as_str())).await? {
+            tracing::debug!("Did not find {target_platform} subdir, creating.");
+            op.create_dir(&format!("{}/", target_platform.as_str()))
+                .await?;
+        }
+        // Limit subdirs to only the requested `target_platform`.
+        HashSet::from([target_platform])
+    } else {
+        entries
+            .iter()
+            .filter_map(|entry| {
+                if entry.metadata().mode().is_dir() && entry.name() != "/" {
+                    // Directory entries always end with `/`.
+                    Some(entry.name().trim_end_matches('/').to_string())
+                } else {
+                    None
+                }
+            })
+            .filter_map(|s| Platform::from_str(&s).ok())
+            .collect::<HashSet<_>>()
+    };
+
+    if !op
+        .exists(&format!("{}/", Platform::NoArch.as_str()))
+        .await?
+    {
+        // If `noarch` subdir does not exist, we create it.
+        tracing::debug!("Did not find noarch subdir, creating.");
+        op.create_dir(&format!("{}/", Platform::NoArch.as_str()))
+            .await?;
+        subdirs.insert(Platform::NoArch);
+    }
+
+    let semaphore = Semaphore::new(max_parallel);
+    let semaphore = Arc::new(semaphore);
+
+    let tasks = subdirs
+        .iter()
+        .map(|subdir| {
+            tokio::spawn(index_subdir(
+                *subdir,
+                op.clone(),
+                force,
+                multi_progress.clone(),
+                semaphore.clone(),
+            ))
+        })
+        .collect::<Vec<_>>();
+    try_join_all(tasks).await?;
+
+    Ok(())
+}

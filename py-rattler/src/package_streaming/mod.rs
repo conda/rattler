@@ -8,8 +8,8 @@ use url::Url;
 use crate::{networking::client::PyClientWithMiddleware, utils::sha256_from_pybytes};
 
 fn convert_result(py: Python<'_>, result: ExtractResult) -> (PyObject, PyObject) {
-    let sha256_bytes = PyBytes::new_bound(py, &result.sha256);
-    let md5_bytes = PyBytes::new_bound(py, &result.md5);
+    let sha256_bytes = PyBytes::new(py, &result.sha256);
+    let md5_bytes = PyBytes::new(py, &result.md5);
 
     (sha256_bytes.into(), md5_bytes.into())
 }

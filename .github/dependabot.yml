@@ -1,20 +1,60 @@
 version: 2
 updates:
-  - package-ecosystem: "cargo"
-    directory: "/"
+  - package-ecosystem: cargo
+    directory: /
     schedule:
-      interval: "daily"
-      time: "04:00" # UTC
+      interval: weekly
     labels:
-      - "dependencies"
+      - dependencies
     commit-message:
-      prefix: "bump"
-    open-pull-requests-limit: 10
-  - package-ecosystem: "github-actions"
-    directory: "/"
+      prefix: bump
+    groups:
+      rust:
+        patterns:
+          - "*"
+  - package-ecosystem: cargo
+    directory: /py-rattler
     schedule:
-      interval: "daily"
+      interval: weekly
     labels:
-      - "dependencies"
+      - dependencies
     commit-message:
-      prefix: "chore(ci)"
+      prefix: bump
+    groups:
+      rust-py-rattler:
+        patterns:
+          - "*"
+  - package-ecosystem: cargo
+    directory: /js-rattler
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+    commit-message:
+      prefix: bump
+    groups:
+      rust-js-rattler:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore(ci)
+
+  - package-ecosystem: npm
+    directory: /js-rattler
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore(ci)
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"

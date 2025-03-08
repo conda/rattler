@@ -6,6 +6,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.6](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.5...rattler_virtual_packages-v2.0.6) - 2025-02-28
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [2.0.5](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.4...rattler_virtual_packages-v2.0.5) - 2025-02-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.3...rattler_virtual_packages-v2.0.4) - 2025-02-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.3](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.2...rattler_virtual_packages-v2.0.3) - 2025-02-18
+
+### Fixed
+
+- do not try to call `ldd` on non-linux systems (#1064)
+
+## [2.0.2](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.1...rattler_virtual_packages-v2.0.2) - 2025-02-06
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.0...rattler_virtual_packages-v2.0.1) - 2025-02-03
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v1.2.0...rattler_virtual_packages-v2.0.0) - 2025-01-23
+
+### Added
+
+- align with upcoming virtual package cep (#1028)
+- add linux-ppc (PPC32 BE) platform to rattler (#1024)
+
+## [1.2.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v1.1.17...rattler_virtual_packages-v1.2.0) - 2025-01-09
+
+### Added
+
+- Match GenericVirtualPackage with MatchSpec (#1016)
+
+## [1.1.17](https://github.com/conda/rattler/compare/rattler_virtual_packages-v1.1.16...rattler_virtual_packages-v1.1.17) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [1.1.16](https://github.com/conda/rattler/compare/rattler_virtual_packages-v1.1.15...rattler_virtual_packages-v1.1.16) - 2025-01-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [1.1.15](https://github.com/conda/rattler/compare/rattler_virtual_packages-v1.1.14...rattler_virtual_packages-v1.1.15) - 2024-12-20
 
 ### Other

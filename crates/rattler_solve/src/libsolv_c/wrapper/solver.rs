@@ -11,13 +11,13 @@ use super::{
 /// when the Solver is dropped
 pub struct Solver<'pool>(NonNull<ffi::Solver>, PhantomData<&'pool Pool>);
 
-impl<'pool> Drop for Solver<'pool> {
+impl Drop for Solver<'_> {
     fn drop(&mut self) {
         unsafe { ffi::solver_free(self.0.as_mut()) }
     }
 }
 
-impl<'pool> Solver<'pool> {
+impl Solver<'_> {
     /// Constructs a new Solver from the provided libsolv pointer. It is the responsibility of the
     /// caller to ensure the pointer is actually valid.
     pub(super) unsafe fn new(_pool: &Pool, ptr: NonNull<ffi::Solver>) -> Solver<'_> {

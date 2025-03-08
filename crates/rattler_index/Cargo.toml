@@ -1,24 +1,64 @@
 [package]
 name = "rattler_index"
-version = "0.20.4"
+version = "0.21.2"
 edition.workspace = true
 authors = []
-description = "A crate that indexes directories containing conda packages to create local conda channels"
+description = "A crate to index conda channels and create a repodata.json file."
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
 readme.workspace = true
+default-run = "rattler-index"
+
+[features]
+default = ["rustls-tls"]
+native-tls = [
+  "reqwest/native-tls",
+  "reqwest/native-tls-alpn",
+  "rattler_package_streaming/native-tls",
+  "rattler_networking/native-tls",
+]
+rustls-tls = [
+  "reqwest/rustls-tls",
+  "reqwest/rustls-tls-native-roots",
+  "rattler_package_streaming/rustls-tls",
+  "rattler_networking/rustls-tls",
+]
+
+[[bin]]
+name = "rattler-index"
+path = "src/main.rs"
 
 [dependencies]
+anyhow = { workspace = true }
+bytes = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+clap-verbosity-flag = { workspace = true, features = ["tracing"] }
+console = { workspace = true }
 fs-err = { workspace = true }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.29.7", default-features = false }
-rattler_digest = { path="../rattler_digest", version = "1.0.4", default-features = false }
-rattler_package_streaming = { path="../rattler_package_streaming", version = "0.22.20", default-features = false }
+fxhash = { workspace = true }
+futures = { workspace = true }
+indicatif = { workspace = true }
+opendal = { workspace = true, features = [
+  "services-s3",
+  "services-fs",
+], default-features = false }
+rattler_networking = { path = "../rattler_networking", version = "0.22.8", default-features = false }
+rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.3" }
+rattler_digest = { path = "../rattler_digest", version = "1.0.7", default-features = false }
+rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.32", default-features = false }
+reqwest = { workspace = true, default-features = false, features = [
+  "http2",
+  "macos-system-configuration",
+  "charset",
+] }
 serde_json = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
-walkdir = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+url = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-tools = { path = "../tools" }
+tools = { path = "../tools", default-features = false }

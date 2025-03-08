@@ -6,6 +6,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.8](https://github.com/conda/rattler/compare/rattler_networking-v0.22.7...rattler_networking-v0.22.8) - 2025-03-04
+
+### Added
+
+- *(js)* compile `rattler_solve` and `rattler_repodata_gateway` ([#1108](https://github.com/conda/rattler/pull/1108))
+
+## [0.22.7](https://github.com/conda/rattler/compare/rattler_networking-v0.22.6...rattler_networking-v0.22.7) - 2025-02-28
+
+### Fixed
+
+- R2 key names in tests (#1115)
+
+## [0.22.6](https://github.com/conda/rattler/compare/rattler_networking-v0.22.5...rattler_networking-v0.22.6) - 2025-02-27
+
+### Fixed
+
+- clippy lint (#1105)
+
+## [0.22.5](https://github.com/conda/rattler/compare/rattler_networking-v0.22.4...rattler_networking-v0.22.5) - 2025-02-25
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.22.4](https://github.com/conda/rattler/compare/rattler_networking-v0.22.3...rattler_networking-v0.22.4) - 2025-02-18
+
+### Other
+
+- update dependencies (#1069)
+
+## [0.22.3](https://github.com/conda/rattler/compare/rattler_networking-v0.22.2...rattler_networking-v0.22.3) - 2025-02-06
+
+### Fixed
+
+- use atomic tempfile to persist file credentials instead of locking (#1055)
+
+### Other
+
+- bump rust 1.84.1 (#1053)
+
+## [0.22.2](https://github.com/conda/rattler/compare/rattler_networking-v0.22.1...rattler_networking-v0.22.2) - 2025-02-06
+
+### Fixed
+
+- create parent directories for file storage (#1045)
+
+## [0.22.1](https://github.com/conda/rattler/compare/rattler_networking-v0.22.0...rattler_networking-v0.22.1) - 2025-02-03
+
+### Added
+
+- add S3 support (#1008)
+
+## [0.22.0](https://github.com/conda/rattler/compare/rattler_networking-v0.21.10...rattler_networking-v0.22.0) - 2025-01-23
+
+### Other
+
+- Improve AuthenticationStorage (#1026)
+
+## [0.21.10](https://github.com/conda/rattler/compare/rattler_networking-v0.21.9...rattler_networking-v0.21.10) - 2025-01-08
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.21.9](https://github.com/conda/rattler/compare/rattler_networking-v0.21.8...rattler_networking-v0.21.9) - 2024-12-17
 
 ### Other

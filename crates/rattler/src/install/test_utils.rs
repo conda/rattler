@@ -1,16 +1,21 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use futures::TryFutureExt;
-use rattler_conda_types::{PrefixRecord, RepoDataRecord};
+use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord, Version};
 use rattler_networking::retry_policies::default_retry_policy;
 use transaction::{Transaction, TransactionOperation};
+use url::Url;
 
 use crate::{
+    get_repodata_record,
     install::{transaction, unlink_package, InstallDriver, InstallOptions},
     package_cache::PackageCache,
 };
 
-use super::driver::PostProcessResult;
+use super::{driver::PostProcessResult, link_package, PythonInfo};
 
 /// Install a package into the environment and write a `conda-meta` file that
 /// contains information about how the file was linked.
@@ -43,6 +48,7 @@ pub async fn install_package_to_environment(
         paths_data: paths.into(),
         requested_spec: None,
         link: None,
+        installed_system_menus: Vec::new(),
     };
 
     // Create the conda-meta directory if it doesnt exist yet.
@@ -155,4 +161,43 @@ pub fn find_prefix_record<'a>(
     prefix_records
         .iter()
         .find(|r| r.repodata_record.package_record.name.as_normalized() == name)
+}
+
+pub async fn download_and_get_prefix_record(
+    target_prefix: &Path,
+    package_url: Url,
+    sha256_hash: &str,
+) -> PrefixRecord {
+    let package_path = tools::download_and_cache_file_async(package_url, sha256_hash)
+        .await
+        .unwrap();
+
+    let package_dir = tempfile::TempDir::new().unwrap();
+
+    // Create package cache
+    rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
+
+    let py_info =
+        PythonInfo::from_version(&Version::from_str("3.10").unwrap(), None, Platform::Linux64)
+            .unwrap();
+    let install_options = InstallOptions {
+        python_info: Some(py_info),
+        ..InstallOptions::default()
+    };
+
+    let install_driver = InstallDriver::default();
+    // Link the package
+    let paths = link_package(
+        package_dir.path(),
+        target_prefix,
+        &install_driver,
+        install_options,
+    )
+    .await
+    .unwrap();
+
+    let repodata_record = get_repodata_record(&package_path);
+    // Construct a PrefixRecord for the package
+
+    PrefixRecord::from_repodata_record(repodata_record, None, None, paths, None, None)
 }

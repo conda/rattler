@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{exceptions::PyValueError, pyclass, pymethods, PyResult};
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
     VersionWithSource,
@@ -212,9 +212,16 @@ impl PyIndexJson {
     }
 
     #[setter]
-    pub fn set_timestamp(&mut self, timestamp: Option<i64>) {
-        self.inner.timestamp =
-            timestamp.map(|ts| chrono::DateTime::from_timestamp_millis(ts).unwrap());
+    pub fn set_timestamp(&mut self, timestamp: Option<i64>) -> PyResult<()> {
+        if let Some(ts) = timestamp {
+            self.inner.timestamp = Some(
+                chrono::DateTime::from_timestamp_millis(ts)
+                    .ok_or_else(|| PyValueError::new_err("Invalid timestamp"))?,
+            );
+        } else {
+            self.inner.timestamp = None;
+        }
+        Ok(())
     }
 
     /// Track features are nowadays only used to downweigh packages (ie. give them less priority). To

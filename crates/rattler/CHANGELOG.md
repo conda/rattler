@@ -6,6 +6,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.4](https://github.com/conda/rattler/compare/rattler-v0.32.3...rattler-v0.32.4) - 2025-03-04
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.32.3](https://github.com/conda/rattler/compare/rattler-v0.32.2...rattler-v0.32.3) - 2025-02-28
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.32.2](https://github.com/conda/rattler/compare/rattler-v0.32.1...rattler-v0.32.2) - 2025-02-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_shell, rattler_menuinst
+
+## [0.32.1](https://github.com/conda/rattler/compare/rattler-v0.32.0...rattler-v0.32.1) - 2025-02-25
+
+### Added
+
+- add `rattler_menuinst` crate (#840)
+
+## [0.32.0](https://github.com/conda/rattler/compare/rattler-v0.31.1...rattler-v0.32.0) - 2025-02-18
+
+### Fixed
+
+- use new PackageRecord when issuing reinstallation in `Transaction::from_current_and_desired` (#1070)
+- clobber issue where path was not correctly searched for in clobbered paths (#1066)
+
+### Other
+
+- update dependencies (#1069)
+
+## [0.31.1](https://github.com/conda/rattler/compare/rattler-v0.31.0...rattler-v0.31.1) - 2025-02-06
+
+### Other
+
+- bump rust 1.84.1 (#1053)
+
+## [0.31.0](https://github.com/conda/rattler/compare/rattler-v0.30.0...rattler-v0.31.0) - 2025-02-06
+
+### Fixed
+
+- create parent directories for file storage (#1045)
+
+## [0.30.0](https://github.com/conda/rattler/compare/rattler-v0.29.0...rattler-v0.30.0) - 2025-02-03
+
+### Added
+
+- add S3 support (#1008)
+
+## [0.29.0](https://github.com/conda/rattler/compare/rattler-v0.28.12...rattler-v0.29.0) - 2025-01-23
+
+### Other
+
+- Improve AuthenticationStorage (#1026)
+
+## [0.28.12](https://github.com/conda/rattler/compare/rattler-v0.28.11...rattler-v0.28.12) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.28.11](https://github.com/conda/rattler/compare/rattler-v0.28.10...rattler-v0.28.11) - 2025-01-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.28.10](https://github.com/conda/rattler/compare/rattler-v0.28.9...rattler-v0.28.10) - 2025-01-08
+
+### Other
+
+- update dependencies (#1009)
+
 ## [0.28.9](https://github.com/conda/rattler/compare/rattler-v0.28.8...rattler-v0.28.9) - 2024-12-20
 
 ### Other
