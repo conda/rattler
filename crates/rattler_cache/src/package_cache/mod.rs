@@ -676,14 +676,14 @@ mod test {
     use reqwest::Client;
     use reqwest_middleware::ClientBuilder;
     use reqwest_retry::RetryTransientMiddleware;
-    use tempfile::tempdir;
+    use tempfile::{tempdir, TempDir};
     use tokio::sync::Mutex;
     use tokio_stream::StreamExt;
     use url::Url;
 
     use super::PackageCache;
     use crate::{
-        package_cache::CacheKey,
+        package_cache::{CacheKey, PackageCacheError},
         validation::{validate_package_directory, ValidationMode},
     };
 
@@ -1240,7 +1240,7 @@ mod test {
         cache
             .get_or_fetch(
                 cache_key.clone(),
-                move |destination| {
+                move |destination: PathBuf| {
                     let tar_archive_path = tar_archive_path.clone();
                     cloned.store(true, Ordering::Release);
                     async move {
