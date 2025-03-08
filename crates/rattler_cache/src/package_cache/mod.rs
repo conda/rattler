@@ -84,12 +84,15 @@ struct Entry {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum PackageCacheError {
+    /// The operation was cancelled
     #[error("the operation was cancelled")]
     Cancelled,
 
+    /// An error occured in a cache layer
     #[error("failed to interact with the package cache layer.")]
     LayerError(#[source] Box<dyn std::error::Error + Send + Sync>), // Wraps layer-specific errors
 
+    /// there are no writable errors to install package to
     #[error("no writable layers to install package to")]
     NoWritableLayers,
 }
@@ -98,18 +101,23 @@ pub enum PackageCacheError {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum PackageCacheLayerError {
+    /// The package is invalid
     #[error("package is invalid")]
     InvalidPackage,
 
+    /// The package was not found in this layer
     #[error("package not found in this layer")]
     PackageNotFound,
 
+    /// A locking error occurred
     #[error("{0}")]
     LockError(String, #[source] std::io::Error),
 
+    /// The operation was cancelled
     #[error("the operation was cancelled")]
     Cancelled,
 
+    /// An error occurred while fetching the package.
     #[error(transparent)]
     FetchError(#[from] Arc<dyn std::error::Error + Send + Sync + 'static>),
 
@@ -145,9 +153,7 @@ impl PackageCacheLayer {
             .unwrap_or(false)
     }
 
-    /// Validates a package in a read-only cache.
-    /// Acquires a read lock, validates, and returns the lock if valid.
-    /// Returns `InvalidPackageInReadOnlyLayer` if validation fails.
+    /// Validate the package, and throw if invalid.
     pub async fn validate_or_throw(
         &self,
         cache_key: &CacheKey,
@@ -579,8 +585,15 @@ where
             );
         }
 
-        // The cache is invalid
-        // Refetch, or throw validation error if no fetch function is supplied.
+        // If the cache is stale, we need to fetch the package again. We have to acquire
+        // a write lock on the cache entry. However, we can't do that while we have a
+        // read lock on the cache lock file. So we release the read lock and acquire a
+        // write lock on the cache lock file. In the meantime, another process might
+        // have already fetched the package. To guard against this we read a revision
+        // from the lock-file while we have the read lock, then we acquire the write
+        // lock and check if the revision has changed. If it has, we assume that
+        // another process has already fetched the package and we restart the
+        // validation process.
         if let Some(ref fetch_fn) = fetch {
             drop(read_lock);
 
