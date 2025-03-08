@@ -1113,6 +1113,14 @@ mod test {
                 std::os::unix::fs::PermissionsExt::from_mode(0o555), // r_x r_x r_x
             )
             .unwrap();
+            #[cfg(windows)]
+            {
+                let mut perms = std::fs::metadata(&layer.path)
+                    .unwrap()
+                    .permissions();
+                perms.set_readonly(true); // Remove write permissions
+                std::fs::set_permissions(&layer.path, perms).unwrap();
+            }
         }
         (cache, all_layers_paths)
     }
