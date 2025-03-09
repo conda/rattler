@@ -19,6 +19,7 @@ serde = { workspace = true, features = ["derive"], optional = true }
 serde_with = { workspace = true }
 sha2 = { workspace = true }
 tokio = { workspace = true, features = ["io-util"], optional = true }
+url = { workspace = true }
 generic-array = { workspace = true, optional = true }
 
 [features]
