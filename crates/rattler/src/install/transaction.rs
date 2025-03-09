@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use rattler_conda_types::{PackageRecord, Platform};
+use rattler_conda_types::{PackageName, PackageRecord, Platform};
 
 use crate::install::{python::PythonInfoError, PythonInfo};
 
@@ -125,13 +125,15 @@ impl<Old: AsRef<New>, New> Transaction<Old, New> {
 
 impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New> {
     /// Constructs a [`Transaction`] by taking the current situation and diffing
-    /// that against the desired situation.
+    /// that against the desired situation. You can specify a set of package names
+    /// that should be reinstalled even if their content has not changed.
     pub fn from_current_and_desired<
         CurIter: IntoIterator<Item = Old>,
         NewIter: IntoIterator<Item = New>,
     >(
         current: CurIter,
         desired: NewIter,
+        reinstall: Option<HashSet<PackageName>>,
         platform: Platform,
     ) -> Result<Self, TransactionError>
     where
@@ -150,6 +152,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         };
 
         let mut operations = Vec::new();
+        let reinstall = reinstall.unwrap_or_default();
 
         let mut current_map = current_iter
             .clone()
@@ -179,7 +182,9 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
             let old_record = current_map.remove(name);
 
             if let Some(old_record) = old_record {
-                if !describe_same_content(record.as_ref(), old_record.as_ref()) {
+                if !describe_same_content(record.as_ref(), old_record.as_ref())
+                    || reinstall.contains(&record.as_ref().name)
+                {
                     // if the content changed, we need to reinstall (remove and install)
                     operations.push(TransactionOperation::Change {
                         old: old_record,
@@ -248,4 +253,43 @@ fn describe_same_content(from: &PackageRecord, to: &PackageRecord) -> bool {
 
     // Otherwise, just check that the name, version and build string match
     from.name == to.name && from.version == to.version && from.build == to.build
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use rattler_conda_types::Platform;
+
+    use crate::install::{
+        test_utils::download_and_get_prefix_record, Transaction, TransactionOperation,
+    };
+    use assert_matches::assert_matches;
+
+    #[tokio::test]
+    async fn test_reinstall_package() {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let prefix_record = download_and_get_prefix_record(
+            environment_dir.path(),
+            "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda"
+                .parse()
+                .unwrap(),
+            "25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd",
+        )
+        .await;
+        let name = prefix_record.repodata_record.package_record.name.clone();
+
+        let transaction = Transaction::from_current_and_desired(
+            vec![prefix_record.clone()],
+            vec![prefix_record.clone()],
+            Some(HashSet::from_iter(vec![name])),
+            Platform::current(),
+        )
+        .unwrap();
+
+        assert_matches!(
+            transaction.operations[0],
+            TransactionOperation::Change { .. }
+        );
+    }
 }
