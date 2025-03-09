@@ -57,6 +57,7 @@ pub struct BucketKey {
     name: String,
     version: String,
     build_string: String,
+    location_hash: Option<String>,
 }
 
 impl From<CacheKey> for BucketKey {
@@ -65,6 +66,7 @@ impl From<CacheKey> for BucketKey {
             name: key.name,
             version: key.version,
             build_string: key.build_string,
+            location_hash: key.location_hash,
         }
     }
 }
@@ -130,7 +132,7 @@ impl PackageCache {
         Fut: Future<Output = Result<(), E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let cache_key = pkg.into();
+        let cache_key: CacheKey = pkg.into();
         let cache_path = self.inner.path.join(cache_key.to_string());
         let cache_entry = self
             .inner
@@ -188,13 +190,16 @@ impl PackageCache {
         path: &Path,
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheLock, PackageCacheError> {
-        let path = path.to_path_buf();
+        let path_buf = path.to_path_buf();
+        let cache_key: CacheKey = ArchiveIdentifier::try_from_path(&path_buf).unwrap().into();
+        let cache_key = cache_key.with_path(path);
+
         self.get_or_fetch(
-            ArchiveIdentifier::try_from_path(&path).unwrap(),
+            cache_key,
             move |destination| {
-                let path = path.clone();
+                let path_buf = path_buf.clone();
                 async move {
-                    rattler_package_streaming::tokio::fs::extract(&path, &destination)
+                    rattler_package_streaming::tokio::fs::extract(&path_buf, &destination)
                         .await
                         .map(|_| ())
                 }
@@ -226,7 +231,7 @@ impl PackageCache {
     ) -> Result<CacheLock, PackageCacheError> {
         let request_start = SystemTime::now();
         // Convert into cache key
-        let cache_key = pkg.into();
+        let cache_key = pkg.into().with_url(url.clone());
         // Sha256 of the expected package
         let sha256 = cache_key.sha256();
         let download_reporter = reporter.clone();
@@ -779,7 +784,13 @@ mod test {
     // Test if packages with different sha's are replaced even though they share the
     // same BucketKey.
     pub async fn test_package_cache_key_with_sha() {
-        let tar_archive_path = tools::download_and_cache_file_async("https://conda.anaconda.org/robostack/linux-64/ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2".parse().unwrap(), "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8").await.unwrap();
+        let package_url: Url ="https://conda.anaconda.org/robostack/linux-64/ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2".parse().unwrap();
+        let tar_archive_path = tools::download_and_cache_file_async(
+            package_url.clone(),
+            "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8",
+        )
+        .await
+        .unwrap();
 
         // Create a temporary directory to store the packages
         let packages_dir = tempdir().unwrap();
@@ -789,12 +800,14 @@ mod test {
         let key: CacheKey = ArchiveIdentifier::try_from_path(&tar_archive_path)
             .unwrap()
             .into();
-        let key = key.with_sha256(
-            parse_digest_from_hex::<Sha256>(
-                "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8",
+        let key = key
+            .with_sha256(
+                parse_digest_from_hex::<Sha256>(
+                    "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8",
+                )
+                .unwrap(),
             )
-            .unwrap(),
-        );
+            .with_url(package_url);
 
         // Get the package to the cache
         let cloned_archive_path = tar_archive_path.clone();
