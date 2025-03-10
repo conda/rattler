@@ -75,12 +75,16 @@ describe("PackageRecord", () => {
             license: "MIT",
             license_family: "MIT",
             md5: "d65ab674acf3b7294ebacaec05fc5b54",
+            legacy_bz2_md5: "deadbeafdeadbeafdeadbeafdeadbeaf",
+            legacy_bz2_size: 12,
             name: "foo",
             sha256: "1154fceeb5c4ee9bb97d245713ac21eb1910237c724d2b7103747215663273c2",
             size: 414494,
             subdir: "linux-64",
             timestamp: 1605110689658,
             version: "03.0.2",
+            features: "foo,bar",
+            track_features: "baz,hello",
         });
         expect(record.name).toBe("foo");
         expect(record.build).toBe("py36h1af98f8_1");
@@ -98,6 +102,10 @@ describe("PackageRecord", () => {
         expect(record.timestamp).toEqual(new Date(1605110689658));
         expect(record.version.source).toEqual("03.0.2");
         expect(record.version.version).toEqual(new Version("3.0.2"));
+        expect(record.features).toEqual("foo,bar");
+        expect(record.trackFeatures).toEqual(["baz", "hello"]);
+        expect(record.legacyBz2Md5).toEqual("deadbeafdeadbeafdeadbeafdeadbeaf");
+        expect(record.legacyBz2Size).toEqual(12);
     });
 
     const record = new PackageRecord({

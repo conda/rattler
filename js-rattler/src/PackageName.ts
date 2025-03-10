@@ -133,6 +133,7 @@ export function isNormalizedPackageName(
  * @param input - The string to parse.
  * @returns The parsed `PackageName`.
  * @throws Will throw an error if the input is not a valid package name.
+ * @public
  */
 export function parsePackageName(input: string): PackageName {
     if (!isPackageName(input)) {

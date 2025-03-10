@@ -4,6 +4,7 @@ import {
     isPackageName,
     normalizePackageName,
     isNormalizedPackageName,
+    parsePackageName,
 } from "./PackageName";
 import { expect, test } from "@jest/globals";
 
@@ -41,4 +42,11 @@ test("normalizePackageName", () => {
     expect(normalizePackageName("abc")).toBe("abc");
     expect(normalizePackageName("aBc")).toBe("abc");
     expect(normalizePackageName("Fo0_B4R-BaZ.B0b")).toBe("fo0_b4r-baz.b0b");
+});
+
+test("parsePackageName", () => {
+    expect(parsePackageName("abc")).toEqual("abc");
+    expect(() => parsePackageName("abc!")).toThrow(
+        "Invalid package name: abc!",
+    );
 });
