@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0](https://github.com/conda/rattler/compare/rattler-v0.32.4...rattler-v0.33.0) - 2025-03-10
+
+### Added
+
+- add reinstallation method to installer and transaction ([#1128](https://github.com/conda/rattler/pull/1128))
+
 ## [0.32.4](https://github.com/conda/rattler/compare/rattler-v0.32.3...rattler-v0.32.4) - 2025-03-04
 
 ### Other

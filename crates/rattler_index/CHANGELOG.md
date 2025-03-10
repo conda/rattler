@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0](https://github.com/conda/rattler/compare/rattler_index-v0.21.2...rattler_index-v0.22.0) - 2025-03-10
+
+### Added
+
+- Add support for repodata patching in rattler-index, fix silent failures ([#1129](https://github.com/conda/rattler/pull/1129))
+
 ## [0.21.2](https://github.com/conda/rattler/compare/rattler_index-v0.21.1...rattler_index-v0.21.2) - 2025-03-04
 
 ### Other
