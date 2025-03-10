@@ -7,7 +7,7 @@ updates:
     labels:
       - dependencies
     commit-message:
-      prefix: bump
+      prefix: chore
     groups:
       rust:
         patterns:
@@ -19,7 +19,7 @@ updates:
     labels:
       - dependencies
     commit-message:
-      prefix: bump
+      prefix: chore(py)
     groups:
       rust-py-rattler:
         patterns:
@@ -31,7 +31,7 @@ updates:
     labels:
       - dependencies
     commit-message:
-      prefix: bump
+      prefix: chore(js)
     groups:
       rust-js-rattler:
         patterns:
@@ -53,7 +53,7 @@ updates:
     labels:
       - dependencies
     commit-message:
-      prefix: chore(ci)
+      prefix: chore(js)
     groups:
       npm-dependencies:
         patterns:
