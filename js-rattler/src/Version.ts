@@ -1,1 +1,1 @@
-export { Version } from "../pkg";
+export { Version, VersionWithSource } from "../pkg";

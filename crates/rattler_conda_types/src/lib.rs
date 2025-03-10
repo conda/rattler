@@ -42,7 +42,7 @@ pub use match_spec::{
     parse::ParseMatchSpecError,
     MatchSpec, Matches, NamelessMatchSpec,
 };
-pub use no_arch_type::{NoArchKind, NoArchType};
+pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
 pub use package_name::{InvalidPackageNameError, PackageName};
 pub use parse_mode::ParseStrictness;
 pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};

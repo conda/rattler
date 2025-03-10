@@ -5,3 +5,4 @@ export * from "./Platform";
 export * from "./solve";
 export * from "./PackageName";
 export * from "./typeUtils";
+export * from "./PackageRecord";

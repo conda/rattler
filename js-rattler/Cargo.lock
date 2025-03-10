@@ -441,8 +441,10 @@ checksum = "1a7964611d71df112cb1730f2ee67324fcf4d0fc6606acbbe9bfe06df124637c"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -1541,8 +1543,10 @@ name = "js-rattler"
 version = "0.1.1"
 dependencies = [
  "bzip2",
+ "chrono",
  "console_error_panic_hook",
  "rattler_conda_types",
+ "rattler_digest",
  "rattler_repodata_gateway",
  "rattler_solve",
  "serde",
