@@ -1,37 +1,5 @@
-/**
- * All platform names supported by this library.
- *
- * @public
- */
-export const platformNames = [
-    "noarch",
-    "linux-32",
-    "linux-64",
-    "linux-aarch64",
-    "linux-armv6l",
-    "linux-armv7l",
-    "linux-ppc64le",
-    "linux-ppc64",
-    "linux-ppc",
-    "linux-s390x",
-    "linux-riscv32",
-    "linux-riscv64",
-    "osx-64",
-    "osx-arm64",
-    "win-32",
-    "win-64",
-    "win-arm64",
-    "emscripten-wasm32",
-    "wasi-wasm32",
-    "zos-z",
-] as const;
-
-/**
- * A type that represents a valid platform.
- *
- * @public
- */
-export type Platform = (typeof platformNames)[number];
+import { Platform, platformNames, Arch, archNames } from "../pkg";
+export { Platform, platformNames, Arch, archNames } from "../pkg";
 
 /**
  * A type guard that identifies if an input value is a `Platform`
@@ -44,35 +12,6 @@ export function isPlatform(maybePlatform: unknown): maybePlatform is Platform {
         platformNames.includes(maybePlatform as Platform)
     );
 }
-
-/**
- * All architecture names supported by this library.
- *
- * @public
- */
-export const archNames = [
-    "x86",
-    "x86_64",
-    "aarch64",
-    "arm64",
-    "armv6l",
-    "armv7l",
-    "ppc64le",
-    "ppc64",
-    "ppc",
-    "s390x",
-    "riscv32",
-    "riscv64",
-    "wasm32",
-    "z",
-] as const;
-
-/**
- * A type that represents a valid architecture.
- *
- * @public
- */
-export type Arch = (typeof archNames)[number];
 
 /**
  * A type guard that identifies if an input value is an `Arch`

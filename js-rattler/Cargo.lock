@@ -441,8 +441,10 @@ checksum = "1a7964611d71df112cb1730f2ee67324fcf4d0fc6606acbbe9bfe06df124637c"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -1541,8 +1543,10 @@ name = "js-rattler"
 version = "0.1.1"
 dependencies = [
  "bzip2",
+ "chrono",
  "console_error_panic_hook",
  "rattler_conda_types",
+ "rattler_digest",
  "rattler_repodata_gateway",
  "rattler_solve",
  "serde",
@@ -2296,7 +2300,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.12"
+version = "0.3.13"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -2326,7 +2330,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.31.2"
+version = "0.31.3"
 dependencies = [
  "chrono",
  "dirs",
@@ -2386,7 +2390,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.22.7"
+version = "0.22.8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2411,7 +2415,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.31"
+version = "0.22.32"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2439,7 +2443,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "reqwest",
  "reqwest-middleware",
@@ -2448,7 +2452,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.21.40"
+version = "0.22.0"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2503,7 +2507,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.3.11"
+version = "1.4.0"
 dependencies = [
  "chrono",
  "futures",
