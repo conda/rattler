@@ -43,6 +43,11 @@ impl CacheKey {
         self.location_hash = Some(format!("{path_hash:x}"));
         self
     }
+
+    /// Return the old cache key format without the location hash
+    pub fn key_without_location(&self) -> String {
+        format!("{}-{}-{}", &self.name, &self.version, &self.build_string)
+    }
 }
 
 impl CacheKey {
@@ -84,7 +89,7 @@ impl Display for CacheKey {
                 "{}-{}-{}-{}",
                 &self.name, &self.version, &self.build_string, url_hash
             ),
-            None => write!(f, "{}-{}-{}", &self.name, &self.version, &self.build_string),
+            None => write!(f, "{}", self.key_without_location()),
         }
     }
 }
