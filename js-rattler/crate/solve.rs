@@ -13,6 +13,7 @@ use crate::error::JsError;
 pub struct SolvedPackage {
     pub url: String,
     pub package_name: String,
+    pub build: String,
     pub build_number: u64,
     pub repo_name: Option<String>,
     pub filename: String,
@@ -74,6 +75,7 @@ pub async fn simple_solve(
         .map(|r| SolvedPackage {
             url: r.url.to_string(),
             package_name: r.package_record.name.as_source().to_string(),
+            build: r.package_record.build.clone(),
             build_number: r.package_record.build_number,
             repo_name: r.channel,
             filename: r.file_name,
