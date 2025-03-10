@@ -18,18 +18,21 @@ updates:
       interval: weekly
     labels:
       - dependencies
+      - python-bindings
     commit-message:
       prefix: chore(py)
     groups:
       rust-py-rattler:
         patterns:
           - "*"
+          
   - package-ecosystem: cargo
     directory: /js-rattler
     schedule:
       interval: weekly
     labels:
       - dependencies
+      - JS
     commit-message:
       prefix: chore(js)
     groups:
@@ -52,6 +55,7 @@ updates:
       interval: weekly
     labels:
       - dependencies
+      - JS
     commit-message:
       prefix: chore(js)
     groups:
