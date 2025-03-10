@@ -19,10 +19,10 @@
 //! [`rattler_installs_packages`]: https://docs.rs/rattler_installs_packages/latest/rattler_installs_packages/
 
 // Private modules
-mod utils;
+// mod utils;
 
 // Public modules
-pub mod artifacts;
-pub mod index;
-pub mod python_env;
+// pub mod artifacts;
+// pub mod index;
+// pub mod python_env;
 pub mod types;
