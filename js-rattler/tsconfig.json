@@ -4,6 +4,7 @@
         "declaration": true,
         "declarationMap": true,
         "declarationDir": "types",
-        "emitDeclarationOnly": true
+        "emitDeclarationOnly": true,
+        "types": []
     }
 }
