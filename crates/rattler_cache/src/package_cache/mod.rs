@@ -153,8 +153,8 @@ impl PackageCacheLayer {
             .unwrap_or(false)
     }
 
-    /// Validate the package, and throw if invalid.
-    pub async fn validate_or_throw(
+    /// Validate the packages.
+    pub async fn try_validate(
         &self,
         cache_key: &CacheKey,
     ) -> Result<CacheLock, PackageCacheLayerError> {
@@ -235,8 +235,8 @@ impl PackageCache {
     }
 
     /// Constructs a new [`PackageCache`] located at the specified paths.
-    /// Read-only layers are queried first.
-    /// Within read-only layers, the ordering is defined in this constructor. Ditto for writable layers.
+    /// Layers are queried in the order they are provided.
+    /// The first writable layer is written to.
     pub fn new_layered<I>(paths: I) -> Self
     where
         I: IntoIterator,
@@ -261,19 +261,10 @@ impl PackageCache {
     ///
     /// The permissions are checked at the time of the function call.
     pub fn split_layers(&self) -> (Vec<&PackageCacheLayer>, Vec<&PackageCacheLayer>) {
-        let readonly_layers = self
-            .inner
+        self.inner
             .layers
             .iter()
-            .filter(|layer| layer.is_readonly())
-            .collect();
-        let writable_layers = self
-            .inner
-            .layers
-            .iter()
-            .filter(|layer| !layer.is_readonly())
-            .collect();
-        (readonly_layers, writable_layers)
+            .partition(|layer| layer.is_readonly())
     }
 
     /// Returns the directory that contains the specified package.
@@ -298,16 +289,13 @@ impl PackageCache {
         E: std::error::Error + Send + Sync + 'static,
     {
         let cache_key = pkg.into();
-        let (readonly_layers, writable_layers) = self.split_layers();
-        let to_read = readonly_layers
-            .into_iter()
-            .chain(writable_layers.clone().into_iter());
+        let (_, writable_layers) = self.split_layers();
 
-        for layer in to_read {
+        for layer in self.inner.layers.iter() {
             let cache_path = layer.path.join(cache_key.to_string());
 
             if cache_path.exists() {
-                match layer.validate_or_throw(&cache_key).await {
+                match layer.try_validate(&cache_key).await {
                     Ok(lock) => {
                         return Ok(lock);
                     }
