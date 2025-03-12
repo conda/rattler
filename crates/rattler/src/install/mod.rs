@@ -562,6 +562,33 @@ pub async fn link_package(
     Ok(paths)
 }
 
+#[cfg(target_os = "macos")]
+/// Marks files or directories as excluded from Time Machine on macOS
+///
+/// This is recommended to prevent derived/temporary files from bloating backups.
+/// <https://github.com/rust-lang/cargo/pull/7192>
+fn exclude_from_backups(path: &Path) {
+    use core_foundation::base::TCFType;
+    use core_foundation::{number, string, url};
+    use std::ptr;
+
+    // For compatibility with 10.7 a string is used instead of global kCFURLIsExcludedFromBackupKey
+    let is_excluded_key: Result<string::CFString, _> = "NSURLIsExcludedFromBackupKey".parse();
+    let path = url::CFURL::from_path(path, false);
+    if let (Some(path), Ok(is_excluded_key)) = (path, is_excluded_key) {
+        unsafe {
+            url::CFURLSetResourcePropertyForKey(
+                path.as_concrete_TypeRef(),
+                is_excluded_key.as_concrete_TypeRef(),
+                number::kCFBooleanTrue.cast(),
+                ptr::null_mut(),
+            );
+        }
+    }
+    // Errors are ignored, since it's an optional feature and failure
+    // doesn't prevent Cargo from working
+}
+
 /// Given an extracted package archive (`package_dir`), installs its files to
 /// the `target_dir`.
 ///
@@ -586,6 +613,9 @@ pub fn link_package_sync(
 
     // Ensure target directory exists
     fs_err::create_dir_all(target_dir).map_err(InstallError::FailedToCreateTargetDirectory)?;
+
+    #[cfg(target_os = "macos")]
+    exclude_from_backups(Path::new(&target_prefix));
 
     // Reuse or read the `paths.json` and `index.json` files from the package
     // directory
