@@ -32,9 +32,10 @@ console_error_panic_hook = { version = "0.1.7", optional = true }
 # Unfortunately, `wee_alloc` requires nightly Rust when targeting wasm for now.
 wee_alloc = { version = "0.4.5", optional = true }
 
-thiserror = "2.0.3"
+thiserror = "2.0.12"
 
 rattler_conda_types = { path = "../crates/rattler_conda_types" }
+rattler_digest = { path = "../crates/rattler_digest" }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", features = ["gateway"] }
 rattler_solve = { path = "../crates/rattler_solve", default-features = false, features = ["resolvo"] }
 
@@ -44,6 +45,8 @@ url = "2.5.4"
 # implementation. This is important because the C implementation is not
 # compatible with wasm.
 bzip2 = { version = "0.5.1", features = ["libbz2-rs-sys"] }
+
+chrono = { version = "0.4.40", features = ["wasmbind"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.45"

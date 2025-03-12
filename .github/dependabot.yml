@@ -7,7 +7,7 @@ updates:
     labels:
       - dependencies
     commit-message:
-      prefix: bump
+      prefix: chore
     groups:
       rust:
         patterns:
@@ -18,20 +18,23 @@ updates:
       interval: weekly
     labels:
       - dependencies
+      - python-bindings
     commit-message:
-      prefix: bump
+      prefix: chore(py)
     groups:
       rust-py-rattler:
         patterns:
           - "*"
+          
   - package-ecosystem: cargo
     directory: /js-rattler
     schedule:
       interval: weekly
     labels:
       - dependencies
+      - JS
     commit-message:
-      prefix: bump
+      prefix: chore(js)
     groups:
       rust-js-rattler:
         patterns:
@@ -52,8 +55,9 @@ updates:
       interval: weekly
     labels:
       - dependencies
+      - JS
     commit-message:
-      prefix: chore(ci)
+      prefix: chore(js)
     groups:
       npm-dependencies:
         patterns:
