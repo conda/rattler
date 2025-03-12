@@ -892,18 +892,15 @@ export TEST_VAR=test_value
                 eprintln!("Script contents:\n{}", script);
                 eprintln!("Stdout:\n{}", stdout);
                 eprintln!("Stderr:\n{}", stderr);
-            } else if let ActivationError::SandboxError(sandbox_error) = e {
-                if let SandboxError::FailedToRunScript {
-                    script,
-                    stdout,
-                    stderr,
-                    ..
-                } = sandbox_error
-                {
-                    eprintln!("Sandbox script:\n{}", script);
-                    eprintln!("Sandbox stdout:\n{}", stdout);
-                    eprintln!("Sandbox stderr:\n{}", stderr);
-                }
+            } else if let ActivationError::SandboxError(SandboxError::FailedToRunScript {
+                script,
+                stdout,
+                stderr,
+                ..
+            }) = e {
+                eprintln!("Sandbox script:\n{}", script);
+                eprintln!("Sandbox stdout:\n{}", stdout);
+                eprintln!("Sandbox stderr:\n{}", stderr);
             }
         }
 

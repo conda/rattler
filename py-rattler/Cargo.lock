@@ -792,6 +792,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 
 [[package]]
+name = "birdcage"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "848df95320021558dd6bb4c26de3fe66724cdcbdbbf3fa720150b52b086ae568"
+dependencies = [
+ "bitflags",
+ "libc",
+ "log",
+ "rustix 0.38.44",
+ "seccompiler",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4096,14 +4109,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_sandbox"
+version = "0.1.4"
+dependencies = [
+ "birdcage",
+ "clap",
+ "fs-err",
+]
+
+[[package]]
 name = "rattler_shell"
 version = "0.22.22"
 dependencies = [
+ "dirs",
  "enum_dispatch",
  "fs-err",
  "indexmap 2.7.1",
  "itertools 0.14.0",
  "rattler_conda_types",
+ "rattler_sandbox",
  "serde_json",
  "shlex",
  "tempfile",
@@ -4656,6 +4680,15 @@ dependencies = [
  "pkcs8",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "seccompiler"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f6575e3c2b3a0fe2ef3e53855b6a8dead7c29f783da5e123d378c8c6a89017e"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
