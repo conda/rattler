@@ -7181,8 +7181,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d65cbf2f12c15564212d48f4e3dfb87923d25d611f2aed18f4cb23f0413d89e"
 dependencies = [
  "libc",
- "linux-raw-sys 0.4.15",
- "rustix 0.38.44",
+ "rustix 1.0.1",
 ]
 
 [[package]]

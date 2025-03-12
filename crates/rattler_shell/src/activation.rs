@@ -897,7 +897,8 @@ export TEST_VAR=test_value
                 stdout,
                 stderr,
                 ..
-            }) = e {
+            }) = e
+            {
                 eprintln!("Sandbox script:\n{}", script);
                 eprintln!("Sandbox stdout:\n{}", stdout);
                 eprintln!("Sandbox stderr:\n{}", stderr);

@@ -74,7 +74,7 @@ impl PyActivationVariables {
             .as_ref()
             .map(|p| p.iter().map(std::path::PathBuf::as_path).collect())
     }
-    
+
     #[getter]
     pub fn sandbox_mode(&self) -> bool {
         self.inner.sandbox_mode
