@@ -14,6 +14,7 @@ If you'd like to contribute code, then you may want to manage the build depends 
 ### Virtual env with pixi
 You can use [pixi](https://github.com/prefix-dev/pixi) for setting up the environment needed for building and testing rattler, (as a fun fact, pixi uses rattler as a dependency!). The spec in `pixi.toml` in the project root will set up the environment. After installing, run the install command from the project root directory, shown below.
 ```sh
+❱ git submodule update --init
 ❱ pixi install # installs dependencies into the virtual env
 ❱ pixi run build # calls "build" task specified in pixi.toml, "cargo build", using cargo in pixi venv
 ```
@@ -22,6 +23,7 @@ You can use [pixi](https://github.com/prefix-dev/pixi) for setting up the enviro
 The environment can also be managed with conda using the spec in `environments.yml` in the project root. 
 As below,
 ```sh
+❱ git submodule update --init
 ❱ mamba create -n name_of_your_rattler_env --file='environments.yml' && mamba activate name_of_your_rattler_env
 ❱ cargo build # uses cargo from your mamba venv
 ❱ mamba deactivate # don't forget you're in the venv
