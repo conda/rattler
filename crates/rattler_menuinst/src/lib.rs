@@ -173,6 +173,29 @@ pub fn install_menuitems(
     Ok(trackers)
 }
 
+/// Remove all menu items from a given prefix record.
+/// This function will remove the menu items from the system,
+/// and update the prefix record with removing the tracker entries
+pub fn remove_menuitems_for_record(
+    target_prefix: &Path,
+    prefix_record: &PrefixRecord,
+) -> Result<(), MenuInstError> {
+    // Remove menu items from the system
+    remove_menu_items(&prefix_record.installed_system_menus)?;
+
+    let mut record = prefix_record.clone();
+    record.installed_system_menus = Vec::new();
+
+    // Save the updated prefix record
+    record
+        .write_to_path(
+            target_prefix.join("conda-meta").join(record.file_name()),
+            true,
+        )
+        .expect("Failed to write prefix record");
+    Ok(())
+}
+
 /// Remove menu items from a given schema file
 pub fn remove_menu_items(tracker: &Vec<Tracker>) -> Result<(), MenuInstError> {
     for el in tracker {
