@@ -12,7 +12,6 @@ use std::{
 
 use bytes::Bytes;
 use fs_err as fs;
-use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use itertools::Itertools;
 use rattler_conda_types::{
     compute_package_url, Channel, ChannelInfo, PackageName, PackageRecord, RepoDataRecord,
@@ -47,6 +46,7 @@ pub struct SparseRepoData {
 
 enum SparseRepoDataInner {
     /// The repo data is stored as a memory mapped file
+    #[cfg(any(unix, windows))]
     Memmapped(MemmappedSparseRepoDataInner),
     /// The repo data is stored as `Bytes`
     Bytes(BytesSparseRepoDataInner),
@@ -55,50 +55,53 @@ enum SparseRepoDataInner {
 impl SparseRepoDataInner {
     fn borrow_repo_data(&self) -> &LazyRepoData<'_> {
         match self {
-            SparseRepoDataInner::Memmapped(inner) => inner.borrow_repo_data(),
-            SparseRepoDataInner::Bytes(inner) => inner.borrow_repo_data(),
+            #[cfg(any(unix, windows))]
+            SparseRepoDataInner::Memmapped(inner) => inner.borrow_dependent(),
+            SparseRepoDataInner::Bytes(inner) => inner.borrow_dependent(),
         }
     }
 }
 
-/// A struct that holds a memory map of a `repodata.json` file and also a
-/// self-referential field which indexes the data in the memory map with a
-/// sparsely parsed json struct. See [`LazyRepoData`].
-#[ouroboros::self_referencing]
-struct MemmappedSparseRepoDataInner {
-    /// Memory map of the `repodata.json` file
-    memory_map: memmap2::Mmap,
+// A struct that holds a memory map of a `repodata.json` file and also a
+// self-referential field which indexes the data in the memory map with a
+// sparsely parsed json struct. See [`LazyRepoData`].
+#[cfg(any(unix, windows))]
+self_cell::self_cell!(
+    struct MemmappedSparseRepoDataInner {
+        // Memory map of the `repodata.json` file
+        owner: memmap2::Mmap,
 
-    /// Sparsely parsed json content of the memory map. This data struct holds
-    /// references into the memory map so we have to use ouroboros to make
-    /// this legal.
-    #[borrows(memory_map)]
-    #[covariant]
-    repo_data: LazyRepoData<'this>,
-}
+        // Sparsely parsed json content of the memory map. This data struct holds
+        // references into the memory map so we have to use ouroboros to make
+        // this legal.
+        #[covariant]
+        dependent: LazyRepoData,
+    }
+);
 
-/// A struct that holds a reference to the bytes of a `repodata.json` file and
-/// also a self-referential field which indexes the data in the `bytes` with a
-/// sparsely parsed json struct. See [`LazyRepoData`].
-#[ouroboros::self_referencing]
-struct BytesSparseRepoDataInner {
-    /// Bytes of the `repodata.json` file
-    bytes: Bytes,
+// A struct that holds a reference to the bytes of a `repodata.json` file and
+// also a self-referential field which indexes the data in the `bytes` with a
+// sparsely parsed json struct. See [`LazyRepoData`].
+self_cell::self_cell!(
+    struct BytesSparseRepoDataInner {
+        // Bytes of the `repodata.json` file
+        owner: Bytes,
 
-    /// Sparsely parsed json content of the file's bytes. This data struct holds
-    /// references into the bytes so we have to use ouroboros to make this
-    /// legal.
-    #[borrows(bytes)]
-    #[covariant]
-    repo_data: LazyRepoData<'this>,
-}
+        // Sparsely parsed json content of the file's bytes. This data struct holds
+        // references into the bytes so we have to use ouroboros to make this
+        // legal.
+        #[covariant]
+        dependent: LazyRepoData,
+    }
+);
 
 impl SparseRepoData {
     /// Construct an instance of self from a file on disk and a [`Channel`].
     ///
     /// The `patch_function` can be used to patch the package record after it
     /// has been parsed (e.g. to add `pip` to `python`).
-    pub fn new(
+    #[cfg(any(unix, windows))]
+    pub fn from_file(
         channel: Channel,
         subdir: impl Into<String>,
         path: impl AsRef<Path>,
@@ -107,17 +110,34 @@ impl SparseRepoData {
         let file = fs::File::open(path.as_ref().to_owned())?;
         let memory_map = unsafe { memmap2::Mmap::map(&file) }?;
         Ok(SparseRepoData {
-            inner: SparseRepoDataInner::Memmapped(
-                MemmappedSparseRepoDataInnerTryBuilder {
-                    memory_map,
-                    repo_data_builder: |memory_map| serde_json::from_slice(memory_map.as_ref()),
-                }
-                .try_build()?,
-            ),
+            inner: SparseRepoDataInner::Memmapped(MemmappedSparseRepoDataInner::try_new(
+                memory_map,
+                |memory_map| serde_json::from_slice(memory_map.as_ref()),
+            )?),
             subdir: subdir.into(),
             channel,
             patch_record_fn: patch_function,
         })
+    }
+
+    /// Construct an instance of self from a file on disk and a [`Channel`].
+    ///
+    /// The `patch_function` can be used to patch the package record after it
+    /// has been parsed (e.g. to add `pip` to `python`).
+    #[cfg(not(any(windows, unix)))]
+    pub fn from_file(
+        channel: Channel,
+        subdir: impl Into<String>,
+        path: impl AsRef<Path>,
+        patch_function: Option<fn(&mut PackageRecord)>,
+    ) -> Result<Self, io::Error> {
+        let bytes = fs::read(path)?;
+        Ok(Self::from_bytes(
+            channel,
+            subdir,
+            bytes.into(),
+            patch_function,
+        )?)
     }
 
     /// Construct an instance of self from a bytes and a [`Channel`].
@@ -131,13 +151,9 @@ impl SparseRepoData {
         patch_function: Option<fn(&mut PackageRecord)>,
     ) -> Result<Self, serde_json::Error> {
         Ok(Self {
-            inner: SparseRepoDataInner::Bytes(
-                BytesSparseRepoDataInnerTryBuilder {
-                    bytes,
-                    repo_data_builder: |bytes| serde_json::from_slice(bytes),
-                }
-                .try_build()?,
-            ),
+            inner: SparseRepoDataInner::Bytes(BytesSparseRepoDataInner::try_new(bytes, |bytes| {
+                serde_json::from_slice(bytes)
+            })?),
             channel,
             subdir: subdir.into(),
             patch_record_fn: patch_function,
@@ -336,19 +352,22 @@ fn parse_records<'i>(
 /// (and their dependencies). Records for the specified packages are loaded from
 /// the repodata files. The `patch_record_fn` is applied to each record after it
 /// has been parsed and can mutate the record after it has been loaded.
+#[cfg(any(unix, windows))]
 pub async fn load_repo_data_recursively(
     repo_data_paths: impl IntoIterator<Item = (Channel, impl Into<String>, impl AsRef<Path>)>,
     package_names: impl IntoIterator<Item = PackageName>,
     patch_function: Option<fn(&mut PackageRecord)>,
 ) -> Result<Vec<Vec<RepoDataRecord>>, io::Error> {
+    use futures::{StreamExt, TryFutureExt, TryStreamExt};
+
     // Open the different files and memory map them to get access to their bytes. Do
     // this in parallel.
-    let lazy_repo_data = stream::iter(repo_data_paths)
+    let lazy_repo_data = futures::stream::iter(repo_data_paths)
         .map(|(channel, subdir, path)| {
             let path = path.as_ref().to_path_buf();
             let subdir = subdir.into();
             tokio::task::spawn_blocking(move || {
-                SparseRepoData::new(channel, subdir, path, patch_function)
+                SparseRepoData::from_file(channel, subdir, path, patch_function)
             })
             .unwrap_or_else(|r| match r.try_into_panic() {
                 Ok(panic) => std::panic::resume_unwind(panic),

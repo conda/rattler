@@ -67,7 +67,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let repodata_json_path = channel_path.join("linux-64").join("repodata.json");
     let channel = Channel::from_directory(&channel_path);
 
-    let sparse_repo_data = SparseRepoData::new(channel, "linux-64", repodata_json_path, None)
+    let sparse_repo_data = SparseRepoData::from_file(channel, "linux-64", repodata_json_path, None)
         .expect("failed to load sparse repodata");
 
     bench_sort(c, &sparse_repo_data, "pytorch");

@@ -33,7 +33,7 @@ impl<'a> From<&'a PySparseRepoData> for &'a SparseRepoData {
 impl PySparseRepoData {
     #[new]
     pub fn new(channel: PyChannel, subdir: String, path: PathBuf) -> PyResult<Self> {
-        Ok(SparseRepoData::new(channel.into(), subdir, path, None)?.into())
+        Ok(SparseRepoData::from_file(channel.into(), subdir, path, None)?.into())
     }
 
     pub fn package_names(&self) -> Vec<String> {

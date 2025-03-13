@@ -75,12 +75,12 @@ class S3Config:
 
 @pytest.fixture()
 def s3_config() -> S3Config:
-    access_key_id = os.environ.get("RATTLER_TEST_R2_ACCESS_KEY_ID")
+    access_key_id = os.environ.get("RATTLER_TEST_R2_READWRITE_ACCESS_KEY_ID")
     if not access_key_id:
-        pytest.skip("RATTLER_TEST_R2_ACCESS_KEY_ID environment variable is not set")
-    secret_access_key = os.environ.get("RATTLER_TEST_R2_SECRET_ACCESS_KEY")
+        pytest.skip("RATTLER_TEST_R2_READWRITE_ACCESS_KEY_ID environment variable is not set")
+    secret_access_key = os.environ.get("RATTLER_TEST_R2_READWRITE_SECRET_ACCESS_KEY")
     if not secret_access_key:
-        pytest.skip("RATTLER_TEST_R2_SECRET_ACCESS_KEY environment variable is not set")
+        pytest.skip("RATTLER_TEST_R2_READWRITE_SECRET_ACCESS_KEY environment variable is not set")
     return S3Config(
         access_key_id=access_key_id,
         secret_access_key=secret_access_key,
@@ -135,6 +135,7 @@ async def test_index_s3(
         force_path_style=True,
         access_key_id=s3_config.access_key_id,
         secret_access_key=s3_config.secret_access_key,
+        repodata_patch=None,
         force=True,
     )
 

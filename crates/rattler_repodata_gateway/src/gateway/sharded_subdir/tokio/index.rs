@@ -17,13 +17,9 @@ use tokio::{
 use url::Url;
 
 use super::ShardedRepodata;
-use crate::{
-    fetch::CacheAction, reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError,
-    Reporter,
-};
-
-/// Magic number that identifies the cache file format.
-const MAGIC_NUMBER: &[u8] = b"SHARD-CACHE-V1";
+use crate::fetch::CacheAction;
+use crate::gateway::sharded_subdir::decode_zst_bytes_async;
+use crate::{reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError, Reporter};
 
 const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
 
@@ -54,7 +50,7 @@ pub async fn fetch_index(
         }
 
         // Decompress the bytes
-        let decoded_bytes = Bytes::from(super::decode_zst_bytes_async(bytes).await?);
+        let decoded_bytes = Bytes::from(decode_zst_bytes_async(bytes).await?);
 
         // Write the cache to disk if the policy allows it.
         let cache_fut =
@@ -267,8 +263,11 @@ pub async fn fetch_index(
     .await
 }
 
+/// Magic number that identifies the cache file format.
+const MAGIC_NUMBER: &[u8] = b"SHARD-CACHE-V1";
+
 /// Writes the shard index cache to disk.
-async fn write_shard_index_cache(
+pub async fn write_shard_index_cache(
     cache_file: &mut File,
     policy: CachePolicy,
     decoded_bytes: Bytes,
@@ -298,7 +297,7 @@ async fn write_shard_index_cache(
 }
 
 /// Read the shard index from a reader and deserialize it.
-async fn read_shard_index_from_reader<R: AsyncRead + Unpin>(
+pub async fn read_shard_index_from_reader<R: AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
 ) -> Result<ShardedRepodata, GatewayError> {
     // Read the file to memory
@@ -353,7 +352,7 @@ async fn read_cached_index<R: AsyncRead + Unpin>(
 
 /// A helper struct to make it easier to construct something that implements
 /// [`RequestLike`].
-struct SimpleRequest {
+pub struct SimpleRequest {
     uri: Uri,
     method: Method,
     headers: HeaderMap,

@@ -10,13 +10,13 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 mod render;
-mod schema;
+pub mod schema;
 #[cfg(target_os = "windows")]
 mod windows;
 
 use crate::{render::BaseMenuItemPlaceholders, schema::MenuInstSchema};
 
-pub mod utils;
+mod utils;
 
 #[derive(thiserror::Error, Debug)]
 pub enum MenuInstError {

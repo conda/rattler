@@ -9,25 +9,33 @@ use std::path::PathBuf;
 use crate::{error::PyRattlerError, platform::PyPlatform};
 
 #[pyfunction]
-#[pyo3(signature = (channel_directory, target_platform=None, force=false, max_parallel=128))]
+#[pyo3(signature = (channel_directory, target_platform=None, repodata_patch=None, force=false, max_parallel=32))]
 pub fn py_index_fs(
     py: Python<'_>,
     channel_directory: PathBuf,
     target_platform: Option<PyPlatform>,
+    repodata_patch: Option<String>,
     force: bool,
     max_parallel: usize,
 ) -> PyResult<Bound<'_, PyAny>> {
     future_into_py(py, async move {
         let target_platform = target_platform.map(Platform::from);
-        index_fs(channel_directory, target_platform, force, max_parallel)
-            .await
-            .map_err(|e| PyRattlerError::from(e).into())
+        index_fs(
+            channel_directory,
+            target_platform,
+            repodata_patch,
+            force,
+            max_parallel,
+            None,
+        )
+        .await
+        .map_err(|e| PyRattlerError::from(e).into())
     })
 }
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-#[pyo3(signature = (channel_url, region, endpoint_url, force_path_style, access_key_id=None,secret_access_key=None, session_token=None, target_platform=None, force=false, max_parallel=128))]
+#[pyo3(signature = (channel_url, region, endpoint_url, force_path_style, access_key_id=None,secret_access_key=None, session_token=None, target_platform=None, repodata_patch=None, force=false, max_parallel=32))]
 pub fn py_index_s3(
     py: Python<'_>,
     channel_url: String,
@@ -38,6 +46,7 @@ pub fn py_index_s3(
     secret_access_key: Option<String>,
     session_token: Option<String>,
     target_platform: Option<PyPlatform>,
+    repodata_patch: Option<String>,
     force: bool,
     max_parallel: usize,
 ) -> PyResult<Bound<'_, PyAny>> {
@@ -54,8 +63,10 @@ pub fn py_index_s3(
             secret_access_key,
             session_token,
             target_platform,
+            repodata_patch,
             force,
             max_parallel,
+            None,
         )
         .await
         .map_err(|e| PyRattlerError::from(e).into())

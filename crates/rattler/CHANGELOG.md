@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0](https://github.com/conda/rattler/compare/rattler-v0.32.4...rattler-v0.33.0) - 2025-03-10
+
+### Added
+
+- add reinstallation method to installer and transaction ([#1128](https://github.com/conda/rattler/pull/1128))
+
+## [0.32.4](https://github.com/conda/rattler/compare/rattler-v0.32.3...rattler-v0.32.4) - 2025-03-04
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.32.3](https://github.com/conda/rattler/compare/rattler-v0.32.2...rattler-v0.32.3) - 2025-02-28
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.32.2](https://github.com/conda/rattler/compare/rattler-v0.32.1...rattler-v0.32.2) - 2025-02-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_shell, rattler_menuinst
+
 ## [0.32.1](https://github.com/conda/rattler/compare/rattler-v0.32.0...rattler-v0.32.1) - 2025-02-25
 
 ### Added

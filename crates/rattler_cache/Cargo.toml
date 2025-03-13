@@ -1,6 +1,6 @@
 [package]
 name = "rattler_cache"
-version = "0.3.10"
+version = "0.3.14"
 description = "A crate to manage the caching of data in rattler"
 categories.workspace = true
 homepage.workspace = true
@@ -10,18 +10,21 @@ edition.workspace = true
 readme.workspace = true
 
 [dependencies]
+
+[target.'cfg(not( target_arch = "wasm32" ))'.dependencies]
 anyhow.workspace = true
 dashmap.workspace = true
 dirs.workspace = true
 futures.workspace = true
 fs-err.workspace = true
+fs4 = { workspace = true, features = ["fs-err3-tokio", "tokio"] }
 fxhash.workspace = true
 itertools.workspace = true
 parking_lot.workspace = true
-rattler_conda_types = { version = "0.31.0", path = "../rattler_conda_types", default-features = false }
-rattler_digest = { version = "1.0.6", path = "../rattler_digest", default-features = false }
-rattler_networking = { version = "0.22.5", path = "../rattler_networking", default-features = false }
-rattler_package_streaming = { version = "0.22.29", path = "../rattler_package_streaming", default-features = false, features = ["reqwest"] }
+rattler_conda_types = { version = "0.31.4", path = "../rattler_conda_types", default-features = false }
+rattler_digest = { version = "1.0.8", path = "../rattler_digest", default-features = false }
+rattler_networking = { version = "0.22.9", path = "../rattler_networking", default-features = false }
+rattler_package_streaming = { version = "0.22.33", path = "../rattler_package_streaming", default-features = false, features = ["reqwest"] }
 reqwest.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros"] }
@@ -30,7 +33,6 @@ url.workspace = true
 thiserror.workspace = true
 reqwest-middleware.workspace = true
 digest.workspace = true
-fs4 = { workspace = true, features = ["fs-err3-tokio", "tokio"] }
 simple_spawn_blocking = { version = "1.1.0", path = "../simple_spawn_blocking", features = ["tokio"] }
 rayon = { workspace = true }
 serde_json = { workspace = true }

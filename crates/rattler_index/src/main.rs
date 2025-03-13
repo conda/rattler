@@ -2,7 +2,6 @@ use clap::{arg, Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Platform;
 use rattler_index::{index_fs, index_s3};
-use tracing_log::AsTrace;
 use url::Url;
 
 fn parse_s3_url(value: &str) -> Result<Url, String> {
@@ -18,13 +17,13 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
 
 /// The `rattler-index` CLI.
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(name = "rattler-index", version, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
 
     #[command(flatten)]
-    verbose: Verbosity,
+    verbosity: Verbosity,
 
     /// Whether to force the re-indexing of all packages.
     /// Note that this will create a new repodata.json instead of updating the existing one.
@@ -33,13 +32,18 @@ struct Cli {
 
     /// The maximum number of packages to process in-memory simultaneously.
     /// This is necessary to limit memory usage when indexing large channels.
-    #[arg(long, default_value = "128", global = true)]
+    #[arg(long, default_value = "32", global = true)]
     max_parallel: usize,
 
     /// A specific platform to index.
     /// Defaults to all platforms available in the channel.
     #[arg(long, global = true)]
     target_platform: Option<Platform>,
+
+    /// The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
+    /// For more information, see `https://prefix.dev/blog/repodata_patching`.
+    #[arg(long, global = true)]
+    repodata_patch: Option<String>,
 }
 
 /// The subcommands for the `rattler-index` CLI.
@@ -97,12 +101,22 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     tracing_subscriber::FmtSubscriber::builder()
-        .with_max_level(cli.verbose.log_level_filter().as_trace())
+        .with_max_level(cli.verbosity)
         .init();
+
+    let multi_progress = indicatif::MultiProgress::new();
 
     match cli.command {
         Commands::FileSystem { channel } => {
-            index_fs(channel, cli.target_platform, cli.force, cli.max_parallel).await
+            index_fs(
+                channel,
+                cli.target_platform,
+                cli.repodata_patch,
+                cli.force,
+                cli.max_parallel,
+                Some(multi_progress),
+            )
+            .await
         }
         Commands::S3 {
             channel,
@@ -122,8 +136,10 @@ async fn main() -> anyhow::Result<()> {
                 secret_access_key,
                 session_token,
                 cli.target_platform,
+                cli.repodata_patch,
                 cli.force,
                 cli.max_parallel,
+                Some(multi_progress),
             )
             .await
         }

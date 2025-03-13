@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.2...rattler_menuinst-v0.2.3) - 2025-03-10
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.2.2](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.1...rattler_menuinst-v0.2.2) - 2025-03-04
+
+### Fixed
+
+- shortcut filename ([#1136](https://github.com/conda/rattler/pull/1136))
+- create test directories ([#1135](https://github.com/conda/rattler/pull/1135))
+
+## [0.2.1](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.0...rattler_menuinst-v0.2.1) - 2025-02-28
+
+### Added
+
+- add fake folders method on win for easier testing (#1125)
+
+## [0.2.0](https://github.com/conda/rattler/compare/rattler_menuinst-v0.1.0...rattler_menuinst-v0.2.0) - 2025-02-27
+
+### Added
+
+- Use `opendal` in `rattler-index` and add executable (#1076)
+
+### Fixed
+
+- make `menuinst` schema pub, hide utils, fix indexing for rattler-build (#1111)
+- clippy lint (#1105)
+
 ## [0.1.0](https://github.com/conda/rattler/releases/tag/rattler_menuinst-v0.1.0) - 2025-02-25
 
 ### Added

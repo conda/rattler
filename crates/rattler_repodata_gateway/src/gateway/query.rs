@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    future::IntoFuture,
+    future::{Future, IntoFuture},
     sync::Arc,
 };
 
@@ -9,7 +9,7 @@ use itertools::Itertools;
 use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, Platform};
 
 use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
-use crate::{gateway::direct_url_query::DirectUrlQuery, Reporter};
+use crate::Reporter;
 
 /// Represents a query to execute with a [`Gateway`].
 ///
@@ -171,37 +171,45 @@ impl RepoDataQuery {
         let mut pending_records = FuturesUnordered::new();
 
         // Push the direct url queries to the pending_records.
-        for (spec, url, name) in direct_url_specs {
-            let gateway = self.gateway.clone();
-            pending_records.push(
-                async move {
-                    let query = DirectUrlQuery::new(
-                        url.clone(),
-                        gateway.package_cache.clone(),
-                        gateway.client.clone(),
-                        spec.sha256,
-                    );
-
-                    let record = query
-                        .execute()
-                        .await
-                        .map_err(|e| GatewayError::DirectUrlQueryError(url.to_string(), e))?;
-
-                    // Check if record actually has the same name
-                    if let Some(record) = record.first() {
-                        if record.package_record.name != name {
-                            // Using as_source to get the closest to the retrieved input.
-                            return Err(GatewayError::UrlRecordNameMismatch(
-                                record.package_record.name.as_source().to_string(),
-                                name.as_source().to_string(),
-                            ));
-                        }
-                    }
-                    // Push the direct url in the first subdir result for channel priority logic.
-                    Ok((0, SourceSpecs::Input(vec![spec]), record))
+        cfg_if::cfg_if! {
+            if #[cfg(target_arch = "wasm32")] {
+                if let Some((_,first_url,_)) = direct_url_specs.into_iter().next() {
+                    // Direct url queries are not supported in wasm.
+                    return Err(GatewayError::DirectUrlQueryNotSupported(first_url.to_string()));
                 }
-                .boxed(),
-            );
+            } else {
+                for (spec, url, name) in direct_url_specs {
+                    let gateway = self.gateway.clone();
+                    pending_records.push(
+                        box_future(async move {
+                            let query = super::direct_url_query::DirectUrlQuery::new(
+                                url.clone(),
+                                gateway.package_cache.clone(),
+                                gateway.client.clone(),
+                                spec.sha256,
+                            );
+
+                            let record = query
+                                .execute()
+                                .await
+                                .map_err(|e| GatewayError::DirectUrlQueryError(url.to_string(), e))?;
+
+                            // Check if record actually has the same name
+                            if let Some(record) = record.first() {
+                                if record.package_record.name != name {
+                                    // Using as_source to get the closest to the retrieved input.
+                                    return Err(GatewayError::UrlRecordNameMismatch(
+                                        record.package_record.name.as_source().to_string(),
+                                        name.as_source().to_string(),
+                                    ));
+                                }
+                            }
+                            // Push the direct url in the first subdir result for channel priority logic.
+                            Ok((0, SourceSpecs::Input(vec![spec]), record))
+                        }),
+                    );
+                }
+            }
         }
 
         let len = subdirs.len() + direct_url_offset;
@@ -216,22 +224,19 @@ impl RepoDataQuery {
                     let specs = specs.clone();
                     let package_name = package_name.clone();
                     let reporter = self.reporter.clone();
-                    pending_records.push(
-                        async move {
-                            let barrier_cell = subdir.clone();
-                            let subdir = barrier_cell.wait().await;
-                            match subdir.as_ref() {
-                                Subdir::Found(subdir) => subdir
-                                    .get_or_fetch_package_records(&package_name, reporter)
-                                    .await
-                                    .map(|records| (subdir_idx, specs, records)),
-                                Subdir::NotFound => {
-                                    Ok((subdir_idx + direct_url_offset, specs, Arc::from(vec![])))
-                                }
+                    pending_records.push(box_future(async move {
+                        let barrier_cell = subdir.clone();
+                        let subdir = barrier_cell.wait().await;
+                        match subdir.as_ref() {
+                            Subdir::Found(subdir) => subdir
+                                .get_or_fetch_package_records(&package_name, reporter)
+                                .await
+                                .map(|records| (subdir_idx, specs, records)),
+                            Subdir::NotFound => {
+                                Ok((subdir_idx + direct_url_offset, specs, Arc::from(vec![])))
                             }
                         }
-                        .boxed(),
-                    );
+                    }));
                 }
             }
 
@@ -306,12 +311,28 @@ impl RepoDataQuery {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+type BoxFuture<T> = futures::future::LocalBoxFuture<'static, T>;
+
+#[cfg(target_arch = "wasm32")]
+fn box_future<T, F: Future<Output = T> + 'static>(future: F) -> BoxFuture<T> {
+    future.boxed_local()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+type BoxFuture<T> = futures::future::BoxFuture<'static, T>;
+
+#[cfg(not(target_arch = "wasm32"))]
+fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture<T> {
+    future.boxed()
+}
+
 impl IntoFuture for RepoDataQuery {
     type Output = Result<Vec<RepoData>, GatewayError>;
-    type IntoFuture = futures::future::BoxFuture<'static, Self::Output>;
+    type IntoFuture = BoxFuture<Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.execute().boxed()
+        box_future(self.execute())
     }
 }
 
@@ -406,10 +427,10 @@ impl NamesQuery {
 
 impl IntoFuture for NamesQuery {
     type Output = Result<Vec<PackageName>, GatewayError>;
-    type IntoFuture = futures::future::BoxFuture<'static, Self::Output>;
+    type IntoFuture = BoxFuture<Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.execute().boxed()
+        box_future(self.execute())
     }
 }
 
