@@ -15,6 +15,7 @@ async def install(
     target_prefix: str | os.PathLike[str],
     cache_dir: Optional[os.PathLike[str]] = None,
     installed_packages: Optional[List[PrefixRecord]] = None,
+    reinstall_packages: Optional[set[str]] = None,
     platform: Optional[Platform] = None,
     execute_link_scripts: bool = False,
     show_progress: bool = True,
@@ -62,6 +63,7 @@ async def install(
                 `PrefixRecord`s from `{target_prefix}/conda-meta/`.
                 If `None` is specified then the `target_prefix` will be scanned for installed
                 packages.
+        reinstall_packages: A list of package names that should be reinstalled.
         platform: Target platform to create and link the
                 environment. Defaults to current platform.
         execute_link_scripts: whether to execute the post-link and pre-unlink scripts
@@ -76,6 +78,7 @@ async def install(
         target_prefix=str(target_prefix),
         cache_dir=cache_dir,
         installed_packages=installed_packages,
+        reinstall_packages=reinstall_packages,
         platform=platform._inner if platform is not None else None,
         client=client._client if client is not None else None,
         execute_link_scripts=execute_link_scripts,

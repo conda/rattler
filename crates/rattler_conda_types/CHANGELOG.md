@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.5](https://github.com/conda/rattler/compare/rattler_conda_types-v0.31.4...rattler_conda_types-v0.31.5) - 2025-03-14
+
+### Added
+
+- package record ([#1148](https://github.com/conda/rattler/pull/1148))
+
 ## [0.31.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.31.3...rattler_conda_types-v0.31.4) - 2025-03-10
 
 ### Added
