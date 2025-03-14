@@ -102,11 +102,10 @@ pub fn install_menuitems_for_record(
         record.installed_system_menus = tracker_vec;
 
         // Save the updated prefix record
-        record
-            .write_to_path(
-                target_prefix.join("conda-meta").join(record.file_name()),
-                true,
-            )?;
+        record.write_to_path(
+            target_prefix.join("conda-meta").join(record.file_name()),
+            true,
+        )?;
     }
 
     Ok(())
@@ -177,7 +176,7 @@ pub fn install_menuitems(
 /// and update the prefix record with removing the tracker entries
 pub fn remove_menuitems_for_record(
     target_prefix: &Path,
-    prefix_record: &PrefixRecord,
+    prefix_record: PrefixRecord,
 ) -> Result<(), MenuInstError> {
     // Remove menu items from the system
     remove_menu_items(&prefix_record.installed_system_menus)?;
@@ -186,11 +185,10 @@ pub fn remove_menuitems_for_record(
     record.installed_system_menus = Vec::new();
 
     // Save the updated prefix record
-    record
-        .write_to_path(
-            target_prefix.join("conda-meta").join(record.file_name()),
-            true,
-        )?;
+    record.write_to_path(
+        target_prefix.join("conda-meta").join(record.file_name()),
+        true,
+    )?;
 
     Ok(())
 }
