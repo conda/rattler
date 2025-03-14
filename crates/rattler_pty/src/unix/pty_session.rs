@@ -132,7 +132,6 @@ impl PtySession {
             if let Err(error) = res {
                 if error == Errno::EINTR {
                     // EINTR is not an error, it just means that we got interrupted by a signal (e.g. SIGWINCH)
-                    continue;
                 } else {
                     self.process.set_mode(original_mode)?;
                     return Err(std::io::Error::from(error));
