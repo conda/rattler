@@ -378,6 +378,7 @@ mod tests {
 
         let environment_dir = tempfile::TempDir::new().unwrap();
         let target_prefix = environment_dir.path();
+        let prefix = Prefix::create(target_prefix).unwrap();
         let trash_dir = target_prefix.join(".trash");
         let files = [
             ("https://conda.anaconda.org/conda-forge/win-64/bat-0.24.0-ha073cba_1.conda", "65a125b7a6e7fd7e5d4588ee537b5db2c984ed71e4832f7041f691c2cfd73504"),
@@ -403,7 +404,7 @@ mod tests {
             // Link the package
             let paths = link_package(
                 package_dir.path(),
-                target_prefix,
+                &prefix,
                 &install_driver,
                 InstallOptions::default(),
             )
@@ -458,7 +459,7 @@ mod tests {
         // Unlink the package
         assert!(!trash_dir.exists());
         let prefix_record = prefix_records.first().unwrap();
-        unlink_package(target_prefix, prefix_record).await.unwrap();
+        unlink_package(&prefix, prefix_record).await.unwrap();
         // Check if the conda-meta file is gone
         assert!(!conda_meta_path.join(prefix_record.file_name()).exists());
         assert!(trash_dir.exists());
