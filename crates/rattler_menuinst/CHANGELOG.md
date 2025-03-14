@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.3...rattler_menuinst-v0.2.4) - 2025-03-14
+
+### Added
+
+- remove menu item and trackers in one function ([#1160](https://github.com/conda/rattler/pull/1160))
+
 ## [0.2.3](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.2...rattler_menuinst-v0.2.3) - 2025-03-10
 
 ### Other

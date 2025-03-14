@@ -4165,7 +4165,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.33.0"
+version = "0.33.1"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4241,7 +4241,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.14"
+version = "0.3.15"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4279,7 +4279,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.31.4"
+version = "0.31.5"
 dependencies = [
  "assert_matches",
  "chrono",
@@ -4344,7 +4344,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.22.0"
+version = "0.22.1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -4384,7 +4384,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.22.47"
+version = "0.22.48"
 dependencies = [
  "chrono",
  "file_url",
@@ -4420,7 +4420,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "chrono",
  "configparser",
@@ -4449,7 +4449,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.22.9"
+version = "0.22.10"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4485,7 +4485,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.33"
+version = "0.22.34"
 dependencies = [
  "assert_matches",
  "bzip2",
@@ -4537,7 +4537,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.22.1"
+version = "0.22.2"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4612,7 +4612,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.22.23"
+version = "0.22.24"
 dependencies = [
  "enum_dispatch",
  "fs-err",
@@ -4631,7 +4631,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.4.1"
+version = "1.4.2"
 dependencies = [
  "chrono",
  "criterion",
@@ -4660,7 +4660,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.0.7"
+version = "2.0.8"
 dependencies = [
  "archspec",
  "libloading",
