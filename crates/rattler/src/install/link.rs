@@ -39,6 +39,9 @@ pub enum LinkMethod {
     /// directory.
     Copy,
 
+    /// The file is not linked but instead the file in the cache directory is used directly.
+    Overlay,
+
     /// A copy of a file is created and it is also patched.
     Patched(FileMode),
 }
@@ -50,6 +53,7 @@ impl fmt::Display for LinkMethod {
             LinkMethod::Softlink => write!(f, "softlink"),
             LinkMethod::Reflink => write!(f, "reflink"),
             LinkMethod::Copy => write!(f, "copy"),
+            LinkMethod::Overlay => write!(f, "overlay"),
             LinkMethod::Patched(FileMode::Binary) => write!(f, "binary patched"),
             LinkMethod::Patched(FileMode::Text) => write!(f, "text patched"),
         }
@@ -144,6 +148,7 @@ pub fn link_file(
     allow_symbolic_links: bool,
     allow_hard_links: bool,
     allow_ref_links: bool,
+    is_overlay: bool,
     target_platform: Platform,
     apple_codesign_behavior: AppleCodeSignBehavior,
 ) -> Result<LinkedFile, LinkFileError> {
@@ -258,6 +263,10 @@ pub fn link_file(
             }
         }
         LinkMethod::Patched(*file_mode)
+    } else if path_json_entry.path_type == PathType::SoftLink && is_overlay {
+        LinkMethod::Overlay
+    } else if path_json_entry.path_type == PathType::HardLink && is_overlay {
+        LinkMethod::Overlay
     } else if path_json_entry.path_type == PathType::HardLink && allow_ref_links {
         reflink_to_destination(&source_path, &destination_path, allow_hard_links)?
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
