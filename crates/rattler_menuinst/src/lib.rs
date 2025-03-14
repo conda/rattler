@@ -106,8 +106,7 @@ pub fn install_menuitems_for_record(
             .write_to_path(
                 target_prefix.join("conda-meta").join(record.file_name()),
                 true,
-            )
-            .expect("Failed to write prefix record");
+            )?;
     }
 
     Ok(())
@@ -191,8 +190,8 @@ pub fn remove_menuitems_for_record(
         .write_to_path(
             target_prefix.join("conda-meta").join(record.file_name()),
             true,
-        )
-        .expect("Failed to write prefix record");
+        )?;
+
     Ok(())
 }
 
