@@ -357,6 +357,7 @@ impl PackageRecord {
         topological_sort::sort_topologically(records)
     }
 
+    #[allow(clippy::result_large_err)]
     /// Validate that the given package records are valid w.r.t. 'depends' and
     /// 'constrains'. This function will return Ok(()) if all records form a
     /// valid environment, i.e., all dependencies of each package are
@@ -403,6 +404,7 @@ impl PackageRecord {
 
 /// An error when validating package records.
 #[derive(Debug, Error)]
+#[allow(clippy::large_enum_variant)]
 pub enum ValidatePackageRecordsError {
     /// A package is not present in the environment.
     #[error("package '{package}' has dependency '{dependency}', which is not in the environment")]

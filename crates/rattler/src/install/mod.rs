@@ -54,7 +54,8 @@ pub use link::{link_file, LinkFileError, LinkMethod};
 pub use python::PythonInfo;
 use rattler_conda_types::{
     package::{IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
-    prefix_record, Platform,
+    prefix_record::{self, Prefix},
+    Platform,
 };
 use rayon::{
     iter::Either,
@@ -150,7 +151,7 @@ pub struct InstallOptions {
     /// However, in exceptional cases you might want to use a different prefix
     /// than the one that is being installed to. This field allows you to do
     /// that. When its set this is used instead of the target directory.
-    pub target_prefix: Option<PathBuf>,
+    pub target_prefix: Option<Prefix>,
 
     /// Instead of reading the `paths.json` file from the package directory
     /// itself, use the data specified here.
@@ -262,7 +263,7 @@ struct LinkPath {
 #[instrument(skip_all, fields(package_dir = % package_dir.display()))]
 pub async fn link_package(
     package_dir: &Path,
-    target_dir: &Path,
+    target_dir: &Prefix,
     driver: &InstallDriver,
     options: InstallOptions,
 ) -> Result<Vec<prefix_record::PathsEntry>, InstallError> {
@@ -274,11 +275,6 @@ pub async fn link_package(
         .to_str()
         .ok_or(InstallError::TargetPrefixIsNotUtf8)?
         .to_owned();
-
-    // Ensure target directory exists
-    tokio_fs::create_dir_all(&target_dir)
-        .await
-        .map_err(InstallError::FailedToCreateTargetDirectory)?;
 
     // Reuse or read the `paths.json` and `index.json` files from the package
     // directory
@@ -359,7 +355,7 @@ pub async fn link_package(
         }
     }
 
-    let directories_target_dir = target_dir.to_path_buf();
+    let directories_target_dir = target_dir.path().to_path_buf();
     driver
         .run_blocking_io_task(move || {
             for directory in directories_to_construct.into_iter().sorted() {
@@ -562,33 +558,6 @@ pub async fn link_package(
     Ok(paths)
 }
 
-#[cfg(target_os = "macos")]
-/// Marks files or directories as excluded from Time Machine on macOS
-///
-/// This is recommended to prevent derived/temporary files from bloating backups.
-/// <https://github.com/rust-lang/cargo/pull/7192>
-fn exclude_from_backups(path: &Path) {
-    use core_foundation::base::TCFType;
-    use core_foundation::{number, string, url};
-    use std::ptr;
-
-    // For compatibility with 10.7 a string is used instead of global kCFURLIsExcludedFromBackupKey
-    let is_excluded_key: Result<string::CFString, _> = "NSURLIsExcludedFromBackupKey".parse();
-    let path = url::CFURL::from_path(path, false);
-    if let (Some(path), Ok(is_excluded_key)) = (path, is_excluded_key) {
-        unsafe {
-            url::CFURLSetResourcePropertyForKey(
-                path.as_concrete_TypeRef(),
-                is_excluded_key.as_concrete_TypeRef(),
-                number::kCFBooleanTrue.cast(),
-                ptr::null_mut(),
-            );
-        }
-    }
-    // Errors are ignored, since it's an optional feature and failure
-    // doesn't prevent Cargo from working
-}
-
 /// Given an extracted package archive (`package_dir`), installs its files to
 /// the `target_dir`.
 ///
@@ -598,7 +567,7 @@ fn exclude_from_backups(path: &Path) {
 #[instrument(skip_all, fields(package_dir = % package_dir.display()))]
 pub fn link_package_sync(
     package_dir: &Path,
-    target_dir: &Path,
+    target_dir: &Prefix,
     clobber_registry: Arc<Mutex<ClobberRegistry>>,
     options: InstallOptions,
 ) -> Result<Vec<prefix_record::PathsEntry>, InstallError> {
@@ -610,12 +579,6 @@ pub fn link_package_sync(
         .to_str()
         .ok_or(InstallError::TargetPrefixIsNotUtf8)?
         .to_owned();
-
-    // Ensure target directory exists
-    fs_err::create_dir_all(target_dir).map_err(InstallError::FailedToCreateTargetDirectory)?;
-
-    #[cfg(target_os = "macos")]
-    exclude_from_backups(Path::new(&target_prefix));
 
     // Reuse or read the `paths.json` and `index.json` files from the package
     // directory
@@ -732,7 +695,7 @@ pub fn link_package_sync(
         .into_iter()
         .sorted_by(|a, b| a.components().count().cmp(&b.components().count()))
     {
-        let full_path = target_dir.join(&directory);
+        let full_path = target_dir.path().join(&directory);
 
         // if we already (recursively) created the parent directory we can skip this
         if created_directories
@@ -778,7 +741,7 @@ pub fn link_package_sync(
 
     // Take care of all the reflinked files (macos only)
     //  - Add them to the paths.json
-    //  - Fix any occurences of the prefix in the files
+    //  - Fix any occurrences of the prefix in the files
     //  - Rename files that need clobber-renames
     let mut reflinked_paths_entries = Vec::new();
     for (parent_dir, files) in reflinked_files {
@@ -816,7 +779,6 @@ pub fn link_package_sync(
     // Link the individual files in parallel
     let link_target_prefix = target_prefix.clone();
     let package_dir = package_dir.to_path_buf();
-    let link_target_dir = target_dir.to_path_buf();
     let mut paths = paths_by_directory
         .into_values()
         .collect_vec()
@@ -834,7 +796,7 @@ pub fn link_package_sync(
                         .clobber_path
                         .unwrap_or(link_path.computed_path.clone()),
                     &package_dir,
-                    &link_target_dir,
+                    target_dir,
                     &link_target_prefix,
                     allow_symbolic_links && !entry.no_link,
                     allow_hard_links && !entry.no_link,
@@ -903,7 +865,6 @@ pub fn link_package_sync(
             .expect("should be safe because its checked above that this contains a value");
 
         let target_prefix = target_prefix.clone();
-        let target_dir = target_dir.to_path_buf();
 
         // Create entry points for each listed item. This is different between Windows
         // and unix because on Windows, two PathEntry's are created whereas on
@@ -915,7 +876,7 @@ pub fn link_package_sync(
                 // .with_min_len(100)
                 .flat_map(move |entry_point| {
                     match create_windows_python_entry_point(
-                        &target_dir,
+                        target_dir,
                         &target_prefix,
                         &entry_point,
                         &python_info,
@@ -935,7 +896,7 @@ pub fn link_package_sync(
                 // .with_min_len(100)
                 .map(move |entry_point| {
                     match create_unix_python_entry_point(
-                        &target_dir,
+                        target_dir,
                         &target_prefix,
                         &entry_point,
                         &python_info,
@@ -1046,9 +1007,9 @@ async fn read_link_json(
 }
 
 /// Returns true if it is possible to create symlinks in the target directory.
-fn can_create_symlinks_sync(target_dir: &Path) -> bool {
+fn can_create_symlinks_sync(target_dir: &Prefix) -> bool {
     let uuid = uuid::Uuid::new_v4();
-    let symlink_path = target_dir.join(format!("symtest_{uuid}"));
+    let symlink_path = target_dir.path().join(format!("symtest_{uuid}"));
     #[cfg(windows)]
     let result = std::os::windows::fs::symlink_file("./", &symlink_path);
     #[cfg(unix)]
@@ -1101,9 +1062,9 @@ impl<T> Ord for OrderWrapper<T> {
 }
 
 /// Returns true if it is possible to create symlinks in the target directory.
-async fn can_create_symlinks(target_dir: &Path) -> bool {
+async fn can_create_symlinks(target_dir: &Prefix) -> bool {
     let uuid = uuid::Uuid::new_v4();
-    let symlink_path = target_dir.join(format!("symtest_{uuid}"));
+    let symlink_path = target_dir.path().join(format!("symtest_{uuid}"));
     #[cfg(windows)]
     let result = tokio_fs::symlink_file("./", &symlink_path).await;
     #[cfg(unix)]
@@ -1129,21 +1090,21 @@ async fn can_create_symlinks(target_dir: &Path) -> bool {
 
 /// Returns true if it is possible to create hard links from the target
 /// directory to the package cache directory.
-async fn can_create_hardlinks(target_dir: &Path, package_dir: &Path) -> bool {
+async fn can_create_hardlinks(target_dir: &Prefix, package_dir: &Path) -> bool {
     paths_have_same_filesystem(target_dir, package_dir).await
 }
 
 /// Returns true if it is possible to create hard links from the target
 /// directory to the package cache directory.
-fn can_create_hardlinks_sync(target_dir: &Path, package_dir: &Path) -> bool {
-    paths_have_same_filesystem_sync(target_dir, package_dir)
+fn can_create_hardlinks_sync(target_dir: &Prefix, package_dir: &Path) -> bool {
+    paths_have_same_filesystem_sync(target_dir.path(), package_dir)
 }
 
 /// Returns true if two paths share the same filesystem
 #[cfg(unix)]
-async fn paths_have_same_filesystem(a: &Path, b: &Path) -> bool {
+async fn paths_have_same_filesystem(a: &Prefix, b: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
-    match tokio::join!(tokio_fs::metadata(a), tokio_fs::metadata(b)) {
+    match tokio::join!(tokio_fs::metadata(a.path()), tokio_fs::metadata(b)) {
         (Ok(a), Ok(b)) => a.dev() == b.dev(),
         _ => false,
     }
@@ -1193,7 +1154,7 @@ mod test {
 
     use crate::{
         get_test_data_dir,
-        install::{link_package, InstallDriver, InstallOptions, PythonInfo},
+        install::{link_package, InstallDriver, InstallOptions, Prefix, PythonInfo},
         package_cache::PackageCache,
     };
 
@@ -1263,7 +1224,7 @@ mod test {
         let target_dir = tempdir().unwrap();
         stream::iter(urls)
             .for_each_concurrent(Some(50), |package_url| {
-                let prefix_path = target_dir.path();
+                let prefix_path = Prefix::create(target_dir.path()).unwrap();
                 let client = client.clone();
                 let package_cache = &package_cache;
                 let install_driver = &install_driver;
@@ -1284,7 +1245,7 @@ mod test {
                     // Install the package to the prefix
                     link_package(
                         package_cache_lock.path(),
-                        prefix_path,
+                        &prefix_path,
                         install_driver,
                         InstallOptions {
                             python_info: Some(python_version.clone()),
@@ -1338,7 +1299,7 @@ mod test {
         // Link the package
         let paths = link_package(
             package_dir.path(),
-            environment_dir.path(),
+            &Prefix::create(environment_dir.path()).unwrap(),
             &install_driver,
             InstallOptions::default(),
         )

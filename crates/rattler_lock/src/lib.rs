@@ -185,14 +185,12 @@ impl LockFile {
     /// Writes the conda lock to a file
     pub fn to_path(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = std::fs::File::create(path)?;
-        serde_yaml::to_writer(file, self)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+        serde_yaml::to_writer(file, self).map_err(std::io::Error::other)
     }
 
     /// Writes the conda lock to a string
     pub fn render_to_string(&self) -> Result<String, std::io::Error> {
-        serde_yaml::to_string(self)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+        serde_yaml::to_string(self).map_err(std::io::Error::other)
     }
 
     /// Returns the environment with the given name.

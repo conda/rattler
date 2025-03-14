@@ -53,6 +53,7 @@ indexmap = { workspace = true }
 dirs = { workspace = true }
 rayon = { workspace = true, optional = true }
 fs-err = { workspace = true }
+core-foundation = "0.10.0"
 
 [dev-dependencies]
 rand = { workspace = true }

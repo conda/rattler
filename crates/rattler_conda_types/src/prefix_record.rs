@@ -145,6 +145,76 @@ impl RecordFromPath for PrefixRecord {
     }
 }
 
+/// Represents a conda environment prefix with initialization handling
+#[derive(Debug, Clone)]
+pub struct Prefix {
+    path: PathBuf,
+}
+
+impl std::ops::Deref for Prefix {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.path
+    }
+}
+
+impl Prefix {
+    /// Create a new prefix, initializing it properly (creating directories, excluding from backups, etc.)
+    pub fn create(path: impl Into<PathBuf>) -> Result<Self, std::io::Error> {
+        let path = path.into();
+
+        // Create the target directory if it doesn't exist
+        fs_err::create_dir_all(&path).map_err(|e| {
+            std::io::Error::other(format!("failed to create target directory: {e}"))
+        })?;
+
+        // Exclude from backups on macOS
+        #[cfg(target_os = "macos")]
+        Self::exclude_from_backups(&path);
+
+        Ok(Self { path })
+    }
+
+    #[cfg(target_os = "macos")]
+    /// Marks files or directories as excluded from Time Machine on macOS
+    ///
+    /// This is recommended to prevent derived/temporary files from bloating backups.
+    /// <https://github.com/rust-lang/cargo/pull/7192>
+    fn exclude_from_backups(path: &Path) {
+        use core_foundation::base::TCFType;
+        use core_foundation::{number, string, url};
+        use std::ptr;
+
+        // For compatibility with 10.7 a string is used instead of global kCFURLIsExcludedFromBackupKey
+        let is_excluded_key: Result<string::CFString, _> = "NSURLIsExcludedFromBackupKey".parse();
+        let path = url::CFURL::from_path(path, false);
+        if let (Some(path), Ok(is_excluded_key)) = (path, is_excluded_key) {
+            unsafe {
+                url::CFURLSetResourcePropertyForKey(
+                    path.as_concrete_TypeRef(),
+                    is_excluded_key.as_concrete_TypeRef(),
+                    number::kCFBooleanTrue.cast(),
+                    ptr::null_mut(),
+                );
+            }
+        }
+        // Errors are ignored, since it's an optional feature and failure
+        // doesn't prevent Cargo from working
+    }
+
+    /// Get a reference to the prefix path
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl AsRef<Path> for Prefix {
+    fn as_ref(&self) -> &Path {
+        &self.path
+    }
+}
+
 /// A record of a single package installed within an environment. The struct includes the
 /// [`RepoDataRecord`] which specifies information about where the original package comes from.
 #[serde_as]
@@ -242,25 +312,19 @@ impl PrefixRecord {
     ) -> Result<(), std::io::Error> {
         let path = path.as_ref();
         let parent = path.parent().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to get parent directory of path '{}'",
-                    path.display()
-                ),
-            )
+            std::io::Error::other(format!(
+                "Failed to get parent directory of path '{}'",
+                path.display()
+            ))
         })?;
 
         // Use a temporary file in the same directory for atomic writes
         let temp_file = NamedTempFile::with_prefix_in("prefix_record_", parent).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to create temporary file in '{}': {}",
-                    parent.display(),
-                    e
-                ),
-            )
+            std::io::Error::other(format!(
+                "Failed to create temporary file in '{}': {}",
+                parent.display(),
+                e
+            ))
         })?;
 
         // Write to temp file with buffered writer
@@ -272,10 +336,7 @@ impl PrefixRecord {
 
         // Atomically rename the temp file to the target path
         temp_file.persist(path).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to persist file {}: {}", path.display(), e),
-            )
+            std::io::Error::other(format!("Failed to persist file {}: {}", path.display(), e))
         })?;
 
         Ok(())

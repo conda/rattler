@@ -4265,6 +4265,7 @@ version = "0.31.4"
 dependencies = [
  "assert_matches",
  "chrono",
+ "core-foundation 0.10.0",
  "criterion",
  "dirs",
  "dunce",
