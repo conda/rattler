@@ -174,6 +174,7 @@ impl Middleware for S3Middleware {
         if req.url().scheme() == "s3" {
             let url = req.url().clone();
             let presigned_url = self.s3.generate_presigned_s3_url(url).await?;
+            tracing::debug!("Presigned URL: {}", presigned_url);
             *req.url_mut() = presigned_url.clone();
         }
         next.run(req, extensions).await
