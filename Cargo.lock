@@ -4340,6 +4340,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "tokio",
+ "url",
 ]
 
 [[package]]

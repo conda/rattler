@@ -57,6 +57,7 @@ pub struct BucketKey {
     name: String,
     version: String,
     build_string: String,
+    location_hash: Option<String>,
 }
 
 impl From<CacheKey> for BucketKey {
@@ -65,6 +66,7 @@ impl From<CacheKey> for BucketKey {
             name: key.name,
             version: key.version,
             build_string: key.build_string,
+            location_hash: key.location_hash,
         }
     }
 }
@@ -130,8 +132,7 @@ impl PackageCache {
         Fut: Future<Output = Result<(), E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let cache_key = pkg.into();
-        let cache_path = self.inner.path.join(cache_key.to_string());
+        let cache_key: CacheKey = pkg.into();
         let cache_entry = self
             .inner
             .packages
@@ -145,7 +146,8 @@ impl PackageCache {
 
         // Validate the cache entry or fetch the package if it is not valid.
         let cache_lock = validate_or_fetch_to_cache(
-            cache_path,
+            &cache_key,
+            &self.inner.path,
             fetch,
             cache_entry.last_revision,
             cache_key.sha256.as_ref(),
@@ -188,13 +190,16 @@ impl PackageCache {
         path: &Path,
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheLock, PackageCacheError> {
-        let path = path.to_path_buf();
+        let path_buf = path.to_path_buf();
+        let cache_key: CacheKey = ArchiveIdentifier::try_from_path(&path_buf).unwrap().into();
+        let cache_key = cache_key.with_path(path);
+
         self.get_or_fetch(
-            ArchiveIdentifier::try_from_path(&path).unwrap(),
+            cache_key,
             move |destination| {
-                let path = path.clone();
+                let path_buf = path_buf.clone();
                 async move {
-                    rattler_package_streaming::tokio::fs::extract(&path, &destination)
+                    rattler_package_streaming::tokio::fs::extract(&path_buf, &destination)
                         .await
                         .map(|_| ())
                 }
@@ -226,7 +231,7 @@ impl PackageCache {
     ) -> Result<CacheLock, PackageCacheError> {
         let request_start = SystemTime::now();
         // Convert into cache key
-        let cache_key = pkg.into();
+        let cache_key = pkg.into().with_url(url.clone());
         // Sha256 of the expected package
         let sha256 = cache_key.sha256();
         let download_reporter = reporter.clone();
@@ -292,10 +297,21 @@ impl PackageCache {
     }
 }
 
+/// Adds the .lock extension to a given path.
+fn get_path_with_lock_extension(path: &Path) -> PathBuf {
+    // Append the `.lock` extension to the cache path to create the lock file path.
+    // `Path::with_extension` strips too much from the filename if it contains one
+    // or more dots.
+    let mut path_str = path.as_os_str().to_owned();
+    path_str.push(".lock");
+    PathBuf::from(path_str)
+}
+
 /// Validates that the package that is currently stored is a valid package and
 /// otherwise calls the `fetch` method to populate the cache.
 async fn validate_or_fetch_to_cache<F, Fut, E>(
-    path: PathBuf,
+    cache_key: &CacheKey,
+    cache_dir: &Path,
     fetch: F,
     known_valid_revision: Option<u64>,
     given_sha: Option<&Sha256Hash>,
@@ -306,28 +322,26 @@ where
     Fut: Future<Output = Result<(), E>> + 'static,
     E: Error + Send + Sync + 'static,
 {
-    // Acquire a read lock on the cache entry. This ensures that no other process is
-    // currently writing to the cache.
-    let lock_file_path = {
-        // Append the `.lock` extension to the cache path to create the lock file path.
-        // `Path::with_extension` strips too much from the filename if it contains one
-        // or more dots.
-        let mut path_str = path.as_os_str().to_owned();
-        path_str.push(".lock");
-        PathBuf::from(path_str)
+    let old_cache_key_path = cache_dir.join(cache_key.key_without_location());
+    let new_cache_key_path = cache_dir.join(cache_key.to_string());
+    let old_lock_file_path = get_path_with_lock_extension(&old_cache_key_path);
+    let new_lock_file_path = get_path_with_lock_extension(&new_cache_key_path);
+
+    let (path, lock_file_path) = if old_lock_file_path.exists() {
+        (old_cache_key_path, old_lock_file_path)
+    } else {
+        (new_cache_key_path.clone(), new_lock_file_path.clone())
     };
 
     // Ensure the directory containing the lock-file exists.
-    if let Some(root_dir) = lock_file_path.parent() {
-        tokio_fs::create_dir_all(root_dir)
-            .map_err(|e| {
-                PackageCacheError::LockError(
-                    format!("failed to create cache directory: '{}", root_dir.display()),
-                    e,
-                )
-            })
-            .await?;
-    }
+    tokio_fs::create_dir_all(cache_dir)
+        .map_err(|e| {
+            PackageCacheError::LockError(
+                format!("failed to create cache directory: '{}", cache_dir.display()),
+                e,
+            )
+        })
+        .await?;
 
     // The revision of the cache entry that we already know is valid.
     let mut validated_revision = known_valid_revision;
@@ -477,8 +491,9 @@ impl DownloadReporter for PassthroughReporter {
 mod test {
     use std::{
         convert::Infallible,
-        fs::File,
+        fs::{File, OpenOptions},
         future::IntoFuture,
+        io::Write,
         net::SocketAddr,
         path::{Path, PathBuf},
         sync::{atomic::AtomicBool, Arc},
@@ -498,7 +513,7 @@ mod test {
     use bytes::Bytes;
     use futures::stream;
     use rattler_conda_types::package::{ArchiveIdentifier, PackageFile, PathsJson};
-    use rattler_digest::{parse_digest_from_hex, Sha256};
+    use rattler_digest::{parse_digest_from_hex, Sha256, Sha256Hash};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use reqwest::Client;
     use reqwest_middleware::ClientBuilder;
@@ -510,7 +525,7 @@ mod test {
 
     use super::PackageCache;
     use crate::{
-        package_cache::CacheKey,
+        package_cache::{cache_lock::CacheRwLock, validate_or_fetch_to_cache, CacheKey},
         validation::{validate_package_directory, ValidationMode},
     };
 
@@ -779,7 +794,13 @@ mod test {
     // Test if packages with different sha's are replaced even though they share the
     // same BucketKey.
     pub async fn test_package_cache_key_with_sha() {
-        let tar_archive_path = tools::download_and_cache_file_async("https://conda.anaconda.org/robostack/linux-64/ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2".parse().unwrap(), "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8").await.unwrap();
+        let package_url: Url ="https://conda.anaconda.org/robostack/linux-64/ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2".parse().unwrap();
+        let tar_archive_path = tools::download_and_cache_file_async(
+            package_url.clone(),
+            "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8",
+        )
+        .await
+        .unwrap();
 
         // Create a temporary directory to store the packages
         let packages_dir = tempdir().unwrap();
@@ -789,12 +810,14 @@ mod test {
         let key: CacheKey = ArchiveIdentifier::try_from_path(&tar_archive_path)
             .unwrap()
             .into();
-        let key = key.with_sha256(
-            parse_digest_from_hex::<Sha256>(
-                "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8",
+        let key = key
+            .with_sha256(
+                parse_digest_from_hex::<Sha256>(
+                    "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8",
+                )
+                .unwrap(),
             )
-            .unwrap(),
-        );
+            .with_url(package_url);
 
         // Get the package to the cache
         let cloned_archive_path = tar_archive_path.clone();
@@ -857,5 +880,110 @@ mod test {
             cache_lock.sha256.expect("expected sha256 to be set"),
             "expected sha256 to be different"
         );
+    }
+
+    async fn mock_fetch(destination: PathBuf) -> Result<(), std::io::Error> {
+        create_and_write_test_file(&destination.join("some_file"), "foo bar").unwrap();
+        Ok(())
+    }
+
+    async fn mock_should_not_execute_fetch(_: PathBuf) -> Result<(), std::io::Error> {
+        panic!("This function should not execute")
+    }
+
+    fn create_and_write_test_file(path: &PathBuf, content: &str) -> std::io::Result<()> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?
+        }
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(path)?;
+        file.write_all(content.as_bytes())?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_validate_or_fetch_to_cache() {
+        let package_url: Url ="https://conda.anaconda.org/robostack/linux-64/ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2".parse().unwrap();
+        let tar_archive_path = tools::download_and_cache_file_async(
+            package_url.clone(),
+            "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8",
+        )
+        .await
+        .unwrap();
+
+        let package_sha = parse_digest_from_hex::<Sha256>(
+            "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8",
+        )
+        .unwrap();
+        let given_sha = Sha256Hash::clone_from_slice(&package_sha);
+
+        // Set the sha256 of the package
+        let key: CacheKey = ArchiveIdentifier::try_from_path(&tar_archive_path)
+            .unwrap()
+            .into();
+        let key = key.with_sha256(package_sha).with_url(package_url);
+
+        let expected_old_cache_key = "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14";
+        let expected_new_cache_key = "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14-c5e00a13f8127a70ed3004ecb6f83eafa98ced9e5602bca19e8d52ae3c9fc881";
+        let expected_old_cache_key_lock = "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.lock";
+        let expected_new_cache_key_lock = "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14-c5e00a13f8127a70ed3004ecb6f83eafa98ced9e5602bca19e8d52ae3c9fc881.lock";
+        assert_eq!(key.key_without_location(), expected_old_cache_key);
+        assert_eq!(key.to_string(), expected_new_cache_key);
+
+        // Test with empty cache: the package should be stored using the new cache key format
+        let packages_dir = tempdir().unwrap();
+        let packages_path = packages_dir.path();
+
+        validate_or_fetch_to_cache(
+            &key,
+            packages_path,
+            mock_fetch,
+            Some(0),
+            Some(&given_sha),
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert!(packages_path.join(expected_new_cache_key).exists());
+        assert!(packages_path.join(expected_new_cache_key_lock).exists());
+        assert!(!packages_path.join(expected_old_cache_key).exists());
+        assert!(!packages_path.join(expected_old_cache_key_lock).exists());
+        assert_eq!(
+            std::fs::read_to_string(packages_path.join(expected_new_cache_key).join("some_file"))
+                .unwrap(),
+            "foo bar".to_string()
+        );
+
+        // Test cache hit: nothing should be fetched and there should not be a cache key with the
+        // new format
+        let packages_dir = tempdir().unwrap();
+        let packages_path = packages_dir.path();
+        std::fs::create_dir_all(packages_path.join(expected_old_cache_key)).unwrap();
+
+        let mut write_lock =
+            CacheRwLock::acquire_write(&packages_path.join(expected_old_cache_key_lock))
+                .await
+                .unwrap();
+        write_lock
+            .write_revision_and_sha(0, Some(&given_sha))
+            .await
+            .unwrap();
+        drop(write_lock);
+
+        validate_or_fetch_to_cache(
+            &key,
+            packages_path,
+            mock_should_not_execute_fetch,
+            Some(0),
+            Some(&given_sha),
+            None,
+        )
+        .await
+        .unwrap();
     }
 }
