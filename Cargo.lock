@@ -1466,6 +1466,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctor"
+version = "0.2.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32a2785755761f3ddc1492979ce1e48d2c00d09311c39e4466429188f3dd6501"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "darling"
 version = "0.20.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4614,12 +4624,15 @@ dependencies = [
 name = "rattler_shell"
 version = "0.22.23"
 dependencies = [
+ "ctor",
+ "dirs",
  "enum_dispatch",
  "fs-err",
  "indexmap 2.8.0",
  "insta",
  "itertools 0.14.0",
  "rattler_conda_types",
+ "rattler_sandbox",
  "serde_json",
  "shlex",
  "sysinfo",

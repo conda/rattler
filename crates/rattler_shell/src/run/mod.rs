@@ -48,6 +48,7 @@ pub fn run_in_environment(
         conda_prefix,
         path: current_path,
         path_modification_behavior: PathModificationBehavior::default(),
+        sandbox_mode: false,
     };
 
     let host_activation = activator.activation(activation_vars)?;

@@ -11,11 +11,13 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+dirs = { workspace = true }
 enum_dispatch = { workspace = true }
 indexmap = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.31.4", default-features = false }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.31.3", default-features = false }
+rattler_sandbox = { path = "../rattler_sandbox", version = "0.1.4" }
 serde_json = { workspace = true, features = ["preserve_order"] }
 shlex = { workspace = true }
 sysinfo = { workspace = true , optional = true }
@@ -24,5 +26,6 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+ctor = "0.2.0"
 insta = { workspace = true, features = ["yaml"] }
 tempdir = { workspace = true }

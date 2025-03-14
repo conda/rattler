@@ -14,6 +14,7 @@ use std::{
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
 
+use crate::sandbox::{is_sandbox_supported, run_in_sandbox, SandboxError};
 use crate::shell::{Shell, ShellScript};
 
 const ENV_START_SEPARATOR: &str = "____RATTLER_ENV_START____";
@@ -46,6 +47,9 @@ pub struct ActivationVariables {
 
     /// The type of behavior of what should happen with the defined paths.
     pub path_modification_behavior: PathModificationBehavior,
+
+    /// Whether to run activation scripts in a sandbox for security
+    pub sandbox_mode: bool,
 }
 
 impl ActivationVariables {
@@ -56,6 +60,7 @@ impl ActivationVariables {
             conda_prefix: std::env::var("CONDA_PREFIX").ok().map(PathBuf::from),
             path: None,
             path_modification_behavior: PathModificationBehavior::Prepend,
+            sandbox_mode: false,
         })
     }
 }
@@ -169,6 +174,14 @@ pub enum ActivationError {
         /// The error code of running the script
         status: ExitStatus,
     },
+
+    /// The sandbox is not supported on this platform
+    #[error("Sandbox is not supported on this platform")]
+    SandboxNotSupported,
+
+    /// An error occurred in the sandbox
+    #[error(transparent)]
+    SandboxError(#[from] SandboxError),
 }
 
 /// Collect all environment variables that are set in a conda environment.
@@ -410,7 +423,7 @@ impl<T: Shell + Clone> Activator<T> {
         variables: ActivationVariables,
         environment: Option<HashMap<&OsStr, &OsStr>>,
     ) -> Result<HashMap<String, String>, ActivationError> {
-        let activation_script = self.activation(variables)?.script;
+        let activation_script = self.activation(variables.clone())?.script;
 
         // Create a script that starts by emitting all environment variables, then runs
         // the activation script followed by again emitting all environment
@@ -438,16 +451,30 @@ impl<T: Shell + Clone> Activator<T> {
             activation_detection_script.contents()?,
         )?;
         // Get only the path to the temporary file
-        let mut activation_command = self
+        let activation_command = self
             .shell_type
             .create_run_script_command(&activation_script_path);
 
-        // Overwrite the environment variables with the ones provided
-        if let Some(environment) = environment.clone() {
-            activation_command.env_clear().envs(environment);
-        }
+        // Run the command either in a sandbox or directly
+        let activation_result = if variables.sandbox_mode {
+            // Check if sandbox is supported on this platform
+            if !is_sandbox_supported() {
+                return Err(ActivationError::SandboxNotSupported);
+            }
 
-        let activation_result = activation_command.output()?;
+            // Run the command in a sandbox
+            run_in_sandbox(activation_command, environment)?
+        } else {
+            // Run the command directly
+            let mut cmd = activation_command;
+
+            // Overwrite the environment variables with the ones provided
+            if let Some(environment) = environment.clone() {
+                cmd.env_clear().envs(environment);
+            }
+
+            cmd.output()?
+        };
 
         if !activation_result.status.success() {
             return Err(ActivationError::FailedToRunActivationScript {
@@ -622,6 +649,7 @@ mod tests {
                     PathBuf::from("/usr/local/bin"),
                 ]),
                 path_modification_behavior,
+                sandbox_mode: false,
             })
             .unwrap();
         let prefix = tdir.path().to_str().unwrap();
@@ -802,5 +830,86 @@ mod tests {
     #[ignore]
     fn test_run_activation_xonsh() {
         test_run_activation(crate::shell::Xonsh.into(), false);
+    }
+
+    #[test]
+    fn test_sandbox_activation() {
+        // Skip the test if sandbox is not supported on this platform
+        if !crate::sandbox::is_sandbox_supported() {
+            eprintln!("Skipping sandbox test as sandbox is not supported on this platform");
+            return;
+        }
+
+        let temp_dir = create_temp_dir();
+        let shell = shell::Bash;
+
+        // Create a test activation script that only sets an environment variable
+        let activate_d = temp_dir.path().join("etc").join("conda").join("activate.d");
+        fs::create_dir_all(&activate_d).unwrap();
+        let script_path = activate_d.join("test.sh");
+
+        fs::write(
+            &script_path,
+            r#"#!/bin/bash
+# Simple script that sets an environment variable
+export TEST_VAR=test_value
+"#,
+        )
+        .unwrap();
+
+        // Make the script executable
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&script_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&script_path, perms).unwrap();
+        }
+
+        // Create an activator
+        let activator = Activator::from_path(temp_dir.path(), shell, Platform::current()).unwrap();
+
+        // Run activation with sandbox mode enabled
+        let variables = ActivationVariables {
+            conda_prefix: None,
+            path: None,
+            path_modification_behavior: PathModificationBehavior::Replace,
+            sandbox_mode: true,
+        };
+
+        let result = activator.run_activation(variables, None);
+
+        // Print error details if the test fails
+        if let Err(ref e) = result {
+            eprintln!("Activation failed with error: {}", e);
+            if let ActivationError::FailedToRunActivationScript {
+                script,
+                stdout,
+                stderr,
+                ..
+            } = e
+            {
+                eprintln!("Script contents:\n{}", script);
+                eprintln!("Stdout:\n{}", stdout);
+                eprintln!("Stderr:\n{}", stderr);
+            } else if let ActivationError::SandboxError(SandboxError::FailedToRunScript {
+                script,
+                stdout,
+                stderr,
+                ..
+            }) = e
+            {
+                eprintln!("Sandbox script:\n{}", script);
+                eprintln!("Sandbox stdout:\n{}", stdout);
+                eprintln!("Sandbox stderr:\n{}", stderr);
+            }
+        }
+
+        // The activation should succeed
+        assert!(result.is_ok(), "Activation failed");
+
+        // The environment variable should be set
+        let env_vars = result.unwrap();
+        assert_eq!(env_vars.get("TEST_VAR"), Some(&"test_value".to_string()));
     }
 }

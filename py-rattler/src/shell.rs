@@ -46,16 +46,18 @@ impl<'py> FromPyObject<'py> for Wrap<PathModificationBehavior> {
 #[pymethods]
 impl PyActivationVariables {
     #[new]
-    #[pyo3(signature = (conda_prefix, path, path_modification_behavior))]
+    #[pyo3(signature = (conda_prefix, path, path_modification_behavior, sandbox_mode=false))]
     pub fn __init__(
         conda_prefix: Option<PathBuf>,
         path: Option<Vec<PathBuf>>,
         path_modification_behavior: Wrap<PathModificationBehavior>,
+        sandbox_mode: bool,
     ) -> Self {
         let activation_vars = ActivationVariables {
             conda_prefix,
             path,
             path_modification_behavior: path_modification_behavior.0,
+            sandbox_mode,
         };
         activation_vars.into()
     }
@@ -71,6 +73,11 @@ impl PyActivationVariables {
             .path
             .as_ref()
             .map(|p| p.iter().map(std::path::PathBuf::as_path).collect())
+    }
+
+    #[getter]
+    pub fn sandbox_mode(&self) -> bool {
+        self.inner.sandbox_mode
     }
 }
 
