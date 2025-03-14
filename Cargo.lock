@@ -4153,7 +4153,6 @@ dependencies = [
  "axum",
  "clap",
  "console",
- "core-foundation 0.10.0",
  "digest",
  "dirs",
  "fs-err",
