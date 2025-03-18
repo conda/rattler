@@ -31,7 +31,10 @@ pub async fn fetch_index(
         .expect("failed to build request for shard index");
 
     // Acquire a permit to do a request
-    let _request_permit = concurrent_requests_semaphore.acquire().await;
+    let request_permit = OptionFuture::from(
+        concurrent_requests_semaphore.map(tokio::sync::Semaphore::acquire_owned),
+    )
+    .await;
 
     // Do a fresh requests
     let reporter = reporter.map(|r| (r, r.on_download_start(&shards_url)));
@@ -55,6 +58,9 @@ pub async fn fetch_index(
 
     // Decompress the bytes
     let decoded_bytes = Bytes::from(decode_zst_bytes_async(bytes).await?);
+
+    // Release the permit
+    drop(request_permit);
 
     // Parse the bytes
     let sharded_index = rmp_serde::from_slice(&decoded_bytes)
