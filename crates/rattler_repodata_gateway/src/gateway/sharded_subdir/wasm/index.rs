@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
+use futures::future::OptionFuture;
 use reqwest_middleware::ClientWithMiddleware;
 use url::Url;
 

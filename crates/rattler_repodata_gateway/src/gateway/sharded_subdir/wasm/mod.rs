@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use futures::future::OptionFuture;
 use http::StatusCode;
 use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata};
 use reqwest_middleware::ClientWithMiddleware;
