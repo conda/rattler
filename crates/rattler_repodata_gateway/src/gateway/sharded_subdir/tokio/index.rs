@@ -3,7 +3,7 @@ use std::{path::Path, str::FromStr, sync::Arc, time::SystemTime};
 use async_fd_lock::{LockWrite, RwLockWriteGuard};
 use bytes::Bytes;
 use fs_err::tokio as tokio_fs;
-use futures::TryFutureExt;
+use futures::{future::OptionFuture, TryFutureExt};
 use http::{HeaderMap, Method, Uri};
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike};
 use reqwest::Response;
@@ -17,9 +17,10 @@ use tokio::{
 use url::Url;
 
 use super::ShardedRepodata;
-use crate::fetch::CacheAction;
-use crate::gateway::sharded_subdir::decode_zst_bytes_async;
-use crate::{reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError, Reporter};
+use crate::{
+    fetch::CacheAction, gateway::sharded_subdir::decode_zst_bytes_async,
+    reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError, Reporter,
+};
 
 const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
 
@@ -29,7 +30,7 @@ pub async fn fetch_index(
     channel_base_url: &Url,
     cache_dir: &Path,
     cache_action: CacheAction,
-    concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
+    concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     reporter: Option<&dyn Reporter>,
 ) -> Result<ShardedRepodata, GatewayError> {
     async fn from_response(
@@ -170,7 +171,12 @@ pub async fn fetch_index(
                             .expect("failed to build request for shard index");
 
                         // Acquire a permit to do a request
-                        let _request_permit = concurrent_requests_semaphore.acquire().await;
+                        let _request_permit = OptionFuture::from(
+                            concurrent_requests_semaphore
+                                .as_deref()
+                                .map(tokio::sync::Semaphore::acquire),
+                        )
+                        .await;
 
                         // Send the request
                         let download_reporter =
@@ -240,7 +246,10 @@ pub async fn fetch_index(
         .expect("failed to build request for shard index");
 
     // Acquire a permit to do a request
-    let _request_permit = concurrent_requests_semaphore.acquire().await;
+    let _request_permit = OptionFuture::from(
+        concurrent_requests_semaphore.map(tokio::sync::Semaphore::acquire_owned),
+    )
+    .await;
 
     // Do a fresh requests
     let reporter = reporter.map(|r| (r, r.on_download_start(&shards_url)));

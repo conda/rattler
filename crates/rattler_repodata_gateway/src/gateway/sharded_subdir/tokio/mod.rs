@@ -3,6 +3,7 @@ mod index;
 use std::{io::Write, path::PathBuf, sync::Arc};
 
 use fs_err::tokio as tokio_fs;
+use futures::future::OptionFuture;
 use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
 use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata};
 use reqwest_middleware::ClientWithMiddleware;
@@ -10,9 +11,8 @@ use simple_spawn_blocking::tokio::run_blocking_task;
 use url::Url;
 
 use super::{add_trailing_slash, decode_zst_bytes_async, parse_records};
-use crate::fetch::CacheAction;
 use crate::{
-    fetch::FetchRepoDataError,
+    fetch::{CacheAction, FetchRepoDataError},
     gateway::{error::SubdirNotFoundError, subdir::SubdirClient},
     reporter::ResponseReporterExt,
     GatewayError, Reporter,
@@ -24,7 +24,7 @@ pub struct ShardedSubdir {
     shards_base_url: Url,
     package_base_url: Url,
     sharded_repodata: ShardedRepodata,
-    concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
+    concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     cache_dir: PathBuf,
     cache_action: CacheAction,
 }
@@ -36,7 +36,7 @@ impl ShardedSubdir {
         client: ClientWithMiddleware,
         cache_dir: PathBuf,
         cache_action: CacheAction,
-        concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
+        concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, GatewayError> {
         // Construct the base url for the shards (e.g. `<channel>/<subdir>`).
@@ -166,7 +166,12 @@ impl SubdirClient for ShardedSubdir {
             .expect("failed to build shard request");
 
         let shard_bytes = {
-            let _permit = self.concurrent_requests_semaphore.acquire();
+            let _request_permit = OptionFuture::from(
+                self.concurrent_requests_semaphore
+                    .as_deref()
+                    .map(tokio::sync::Semaphore::acquire),
+            )
+            .await;
             let reporter = reporter.map(|r| (r, r.on_download_start(&shard_url)));
             let shard_response = self
                 .client

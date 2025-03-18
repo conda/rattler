@@ -78,7 +78,7 @@ impl Directories {
     /// Create a fake Directories struct for testing ONLY
     pub fn fake_folders(path: &Path) -> Directories {
         // Prepare the directories
-        fs::create_dir_all(&path).unwrap();
+        fs::create_dir_all(path).unwrap();
 
         let terminal_settings_json = path.join("terminal_settings.json");
         if !terminal_settings_json.exists() {
@@ -464,7 +464,7 @@ impl WindowsMenu {
         };
 
         for location in &self.directories.windows_terminal_settings_files {
-            terminal::add_windows_terminal_profile(&location, &profile)?;
+            terminal::add_windows_terminal_profile(location, &profile)?;
             tracker.terminal_profiles.push(WindowsTerminalProfile {
                 configuration_file: location.clone(),
                 identifier: profile.name.clone(),
