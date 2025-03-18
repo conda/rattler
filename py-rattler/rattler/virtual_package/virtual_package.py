@@ -168,6 +168,8 @@ class VirtualPackage:
         """
         Returns virtual packages detected for the current system or an error
         if the versions could not be properly detected.
+
+        .. deprecated:: 0.7.0 Use `detect` instead.
         """
         warnings.warn("Use `detect` instead")
         return VirtualPackage.detect()
