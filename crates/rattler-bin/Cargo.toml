@@ -27,7 +27,7 @@ clap = { workspace = true, features = ["derive"] }
 console = { workspace = true, features = ["windows-console-colors"] }
 indicatif = { workspace = true }
 once_cell = { workspace = true }
-rattler = { path="../rattler", version = "0.33.2", default-features = false, features = ["indicatif"] }
+rattler = { path="../rattler", version = "0.33.3", default-features = false, features = ["indicatif"] }
 rattler_conda_types = { path="../rattler_conda_types", version = "0.31.5", default-features = false }
 rattler_networking = { path="../rattler_networking", version = "0.22.10", default-features = false, features = ["gcs", "s3"] }
 rattler_repodata_gateway = { path="../rattler_repodata_gateway", version = "0.22.3", default-features = false, features = ["gateway"] }
