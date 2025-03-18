@@ -17,7 +17,7 @@ const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
 pub async fn fetch_index(
     client: ClientWithMiddleware,
     channel_base_url: &Url,
-    concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
+    concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     reporter: Option<&dyn Reporter>,
 ) -> Result<ShardedRepodata, GatewayError> {
     // Determine the actual URL to use for the request

@@ -27,7 +27,7 @@ pub struct ShardedSubdir {
     shards_base_url: Url,
     package_base_url: Url,
     sharded_repodata: ShardedRepodata,
-    concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
+    concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 impl ShardedSubdir {
