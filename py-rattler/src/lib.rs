@@ -4,6 +4,7 @@ mod error;
 mod explicit_environment_spec;
 mod generic_virtual_package;
 mod index;
+mod install;
 mod installer;
 mod lock;
 mod match_spec;
@@ -43,6 +44,7 @@ use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmen
 use generic_virtual_package::PyGenericVirtualPackage;
 use index::{py_index_fs, py_index_s3};
 use index_json::PyIndexJson;
+use install::{py_link_package, py_unlink_package, py_empty_trash};
 use installer::py_install;
 use lock::{
     PyEnvironment, PyLockChannel, PyLockFile, PyLockedPackage, PyPackageHashes, PyPypiPackageData,
@@ -160,6 +162,9 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_solve_with_sparse_repodata, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(get_rattler_version, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_install, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(py_link_package, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(py_unlink_package, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(py_empty_trash, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_index_fs, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_index_s3, &m).unwrap())?;
 

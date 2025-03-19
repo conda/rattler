@@ -1,7 +1,7 @@
 use std::{error::Error, io};
 
 use pyo3::{create_exception, exceptions::PyException, PyErr};
-use rattler::install::TransactionError;
+use rattler::install::{InstallError, TransactionError, unlink::UnlinkError};
 use rattler_conda_types::{
     ConvertSubdirError, InvalidPackageNameError, ParseArchError, ParseChannelError,
     ParseMatchSpecError, ParsePlatformError, ParseVersionError, ValidatePackageRecordsError,
@@ -79,6 +79,12 @@ pub enum PyRattlerError {
     ValidatePackageRecordsError(#[from] ValidatePackageRecordsError),
     #[error(transparent)]
     AuthenticationStorageError(#[from] AuthenticationStorageError),
+    
+    #[error(transparent)]
+    InstallError(#[from] InstallError),
+    
+    #[error(transparent)]
+    UnlinkError(#[from] UnlinkError),
 }
 
 fn pretty_print_error(mut err: &dyn Error) -> String {
@@ -172,6 +178,12 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::AuthenticationStorageError(err) => {
                 AuthenticationStorageException::new_err(pretty_print_error(&err))
             }
+            PyRattlerError::InstallError(err) => {
+                InstallException::new_err(pretty_print_error(&err))
+            }
+            PyRattlerError::UnlinkError(err) => {
+                UnlinkException::new_err(pretty_print_error(&err))
+            }
         }
     }
 }
@@ -209,3 +221,5 @@ create_exception!(
 );
 create_exception!(exceptions, ValidatePackageRecordsException, PyException);
 create_exception!(exceptions, AuthenticationStorageException, PyException);
+create_exception!(exceptions, UnlinkException, PyException);
+create_exception!(exceptions, InstallException, PyException);
