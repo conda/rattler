@@ -155,8 +155,8 @@ pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> 
 /// and extract the package record from it.
 pub fn package_record_from_conda_reader(reader: impl Read) -> std::io::Result<PackageRecord> {
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
-    let mut reader = Cursor::new(&bytes);
-    let mut archive = seek::stream_conda_info(&mut reader).expect("Could not open conda file");
+    let reader = Cursor::new(&bytes);
+    let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
 
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
