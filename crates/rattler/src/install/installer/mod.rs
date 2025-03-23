@@ -38,6 +38,13 @@ use crate::{
     package_cache::PackageCache,
 };
 
+#[derive(Default)]
+pub struct LinkOptions {
+    pub allow_symbolic_links: Option<bool>,
+    pub allow_hard_links: Option<bool>,
+    pub allow_ref_links: Option<bool>,
+}
+
 /// An installer that can install packages into a prefix.
 #[derive(Default)]
 pub struct Installer {
@@ -52,9 +59,7 @@ pub struct Installer {
     alternative_target_prefix: Option<PathBuf>,
     reinstall_packages: Option<HashSet<PackageName>>,
     // TODO: Determine upfront if these are possible.
-    // allow_symbolic_links: Option<bool>,
-    // allow_hard_links: Option<bool>,
-    // allow_ref_links: Option<bool>,
+    link_options: LinkOptions,
 }
 
 #[derive(Debug)]
@@ -286,6 +291,20 @@ impl Installer {
         self
     }
 
+    /// Sets the link options for the installer.
+    pub fn with_link_options(self, options: LinkOptions) -> Self {
+        Self {
+            link_options: options,
+            ..self
+        }
+    }
+
+    /// Sets the link options for the installer.
+    pub fn set_link_options(&mut self, options: LinkOptions) -> &mut Self {
+        self.link_options = options;
+        self
+    }
+
     /// Install the packages in the given prefix.
     pub async fn install(
         self,
@@ -352,6 +371,9 @@ impl Installer {
             platform: Some(target_platform),
             python_info: transaction.python_info.clone(),
             apple_codesign_behavior: self.apple_code_sign_behavior,
+            allow_symbolic_links: self.link_options.allow_symbolic_links,
+            allow_hard_links: self.link_options.allow_hard_links,
+            allow_ref_links: self.link_options.allow_ref_links,
             ..InstallOptions::default()
         };
 
