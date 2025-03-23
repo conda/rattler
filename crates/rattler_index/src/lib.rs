@@ -127,13 +127,13 @@ pub fn package_record_from_tar_bz2(file: &Path) -> std::io::Result<PackageRecord
 /// and extract the package record from it.
 pub fn package_record_from_tar_bz2_reader(reader: impl Read) -> std::io::Result<PackageRecord> {
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
-    let reader = Cursor::new(bytes.clone());
+    let reader = Cursor::new(&bytes);
     let mut archive = read::stream_tar_bz2(reader);
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            return package_record_from_index_json(bytes, &mut entry);
+            return package_record_from_index_json(&bytes, &mut entry);
         }
     }
     Err(std::io::Error::new(
@@ -155,14 +155,14 @@ pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> 
 /// and extract the package record from it.
 pub fn package_record_from_conda_reader(reader: impl Read) -> std::io::Result<PackageRecord> {
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
-    let reader = Cursor::new(bytes.clone());
+    let reader = Cursor::new(&bytes);
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
 
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            return package_record_from_index_json(bytes, &mut entry);
+            return package_record_from_index_json(&bytes, &mut entry);
         }
     }
     Err(std::io::Error::new(

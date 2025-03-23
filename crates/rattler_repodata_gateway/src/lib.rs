@@ -1,11 +1,12 @@
 #![deny(missing_docs)]
 
-//! `rattler_repodata_gateway` is a crate that provides functionality to interact with Conda
-//! repodata. It currently provides functionality to download and cache `repodata.json` files
-//! through the [`fetch::fetch_repo_data`] function.
+//! `rattler_repodata_gateway` is a crate that provides functionality to
+//! interact with Conda repodata. It currently provides functionality to
+//! download and cache `repodata.json` files through the
+//! [`fetch::fetch_repo_data`] function.
 //!
-//! In the future this crate will also provide more high-level functionality to query information
-//! about specific packages from different sources.
+//! In the future this crate will also provide more high-level functionality to
+//! query information about specific packages from different sources.
 //!
 //! # Install
 //! Add the following to your *Cargo.toml*:
@@ -22,8 +23,8 @@
 //! ```
 //!
 //! # Examples
-//! Below is a basic example that shows how to retrieve and cache the repodata for a conda channel
-//! using the [`fetch::fetch_repo_data`] function:
+//! Below is a basic example that shows how to retrieve and cache the repodata
+//! for a conda channel using the [`fetch::fetch_repo_data`] function:
 //!
 //! ```no_run
 //! use std::{default::Default, path::PathBuf};
@@ -72,5 +73,6 @@ mod gateway;
 
 #[cfg(feature = "gateway")]
 pub use gateway::{
-    ChannelConfig, Gateway, GatewayBuilder, GatewayError, RepoData, SourceConfig, SubdirSelection,
+    ChannelConfig, Gateway, GatewayBuilder, GatewayError, MaxConcurrency, RepoData, SourceConfig,
+    SubdirSelection,
 };

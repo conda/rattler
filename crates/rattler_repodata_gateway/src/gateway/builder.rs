@@ -1,11 +1,40 @@
-use crate::gateway::GatewayInner;
-use crate::{ChannelConfig, Gateway};
+use std::sync::Arc;
+
 use dashmap::DashMap;
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
-use std::sync::Arc;
+
+use crate::{gateway::GatewayInner, ChannelConfig, Gateway};
+
+/// Defines the maximum concurrency for the gateway.
+#[derive(Default)]
+pub enum MaxConcurrency {
+    /// No limit on the number of concurrent requests.
+    #[default]
+    Unlimited,
+    /// A specific number of concurrent requests.
+    Limited(usize),
+    /// Use the specified semaphore for concurrency control.
+    Semaphore(Arc<tokio::sync::Semaphore>),
+}
+
+impl From<usize> for MaxConcurrency {
+    fn from(value: usize) -> Self {
+        if value == 0 {
+            MaxConcurrency::Unlimited
+        } else {
+            MaxConcurrency::Limited(value)
+        }
+    }
+}
+
+impl From<Arc<tokio::sync::Semaphore>> for MaxConcurrency {
+    fn from(value: Arc<tokio::sync::Semaphore>) -> Self {
+        MaxConcurrency::Semaphore(value)
+    }
+}
 
 /// A builder for constructing a [`Gateway`].
 #[derive(Default)]
@@ -16,7 +45,7 @@ pub struct GatewayBuilder {
     cache: Option<std::path::PathBuf>,
     #[cfg(not(target_arch = "wasm32"))]
     package_cache: Option<PackageCache>,
-    max_concurrent_requests: Option<usize>,
+    max_concurrent_requests: MaxConcurrency,
 }
 
 impl GatewayBuilder {
@@ -82,14 +111,22 @@ impl GatewayBuilder {
 
     /// Sets the maximum number of concurrent HTTP requests to make.
     #[must_use]
-    pub fn with_max_concurrent_requests(mut self, max_concurrent_requests: usize) -> Self {
-        self.set_max_concurrent_requests(max_concurrent_requests);
-        self
+    pub fn with_max_concurrent_requests(
+        self,
+        max_concurrent_requests: impl Into<MaxConcurrency>,
+    ) -> Self {
+        Self {
+            max_concurrent_requests: max_concurrent_requests.into(),
+            ..self
+        }
     }
 
     /// Sets the maximum number of concurrent HTTP requests to make.
-    pub fn set_max_concurrent_requests(&mut self, max_concurrent_requests: usize) -> &mut Self {
-        self.max_concurrent_requests = Some(max_concurrent_requests);
+    pub fn set_max_concurrent_requests(
+        &mut self,
+        max_concurrent_requests: impl Into<MaxConcurrency>,
+    ) -> &mut Self {
+        self.max_concurrent_requests = max_concurrent_requests.into();
         self
     }
 
@@ -111,7 +148,12 @@ impl GatewayBuilder {
             cache.join(rattler_cache::PACKAGE_CACHE_DIR),
         ));
 
-        let max_concurrent_requests = self.max_concurrent_requests.unwrap_or(100);
+        let concurrent_requests_semaphore = match self.max_concurrent_requests {
+            MaxConcurrency::Unlimited => None,
+            MaxConcurrency::Limited(n) => Some(Arc::new(tokio::sync::Semaphore::new(n))),
+            MaxConcurrency::Semaphore(sem) => Some(sem),
+        };
+
         Gateway {
             inner: Arc::new(GatewayInner {
                 subdirs: DashMap::default(),
@@ -121,9 +163,7 @@ impl GatewayBuilder {
                 cache,
                 #[cfg(not(target_arch = "wasm32"))]
                 package_cache,
-                concurrent_requests_semaphore: Arc::new(tokio::sync::Semaphore::new(
-                    max_concurrent_requests,
-                )),
+                concurrent_requests_semaphore,
             }),
         }
     }

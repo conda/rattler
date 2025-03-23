@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.3](https://github.com/conda/rattler/compare/rattler-v0.33.2...rattler-v0.33.3) - 2025-03-18
+
+### Fixed
+
+- use `create_dir_all` for `.trash` directory on Windows ([#1174](https://github.com/conda/rattler/pull/1174))
+
+## [0.33.2](https://github.com/conda/rattler/compare/rattler-v0.33.1...rattler-v0.33.2) - 2025-03-18
+
+### Other
+
+- updated the following local packages: rattler_menuinst
+
 ## [0.33.1](https://github.com/conda/rattler/compare/rattler-v0.33.0...rattler-v0.33.1) - 2025-03-14
 
 ### Other
