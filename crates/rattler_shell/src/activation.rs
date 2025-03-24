@@ -4,6 +4,10 @@
 //! environments.
 
 use fs_err as fs;
+#[cfg(target_family = "unix")]
+use miette::IntoDiagnostic;
+#[cfg(target_family = "unix")]
+use std::io::Write;
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -13,6 +17,8 @@ use std::{
 
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
+#[cfg(target_family = "unix")]
+use rattler_pty::unix::PtySession;
 
 use crate::shell::{Shell, ShellScript};
 
@@ -350,6 +356,63 @@ impl<T: Shell + Clone> Activator<T> {
             env_vars,
             platform,
         })
+    }
+
+    /// Starts a UNIX shell.
+    /// # Arguments
+    /// - `shell`: The type of shell to start. Must implement the `Shell` and `Copy` traits.
+    /// - `args`: A vector of arguments to pass to the shell.
+    /// - `env`: A HashMap containing environment variables to set in the shell.
+    #[cfg(target_family = "unix")]
+    #[allow(dead_code)]
+    async fn start_unix_shell<T_: Shell + Copy + 'static>(
+        shell: T_,
+        args: Vec<&str>,
+        env: &HashMap<String, String>,
+        prompt: String,
+    ) -> miette::Result<Option<i32>> {
+        // create a tempfile for activation
+        let mut temp_file = tempfile::Builder::new()
+            .prefix("rattler_env_")
+            .suffix(&format!(".{}", shell.extension()))
+            .rand_bytes(3)
+            .tempfile()
+            .into_diagnostic()?;
+
+        let mut shell_script = ShellScript::new(shell, Platform::current());
+        for (key, value) in env {
+            shell_script.set_env_var(key, value).into_diagnostic()?;
+        }
+
+        const DONE_STR: &str = "=== DONE ===";
+        shell_script.echo(DONE_STR).into_diagnostic()?;
+
+        temp_file
+            .write_all(shell_script.contents().into_diagnostic()?.as_bytes())
+            .into_diagnostic()?;
+
+        // Write custom prompt to the env file
+        temp_file.write(prompt.as_bytes()).into_diagnostic()?;
+
+        let mut command = std::process::Command::new(shell.executable());
+        command.args(args);
+
+        // Space added before `source` to automatically ignore it in history.
+        let mut source_command = " ".to_string();
+        shell
+            .run_script(&mut source_command, temp_file.path())
+            .into_diagnostic()?;
+
+        // Remove automatically added `\n`, if for some reason this fails, just ignore.
+        let source_command = source_command
+            .strip_suffix('\n')
+            .unwrap_or(source_command.as_str());
+
+        // Start process and send env activation to the shell.
+        let mut process = PtySession::new(command).into_diagnostic()?;
+        process.send_line(source_command).into_diagnostic()?;
+
+        process.interact(Some(DONE_STR)).into_diagnostic()
     }
 
     /// Create an activation script for a given shell and platform. This
@@ -802,5 +865,42 @@ mod tests {
     #[ignore]
     fn test_run_activation_xonsh() {
         test_run_activation(crate::shell::Xonsh.into(), false);
+    }
+
+    #[cfg(test)]
+    #[tokio::test]
+    #[cfg(target_family = "unix")]
+    async fn test_start_unix_shell_bash() {
+        let env = HashMap::from([
+            ("TEST_VAR".to_string(), "test_value".to_string()),
+            ("ANOTHER_VAR".to_string(), "another_value".to_string()),
+        ]);
+
+        // Exit the shell after running the activation script
+        let result = Activator::<shell::Bash>::start_unix_shell(
+            shell::Bash,
+            vec!["--noprofile", "--norc"],
+            &env,
+            "exit".to_string(),
+        )
+        .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    #[cfg(target_family = "unix")]
+    async fn test_start_unix_shell_zsh() {
+        let env = HashMap::from([("TEST_VAR".to_string(), "test_value".to_string())]);
+
+        let result = Activator::<shell::Zsh>::start_unix_shell(
+            shell::Zsh,
+            vec!["--no-rcs"],
+            &env,
+            "exit".to_string(),
+        )
+        .await;
+
+        assert!(result.is_ok());
     }
 }
