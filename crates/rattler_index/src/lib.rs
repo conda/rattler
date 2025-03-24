@@ -196,7 +196,7 @@ async fn index_subdir(
                 tracing::info!("Could not find repodata.json. Creating new one.");
                 RepoData {
                     info: Some(ChannelInfo {
-                        subdir: subdir.to_string(),
+                        subdir: Some(subdir.to_string()),
                         base_url: None,
                     }),
                     packages: HashMap::default(),
@@ -369,7 +369,7 @@ async fn index_subdir(
 
     let repodata = RepoData {
         info: Some(ChannelInfo {
-            subdir: subdir.to_string(),
+            subdir: Some(subdir.to_string()),
             base_url: None,
         }),
         packages,
