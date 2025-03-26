@@ -17,7 +17,7 @@ describe("solving", () => {
                 "https://prefix.dev/emscripten-forge-dev/noarch/emscripten-abi-",
             ];
 
-            const urls = result.map(pkg => pkg.url).sort();
+            const urls = result.map((pkg) => pkg.url).sort();
             expect(urls.length).toBe(expectedPrefixes.length);
 
             urls.forEach((url, index) => {
