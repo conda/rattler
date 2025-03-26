@@ -48,6 +48,10 @@ updates:
       - dependencies
     commit-message:
       prefix: chore(ci)
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
   - package-ecosystem: npm
     directory: /js-rattler
