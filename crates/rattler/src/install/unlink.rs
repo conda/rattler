@@ -8,7 +8,7 @@ use std::{
 };
 
 use fs_err::tokio as tokio_fs;
-use rattler_conda_types::{prefix_record::Prefix, PrefixRecord};
+use rattler_conda_types::{prefix::Prefix, prefix_record::PrefixRecord};
 use uuid::Uuid;
 
 /// Error that can occur while unlinking a package.
@@ -229,7 +229,7 @@ mod tests {
         path::Path,
     };
 
-    use rattler_conda_types::{prefix_record::Prefix, Platform, RepoDataRecord};
+    use rattler_conda_types::{prefix::Prefix, Platform, RepoDataRecord};
 
     use crate::install::test_utils::download_and_get_prefix_record;
     use crate::install::{empty_trash, unlink_package, InstallDriver, Transaction};

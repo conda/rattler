@@ -232,7 +232,7 @@ impl InstallDriver {
 
 #[cfg(test)]
 mod tests {
-    use rattler_conda_types::{prefix_record::Prefix, Platform, PrefixRecord, RepoDataRecord};
+    use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord};
 
     use crate::{
         get_repodata_record, get_test_data_dir,

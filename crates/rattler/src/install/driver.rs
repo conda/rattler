@@ -8,7 +8,7 @@ use std::{
 use indexmap::IndexSet;
 use itertools::Itertools;
 use rattler_conda_types::{
-    prefix_record::PathType, prefix_record::Prefix, PackageRecord, PrefixRecord,
+    prefix_record::PathType, prefix::Prefix, PackageRecord, PrefixRecord,
 };
 use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
 use thiserror::Error;

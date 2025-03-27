@@ -1,7 +1,7 @@
 use std::{path::PathBuf, str::FromStr};
 
 use futures::TryFutureExt;
-use rattler_conda_types::{prefix_record::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
+use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
 use rattler_networking::retry_policies::default_retry_policy;
 use transaction::{Transaction, TransactionOperation};
 use url::Url;

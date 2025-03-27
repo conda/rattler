@@ -259,7 +259,7 @@ fn describe_same_content(from: &PackageRecord, to: &PackageRecord) -> bool {
 mod tests {
     use std::collections::HashSet;
 
-    use rattler_conda_types::{prefix_record::Prefix, Platform};
+    use rattler_conda_types::{prefix::Prefix, Platform};
 
     use crate::install::{
         test_utils::download_and_get_prefix_record, Transaction, TransactionOperation,

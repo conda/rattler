@@ -435,7 +435,7 @@ mod tests {
     use insta::assert_yaml_snapshot;
     use rand::seq::SliceRandom;
     use rattler_conda_types::{
-        prefix_record::Prefix, Platform, PrefixRecord, RepoDataRecord, Version,
+        prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version,
     };
     use transaction::TransactionOperation;
 

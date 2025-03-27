@@ -54,7 +54,8 @@ pub use link::{link_file, LinkFileError, LinkMethod};
 pub use python::PythonInfo;
 use rattler_conda_types::{
     package::{IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
-    prefix_record::{self, Prefix},
+    prefix::Prefix,
+    prefix_record,
     Platform,
 };
 use rayon::{
