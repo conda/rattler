@@ -334,7 +334,7 @@ impl WindowsMenu {
         let link_name = format!("{}.lnk", self.name);
 
         // install start menu shortcut
-        let start_menu_link_path = self.directories.start_menu.join(link_name);
+        let start_menu_link_path = self.directories.start_menu.join(&link_name);
         let shortcut = Shortcut {
             path: &self.name,
             description: &self.command.description.resolve(&self.placeholders),
