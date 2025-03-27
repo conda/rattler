@@ -87,6 +87,16 @@ pub fn compute_file_digest<D: Digest + Default + Write>(
     Ok(hasher.finalize())
 }
 
+/// Compute a hash of the specified Url without basic auth.
+pub fn compute_url_digest<D: Digest + Default + Write>(mut url: url::Url) -> Output<D> {
+    let _ = url.set_username("");
+    let _ = url.set_password(None);
+
+    let mut hasher = D::default();
+    hasher.update(url.to_string());
+    hasher.finalize()
+}
+
 /// Compute a hash of the specified bytes.
 pub fn compute_bytes_digest<D: Digest + Default + Write>(bytes: impl AsRef<[u8]>) -> Output<D> {
     let mut hasher = D::default();
