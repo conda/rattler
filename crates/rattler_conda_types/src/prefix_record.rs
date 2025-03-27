@@ -145,10 +145,19 @@ impl RecordFromPath for PrefixRecord {
     }
 }
 
-/// Represents a conda environment prefix with initialization handling
+/// Represents a conda environment prefix (directory).
+///
+/// On macOS, the directory is excluded from Time Machine upons creation.
 #[derive(Debug, Clone)]
 pub struct Prefix {
     path: PathBuf,
+}
+
+impl Prefix {
+    /// Get the trash directory for the prefix
+    pub fn get_trash_dir(&self) -> PathBuf {
+        self.path.join(".trash")
+    }
 }
 
 impl std::ops::Deref for Prefix {
@@ -165,9 +174,7 @@ impl Prefix {
         let path = path.into();
 
         // Create the target directory if it doesn't exist
-        fs_err::create_dir_all(&path).map_err(|e| {
-            std::io::Error::other(format!("failed to create target directory: {e}"))
-        })?;
+        fs_err::create_dir_all(&path)?;
 
         // Exclude from backups on macOS
         #[cfg(target_os = "macos")]

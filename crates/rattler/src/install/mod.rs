@@ -1222,13 +1222,14 @@ mod test {
         // Download and install each layer into an environment.
         let install_driver = InstallDriver::default();
         let target_dir = tempdir().unwrap();
+        let prefix_path = Prefix::create(target_dir.path()).unwrap();
         stream::iter(urls)
             .for_each_concurrent(Some(50), |package_url| {
-                let prefix_path = Prefix::create(target_dir.path()).unwrap();
                 let client = client.clone();
                 let package_cache = &package_cache;
                 let install_driver = &install_driver;
                 let python_version = &python_version;
+                let prefix_path = prefix_path.clone();
                 async move {
                     // Populate the cache
                     let package_info = ArchiveIdentifier::try_from_url(&package_url).unwrap();

@@ -305,8 +305,9 @@ impl Installer {
             )
         });
 
-        let prefix =
-            Prefix::create(prefix.as_ref().to_path_buf()).expect("failed to create prefix");
+        let prefix = Prefix::create(prefix.as_ref().to_path_buf()).map_err(|err| {
+            InstallerError::FailedToCreatePrefix(prefix.as_ref().to_path_buf(), err)
+        })?;
 
         // Create a future to determine the currently installed packages. We
         // can start this in parallel with the other operations and resolve it

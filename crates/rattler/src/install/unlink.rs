@@ -155,7 +155,7 @@ pub async fn empty_trash(target_prefix: &Path) -> Result<(), UnlinkError> {
 }
 
 async fn move_to_trash(target_prefix: &Prefix, path: &Path) -> Result<(), UnlinkError> {
-    let mut trash_dest = target_prefix.path().join(".trash");
+    let mut trash_dest = target_prefix.get_trash_dir();
     match tokio::fs::try_exists(&trash_dest).await {
         Ok(true) => {}
         Ok(false) => tokio_fs::create_dir(&trash_dest).await.map_err(|e| {

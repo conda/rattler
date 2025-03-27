@@ -357,7 +357,6 @@ impl PackageRecord {
         topological_sort::sort_topologically(records)
     }
 
-    #[allow(clippy::result_large_err)]
     /// Validate that the given package records are valid w.r.t. 'depends' and
     /// 'constrains'. This function will return Ok(()) if all records form a
     /// valid environment, i.e., all dependencies of each package are
