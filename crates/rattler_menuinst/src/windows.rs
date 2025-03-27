@@ -350,7 +350,7 @@ impl WindowsMenu {
         }
 
         if let Some(quick_launch_dir) = self.directories.quick_launch.as_ref() {
-            if self.item.quicklaunch.unwrap_or(true) {
+            if self.item.quicklaunch.unwrap_or(false) {
                 let quicklaunch_link_path = quick_launch_dir.join(link_name);
                 let shortcut = Shortcut {
                     path: &self.name,
