@@ -71,7 +71,7 @@ pub struct RepoData {
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct ChannelInfo {
     /// The channel's subdirectory
-    pub subdir: String,
+    pub subdir: Option<String>,
 
     /// The `base_url` for all package urls. Can be an absolute or relative url.
     #[serde(skip_serializing_if = "Option::is_none")]
