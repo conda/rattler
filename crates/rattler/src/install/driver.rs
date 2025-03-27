@@ -7,9 +7,7 @@ use std::{
 
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::{
-    prefix_record::PathType, prefix::Prefix, PackageRecord, PrefixRecord,
-};
+use rattler_conda_types::{prefix::Prefix, prefix_record::PathType, PackageRecord, PrefixRecord};
 use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};

@@ -23,8 +23,8 @@ mod environment_yaml;
 mod generic_virtual_package;
 pub mod package;
 mod package_name;
-pub mod prefix_record;
 pub mod prefix;
+pub mod prefix_record;
 
 #[cfg(test)]
 use std::path::{Path, PathBuf};

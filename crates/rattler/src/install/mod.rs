@@ -55,8 +55,7 @@ pub use python::PythonInfo;
 use rattler_conda_types::{
     package::{IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
     prefix::Prefix,
-    prefix_record,
-    Platform,
+    prefix_record, Platform,
 };
 use rayon::{
     iter::Either,
