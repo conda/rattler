@@ -154,7 +154,7 @@ pub async fn empty_trash(target_prefix: &Path) -> Result<(), UnlinkError> {
     Ok(())
 }
 
-async fn move_to_trash(target_prefix: &Path, path: &Path) -> Result<(), UnlinkError> {
+async fn move_to_trash(target_prefix: &Prefix, path: &Path) -> Result<(), UnlinkError> {
     let mut trash_dest = target_prefix.get_trash_dir();
     tokio_fs::create_dir_all(&trash_dest).await.map_err(|e| {
         UnlinkError::FailedToCreateDirectory(trash_dest.to_string_lossy().to_string(), e)
