@@ -27,7 +27,7 @@ use nix::pty::ptsname_r;
 /// Start a process in a forked tty so you can interact with it the same as you would
 /// within a terminal
 ///
-/// The process and pty session are killed upon dropping PtyProcess
+/// The process and pty session are killed upon dropping `PtyProcess`
 pub struct PtyProcess {
     pub pty: PtyMaster,
     pub child_pid: Pid,
@@ -35,9 +35,9 @@ pub struct PtyProcess {
 }
 
 #[cfg(target_os = "macos")]
-/// ptsname_r is a linux extension but ptsname isn't thread-safe
-/// instead of using a static mutex this calls ioctl with TIOCPTYGNAME directly
-/// based on https://blog.tarq.io/ptsname-on-osx-with-rust/
+/// `ptsname_r` is a linux extension but `ptsname` isn't thread-safe
+/// instead of using a static mutex this calls `ioctl` with `TIOCPTYGNAME` directly
+/// based on <https://blog.tarq.io/ptsname-on-osx-with-rust>/
 fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
     use nix::libc::{ioctl, TIOCPTYGNAME};
     use std::ffi::CStr;
@@ -46,7 +46,7 @@ fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
     let mut buf: [i8; 128] = [0; 128];
 
     unsafe {
-        match ioctl(fd.as_raw_fd(), TIOCPTYGNAME as u64, &mut buf) {
+        match ioctl(fd.as_raw_fd(), u64::from(TIOCPTYGNAME), &mut buf) {
             0 => {
                 let res = CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned();
                 Ok(res)
@@ -138,11 +138,7 @@ impl PtyProcess {
     /// This means: If you ran `exit()` before or `status()` this method will
     /// return `None`
     pub fn status(&self) -> Option<wait::WaitStatus> {
-        if let Ok(status) = wait::waitpid(self.child_pid, Some(wait::WaitPidFlag::WNOHANG)) {
-            Some(status)
-        } else {
-            None
-        }
+        wait::waitpid(self.child_pid, Some(wait::WaitPidFlag::WNOHANG)).ok()
     }
 
     /// Regularly exit the process, this method is blocking until the process is dead
@@ -153,7 +149,7 @@ impl PtyProcess {
     /// Kill the process with a specific signal. This method blocks, until the process is dead
     ///
     /// repeatedly sends SIGTERM to the process until it died,
-    /// the pty session is closed upon dropping PtyMaster,
+    /// the pty session is closed upon dropping `PtyMaster`,
     /// so we don't need to explicitly do that here.
     ///
     /// if `kill_timeout` is set and a repeated sending of signal does not result in the process
@@ -177,7 +173,7 @@ impl PtyProcess {
             // kill -9 if timeout is reached
             if let Some(timeout) = self.kill_timeout {
                 if start.elapsed() > timeout {
-                    signal::kill(self.child_pid, signal::Signal::SIGKILL)?
+                    signal::kill(self.child_pid, signal::Signal::SIGKILL)?;
                 }
             }
         }

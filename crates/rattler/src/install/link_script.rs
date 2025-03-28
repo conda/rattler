@@ -232,7 +232,7 @@ impl InstallDriver {
 
 #[cfg(test)]
 mod tests {
-    use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord};
+    use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord};
 
     use crate::{
         get_repodata_record, get_test_data_dir,
@@ -254,6 +254,7 @@ mod tests {
     #[tokio::test]
     async fn test_run_link_scripts() {
         let target_prefix = tempfile::tempdir().unwrap();
+        let target_prefix = Prefix::create(target_prefix.path()).unwrap();
 
         let operations = test_operations();
 
@@ -270,7 +271,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &target_prefix,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &driver,
@@ -283,7 +284,7 @@ mod tests {
 
         // unlink the package
         let prefix_records: Vec<PrefixRecord> =
-            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+            PrefixRecord::collect_from_prefix(&target_prefix).unwrap();
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
             operations: vec![TransactionOperation::Remove(prefix_records[0].clone())],
             python_info: None,
@@ -293,7 +294,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &target_prefix,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &driver,

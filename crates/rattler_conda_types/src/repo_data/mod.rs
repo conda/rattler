@@ -403,6 +403,7 @@ impl PackageRecord {
 
 /// An error when validating package records.
 #[derive(Debug, Error)]
+#[allow(clippy::large_enum_variant)]
 pub enum ValidatePackageRecordsError {
     /// A package is not present in the environment.
     #[error("package '{package}' has dependency '{dependency}', which is not in the environment")]

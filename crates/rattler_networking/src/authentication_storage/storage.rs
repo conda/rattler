@@ -119,9 +119,7 @@ impl AuthenticationStorage {
                     cache.insert(host.to_string(), Some(auth.clone()));
                     return Ok(Some(auth));
                 }
-                Ok(None) => {
-                    continue;
-                }
+                Ok(None) => {}
                 Err(e) => {
                     if let AuthenticationStorageError::KeyringStorageError(
                         KeyringAuthenticationStorageError::StorageError(_),

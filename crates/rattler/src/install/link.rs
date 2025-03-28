@@ -17,6 +17,7 @@ use std::io::{BufWriter, ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use super::apple_codesign::{codesign, AppleCodeSignBehavior};
+use super::Prefix;
 
 /// Describes the method to "link" a file from the source directory (or the cache directory) to the
 /// destination directory.
@@ -139,7 +140,7 @@ pub fn link_file(
     path_json_entry: &PathsEntry,
     destination_relative_path: PathBuf,
     package_dir: &Path,
-    target_dir: &Path,
+    target_dir: &Prefix,
     target_prefix: &str,
     allow_symbolic_links: bool,
     allow_hard_links: bool,
@@ -149,7 +150,7 @@ pub fn link_file(
 ) -> Result<LinkedFile, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
-    let destination_path = target_dir.join(&destination_relative_path);
+    let destination_path = target_dir.path().join(&destination_relative_path);
 
     // Temporary variables to store intermediate computations in. If we already computed the file
     // size or the sha hash we dont have to recompute them at the end of the function.

@@ -1,4 +1,5 @@
 use simple_spawn_blocking::Cancelled;
+use std::path::PathBuf;
 
 use crate::{
     install::{
@@ -50,6 +51,10 @@ pub enum InstallerError {
     /// The operation was cancelled
     #[error("the operation was cancelled")]
     Cancelled,
+
+    /// Failed to create the prefix
+    #[error("failed to create the prefix")]
+    FailedToCreatePrefix(PathBuf, #[source] std::io::Error),
 }
 
 impl From<Cancelled> for InstallerError {

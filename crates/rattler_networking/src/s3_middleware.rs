@@ -61,13 +61,12 @@ impl S3 {
             expiration: std::time::Duration::from_secs(300),
         }
     }
-
     /// Create an S3 client.
     ///
     /// # Arguments
     ///
     /// * `url` - The S3 URL to obtain authentication information from the authentication storage.
-    ///     Only respected for custom (non-AWS-based) configuration.
+    ///   Only respected for custom (non-AWS-based) configuration.
     pub async fn create_s3_client(&self, url: Url) -> Result<aws_sdk_s3::Client, Error> {
         let bucket_name = url
             .host_str()

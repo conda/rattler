@@ -34,7 +34,7 @@ pub enum TransactionOperation<Old, New> {
     /// Reinstall a package. This can happen if the Python version changed in
     /// the environment, we need to relink all noarch python packages in
     /// that case.
-    /// Includes old and new because certains fields like the channel/url may have changed between installations
+    /// Includes old and new because certain fields like the channel/url may have changed between installations
     Reinstall {
         /// The old record to remove
         old: Old,
@@ -259,7 +259,7 @@ fn describe_same_content(from: &PackageRecord, to: &PackageRecord) -> bool {
 mod tests {
     use std::collections::HashSet;
 
-    use rattler_conda_types::Platform;
+    use rattler_conda_types::{prefix::Prefix, Platform};
 
     use crate::install::{
         test_utils::download_and_get_prefix_record, Transaction, TransactionOperation,
@@ -270,7 +270,7 @@ mod tests {
     async fn test_reinstall_package() {
         let environment_dir = tempfile::TempDir::new().unwrap();
         let prefix_record = download_and_get_prefix_record(
-            environment_dir.path(),
+            &Prefix::create(environment_dir.path()).unwrap(),
             "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda"
                 .parse()
                 .unwrap(),
