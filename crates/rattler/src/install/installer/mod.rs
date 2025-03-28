@@ -45,6 +45,7 @@ pub struct Installer {
     package_cache: Option<PackageCache>,
     downloader: Option<reqwest_middleware::ClientWithMiddleware>,
     execute_link_scripts: bool,
+    is_overlay: bool,
     io_semaphore: Option<Arc<Semaphore>>,
     reporter: Option<Arc<dyn Reporter>>,
     target_platform: Option<Platform>,
@@ -142,6 +143,21 @@ impl Installer {
     /// risk.
     pub fn set_execute_link_scripts(&mut self, execute: bool) -> &mut Self {
         self.execute_link_scripts = execute;
+        self
+    }
+
+    /// Sets whether to build an overlay prefix or not.
+    #[must_use]
+    pub fn with_overlay(self, overlay: bool) -> Self {
+        Self {
+            is_overlay: overlay,
+            ..self
+        }
+    }
+
+    /// Sets whether to build an overlay prefix or not.
+    pub fn set_overlay(&mut self, overlay: bool) -> &mut Self {
+        self.is_overlay = overlay;
         self
     }
 
@@ -352,6 +368,7 @@ impl Installer {
             platform: Some(target_platform),
             python_info: transaction.python_info.clone(),
             apple_codesign_behavior: self.apple_code_sign_behavior,
+            is_overlay: self.is_overlay,
             ..InstallOptions::default()
         };
 

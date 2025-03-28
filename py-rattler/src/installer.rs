@@ -17,7 +17,7 @@ use crate::{
 // TODO: Accept functions to report progress
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-#[pyo3(signature = (records, target_prefix, execute_link_scripts=false, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None))]
+#[pyo3(signature = (records, target_prefix, execute_link_scripts=false, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, is_overlay=false))]
 pub fn py_install<'a>(
     py: Python<'a>,
     records: Vec<Bound<'a, PyAny>>,
@@ -29,6 +29,7 @@ pub fn py_install<'a>(
     cache_dir: Option<PathBuf>,
     installed_packages: Option<Vec<Bound<'a, PyAny>>>,
     reinstall_packages: Option<HashSet<String>>,
+    is_overlay: bool,
 ) -> PyResult<Bound<'a, PyAny>> {
     let dependencies = records
         .into_iter()
@@ -69,6 +70,8 @@ pub fn py_install<'a>(
         if let Some(client) = client {
             installer.set_download_client(client);
         }
+
+        installer.set_overlay(is_overlay);
 
         if let Some(cache_dir) = cache_dir {
             installer.set_package_cache(PackageCache::new(cache_dir));
