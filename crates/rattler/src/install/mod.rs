@@ -267,10 +267,8 @@ pub async fn link_package(
     options: InstallOptions,
 ) -> Result<Vec<prefix_record::PathsEntry>, InstallError> {
     // Determine the target prefix for linking
-    let target_prefix = options
-        .target_prefix
-        .as_deref()
-        .unwrap_or(target_dir)
+    let target_prefix = std::path::absolute(options.target_prefix.as_deref().unwrap_or(target_dir))
+        .map_err(InstallError::FailedToCreateTargetDirectory)?
         .to_str()
         .ok_or(InstallError::TargetPrefixIsNotUtf8)?
         .to_owned();
