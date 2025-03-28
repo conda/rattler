@@ -187,6 +187,7 @@ impl RepoDataQuery {
                                 gateway.package_cache.clone(),
                                 gateway.client.clone(),
                                 spec.sha256,
+                                spec.md5,
                             );
 
                             let record = query
