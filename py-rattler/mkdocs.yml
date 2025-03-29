@@ -95,6 +95,7 @@ nav:
           - fetch: fetch_repo_data.md
           - solve: solver.md
           - install: installer.md
+          - index: index_.md
       - channel:
           - ChannelConfig: channel_config.md
           - Channel: channel.md
@@ -188,3 +189,6 @@ plugins:
 
   - search
   - social
+
+watch:
+  - rattler

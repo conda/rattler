@@ -1,0 +1,3 @@
+# index
+
+::: rattler.index
