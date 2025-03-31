@@ -8,7 +8,7 @@
 
 ## What is this?
 
-Rattler is a library that provides common functionality used within the conda ecosystem ([what is conda & conda-forge?](#what-is-conda--conda-forge)).
+Rattler is a library that provides common functionality used within the conda ecosystem ([what is conda & conda-forge?](#what-is-conda-conda-forge)).
 The goal of the library is to enable programs and other libraries to easily interact with the conda ecosystem without being dependent on Python.
 Its primary use case is as a library that you can use to provide conda related workflows in your own tools.
 
