@@ -1,6 +1,6 @@
 [package]
 name = "rattler_virtual_packages"
-version = "2.0.8"
+version = "2.0.9"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Library to work with and detect Conda virtual packages"
@@ -14,7 +14,7 @@ readme.workspace = true
 libloading = { workspace = true }
 nom = { workspace = true }
 once_cell = { workspace = true }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.31.5", default-features = false }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.31.6", default-features = false }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }

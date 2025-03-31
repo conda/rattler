@@ -1,6 +1,6 @@
 [package]
 name = "file_url"
-version = "0.2.3"
+version = "0.2.4"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Helper functions to work with file:// urls"
