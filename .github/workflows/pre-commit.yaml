@@ -13,7 +13,7 @@ jobs:
         with:
           lfs: false
       - name: Set up pixi
-        uses: prefix-dev/setup-pixi@92815284c57faa15cd896c4d5cfb2d59f32dc43d # v0.8.3
+        uses: prefix-dev/setup-pixi@8eaba7c61d661f73d558b0b477156b7b62667fa4 # v0.8.4
         with:
           environments: lint
       - name: pre-commit
