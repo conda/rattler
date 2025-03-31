@@ -72,6 +72,8 @@ use crate::install::{
     entry_point::{create_unix_python_entry_point, create_windows_python_entry_point},
 };
 
+use rattler_digest::Sha256;
+
 /// An error that might occur when installing a package.
 #[derive(Debug, thiserror::Error)]
 pub enum InstallError {
@@ -181,6 +183,12 @@ pub struct InstallOptions {
     /// package.
     pub link_json: Option<Option<LinkJson>>,
 
+    /// Whether or not to use overlay directories. Defaults to false if not set.
+    /// If set to true, the installation will only write modified files to the
+    /// target directory. To use the environment the prefix and package cache
+    /// must be mounted with something like `overlayfs` or `aufs`.
+    pub is_overlay: bool,
+
     /// Whether or not to use symbolic links where possible. If this is set to
     /// `Some(false)` symlinks are disabled, if set to `Some(true)` symbolic
     /// links are always used when specified in the [`info/paths.json`] file
@@ -279,6 +287,28 @@ pub async fn link_package(
     tokio_fs::create_dir_all(&target_dir)
         .await
         .map_err(InstallError::FailedToCreateTargetDirectory)?;
+
+    if options.is_overlay {
+        let underlays = target_dir.join(".dematerialized/underlays");
+        tokio_fs::create_dir_all(&underlays)
+            .await
+            .map_err(InstallError::FailedToCreateTargetDirectory)?;
+
+        let hash = rattler_digest::compute_bytes_digest::<Sha256>(
+            package_dir.as_os_str().to_string_lossy().as_bytes(),
+        );
+        let hash_hex = format!("{:x}", hash);
+        let symlink_path = underlays.join(&hash_hex);
+
+        #[cfg(unix)]
+        tokio::fs::symlink(&package_dir, &symlink_path)
+            .await
+            .map_err(|e| InstallError::FailedToCreateDirectory(symlink_path.clone(), e))?;
+        #[cfg(windows)]
+        tokio::fs::symlink_dir(&package_dir, &symlink_path)
+            .await
+            .map_err(|e| InstallError::FailedToCreateDirectory(symlink_path.clone(), e))?;
+    }
 
     // Reuse or read the `paths.json` and `index.json` files from the package
     // directory
@@ -405,6 +435,7 @@ pub async fn link_package(
                     allow_symbolic_links && !cloned_entry.no_link,
                     allow_hard_links && !cloned_entry.no_link,
                     allow_ref_links && !cloned_entry.no_link,
+                    options.is_overlay,
                     platform,
                     options.apple_codesign_behavior,
                 )
@@ -587,6 +618,24 @@ pub fn link_package_sync(
     // Ensure target directory exists
     fs_err::create_dir_all(target_dir).map_err(InstallError::FailedToCreateTargetDirectory)?;
 
+    if options.is_overlay {
+        let underlays = target_dir.join(".dematerialized/underlays");
+        fs_err::create_dir_all(&underlays).map_err(InstallError::FailedToCreateTargetDirectory)?;
+
+        let hash = rattler_digest::compute_bytes_digest::<Sha256>(
+            package_dir.as_os_str().to_string_lossy().as_bytes(),
+        );
+        let hash_hex = format!("{:x}", hash);
+        let symlink_path = underlays.join(&hash_hex);
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&package_dir, &symlink_path)
+            .map_err(|e| InstallError::FailedToCreateDirectory(symlink_path.clone(), e))?;
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_dir(&package_dir, &symlink_path)
+            .map_err(|e| InstallError::FailedToCreateDirectory(symlink_path.clone(), e))?;
+    }
+
     // Reuse or read the `paths.json` and `index.json` files from the package
     // directory
     let paths_json = options.paths_json.map_or_else(
@@ -748,7 +797,7 @@ pub fn link_package_sync(
 
     // Take care of all the reflinked files (macos only)
     //  - Add them to the paths.json
-    //  - Fix any occurences of the prefix in the files
+    //  - Fix any occurrences of the prefix in the files
     //  - Rename files that need clobber-renames
     let mut reflinked_paths_entries = Vec::new();
     for (parent_dir, files) in reflinked_files {
@@ -809,6 +858,7 @@ pub fn link_package_sync(
                     allow_symbolic_links && !entry.no_link,
                     allow_hard_links && !entry.no_link,
                     allow_ref_links && !entry.no_link,
+                    options.is_overlay,
                     platform,
                     options.apple_codesign_behavior,
                 );

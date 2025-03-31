@@ -20,6 +20,7 @@ async def install(
     execute_link_scripts: bool = False,
     show_progress: bool = True,
     client: Optional[Client] = None,
+    is_overlay: bool = False,
 ) -> None:
     """
     Create an environment by downloading and linking the `dependencies` in
@@ -71,6 +72,7 @@ async def install(
         show_progress: If set to `True` a progress bar will be shown on the CLI.
         client: An authenticated client to use for downloading packages. If not specified a default
                 client will be used.
+        is_overlay: If set to `True` the environment will be created as an overlay environment.
     """
 
     await py_install(
@@ -83,4 +85,5 @@ async def install(
         client=client._client if client is not None else None,
         execute_link_scripts=execute_link_scripts,
         show_progress=show_progress,
+        is_overlay=is_overlay,
     )
