@@ -71,11 +71,6 @@ pub fn py_link_package<'a>(
         None
     };
 
-    // Setup installation options
-    // Since InstallOptions doesn't implement Clone, we'll create a new instance 
-    // in the async block instead of trying to clone it
-    let python_info = python_info;
-    let platform = Some(target_platform);
 
     // Convert prefix_records if provided
     let records = match prefix_records {
