@@ -132,26 +132,13 @@ mod test {
 
         let repodata_record = query.await.unwrap();
 
-        assert_eq!(
-            repodata_record
-                .as_ref()
-                .first()
-                .unwrap()
-                .package_record
-                .name
-                .as_normalized(),
-            "boltons"
-        );
-        assert_eq!(
-            repodata_record
-                .as_ref()
-                .first()
-                .unwrap()
-                .package_record
-                .version
-                .as_str(),
-            "24.0.0"
-        );
+        let record = repodata_record.as_ref().first().unwrap();
+
+        assert_eq!(record.package_record.name.as_normalized(), "boltons");
+        assert_eq!(record.package_record.version.as_str(), "24.0.0");
+
+        // Check that the md5 is filled in for the package record
+        assert!(record.package_record.md5.is_some());
     }
 
     #[tokio::test]
@@ -172,26 +159,10 @@ mod test {
 
         assert_eq!(query.url.clone(), url);
 
-        let repodata_record = query.await.unwrap();
-        assert_eq!(
-            repodata_record
-                .as_ref()
-                .first()
-                .unwrap()
-                .package_record
-                .name
-                .as_normalized(),
-            "zlib"
-        );
-        assert_eq!(
-            repodata_record
-                .as_ref()
-                .first()
-                .unwrap()
-                .package_record
-                .version
-                .as_str(),
-            "1.2.8"
-        );
+        let result = query.await.unwrap();
+        let record = result.as_ref().first().unwrap();
+
+        assert_eq!(record.package_record.name.as_normalized(), "zlib");
+        assert_eq!(record.package_record.version.as_str(), "1.2.8");
     }
 }
