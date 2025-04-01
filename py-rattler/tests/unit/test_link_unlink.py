@@ -43,7 +43,6 @@ async def test_link_unlink_package(package_file_ruff: Path, tmp_path: Path) -> N
 
 @pytest.mark.asyncio
 async def test_empty_trash(tmp_path: Path) -> None:
-    """
     # Create a trash directory and some files in it
     target_dir = tmp_path / "env"
     target_dir.mkdir()
@@ -64,5 +63,3 @@ async def test_empty_trash(tmp_path: Path) -> None:
 
     # Verify trash directory is gone
     assert not os.path.exists(trash_dir)
-    """
-    pass
