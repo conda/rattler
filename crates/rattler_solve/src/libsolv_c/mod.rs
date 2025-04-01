@@ -183,9 +183,10 @@ impl super::SolverImpl for Solver {
             } else {
                 0
             };
-            let channel_url: String = channel
-                .as_ref()
-                .map_or("<direct>".to_string(), rattler_conda_types::Channel::canonical_name);
+            let channel_url: String = channel.as_ref().map_or(
+                "<direct>".to_string(),
+                rattler_conda_types::Channel::canonical_name,
+            );
             let repo = ManuallyDrop::new(Repo::new(&pool, &channel_url, priority));
 
             if let Some(solv_file) = repodata.solv_file {
