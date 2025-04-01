@@ -536,7 +536,7 @@ mod tests {
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
     use crate::{
-        match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
+        match_spec::Matches, Channel, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
         ParseStrictness::*, RepoDataRecord, StringMatcher, Version,
     };
     use insta::assert_snapshot;
@@ -724,7 +724,9 @@ mod tests {
             ),
             file_name: String::from("mamba-1.0-py37_0"),
             url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
-            channel: Some(String::from("mamba")),
+            channel: Some(Channel::from_url(
+                url::Url::parse("https://mamba.io").unwrap(),
+            )),
         };
         let package_record = repodata_record.clone().package_record;
 

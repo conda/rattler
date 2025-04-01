@@ -339,7 +339,7 @@ fn print_transaction(
 ) {
     let format_record = |r: &RepoDataRecord| {
         let direct_url_print = if let Some(channel) = &r.channel {
-            channel.clone()
+            channel.canonical_name()
         } else {
             String::new()
         };

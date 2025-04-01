@@ -13,9 +13,10 @@ use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::{
-    package::ArchiveType, version_spec::EqualityOperator, BuildNumberSpec, GenericVirtualPackage,
-    MatchSpec, Matches, NamelessMatchSpec, OrdOperator, PackageName, PackageRecord,
-    ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult, StringMatcher, VersionSpec,
+    package::ArchiveType, version_spec::EqualityOperator, BuildNumberSpec, Channel,
+    GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, OrdOperator, PackageName,
+    PackageRecord, ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult,
+    StringMatcher, VersionSpec,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -302,7 +303,7 @@ impl<'a> CondaDependencyProvider<'a> {
             .collect::<Vec<_>>();
 
         // Hashmap that maps the package name to the channel it was first found in.
-        let mut package_name_found_in_channel = HashMap::<String, &Option<String>>::new();
+        let mut package_name_found_in_channel = HashMap::<String, &Option<Channel>>::new();
 
         // Add additional records
         for repo_data in repodata {
@@ -431,9 +432,9 @@ impl<'a> CondaDependencyProvider<'a> {
                         }) {
                             // Check if the spec has a channel, and compare it to the repodata channel
                             if let Some(spec_channel) = &spec.channel {
-                                if record.channel.as_ref() != Some(&spec_channel.canonical_name()) {
+                                if record.channel.as_ref() != Some(&spec_channel) {
                                     tracing::debug!("Ignoring {} {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), match &record.channel {
-                                        Some(channel) => format!("from {}", &channel),
+                                        Some(channel) => format!("from {}", &channel.canonical_name()),
                                         None => "without a channel".to_string(),
                                     });
                                     // Add record to the excluded with reason of being in the non
@@ -466,12 +467,13 @@ impl<'a> CondaDependencyProvider<'a> {
                                 tracing::debug!(
                                     "Ignoring '{}' from '{}' because of strict channel priority.",
                                     &record.package_record.name.as_normalized(),
-                                    channel
+                                    channel.canonical_name()
                                 );
                                 candidates.excluded.push((
                                     solvable,
                                     pool.intern_string(format!(
-                                        "due to strict channel priority not using this option from: '{channel}'",
+                                        "due to strict channel priority not using this option from: '{}'",
+                                        channel.canonical_name(),
                                     )),
                                 ));
                             } else {
