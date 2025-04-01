@@ -1,7 +1,7 @@
 use std::{error::Error, io};
 
 use pyo3::{create_exception, exceptions::PyException, PyErr};
-use rattler::install::{InstallError, TransactionError, unlink::UnlinkError};
+use rattler::install::{unlink::UnlinkError, InstallError, TransactionError};
 use rattler_conda_types::{
     ConvertSubdirError, InvalidPackageNameError, ParseArchError, ParseChannelError,
     ParseMatchSpecError, ParsePlatformError, ParseVersionError, ValidatePackageRecordsError,
@@ -79,10 +79,10 @@ pub enum PyRattlerError {
     ValidatePackageRecordsError(#[from] ValidatePackageRecordsError),
     #[error(transparent)]
     AuthenticationStorageError(#[from] AuthenticationStorageError),
-    
+
     #[error(transparent)]
     InstallError(#[from] InstallError),
-    
+
     #[error(transparent)]
     UnlinkError(#[from] UnlinkError),
 }
@@ -181,9 +181,7 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::InstallError(err) => {
                 InstallException::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::UnlinkError(err) => {
-                UnlinkException::new_err(pretty_print_error(&err))
-            }
+            PyRattlerError::UnlinkError(err) => UnlinkException::new_err(pretty_print_error(&err)),
         }
     }
 }

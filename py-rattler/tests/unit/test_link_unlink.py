@@ -39,7 +39,6 @@ async def test_link_unlink_package(package_file_ruff: Path, tmp_path: Path) -> N
 
     # Verify the package was linked.
     assert (target_dir / "Scripts" / "ruff.exe").exists()
-    print(target_dir)
 
 
 @pytest.mark.asyncio

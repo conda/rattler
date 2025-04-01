@@ -44,7 +44,7 @@ use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmen
 use generic_virtual_package::PyGenericVirtualPackage;
 use index::{py_index_fs, py_index_s3};
 use index_json::PyIndexJson;
-use install::{py_link_package, py_unlink_package, py_empty_trash};
+use install::{py_empty_trash, py_link_package, py_unlink_package};
 use installer::py_install;
 use lock::{
     PyEnvironment, PyLockChannel, PyLockFile, PyLockedPackage, PyPackageHashes, PyPypiPackageData,
