@@ -2,7 +2,6 @@ use std::borrow::Cow;
 
 use cfg_if::cfg_if;
 use rattler_conda_types::{Channel, ChannelUrl, RepoDataRecord, Shard};
-use rattler_redaction::Redact;
 use url::Url;
 
 use crate::{fetch::FetchRepoDataError, GatewayError};

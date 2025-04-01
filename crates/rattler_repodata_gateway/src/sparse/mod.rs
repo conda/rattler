@@ -16,7 +16,6 @@ use itertools::Itertools;
 use rattler_conda_types::{
     compute_package_url, Channel, ChannelInfo, PackageName, PackageRecord, RepoDataRecord,
 };
-use rattler_redaction::Redact;
 use serde::{
     de::{Error, MapAccess, Visitor},
     Deserialize, Deserializer,

@@ -4,7 +4,6 @@ use rattler_conda_types::{
     Channel, ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, RepoDataRecord,
 };
 use rattler_digest::Sha256Hash;
-use url::Url;
 
 use crate::UrlOrPath;
 

@@ -432,7 +432,7 @@ impl<'a> CondaDependencyProvider<'a> {
                         }) {
                             // Check if the spec has a channel, and compare it to the repodata channel
                             if let Some(spec_channel) = &spec.channel {
-                                if record.channel.as_ref() != Some(&spec_channel) {
+                                if record.channel.as_ref() != Some(spec_channel) {
                                     tracing::debug!("Ignoring {} {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), match &record.channel {
                                         Some(channel) => format!("from {}", &channel.canonical_name()),
                                         None => "without a channel".to_string(),
