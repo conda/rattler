@@ -1,6 +1,5 @@
 from __future__ import annotations
 import os
-from typing import Optional
 
 from rattler.prefix.prefix_record import PrefixRecord
 from rattler.rattler import py_unlink_package, py_empty_trash

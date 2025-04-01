@@ -40,6 +40,12 @@ async def test_link_unlink_package(package_file_ruff: Path, tmp_path: Path) -> N
     # Verify the package was linked.
     assert (target_dir / "Scripts" / "ruff.exe").exists()
 
+    # Now, unlink the package
+    assert await unlink_package(package_dir=str(package_dir), target_dir=str(target_dir))
+
+    # Verify the package was unlinked.
+    assert not (target_dir / "Scripts" / "ruff.exe").exists()
+
 
 @pytest.mark.asyncio
 async def test_empty_trash(tmp_path: Path) -> None:
