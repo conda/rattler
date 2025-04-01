@@ -213,6 +213,7 @@ fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
 macro_rules! solver_backend_tests {
     ($T:path) => {
         use chrono::{DateTime, Utc};
+        use rattler_conda_types::Channel;
         use itertools::Itertools;
 
         #[test]
@@ -362,7 +363,7 @@ macro_rules! solver_backend_tests {
                 "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_3.conda",
                 info.url.to_string()
             );
-            assert_eq!(Some("https://conda.anaconda.org/conda-forge/"), info.channel.map(Channel::canonical_name));
+            assert_eq!(Some("https://conda.anaconda.org/conda-forge/".to_string()), info.channel.as_ref().map(Channel::canonical_name));
             assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("linux-64", info.package_record.subdir);
             assert_eq!("3.0.2", info.package_record.version.to_string());
@@ -685,7 +686,7 @@ mod libsolv_c {
         );
         assert_eq!(
             Some("https://conda.anaconda.org/conda-forge/"),
-            info.channel.as_deref()
+            info.channel.map(Channel::canonical_name)
         );
         assert_eq!("foo", info.package_record.name.as_normalized());
         assert_eq!("linux-64", info.package_record.subdir);
@@ -1543,7 +1544,14 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
     let record = result.iter().find(|record| {
         record.package_record.name.as_normalized() == spec.name.as_ref().unwrap().as_normalized()
     });
-    assert_eq!(record.unwrap().channel, Some(expected_channel.to_string()));
+    assert_eq!(
+        record
+            .unwrap()
+            .channel
+            .as_ref()
+            .map(Channel::canonical_name),
+        Some(expected_channel.to_string())
+    );
 }
 
 #[test]
