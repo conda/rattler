@@ -92,6 +92,7 @@ mod pypi;
 mod pypi_indexes;
 mod url_or_path;
 mod utils;
+pub mod source;
 
 pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
