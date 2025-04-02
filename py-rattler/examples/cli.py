@@ -4,19 +4,19 @@ import argparse
 import asyncio
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from rattler.channel import Channel, ChannelConfig
 from rattler.install import install
-from rattler.lock import Environment, LockFile
+from rattler.lock import Environment, LockFile, LockChannel
 from rattler.match_spec import MatchSpec
-from rattler.platform import Platform
+from rattler.platform import Platform, PlatformLiteral
 from rattler.solver import solve
 
 
 async def create_environment(
     prefix: Path, dependencies: List[str], channel_strs: List[str], 
-    platform_str: str = None, lockfile: Path = None
+    platform_str: Optional[PlatformLiteral], lockfile: Optional[Path]
     ) -> None:
     if prefix.exists():
         raise ValueError(f"Prefix path {prefix} already exists. Please specify a new path.")
@@ -40,7 +40,7 @@ async def create_environment(
             environment = Environment(
                 prefix.name,
                 {selected_platform: records},
-                channels, 
+                [LockChannel(chan.base_url) for chan in channels],
             )
             lock = LockFile({prefix.name: environment})
             lock.to_path(lockfile)
@@ -55,7 +55,7 @@ async def create_environment(
 Example usage: 
 python3 -m examples.cli --prefix ~/Downloads/test python=3.12 flask  --lockfile ~/Downloads/test.lock --channel conda-forge
 """
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Create a Conda environment from scratch using py-rattler."
     )
