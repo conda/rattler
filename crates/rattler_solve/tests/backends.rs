@@ -685,8 +685,8 @@ mod libsolv_c {
             info.url.to_string()
         );
         assert_eq!(
-            Some("https://conda.anaconda.org/conda-forge/"),
-            info.channel.map(Channel::canonical_name)
+            Some("https://conda.anaconda.org/conda-forge/".to_string()),
+            info.channel.as_ref().map(Channel::canonical_name)
         );
         assert_eq!("foo", info.package_record.name.as_normalized());
         assert_eq!("linux-64", info.package_record.subdir);

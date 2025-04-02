@@ -83,7 +83,7 @@ pub async fn simple_solve(
             package_name: r.package_record.name.as_source().to_string(),
             build: r.package_record.build.clone(),
             build_number: r.package_record.build_number,
-            repo_name: r.channel,
+            repo_name: r.channel.as_ref().map(Channel::canonical_name),
             filename: r.file_name,
             version: r.package_record.version.to_string(),
         })
