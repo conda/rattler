@@ -15,9 +15,12 @@ from rattler.solver import solve
 
 
 async def create_environment(
-    prefix: Path, dependencies: List[str], channel_strs: List[str], 
-    platform_str: Optional[PlatformLiteral], lockfile: Optional[Path]
-    ) -> None:
+    prefix: Path,
+    dependencies: List[str],
+    channel_strs: List[str],
+    platform_str: Optional[PlatformLiteral],
+    lockfile: Optional[Path],
+) -> None:
     if prefix.exists():
         raise ValueError(f"Prefix path {prefix} already exists. Please specify a new path.")
 
@@ -51,14 +54,15 @@ async def create_environment(
         print(f"Failed to create environment: {e}", file=sys.stderr)
         sys.exit(1)
 
+
 """
 Example usage: 
 python3 -m examples.cli --prefix ~/Downloads/test python=3.12 flask  --lockfile ~/Downloads/test.lock --channel conda-forge
 """
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Create a Conda environment from scratch using py-rattler."
-    )
+    parser = argparse.ArgumentParser(description="Create a Conda environment from scratch using py-rattler.")
     parser.add_argument("--prefix", type=Path, required=True, help="Environment path.")
     parser.add_argument("dependencies", nargs="+", help="Dependencies (e.g., 'python=3.11').")
     parser.add_argument("--platform", help="Target platform (e.g., 'linux-64').")
@@ -66,6 +70,7 @@ def main() -> None:
     parser.add_argument("--lockfile", type=Path, help="Save lock file to path.")
     args = parser.parse_args()
     asyncio.run(create_environment(args.prefix, args.dependencies, args.channel, args.platform, args.lockfile))
+
 
 if __name__ == "__main__":
     main()
