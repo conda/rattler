@@ -51,6 +51,10 @@ async def create_environment(
         print(f"Failed to create environment: {e}", file=sys.stderr)
         sys.exit(1)
 
+"""
+Example usage: 
+python3 -m examples.cli --prefix ~/Downloads/test python=3.12 flask  --lockfile ~/Downloads/test.lock --channel conda-forge
+"""
 def main():
     parser = argparse.ArgumentParser(
         description="Create a Conda environment from scratch using py-rattler."
