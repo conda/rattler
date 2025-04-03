@@ -28,6 +28,7 @@ use tokio::sync::Semaphore;
 use url::Url;
 
 use opendal::{
+    layers::RetryLayer,
     services::{FsConfig, S3Config},
     Configurator, Operator,
 };
@@ -196,7 +197,7 @@ async fn index_subdir(
                 tracing::info!("Could not find repodata.json. Creating new one.");
                 RepoData {
                     info: Some(ChannelInfo {
-                        subdir: subdir.to_string(),
+                        subdir: Some(subdir.to_string()),
                         base_url: None,
                     }),
                     packages: HashMap::default(),
@@ -369,7 +370,7 @@ async fn index_subdir(
 
     let repodata = RepoData {
         info: Some(ChannelInfo {
-            subdir: subdir.to_string(),
+            subdir: Some(subdir.to_string()),
             base_url: None,
         }),
         packages,
@@ -502,7 +503,7 @@ pub async fn index<T: Configurator>(
     let builder = config.into_builder();
 
     // Get all subdirs
-    let op = Operator::new(builder)?.finish();
+    let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
     let entries = op.list_with("").await?;
 
     // If requested `target_platform` subdir does not exist, we create it.

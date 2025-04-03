@@ -28,7 +28,9 @@ use reqwest::Client;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
 
-use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
+use super::{
+    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
+};
 use crate::{
     default_cache_dir,
     install::{
@@ -37,6 +39,13 @@ use crate::{
     },
     package_cache::PackageCache,
 };
+
+#[derive(Default)]
+pub struct LinkOptions {
+    pub allow_symbolic_links: Option<bool>,
+    pub allow_hard_links: Option<bool>,
+    pub allow_ref_links: Option<bool>,
+}
 
 /// An installer that can install packages into a prefix.
 #[derive(Default)]
@@ -49,12 +58,10 @@ pub struct Installer {
     reporter: Option<Arc<dyn Reporter>>,
     target_platform: Option<Platform>,
     apple_code_sign_behavior: AppleCodeSignBehavior,
-    alternative_target_prefix: Option<PathBuf>,
+    alternative_target_prefix: Option<Prefix>,
     reinstall_packages: Option<HashSet<PackageName>>,
     // TODO: Determine upfront if these are possible.
-    // allow_symbolic_links: Option<bool>,
-    // allow_hard_links: Option<bool>,
-    // allow_ref_links: Option<bool>,
+    link_options: LinkOptions,
 }
 
 #[derive(Debug)]
@@ -286,6 +293,20 @@ impl Installer {
         self
     }
 
+    /// Sets the link options for the installer.
+    pub fn with_link_options(self, options: LinkOptions) -> Self {
+        Self {
+            link_options: options,
+            ..self
+        }
+    }
+
+    /// Sets the link options for the installer.
+    pub fn set_link_options(&mut self, options: LinkOptions) -> &mut Self {
+        self.link_options = options;
+        self
+    }
+
     /// Install the packages in the given prefix.
     pub async fn install(
         self,
@@ -303,14 +324,18 @@ impl Installer {
             )
         });
 
+        let prefix = Prefix::create(prefix.as_ref().to_path_buf()).map_err(|err| {
+            InstallerError::FailedToCreatePrefix(prefix.as_ref().to_path_buf(), err)
+        })?;
+
         // Create a future to determine the currently installed packages. We
         // can start this in parallel with the other operations and resolve it
         // when we need it.
         let installed = if let Some(installed) = self.installed {
             installed
         } else {
+            let prefix = prefix.clone();
             // TODO: Should we add progress reporting here?
-            let prefix = prefix.as_ref().to_path_buf();
             run_blocking_task(move || {
                 PrefixRecord::collect_from_prefix(&prefix)
                     .map_err(InstallerError::FailedToDetectInstalledPackages)
@@ -352,6 +377,9 @@ impl Installer {
             platform: Some(target_platform),
             python_info: transaction.python_info.clone(),
             apple_codesign_behavior: self.apple_code_sign_behavior,
+            allow_symbolic_links: self.link_options.allow_symbolic_links,
+            allow_hard_links: self.link_options.allow_hard_links,
+            allow_ref_links: self.link_options.allow_ref_links,
             ..InstallOptions::default()
         };
 
@@ -361,7 +389,7 @@ impl Installer {
 
         // Preprocess the transaction
         let pre_process_result = driver
-            .pre_process(&transaction, prefix.as_ref())
+            .pre_process(&transaction, &prefix)
             .map_err(InstallerError::PreProcessingFailed)?;
 
         // Execute the operations in the transaction.
@@ -429,7 +457,7 @@ impl Installer {
                         .as_deref()
                         .map(move |r| (r, r.on_unlink_start(idx, record)));
                     driver.clobber_registry().unregister_paths(record);
-                    unlink_package(prefix.as_ref(), record).await.map_err(|e| {
+                    unlink_package(prefix, record).await.map_err(|e| {
                         InstallerError::UnlinkError(record.repodata_record.file_name.clone(), e)
                     })?;
                     if let Some((reporter, index)) = reporter {
@@ -444,7 +472,7 @@ impl Installer {
                         .map(|r| (r, r.on_link_start(idx, &record)));
                     link_package(
                         &record,
-                        prefix.as_ref(),
+                        prefix,
                         cache_lock.path(),
                         base_install_options.clone(),
                         driver,
@@ -472,7 +500,7 @@ impl Installer {
         drop(pending_futures);
 
         // Post process the transaction
-        let post_process_result = driver.post_process(&transaction, prefix.as_ref())?;
+        let post_process_result = driver.post_process(&transaction, &prefix)?;
 
         if let Some(reporter) = &self.reporter {
             reporter.on_transaction_complete();
@@ -489,13 +517,13 @@ impl Installer {
 
 async fn link_package(
     record: &RepoDataRecord,
-    target_prefix: &Path,
+    target_prefix: &Prefix,
     cached_package_dir: &Path,
     install_options: InstallOptions,
     driver: &InstallDriver,
 ) -> Result<(), InstallerError> {
     let record = record.clone();
-    let target_prefix = target_prefix.to_path_buf();
+    let target_prefix = target_prefix.clone();
     let cached_package_dir = cached_package_dir.to_path_buf();
     let clobber_registry = driver.clobber_registry.clone();
 
@@ -534,7 +562,7 @@ async fn link_package(
                 installed_system_menus: Vec::new(),
             };
 
-            let conda_meta_path = target_prefix.join("conda-meta");
+            let conda_meta_path = target_prefix.path().join("conda-meta");
             std::fs::create_dir_all(&conda_meta_path).map_err(|e| {
                 InstallerError::IoError("failed to create conda-meta directory".to_string(), e)
             })?;

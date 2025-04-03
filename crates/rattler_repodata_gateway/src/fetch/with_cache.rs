@@ -490,8 +490,10 @@ pub async fn fetch_repo_data(
     let repo_data_destination_path = repo_data_json_path.clone();
     let repo_data_json_metadata = tokio::task::spawn_blocking(move || {
         let file = temp_file
-            .persist(repo_data_destination_path)
-            .map_err(FetchRepoDataError::FailedToPersistTemporaryFile)?;
+            .persist(repo_data_destination_path.clone())
+            .map_err(|e| {
+                FetchRepoDataError::FailedToPersistTemporaryFile(e, repo_data_destination_path)
+            })?;
 
         // Determine the last modified date and size of the repodata.json file. We store
         // these values in the cache to link the cache to the corresponding

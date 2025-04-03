@@ -101,7 +101,7 @@ jobs:
           sudo apt install musl-tools gcc g++
           sudo ln -s /usr/bin/musl-gcc /usr/bin/musl-g++
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
 
       - name: Show version information (Rust, cargo, GCC)
         shell: bash
@@ -134,7 +134,7 @@ jobs:
 
       - name: Install cargo nextest
         if: ${{ !matrix.skip-tests }}
-        uses: taiki-e/install-action@d7975a1de23014ff85d5da2d113615774467bcc1 # v2
+        uses: taiki-e/install-action@914ac1e29db2d22aef69891f032778d9adc3990d # v2
         with:
           tool: cargo-nextest
 
