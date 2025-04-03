@@ -105,8 +105,9 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
 
     // Define the contents of the bindings and how they are generated
     let bindings = bindgen::Builder::default()
-        .rust_target("1.81.0".parse().unwrap())
+        .rust_target("1.85.0".parse().unwrap())
         .clang_arg(format!("-I{}", temp_include_dir.path().display()))
+        .clang_arg(format!("-I{}", libsolv_path.join("src").display()))
         .ctypes_prefix("libc")
         .header(libsolv_path.join("src/solver.h").to_str().unwrap())
         .header(libsolv_path.join("src/solverdebug.h").to_str().unwrap())
