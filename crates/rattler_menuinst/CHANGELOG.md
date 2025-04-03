@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.5...rattler_menuinst-v0.2.6) - 2025-04-03
+
+### Fixed
+
+- install windows start menu shortcut ([#1198](https://github.com/conda/rattler/pull/1198))
+
+### Other
+
+- change default value of  menuinst windows `quicklaunch` to `false` ([#1196](https://github.com/conda/rattler/pull/1196))
+
 ## [0.2.5](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.4...rattler_menuinst-v0.2.5) - 2025-03-18
 
 ### Added

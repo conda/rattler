@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.6](https://github.com/conda/rattler/compare/rattler_conda_types-v0.31.5...rattler_conda_types-v0.31.6) - 2025-04-03
+
+### Fixed
+
+- allow empty info key in repodata.json ([#1181](https://github.com/conda/rattler/pull/1181))
+
+### Other
+
+- add the remove_from_backup function and update the prefix ([#1155](https://github.com/conda/rattler/pull/1155))
+
 ## [0.31.5](https://github.com/conda/rattler/compare/rattler_conda_types-v0.31.4...rattler_conda_types-v0.31.5) - 2025-03-14
 
 ### Added

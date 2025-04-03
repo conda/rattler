@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.3](https://github.com/conda/rattler/compare/rattler_index-v0.22.2...rattler_index-v0.22.3) - 2025-04-03
+
+### Added
+
+- add retry middleware to opendal operator ([#1207](https://github.com/conda/rattler/pull/1207))
+
+### Fixed
+
+- allow empty info key in repodata.json ([#1181](https://github.com/conda/rattler/pull/1181))
+- don't clone package bytes in rattler-index ([#1175](https://github.com/conda/rattler/pull/1175))
+
 ## [0.22.2](https://github.com/conda/rattler/compare/rattler_index-v0.22.1...rattler_index-v0.22.2) - 2025-03-18
 
 ### Other

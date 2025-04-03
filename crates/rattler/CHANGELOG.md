@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0](https://github.com/conda/rattler/compare/rattler-v0.33.3...rattler-v0.34.0) - 2025-04-03
+
+### Added
+
+- Set link options in installer ([#1178](https://github.com/conda/rattler/pull/1178))
+
+### Other
+
+- add the remove_from_backup function and update the prefix ([#1155](https://github.com/conda/rattler/pull/1155))
+
 ## [0.33.3](https://github.com/conda/rattler/compare/rattler-v0.33.2...rattler-v0.33.3) - 2025-03-18
 
 ### Fixed
