@@ -10,7 +10,7 @@ use pyo3::{
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
-    NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
+    Channel, NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
 };
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use url::Url;
@@ -207,7 +207,7 @@ impl PyRecord {
                 channel: channel
                     .map(|channel| Url::parse(&channel).map_err(PyRattlerError::from))
                     .transpose()?
-                    .map(Into::into),
+                    .map(Channel::from_url),
             }),
         })
     }
@@ -571,13 +571,16 @@ impl PyRecord {
             .try_as_repodata_record()?
             .channel
             .as_ref()
-            .map(|channel| channel.as_str().to_string()))
+            .map(rattler_conda_types::Channel::canonical_name))
     }
 
     #[setter]
     pub fn set_channel(&mut self, channel: String) -> PyResult<()> {
-        self.try_as_repodata_record_mut()?.channel =
-            Some(Url::parse(&channel).map_err(PyRattlerError::from)?.into());
+        self.try_as_repodata_record_mut()?.channel = Some(
+            Url::parse(&channel)
+                .map_err(PyRattlerError::from)
+                .map(Channel::from_url)?,
+        );
         Ok(())
     }
 

@@ -175,19 +175,19 @@ impl super::SolverImpl for Solver {
             if repodata.records.is_empty() {
                 continue;
             }
-            let channel_name = &repodata.records[0].channel;
+            let channel = &repodata.records[0].channel;
 
             // We dont want to drop the Repo, its stored in the pool anyway.
             let priority: i32 = if task.channel_priority == ChannelPriority::Strict {
-                *channel_priority.get(channel_name).unwrap()
+                *channel_priority.get(channel).unwrap()
             } else {
                 0
             };
-            let repo = ManuallyDrop::new(Repo::new(
-                &pool,
-                channel_name.as_ref().map_or("<direct>", String::as_str),
-                priority,
-            ));
+            let channel_url: String = channel.as_ref().map_or(
+                "<direct>".to_string(),
+                rattler_conda_types::Channel::canonical_name,
+            );
+            let repo = ManuallyDrop::new(Repo::new(&pool, &channel_url, priority));
 
             if let Some(solv_file) = repodata.solv_file {
                 add_solv_file(&pool, &repo, solv_file);
