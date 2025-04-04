@@ -12,9 +12,11 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use url::Url;
 
+use super::source_data::SourceLocationSerializer;
 use crate::{
     conda,
     conda::{CondaBinaryData, CondaSourceData},
+    source::SourceLocation,
     utils::{derived_fields, derived_fields::LocationDerivedFields},
     CondaPackageData, ConversionError, UrlOrPath,
 };
@@ -109,6 +111,10 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<InputHash<'a>>,
+
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde_as(as = "BTreeMap<_, SourceLocationSerializer>")]
+    pub sources: BTreeMap<String, SourceLocation>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
@@ -221,6 +227,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                     hash: input.hash,
                     globs: input.globs.into_owned(),
                 }),
+                sources: value.sources,
             }))
         }
     }
@@ -240,6 +247,9 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
         let channel = value.as_binary().and_then(|binary| binary.channel.as_ref());
         let file_name = value.as_binary().map(|binary| binary.file_name.as_str());
         let input = value.as_source().and_then(|source| source.input.as_ref());
+        let sources = value
+            .as_source()
+            .map_or_else(BTreeMap::new, |source| source.sources.clone());
 
         let normalized_channel = channel
             .map(|channel| strip_trailing_slash(channel.as_ref()))
@@ -285,6 +295,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                 hash: input.hash,
                 globs: Cow::Borrowed(&input.globs),
             }),
+            sources,
         }
     }
 }

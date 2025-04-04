@@ -1,0 +1,37 @@
+version: 6
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      win-64:
+        - conda: child-package
+packages:
+  - conda: child-package
+    name: child-package
+    version: 0.1.0
+    build: pyhbf21a9e_0
+    subdir: noarch
+    depends:
+      - path
+      - git_tag
+      - git_rev
+      - git_branch
+    # This should cause the lock-file to be invalid because `foobar` should be a source package,
+    # but it is installed in the environment as a binary package.
+    sources:
+      path:
+        path: "foobar"
+      git_tag:
+        git: https://github.com/example/baz.git
+        tag: v0.1.0
+      git_rev:
+        git: https://github.com/example/baz.git
+        rev: deadbeaf
+      git_branch:
+        git: https://github.com/example/baz.git
+        branch: foobar
+      url:
+        url: https://example.com/foobar.tar.gz
+        sha256: 1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+        md5: 1234567890abcdef1234567890abcdef
