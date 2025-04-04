@@ -1,6 +1,6 @@
 [package]
 name = "rattler_repodata_gateway"
-version = "0.22.3"
+version = "0.22.4"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to interact with Conda repodata"
@@ -22,7 +22,7 @@ cache_control = { workspace = true }
 chrono = { workspace = true, features = ["std", "serde", "alloc", "clock"] }
 dashmap = { workspace = true }
 dirs = { workspace = true }
-file_url = { path = "../file_url", version = "0.2.3" }
+file_url = { path = "../file_url", version = "0.2.4" }
 futures = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
 http = { workspace = true, optional = true }
@@ -34,9 +34,9 @@ json-patch = { workspace = true }
 self_cell = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
 pin-project-lite = { workspace = true }
-rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.5", default-features = false, optional = true }
-rattler_digest = { path = "../rattler_digest", version = "1.0.8", default-features = false, features = ["tokio", "serde"] }
-rattler_networking = { path = "../rattler_networking", version = "0.22.10", default-features = false }
+rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.6", default-features = false, optional = true }
+rattler_digest = { path = "../rattler_digest", version = "1.1.0", default-features = false, features = ["tokio", "serde"] }
+rattler_networking = { path = "../rattler_networking", version = "0.22.11", default-features = false }
 reqwest = { workspace = true, features = ["stream", "http2"] }
 reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
@@ -53,8 +53,8 @@ tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 zstd = { workspace = true }
 retry-policies = { workspace = true }
-rattler_cache = { version = "0.3.15", path = "../rattler_cache" }
-rattler_redaction = { version = "0.1.8", path = "../rattler_redaction", features = ["reqwest", "reqwest-middleware"] }
+rattler_cache = { version = "0.3.16", path = "../rattler_cache" }
+rattler_redaction = { version = "0.1.9", path = "../rattler_redaction", features = ["reqwest", "reqwest-middleware"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
