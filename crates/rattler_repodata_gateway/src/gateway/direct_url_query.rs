@@ -6,7 +6,7 @@ use rattler_conda_types::{
     package::{ArchiveIdentifier, IndexJson, PackageFile},
     ConvertSubdirError, PackageRecord, RepoDataRecord,
 };
-use rattler_digest::Sha256Hash;
+use rattler_digest::{Md5Hash, Sha256Hash};
 use url::Url;
 
 pub(crate) struct DirectUrlQuery {
@@ -14,6 +14,8 @@ pub(crate) struct DirectUrlQuery {
     url: Url,
     /// Optional Sha256 of the file
     sha256: Option<Sha256Hash>,
+    /// Optional MD5 of the file
+    md5: Option<Md5Hash>,
     /// The client to use for fetching the package
     client: reqwest_middleware::ClientWithMiddleware,
     /// The cache to use for storing the package
@@ -38,10 +40,12 @@ impl DirectUrlQuery {
         package_cache: PackageCache,
         client: reqwest_middleware::ClientWithMiddleware,
         sha256: Option<Sha256Hash>,
+        md5: Option<Md5Hash>,
     ) -> Self {
         Self {
             url,
             sha256,
+            md5,
             client,
             package_cache,
         }
@@ -80,7 +84,7 @@ impl DirectUrlQuery {
             index_json,
             None,        // Size
             self.sha256, // sha256
-            None,        // md5
+            self.md5,    // md5
         )?;
 
         tracing::debug!("Package record build from direct url: {:?}", package_record);
@@ -122,32 +126,19 @@ mod test {
         .unwrap();
         let package_cache = PackageCache::new(PathBuf::from("/tmp"));
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
-        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None);
+        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None, None);
 
         assert_eq!(query.url.clone(), url);
 
         let repodata_record = query.await.unwrap();
 
-        assert_eq!(
-            repodata_record
-                .as_ref()
-                .first()
-                .unwrap()
-                .package_record
-                .name
-                .as_normalized(),
-            "boltons"
-        );
-        assert_eq!(
-            repodata_record
-                .as_ref()
-                .first()
-                .unwrap()
-                .package_record
-                .version
-                .as_str(),
-            "24.0.0"
-        );
+        let record = repodata_record.as_ref().first().unwrap();
+
+        assert_eq!(record.package_record.name.as_normalized(), "boltons");
+        assert_eq!(record.package_record.version.as_str(), "24.0.0");
+
+        // Check that the md5 is filled in for the package record
+        assert!(record.package_record.md5.is_some());
     }
 
     #[tokio::test]
@@ -164,30 +155,14 @@ mod test {
         let url = Url::from_file_path(package_path).unwrap();
         let package_cache = PackageCache::new(temp_dir());
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
-        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None);
+        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None, None);
 
         assert_eq!(query.url.clone(), url);
 
-        let repodata_record = query.await.unwrap();
-        assert_eq!(
-            repodata_record
-                .as_ref()
-                .first()
-                .unwrap()
-                .package_record
-                .name
-                .as_normalized(),
-            "zlib"
-        );
-        assert_eq!(
-            repodata_record
-                .as_ref()
-                .first()
-                .unwrap()
-                .package_record
-                .version
-                .as_str(),
-            "1.2.8"
-        );
+        let result = query.await.unwrap();
+        let record = result.as_ref().first().unwrap();
+
+        assert_eq!(record.package_record.name.as_normalized(), "zlib");
+        assert_eq!(record.package_record.version.as_str(), "1.2.8");
     }
 }
