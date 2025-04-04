@@ -14,11 +14,13 @@ readme.workspace = true
 enum_dispatch = { workspace = true }
 indexmap = { workspace = true }
 fs-err = { workspace = true }
+miette = { version = "7.4.0" }
 itertools = { workspace = true }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.31.6", default-features = false }
+rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.6", default-features = false }
+rattler_pty = { path = "../rattler_pty", version = "0.1.0", default-features = false }
 serde_json = { workspace = true, features = ["preserve_order"] }
 shlex = { workspace = true }
-sysinfo = { workspace = true , optional = true }
+sysinfo = { workspace = true, optional = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -26,3 +28,4 @@ tracing = { workspace = true }
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }
 tempdir = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

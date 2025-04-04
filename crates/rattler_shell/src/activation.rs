@@ -4,6 +4,10 @@
 //! environments.
 
 use fs_err as fs;
+#[cfg(target_family = "unix")]
+use miette::IntoDiagnostic;
+#[cfg(target_family = "unix")]
+use std::io::Write;
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -13,6 +17,8 @@ use std::{
 
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
+#[cfg(target_family = "unix")]
+use rattler_pty::unix::PtySession;
 
 use crate::shell::{Shell, ShellScript};
 
@@ -350,6 +356,64 @@ impl<T: Shell + Clone> Activator<T> {
             env_vars,
             platform,
         })
+    }
+
+    /// Starts a UNIX shell.
+    /// # Arguments
+    /// - `shell`: The type of shell to start. Must implement the `Shell` and `Copy` traits.
+    /// - `args`: A vector of arguments to pass to the shell.
+    /// - `env`: A `HashMap` containing environment variables to set in the shell.
+    /// - `prompt`: Prompt to the shell
+    #[cfg(target_family = "unix")]
+    #[allow(dead_code)]
+    async fn start_unix_shell<T_: Shell + Copy + 'static>(
+        shell: T_,
+        args: Vec<&str>,
+        env: &HashMap<String, String>,
+        prompt: String,
+    ) -> miette::Result<Option<i32>> {
+        const DONE_STR: &str = "RATTLER_SHELL_ACTIVATION_DONE";
+        // create a tempfile for activation
+        let mut temp_file = tempfile::Builder::new()
+            .prefix("rattler_env_")
+            .suffix(&format!(".{}", shell.extension()))
+            .rand_bytes(3)
+            .tempfile()
+            .into_diagnostic()?;
+
+        let mut shell_script = ShellScript::new(shell, Platform::current());
+        for (key, value) in env {
+            shell_script.set_env_var(key, value).into_diagnostic()?;
+        }
+
+        shell_script.echo(DONE_STR).into_diagnostic()?;
+
+        temp_file
+            .write_all(shell_script.contents().into_diagnostic()?.as_bytes())
+            .into_diagnostic()?;
+
+        // Write custom prompt to the env file
+        temp_file.write(prompt.as_bytes()).into_diagnostic()?;
+
+        let mut command = std::process::Command::new(shell.executable());
+        command.args(args);
+
+        // Space added before `source` to automatically ignore it in history.
+        let mut source_command = " ".to_string();
+        shell
+            .run_script(&mut source_command, temp_file.path())
+            .into_diagnostic()?;
+
+        // Remove automatically added `\n`, if for some reason this fails, just ignore.
+        let source_command = source_command
+            .strip_suffix('\n')
+            .unwrap_or(source_command.as_str());
+
+        // Start process and send env activation to the shell.
+        let mut process = PtySession::new(command).into_diagnostic()?;
+        process.send_line(source_command).into_diagnostic()?;
+
+        process.interact(Some(DONE_STR)).into_diagnostic()
     }
 
     /// Create an activation script for a given shell and platform. This
