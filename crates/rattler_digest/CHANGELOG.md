@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0](https://github.com/conda/rattler/compare/rattler_digest-v1.0.8...rattler_digest-v1.1.0) - 2025-04-04
+
+### Added
+
+- derive `Debug` and `Clone` for `SerializableHash` ([#1226](https://github.com/conda/rattler/pull/1226))
+
 ## [1.0.8](https://github.com/conda/rattler/compare/rattler_digest-v1.0.7...rattler_digest-v1.0.8) - 2025-03-10
 
 ### Other
