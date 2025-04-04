@@ -14,7 +14,7 @@ use std::{
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
 
-use crate::shell::{Shell, ShellScript};
+use crate::shell::{Shell, ShellError, ShellScript};
 
 const ENV_START_SEPARATOR: &str = "____RATTLER_ENV_START____";
 
@@ -130,6 +130,10 @@ pub enum ActivationError {
     /// An error that can occur when reading or writing files
     #[error(transparent)]
     IoError(#[from] std::io::Error),
+
+    /// An error that can occur when running a command
+    #[error(transparent)]
+    ShellError(#[from] ShellError),
 
     /// An error that can occur when parsing JSON
     #[error("Invalid json for environment vars: {0} in file {1:?}")]
