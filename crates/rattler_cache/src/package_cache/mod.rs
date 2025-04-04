@@ -43,6 +43,7 @@ mod reporter;
 #[derive(Clone)]
 pub struct PackageCache {
     inner: Arc<PackageCacheInner>,
+    cache_origin: bool,
 }
 
 #[derive(Default)]
@@ -57,6 +58,7 @@ pub struct BucketKey {
     name: String,
     version: String,
     build_string: String,
+    origin_hash: Option<String>,
 }
 
 impl From<CacheKey> for BucketKey {
@@ -65,6 +67,7 @@ impl From<CacheKey> for BucketKey {
             name: key.name,
             version: key.version,
             build_string: key.build_string,
+            origin_hash: key.origin_hash,
         }
     }
 }
@@ -106,6 +109,16 @@ impl PackageCache {
                 path: path.into(),
                 packages: DashMap::default(),
             }),
+            cache_origin: false,
+        }
+    }
+
+    /// Adds the origin (url or path) to the cache key to avoid unwanted cache hits of packages
+    /// with packages with similar properties.
+    pub fn with_cached_origin(self) -> Self {
+        Self {
+            cache_origin: true,
+            ..self
         }
     }
 
@@ -130,7 +143,7 @@ impl PackageCache {
         Fut: Future<Output = Result<(), E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let cache_key = pkg.into();
+        let cache_key: CacheKey = pkg.into();
         let cache_path = self.inner.path.join(cache_key.to_string());
         let cache_entry = self
             .inner
@@ -188,13 +201,18 @@ impl PackageCache {
         path: &Path,
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheLock, PackageCacheError> {
-        let path = path.to_path_buf();
+        let path_buf = path.to_path_buf();
+        let mut cache_key: CacheKey = ArchiveIdentifier::try_from_path(&path_buf).unwrap().into();
+        if self.cache_origin {
+            cache_key = cache_key.with_path(path);
+        }
+
         self.get_or_fetch(
-            ArchiveIdentifier::try_from_path(&path).unwrap(),
+            cache_key,
             move |destination| {
-                let path = path.clone();
+                let path_buf = path_buf.clone();
                 async move {
-                    rattler_package_streaming::tokio::fs::extract(&path, &destination)
+                    rattler_package_streaming::tokio::fs::extract(&path_buf, &destination)
                         .await
                         .map(|_| ())
                 }
@@ -226,7 +244,10 @@ impl PackageCache {
     ) -> Result<CacheLock, PackageCacheError> {
         let request_start = SystemTime::now();
         // Convert into cache key
-        let cache_key = pkg.into();
+        let mut cache_key = pkg.into();
+        if self.cache_origin {
+            cache_key = cache_key.with_url(url.clone());
+        }
         // Sha256 of the expected package
         let sha256 = cache_key.sha256();
         let download_reporter = reporter.clone();
@@ -498,7 +519,7 @@ mod test {
     use bytes::Bytes;
     use futures::stream;
     use rattler_conda_types::package::{ArchiveIdentifier, PackageFile, PathsJson};
-    use rattler_digest::{parse_digest_from_hex, Sha256};
+    use rattler_digest::{compute_bytes_digest, parse_digest_from_hex, Sha256};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use reqwest::Client;
     use reqwest_middleware::ClientBuilder;
@@ -773,6 +794,38 @@ mod test {
             .unwrap();
 
         assert_eq!(cache_c_lock.revision(), 2);
+    }
+
+    fn get_file_name_from_path(path: &Path) -> &str {
+        path.file_name().unwrap().to_str().unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_origin_hash_from_path() {
+        let packages_dir = tempdir().unwrap();
+        let package_cache_with_origin_hash = PackageCache::new(packages_dir.path());
+        let package_cache_without_origin_hash =
+            PackageCache::new(packages_dir.path()).with_cached_origin();
+
+        let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+
+        let cache_lock_with_origin_hash = package_cache_with_origin_hash
+            .get_or_fetch_from_path(&package_path, None)
+            .await
+            .unwrap();
+
+        let file_name = get_file_name_from_path(cache_lock_with_origin_hash.path());
+        assert_eq!(file_name, "clobber-python-0.1.0-cpython");
+
+        let cache_lock_without_origin_hash = package_cache_without_origin_hash
+            .get_or_fetch_from_path(&package_path, None)
+            .await
+            .unwrap();
+
+        let file_name = get_file_name_from_path(cache_lock_without_origin_hash.path());
+        let path_hash = compute_bytes_digest::<Sha256>(package_path.to_string_lossy().as_bytes());
+        let expected_file_name = format!("clobber-python-0.1.0-cpython-{:x}", path_hash);
+        assert_eq!(file_name, expected_file_name);
     }
 
     #[tokio::test]
