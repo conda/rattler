@@ -3,9 +3,9 @@
 //! This crate provides helper functions to activate and deactivate virtual
 //! environments.
 
-use fs_err as fs;
 #[cfg(target_family = "unix")]
-use miette::IntoDiagnostic;
+use anyhow::{Context, Result};
+use fs_err as fs;
 #[cfg(target_family = "unix")]
 use std::io::Write;
 use std::{
@@ -371,7 +371,7 @@ impl<T: Shell + Clone> Activator<T> {
         args: Vec<&str>,
         env: &HashMap<String, String>,
         prompt: String,
-    ) -> miette::Result<Option<i32>> {
+    ) -> Result<Option<i32>> {
         const DONE_STR: &str = "RATTLER_SHELL_ACTIVATION_DONE";
         // create a tempfile for activation
         let mut temp_file = tempfile::Builder::new()
@@ -379,21 +379,23 @@ impl<T: Shell + Clone> Activator<T> {
             .suffix(&format!(".{}", shell.extension()))
             .rand_bytes(3)
             .tempfile()
-            .into_diagnostic()?;
+            .context("Failed to create tmp file")?;
 
         let mut shell_script = ShellScript::new(shell, Platform::current());
         for (key, value) in env {
-            shell_script.set_env_var(key, value).into_diagnostic()?;
+            shell_script
+                .set_env_var(key, value)
+                .context("Failed to set env var")?;
         }
 
-        shell_script.echo(DONE_STR).into_diagnostic()?;
+        shell_script.echo(DONE_STR)?;
 
         temp_file
-            .write_all(shell_script.contents().into_diagnostic()?.as_bytes())
-            .into_diagnostic()?;
+            .write_all(shell_script.contents()?.as_bytes())
+            .context("Failed to write shell script content")?;
 
         // Write custom prompt to the env file
-        temp_file.write(prompt.as_bytes()).into_diagnostic()?;
+        temp_file.write_all(prompt.as_bytes())?;
 
         let mut command = std::process::Command::new(shell.executable());
         command.args(args);
@@ -402,7 +404,7 @@ impl<T: Shell + Clone> Activator<T> {
         let mut source_command = " ".to_string();
         shell
             .run_script(&mut source_command, temp_file.path())
-            .into_diagnostic()?;
+            .context("Failed to run the script")?;
 
         // Remove automatically added `\n`, if for some reason this fails, just ignore.
         let source_command = source_command
@@ -410,10 +412,14 @@ impl<T: Shell + Clone> Activator<T> {
             .unwrap_or(source_command.as_str());
 
         // Start process and send env activation to the shell.
-        let mut process = PtySession::new(command).into_diagnostic()?;
-        process.send_line(source_command).into_diagnostic()?;
+        let mut process = PtySession::new(command)?;
+        process
+            .send_line(source_command)
+            .context("Failed to send command to shell")?;
 
-        process.interact(Some(DONE_STR)).into_diagnostic()
+        process
+            .interact(Some(DONE_STR))
+            .context("Failed to interact with shell process")
     }
 
     /// Create an activation script for a given shell and platform. This

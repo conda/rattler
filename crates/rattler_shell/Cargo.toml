@@ -11,10 +11,10 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 enum_dispatch = { workspace = true }
 indexmap = { workspace = true }
 fs-err = { workspace = true }
-miette = { version = "7.4.0" }
 itertools = { workspace = true }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.6", default-features = false }
 rattler_pty = { path = "../rattler_pty", version = "0.1.0", default-features = false }
