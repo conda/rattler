@@ -58,7 +58,7 @@ pyo3-async-runtimes = { version = "0.23.0", features = ["tokio-runtime"] }
 tokio = { version = "1.44" }
 
 reqwest = { version = "0.12.15", default-features = false }
-reqwest-middleware = "0.4.1"
+reqwest-middleware = "0.4.2"
 
 thiserror = "2.0.12"
 url = "2.5.4"
