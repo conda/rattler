@@ -39,7 +39,7 @@ impl CacheKey {
 
     /// Adds a hash of the Path to the cache key
     pub fn with_path(mut self, path: &Path) -> Self {
-        let path_hash = compute_bytes_digest::<Sha256>(path.to_os_str().as_encoded_bytes());
+        let path_hash = compute_bytes_digest::<Sha256>(path.as_os_str().as_encoded_bytes());
         self.origin_hash = Some(format!("{path_hash:x}"));
         self
     }
