@@ -92,7 +92,7 @@ class MatchSpec:
         >>> MatchSpec("pip 24")
         MatchSpec("pip ==24")
         >>> MatchSpec('python[license=MIT]')
-        MatchSpec('python[license=MIT]')
+        MatchSpec("python[license="MIT"]")
         >>>
         ```
         """
