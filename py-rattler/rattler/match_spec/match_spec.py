@@ -91,8 +91,8 @@ class MatchSpec:
         MatchSpec("pip >=24.0")
         >>> MatchSpec("pip 24")
         MatchSpec("pip ==24")
-        >>> MatchSpec('*[license="MIT"]')
-        MatchSpec('*=*=*[license="MIT"]')
+        >>> MatchSpec('python[license=MIT]')
+        MatchSpec('python[license=MIT]')
         >>>
         ```
         """
