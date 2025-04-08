@@ -1,10 +1,10 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Optional
+
 from rattler.channel.channel import Channel
-
-from rattler.rattler import PyMatchSpec
-
 from rattler.package.package_name import PackageName
+from rattler.rattler import PyMatchSpec
 
 if TYPE_CHECKING:
     from rattler.match_spec import NamelessMatchSpec
@@ -91,6 +91,8 @@ class MatchSpec:
         MatchSpec("pip >=24.0")
         >>> MatchSpec("pip 24")
         MatchSpec("pip ==24")
+        >>> MatchSpec('*[license="MIT"]')
+        MatchSpec('*=*=*[license="MIT"]')
         >>>
         ```
         """
@@ -98,7 +100,7 @@ class MatchSpec:
             self._match_spec = PyMatchSpec(spec, strict)
         else:
             raise TypeError(
-                "MatchSpec constructor received unsupported type" f" {type(spec).__name__!r} for the 'spec' parameter"
+                f"MatchSpec constructor received unsupported type {type(spec).__name__!r} for the 'spec' parameter"
             )
 
     @property

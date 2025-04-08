@@ -152,6 +152,8 @@ pub struct MatchSpec {
     pub sha256: Option<Sha256Hash>,
     /// The url of the package
     pub url: Option<Url>,
+    /// The license of the package
+    pub license: Option<String>,
 }
 
 impl Display for MatchSpec {
@@ -210,6 +212,10 @@ impl Display for MatchSpec {
             keys.push(format!("url=\"{url}\""));
         }
 
+        if let Some(license) = &self.license {
+            keys.push(format!("license=\"{license}\""));
+        }
+
         if !keys.is_empty() {
             write!(f, "[{}]", keys.join(", "))?;
         }
@@ -235,6 +241,7 @@ impl MatchSpec {
                 md5: self.md5,
                 sha256: self.sha256,
                 url: self.url,
+                license: self.license,
             },
         )
     }
@@ -290,6 +297,8 @@ pub struct NamelessMatchSpec {
     pub sha256: Option<Sha256Hash>,
     /// The url of the package
     pub url: Option<Url>,
+    /// The license of the package
+    pub license: Option<String>,
 }
 
 impl Display for NamelessMatchSpec {
@@ -335,6 +344,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             md5: spec.md5,
             sha256: spec.sha256,
             url: spec.url,
+            license: spec.license,
         }
     }
 }
@@ -355,6 +365,7 @@ impl MatchSpec {
             md5: spec.md5,
             sha256: spec.sha256,
             url: spec.url,
+            license: spec.license,
         }
     }
 }
@@ -754,7 +765,7 @@ mod tests {
             "conda-forge::pytest[version='==1.0', sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]",
             "conda-forge/linux-64::pytest",
             "conda-forge/linux-64::pytest[version=1.0.*]",
-            "conda-forge/linux-64::pytest[version=1.0.*, build=py37_0]",
+            "conda-forge/linux-64::pytest[version=1.0.*, build=py37_0, license=MIT]",
             "conda-forge/linux-64::pytest ==1.2.3"];
 
         assert_snapshot!(specs
