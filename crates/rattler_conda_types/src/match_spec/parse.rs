@@ -324,7 +324,8 @@ fn parse_bracket_vec_into_components(
                 match_spec.channel = match_spec.channel.or(channel.map(Arc::new));
                 match_spec.subdir = match_spec.subdir.or(subdir);
             }
-            // TODO: Still need to add `track_features`, `features`, `license` and `license_family`
+            "license" => match_spec.license = Some(value.to_string()),
+            // TODO: Still need to add `track_features`, `features`, and `license_family`
             // to the match spec.
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
         }
@@ -1323,6 +1324,14 @@ mod tests {
     }
 
     #[test]
+    fn test_parsing_license() {
+        let spec = MatchSpec::from_str("python[license=MIT]", Strict).unwrap();
+
+        assert_eq!(spec.name, Some("python".parse().unwrap()));
+        assert_eq!(spec.license, Some("MIT".into()));
+    }
+
+    #[test]
     fn test_issue_717() {
         assert_matches!(
             MatchSpec::from_str("ray[default,data] >=2.9.0,<3.0.0", Strict),
@@ -1407,6 +1416,7 @@ mod tests {
                 )
                 .unwrap(),
             ),
+            license: Some("MIT".into()),
         });
 
         // insta check all the strings
