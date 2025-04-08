@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.4](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.3...rattler_repodata_gateway-v0.22.4) - 2025-04-04
+
+### Added
+
+- more helpful error when failing to persist repodata ([#1220](https://github.com/conda/rattler/pull/1220))
+
 ## [0.22.3](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.2...rattler_repodata_gateway-v0.22.3) - 2025-03-18
 
 ### Added
