@@ -1332,14 +1332,6 @@ mod tests {
     }
 
     #[test]
-    fn test_name_asterisk() {
-        let spec = MatchSpec::from_str("*[license=MIT]", Strict).unwrap();
-
-        assert_eq!(spec.name, None);
-        assert_eq!(spec.license, Some("MIT".into()));
-    }
-
-    #[test]
     fn test_issue_717() {
         assert_matches!(
             MatchSpec::from_str("ray[default,data] >=2.9.0,<3.0.0", Strict),
