@@ -566,12 +566,12 @@ mod tests {
     fn test_name_asterisk() {
         // Test that MatchSpec can be created with an asterisk as the package name
         let spec = MatchSpec::from_str("*[license=MIT]", Lenient).unwrap();
-        assert_eq!(spec.name, Some(PackageName::new_unchecked("*")));
+        assert_eq!(spec.name, None);
         assert_eq!(spec.license, Some("MIT".to_string()));
 
         // Test with a version
         let spec = MatchSpec::from_str("* >=1.0", Lenient).unwrap();
-        assert_eq!(spec.name, Some(PackageName::new_unchecked("*")));
+        assert_eq!(spec.name, None);
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str(">=1.0", Lenient).unwrap())
