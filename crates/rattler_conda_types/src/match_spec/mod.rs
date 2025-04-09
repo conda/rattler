@@ -548,7 +548,7 @@ mod tests {
 
     use crate::{
         match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
-        ParseStrictness::*, RepoDataRecord, StringMatcher, Version,
+        ParseStrictness::*, RepoDataRecord, StringMatcher, Version, VersionSpec,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -560,6 +560,22 @@ mod tests {
         let rebuild_spec = MatchSpec::from_str(&spec_as_string, Strict).unwrap();
 
         assert_eq!(spec, rebuild_spec);
+    }
+
+    #[test]
+    fn test_name_asterisk() {
+        // Test that MatchSpec can be created with an asterisk as the package name
+        let spec = MatchSpec::from_str("*[license=MIT]", Lenient).unwrap();
+        assert_eq!(spec.name, None);
+        assert_eq!(spec.license, Some("MIT".to_string()));
+
+        // Test with a version
+        let spec = MatchSpec::from_str("* >=1.0", Lenient).unwrap();
+        assert_eq!(spec.name, None);
+        assert_eq!(
+            spec.version,
+            Some(VersionSpec::from_str(">=1.0", Lenient).unwrap())
+        );
     }
 
     #[test]

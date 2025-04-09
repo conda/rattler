@@ -358,7 +358,7 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
 }
 
 /// Strip the package name from the input.
-fn strip_package_name(input: &str) -> Result<(PackageName, &str), ParseMatchSpecError> {
+fn strip_package_name(input: &str) -> Result<(Option<PackageName>, &str), ParseMatchSpecError> {
     let (rest, package_name) =
         take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(
             input.trim(),
@@ -371,7 +371,15 @@ fn strip_package_name(input: &str) -> Result<(PackageName, &str), ParseMatchSpec
         return Err(ParseMatchSpecError::MissingPackageName);
     }
 
-    Ok((PackageName::from_str(trimmed_package_name)?, rest.trim()))
+    // Handle asterisk as a wildcard (no package name)
+    if trimmed_package_name == "*" {
+        return Ok((None, rest.trim()));
+    }
+
+    Ok((
+        Some(PackageName::from_str(trimmed_package_name)?),
+        rest.trim(),
+    ))
 }
 
 /// Splits a string into version and build constraints.
@@ -640,7 +648,7 @@ fn matchspec_parser(
 
     // Step 6. Strip off the package name from the input
     let (name, input) = strip_package_name(input)?;
-    let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, Some(name));
+    let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, name);
 
     // Step 7. Otherwise, sort our version + build
     let input = input.trim();
