@@ -433,6 +433,12 @@ impl Matches<PackageRecord> for NamelessMatchSpec {
             }
         }
 
+        if let Some(license) = self.license.as_ref() {
+            if Some(license) != other.license.as_ref() {
+                return false;
+            }
+        }
+
         true
     }
 }
@@ -472,6 +478,12 @@ impl Matches<PackageRecord> for MatchSpec {
 
         if let Some(sha256_spec) = self.sha256.as_ref() {
             if Some(sha256_spec) != other.sha256.as_ref() {
+                return false;
+            }
+        }
+
+        if let Some(license) = self.license.as_ref() {
+            if Some(license) != other.license.as_ref() {
                 return false;
             }
         }
@@ -773,6 +785,52 @@ mod tests {
         assert!(match_spec.matches(&package_record));
         assert!(nameless_spec.matches(&repodata_record));
         assert!(nameless_spec.matches(&package_record));
+    }
+
+    #[test]
+    fn test_field_matches() {
+        let mut repodata_record = RepoDataRecord {
+            package_record: PackageRecord::new(
+                PackageName::new_unchecked("mamba"),
+                Version::from_str("1.0").unwrap(),
+                String::from(""),
+            ),
+            file_name: String::from("mamba-1.0-py37_0"),
+            url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
+            channel: Some(String::from("mamba")),
+        };
+        repodata_record.package_record.license = Some("BSD-3-Clause".into());
+        let package_record = repodata_record.clone().package_record;
+
+        let match_spec = MatchSpec::from_str("mamba[license=BSD-3-Clause]", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+        assert!(match_spec.matches(&repodata_record));
+        assert!(match_spec.matches(&package_record));
+        assert!(nameless_spec.matches(&repodata_record));
+        assert!(nameless_spec.matches(&package_record));
+
+        let match_spec = MatchSpec::from_str("mamba[license=MIT]", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+        assert!(!match_spec.matches(&repodata_record));
+        assert!(!match_spec.matches(&package_record));
+        assert!(!nameless_spec.matches(&repodata_record));
+        assert!(!nameless_spec.matches(&package_record));
+
+        let repodata_record_no_license = RepoDataRecord {
+            package_record: PackageRecord::new(
+                PackageName::new_unchecked("mamba"),
+                Version::from_str("1.0").unwrap(),
+                String::from(""),
+            ),
+            file_name: String::from("mamba-1.0-py37_0"),
+            url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
+            channel: Some(String::from("mamba")),
+        };
+        let package_record_no_license = repodata_record_no_license.clone().package_record;
+        assert!(!match_spec.matches(&repodata_record_no_license));
+        assert!(!match_spec.matches(&package_record_no_license));
+        assert!(!nameless_spec.matches(&repodata_record_no_license));
+        assert!(!nameless_spec.matches(&package_record_no_license));
     }
 
     #[test]
