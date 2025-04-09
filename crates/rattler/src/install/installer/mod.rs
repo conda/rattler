@@ -58,7 +58,7 @@ pub struct Installer {
     reporter: Option<Arc<dyn Reporter>>,
     target_platform: Option<Platform>,
     apple_code_sign_behavior: AppleCodeSignBehavior,
-    alternative_target_prefix: Option<Prefix>,
+    alternative_target_prefix: Option<PathBuf>,
     reinstall_packages: Option<HashSet<PackageName>>,
     // TODO: Determine upfront if these are possible.
     link_options: LinkOptions,

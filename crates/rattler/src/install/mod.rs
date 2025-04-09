@@ -151,7 +151,7 @@ pub struct InstallOptions {
     /// However, in exceptional cases you might want to use a different prefix
     /// than the one that is being installed to. This field allows you to do
     /// that. When its set this is used instead of the target directory.
-    pub target_prefix: Option<Prefix>,
+    pub target_prefix: Option<PathBuf>,
 
     /// Instead of reading the `paths.json` file from the package directory
     /// itself, use the data specified here.
