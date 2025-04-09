@@ -75,6 +75,14 @@ impl TryFrom<String> for PackageName {
     type Error = InvalidPackageNameError;
 
     fn try_from(source: String) -> Result<Self, Self::Error> {
+        // Special case for wildcard package name
+        if source == "*" {
+            return Ok(Self {
+                normalized: None,
+                source,
+            });
+        }
+
         // Ensure that the string only contains valid characters
         if !source
             .chars()
@@ -177,5 +185,16 @@ mod test {
         assert_eq!(name1, name2);
 
         assert!(PackageName::try_from("invalid$").is_err());
+    }
+
+    #[test]
+    fn test_wildcard_package_name() {
+        // Test that asterisk is allowed as a package name
+        let name = PackageName::try_from("*").unwrap();
+        assert_eq!(name.as_source(), "*");
+        assert_eq!(name.as_normalized(), "*");
+
+        // Confirm it's not normalized (since it's a special case)
+        assert!(name.normalized.is_none());
     }
 }
