@@ -11,7 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-anyhow.workspace = true
+anyhow = { workspace = true }
 enum_dispatch = { workspace = true }
 indexmap = { workspace = true }
 fs-err = { workspace = true }
