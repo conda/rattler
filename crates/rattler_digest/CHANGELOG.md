@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1](https://github.com/conda/rattler/compare/rattler_digest-v1.1.0...rattler_digest-v1.1.1) - 2025-04-10
+
+### Fixed
+
+- Add location to the cache key ([#1143](https://github.com/conda/rattler/pull/1143))
+
 ## [1.1.0](https://github.com/conda/rattler/compare/rattler_digest-v1.0.8...rattler_digest-v1.1.0) - 2025-04-04
 
 ### Added
