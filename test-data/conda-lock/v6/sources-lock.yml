@@ -17,8 +17,6 @@ packages:
       - git_tag
       - git_rev
       - git_branch
-    # This should cause the lock-file to be invalid because `foobar` should be a source package,
-    # but it is installed in the environment as a binary package.
     sources:
       path:
         path: "foobar"
