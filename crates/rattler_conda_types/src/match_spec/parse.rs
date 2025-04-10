@@ -324,7 +324,8 @@ fn parse_bracket_vec_into_components(
                 match_spec.channel = match_spec.channel.or(channel.map(Arc::new));
                 match_spec.subdir = match_spec.subdir.or(subdir);
             }
-            // TODO: Still need to add `track_features`, `features`, `license` and `license_family`
+            "license" => match_spec.license = Some(value.to_string()),
+            // TODO: Still need to add `track_features`, `features`, and `license_family`
             // to the match spec.
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
         }
@@ -357,7 +358,7 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
 }
 
 /// Strip the package name from the input.
-fn strip_package_name(input: &str) -> Result<(PackageName, &str), ParseMatchSpecError> {
+fn strip_package_name(input: &str) -> Result<(Option<PackageName>, &str), ParseMatchSpecError> {
     let (rest, package_name) =
         take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(
             input.trim(),
@@ -370,7 +371,15 @@ fn strip_package_name(input: &str) -> Result<(PackageName, &str), ParseMatchSpec
         return Err(ParseMatchSpecError::MissingPackageName);
     }
 
-    Ok((PackageName::from_str(trimmed_package_name)?, rest.trim()))
+    // Handle asterisk as a wildcard (no package name)
+    if trimmed_package_name == "*" {
+        return Ok((None, rest.trim()));
+    }
+
+    Ok((
+        Some(PackageName::from_str(trimmed_package_name)?),
+        rest.trim(),
+    ))
 }
 
 /// Splits a string into version and build constraints.
@@ -639,7 +648,7 @@ fn matchspec_parser(
 
     // Step 6. Strip off the package name from the input
     let (name, input) = strip_package_name(input)?;
-    let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, Some(name));
+    let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, name);
 
     // Step 7. Otherwise, sort our version + build
     let input = input.trim();
@@ -1323,6 +1332,14 @@ mod tests {
     }
 
     #[test]
+    fn test_parsing_license() {
+        let spec = MatchSpec::from_str("python[license=MIT]", Strict).unwrap();
+
+        assert_eq!(spec.name, Some("python".parse().unwrap()));
+        assert_eq!(spec.license, Some("MIT".into()));
+    }
+
+    #[test]
     fn test_issue_717() {
         assert_matches!(
             MatchSpec::from_str("ray[default,data] >=2.9.0,<3.0.0", Strict),
@@ -1407,6 +1424,7 @@ mod tests {
                 )
                 .unwrap(),
             ),
+            license: Some("MIT".into()),
         });
 
         // insta check all the strings
