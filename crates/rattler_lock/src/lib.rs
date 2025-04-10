@@ -90,6 +90,7 @@ mod hash;
 mod parse;
 mod pypi;
 mod pypi_indexes;
+pub mod source;
 mod url_or_path;
 mod utils;
 
@@ -545,6 +546,7 @@ mod test {
     #[case::v5_with_and_without_purl("v5/similar-with-and-without-purl.yml")]
     #[case::v6_conda_source_path("v6/conda-path-lock.yml")]
     #[case::v6_derived_channel("v6/derived-channel-lock.yml")]
+    #[case::v6_sources("v6/sources-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
