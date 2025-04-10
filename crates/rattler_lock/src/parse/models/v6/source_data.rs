@@ -49,8 +49,8 @@ impl<'a> From<&'a UrlSourceLocation> for SourceLocationData<'a> {
     fn from(value: &'a UrlSourceLocation) -> Self {
         Self {
             url: Some(Cow::Borrowed(&value.url)),
-            md5: value.md5.clone(),
-            sha256: value.sha256.clone(),
+            md5: value.md5,
+            sha256: value.sha256,
             git: None,
             rev: None,
             branch: None,
@@ -130,7 +130,10 @@ impl<'a> TryFrom<SourceLocationData<'a>> for SourceLocation {
             subdirectory,
         } = value;
 
-        let count = url.is_some() as u8 + path.is_some() as u8 + git.is_some() as u8;
+        let count = [url.is_some(), path.is_some(), git.is_some()]
+            .into_iter()
+            .filter(|&x| x)
+            .count();
         if count != 1 {
             return Err(SourceLocationError::MissingOrMultipleSourceRoots);
         }
@@ -154,7 +157,7 @@ impl<'a> TryFrom<SourceLocationData<'a>> for SourceLocation {
             Ok(SourceLocation::Git(GitSourceLocation {
                 git,
                 rev,
-                subdirectory: subdirectory.map(|subdirectory| subdirectory.into_owned()),
+                subdirectory: subdirectory.map(Cow::into_owned),
             }))
         } else {
             unreachable!("we already checked that exactly one of url, path or git is set")

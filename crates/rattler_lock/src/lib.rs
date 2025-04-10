@@ -90,9 +90,9 @@ mod hash;
 mod parse;
 mod pypi;
 mod pypi_indexes;
+pub mod source;
 mod url_or_path;
 mod utils;
-pub mod source;
 
 pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;

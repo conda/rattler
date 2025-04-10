@@ -1,12 +1,12 @@
-use std::{borrow::Cow, cmp::Ordering, hash::Hash};
-use std::collections::BTreeMap;
+use crate::source::SourceLocation;
+use crate::UrlOrPath;
 use rattler_conda_types::{
     ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, RepoDataRecord,
 };
 use rattler_digest::Sha256Hash;
+use std::collections::BTreeMap;
+use std::{borrow::Cow, cmp::Ordering, hash::Hash};
 use url::Url;
-use crate::source::SourceLocation;
-use crate::UrlOrPath;
 
 /// A locked conda dependency can be either a binary package or a source
 /// package.
