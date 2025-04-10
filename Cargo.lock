@@ -4641,18 +4641,21 @@ dependencies = [
 name = "rattler_shell"
 version = "0.22.25"
 dependencies = [
+ "anyhow",
  "enum_dispatch",
  "fs-err",
  "indexmap 2.8.0",
  "insta",
  "itertools 0.14.0",
  "rattler_conda_types",
+ "rattler_pty",
  "serde_json",
  "shlex",
  "sysinfo",
  "tempdir",
  "tempfile",
  "thiserror 2.0.12",
+ "tokio",
  "tracing",
 ]
 

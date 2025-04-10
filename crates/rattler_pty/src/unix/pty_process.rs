@@ -35,9 +35,9 @@ pub struct PtyProcess {
 }
 
 #[cfg(target_os = "macos")]
-/// `ptsname_r` is a linux extension but `ptsname` isn't thread-safe
+/// `ptsname_r` is a linux extension but ptsname isn't thread-safe
 /// instead of using a static mutex this calls `ioctl` with `TIOCPTYGNAME` directly
-/// based on <https://blog.tarq.io/ptsname-on-osx-with-rust>/
+/// <https://blog.tarq.io/ptsname-on-osx-with-rust>/
 fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
     use nix::libc::{ioctl, TIOCPTYGNAME};
     use std::ffi::CStr;
@@ -106,13 +106,9 @@ impl PtyProcess {
                     close(slave_fd)?;
                 }
 
-                // set echo off
+                // Set `echo` and `window_size` for the pty
                 set_echo(io::stdin(), opts.echo)?;
                 set_window_size(io::stdout().as_raw_fd(), window_size)?;
-
-                // let mut flags = termios::tcgetattr(io::stdin())?;
-                // flags.local_flags |= termios::LocalFlags::ECHO;
-                // termios::tcsetattr(io::stdin(), termios::SetArg::TCSANOW, &flags)?;
 
                 let _ = command.exec();
                 Err(nix::Error::last())
@@ -138,7 +134,11 @@ impl PtyProcess {
     /// This means: If you ran `exit()` before or `status()` this method will
     /// return `None`
     pub fn status(&self) -> Option<wait::WaitStatus> {
-        wait::waitpid(self.child_pid, Some(wait::WaitPidFlag::WNOHANG)).ok()
+        if let Ok(status) = wait::waitpid(self.child_pid, Some(wait::WaitPidFlag::WNOHANG)) {
+            Some(status)
+        } else {
+            None
+        }
     }
 
     /// Regularly exit the process, this method is blocking until the process is dead
