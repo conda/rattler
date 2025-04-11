@@ -1,6 +1,8 @@
 import { describe, expect, it } from "@jest/globals";
 import { Version } from "./Version";
 
+// Comment to trigger test run
+
 describe("Version", () => {
     describe("constructor", () => {
         it("should parse a version from string", () => {
