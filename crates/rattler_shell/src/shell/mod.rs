@@ -244,8 +244,7 @@ fn validate_env_var_name(name: &str) -> Result<(), ShellError> {
     if !name
         .chars()
         .next()
-        .map(|c| c.is_ascii_alphabetic() || c == '_')
-        .unwrap_or(false)
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
     {
         return Err(ShellError::InvalidName(
             name.to_string(),
@@ -908,11 +907,7 @@ impl<T: Shell + 'static> ShellScript<T> {
     }
 
     /// Export an environment variable.
-    pub fn set_env_var(
-        &mut self,
-        env_var: &str,
-        value: &str,
-    ) -> Result<&mut Self, ShellError> {
+    pub fn set_env_var(&mut self, env_var: &str, value: &str) -> Result<&mut Self, ShellError> {
         self.shell.set_env_var(&mut self.contents, env_var, value)?;
         Ok(self)
     }
@@ -945,10 +940,7 @@ impl<T: Shell + 'static> ShellScript<T> {
     }
 
     /// Source completion scripts for the shell from a given directory with completion scripts.
-    pub fn source_completions(
-        &mut self,
-        completions_dir: &Path,
-    ) -> Result<&mut Self, ShellError> {
+    pub fn source_completions(&mut self, completions_dir: &Path) -> Result<&mut Self, ShellError> {
         self.shell
             .source_completions(&mut self.contents, completions_dir)?;
         Ok(self)
