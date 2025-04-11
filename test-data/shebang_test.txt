@@ -1,4 +1,4 @@
-#!/this/is/placeholder/python -m 123123
+#!/this/is/placeholder/executable -m 123123
 
 # just a comment
 

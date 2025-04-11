@@ -15,6 +15,11 @@ class LockFile:
     _lock_file: PyLockFile
 
     def __init__(self, envs: Dict[str, Environment]) -> None:
+        """
+        Create a new rattler-lock file.
+
+        `envs` maps each environment to its name.
+        """
         self._lock_file = PyLockFile({name: env._env for (name, env) in envs.items()})
 
     @staticmethod
@@ -40,8 +45,10 @@ class LockFile:
         Examples
         --------
         ```python
+        >>> import tempfile
         >>> lock_file = LockFile.from_path("./pixi.lock")
-        >>> lock_file.to_path("/tmp/test.lock")
+        >>> with tempfile.NamedTemporaryFile() as fp:
+        ...     lock_file.to_path(fp.name)
         >>>
         ```
         """
@@ -56,7 +63,7 @@ class LockFile:
         ```python
         >>> lock_file = LockFile.from_path("./pixi.lock")
         >>> lock_file.environments()
-        [('default', Environment()), ('docs', Environment()), ('test', Environment())]
+        [('default', Environment()), ('repl', Environment()), ('docs', Environment()), ('test', Environment())]
         >>>
         ```
         """

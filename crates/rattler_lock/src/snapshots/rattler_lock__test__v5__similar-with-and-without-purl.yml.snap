@@ -1,0 +1,20 @@
+---
+source: crates/rattler_lock/src/lib.rs
+expression: conda_lock
+---
+version: 6
+environments:
+  default:
+    channels:
+      - url: "https://conda.anaconda.org/conda-forge/"
+    packages:
+      win-64:
+        - conda: "https://conda.anaconda.org/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda"
+packages:
+  - conda: "https://conda.anaconda.org/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda"
+    sha256: 4fde5c3008bf5d2db82f2b50204464314cc3c91c1d953652f7bd01d9e52aefdf
+    md5: 8ac3367aafb1cc0a068483c580af8015
+    license: LicenseRef-Public-Domain
+    purls: []
+    size: 122354
+    timestamp: 1728047496079

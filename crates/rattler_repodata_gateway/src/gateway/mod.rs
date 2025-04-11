@@ -1,6 +1,7 @@
 mod barrier_cell;
 mod builder;
 mod channel_config;
+#[cfg(not(target_arch = "wasm32"))]
 mod direct_url_query;
 mod error;
 mod local_subdir;
@@ -9,30 +10,30 @@ mod remote_subdir;
 mod repo_data;
 mod sharded_subdir;
 mod subdir;
+mod subdir_builder;
 
 use std::{
     collections::HashSet,
-    path::PathBuf,
     sync::{Arc, Weak},
 };
 
 pub use barrier_cell::BarrierCell;
-pub use builder::GatewayBuilder;
+pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
 use dashmap::{mapref::entry::Entry, DashMap};
 pub use error::GatewayError;
-use file_url::url_to_path;
-use local_subdir::LocalSubdirClient;
-pub use query::GatewayQuery;
+pub use query::{NamesQuery, RepoDataQuery};
+#[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, MatchSpec, Platform};
 pub use repo_data::RepoData;
 use reqwest_middleware::ClientWithMiddleware;
-use subdir::{Subdir, SubdirData};
+use subdir::Subdir;
 use tokio::sync::broadcast;
-use tracing::instrument;
+use tracing::{instrument, Level};
+use url::Url;
 
-use crate::{fetch::FetchRepoDataError, gateway::error::SubdirNotFoundError, Reporter};
+use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 
 /// Central access point for high level queries about
 /// [`rattler_conda_types::RepoDataRecord`]s from different channels.
@@ -99,7 +100,7 @@ impl Gateway {
         channels: ChannelIter,
         platforms: PlatformIter,
         specs: PackageNameIter,
-    ) -> GatewayQuery
+    ) -> RepoDataQuery
     where
         AsChannel: Into<Channel>,
         ChannelIter: IntoIterator<Item = AsChannel>,
@@ -108,11 +109,30 @@ impl Gateway {
         PackageNameIter: IntoIterator<Item = IntoMatchSpec>,
         IntoMatchSpec: Into<MatchSpec>,
     {
-        GatewayQuery::new(
+        RepoDataQuery::new(
             self.inner.clone(),
             channels.into_iter().map(Into::into).collect(),
             platforms.into_iter().collect(),
             specs.into_iter().map(Into::into).collect(),
+        )
+    }
+
+    /// Return all names from repodata
+    pub fn names<AsChannel, ChannelIter, PlatformIter>(
+        &self,
+        channels: ChannelIter,
+        platforms: PlatformIter,
+    ) -> NamesQuery
+    where
+        AsChannel: Into<Channel>,
+        ChannelIter: IntoIterator<Item = AsChannel>,
+        PlatformIter: IntoIterator<Item = Platform>,
+        <PlatformIter as IntoIterator>::IntoIter: Clone,
+    {
+        NamesQuery::new(
+            self.inner.clone(),
+            channels.into_iter().map(Into::into).collect(),
+            platforms.into_iter().collect(),
         )
     }
 
@@ -122,9 +142,9 @@ impl Gateway {
     ///
     /// This method does not clear any on-disk cache.
     pub fn clear_repodata_cache(&self, channel: &Channel, subdirs: SubdirSelection) {
-        self.inner
-            .subdirs
-            .retain(|key, _| key.0 != *channel || !subdirs.contains(key.1.as_str()));
+        self.inner.subdirs.retain(|key, _| {
+            key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str())
+        });
     }
 }
 
@@ -139,13 +159,15 @@ struct GatewayInner {
     channel_config: ChannelConfig,
 
     /// The directory to store any cache
-    cache: PathBuf,
+    #[cfg(not(target_arch = "wasm32"))]
+    cache: std::path::PathBuf,
 
     /// The package cache, stored to reuse memory cache
+    #[cfg(not(target_arch = "wasm32"))]
     package_cache: PackageCache,
 
     /// A semaphore to limit the number of concurrent requests.
-    concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
+    concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 impl GatewayInner {
@@ -157,7 +179,7 @@ impl GatewayInner {
     /// coalesced, and they will all receive the same subdir. If an error
     /// occurs while creating the subdir all waiting tasks will also return an
     /// error.
-    #[instrument(skip(self, reporter), err)]
+    #[instrument(skip(self, reporter, channel), fields(channel = %channel.base_url), err(level = Level::INFO))]
     async fn get_or_create_subdir(
         &self,
         channel: &Channel,
@@ -251,76 +273,9 @@ impl GatewayInner {
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Subdir, GatewayError> {
-        let url = channel.platform_url(platform);
-        let subdir_data = if url.scheme() == "file" {
-            if let Some(path) = url_to_path(&url) {
-                LocalSubdirClient::from_channel_subdir(
-                    &path.join("repodata.json"),
-                    channel.clone(),
-                    platform.as_str(),
-                )
-                .await
-                .map(SubdirData::from_client)
-            } else {
-                return Err(GatewayError::UnsupportedUrl(
-                    "unsupported file based url".to_string(),
-                ));
-            }
-        } else if url.scheme() == "http" || url.scheme() == "https" {
-            if url.host_str() == Some("fast.prefiks.dev")
-                || url.host_str() == Some("fast.prefix.dev")
-            {
-                sharded_subdir::ShardedSubdir::new(
-                    channel.clone(),
-                    platform.to_string(),
-                    self.client.clone(),
-                    self.cache.clone(),
-                    self.concurrent_requests_semaphore.clone(),
-                    reporter.as_deref(),
-                )
-                .await
-                .map(SubdirData::from_client)
-            } else {
-                remote_subdir::RemoteSubdirClient::new(
-                    channel.clone(),
-                    platform,
-                    self.client.clone(),
-                    self.cache.clone(),
-                    self.channel_config.get(channel).clone(),
-                    reporter,
-                )
-                .await
-                .map(SubdirData::from_client)
-            }
-        } else {
-            return Err(GatewayError::UnsupportedUrl(format!(
-                "'{}' is not a supported scheme",
-                url.scheme()
-            )));
-        };
-
-        match subdir_data {
-            Ok(client) => Ok(Subdir::Found(client)),
-            Err(GatewayError::SubdirNotFoundError(err)) if platform != Platform::NoArch => {
-                // If the subdir was not found and the platform is not `noarch` we assume its
-                // just empty.
-                tracing::info!(
-                    "subdir {} of channel {} was not found, ignoring",
-                    err.subdir,
-                    err.channel.canonical_name()
-                );
-                Ok(Subdir::NotFound)
-            }
-            Err(GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(err))) => {
-                Err(SubdirNotFoundError {
-                    subdir: platform.to_string(),
-                    channel: channel.clone(),
-                    source: err.into(),
-                }
-                .into())
-            }
-            Err(err) => Err(err),
-        }
+        SubdirBuilder::new(self, channel.clone(), platform, reporter)
+            .build()
+            .await
     }
 }
 
@@ -331,9 +286,13 @@ enum PendingOrFetched<T> {
     Fetched(T),
 }
 
+fn force_sharded_repodata(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https")
+        && matches!(url.host_str(), Some("fast.prefiks.dev" | "fast.prefix.dev"))
+}
+
 #[cfg(test)]
 mod test {
-    use assert_matches::assert_matches;
     use std::{
         path::{Path, PathBuf},
         str::FromStr,
@@ -341,18 +300,19 @@ mod test {
         time::Instant,
     };
 
+    use assert_matches::assert_matches;
     use dashmap::DashSet;
-    use rattler_cache::default_cache_dir;
-    use rattler_cache::package_cache::PackageCache;
+    use rattler_cache::{default_cache_dir, package_cache::PackageCache};
     use rattler_conda_types::{
-        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness::Lenient,
-        ParseStrictness::Strict, Platform, RepoDataRecord,
+        Channel, ChannelConfig, MatchSpec, PackageName,
+        ParseStrictness::{Lenient, Strict},
+        Platform, RepoDataRecord,
     };
     use rstest::rstest;
     use url::Url;
 
+    use crate::fetch::CacheAction;
     use crate::{
-        fetch::CacheAction,
         gateway::Gateway,
         utils::{simple_channel_server::SimpleChannelServer, test::fetch_repo_data},
         GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
@@ -412,6 +372,7 @@ mod test {
     }
 
     #[tokio::test]
+    #[cfg(not(target_arch = "wasm32"))]
     async fn test_direct_url_spec_from_gateway() {
         let gateway = Gateway::builder()
             .with_package_cache(PackageCache::new(
@@ -454,7 +415,8 @@ mod test {
             .query(
                 vec![index],
                 vec![Platform::Linux64],
-                vec![MatchSpec::from_str("openssl 3.3.1 h2466b09_1", Strict).unwrap()].into_iter(),
+                vec![MatchSpec::from_str("openssl ==3.3.1 h2466b09_1", Strict).unwrap()]
+                    .into_iter(),
             )
             .recursive(true)
             .await
@@ -471,7 +433,8 @@ mod test {
         assert_eq!(non_openssl_total_records, non_openssl_direct_records);
     }
 
-    // Make sure that the direct url version of openssl is used instead of the one from the normal channel.
+    // Make sure that the direct url version of openssl is used instead of the one
+    // from the normal channel.
     #[tokio::test]
     async fn test_select_forced_url_instead_of_deps() {
         let gateway = Gateway::builder()
@@ -496,7 +459,7 @@ mod test {
                 vec![index.clone()],
                 vec![Platform::Linux64],
                 vec![
-                    MatchSpec::from_str("mamba 0.9.2 py39h951de11_0", Strict).unwrap(),
+                    MatchSpec::from_str("mamba ==0.9.2 py39h951de11_0", Strict).unwrap(),
                     MatchSpec::from_str(openssl_url, Strict).unwrap(),
                 ]
                 .into_iter(),
@@ -506,7 +469,7 @@ mod test {
             .unwrap();
 
         let total_records_single_openssl: usize = records.iter().map(RepoData::len).sum();
-        assert_eq!(total_records_single_openssl, 4644);
+        assert_eq!(total_records_single_openssl, 4219);
 
         // There should be only one record for the openssl package.
         let openssl_records: Vec<&RepoDataRecord> = records
@@ -533,7 +496,7 @@ mod test {
             .query(
                 vec![index.clone()],
                 vec![Platform::Linux64],
-                vec![MatchSpec::from_str("mamba 0.9.2 py39h951de11_0", Strict).unwrap()]
+                vec![MatchSpec::from_str("mamba ==0.9.2 py39h951de11_0", Strict).unwrap()]
                     .into_iter(),
             )
             .recursive(true)
@@ -545,7 +508,7 @@ mod test {
         // The total number of records should be greater than the number of records
         // fetched when selecting the openssl with a direct url.
         assert!(total_records > total_records_single_openssl);
-        assert_eq!(total_records, 4692);
+        assert_eq!(total_records, 4267);
 
         let openssl_records: Vec<&RepoDataRecord> = records
             .iter()
@@ -556,7 +519,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_flter_with_specs() {
+    async fn test_filter_with_specs() {
         let gateway = Gateway::new();
 
         let index = local_conda_forge().await;

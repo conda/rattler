@@ -7,7 +7,7 @@
 //! that conda compatible applications use to query conda packages. For more information about
 //! how this file format works, please read this CEP proposal:
 //!
-//! - <https://github.com/conda-incubator/ceps/pull/20/files>
+//! - <https://github.com/conda/ceps/pull/20/files>
 //!
 //! ## Example
 //!
@@ -30,7 +30,7 @@
 //! pub async fn main() {
 //!     let subdir_url = Url::parse("https://conda.anaconda.org/conda-forge/osx-64/").unwrap();
 //!     let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
-//!         .with_arc(Arc::new(AuthenticationMiddleware::default()))
+//!         .with_arc(Arc::new(AuthenticationMiddleware::from_env_and_defaults().unwrap()))
 //!         .build();
 //!     let cache = Path::new("./cache");
 //!     let current_repo_data = cache.join("c93ef9c9.json");
@@ -81,10 +81,11 @@
 
 use blake2::digest::Output;
 use blake2::digest::{FixedOutput, Update};
+use fs_err as fs;
 use rattler_digest::{
     parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2b256Hash, Blake2bMac256,
 };
-use rattler_networking::Redact;
+use rattler_redaction::Redact;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Response, StatusCode,
@@ -93,7 +94,6 @@ use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::serde_as;
-use std::io::Write;
 use std::iter::Iterator;
 use std::path::Path;
 use std::str;
@@ -290,10 +290,7 @@ impl<'a> JLAPResponse<'a> {
                 .map(|x| Patch::from_str(x).map_err(JLAPError::JSONParse))
                 .collect();
 
-            patches = match patches_result {
-                Ok(patches) => patches,
-                Err(error) => return Err(error),
-            };
+            patches = patches_result?;
         }
 
         Ok(JLAPResponse {
@@ -388,7 +385,7 @@ impl<'a> JLAPResponse<'a> {
 
 /// Calculates the bytes offset. We default to zero if we receive a shorter than
 /// expected vector.
-fn get_bytes_offset(lines: &Vec<&str>) -> u64 {
+fn get_bytes_offset(lines: &[&str]) -> u64 {
     if lines.len() >= JLAP_FOOTER_OFFSET {
         lines[0..lines.len() - JLAP_FOOTER_OFFSET]
             .iter()
@@ -537,13 +534,13 @@ fn apply_jlap_patches(
     }
 
     // Read the contents of the current repodata to a string
-    let repo_data_contents =
-        std::fs::read_to_string(repo_data_path).map_err(JLAPError::FileSystem)?;
+    let repo_data_contents = fs::read_to_string(repo_data_path).map_err(JLAPError::FileSystem)?;
 
     // Parse the JSON so we can manipulate it
     tracing::info!("parsing cached repodata.json as JSON");
     let mut repo_data =
         serde_json::from_str::<Value>(&repo_data_contents).map_err(JLAPError::JSONParse)?;
+    std::mem::drop(repo_data_contents);
 
     if let Some((reporter, index)) = report {
         reporter.on_jlap_decode_completed(index);
@@ -569,9 +566,6 @@ fn apply_jlap_patches(
         reporter.on_jlap_encode_start(index);
     }
 
-    // Convert the json to bytes, but we don't really care about formatting.
-    let updated_json = serde_json::to_string(&repo_data).map_err(JLAPError::JSONParse)?;
-
     // Write the content to disk and immediately compute the hash of the file contents.
     tracing::info!("writing patched repodata to disk");
     let mut hashing_writer = NamedTempFile::new_in(
@@ -581,9 +575,9 @@ fn apply_jlap_patches(
     )
     .map_err(JLAPError::FileSystem)
     .map(rattler_digest::HashingWriter::<_, Blake2b256>::new)?;
-    hashing_writer
-        .write_all(&updated_json.into_bytes())
-        .map_err(JLAPError::FileSystem)?;
+    serde_json::to_writer(std::io::BufWriter::new(&mut hashing_writer), &repo_data)
+        .map_err(JLAPError::JSONParse)?;
+
     let (file, hash) = hashing_writer.finalize();
     file.persist(repo_data_path)
         .map_err(|e| JLAPError::FileSystem(e.error))?;
@@ -636,6 +630,8 @@ mod test {
     use rstest::rstest;
     use tempfile::TempDir;
     use url::Url;
+
+    use fs_err::tokio as tokio_fs;
 
     const FAKE_STATE_DATA_INITIAL: &str = r#"{
   "url": "https://repo.example.com/pkgs/main/osx-64/repodata.json.zst",
@@ -851,14 +847,14 @@ mod test {
 
         if let Some(content) = server_jlap {
             // Add files we need to request to the server
-            tokio::fs::write(subdir_path.path().join("repodata.jlap"), content)
+            tokio_fs::write(subdir_path.path().join("repodata.jlap"), content)
                 .await
                 .unwrap();
         }
 
         if let Some(content) = server_repo_data {
             // Add files we need to request to the server
-            tokio::fs::write(subdir_path.path().join("repodata.json"), content)
+            tokio_fs::write(subdir_path.path().join("repodata.json"), content)
                 .await
                 .unwrap();
         }
@@ -883,7 +879,7 @@ mod test {
         let cache_repo_data_path = cache_dir.path().join(format!("{cache_key}.json"));
 
         if let Some(content) = cache_repo_data {
-            tokio::fs::write(cache_repo_data_path.clone(), content)
+            tokio_fs::write(cache_repo_data_path.clone(), content)
                 .await
                 .unwrap();
         }
@@ -954,7 +950,7 @@ mod test {
         .unwrap();
 
         // Make assertions
-        let repo_data = tokio::fs::read_to_string(test_env.cache_repo_data)
+        let repo_data = tokio_fs::read_to_string(test_env.cache_repo_data)
             .await
             .unwrap();
 

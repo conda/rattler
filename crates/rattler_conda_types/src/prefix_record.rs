@@ -1,16 +1,20 @@
 //! Defines the `[PrefixRecord]` struct.
 
 use crate::package::FileMode;
+use crate::repo_data::RecordFromPath;
 use crate::repo_data_record::RepoDataRecord;
-use crate::PackageRecord;
+use crate::{menuinst, PackageRecord};
 use rattler_digest::serde::SerializableHash;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::serde_as;
-use std::fs::File;
 use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use tempfile::NamedTempFile;
+
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
 
 /// Information about every file installed with the package.
 ///
@@ -135,6 +139,12 @@ impl From<crate::package::PathType> for PathType {
     }
 }
 
+impl RecordFromPath for PrefixRecord {
+    fn from_path(path: &Path) -> Result<Self, std::io::Error> {
+        Self::from_path(path)
+    }
+}
+
 /// A record of a single package installed within an environment. The struct includes the
 /// [`RepoDataRecord`] which specifies information about where the original package comes from.
 #[serde_as]
@@ -169,6 +179,11 @@ pub struct PrefixRecord {
     /// currently another spec was used. Note: conda seems to serialize a "None" string value instead of `null`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_spec: Option<String>,
+
+    /// If menuinst is enabled and added menu items, this field contains the menuinst tracker data.
+    /// This data is used to remove the menu items when the package is uninstalled.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub installed_system_menus: Vec<menuinst::Tracker>,
 }
 
 impl PrefixRecord {
@@ -199,12 +214,13 @@ impl PrefixRecord {
             paths_data: paths.into(),
             link,
             requested_spec,
+            installed_system_menus: Vec::new(),
         }
     }
 
     /// Parses a `paths.json` file from a file.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
-        Self::from_reader(File::open(path.as_ref())?)
+        Self::from_str(&fs_err::read_to_string(path.as_ref())?)
     }
 
     /// Return the canonical file name for a `PrefixRecord`. Takes the form of
@@ -224,7 +240,36 @@ impl PrefixRecord {
         path: impl AsRef<Path>,
         pretty: bool,
     ) -> Result<(), std::io::Error> {
-        self.write_to(File::create(path)?, pretty)
+        let path = path.as_ref();
+        let parent = path.parent().ok_or_else(|| {
+            std::io::Error::other(format!(
+                "Failed to get parent directory of path '{}'",
+                path.display()
+            ))
+        })?;
+
+        // Use a temporary file in the same directory for atomic writes
+        let temp_file = NamedTempFile::with_prefix_in("prefix_record_", parent).map_err(|e| {
+            std::io::Error::other(format!(
+                "Failed to create temporary file in '{}': {}",
+                parent.display(),
+                e
+            ))
+        })?;
+
+        // Write to temp file with buffered writer
+        let writer = BufWriter::with_capacity(64 * 1024, &temp_file);
+        self.write_to(writer, pretty)?;
+
+        // Make sure that all data is written to disk
+        temp_file.as_file().sync_all()?;
+
+        // Atomically rename the temp file to the target path
+        temp_file.persist(path).map_err(|e| {
+            std::io::Error::other(format!("Failed to persist file {}: {}", path.display(), e))
+        })?;
+
+        Ok(())
     }
 
     /// Writes the contents of this instance to the file at the specified location.
@@ -234,34 +279,55 @@ impl PrefixRecord {
         pretty: bool,
     ) -> Result<(), std::io::Error> {
         if pretty {
-            serde_json::to_writer_pretty(BufWriter::new(writer), self)?;
+            serde_json::to_writer_pretty(writer, self)?;
         } else {
-            serde_json::to_writer(BufWriter::new(writer), self)?;
+            serde_json::to_writer(writer, self)?;
         }
         Ok(())
     }
 
     /// Collects all `PrefixRecord`s from the specified prefix. This function will read all files in
     /// the `$PREFIX/conda-meta` directory and parse them as `PrefixRecord`s.
-    pub fn collect_from_prefix(prefix: &Path) -> Result<Vec<PrefixRecord>, std::io::Error> {
-        let mut records = Vec::new();
+    pub fn collect_from_prefix<T: RecordFromPath + Send>(
+        prefix: &Path,
+    ) -> Result<Vec<T>, std::io::Error> {
         let conda_meta_path = prefix.join("conda-meta");
 
         if !conda_meta_path.exists() {
-            return Ok(records);
+            return Ok(Vec::new());
         }
 
-        for entry in std::fs::read_dir(prefix.join("conda-meta"))? {
-            let entry = entry?;
+        // Collect paths first to avoid holding the directory iterator during parallel processing
+        let json_paths: Vec<_> = fs_err::read_dir(&conda_meta_path)?
+            .filter_map(|entry| {
+                entry.ok().and_then(|e| {
+                    if e.file_type().ok()?.is_file()
+                        && e.file_name().to_string_lossy().ends_with(".json")
+                    {
+                        Some(e.path())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect();
 
-            if entry.file_type()?.is_file()
-                && entry.file_name().to_string_lossy().ends_with(".json")
-            {
-                let record = Self::from_path(entry.path())?;
-                records.push(record);
-            }
+        #[cfg(feature = "rayon")]
+        {
+            // Process files in parallel
+            json_paths
+                .par_iter()
+                .map(|path| RecordFromPath::from_path(path))
+                .collect()
         }
-        Ok(records)
+
+        #[cfg(not(feature = "rayon"))]
+        {
+            json_paths
+                .iter()
+                .map(|path| RecordFromPath::from_path(path))
+                .collect()
+        }
     }
 }
 

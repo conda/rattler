@@ -1,6 +1,6 @@
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
     paths:
       # When we change pyproject.toml, we want to ensure that the maturin builds still work
@@ -22,79 +22,76 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
-  DEFAULT_FEATURES: tokio,serde,reqwest,sparse,sysinfo,resolvo,gateway
+  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3
 
 jobs:
   check-rustdoc-links:
     name: Check intra-doc links
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           submodules: recursive
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@9399c7bb15d4c7d47b27263d024f0a4978346ba4 # v1
       - run: |
-          for package in $(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | .name'); do
-            cargo rustdoc -p "$package" --all-features -- -D warnings -W unreachable-pub
-          done
+          RUSTDOCFLAGS="-Dwarnings -Wunreachable-pub" cargo doc --no-deps --all --all-features
 
   format_and_lint:
     name: Format and Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           submodules: recursive
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@9399c7bb15d4c7d47b27263d024f0a4978346ba4 # v1
         with:
           components: clippy, rustfmt
       - name: Run rustfmt
-        uses: actions-rust-lang/rustfmt@v1
+        uses: actions-rust-lang/rustfmt@559aa3035a47390ba96088dffa783b5d26da9326 # v1
       - name: Run clippy
         run: cargo clippy --all-targets
 
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    needs: [ format_and_lint ]
+    needs: [format_and_lint]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { name: "Linux-x86_64",      target: x86_64-unknown-linux-musl,        os: ubuntu-latest }
+          - { name: "Linux-x86_64",      target: x86_64-unknown-linux-musl,        os: ubuntu-22.04 }
           - { name: "Linux-aarch64",     target: aarch64-unknown-linux-musl,       os: ubuntu-latest, skip-tests: true }
           - { name: "Linux-arm",         target: arm-unknown-linux-musleabi,       os: ubuntu-latest, use-cross: true, skip-tests: true }
-
           # - { name: "Linux-mips",        target: mips-unknown-linux-musl,          os: ubuntu-latest, use-cross: true, skip-tests: true }
           # - { name: "Linux-mipsel",      target: mipsel-unknown-linux-musl,        os: ubuntu-latest, use-cross: true, skip-tests: true }
           # - { name: "Linux-mips64",      target: mips64-unknown-linux-muslabi64,   os: ubuntu-latest, use-cross: true, skip-tests: true }
           # - { name: "Linux-mips64el",    target: mips64el-unknown-linux-muslabi64, os: ubuntu-latest, use-cross: true, skip-tests: true }
 
-#          - { name: "Linux-powerpc",     target: powerpc-unknown-linux-gnu,        os: ubuntu-latest, use-cross: true, skip-tests: true }
+          # - { name: "Linux-powerpc",     target: powerpc-unknown-linux-gnu,        os: ubuntu-latest, use-cross: true, skip-tests: true }
           - { name: "Linux-powerpc64",   target: powerpc64-unknown-linux-gnu,      os: ubuntu-latest, use-cross: true, skip-tests: true }
           - { name: "Linux-powerpc64le", target: powerpc64le-unknown-linux-gnu,    os: ubuntu-latest, use-cross: true, skip-tests: true }
 
           - { name: "Linux-s390x",       target: s390x-unknown-linux-gnu,          os: ubuntu-latest, use-cross: true, skip-tests: true }
 
           - { name: "macOS-x86_64",      target: x86_64-apple-darwin,              os: macOS-latest }
-          - { name: "macOS-aarch64",     target: aarch64-apple-darwin,             os: macOS-latest,                  skip-tests: true }
+          - { name: "macOS-aarch64",     target: aarch64-apple-darwin,             os: macOS-latest }
 
           - { name: "Windows-x86_64",    target: x86_64-pc-windows-msvc,           os: windows-latest }
           - { name: "Windows-aarch64",   target: aarch64-pc-windows-msvc,          os: windows-latest,                  skip-tests: true }
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           submodules: recursive
 
       - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@9399c7bb15d4c7d47b27263d024f0a4978346ba4 # v1
         with:
           target: ${{ matrix.target }}
           components: rustfmt
           cache: false
 
-      - uses: taiki-e/setup-cross-toolchain-action@v1
+      - uses: taiki-e/setup-cross-toolchain-action@0d2c6fcce937ba2ba77abf40e06449b74d60fa04 # v1
         if: matrix.target != 'x86_64-unknown-linux-musl'
         with:
           target: ${{ matrix.target }}
@@ -104,7 +101,7 @@ jobs:
           sudo apt install musl-tools gcc g++
           sudo ln -s /usr/bin/musl-gcc /usr/bin/musl-g++
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
 
       - name: Show version information (Rust, cargo, GCC)
         shell: bash
@@ -123,11 +120,11 @@ jobs:
 
       - name: Build
         run: >
-          cargo build 
-          --all-targets  
+          cargo build
+          --all-targets
           --features ${{ env.DEFAULT_FEATURES }}
           --target ${{ matrix.target }}
-          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}
+          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
 
       - name: Disable testing the tools crate if cross compiling
         id: test-options
@@ -137,19 +134,23 @@ jobs:
 
       - name: Install cargo nextest
         if: ${{ !matrix.skip-tests }}
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@d4635f2de61c8b8104d59cd4aede2060638378cc # v2
         with:
           tool: cargo-nextest
 
       - name: Run tests
         if: ${{ !matrix.skip-tests }}
+        env:
+          GOOGLE_CLOUD_TEST_KEY_JSON: ${{ secrets.GOOGLE_CLOUD_TEST_KEY_JSON }}
+          RATTLER_TEST_R2_READONLY_ACCESS_KEY_ID: ${{ secrets.RATTLER_TEST_R2_READONLY_ACCESS_KEY_ID }}
+          RATTLER_TEST_R2_READONLY_SECRET_ACCESS_KEY: ${{ secrets.RATTLER_TEST_R2_READONLY_SECRET_ACCESS_KEY }}
         run: >
           cargo nextest run
-          --workspace 
-          --features ${{ env.DEFAULT_FEATURES }} 
+          --workspace
+          --features ${{ env.DEFAULT_FEATURES }},experimental_extras
           --target ${{ matrix.target }}
-          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} 
-          ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} 
+          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
+          ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}
 
       - name: Run doctests
         if: ${{ !matrix.skip-tests }}

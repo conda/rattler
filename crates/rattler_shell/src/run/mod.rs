@@ -58,7 +58,7 @@ pub fn run_in_environment(
     let file = tempfile::Builder::new()
         .suffix(&format!(".{}", shell.extension()))
         .tempfile()?;
-    std::fs::write(file.path(), shell_script.contents()?)?;
+    fs_err::write(file.path(), shell_script.contents()?)?;
 
     match shell {
         ShellEnum::Bash(_) => Ok(Command::new(shell.executable()).arg(file.path()).output()?),

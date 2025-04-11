@@ -1,0 +1,6 @@
+---
+source: crates/rattler_solve/tests/sorting.rs
+expression: "create_sorting_snapshot(spec, solve_strategy)"
+---
+libuuid=2.32.1=h7f98852_1000
+libuuid=2.32.1=h14c3975_1000

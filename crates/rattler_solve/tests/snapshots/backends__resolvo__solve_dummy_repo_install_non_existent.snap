@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_solve/tests/backends.rs
-assertion_line: 530
 expression: err
 ---
 Unsolvable(

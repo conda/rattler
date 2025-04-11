@@ -1,4 +1,4 @@
-//! A simpel crate that makes it more ergonomic to spawn blocking tasks and
+//! A simple crate that makes it more ergonomic to spawn blocking tasks and
 //! await their completion.
 
 #[cfg(feature = "tokio")]

@@ -7,11 +7,11 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// the [`NoArchType`] and [`NoArchKind`] for a higher level API.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum RawNoArchType {
-    /// A generic noarch package. This differs from [`GenericV2`] by how it is stored in the
+    /// A generic noarch package. This differs from `GenericV2` by how it is stored in the
     /// repodata (old-format vs new-format)
     GenericV1,
 
-    /// A generic noarch package. This differs from [`GenericV1`] by how it is stored in the
+    /// A generic noarch package. This differs from `GenericV1` by how it is stored in the
     /// repodata (old-format vs new-format)
     GenericV2,
 

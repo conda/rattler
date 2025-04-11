@@ -1,0 +1,164 @@
+{
+    "$schema": "https://json-schema.org/draft-07/schema",
+    "$id": "https://schemas.conda.io/menuinst-1.schema.json",
+    "menu_name": "{{ DISTRIBUTION_NAME }} spyder",
+    "menu_items": [
+        {
+            "name": {
+                "target_environment_is_base": "Spyder 6 ({{ DISTRIBUTION_NAME }})",
+                "target_environment_is_not_base": "Spyder 6 ({{ ENV_NAME }})"
+            },
+            "description": "Scientific PYthon Development EnviRonment",
+            "icon": "{{ MENU_DIR }}/spyder.{{ ICON_EXT }}",
+            "activate": false,
+            "terminal": false,
+            "command": [""],
+            "platforms": {
+                "win": {
+                    "desktop": true,
+                    "app_user_model_id": "spyder-ide.Spyder-6.{{ ENV_NAME }}",
+                    "command": ["{{ PREFIX }}/Scripts/spyder.exe", "%*"],
+                    "file_extensions": [
+                        ".enaml",
+                        ".ipy",
+                        ".py",
+                        ".pyi",
+                        ".pyw",
+                        ".pyx"
+                    ]
+                },
+                "linux": {
+                    "Categories": [
+                        "Development",
+                        "Science"
+                    ],
+                    "command": ["{{ PREFIX }}/bin/spyder", "%F"],
+                    "StartupWMClass": "Spyder-6.{{ ENV_NAME }}",
+                    "MimeType": [
+                        "text/x-spython"
+                    ],
+                    "glob_patterns": {
+                        "text/x-spython": "*.spy"
+                    }
+                },
+                "osx": {
+                    "precommand": "pushd \"$(dirname \"$0\")\" &>/dev/null",
+                    "command": ["./python", "{{ PREFIX }}/bin/spyder", "$@"],
+                    "link_in_bundle": {
+                        "{{ PREFIX }}/bin/python": "{{ MENU_ITEM_LOCATION }}/Contents/MacOS/python"
+                    },
+                    "CFBundleName": "Spyder 6",
+                    "CFBundleIdentifier": "org.spyder-ide.Spyder-6-.prefix",
+                    "CFBundleVersion": "6.0.2",
+                    "CFBundleDocumentTypes": [
+                        {
+                            "CFBundleTypeName": "text document",
+                            "CFBundleTypeRole": "Editor",
+                            "LSHandlerRank": "Default",
+                            "CFBundleTypeIconFile": "spyder.icns",
+                            "LSItemContentTypes": [
+                                "com.apple.applescript.text",
+                                "com.apple.ascii-property-list",
+                                "com.apple.audio-unit-preset",
+                                "com.apple.binary-property-list",
+                                "com.apple.configprofile",
+                                "com.apple.crashreport",
+                                "com.apple.dashcode.css",
+                                "com.apple.dashcode.javascript",
+                                "com.apple.dashcode.json",
+                                "com.apple.dashcode.manifest",
+                                "com.apple.dt.document.ascii-property-list",
+                                "com.apple.dt.document.script-suite-property-list",
+                                "com.apple.dt.document.script-terminology-property-list",
+                                "com.apple.property-list",
+                                "com.apple.rez-source",
+                                "com.apple.scripting-definition",
+                                "com.apple.structured-text",
+                                "com.apple.traditional-mac-plain-text",
+                                "com.apple.xcode.ada-source",
+                                "com.apple.xcode.apinotes",
+                                "com.apple.xcode.bash-script",
+                                "com.apple.xcode.configsettings",
+                                "com.apple.xcode.csh-script",
+                                "com.apple.xcode.entitlements-property-list",
+                                "com.apple.xcode.fortran-source",
+                                "com.apple.xcode.glsl-source",
+                                "com.apple.xcode.ksh-script",
+                                "com.apple.xcode.lex-source",
+                                "com.apple.xcode.make-script",
+                                "com.apple.xcode.mig-source",
+                                "com.apple.xcode.pascal-source",
+                                "com.apple.xcode.strings-text",
+                                "com.apple.xcode.tcsh-script",
+                                "com.apple.xcode.yacc-source",
+                                "com.apple.xcode.zsh-script",
+                                "com.apple.xml-property-list",
+                                "com.netscape.javascript-source",
+                                "com.scenarist.closed-caption",
+                                "com.sun.java-source",
+                                "com.sun.java-web-start",
+                                "net.daringfireball.markdown",
+                                "org.khronos.glsl-source",
+                                "org.oasis-open.xliff",
+                                "public.ada-source",
+                                "public.assembly-source",
+                                "public.bash-script",
+                                "public.c-header",
+                                "public.c-plus-plus-header",
+                                "public.c-plus-plus-source",
+                                "public.c-source",
+                                "public.case-insensitive-text",
+                                "public.comma-separated-values-text",
+                                "public.csh-script",
+                                "public.css",
+                                "public.delimited-values-text",
+                                "public.dylan-source",
+                                "public.filename-extension",
+                                "public.fortran-77-source",
+                                "public.fortran-90-source",
+                                "public.fortran-95-source",
+                                "public.fortran-source",
+                                "public.html",
+                                "public.json",
+                                "public.ksh-script",
+                                "public.lex-source",
+                                "public.log",
+                                "public.m3u-playlist",
+                                "public.make-source",
+                                "public.mig-source",
+                                "public.mime-type",
+                                "public.module-map",
+                                "public.nasm-assembly-source",
+                                "public.objective-c-plus-plus-source",
+                                "public.objective-c-source",
+                                "public.opencl-source",
+                                "public.pascal-source",
+                                "public.patch-file",
+                                "public.perl-script",
+                                "public.php-script",
+                                "public.plain-text",
+                                "public.python-script",
+                                "public.rss",
+                                "public.ruby-script",
+                                "public.script",
+                                "public.shell-script",
+                                "public.source-code",
+                                "public.tcsh-script",
+                                "public.text",
+                                "public.utf16-external-plain-text",
+                                "public.utf16-plain-text",
+                                "public.utf8-plain-text",
+                                "public.utf8-tab-separated-values-text",
+                                "public.xhtml",
+                                "public.xml",
+                                "public.yacc-source",
+                                "public.yaml",
+                                "public.zsh-script"
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+}

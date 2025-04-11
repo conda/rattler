@@ -6,7 +6,6 @@ pub mod sharded;
 mod topological_sort;
 
 use std::{
-    borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
     path::Path,
@@ -16,15 +15,19 @@ use fxhash::{FxHashMap, FxHashSet};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use serde_with::{serde_as, skip_serializing_none};
 use thiserror::Error;
 use url::Url;
 
 use crate::{
     build_spec::BuildNumber,
     package::{IndexJson, RunExportsJson},
-    utils::serde::DeserializeFromStrUnchecked,
-    Channel, NoArchType, PackageName, PackageUrl, Platform, RepoDataRecord, VersionWithSource,
+    utils::{
+        serde::{sort_map_alphabetically, DeserializeFromStrUnchecked},
+        UrlWithTrailingSlash,
+    },
+    Arch, Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
+    ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
 };
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory
@@ -68,11 +71,19 @@ pub struct RepoData {
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct ChannelInfo {
     /// The channel's subdirectory
-    pub subdir: String,
+    pub subdir: Option<String>,
 
-    /// The base_url for all package urls. Can be an absolute or relative url.
+    /// The `base_url` for all package urls. Can be an absolute or relative url.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
+}
+
+/// Trait to allow for generic deserialization of records from a path.
+pub trait RecordFromPath {
+    /// Deserialize a record from a path.
+    fn from_path(path: &Path) -> Result<Self, std::io::Error>
+    where
+        Self: Sized;
 }
 
 /// A single record in the Conda repodata. A single record refers to a single
@@ -82,7 +93,10 @@ pub struct ChannelInfo {
 #[sorted]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Hash)]
 pub struct PackageRecord {
-    /// Optionally the architecture the package supports
+    /// Optionally the architecture the package supports. This is almost
+    /// always the second part of the `subdir` string. Except for `64` which
+    /// maps to `x86_64` and `32` which maps to `x86`. This will be `None` if
+    /// the package is `noarch`.
     pub arch: Option<String>,
 
     /// The build string of the package
@@ -102,6 +116,12 @@ pub struct PackageRecord {
     /// Specification of packages this package depends on
     #[serde(default)]
     pub depends: Vec<String>,
+
+    /// Specifications of optional or dependencies. These are dependencies that
+    /// are only required if certain features are enabled or if certain
+    /// conditions are met.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extra_depends: BTreeMap<String, Vec<String>>,
 
     /// Features are a deprecated way to specify different feature sets for the
     /// conda solver. This is not supported anymore and should not be used.
@@ -135,8 +155,11 @@ pub struct PackageRecord {
     #[serde(skip_serializing_if = "NoArchType::is_none")]
     pub noarch: NoArchType,
 
-    /// Optionally the platform the package supports
-    pub platform: Option<String>, // Note that this does not match the [`Platform`] enum..
+    /// Optionally the platform the package supports.
+    /// Note that this does not match the [`Platform`] enum, but is only the first
+    /// part of the platform (e.g. `linux`, `osx`, `win`, ...).
+    /// The `subdir` field contains the `Platform` enum.
+    pub platform: Option<String>,
 
     /// Package identifiers of packages that are equivalent to this package but
     /// from other ecosystems.
@@ -149,6 +172,11 @@ pub struct PackageRecord {
     /// one. [`Some([`PackageUrl`])`] means that it is a pypi package.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purls: Option<BTreeSet<PackageUrl>>,
+
+    /// Optionally a path within the environment of the site-packages directory.
+    /// This field is only present for python interpreter packages.
+    /// This field was introduced with <https://github.com/conda/ceps/blob/main/cep-17.md>.
+    pub python_site_packages_path: Option<String>,
 
     /// Run exports that are specified in the package.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -170,11 +198,10 @@ pub struct PackageRecord {
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 
     /// Track features are nowadays only used to downweight packages (ie. give
-    /// them less priority). To that effect, the number of track features is
-    /// counted (number of commas) and the package is downweighted
+    /// them less priority). To that effect, the package is downweighted
     /// by the number of track_features.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    #[serde_as(as = "OneOrMany<_>")]
+    #[serde_as(as = "crate::utils::serde::Features")]
     pub track_features: Vec<String>,
 
     /// The version of the package
@@ -202,6 +229,13 @@ impl Display for PackageRecord {
     }
 }
 
+impl RecordFromPath for PackageRecord {
+    fn from_path(path: &Path) -> Result<Self, std::io::Error> {
+        let contents = fs_err::read_to_string(path)?;
+        Ok(serde_json::from_str(&contents)?)
+    }
+}
+
 impl RepoData {
     /// Parses [`RepoData`] from a file.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
@@ -218,7 +252,6 @@ impl RepoData {
     /// given the source of the data.
     pub fn into_repo_data_records(self, channel: &Channel) -> Vec<RepoDataRecord> {
         let mut records = Vec::with_capacity(self.packages.len() + self.conda_packages.len());
-        let channel_name = channel.canonical_name();
         let base_url = self.base_url().map(ToOwned::to_owned);
 
         // Determine the base_url of the channel
@@ -226,13 +259,14 @@ impl RepoData {
             records.push(RepoDataRecord {
                 url: compute_package_url(
                     &channel
-                        .base_url()
+                        .base_url
+                        .url()
                         .join(&package_record.subdir)
                         .expect("cannot join channel base_url and subdir"),
                     base_url.as_deref(),
                     &filename,
                 ),
-                channel: channel_name.clone(),
+                channel: Some(channel.base_url.as_str().to_string()),
                 package_record,
                 file_name: filename,
             });
@@ -251,7 +285,7 @@ pub fn compute_package_url(
         None => repo_data_base_url.clone(),
         Some(base_url) => match Url::parse(base_url) {
             Err(url::ParseError::RelativeUrlWithoutBase) if !base_url.starts_with('/') => {
-                add_trailing_slash(repo_data_base_url)
+                UrlWithTrailingSlash::from(repo_data_base_url.clone())
                     .join(base_url)
                     .expect("failed to join base_url with channel")
             }
@@ -274,14 +308,9 @@ pub fn compute_package_url(
         .expect("failed to join base_url and filename")
 }
 
-fn add_trailing_slash(url: &Url) -> Cow<'_, Url> {
-    let path = url.path();
-    if path.ends_with('/') {
-        Cow::Borrowed(url)
-    } else {
-        let mut url = url.clone();
-        url.set_path(&format!("{path}/"));
-        Cow::Owned(url)
+impl AsRef<PackageRecord> for PackageRecord {
+    fn as_ref(&self) -> &PackageRecord {
+        self
     }
 }
 
@@ -304,6 +333,8 @@ impl PackageRecord {
             name,
             noarch: NoArchType::default(),
             platform: None,
+            python_site_packages_path: None,
+            extra_depends: BTreeMap::new(),
             sha256: None,
             size: None,
             subdir: Platform::current().to_string(),
@@ -325,6 +356,76 @@ impl PackageRecord {
     pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(records: Vec<T>) -> Vec<T> {
         topological_sort::sort_topologically(records)
     }
+
+    /// Validate that the given package records are valid w.r.t. 'depends' and
+    /// 'constrains'. This function will return Ok(()) if all records form a
+    /// valid environment, i.e., all dependencies of each package are
+    /// satisfied by the other packages in the list. If there is a
+    /// dependency that is not satisfied, this function will return an error.
+    pub fn validate<T: AsRef<PackageRecord>>(
+        records: Vec<T>,
+    ) -> Result<(), ValidatePackageRecordsError> {
+        for package in records.iter() {
+            let package = package.as_ref();
+            // First we check if all dependencies are in the environment.
+            for dep in package.depends.iter() {
+                // We ignore virtual packages, e.g. `__unix`.
+                if dep.starts_with("__") {
+                    continue;
+                }
+                let dep_spec = MatchSpec::from_str(dep, ParseStrictness::Lenient)?;
+                if !records.iter().any(|p| dep_spec.matches(p.as_ref())) {
+                    return Err(ValidatePackageRecordsError::DependencyNotInEnvironment {
+                        package: package.to_owned(),
+                        dependency: dep.to_string(),
+                    });
+                }
+            }
+
+            // Then we check if all constraints are satisfied.
+            for constraint in package.constrains.iter() {
+                let constraint_spec = MatchSpec::from_str(constraint, ParseStrictness::Lenient)?;
+                let matching_package = records
+                    .iter()
+                    .find(|record| Some(record.as_ref().name.clone()) == constraint_spec.name);
+                if matching_package.is_some_and(|p| !constraint_spec.matches(p.as_ref())) {
+                    return Err(ValidatePackageRecordsError::PackageConstraintNotSatisfied {
+                        package: package.to_owned(),
+                        constraint: constraint.to_owned(),
+                        violating_package: matching_package.unwrap().as_ref().to_owned(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// An error when validating package records.
+#[derive(Debug, Error)]
+#[allow(clippy::large_enum_variant)]
+pub enum ValidatePackageRecordsError {
+    /// A package is not present in the environment.
+    #[error("package '{package}' has dependency '{dependency}', which is not in the environment")]
+    DependencyNotInEnvironment {
+        /// The package containing the unmet dependency.
+        package: PackageRecord,
+        /// The dependency that is not in the environment.
+        dependency: String,
+    },
+    /// A package constraint is not met in the environment.
+    #[error("package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment")]
+    PackageConstraintNotSatisfied {
+        /// The package containing the unmet constraint.
+        package: PackageRecord,
+        /// The constraint that is violated.
+        constraint: String,
+        /// The corresponding package that violates the constraint.
+        violating_package: PackageRecord,
+    },
+    /// Failed to parse a matchspec.
+    #[error(transparent)]
+    ParseMatchSpec(#[from] ParseMatchSpecError),
 }
 
 /// An error that can occur when parsing a platform from a string.
@@ -341,7 +442,7 @@ pub enum ConvertSubdirError {
     /// Platform key is empty
     #[error("platform key is empty in index.json")]
     PlatformEmpty,
-    /// Arc key is empty
+    /// Arch key is empty
     #[error("arch key is empty in index.json")]
     ArchEmpty,
 }
@@ -363,33 +464,17 @@ fn determine_subdir(
     let platform = platform.ok_or(ConvertSubdirError::PlatformEmpty)?;
     let arch = arch.ok_or(ConvertSubdirError::ArchEmpty)?;
 
-    let plat = match platform.as_ref() {
-        "linux" => match arch.as_ref() {
-            "x86" => Ok(Platform::Linux32),
-            "x86_64" => Ok(Platform::Linux64),
-            "aarch64" => Ok(Platform::LinuxAarch64),
-            "armv61" => Ok(Platform::LinuxArmV6l),
-            "armv71" => Ok(Platform::LinuxArmV7l),
-            "ppc64le" => Ok(Platform::LinuxPpc64le),
-            "ppc64" => Ok(Platform::LinuxPpc64),
-            "s390x" => Ok(Platform::LinuxS390X),
-            _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
-        },
-        "osx" => match arch.as_ref() {
-            "x86_64" => Ok(Platform::Osx64),
-            "arm64" => Ok(Platform::OsxArm64),
-            _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
-        },
-        "windows" => match arch.as_ref() {
-            "x86" => Ok(Platform::Win32),
-            "x86_64" => Ok(Platform::Win64),
-            "arm64" => Ok(Platform::WinArm64),
-            _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
-        },
-        _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
-    }?;
-    // Convert back to Platform string which should correspond to known subdirs
-    Ok(plat.to_string())
+    match arch.parse::<Arch>() {
+        Ok(arch) => {
+            let arch_str = match arch {
+                Arch::X86 => "32",
+                Arch::X86_64 => "64",
+                _ => arch.as_str(),
+            };
+            Ok(format!("{platform}-{arch_str}"))
+        }
+        Err(_) => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
+    }
 }
 
 impl PackageRecord {
@@ -422,6 +507,8 @@ impl PackageRecord {
             name: index.name,
             noarch: index.noarch,
             platform: index.platform,
+            python_site_packages_path: index.python_site_packages_path,
+            extra_depends: BTreeMap::new(),
             sha256,
             size,
             subdir,
@@ -432,16 +519,6 @@ impl PackageRecord {
             run_exports: None,
         })
     }
-}
-
-fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(
-    value: &FxHashMap<String, T>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    value
-        .iter()
-        .collect::<BTreeMap<_, _>>()
-        .serialize(serializer)
 }
 
 fn sort_set_alphabetically<S: serde::Serializer>(
@@ -457,7 +534,7 @@ mod test {
 
     use crate::{
         repo_data::{compute_package_url, determine_subdir},
-        Channel, ChannelConfig, RepoData,
+        Channel, ChannelConfig, PackageRecord, RepoData,
     };
 
     // isl-0.12.2-1.tar.bz2
@@ -545,7 +622,7 @@ mod test {
             &ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap()),
         )
         .unwrap();
-        let base_url = channel.base_url().join("linux-64/").unwrap();
+        let base_url = channel.base_url.url().join("linux-64/").unwrap();
         assert_eq!(
             compute_package_url(&base_url, None, "bla.conda").to_string(),
             "https://conda.anaconda.org/conda-forge/linux-64/bla.conda"
@@ -573,5 +650,47 @@ mod test {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
         let data_path = test_data_path.join(path);
         RepoData::from_path(data_path).unwrap()
+    }
+
+    #[test]
+    fn test_validate() {
+        // load test data
+        let test_data_path = dunce::canonicalize(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data"),
+        )
+        .unwrap();
+        let data_path = test_data_path.join("channels/dummy/linux-64/repodata.json");
+        let repodata = RepoData::from_path(&data_path).unwrap();
+
+        let package_depends_only_virtual_package = repodata
+            .packages
+            .get("baz-1.0-unix_py36h1af98f8_2.tar.bz2")
+            .unwrap();
+        let package_depends = repodata.packages.get("foobar-2.0-bla_1.tar.bz2").unwrap();
+        let package_constrains = repodata
+            .packages
+            .get("foo-3.0.2-py36h1af98f8_3.conda")
+            .unwrap();
+        let package_bors_1 = repodata.packages.get("bors-1.2.1-bla_1.tar.bz2").unwrap();
+        let package_bors_2 = repodata.packages.get("bors-2.1-bla_1.tar.bz2").unwrap();
+
+        assert!(PackageRecord::validate(vec![package_depends_only_virtual_package]).is_ok());
+        for packages in [vec![package_depends], vec![package_depends, package_bors_2]] {
+            let result = PackageRecord::validate(packages);
+            assert!(result.is_err());
+            assert!(result.err().unwrap().to_string().contains(
+                "package 'foobar=2.0=bla_1' has dependency 'bors <2.0', which is not in the environment"
+            ));
+        }
+
+        assert!(PackageRecord::validate(vec![package_depends, package_bors_1]).is_ok());
+        assert!(PackageRecord::validate(vec![package_constrains]).is_ok());
+        assert!(PackageRecord::validate(vec![package_constrains, package_bors_1]).is_ok());
+
+        let result = PackageRecord::validate(vec![package_constrains, package_bors_2]);
+        assert!(result.is_err());
+        assert!(result.err().unwrap().to_string().contains(
+            "package 'foo=3.0.2=py36h1af98f8_3' has constraint 'bors <2.0', which is not satisfied by 'bors=2.1=bla_1' in the environment"
+        ));
     }
 }

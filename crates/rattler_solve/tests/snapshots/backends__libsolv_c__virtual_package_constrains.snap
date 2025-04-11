@@ -1,0 +1,6 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+assertion_line: 614
+expression: output
+---
+Cannot solve the request because of: package cuda-version-12.5-hd4f0392_3 has constraint __cuda >=12.1 conflicting with __cuda-1

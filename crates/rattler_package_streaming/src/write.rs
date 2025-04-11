@@ -241,7 +241,11 @@ fn write_zst_archive<W: Write>(
     let tar_file = File::open(&tar_path)?;
     let compression_level = compression_level.to_zstd_level()?;
     let mut zst_encoder = zstd::Encoder::new(writer, compression_level)?;
+    #[cfg(not(target_arch = "wasm32"))]
     zst_encoder.multithread(num_threads.unwrap_or_else(|| num_cpus::get() as u32))?;
+    // mark as "used" to avoid "unused" warning
+    #[cfg(target_arch = "wasm32")]
+    let _ = num_threads;
 
     progress_bar_wrapper.reset_position();
     if let Ok(tar_total_size) = tar_file.metadata().map(|v| v.len()) {
@@ -271,7 +275,7 @@ fn write_zst_archive<W: Write>(
 /// * `paths` - a list of paths to include in the package
 /// * `compression_level` - the compression level to use for the inner zstd encoded files
 /// * `compression_num_threads` - the number of threads to use for zstd compression (defaults to
-/// the number of CPU cores if `None`)
+///    the number of CPU cores if `None`)
 /// * `timestamp` - optional a timestamp to use for all archive files (useful for reproducible builds)
 ///
 /// # Errors
@@ -310,7 +314,8 @@ pub fn write_conda_package<W: Write + Seek>(
 
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Stored)
-        .last_modified_time(last_modified_time);
+        .last_modified_time(last_modified_time)
+        .large_file(true);
 
     // write the metadata as first file in the zip archive
     let package_metadata = PackageMetadata::default();
@@ -321,6 +326,7 @@ pub fn write_conda_package<W: Write + Seek>(
     let (info_paths, other_paths) = sort_paths(paths, base_path);
 
     let archive_path = format!("pkg-{out_name}.tar.zst");
+
     outer_archive.start_file(archive_path, options)?;
     write_zst_archive(
         &mut outer_archive,

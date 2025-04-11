@@ -1,9 +1,10 @@
 [build-system]
-requires = ["maturin~=1.2.1"]
+requires = ["maturin~=1.7.8"]
 build-backend = "maturin"
 
 [project]
 name = "py-rattler"
+dynamic = ["version"]
 requires-python = ">=3.8"
 description = "A blazing fast library to work with the conda ecosystem"
 readme = "README.md"
@@ -23,10 +24,10 @@ classifiers = [
 license = "BSD-3-Clause"
 
 [project.urls]
-Homepage = "https://github.com/mamba-org/rattler"
-Documentation = "https://mamba-org.github.io/rattler/py-rattler/"
-Repository = "https://github.com/mamba-org/rattler"
-Issues = "https://github.com/mamba-org/rattler/labels/python-bindings"
+Homepage = "https://github.com/conda/rattler"
+Documentation = "https://conda.github.io/rattler/py-rattler/"
+Repository = "https://github.com/conda/rattler"
+Issues = "https://github.com/conda/rattler/labels/python-bindings"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

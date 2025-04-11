@@ -3,20 +3,26 @@
 //! This crate provides helper functions to activate and deactivate virtual
 //! environments.
 
+#[cfg(target_family = "unix")]
+use anyhow::{Context, Result};
+use fs_err as fs;
+#[cfg(target_family = "unix")]
+use std::io::Write;
 use std::{
     collections::HashMap,
     ffi::OsStr,
-    fs,
     path::{Path, PathBuf},
     process::ExitStatus,
 };
 
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
+#[cfg(target_family = "unix")]
+use rattler_pty::unix::PtySession;
 
 use crate::shell::{Shell, ShellScript};
 
-const ENV_START_SEPERATOR: &str = "____RATTLER_ENV_START____";
+const ENV_START_SEPARATOR: &str = "____RATTLER_ENV_START____";
 
 /// Type of modification done to the `PATH` variable
 #[derive(Default, Clone)]
@@ -24,9 +30,9 @@ pub enum PathModificationBehavior {
     /// Replaces the complete path variable with specified paths.
     #[default]
     Replace,
-    /// Appends the new path variables to the path. E.g. '$PATH:/new/path'
+    /// Appends the new path variables to the path. E.g. <PATH:/new/path>
     Append,
-    /// Prepends the new path variables to the path. E.g. '/new/path:$PATH'
+    /// Prepends the new path variables to the path. E.g. "/new/path:$PATH"
     Prepend,
 }
 
@@ -135,7 +141,7 @@ pub enum ActivationError {
     #[error("Invalid json for environment vars: {0} in file {1:?}")]
     InvalidEnvVarFileJson(serde_json::Error, PathBuf),
 
-    /// An error that can occur wiht malformed JSON when parsing files in the
+    /// An error that can occur with malformed JSON when parsing files in the
     /// `env_vars.d` directory
     #[error("Malformed JSON: not a plain JSON object in file {file:?}")]
     InvalidEnvVarFileJsonNoObject {
@@ -352,6 +358,70 @@ impl<T: Shell + Clone> Activator<T> {
         })
     }
 
+    /// Starts a UNIX shell.
+    /// # Arguments
+    /// - `shell`: The type of shell to start. Must implement the `Shell` and `Copy` traits.
+    /// - `args`: A vector of arguments to pass to the shell.
+    /// - `env`: A `HashMap` containing environment variables to set in the shell.
+    /// - `prompt`: Prompt to the shell
+    #[cfg(target_family = "unix")]
+    #[allow(dead_code)]
+    async fn start_unix_shell<T_: Shell + Copy + 'static>(
+        shell: T_,
+        args: Vec<&str>,
+        env: &HashMap<String, String>,
+        prompt: String,
+    ) -> Result<Option<i32>> {
+        const DONE_STR: &str = "RATTLER_SHELL_ACTIVATION_DONE";
+        // create a tempfile for activation
+        let mut temp_file = tempfile::Builder::new()
+            .prefix("rattler_env_")
+            .suffix(&format!(".{}", shell.extension()))
+            .rand_bytes(3)
+            .tempfile()
+            .context("Failed to create tmp file")?;
+
+        let mut shell_script = ShellScript::new(shell, Platform::current());
+        for (key, value) in env {
+            shell_script
+                .set_env_var(key, value)
+                .context("Failed to set env var")?;
+        }
+
+        shell_script.echo(DONE_STR)?;
+
+        temp_file
+            .write_all(shell_script.contents()?.as_bytes())
+            .context("Failed to write shell script content")?;
+
+        // Write custom prompt to the env file
+        temp_file.write_all(prompt.as_bytes())?;
+
+        let mut command = std::process::Command::new(shell.executable());
+        command.args(args);
+
+        // Space added before `source` to automatically ignore it in history.
+        let mut source_command = " ".to_string();
+        shell
+            .run_script(&mut source_command, temp_file.path())
+            .context("Failed to run the script")?;
+
+        // Remove automatically added `\n`, if for some reason this fails, just ignore.
+        let source_command = source_command
+            .strip_suffix('\n')
+            .unwrap_or(source_command.as_str());
+
+        // Start process and send env activation to the shell.
+        let mut process = PtySession::new(command)?;
+        process
+            .send_line(source_command)
+            .context("Failed to send command to shell")?;
+
+        process
+            .interact(Some(DONE_STR))
+            .context("Failed to interact with shell process")
+    }
+
     /// Create an activation script for a given shell and platform. This
     /// returns a tuple of the newly computed PATH variable and the activation
     /// script.
@@ -419,10 +489,10 @@ impl<T: Shell + Clone> Activator<T> {
             ShellScript::new(self.shell_type.clone(), self.platform);
         activation_detection_script
             .print_env()?
-            .echo(ENV_START_SEPERATOR)?;
+            .echo(ENV_START_SEPARATOR)?;
         activation_detection_script.append_script(&activation_script);
         activation_detection_script
-            .echo(ENV_START_SEPERATOR)?
+            .echo(ENV_START_SEPARATOR)?
             .print_env()?;
 
         // Create a temporary file that we can execute with our shell.
@@ -460,9 +530,9 @@ impl<T: Shell + Clone> Activator<T> {
 
         let stdout = String::from_utf8_lossy(&activation_result.stdout);
         let (before_env, rest) = stdout
-            .split_once(ENV_START_SEPERATOR)
+            .split_once(ENV_START_SEPARATOR)
             .unwrap_or(("", stdout.as_ref()));
-        let (_, after_env) = rest.rsplit_once(ENV_START_SEPERATOR).unwrap_or(("", ""));
+        let (_, after_env) = rest.rsplit_once(ENV_START_SEPARATOR).unwrap_or(("", ""));
 
         // Parse both environments and find the difference
         let before_env = self.shell_type.parse_env(before_env);
@@ -603,13 +673,10 @@ mod tests {
     }
 
     #[cfg(unix)]
-    fn get_script<T: Shell + 'static>(
+    fn get_script<T: Clone + Shell + 'static>(
         shell_type: T,
         path_modification_behavior: PathModificationBehavior,
-    ) -> String
-    where
-        T: Clone,
-    {
+    ) -> String {
         let tdir = create_temp_dir();
 
         let activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();

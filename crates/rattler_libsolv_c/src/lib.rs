@@ -29,6 +29,7 @@ pub const DISTTYPE_DEB: u32 = 1;
 pub const DISTTYPE_ARCH: u32 = 2;
 pub const DISTTYPE_HAIKU: u32 = 3;
 pub const DISTTYPE_CONDA: u32 = 4;
+pub const DISTTYPE_APK: u32 = 5;
 pub const SOLV_FATAL: u32 = 1;
 pub const SOLV_ERROR: u32 = 2;
 pub const SOLV_WARN: u32 = 4;
@@ -92,7 +93,6 @@ pub const SEARCH_KEEP_TYPE_DELETED: u32 = 4096;
 pub const SEARCH_SKIP_KIND: u32 = 65536;
 pub const SEARCH_FILES: u32 = 131072;
 pub const SEARCH_CHECKSUMS: u32 = 262144;
-pub const SEARCH_SUBSCHEMA: u32 = 1073741824;
 pub const SEARCH_THISSOLVID: u32 = 2147483648;
 pub const SEARCH_COMPLETE_FILELIST: u32 = 0;
 pub const SEARCH_NEXT_KEY: u32 = 1;
@@ -141,6 +141,12 @@ pub const SOLVER_SOLUTION_BEST: i32 = -3;
 pub const SOLVER_SOLUTION_POOLJOB: i32 = -4;
 pub const SOLVER_SOLUTION_BLACK: i32 = -5;
 pub const SOLVER_SOLUTION_STRICTREPOPRIORITY: i32 = -6;
+pub const SOLVER_SOLUTION_ERASE: i32 = -100;
+pub const SOLVER_SOLUTION_REPLACE: i32 = -101;
+pub const SOLVER_SOLUTION_REPLACE_DOWNGRADE: i32 = -102;
+pub const SOLVER_SOLUTION_REPLACE_ARCHCHANGE: i32 = -103;
+pub const SOLVER_SOLUTION_REPLACE_VENDORCHANGE: i32 = -104;
+pub const SOLVER_SOLUTION_REPLACE_NAMECHANGE: i32 = -105;
 pub const SOLVER_SOLVABLE: u32 = 1;
 pub const SOLVER_SOLVABLE_NAME: u32 = 2;
 pub const SOLVER_SOLVABLE_PROVIDES: u32 = 3;
@@ -192,6 +198,8 @@ pub const SOLVER_REASON_WEAKDEP: u32 = 7;
 pub const SOLVER_REASON_RESOLVE_ORPHAN: u32 = 8;
 pub const SOLVER_REASON_RECOMMENDED: u32 = 16;
 pub const SOLVER_REASON_SUPPLEMENTED: u32 = 17;
+pub const SOLVER_REASON_UNSOLVABLE: u32 = 18;
+pub const SOLVER_REASON_PREMISE: u32 = 19;
 pub const SOLVER_FLAG_ALLOW_DOWNGRADE: u32 = 1;
 pub const SOLVER_FLAG_ALLOW_ARCHCHANGE: u32 = 2;
 pub const SOLVER_FLAG_ALLOW_VENDORCHANGE: u32 = 3;
@@ -220,9 +228,17 @@ pub const SOLVER_FLAG_STRONG_RECOMMENDS: u32 = 25;
 pub const SOLVER_FLAG_INSTALL_ALSO_UPDATES: u32 = 26;
 pub const SOLVER_FLAG_ONLY_NAMESPACE_RECOMMENDED: u32 = 27;
 pub const SOLVER_FLAG_STRICT_REPO_PRIORITY: u32 = 28;
+pub const SOLVER_FLAG_FOCUS_NEW: u32 = 29;
 pub const SOLVER_ALTERNATIVE_TYPE_RULE: u32 = 1;
 pub const SOLVER_ALTERNATIVE_TYPE_RECOMMENDS: u32 = 2;
 pub const SOLVER_ALTERNATIVE_TYPE_SUGGESTS: u32 = 3;
+pub const SOLVER_DECISIONLIST_SOLVABLE: u32 = 2;
+pub const SOLVER_DECISIONLIST_PROBLEM: u32 = 4;
+pub const SOLVER_DECISIONLIST_LEARNTRULE: u32 = 8;
+pub const SOLVER_DECISIONLIST_WITHINFO: u32 = 256;
+pub const SOLVER_DECISIONLIST_SORTED: u32 = 512;
+pub const SOLVER_DECISIONLIST_MERGEDINFO: u32 = 1024;
+pub const SOLVER_DECISIONLIST_TYPEMASK: u32 = 255;
 pub const SELECTION_NAME: u32 = 1;
 pub const SELECTION_PROVIDES: u32 = 2;
 pub const SELECTION_FILELIST: u32 = 4;
@@ -252,6 +268,9 @@ pub const CONDA_ADD_USE_ONLY_TAR_BZ2: u32 = 256;
 pub const CONDA_ADD_WITH_SIGNATUREDATA: u32 = 512;
 pub type Stringpool = s_Stringpool;
 pub type Pool = s_Pool;
+pub type Repo = s_Repo;
+pub type Repodata = s_Repodata;
+pub type Solvable = s_Solvable;
 pub type Id = libc::c_int;
 pub type Offset = libc::c_uint;
 pub type Hashval = libc::c_uint;
@@ -264,10 +283,10 @@ pub struct s_Reldep {
     pub flags: libc::c_int,
 }
 pub type Reldep = s_Reldep;
-extern "C" {
+unsafe extern "C" {
     pub fn pool_str2id(pool: *mut Pool, arg1: *const libc::c_char, arg2: libc::c_int) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_strn2id(
         pool: *mut Pool,
         arg1: *const libc::c_char,
@@ -275,7 +294,7 @@ extern "C" {
         arg3: libc::c_int,
     ) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_rel2id(
         pool: *mut Pool,
         arg1: Id,
@@ -284,28 +303,28 @@ extern "C" {
         arg4: libc::c_int,
     ) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_id2str(pool: *const Pool, arg1: Id) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_id2rel(pool: *const Pool, arg1: Id) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_id2evr(pool: *const Pool, arg1: Id) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_dep2str(pool: *mut Pool, arg1: Id) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_shrink_strings(pool: *mut Pool);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_shrink_rels(pool: *mut Pool);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_freeidhashes(pool: *mut Pool);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_resize_rels_hash(pool: *mut Pool, numnew: libc::c_int);
 }
 #[repr(C)]
@@ -317,43 +336,43 @@ pub struct s_Queue {
     pub left: libc::c_int,
 }
 pub type Queue = s_Queue;
-extern "C" {
+unsafe extern "C" {
     pub fn queue_alloc_one(q: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn queue_alloc_one_head(q: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn queue_init(q: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn queue_init_buffer(q: *mut Queue, buf: *mut Id, size: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn queue_init_clone(target: *mut Queue, source: *const Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn queue_free(q: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn queue_insert(q: *mut Queue, pos: libc::c_int, id: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn queue_insert2(q: *mut Queue, pos: libc::c_int, id1: Id, id2: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn queue_insertn(q: *mut Queue, pos: libc::c_int, n: libc::c_int, elements: *const Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn queue_delete(q: *mut Queue, pos: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn queue_delete2(q: *mut Queue, pos: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn queue_deleten(q: *mut Queue, pos: libc::c_int, n: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn queue_prealloc(q: *mut Queue, n: libc::c_int);
 }
 #[repr(C)]
@@ -363,28 +382,28 @@ pub struct s_Map {
     pub size: libc::c_int,
 }
 pub type Map = s_Map;
-extern "C" {
+unsafe extern "C" {
     pub fn map_init(m: *mut Map, n: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn map_init_clone(target: *mut Map, source: *const Map);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn map_grow(m: *mut Map, n: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn map_free(m: *mut Map);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn map_and(t: *mut Map, s: *const Map);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn map_or(t: *mut Map, s: *const Map);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn map_subtract(t: *mut Map, s: *const Map);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn map_invertall(m: *mut Map);
 }
 #[repr(C)]
@@ -404,34 +423,33 @@ pub struct s_Solvable {
     pub supplements: Offset,
     pub enhances: Offset,
 }
-pub type Solvable = s_Solvable;
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_type(s: *mut Solvable, keyname: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_id(s: *mut Solvable, keyname: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_num(
         s: *mut Solvable,
         keyname: Id,
         notfound: libc::c_ulonglong,
     ) -> libc::c_ulonglong;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_sizek(
         s: *mut Solvable,
         keyname: Id,
         notfound: libc::c_ulonglong,
     ) -> libc::c_ulonglong;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_str(s: *mut Solvable, keyname: Id) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_str_poollang(s: *mut Solvable, keyname: Id) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_str_lang(
         s: *mut Solvable,
         keyname: Id,
@@ -439,45 +457,45 @@ extern "C" {
         usebase: libc::c_int,
     ) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_bool(s: *mut Solvable, keyname: Id) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_void(s: *mut Solvable, keyname: Id) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_get_location(
         s: *mut Solvable,
         medianrp: *mut libc::c_uint,
     ) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_location(
         s: *mut Solvable,
         medianrp: *mut libc::c_uint,
     ) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_sourcepkg(s: *mut Solvable) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_bin_checksum(
         s: *mut Solvable,
         keyname: Id,
         typep: *mut Id,
     ) -> *const libc::c_uchar;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_checksum(
         s: *mut Solvable,
         keyname: Id,
         typep: *mut Id,
     ) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_idarray(s: *mut Solvable, keyname: Id, q: *mut Queue) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_deparray(
         s: *mut Solvable,
         keyname: Id,
@@ -485,46 +503,46 @@ extern "C" {
         marker: Id,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_lookup_count(s: *mut Solvable, keyname: Id) -> libc::c_uint;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_set_id(s: *mut Solvable, keyname: Id, id: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_set_num(s: *mut Solvable, keyname: Id, num: libc::c_ulonglong);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_set_str(s: *mut Solvable, keyname: Id, str_: *const libc::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_set_poolstr(s: *mut Solvable, keyname: Id, str_: *const libc::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_add_poolstr_array(s: *mut Solvable, keyname: Id, str_: *const libc::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_add_idarray(s: *mut Solvable, keyname: Id, id: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_add_deparray(s: *mut Solvable, keyname: Id, dep: Id, marker: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_set_idarray(s: *mut Solvable, keyname: Id, q: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_set_deparray(s: *mut Solvable, keyname: Id, q: *mut Queue, marker: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_unset(s: *mut Solvable, keyname: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_identical(s1: *mut Solvable, s2: *mut Solvable) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_selfprovidedep(s: *mut Solvable) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_matchesdep(
         s: *mut Solvable,
         keyname: Id,
@@ -532,7 +550,7 @@ extern "C" {
         marker: libc::c_int,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_matchessolvable(
         s: *mut Solvable,
         keyname: Id,
@@ -541,7 +559,7 @@ extern "C" {
         marker: libc::c_int,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_matchessolvable_int(
         s: *mut Solvable,
         keyname: Id,
@@ -554,10 +572,10 @@ extern "C" {
         outdepq: *mut Queue,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_is_irrelevant_patch(s: *mut Solvable, installedmap: *mut Map) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_trivial_installable_map(
         s: *mut Solvable,
         installedmap: *mut Map,
@@ -565,14 +583,14 @@ extern "C" {
         multiversionmap: *mut Map,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_trivial_installable_queue(
         s: *mut Solvable,
         installed: *mut Queue,
         multiversionmap: *mut Map,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_trivial_installable_repo(
         s: *mut Solvable,
         installed: *mut s_Repo,
@@ -589,32 +607,29 @@ pub struct s_Stringpool {
     pub stringhashtbl: Hashtable,
     pub stringhashmask: Hashval,
 }
-extern "C" {
+unsafe extern "C" {
     pub fn stringpool_init(ss: *mut Stringpool, strs: *mut *const libc::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn stringpool_init_empty(ss: *mut Stringpool);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn stringpool_clone(ss: *mut Stringpool, from: *mut Stringpool);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn stringpool_free(ss: *mut Stringpool);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn stringpool_freehash(ss: *mut Stringpool);
 }
-extern "C" {
-    pub fn stringpool_resize_hash(ss: *mut Stringpool, numnew: libc::c_int);
-}
-extern "C" {
+unsafe extern "C" {
     pub fn stringpool_str2id(
         ss: *mut Stringpool,
         str_: *const libc::c_char,
         create: libc::c_int,
     ) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn stringpool_strn2id(
         ss: *mut Stringpool,
         str_: *const libc::c_char,
@@ -622,13 +637,24 @@ extern "C" {
         create: libc::c_int,
     ) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn stringpool_shrink(ss: *mut Stringpool);
+}
+unsafe extern "C" {
+    pub fn stringpool_reserve(ss: *mut Stringpool, numid: libc::c_int, sizeid: Offset);
+}
+unsafe extern "C" {
+    pub fn stringpool_integrate(
+        ss: *mut Stringpool,
+        numid: libc::c_int,
+        sizeid: Offset,
+        idmap: *mut Id,
+    ) -> libc::c_int;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_Datapos {
-    pub repo: *mut s_Repo,
+    pub repo: *mut Repo,
     pub solvid: Id,
     pub repodataid: Id,
     pub schema: Id,
@@ -639,13 +665,13 @@ pub type Datapos = s_Datapos;
 #[derive(Debug, Copy, Clone)]
 pub struct s_Pool {
     pub appdata: *mut libc::c_void,
-    pub ss: s_Stringpool,
+    pub ss: Stringpool,
     pub rels: *mut Reldep,
     pub nrels: libc::c_int,
-    pub repos: *mut *mut s_Repo,
+    pub repos: *mut *mut Repo,
     pub nrepos: libc::c_int,
     pub urepos: libc::c_int,
-    pub installed: *mut s_Repo,
+    pub installed: *mut Repo,
     pub solvables: *mut Solvable,
     pub nsolvables: libc::c_int,
     pub languages: *mut *const libc::c_char,
@@ -663,13 +689,13 @@ pub struct s_Pool {
     pub whatprovidesdataleft: libc::c_int,
     pub considered: *mut Map,
     pub nscallback: ::std::option::Option<
-        unsafe extern "C" fn(arg1: *mut s_Pool, data: *mut libc::c_void, name: Id, evr: Id) -> Id,
+        unsafe extern "C" fn(arg1: *mut Pool, data: *mut libc::c_void, name: Id, evr: Id) -> Id,
     >,
     pub nscallbackdata: *mut libc::c_void,
     pub debugmask: libc::c_int,
     pub debugcallback: ::std::option::Option<
         unsafe extern "C" fn(
-            arg1: *mut s_Pool,
+            arg1: *mut Pool,
             data: *mut libc::c_void,
             type_: libc::c_int,
             str_: *const libc::c_char,
@@ -678,8 +704,8 @@ pub struct s_Pool {
     pub debugcallbackdata: *mut libc::c_void,
     pub loadcallback: ::std::option::Option<
         unsafe extern "C" fn(
-            arg1: *mut s_Pool,
-            arg2: *mut s_Repodata,
+            arg1: *mut Pool,
+            arg2: *mut Repodata,
             arg3: *mut libc::c_void,
         ) -> libc::c_int,
     >,
@@ -687,36 +713,36 @@ pub struct s_Pool {
     pub pos: Datapos,
     pub pooljobs: Queue,
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_create() -> *mut Pool;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_free(pool: *mut Pool);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_freeallrepos(pool: *mut Pool, reuseids: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_setdebuglevel(pool: *mut Pool, level: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_setdisttype(pool: *mut Pool, disttype: libc::c_int) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_set_flag(pool: *mut Pool, flag: libc::c_int, value: libc::c_int) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_get_flag(pool: *mut Pool, flag: libc::c_int) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_debug(pool: *mut Pool, type_: libc::c_int, format: *const libc::c_char, ...);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_setdebugcallback(
         pool: *mut Pool,
         debugcallback: ::std::option::Option<
             unsafe extern "C" fn(
-                arg1: *mut s_Pool,
+                pool: *mut Pool,
                 data: *mut libc::c_void,
                 type_: libc::c_int,
                 str_: *const libc::c_char,
@@ -725,28 +751,28 @@ extern "C" {
         debugcallbackdata: *mut libc::c_void,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_setdebugmask(pool: *mut Pool, mask: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_setloadcallback(
         pool: *mut Pool,
         cb: ::std::option::Option<
             unsafe extern "C" fn(
-                arg1: *mut s_Pool,
-                arg2: *mut s_Repodata,
+                arg1: *mut Pool,
+                arg2: *mut Repodata,
                 arg3: *mut libc::c_void,
             ) -> libc::c_int,
         >,
         loadcbdata: *mut libc::c_void,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_setnamespacecallback(
         pool: *mut Pool,
         cb: ::std::option::Option<
             unsafe extern "C" fn(
-                arg1: *mut s_Pool,
+                arg1: *mut Pool,
                 arg2: *mut libc::c_void,
                 arg3: Id,
                 arg4: Id,
@@ -755,39 +781,39 @@ extern "C" {
         nscbdata: *mut libc::c_void,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_flush_namespaceproviders(pool: *mut Pool, ns: Id, evr: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_set_custom_vendorcheck(
         pool: *mut Pool,
         vendorcheck: ::std::option::Option<
             unsafe extern "C" fn(
-                arg1: *mut s_Pool,
+                arg1: *mut Pool,
                 arg2: *mut Solvable,
                 arg3: *mut Solvable,
             ) -> libc::c_int,
         >,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_get_custom_vendorcheck(
         pool: *mut Pool,
     ) -> ::std::option::Option<
         unsafe extern "C" fn(
-            pool: *mut s_Pool,
+            pool: *mut Pool,
             arg1: *mut Solvable,
             arg2: *mut Solvable,
         ) -> libc::c_int,
     >;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_alloctmpspace(pool: *mut Pool, len: libc::c_int) -> *mut libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_freetmpspace(pool: *mut Pool, space: *const libc::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_tmpjoin(
         pool: *mut Pool,
         str1: *const libc::c_char,
@@ -795,7 +821,7 @@ extern "C" {
         str3: *const libc::c_char,
     ) -> *mut libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_tmpappend(
         pool: *mut Pool,
         str1: *const libc::c_char,
@@ -803,17 +829,17 @@ extern "C" {
         str3: *const libc::c_char,
     ) -> *mut libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_bin2hex(
         pool: *mut Pool,
         buf: *const libc::c_uchar,
         len: libc::c_int,
     ) -> *const libc::c_char;
 }
-extern "C" {
-    pub fn pool_set_installed(pool: *mut Pool, repo: *mut s_Repo);
+unsafe extern "C" {
+    pub fn pool_set_installed(pool: *mut Pool, repo: *mut Repo);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_error(
         pool: *mut Pool,
         ret: libc::c_int,
@@ -821,32 +847,32 @@ extern "C" {
         ...
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_errstr(pool: *mut Pool) -> *mut libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_set_rootdir(pool: *mut Pool, rootdir: *const libc::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_get_rootdir(pool: *mut Pool) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_prepend_rootdir(pool: *mut Pool, dir: *const libc::c_char) -> *mut libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_prepend_rootdir_tmp(
         pool: *mut Pool,
         dir: *const libc::c_char,
     ) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     #[doc = " Solvable management"]
     pub fn pool_add_solvable(pool: *mut Pool) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_add_solvable_block(pool: *mut Pool, count: libc::c_int) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_free_solvable_block(
         pool: *mut Pool,
         start: Id,
@@ -854,17 +880,20 @@ extern "C" {
         reuseids: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_solvable2str(pool: *mut Pool, s: *mut Solvable) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
+    pub fn pool_solvidset2str(pool: *mut Pool, q: *mut Queue) -> *const libc::c_char;
+}
+unsafe extern "C" {
     pub fn pool_set_languages(
         pool: *mut Pool,
         languages: *mut *const libc::c_char,
         nlanguages: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_id2langid(
         pool: *mut Pool,
         id: Id,
@@ -872,7 +901,7 @@ extern "C" {
         create: libc::c_int,
     ) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_intersect_evrs(
         pool: *mut Pool,
         pflags: libc::c_int,
@@ -881,38 +910,38 @@ extern "C" {
         evr: Id,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_match_dep(pool: *mut Pool, d1: Id, d2: Id) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_match_nevr_rel(pool: *mut Pool, s: *mut Solvable, d: Id) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     #[doc = " Prepares a pool for solving"]
     pub fn pool_createwhatprovides(pool: *mut Pool);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_addfileprovides(pool: *mut Pool);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_addfileprovides_queue(pool: *mut Pool, idq: *mut Queue, idqinst: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_freewhatprovides(pool: *mut Pool);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_queuetowhatprovides(pool: *mut Pool, q: *mut Queue) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_ids2whatprovides(pool: *mut Pool, ids: *mut Id, count: libc::c_int) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_searchlazywhatprovidesq(pool: *mut Pool, d: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_addrelproviders(pool: *mut Pool, d: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_whatmatchesdep(
         pool: *mut Pool,
         keyname: Id,
@@ -921,7 +950,7 @@ extern "C" {
         marker: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_whatcontainsdep(
         pool: *mut Pool,
         keyname: Id,
@@ -930,7 +959,7 @@ extern "C" {
         marker: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_whatmatchessolvable(
         pool: *mut Pool,
         keyname: Id,
@@ -939,10 +968,10 @@ extern "C" {
         marker: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_set_whatprovides(pool: *mut Pool, id: Id, providers: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_search(
         pool: *mut Pool,
         p: Id,
@@ -953,7 +982,7 @@ extern "C" {
             unsafe extern "C" fn(
                 cbdata: *mut libc::c_void,
                 s: *mut Solvable,
-                data: *mut s_Repodata,
+                data: *mut Repodata,
                 key: *mut s_Repokey,
                 kv: *mut s_KeyValue,
             ) -> libc::c_int,
@@ -961,16 +990,16 @@ extern "C" {
         cbdata: *mut libc::c_void,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_clear_pos(pool: *mut Pool);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_lookup_str(pool: *mut Pool, entry: Id, keyname: Id) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_lookup_id(pool: *mut Pool, entry: Id, keyname: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_lookup_num(
         pool: *mut Pool,
         entry: Id,
@@ -978,10 +1007,10 @@ extern "C" {
         notfound: libc::c_ulonglong,
     ) -> libc::c_ulonglong;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_lookup_void(pool: *mut Pool, entry: Id, keyname: Id) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_lookup_bin_checksum(
         pool: *mut Pool,
         entry: Id,
@@ -989,7 +1018,7 @@ extern "C" {
         typep: *mut Id,
     ) -> *const libc::c_uchar;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_lookup_idarray(
         pool: *mut Pool,
         entry: Id,
@@ -997,7 +1026,7 @@ extern "C" {
         q: *mut Queue,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_lookup_checksum(
         pool: *mut Pool,
         entry: Id,
@@ -1005,7 +1034,7 @@ extern "C" {
         typep: *mut Id,
     ) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_lookup_deltalocation(
         pool: *mut Pool,
         entry: Id,
@@ -1021,7 +1050,7 @@ pub struct s_DUChanges {
     pub flags: libc::c_int,
 }
 pub type DUChanges = s_DUChanges;
-extern "C" {
+unsafe extern "C" {
     pub fn pool_create_state_maps(
         pool: *mut Pool,
         installed: *mut Queue,
@@ -1029,7 +1058,7 @@ extern "C" {
         conflictsmap: *mut Map,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_calc_duchanges(
         pool: *mut Pool,
         installedmap: *mut Map,
@@ -1037,14 +1066,14 @@ extern "C" {
         nmps: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_calc_installsizechange(pool: *mut Pool, installedmap: *mut Map)
         -> libc::c_longlong;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_add_fileconflicts_deps(pool: *mut Pool, conflicts: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_trivial_installable_multiversionmap(
         pool: *mut Pool,
         installedmap: *mut Map,
@@ -1053,7 +1082,7 @@ extern "C" {
         multiversionmap: *mut Map,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_trivial_installable(
         pool: *mut Pool,
         installedmap: *mut Map,
@@ -1061,32 +1090,32 @@ extern "C" {
         res: *mut Queue,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_setarch(arg1: *mut Pool, arg2: *const libc::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_setarchpolicy(arg1: *mut Pool, arg2: *const libc::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_arch2color_slow(pool: *mut Pool, arch: Id) -> libc::c_uchar;
 }
-extern "C" {
+unsafe extern "C" {
     #[doc = " malloc\n exits with error message on error"]
     pub fn solv_malloc(arg1: usize) -> *mut libc::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_malloc2(arg1: usize, arg2: usize) -> *mut libc::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_calloc(arg1: usize, arg2: usize) -> *mut libc::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_realloc(arg1: *mut libc::c_void, arg2: usize) -> *mut libc::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_realloc2(arg1: *mut libc::c_void, arg2: usize, arg3: usize) -> *mut libc::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_extend_realloc(
         arg1: *mut libc::c_void,
         arg2: usize,
@@ -1094,22 +1123,22 @@ extern "C" {
         arg4: usize,
     ) -> *mut libc::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_free(arg1: *mut libc::c_void) -> *mut libc::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_strdup(arg1: *const libc::c_char) -> *mut libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_oom(arg1: usize, arg2: usize);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_timems(subtract: libc::c_uint) -> libc::c_uint;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_setcloexec(fd: libc::c_int, state: libc::c_int) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_sort(
         base: *mut libc::c_void,
         nmemb: usize,
@@ -1124,41 +1153,41 @@ extern "C" {
         compard: *mut libc::c_void,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_dupjoin(
         str1: *const libc::c_char,
         str2: *const libc::c_char,
         str3: *const libc::c_char,
     ) -> *mut libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_dupappend(
         str1: *const libc::c_char,
         str2: *const libc::c_char,
         str3: *const libc::c_char,
     ) -> *mut libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_hex2bin(
         strp: *mut *const libc::c_char,
         buf: *mut libc::c_uchar,
         bufl: libc::c_int,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_bin2hex(
         buf: *const libc::c_uchar,
         l: libc::c_int,
         str_: *mut libc::c_char,
     ) -> *mut libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_validutf8(buf: *const libc::c_char) -> usize;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_latin1toutf8(buf: *const libc::c_char) -> *mut libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_replacebadutf8(
         buf: *const libc::c_char,
         replchar: libc::c_int,
@@ -1185,9 +1214,9 @@ pub type Repokey = s_Repokey;
 #[derive(Debug, Copy, Clone)]
 pub struct s_Repodata {
     pub repodataid: Id,
-    pub repo: *mut s_Repo,
+    pub repo: *mut Repo,
     pub state: libc::c_int,
-    pub loadcallback: ::std::option::Option<unsafe extern "C" fn(arg1: *mut s_Repodata)>,
+    pub loadcallback: ::std::option::Option<unsafe extern "C" fn(arg1: *mut Repodata)>,
     pub start: libc::c_int,
     pub end: libc::c_int,
     pub keys: *mut Repokey,
@@ -1200,32 +1229,31 @@ pub struct s_Repodata {
     pub localpool: libc::c_int,
     pub dirpool: Dirpool,
 }
-pub type Repodata = s_Repodata;
-extern "C" {
-    pub fn repodata_initdata(data: *mut Repodata, repo: *mut s_Repo, localpool: libc::c_int);
+unsafe extern "C" {
+    pub fn repodata_initdata(data: *mut Repodata, repo: *mut Repo, localpool: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_freedata(data: *mut Repodata);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_free(data: *mut Repodata);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_empty(data: *mut Repodata, localpool: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_load(data: *mut Repodata);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_key2id(data: *mut Repodata, key: *mut Repokey, create: libc::c_int) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_schema2id(data: *mut Repodata, schema: *mut Id, create: libc::c_int) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_free_schemahash(data: *mut Repodata);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_search(
         data: *mut Repodata,
         solvid: Id,
@@ -1243,7 +1271,7 @@ extern "C" {
         cbdata: *mut libc::c_void,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_search_keyskip(
         data: *mut Repodata,
         solvid: Id,
@@ -1262,7 +1290,7 @@ extern "C" {
         cbdata: *mut libc::c_void,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_search_arrayelement(
         data: *mut Repodata,
         solvid: Id,
@@ -1281,7 +1309,7 @@ extern "C" {
         cbdata: *mut libc::c_void,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_stringify(
         pool: *mut Pool,
         data: *mut Repodata,
@@ -1290,29 +1318,29 @@ extern "C" {
         flags: libc::c_int,
     ) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_filelisttype(data: *mut Repodata, filelisttype: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_filelistfilter_matches(
         data: *mut Repodata,
         str_: *const libc::c_char,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_free_filelistfilter(data: *mut Repodata);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_lookup_type(data: *mut Repodata, solvid: Id, keyname: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_lookup_id(data: *mut Repodata, solvid: Id, keyname: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_lookup_str(data: *mut Repodata, solvid: Id, keyname: Id)
         -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_lookup_num(
         data: *mut Repodata,
         solvid: Id,
@@ -1320,10 +1348,10 @@ extern "C" {
         notfound: libc::c_ulonglong,
     ) -> libc::c_ulonglong;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_lookup_void(data: *mut Repodata, solvid: Id, keyname: Id) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_lookup_bin_checksum(
         data: *mut Repodata,
         solvid: Id,
@@ -1331,7 +1359,7 @@ extern "C" {
         typep: *mut Id,
     ) -> *const libc::c_uchar;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_lookup_idarray(
         data: *mut Repodata,
         solvid: Id,
@@ -1339,7 +1367,7 @@ extern "C" {
         q: *mut Queue,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_lookup_binary(
         data: *mut Repodata,
         solvid: Id,
@@ -1347,44 +1375,44 @@ extern "C" {
         lenp: *mut libc::c_int,
     ) -> *const libc::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_lookup_count(data: *mut Repodata, solvid: Id, keyname: Id) -> libc::c_uint;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_lookup_packed_dirstrarray(
         data: *mut Repodata,
         solvid: Id,
         keyname: Id,
     ) -> *const libc::c_uchar;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_fill_keyskip(data: *mut Repodata, solvid: Id, keyskip: *mut Id) -> *mut Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_extend(data: *mut Repodata, p: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_extend_block(data: *mut Repodata, p: Id, num: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_shrink(data: *mut Repodata, end: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_internalize(data: *mut Repodata);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_new_handle(data: *mut Repodata) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_void(data: *mut Repodata, solvid: Id, keyname: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_num(data: *mut Repodata, solvid: Id, keyname: Id, num: libc::c_ulonglong);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_id(data: *mut Repodata, solvid: Id, keyname: Id, id: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_str(
         data: *mut Repodata,
         solvid: Id,
@@ -1392,7 +1420,7 @@ extern "C" {
         str_: *const libc::c_char,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_binary(
         data: *mut Repodata,
         solvid: Id,
@@ -1401,7 +1429,7 @@ extern "C" {
         len: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_poolstr(
         data: *mut Repodata,
         solvid: Id,
@@ -1409,7 +1437,7 @@ extern "C" {
         str_: *const libc::c_char,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_constant(
         data: *mut Repodata,
         solvid: Id,
@@ -1417,10 +1445,10 @@ extern "C" {
         constant: libc::c_uint,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_constantid(data: *mut Repodata, solvid: Id, keyname: Id, id: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_bin_checksum(
         data: *mut Repodata,
         solvid: Id,
@@ -1429,7 +1457,7 @@ extern "C" {
         buf: *const libc::c_uchar,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_checksum(
         data: *mut Repodata,
         solvid: Id,
@@ -1438,10 +1466,10 @@ extern "C" {
         str_: *const libc::c_char,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_idarray(data: *mut Repodata, solvid: Id, keyname: Id, q: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_add_dirnumnum(
         data: *mut Repodata,
         solvid: Id,
@@ -1451,7 +1479,7 @@ extern "C" {
         num2: Id,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_add_dirstr(
         data: *mut Repodata,
         solvid: Id,
@@ -1460,13 +1488,13 @@ extern "C" {
         str_: *const libc::c_char,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_free_dircache(data: *mut Repodata);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_add_idarray(data: *mut Repodata, solvid: Id, keyname: Id, id: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_add_poolstr_array(
         data: *mut Repodata,
         solvid: Id,
@@ -1474,13 +1502,13 @@ extern "C" {
         str_: *const libc::c_char,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_add_fixarray(data: *mut Repodata, solvid: Id, keyname: Id, ghandle: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_add_flexarray(data: *mut Repodata, solvid: Id, keyname: Id, ghandle: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_kv(
         data: *mut Repodata,
         solvid: Id,
@@ -1489,16 +1517,16 @@ extern "C" {
         kv: *mut s_KeyValue,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_unset(data: *mut Repodata, solvid: Id, keyname: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_unset_uninternalized(data: *mut Repodata, solvid: Id, keyname: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_merge_attrs(data: *mut Repodata, dest: Id, src: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_merge_some_attrs(
         data: *mut Repodata,
         dest: Id,
@@ -1507,22 +1535,22 @@ extern "C" {
         overwrite: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_swap_attrs(data: *mut Repodata, dest: Id, src: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_create_stubs(data: *mut Repodata) -> *mut Repodata;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_disable_paging(data: *mut Repodata);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_globalize_id(data: *mut Repodata, id: Id, create: libc::c_int) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_localize_id(data: *mut Repodata, id: Id, create: libc::c_int) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_translate_id(
         data: *mut Repodata,
         fromdata: *mut Repodata,
@@ -1530,7 +1558,7 @@ extern "C" {
         create: libc::c_int,
     ) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_translate_dir_slow(
         data: *mut Repodata,
         fromdata: *mut Repodata,
@@ -1539,28 +1567,28 @@ extern "C" {
         cache: *mut Id,
     ) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_str2dir(
         data: *mut Repodata,
         dir: *const libc::c_char,
         create: libc::c_int,
     ) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_dir2str(
         data: *mut Repodata,
         did: Id,
         suf: *const libc::c_char,
     ) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_chk2str(
         data: *mut Repodata,
         type_: Id,
         buf: *const libc::c_uchar,
     ) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_location(
         data: *mut Repodata,
         solvid: Id,
@@ -1569,7 +1597,7 @@ extern "C" {
         file: *const libc::c_char,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_deltalocation(
         data: *mut Repodata,
         handle: Id,
@@ -1578,10 +1606,10 @@ extern "C" {
         file: *const libc::c_char,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_set_sourcepkg(data: *mut Repodata, solvid: Id, sourcepkg: *const libc::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_lookup_kv_uninternalized(
         data: *mut Repodata,
         solvid: Id,
@@ -1589,7 +1617,7 @@ extern "C" {
         kv: *mut s_KeyValue,
     ) -> *mut Repokey;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_search_uninternalized(
         data: *mut Repodata,
         solvid: Id,
@@ -1607,7 +1635,7 @@ extern "C" {
         cbdata: *mut libc::c_void,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_memused(data: *mut Repodata) -> libc::c_uint;
 }
 #[repr(C)]
@@ -1631,20 +1659,20 @@ pub struct s_Datamatcher {
     pub error: libc::c_int,
 }
 pub type Datamatcher = s_Datamatcher;
-extern "C" {
+unsafe extern "C" {
     pub fn datamatcher_init(
         ma: *mut Datamatcher,
         match_: *const libc::c_char,
         flags: libc::c_int,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn datamatcher_free(ma: *mut Datamatcher);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn datamatcher_match(ma: *mut Datamatcher, str_: *const libc::c_char) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn datamatcher_checkbasename(
         ma: *mut Datamatcher,
         str_: *const libc::c_char,
@@ -1656,8 +1684,8 @@ pub struct s_Dataiterator {
     pub state: libc::c_int,
     pub flags: libc::c_int,
     pub pool: *mut Pool,
-    pub repo: *mut s_Repo,
-    pub data: *mut s_Repodata,
+    pub repo: *mut Repo,
+    pub data: *mut Repodata,
     pub dp: *mut libc::c_uchar,
     pub ddp: *mut libc::c_uchar,
     pub idp: *mut Id,
@@ -1691,76 +1719,76 @@ pub struct s_Dataiterator_di_parent {
     pub keyp: *mut Id,
 }
 pub type Dataiterator = s_Dataiterator;
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_init(
         di: *mut Dataiterator,
         pool: *mut Pool,
-        repo: *mut s_Repo,
+        repo: *mut Repo,
         p: Id,
         keyname: Id,
         match_: *const libc::c_char,
         flags: libc::c_int,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_init_clone(di: *mut Dataiterator, from: *mut Dataiterator);
 }
-extern "C" {
-    pub fn dataiterator_set_search(di: *mut Dataiterator, repo: *mut s_Repo, p: Id);
+unsafe extern "C" {
+    pub fn dataiterator_set_search(di: *mut Dataiterator, repo: *mut Repo, p: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_set_keyname(di: *mut Dataiterator, keyname: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_set_match(
         di: *mut Dataiterator,
         match_: *const libc::c_char,
         flags: libc::c_int,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_prepend_keyname(di: *mut Dataiterator, keyname: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_free(di: *mut Dataiterator);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_step(di: *mut Dataiterator) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_setpos(di: *mut Dataiterator);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_setpos_parent(di: *mut Dataiterator);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_match(di: *mut Dataiterator, ma: *mut Datamatcher) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_skip_attribute(di: *mut Dataiterator);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_skip_solvable(di: *mut Dataiterator);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_skip_repo(di: *mut Dataiterator);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_jump_to_solvid(di: *mut Dataiterator, solvid: Id);
 }
-extern "C" {
-    pub fn dataiterator_jump_to_repo(di: *mut Dataiterator, repo: *mut s_Repo);
+unsafe extern "C" {
+    pub fn dataiterator_jump_to_repo(di: *mut Dataiterator, repo: *mut Repo);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_entersub(di: *mut Dataiterator);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_clonepos(di: *mut Dataiterator, from: *mut Dataiterator);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_seek(di: *mut Dataiterator, whence: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn dataiterator_strdup(di: *mut Dataiterator);
 }
 #[repr(C)]
@@ -1781,29 +1809,28 @@ pub struct s_Repo {
     pub nrepodata: libc::c_int,
     pub rpmdbid: *mut Id,
 }
-pub type Repo = s_Repo;
-extern "C" {
+unsafe extern "C" {
     pub fn repo_create(pool: *mut Pool, name: *const libc::c_char) -> *mut Repo;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_free(repo: *mut Repo, reuseids: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_empty(repo: *mut Repo, reuseids: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_freedata(repo: *mut Repo);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_add_solvable(repo: *mut Repo) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_add_solvable_block(repo: *mut Repo, count: libc::c_int) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_free_solvable(repo: *mut Repo, p: Id, reuseids: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_free_solvable_block(
         repo: *mut Repo,
         start: Id,
@@ -1811,10 +1838,10 @@ extern "C" {
         reuseids: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_sidedata_create(repo: *mut Repo, size: usize) -> *mut libc::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_sidedata_extend(
         repo: *mut Repo,
         b: *mut libc::c_void,
@@ -1823,32 +1850,32 @@ extern "C" {
         count: libc::c_int,
     ) -> *mut libc::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_add_solvable_block_before(
         repo: *mut Repo,
         count: libc::c_int,
         beforerepo: *mut Repo,
     ) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_addid(repo: *mut Repo, olddeps: Offset, id: Id) -> Offset;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_addid_dep(repo: *mut Repo, olddeps: Offset, id: Id, marker: Id) -> Offset;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_reserve_ids(repo: *mut Repo, olddeps: Offset, num: libc::c_int) -> Offset;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_add_repodata(repo: *mut Repo, flags: libc::c_int) -> *mut Repodata;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_id2repodata(repo: *mut Repo, id: Id) -> *mut Repodata;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_last_repodata(repo: *mut Repo) -> *mut Repodata;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_search(
         repo: *mut Repo,
         p: Id,
@@ -1867,26 +1894,26 @@ extern "C" {
         cbdata: *mut libc::c_void,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_repodata(repo: *mut Repo, entry: Id, keyname: Id) -> *mut Repodata;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_repodata_opt(repo: *mut Repo, entry: Id, keyname: Id) -> *mut Repodata;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_filelist_repodata(
         repo: *mut Repo,
         entry: Id,
         matcher: *mut Datamatcher,
     ) -> *mut Repodata;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_type(repo: *mut Repo, entry: Id, keyname: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_str(repo: *mut Repo, entry: Id, keyname: Id) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_num(
         repo: *mut Repo,
         entry: Id,
@@ -1894,10 +1921,10 @@ extern "C" {
         notfound: libc::c_ulonglong,
     ) -> libc::c_ulonglong;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_id(repo: *mut Repo, entry: Id, keyname: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_idarray(
         repo: *mut Repo,
         entry: Id,
@@ -1905,7 +1932,7 @@ extern "C" {
         q: *mut Queue,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_deparray(
         repo: *mut Repo,
         entry: Id,
@@ -1914,10 +1941,10 @@ extern "C" {
         marker: Id,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_void(repo: *mut Repo, entry: Id, keyname: Id) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_checksum(
         repo: *mut Repo,
         entry: Id,
@@ -1925,7 +1952,7 @@ extern "C" {
         typep: *mut Id,
     ) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_bin_checksum(
         repo: *mut Repo,
         entry: Id,
@@ -1933,7 +1960,7 @@ extern "C" {
         typep: *mut Id,
     ) -> *const libc::c_uchar;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_binary(
         repo: *mut Repo,
         entry: Id,
@@ -1941,52 +1968,52 @@ extern "C" {
         lenp: *mut libc::c_int,
     ) -> *const libc::c_void;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_lookup_count(repo: *mut Repo, entry: Id, keyname: Id) -> libc::c_uint;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_depmarker(keyname: Id, marker: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_set_id(repo: *mut Repo, p: Id, keyname: Id, id: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_set_num(repo: *mut Repo, p: Id, keyname: Id, num: libc::c_ulonglong);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_set_str(repo: *mut Repo, p: Id, keyname: Id, str_: *const libc::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_set_poolstr(repo: *mut Repo, p: Id, keyname: Id, str_: *const libc::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_add_poolstr_array(repo: *mut Repo, p: Id, keyname: Id, str_: *const libc::c_char);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_add_idarray(repo: *mut Repo, p: Id, keyname: Id, id: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_add_deparray(repo: *mut Repo, p: Id, keyname: Id, dep: Id, marker: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_set_idarray(repo: *mut Repo, p: Id, keyname: Id, q: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_set_deparray(repo: *mut Repo, p: Id, keyname: Id, q: *mut Queue, marker: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_unset(repo: *mut Repo, p: Id, keyname: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_internalize(repo: *mut Repo);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_disable_paging(repo: *mut Repo);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_create_keyskip(repo: *mut Repo, entry: Id, oldkeyskip: *mut *mut Id) -> *mut Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_fix_supplements(
         repo: *mut Repo,
         provides: Offset,
@@ -1994,48 +2021,48 @@ extern "C" {
         freshens: Offset,
     ) -> Offset;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_fix_conflicts(repo: *mut Repo, conflicts: Offset) -> Offset;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_rewrite_suse_deps(s: *mut Solvable, freshens: Offset);
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_Transaction {
-    pub pool: *mut s_Pool,
+    pub pool: *mut Pool,
     pub steps: Queue,
 }
 pub type Transaction = s_Transaction;
-extern "C" {
-    pub fn transaction_create(pool: *mut s_Pool) -> *mut Transaction;
+unsafe extern "C" {
+    pub fn transaction_create(pool: *mut Pool) -> *mut Transaction;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_create_decisionq(
-        pool: *mut s_Pool,
+        pool: *mut Pool,
         decisionq: *mut Queue,
         multiversionmap: *mut Map,
     ) -> *mut Transaction;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_create_clone(srctrans: *mut Transaction) -> *mut Transaction;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_free(trans: *mut Transaction);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_obs_pkg(trans: *mut Transaction, p: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_all_obs_pkgs(trans: *mut Transaction, p: Id, pkgs: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_type(trans: *mut Transaction, p: Id, mode: libc::c_int) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_classify(trans: *mut Transaction, mode: libc::c_int, classes: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_classify_pkgs(
         trans: *mut Transaction,
         mode: libc::c_int,
@@ -2045,53 +2072,53 @@ extern "C" {
         pkgs: *mut Queue,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_installedresult(
         trans: *mut Transaction,
         installedq: *mut Queue,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_calc_installsizechange(trans: *mut Transaction) -> libc::c_longlong;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_calc_duchanges(
         trans: *mut Transaction,
         mps: *mut s_DUChanges,
         nmps: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_order(trans: *mut Transaction, flags: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_order_add_choices(
         trans: *mut Transaction,
         chosen: Id,
         choices: *mut Queue,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_add_obsoleted(trans: *mut Transaction);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_check_order(trans: *mut Transaction);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_order_get_cycleids(
         trans: *mut Transaction,
         q: *mut Queue,
         minseverity: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_order_get_cycle(
         trans: *mut Transaction,
         cid: Id,
         q: *mut Queue,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_order_get_edges(
         trans: *mut Transaction,
         p: Id,
@@ -2099,10 +2126,10 @@ extern "C" {
         unbroken: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_free_orderdata(trans: *mut Transaction);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_clone_orderdata(trans: *mut Transaction, srctrans: *mut Transaction);
 }
 #[repr(C)]
@@ -2129,6 +2156,7 @@ pub const SolverRuleinfo_SOLVER_RULE_PKG_IMPLICIT_OBSOLETES: SolverRuleinfo = 26
 pub const SolverRuleinfo_SOLVER_RULE_PKG_INSTALLED_OBSOLETES: SolverRuleinfo = 265;
 pub const SolverRuleinfo_SOLVER_RULE_PKG_RECOMMENDS: SolverRuleinfo = 266;
 pub const SolverRuleinfo_SOLVER_RULE_PKG_CONSTRAINS: SolverRuleinfo = 267;
+pub const SolverRuleinfo_SOLVER_RULE_PKG_SUPPLEMENTS: SolverRuleinfo = 268;
 pub const SolverRuleinfo_SOLVER_RULE_UPDATE: SolverRuleinfo = 512;
 pub const SolverRuleinfo_SOLVER_RULE_FEATURE: SolverRuleinfo = 768;
 pub const SolverRuleinfo_SOLVER_RULE_JOB: SolverRuleinfo = 1024;
@@ -2152,28 +2180,28 @@ cfg_if::cfg_if! {
         pub type SolverRuleinfo = libc::c_uint;
     }
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addrule(solv: *mut s_Solver, p: Id, p2: Id, d: Id) -> *mut Rule;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_unifyrules(solv: *mut s_Solver);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_rulecmp(solv: *mut s_Solver, r1: *mut Rule, r2: *mut Rule) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_shrinkrules(solv: *mut s_Solver, nrules: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addpkgrulesforsolvable(solv: *mut s_Solver, s: *mut Solvable, m: *mut Map);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addpkgrulesforweak(solv: *mut s_Solver, m: *mut Map);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addpkgrulesforlinked(solv: *mut s_Solver, m: *mut Map);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addpkgrulesforupdaters(
         solv: *mut s_Solver,
         s: *mut Solvable,
@@ -2181,62 +2209,62 @@ extern "C" {
         allow_all: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addfeaturerule(solv: *mut s_Solver, s: *mut Solvable);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addupdaterule(solv: *mut s_Solver, s: *mut Solvable);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addinfarchrules(solv: *mut s_Solver, addedmap: *mut Map);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_createdupmaps(solv: *mut s_Solver);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_freedupmaps(solv: *mut s_Solver);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addduprules(solv: *mut s_Solver, addedmap: *mut Map);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addchoicerules(solv: *mut s_Solver);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_disablechoicerules(solv: *mut s_Solver, r: *mut Rule);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addbestrules(
         solv: *mut s_Solver,
         havebestinstalljobs: libc::c_int,
         haslockjob: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addyumobsrules(solv: *mut s_Solver);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addblackrules(solv: *mut s_Solver);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addrecommendsrules(solv: *mut s_Solver);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_addstrictrepopriorules(solv: *mut s_Solver, addedmap: *mut Map);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_disablepolicyrules(solv: *mut s_Solver);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_reenablepolicyrules(solv: *mut s_Solver, jobidx: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_reenablepolicyrules_cleandeps(solv: *mut s_Solver, pkg: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_allruleinfos(solv: *mut s_Solver, rid: Id, rq: *mut Queue) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_ruleinfo(
         solv: *mut s_Solver,
         rid: Id,
@@ -2245,78 +2273,99 @@ extern "C" {
         depp: *mut Id,
     ) -> SolverRuleinfo;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_ruleclass(solv: *mut s_Solver, rid: Id) -> SolverRuleinfo;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_ruleliterals(solv: *mut s_Solver, rid: Id, q: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_rule2jobidx(solv: *mut s_Solver, rid: Id) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_rule2job(solv: *mut s_Solver, rid: Id, whatp: *mut Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_rule2solvable(solv: *mut s_Solver, rid: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_rule2rules(solv: *mut s_Solver, rid: Id, q: *mut Queue, recursive: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_rule2pkgrule(solv: *mut s_Solver, rid: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
+    pub fn solver_ruleinfo2str(
+        solv: *mut s_Solver,
+        type_: SolverRuleinfo,
+        source: Id,
+        target: Id,
+        dep: Id,
+    ) -> *const libc::c_char;
+}
+unsafe extern "C" {
+    pub fn solver_allweakdepinfos(solv: *mut s_Solver, p: Id, rq: *mut Queue) -> libc::c_int;
+}
+unsafe extern "C" {
+    pub fn solver_weakdepinfo(
+        solv: *mut s_Solver,
+        p: Id,
+        fromp: *mut Id,
+        top: *mut Id,
+        depp: *mut Id,
+    ) -> SolverRuleinfo;
+}
+unsafe extern "C" {
     pub fn solver_breakorphans(solv: *mut s_Solver);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_check_brokenorphanrules(solv: *mut s_Solver, dq: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_recordproblem(solv: *mut s_Solver, rid: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_fixproblem(solv: *mut s_Solver, rid: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_autouninstall(solv: *mut s_Solver, start: libc::c_int) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_disableproblemset(solv: *mut s_Solver, start: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_prepare_solutions(solv: *mut s_Solver) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_problem_count(solv: *mut s_Solver) -> libc::c_uint;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_next_problem(solv: *mut s_Solver, problem: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_solution_count(solv: *mut s_Solver, problem: Id) -> libc::c_uint;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_next_solution(solv: *mut s_Solver, problem: Id, solution: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_solutionelement_count(
         solv: *mut s_Solver,
         problem: Id,
         solution: Id,
     ) -> libc::c_uint;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_solutionelement_internalid(solv: *mut s_Solver, problem: Id, solution: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_solutionelement_extrajobflags(
         solv: *mut s_Solver,
         problem: Id,
         solution: Id,
     ) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_next_solutionelement(
         solv: *mut s_Solver,
         problem: Id,
@@ -2326,7 +2375,16 @@ extern "C" {
         rp: *mut Id,
     ) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
+    pub fn solver_all_solutionelements(
+        solv: *mut s_Solver,
+        problem: Id,
+        solution: Id,
+        expandreplaces: libc::c_int,
+        q: *mut Queue,
+    );
+}
+unsafe extern "C" {
     pub fn solver_take_solutionelement(
         solv: *mut s_Solver,
         p: Id,
@@ -2335,16 +2393,16 @@ extern "C" {
         job: *mut Queue,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_take_solution(solv: *mut s_Solver, problem: Id, solution: Id, job: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_findproblemrule(solv: *mut s_Solver, problem: Id) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_findallproblemrules(solv: *mut s_Solver, problem: Id, rules: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_problemruleinfo2str(
         solv: *mut s_Solver,
         type_: SolverRuleinfo,
@@ -2353,11 +2411,19 @@ extern "C" {
         dep: Id,
     ) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_problem2str(solv: *mut s_Solver, problem: Id) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_solutionelement2str(solv: *mut s_Solver, p: Id, rp: Id) -> *const libc::c_char;
+}
+unsafe extern "C" {
+    pub fn solver_solutionelementtype2str(
+        solv: *mut s_Solver,
+        type_: libc::c_int,
+        p: Id,
+        rp: Id,
+    ) -> *const libc::c_char;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -2371,41 +2437,41 @@ pub struct s_Solver {
     pub pooljobcnt: libc::c_int,
 }
 pub type Solver = s_Solver;
-extern "C" {
+unsafe extern "C" {
     pub fn solver_create(pool: *mut Pool) -> *mut Solver;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_free(solv: *mut Solver);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_solve(solv: *mut Solver, job: *mut Queue) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_create_transaction(solv: *mut Solver) -> *mut Transaction;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_set_flag(solv: *mut Solver, flag: libc::c_int, value: libc::c_int)
         -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_get_flag(solv: *mut Solver, flag: libc::c_int) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_get_decisionlevel(solv: *mut Solver, p: Id) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_get_decisionqueue(solv: *mut Solver, decisionq: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_get_lastdecisionblocklevel(solv: *mut Solver) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_get_decisionblock(solv: *mut Solver, level: libc::c_int, decisionq: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_get_orphaned(solv: *mut Solver, orphanedq: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_get_recommendations(
         solv: *mut Solver,
         recommendationsq: *mut Queue,
@@ -2413,13 +2479,13 @@ extern "C" {
         noselected: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_get_unneeded(solv: *mut Solver, unneededq: *mut Queue, filtered: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_get_userinstalled(solv: *mut Solver, q: *mut Queue, flags: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_add_userinstalled_jobs(
         pool: *mut Pool,
         q: *mut Queue,
@@ -2427,19 +2493,50 @@ extern "C" {
         flags: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_get_cleandeps(solv: *mut Solver, cleandepsq: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_describe_decision(solv: *mut Solver, p: Id, infop: *mut Id) -> libc::c_int;
 }
-extern "C" {
-    pub fn solver_describe_weakdep_decision(solv: *mut Solver, p: Id, whyq: *mut Queue);
+unsafe extern "C" {
+    pub fn solver_get_decisionlist(
+        solv: *mut Solver,
+        p: Id,
+        flags: libc::c_int,
+        decisionlistq: *mut Queue,
+    );
 }
-extern "C" {
+unsafe extern "C" {
+    pub fn solver_get_decisionlist_multiple(
+        solv: *mut Solver,
+        pq: *mut Queue,
+        flags: libc::c_int,
+        decisionlistq: *mut Queue,
+    );
+}
+unsafe extern "C" {
+    pub fn solver_get_learnt(solv: *mut Solver, id: Id, flags: libc::c_int, q: *mut Queue);
+}
+unsafe extern "C" {
+    pub fn solver_decisionlist_solvables(
+        solv: *mut Solver,
+        decisionlistq: *mut Queue,
+        pos: libc::c_int,
+        q: *mut Queue,
+    );
+}
+unsafe extern "C" {
+    pub fn solver_decisionlist_merged(
+        solv: *mut Solver,
+        decisionlistq: *mut Queue,
+        pos: libc::c_int,
+    ) -> libc::c_int;
+}
+unsafe extern "C" {
     pub fn solver_alternatives_count(solv: *mut Solver) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_get_alternative(
         solv: *mut Solver,
         alternative: Id,
@@ -2450,42 +2547,78 @@ extern "C" {
         levelp: *mut libc::c_int,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
+    pub fn solver_alternativeinfo(
+        solv: *mut Solver,
+        type_: libc::c_int,
+        id: Id,
+        from: Id,
+        fromp: *mut Id,
+        top: *mut Id,
+        depp: *mut Id,
+    ) -> libc::c_int;
+}
+unsafe extern "C" {
     pub fn solver_calculate_multiversionmap(
         pool: *mut Pool,
         job: *mut Queue,
         multiversionmap: *mut Map,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_calculate_noobsmap(pool: *mut Pool, job: *mut Queue, multiversionmap: *mut Map);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_create_state_maps(
         solv: *mut Solver,
         installedmap: *mut Map,
         conflictsmap: *mut Map,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_calc_duchanges(solv: *mut Solver, mps: *mut DUChanges, nmps: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_calc_installsizechange(solv: *mut Solver) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_job2solvables(pool: *mut Pool, pkgs: *mut Queue, how: Id, what: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_isemptyupdatejob(pool: *mut Pool, how: Id, what: Id) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
+    pub fn solver_calc_decisioninfo_bits(
+        solv: *mut Solver,
+        decision: Id,
+        type_: libc::c_int,
+        from: Id,
+        to: Id,
+        dep: Id,
+    ) -> libc::c_int;
+}
+unsafe extern "C" {
+    pub fn solver_merge_decisioninfo_bits(
+        solv: *mut Solver,
+        state1: libc::c_int,
+        type1: libc::c_int,
+        from1: Id,
+        to1: Id,
+        dep1: Id,
+        state2: libc::c_int,
+        type2: libc::c_int,
+        from2: Id,
+        to2: Id,
+        dep2: Id,
+    ) -> libc::c_int;
+}
+unsafe extern "C" {
     pub fn solver_select2str(pool: *mut Pool, select: Id, what: Id) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_job2str(pool: *mut Pool, how: Id, what: Id, flagmask: Id) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_alternative2str(
         solv: *mut Solver,
         type_: libc::c_int,
@@ -2493,52 +2626,76 @@ extern "C" {
         from: Id,
     ) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
+    pub fn solver_reason2str(solv: *mut Solver, reason: libc::c_int) -> *const libc::c_char;
+}
+unsafe extern "C" {
+    pub fn solver_decisionreason2str(
+        solv: *mut Solver,
+        decision: Id,
+        reason: libc::c_int,
+        info: Id,
+    ) -> *const libc::c_char;
+}
+unsafe extern "C" {
+    pub fn solver_decisioninfo2str(
+        solv: *mut Solver,
+        bits: libc::c_int,
+        type_: libc::c_int,
+        from: Id,
+        to: Id,
+        dep: Id,
+    ) -> *const libc::c_char;
+}
+unsafe extern "C" {
+    pub fn solver_describe_weakdep_decision(solv: *mut Solver, p: Id, whyq: *mut Queue);
+}
+unsafe extern "C" {
     pub fn solver_trivial_installable(solv: *mut Solver, pkgs: *mut Queue, res: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_printruleelement(solv: *mut Solver, type_: libc::c_int, r: *mut Rule, v: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_printrule(solv: *mut Solver, type_: libc::c_int, r: *mut Rule);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_printruleclass(solv: *mut Solver, type_: libc::c_int, r: *mut Rule);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_printproblem(solv: *mut Solver, v: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_printwatches(solv: *mut Solver, type_: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_printdecisionq(solv: *mut Solver, type_: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_printdecisions(solv: *mut Solver);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_printproblemruleinfo(solv: *mut Solver, rule: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_printprobleminfo(solv: *mut Solver, problem: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_printcompleteprobleminfo(solv: *mut Solver, problem: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_printsolution(solv: *mut Solver, problem: Id, solution: Id);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_printallsolutions(solv: *mut Solver);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn transaction_print(trans: *mut Transaction);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solver_printtrivial(solv: *mut Solver);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn selection_make(
         pool: *mut Pool,
         selection: *mut Queue,
@@ -2546,7 +2703,7 @@ extern "C" {
         flags: libc::c_int,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn selection_make_matchdeps(
         pool: *mut Pool,
         selection: *mut Queue,
@@ -2556,7 +2713,7 @@ extern "C" {
         marker: libc::c_int,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn selection_make_matchdepid(
         pool: *mut Pool,
         selection: *mut Queue,
@@ -2566,7 +2723,7 @@ extern "C" {
         marker: libc::c_int,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn selection_make_matchsolvable(
         pool: *mut Pool,
         selection: *mut Queue,
@@ -2576,7 +2733,7 @@ extern "C" {
         marker: libc::c_int,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn selection_make_matchsolvablelist(
         pool: *mut Pool,
         selection: *mut Queue,
@@ -2586,26 +2743,26 @@ extern "C" {
         marker: libc::c_int,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn selection_filter(pool: *mut Pool, sel1: *mut Queue, sel2: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn selection_add(pool: *mut Pool, sel1: *mut Queue, sel2: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn selection_subtract(pool: *mut Pool, sel1: *mut Queue, sel2: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn selection_solvables(pool: *mut Pool, selection: *mut Queue, pkgs: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_selection2str(
         pool: *mut Pool,
         selection: *mut Queue,
         flagmask: Id,
     ) -> *const libc::c_char;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_evrcmp_conda(
         pool: *const Pool,
         evr1: *const libc::c_char,
@@ -2613,22 +2770,22 @@ extern "C" {
         mode: libc::c_int,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solvable_conda_matchversion(
         s: *mut Solvable,
         version: *const libc::c_char,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_addrelproviders_conda(pool: *mut Pool, name: Id, evr: Id, plist: *mut Queue) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn pool_conda_matchspec(pool: *mut Pool, name: *const libc::c_char) -> Id;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_add_solv(repo: *mut Repo, fp: *mut FILE, flags: libc::c_int) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn solv_read_userdata(
         fp: *mut FILE,
         datap: *mut *mut libc::c_uchar,
@@ -2657,16 +2814,16 @@ pub struct s_Repowriter {
     pub userdatalen: libc::c_int,
 }
 pub type Repowriter = s_Repowriter;
-extern "C" {
+unsafe extern "C" {
     pub fn repowriter_create(repo: *mut Repo) -> *mut Repowriter;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repowriter_free(writer: *mut Repowriter) -> *mut Repowriter;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repowriter_set_flags(writer: *mut Repowriter, flags: libc::c_int);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repowriter_set_keyfilter(
         writer: *mut Repowriter,
         keyfilter: ::std::option::Option<
@@ -2679,47 +2836,47 @@ extern "C" {
         kfdata: *mut libc::c_void,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repowriter_set_keyqueue(writer: *mut Repowriter, keyq: *mut Queue);
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repowriter_set_repodatarange(
         writer: *mut Repowriter,
         repodatastart: libc::c_int,
         repodataend: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repowriter_set_solvablerange(
         writer: *mut Repowriter,
         solvablestart: libc::c_int,
         solvableend: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repowriter_set_userdata(
         writer: *mut Repowriter,
         data: *const libc::c_void,
         len: libc::c_int,
     );
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repowriter_write(writer: *mut Repowriter, fp: *mut FILE) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_write(repo: *mut Repo, fp: *mut FILE) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_write(data: *mut Repodata, fp: *mut FILE) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_write_stdkeyfilter(
         repo: *mut Repo,
         key: *mut Repokey,
         kfdata: *mut libc::c_void,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_write_filtered(
         repo: *mut Repo,
         fp: *mut FILE,
@@ -2734,7 +2891,7 @@ extern "C" {
         keyq: *mut Queue,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repodata_write_filtered(
         data: *mut Repodata,
         fp: *mut FILE,
@@ -2749,6 +2906,6 @@ extern "C" {
         keyq: *mut Queue,
     ) -> libc::c_int;
 }
-extern "C" {
+unsafe extern "C" {
     pub fn repo_add_conda(repo: *mut Repo, fp: *mut FILE, flags: libc::c_int) -> libc::c_int;
 }

@@ -2,7 +2,7 @@
 source: crates/rattler/src/install/link.rs
 expression: replaced
 ---
-#!/usr/bin/env python -m 123123
+#!/usr/bin/env executable -m 123123
 
 # just a comment
 

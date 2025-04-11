@@ -76,19 +76,11 @@
 //! for different platforms and with different channels in a single lock-file.
 //! This allows storing production- and test environments in a single file.
 
-use std::{
-    borrow::Cow,
-    collections::{BTreeSet, HashMap},
-    io::Read,
-    path::Path,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{collections::HashMap, io::Read, path::Path, str::FromStr, sync::Arc};
 
 use fxhash::FxHashMap;
-use pep508_rs::{ExtraName, Requirement};
-use rattler_conda_types::{MatchSpec, PackageRecord, Platform, RepoDataRecord};
-use url::Url;
+use indexmap::IndexSet;
+use rattler_conda_types::{Platform, RepoDataRecord};
 
 mod builder;
 mod channel;
@@ -98,12 +90,13 @@ mod hash;
 mod parse;
 mod pypi;
 mod pypi_indexes;
+pub mod source;
 mod url_or_path;
 mod utils;
 
-pub use builder::LockFileBuilder;
+pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
-pub use conda::{CondaPackageData, ConversionError};
+pub use conda::{CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, InputHash};
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
 pub use parse::ParseCondaLockError;
@@ -123,21 +116,20 @@ pub const DEFAULT_ENVIRONMENT_NAME: &str = "default";
 /// environments.
 ///
 /// The high-level API provided by this type holds internal references to the
-/// data. Its is therefore cheap to clone this type and any type derived from it
-/// (e.g. [`Environment`] or [`Package`]).
-#[derive(Clone, Default)]
+/// data. Its is therefore cheap to clone this type.
+#[derive(Clone, Default, Debug)]
 pub struct LockFile {
     inner: Arc<LockFileInner>,
 }
 
 /// Internal data structure that stores the lock-file data.
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct LockFileInner {
     version: FileFormatVersion,
     environments: Vec<EnvironmentData>,
     conda_packages: Vec<CondaPackageData>,
     pypi_packages: Vec<PypiPackageData>,
-    pypi_environment_package_datas: Vec<PypiPackageEnvironmentData>,
+    pypi_environment_package_data: Vec<PypiPackageEnvironmentData>,
 
     environment_lookup: FxHashMap<String, usize>,
 }
@@ -146,7 +138,7 @@ struct LockFileInner {
 /// enum and might contain additional data that is specific to the environment.
 /// For instance different environments might select the same Pypi package but
 /// with different extras.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 enum EnvironmentPackageData {
     Conda(usize),
     Pypi(usize, usize),
@@ -168,7 +160,7 @@ struct EnvironmentData {
 
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
-    packages: FxHashMap<Platform, Vec<EnvironmentPackageData>>,
+    packages: FxHashMap<Platform, IndexSet<EnvironmentPackageData>>,
 }
 
 impl LockFile {
@@ -194,29 +186,31 @@ impl LockFile {
     /// Writes the conda lock to a file
     pub fn to_path(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = std::fs::File::create(path)?;
-        serde_yaml::to_writer(file, self)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+        serde_yaml::to_writer(file, self).map_err(std::io::Error::other)
+    }
+
+    /// Writes the conda lock to a string
+    pub fn render_to_string(&self) -> Result<String, std::io::Error> {
+        serde_yaml::to_string(self).map_err(std::io::Error::other)
     }
 
     /// Returns the environment with the given name.
-    pub fn environment(&self, name: &str) -> Option<Environment> {
+    pub fn environment(&self, name: &str) -> Option<Environment<'_>> {
         let index = *self.inner.environment_lookup.get(name)?;
         Some(Environment {
-            inner: self.inner.clone(),
+            lock_file: self,
             index,
         })
     }
 
     /// Returns the environment with the default name as defined by
     /// [`DEFAULT_ENVIRONMENT_NAME`].
-    pub fn default_environment(&self) -> Option<Environment> {
+    pub fn default_environment(&self) -> Option<Environment<'_>> {
         self.environment(DEFAULT_ENVIRONMENT_NAME)
     }
 
     /// Returns an iterator over all environments defined in the lock-file.
-    pub fn environments(
-        &self,
-    ) -> impl Iterator<Item = (&str, Environment)> + ExactSizeIterator + '_ {
+    pub fn environments(&self) -> impl ExactSizeIterator<Item = (&str, Environment<'_>)> + '_ {
         self.inner
             .environment_lookup
             .iter()
@@ -224,7 +218,7 @@ impl LockFile {
                 (
                     name.as_str(),
                     Environment {
-                        inner: self.inner.clone(),
+                        lock_file: self,
                         index: *index,
                     },
                 )
@@ -235,23 +229,33 @@ impl LockFile {
     pub fn version(&self) -> FileFormatVersion {
         self.inner.version
     }
+
+    /// Check if there are any packages in the lockfile
+    pub fn is_empty(&self) -> bool {
+        self.inner.conda_packages.is_empty() && self.inner.pypi_packages.is_empty()
+    }
 }
 
 /// Information about a specific environment in the lock-file.
-#[derive(Clone)]
-pub struct Environment {
-    inner: Arc<LockFileInner>,
+#[derive(Clone, Copy)]
+pub struct Environment<'lock> {
+    lock_file: &'lock LockFile,
     index: usize,
 }
 
-impl Environment {
+impl<'lock> Environment<'lock> {
     /// Returns a reference to the internal data structure.
-    fn data(&self) -> &EnvironmentData {
-        &self.inner.environments[self.index]
+    fn data(&self) -> &'lock EnvironmentData {
+        &self.lock_file.inner.environments[self.index]
+    }
+
+    /// Returns the lock file to which this environment belongs.
+    pub fn lock_file(&self) -> &'lock LockFile {
+        self.lock_file
     }
 
     /// Returns all the platforms for which we have a locked-down environment.
-    pub fn platforms(&self) -> impl Iterator<Item = Platform> + ExactSizeIterator + '_ {
+    pub fn platforms(&self) -> impl ExactSizeIterator<Item = Platform> + '_ {
         self.data().packages.keys().copied()
     }
 
@@ -276,12 +280,22 @@ impl Environment {
     pub fn packages(
         &self,
         platform: Platform,
-    ) -> Option<impl Iterator<Item = Package> + ExactSizeIterator + DoubleEndedIterator + '_> {
-        let packages = self.data().packages.get(&platform)?;
+    ) -> Option<impl DoubleEndedIterator<Item = LockedPackageRef<'lock>> + ExactSizeIterator + '_>
+    {
         Some(
-            packages
+            self.data()
+                .packages
+                .get(&platform)?
                 .iter()
-                .map(move |package| Package::from_env_package(*package, self.inner.clone())),
+                .map(move |package| match package {
+                    EnvironmentPackageData::Conda(data) => {
+                        LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
+                    }
+                    EnvironmentPackageData::Pypi(data, env_data) => LockedPackageRef::Pypi(
+                        &self.lock_file.inner.pypi_packages[*data],
+                        &self.lock_file.inner.pypi_environment_package_data[*env_data],
+                    ),
+                }),
         )
     }
 
@@ -289,379 +303,250 @@ impl Environment {
     /// environment
     pub fn packages_by_platform(
         &self,
-    ) -> impl Iterator<
+    ) -> impl ExactSizeIterator<
         Item = (
             Platform,
-            impl Iterator<Item = Package> + ExactSizeIterator + DoubleEndedIterator + '_,
+            impl DoubleEndedIterator<Item = LockedPackageRef<'lock>> + ExactSizeIterator + '_,
         ),
-    > + ExactSizeIterator
-           + '_ {
+    > + '_ {
         let env_data = self.data();
         env_data.packages.iter().map(move |(platform, packages)| {
             (
                 *platform,
-                packages
-                    .iter()
-                    .map(move |package| Package::from_env_package(*package, self.inner.clone())),
+                packages.iter().map(move |package| match package {
+                    EnvironmentPackageData::Conda(data) => {
+                        LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
+                    }
+                    EnvironmentPackageData::Pypi(data, env_data) => LockedPackageRef::Pypi(
+                        &self.lock_file.inner.pypi_packages[*data],
+                        &self.lock_file.inner.pypi_environment_package_data[*env_data],
+                    ),
+                }),
             )
         })
     }
 
     /// Returns all pypi packages for all platforms
-    pub fn pypi_packages(
+    pub fn pypi_packages_by_platform(
         &self,
-    ) -> HashMap<Platform, Vec<(PypiPackageData, PypiPackageEnvironmentData)>> {
+    ) -> impl ExactSizeIterator<
+        Item = (
+            Platform,
+            impl DoubleEndedIterator<Item = (&'lock PypiPackageData, &'lock PypiPackageEnvironmentData)>,
+        ),
+    > + '_ {
         let env_data = self.data();
-        env_data
-            .packages
-            .iter()
+        env_data.packages.iter().map(|(platform, packages)| {
+            let records = packages.iter().filter_map(|package| match package {
+                EnvironmentPackageData::Conda(_) => None,
+                EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Some((
+                    &self.lock_file.inner.pypi_packages[*pkg_data_idx],
+                    &self.lock_file.inner.pypi_environment_package_data[*env_data_idx],
+                )),
+            });
+            (*platform, records)
+        })
+    }
+
+    /// Returns all conda packages for all platforms.
+    pub fn conda_packages_by_platform(
+        &self,
+    ) -> impl ExactSizeIterator<
+        Item = (
+            Platform,
+            impl DoubleEndedIterator<Item = &'lock CondaPackageData> + '_,
+        ),
+    > + '_ {
+        self.packages_by_platform()
+            .map(|(platform, packages)| (platform, packages.filter_map(LockedPackageRef::as_conda)))
+    }
+
+    /// Returns all binary conda packages for all platforms and converts them to
+    /// [`RepoDataRecord`].
+    pub fn conda_repodata_records_by_platform(
+        &self,
+    ) -> Result<HashMap<Platform, Vec<RepoDataRecord>>, ConversionError> {
+        self.conda_packages_by_platform()
             .map(|(platform, packages)| {
-                let records = packages
-                    .iter()
-                    .filter_map(|package| match package {
-                        EnvironmentPackageData::Conda(_) => None,
-                        EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Some((
-                            self.inner.pypi_packages[*pkg_data_idx].clone(),
-                            self.inner.pypi_environment_package_datas[*env_data_idx].clone(),
-                        )),
-                    })
-                    .collect();
-                (*platform, records)
+                Ok((
+                    platform,
+                    packages
+                        .filter_map(CondaPackageData::as_binary)
+                        .map(RepoDataRecord::try_from)
+                        .collect::<Result<Vec<_>, ConversionError>>()?,
+                ))
             })
             .collect()
     }
 
-    /// Returns all conda packages for all platforms and converts them to
-    /// [`RepoDataRecord`].
-    pub fn conda_repodata_records(
+    /// Returns all conda packages for a specific platform.
+    pub fn conda_packages(
         &self,
-    ) -> Result<HashMap<Platform, Vec<RepoDataRecord>>, ConversionError> {
-        let env_data = self.data();
-        env_data
-            .packages
-            .iter()
-            .map(|(platform, packages)| {
-                packages
-                    .iter()
-                    .filter_map(|package| match package {
-                        EnvironmentPackageData::Conda(idx) => {
-                            Some(RepoDataRecord::try_from(&self.inner.conda_packages[*idx]))
-                        }
-                        EnvironmentPackageData::Pypi(_, _) => None,
-                    })
-                    .collect::<Result<_, _>>()
-                    .map(|records| (*platform, records))
-            })
-            .collect()
+        platform: Platform,
+    ) -> Option<impl DoubleEndedIterator<Item = &'lock CondaPackageData> + '_> {
+        self.packages(platform)
+            .map(|packages| packages.filter_map(LockedPackageRef::as_conda))
     }
 
     /// Takes all the conda packages, converts them to [`RepoDataRecord`] and
     /// returns them or returns an error if the conversion failed. Returns
     /// `None` if the specified platform is not defined for this
     /// environment.
-    pub fn conda_repodata_records_for_platform(
+    ///
+    /// This method ignores any conda packages that do not refer to repodata
+    /// records.
+    pub fn conda_repodata_records(
         &self,
         platform: Platform,
     ) -> Result<Option<Vec<RepoDataRecord>>, ConversionError> {
-        let Some(packages) = self.data().packages.get(&platform) else {
-            return Ok(None);
-        };
-
-        packages
-            .iter()
-            .filter_map(|package| match package {
-                EnvironmentPackageData::Conda(idx) => {
-                    Some(RepoDataRecord::try_from(&self.inner.conda_packages[*idx]))
-                }
-                EnvironmentPackageData::Pypi(_, _) => None,
+        self.conda_packages(platform)
+            .map(|packages| {
+                packages
+                    .filter_map(CondaPackageData::as_binary)
+                    .map(RepoDataRecord::try_from)
+                    .collect()
             })
-            .collect::<Result<_, _>>()
-            .map(Some)
+            .transpose()
     }
 
     /// Returns all the pypi packages and their associated environment data for
     /// the specified platform. Returns `None` if the platform is not
     /// defined for this environment.
-    pub fn pypi_packages_for_platform(
+    pub fn pypi_packages(
         &self,
         platform: Platform,
-    ) -> Option<Vec<(PypiPackageData, PypiPackageEnvironmentData)>> {
-        let Some(packages) = self.data().packages.get(&platform) else {
-            return None;
-        };
-
-        Some(
-            packages
-                .iter()
-                .filter_map(|package| match package {
-                    EnvironmentPackageData::Conda(_) => None,
-                    EnvironmentPackageData::Pypi(package_idx, env_idx) => Some((
-                        self.inner.pypi_packages[*package_idx].clone(),
-                        self.inner.pypi_environment_package_datas[*env_idx].clone(),
-                    )),
-                })
-                .collect(),
-        )
+    ) -> Option<
+        impl DoubleEndedIterator<Item = (&'lock PypiPackageData, &'lock PypiPackageEnvironmentData)>
+            + '_,
+    > {
+        self.packages(platform)
+            .map(|pkgs| pkgs.filter_map(LockedPackageRef::as_pypi))
     }
 
-    /// Returns the version of the lock-file that contained this environment.
-    pub fn version(&self) -> FileFormatVersion {
-        self.inner.version
+    /// Returns whether this environment has any pypi packages for the specified platform.
+    pub fn has_pypi_packages(&self, platform: Platform) -> bool {
+        self.pypi_packages(platform)
+            .is_some_and(|mut packages| packages.next().is_some())
+    }
+
+    /// Creates a [`OwnedEnvironment`] from this environment.
+    pub fn to_owned(self) -> OwnedEnvironment {
+        OwnedEnvironment {
+            lock_file: self.lock_file.clone(),
+            index: self.index,
+        }
+    }
+}
+
+/// An owned version of an [`Environment`].
+///
+/// Use [`OwnedEnvironment::as_ref`] to get a reference to the environment data.
+#[derive(Clone)]
+pub struct OwnedEnvironment {
+    lock_file: LockFile,
+    index: usize,
+}
+
+impl OwnedEnvironment {
+    /// Returns a reference to the environment data.
+    pub fn as_ref(&self) -> Environment<'_> {
+        Environment {
+            lock_file: &self.lock_file,
+            index: self.index,
+        }
+    }
+
+    /// Returns the lock-file this environment is part of.
+    pub fn lock_file(&self) -> LockFile {
+        self.lock_file.clone()
     }
 }
 
 /// Data related to a single locked package in an [`Environment`].
-#[derive(Clone)]
-pub enum Package {
+#[derive(Clone, Copy)]
+pub enum LockedPackageRef<'lock> {
     /// A conda package
-    Conda(CondaPackage),
+    Conda(&'lock CondaPackageData),
 
     /// A pypi package
-    Pypi(PypiPackage),
+    Pypi(&'lock PypiPackageData, &'lock PypiPackageEnvironmentData),
 }
 
-impl From<CondaPackage> for Package {
-    fn from(value: CondaPackage) -> Self {
-        Package::Conda(value)
-    }
-}
-
-impl From<PypiPackage> for Package {
-    fn from(value: PypiPackage) -> Self {
-        Package::Pypi(value)
-    }
-}
-
-impl Package {
-    /// Constructs a new instance from a [`EnvironmentPackageData`] and a
-    /// reference to the internal data structure.
-    fn from_env_package(data: EnvironmentPackageData, inner: Arc<LockFileInner>) -> Self {
-        match data {
-            EnvironmentPackageData::Conda(idx) => {
-                Package::Conda(CondaPackage { inner, index: idx })
-            }
-            EnvironmentPackageData::Pypi(idx, runtime) => Package::Pypi(PypiPackage {
-                inner,
-                package_index: idx,
-                runtime_index: runtime,
-            }),
-        }
-    }
-
-    /// Returns true if this package represents a conda package.
-    pub fn is_conda(&self) -> bool {
-        matches!(self, Self::Conda(_))
-    }
-
-    /// Returns true if this package represents a pypi package.
-    pub fn is_pypi(&self) -> bool {
-        matches!(self, Self::Pypi(_))
-    }
-
-    /// Returns this instance as a [`CondaPackage`] if this instance represents
-    /// a conda package.
-    pub fn as_conda(&self) -> Option<&CondaPackage> {
+impl<'lock> LockedPackageRef<'lock> {
+    /// Returns the name of the package as it occurs in the lock file. This
+    /// might not be the normalized name.
+    pub fn name(self) -> &'lock str {
         match self {
-            Self::Conda(value) => Some(value),
-            Self::Pypi(_) => None,
+            LockedPackageRef::Conda(data) => data.record().name.as_source(),
+            LockedPackageRef::Pypi(data, _) => data.name.as_ref(),
         }
     }
 
-    /// Returns this instance as a [`PypiPackage`] if this instance represents a
-    /// pypi package.
-    pub fn as_pypi(&self) -> Option<&PypiPackage> {
+    /// Returns the location of the package.
+    pub fn location(self) -> &'lock UrlOrPath {
         match self {
-            Self::Conda(_) => None,
-            Self::Pypi(value) => Some(value),
+            LockedPackageRef::Conda(data) => data.location(),
+            LockedPackageRef::Pypi(data, _) => &data.location,
         }
     }
 
-    /// Returns this instance as a [`CondaPackage`] if this instance represents
-    /// a conda package.
-    pub fn into_conda(self) -> Option<CondaPackage> {
+    /// Returns the pypi package if this is a pypi package.
+    pub fn as_pypi(self) -> Option<(&'lock PypiPackageData, &'lock PypiPackageEnvironmentData)> {
         match self {
-            Self::Conda(value) => Some(value),
-            Self::Pypi(_) => None,
+            LockedPackageRef::Conda(_) => None,
+            LockedPackageRef::Pypi(data, env) => Some((data, env)),
         }
     }
 
-    /// Returns this instance as a [`PypiPackage`] if this instance represents a
-    /// pypi package.
-    pub fn into_pypi(self) -> Option<PypiPackage> {
+    /// Returns the conda package if this is a conda package.
+    pub fn as_conda(self) -> Option<&'lock CondaPackageData> {
         match self {
-            Self::Conda(_) => None,
-            Self::Pypi(value) => Some(value),
+            LockedPackageRef::Conda(data) => Some(data),
+            LockedPackageRef::Pypi(..) => None,
         }
     }
 
-    /// Returns the name of the package.
-    pub fn name(&self) -> Cow<'_, str> {
-        match self {
-            Self::Conda(value) => value.package_record().name.as_normalized().into(),
-            Self::Pypi(value) => value.package_data().name.as_dist_info_name(),
-        }
+    /// Returns the package as a binary conda package if this is a binary conda
+    /// package.
+    pub fn as_binary_conda(self) -> Option<&'lock CondaBinaryData> {
+        self.as_conda().and_then(CondaPackageData::as_binary)
     }
 
-    /// Returns the version string of the package
-    pub fn version(&self) -> Cow<'_, str> {
-        match self {
-            Self::Conda(value) => value.package_record().version.as_str(),
-            Self::Pypi(value) => value.package_data().version.to_string().into(),
-        }
+    /// Returns the package as a source conda package if this is a source conda
+    /// package.
+    pub fn as_source_conda(self) -> Option<&'lock CondaSourceData> {
+        self.as_conda().and_then(CondaPackageData::as_source)
     }
-
-    /// Returns the URL or relative path to the package
-    pub fn url_or_path(&self) -> Cow<'_, UrlOrPath> {
-        match self {
-            Self::Conda(value) => Cow::Owned(UrlOrPath::Url(value.url().clone())),
-            Self::Pypi(value) => Cow::Borrowed(value.url()),
-        }
-    }
-}
-
-/// Data related to a single locked conda package in an environment.
-#[derive(Clone)]
-pub struct CondaPackage {
-    inner: Arc<LockFileInner>,
-    index: usize,
-}
-
-impl CondaPackage {
-    fn package_data(&self) -> &CondaPackageData {
-        &self.inner.conda_packages[self.index]
-    }
-
-    /// Returns the package data
-    pub fn package_record(&self) -> &PackageRecord {
-        &self.package_data().package_record
-    }
-
-    /// Returns the URL of the package
-    pub fn url(&self) -> &Url {
-        &self.package_data().url
-    }
-
-    /// Returns the filename of the package.
-    pub fn file_name(&self) -> Option<&str> {
-        self.package_data().file_name()
-    }
-
-    /// Returns the channel of the package.
-    pub fn channel(&self) -> Option<Url> {
-        self.package_data().channel()
-    }
-
-    /// Returns true if this package satisfies the given `spec`.
-    pub fn satisfies(&self, spec: &MatchSpec) -> bool {
-        // Check the data in the package record
-        if !spec.matches(self.package_record()) {
-            return false;
-        }
-
-        // Check the the channel
-        if let Some(channel) = &spec.channel {
-            if !self.url().as_str().starts_with(channel.base_url.as_str()) {
-                return false;
-            }
-        }
-
-        true
-    }
-}
-
-impl AsRef<PackageRecord> for CondaPackage {
-    fn as_ref(&self) -> &PackageRecord {
-        self.package_record()
-    }
-}
-
-impl TryFrom<CondaPackage> for RepoDataRecord {
-    type Error = ConversionError;
-
-    fn try_from(value: CondaPackage) -> Result<Self, Self::Error> {
-        value.package_data().clone().try_into()
-    }
-}
-
-/// Data related to a single locked pypi package in an environment.
-#[derive(Clone)]
-pub struct PypiPackage {
-    inner: Arc<LockFileInner>,
-    package_index: usize,
-    runtime_index: usize,
-}
-
-impl PypiPackage {
-    /// Returns references to the internal data structures.
-    pub fn data(&self) -> PypiPackageDataRef<'_> {
-        PypiPackageDataRef {
-            package: self.package_data(),
-            environment: self.environment_data(),
-        }
-    }
-
-    /// Returns the runtime data from the internal data structure.
-    fn environment_data(&self) -> &PypiPackageEnvironmentData {
-        &self.inner.pypi_environment_package_datas[self.runtime_index]
-    }
-
-    /// Returns the package data from the internal data structure.
-    fn package_data(&self) -> &PypiPackageData {
-        &self.inner.pypi_packages[self.package_index]
-    }
-
-    /// Returns the URL of the package
-    pub fn url(&self) -> &UrlOrPath {
-        &self.package_data().url_or_path
-    }
-
-    /// Returns the extras enabled for this package
-    pub fn extras(&self) -> &BTreeSet<ExtraName> {
-        &self.environment_data().extras
-    }
-
-    /// Returns true if this package satisfies the given `spec`.
-    pub fn satisfies(&self, spec: &Requirement) -> bool {
-        self.package_data().satisfies(spec)
-    }
-
-    /// Returns true if this package should be installed in "editable" mode.
-    pub fn is_editable(&self) -> bool {
-        self.package_data().editable
-    }
-}
-
-/// A helper struct to group package and environment data together.
-#[derive(Copy, Clone)]
-pub struct PypiPackageDataRef<'p> {
-    /// The package data. This information is deduplicated between environments.
-    pub package: &'p PypiPackageData,
-
-    /// Environment specific data for the package. This information is specific
-    /// to the environment.
-    pub environment: &'p PypiPackageEnvironmentData,
 }
 
 #[cfg(test)]
 mod test {
-    use std::path::Path;
+    use std::{
+        path::{Path, PathBuf},
+        str::FromStr,
+    };
 
-    use rattler_conda_types::Platform;
+    use rattler_conda_types::{Platform, RepoDataRecord};
     use rstest::*;
 
     use super::{LockFile, DEFAULT_ENVIRONMENT_NAME};
 
     #[rstest]
-    #[case("v0/numpy-conda-lock.yml")]
-    #[case("v0/python-conda-lock.yml")]
-    #[case("v0/pypi-matplotlib-conda-lock.yml")]
-    #[case("v3/robostack-turtlesim-conda-lock.yml")]
-    #[case("v4/numpy-lock.yml")]
-    #[case("v4/python-lock.yml")]
-    #[case("v4/pypi-matplotlib-lock.yml")]
-    #[case("v4/turtlesim-lock.yml")]
-    #[case("v4/path-based-lock.yml")]
-    #[case("v5/flat-index-lock.yml")]
+    #[case::v0_numpy("v0/numpy-conda-lock.yml")]
+    #[case::v0_python("v0/python-conda-lock.yml")]
+    #[case::v0_pypi_matplotlib("v0/pypi-matplotlib-conda-lock.yml")]
+    #[case::v3_robostack("v3/robostack-turtlesim-conda-lock.yml")]
+    #[case::v3_numpy("v4/numpy-lock.yml")]
+    #[case::v4_python("v4/python-lock.yml")]
+    #[case::v4_pypi_matplotlib("v4/pypi-matplotlib-lock.yml")]
+    #[case::v4_turtlesim("v4/turtlesim-lock.yml")]
+    #[case::v4_pypi_path("v4/path-based-lock.yml")]
+    #[case::v4_pypi_absolute_path("v4/absolute-path-lock.yml")]
+    #[case::v5_pypi_flat_index("v5/flat-index-lock.yml")]
+    #[case::v5_with_and_without_purl("v5/similar-with-and-without-purl.yml")]
+    #[case::v6_conda_source_path("v6/conda-path-lock.yml")]
+    #[case::v6_derived_channel("v6/derived-channel-lock.yml")]
+    #[case::v6_sources("v6/sources-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
@@ -670,12 +555,33 @@ mod test {
         insta::assert_yaml_snapshot!(file_name, conda_lock);
     }
 
+    #[rstest]
+    fn test_roundtrip(
+        #[files("../../test-data/conda-lock/**/*.yml")]
+        #[exclude("forward-compatible-lock")]
+        path: PathBuf,
+    ) {
+        // Load the lock-file
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        // Serialize the lock-file
+        let rendered_lock_file = conda_lock.render_to_string().unwrap();
+
+        // Parse the rendered lock-file again
+        let parsed_lock_file = LockFile::from_str(&rendered_lock_file).unwrap();
+
+        // And re-render again
+        let rerendered_lock_file = parsed_lock_file.render_to_string().unwrap();
+
+        similar_asserts::assert_eq!(rendered_lock_file, rerendered_lock_file);
+    }
+
     /// Absolute paths on Windows are not properly parsed.
-    /// See: <https://github.com/mamba-org/rattler/issues/615>
+    /// See: <https://github.com/conda/rattler/issues/615>
     #[test]
     fn test_issue_615() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../test-data/conda-lock/absolute-path-lock.yml");
+            .join("../../test-data/conda-lock/v4/absolute-path-lock.yml");
         let conda_lock = LockFile::from_path(&path);
         assert!(conda_lock.is_ok());
     }
@@ -694,7 +600,7 @@ mod test {
             .unwrap()
             .packages(Platform::Linux64)
             .unwrap()
-            .map(|p| p.url_or_path().into_owned())
+            .map(|p| p.location().to_string())
             .collect::<Vec<_>>());
 
         insta::assert_yaml_snapshot!(conda_lock
@@ -702,7 +608,107 @@ mod test {
             .unwrap()
             .packages(Platform::Osx64)
             .unwrap()
-            .map(|p| p.url_or_path().into_owned())
+            .map(|p| p.location().to_string())
             .collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn test_has_pypi_packages() {
+        // v4
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v4/pypi-matplotlib-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        assert!(conda_lock
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .has_pypi_packages(Platform::Linux64));
+
+        // v6
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v6/numpy-as-pypi-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        assert!(conda_lock
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .has_pypi_packages(Platform::OsxArm64));
+
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v6/python-from-conda-only-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        assert!(!conda_lock
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .has_pypi_packages(Platform::OsxArm64));
+    }
+
+    #[test]
+    fn test_is_empty() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v6/empty-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+        assert!(conda_lock.is_empty());
+
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join("v6/python-from-conda-only-lock.yml");
+        let conda_lock = LockFile::from_path(&path).unwrap();
+        assert!(!conda_lock.is_empty());
+    }
+
+    #[test]
+    fn solve_roundtrip() {
+        // load repodata from JSON
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/repodata-records/_libgcc_mutex-0.1-conda_forge.json");
+        let content = std::fs::read_to_string(&path).unwrap();
+        let repodata_record: RepoDataRecord = serde_json::from_str(&content).unwrap();
+
+        // check that the repodata record is as expected
+        assert_eq!(repodata_record.package_record.arch, None);
+        assert_eq!(repodata_record.package_record.platform, None);
+
+        // create a lockfile with the repodata record
+        let lock_file = LockFile::builder()
+            .with_conda_package(
+                DEFAULT_ENVIRONMENT_NAME,
+                Platform::Linux64,
+                repodata_record.clone().into(),
+            )
+            .finish();
+
+        // serialize the lockfile
+        let rendered_lock_file = lock_file.render_to_string().unwrap();
+
+        // parse the lockfile
+        let parsed_lock_file = LockFile::from_str(&rendered_lock_file).unwrap();
+        // get repodata record from parsed lockfile
+        let repodata_records = parsed_lock_file
+            .environment(DEFAULT_ENVIRONMENT_NAME)
+            .unwrap()
+            .conda_repodata_records(Platform::Linux64)
+            .unwrap()
+            .unwrap();
+
+        // These are not equal because the one from `repodata_records[0]` contains arch and platform.
+        let repodata_record_two = repodata_records[0].clone();
+        assert_eq!(
+            repodata_record_two.package_record.arch,
+            Some("x86_64".to_string())
+        );
+        assert_eq!(
+            repodata_record_two.package_record.platform,
+            Some("linux".to_string())
+        );
+
+        // But if we render it again, the lockfile should look the same at least
+        let rerendered_lock_file_two = parsed_lock_file.render_to_string().unwrap();
+        assert_eq!(rendered_lock_file, rerendered_lock_file_two);
     }
 }

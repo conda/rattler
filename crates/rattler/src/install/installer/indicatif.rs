@@ -61,7 +61,7 @@ pub enum ProgressTrack {
     Linking,
 }
 
-/// Defines the currect status of a progress bar.
+/// Defines the correct status of a progress bar.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum ProgressStatus {
     /// The progress bar is visible but has not started yet.
@@ -375,8 +375,8 @@ impl<F: ProgressFormatter> IndicatifReporterInner<F> {
             .iter()
             .map(|&idx| (self.package_sizes[idx], &self.package_names[idx]));
 
-        let largest_package = package_iter.max_by_key(|(size, _)| *size);
-        if let Some((_, first)) = largest_package {
+        let smallest_package = package_iter.min_by_key(|(size, _)| *size);
+        if let Some((_, first)) = smallest_package {
             msg.push_str(first);
         }
 
@@ -446,12 +446,10 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
         inner.package_sizes.reserve(transaction.operations.len());
         for operation in &transaction.operations {
             let record = match operation {
-                TransactionOperation::Install(new) | TransactionOperation::Change { new, .. } => {
-                    &new.package_record
-                }
-                TransactionOperation::Reinstall(old) | TransactionOperation::Remove(old) => {
-                    &old.repodata_record.package_record
-                }
+                TransactionOperation::Install(new)
+                | TransactionOperation::Change { new, .. }
+                | TransactionOperation::Reinstall { new, .. } => &new.package_record,
+                TransactionOperation::Remove(old) => &old.repodata_record.package_record,
             };
             inner
                 .package_names
@@ -479,34 +477,33 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
 
         inner.start_validating.get_or_insert_with(Instant::now);
 
-        let validation_progress = match &inner.validation_progress {
-            Some(pb) => pb,
-            None => {
-                let place_above = inner
-                    .download_progress
-                    .as_ref()
-                    .or_else(|| inner.link_progress.as_ref())
-                    .expect("progress bar not set");
+        let validation_progress = if let Some(pb) = &inner.validation_progress {
+            pb
+        } else {
+            let place_above = inner
+                .download_progress
+                .as_ref()
+                .or_else(|| inner.link_progress.as_ref())
+                .expect("progress bar not set");
 
-                let pb = inner
-                    .multi_progress
-                    .insert_before(place_above, indicatif::ProgressBar::new(0))
-                    .with_style(inner.style(ProgressStyleProperties {
-                        status: ProgressStatus::Active,
-                        determinate: true,
-                        progress_type: ProgressType::Generic,
-                        track: ProgressTrack::Validation,
-                    }))
-                    .with_prefix("validate cache")
-                    .with_finish(ProgressFinish::AndLeave);
-                pb.enable_steady_tick(Duration::from_millis(100));
+            let pb = inner
+                .multi_progress
+                .insert_before(place_above, indicatif::ProgressBar::new(0))
+                .with_style(inner.style(ProgressStyleProperties {
+                    status: ProgressStatus::Active,
+                    determinate: true,
+                    progress_type: ProgressType::Generic,
+                    track: ProgressTrack::Validation,
+                }))
+                .with_prefix("validate cache")
+                .with_finish(ProgressFinish::AndLeave);
+            pb.enable_steady_tick(Duration::from_millis(100));
 
-                inner.validation_progress = Some(pb);
-                inner
-                    .validation_progress
-                    .as_ref()
-                    .expect("progress bar not set")
-            }
+            inner.validation_progress = Some(pb);
+            inner
+                .validation_progress
+                .as_ref()
+                .expect("progress bar not set")
         };
 
         validation_progress.inc_length(1);
@@ -553,30 +550,29 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
         inner.bytes_downloaded[cache_entry] = 0;
         inner.total_download_size += inner.package_sizes[cache_entry];
 
-        let download_progress = match &inner.download_progress {
-            Some(pb) => pb,
-            None => {
-                let place_above = inner.link_progress.as_ref().expect("progress bar not set");
+        let download_progress = if let Some(pb) = &inner.download_progress {
+            pb
+        } else {
+            let place_above = inner.link_progress.as_ref().expect("progress bar not set");
 
-                let pb = inner
-                    .multi_progress
-                    .insert_before(place_above, indicatif::ProgressBar::new(0))
-                    .with_style(inner.style(ProgressStyleProperties {
-                        status: ProgressStatus::Active,
-                        determinate: true,
-                        progress_type: ProgressType::Generic,
-                        track: ProgressTrack::DownloadAndExtract,
-                    }))
-                    .with_prefix("download & extract")
-                    .with_finish(ProgressFinish::AndLeave);
-                pb.enable_steady_tick(Duration::from_millis(100));
+            let pb = inner
+                .multi_progress
+                .insert_before(place_above, indicatif::ProgressBar::new(0))
+                .with_style(inner.style(ProgressStyleProperties {
+                    status: ProgressStatus::Active,
+                    determinate: true,
+                    progress_type: ProgressType::Generic,
+                    track: ProgressTrack::DownloadAndExtract,
+                }))
+                .with_prefix("download & extract")
+                .with_finish(ProgressFinish::AndLeave);
+            pb.enable_steady_tick(Duration::from_millis(100));
 
-                inner.download_progress = Some(pb);
-                inner
-                    .download_progress
-                    .as_ref()
-                    .expect("progress bar not set")
-            }
+            inner.download_progress = Some(pb);
+            inner
+                .download_progress
+                .as_ref()
+                .expect("progress bar not set")
         };
 
         download_progress.set_style(inner.style(ProgressStyleProperties {

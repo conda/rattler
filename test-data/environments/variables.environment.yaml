@@ -1,0 +1,7 @@
+name: test
+channels:
+  - conda-forge
+dependencies:
+  - numpy
+variables:
+  MY_ENV_VAR: "My Value"

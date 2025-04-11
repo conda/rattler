@@ -4,10 +4,11 @@ use pyo3::{create_exception, exceptions::PyException, PyErr};
 use rattler::install::TransactionError;
 use rattler_conda_types::{
     ConvertSubdirError, InvalidPackageNameError, ParseArchError, ParseChannelError,
-    ParseMatchSpecError, ParsePlatformError, ParseVersionError, VersionBumpError,
-    VersionExtendError,
+    ParseMatchSpecError, ParsePlatformError, ParseVersionError, ValidatePackageRecordsError,
+    VersionBumpError, VersionExtendError,
 };
 use rattler_lock::{ConversionError, ParseCondaLockError};
+use rattler_networking::authentication_storage::AuthenticationStorageError;
 use rattler_package_streaming::ExtractError;
 use rattler_repodata_gateway::{fetch::FetchRepoDataError, GatewayError};
 use rattler_shell::activation::ActivationError;
@@ -49,7 +50,7 @@ pub enum PyRattlerError {
     #[error("{0}")]
     LinkError(String),
     #[error(transparent)]
-    ConverSubdirError(#[from] ConvertSubdirError),
+    ConvertSubdirError(#[from] ConvertSubdirError),
     #[error(transparent)]
     VersionBumpError(#[from] VersionBumpError),
     #[error(transparent)]
@@ -70,6 +71,14 @@ pub enum PyRattlerError {
     GatewayError(#[from] GatewayError),
     #[error(transparent)]
     InstallerError(#[from] rattler::install::InstallerError),
+    #[error(transparent)]
+    ParseExplicitEnvironmentSpecError(
+        #[from] rattler_conda_types::ParseExplicitEnvironmentSpecError,
+    ),
+    #[error(transparent)]
+    ValidatePackageRecordsError(#[from] ValidatePackageRecordsError),
+    #[error(transparent)]
+    AuthenticationStorageError(#[from] AuthenticationStorageError),
 }
 
 fn pretty_print_error(mut err: &dyn Error) -> String {
@@ -123,7 +132,7 @@ impl From<PyRattlerError> for PyErr {
                 TransactionException::new_err(pretty_print_error(&err))
             }
             PyRattlerError::LinkError(err) => LinkException::new_err(err),
-            PyRattlerError::ConverSubdirError(err) => {
+            PyRattlerError::ConvertSubdirError(err) => {
                 ConvertSubdirException::new_err(pretty_print_error(&err))
             }
             PyRattlerError::VersionBumpError(err) => {
@@ -153,6 +162,15 @@ impl From<PyRattlerError> for PyErr {
             }
             PyRattlerError::InstallerError(err) => {
                 InstallerException::new_err(pretty_print_error(&err))
+            }
+            PyRattlerError::ParseExplicitEnvironmentSpecError(err) => {
+                ParseExplicitEnvironmentSpecException::new_err(pretty_print_error(&err))
+            }
+            PyRattlerError::ValidatePackageRecordsError(err) => {
+                ValidatePackageRecordsException::new_err(pretty_print_error(&err))
+            }
+            PyRattlerError::AuthenticationStorageError(err) => {
+                AuthenticationStorageException::new_err(pretty_print_error(&err))
             }
         }
     }
@@ -184,3 +202,10 @@ create_exception!(exceptions, ExtractException, PyException);
 create_exception!(exceptions, ActivationScriptFormatException, PyException);
 create_exception!(exceptions, GatewayException, PyException);
 create_exception!(exceptions, InstallerException, PyException);
+create_exception!(
+    exceptions,
+    ParseExplicitEnvironmentSpecException,
+    PyException
+);
+create_exception!(exceptions, ValidatePackageRecordsException, PyException);
+create_exception!(exceptions, AuthenticationStorageException, PyException);

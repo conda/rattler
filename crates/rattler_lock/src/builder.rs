@@ -1,6 +1,7 @@
 //! Builder for the creation of lock files.
 
 use std::{
+    borrow::Cow,
     collections::{BTreeSet, HashMap},
     sync::Arc,
 };
@@ -8,13 +9,108 @@ use std::{
 use fxhash::FxHashMap;
 use indexmap::{IndexMap, IndexSet};
 use pep508_rs::ExtraName;
-use rattler_conda_types::Platform;
+use rattler_conda_types::{Platform, Version};
 
 use crate::{
-    file_format_version::FileFormatVersion, Channel, CondaPackageData, EnvironmentData,
-    EnvironmentPackageData, LockFile, LockFileInner, Package, PypiIndexes, PypiPackageData,
-    PypiPackageEnvironmentData,
+    file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
+    CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
+    LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
 };
+
+/// Information about a single locked package in an environment.
+#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
+pub enum LockedPackage {
+    /// A conda package
+    Conda(CondaPackageData),
+
+    /// A pypi package in an environment
+    Pypi(PypiPackageData, PypiPackageEnvironmentData),
+}
+
+impl From<LockedPackageRef<'_>> for LockedPackage {
+    fn from(value: LockedPackageRef<'_>) -> Self {
+        match value {
+            LockedPackageRef::Conda(data) => LockedPackage::Conda(data.clone()),
+            LockedPackageRef::Pypi(data, env) => LockedPackage::Pypi(data.clone(), env.clone()),
+        }
+    }
+}
+
+impl From<CondaPackageData> for LockedPackage {
+    fn from(value: CondaPackageData) -> Self {
+        LockedPackage::Conda(value)
+    }
+}
+
+impl From<(PypiPackageData, PypiPackageEnvironmentData)> for LockedPackage {
+    fn from((data, env): (PypiPackageData, PypiPackageEnvironmentData)) -> Self {
+        LockedPackage::Pypi(data, env)
+    }
+}
+
+impl LockedPackage {
+    /// Returns the name of the package as it occurs in the lock file. This
+    /// might not be the normalized name.
+    pub fn name(&self) -> &str {
+        match self {
+            LockedPackage::Conda(data) => data.record().name.as_source(),
+            LockedPackage::Pypi(data, _) => data.name.as_ref(),
+        }
+    }
+
+    /// Returns the location of the package.
+    pub fn location(&self) -> &UrlOrPath {
+        match self {
+            LockedPackage::Conda(data) => data.location(),
+            LockedPackage::Pypi(data, _) => &data.location,
+        }
+    }
+
+    /// Returns the conda package data if this is a conda package.
+    pub fn as_conda(&self) -> Option<&CondaPackageData> {
+        match self {
+            LockedPackage::Conda(data) => Some(data),
+            LockedPackage::Pypi(..) => None,
+        }
+    }
+
+    /// Returns the pypi package data if this is a pypi package.
+    pub fn as_pypi(&self) -> Option<(&PypiPackageData, &PypiPackageEnvironmentData)> {
+        match self {
+            LockedPackage::Conda(..) => None,
+            LockedPackage::Pypi(data, env) => Some((data, env)),
+        }
+    }
+
+    /// Returns the package as a binary conda package if this is a binary conda
+    /// package.
+    pub fn as_binary_conda(&self) -> Option<&CondaBinaryData> {
+        self.as_conda().and_then(CondaPackageData::as_binary)
+    }
+
+    /// Returns the package as a source conda package if this is a source conda
+    /// package.
+    pub fn as_source_conda(&self) -> Option<&CondaSourceData> {
+        self.as_conda().and_then(CondaPackageData::as_source)
+    }
+
+    /// Returns the conda package data if this is a conda package.
+    pub fn into_conda(self) -> Option<CondaPackageData> {
+        match self {
+            LockedPackage::Conda(data) => Some(data),
+            LockedPackage::Pypi(..) => None,
+        }
+    }
+
+    /// Returns the pypi package data if this is a pypi package.
+    pub fn into_pypi(self) -> Option<(PypiPackageData, PypiPackageEnvironmentData)> {
+        match self {
+            LockedPackage::Conda(..) => None,
+            LockedPackage::Pypi(data, env) => Some((data, env)),
+        }
+    }
+}
 
 /// A struct to incrementally build a lock-file.
 #[derive(Default)]
@@ -23,9 +119,32 @@ pub struct LockFileBuilder {
     environments: IndexMap<String, EnvironmentData>,
 
     /// A list of all package metadata stored in the lock file.
-    conda_packages: IndexSet<CondaPackageData>,
+    conda_packages: IndexMap<UniqueCondaIdentifier, CondaPackageData>,
     pypi_packages: IndexSet<PypiPackageData>,
     pypi_runtime_configurations: IndexSet<HashablePypiPackageEnvironmentData>,
+}
+
+/// A unique identifier for a conda package. This is used to deduplicate
+/// packages. This only includes the unique identifying aspects of a package.
+#[derive(Debug, Hash, Eq, PartialEq)]
+struct UniqueCondaIdentifier {
+    location: UrlOrPath,
+    normalized_name: String,
+    version: Version,
+    build: String,
+    subdir: String,
+}
+
+impl<'a> From<&'a CondaPackageData> for UniqueCondaIdentifier {
+    fn from(value: &'a CondaPackageData) -> Self {
+        Self {
+            location: value.location().clone(),
+            normalized_name: value.record().name.as_normalized().to_string(),
+            version: value.record().version.version().clone(),
+            build: value.record().build.clone(),
+            subdir: value.record().subdir.clone(),
+        }
+    }
 }
 
 impl LockFileBuilder {
@@ -89,15 +208,25 @@ impl LockFileBuilder {
                 indexes: None,
             });
 
+        let unique_identifier = UniqueCondaIdentifier::from(&locked_package);
+
         // Add the package to the list of packages.
-        let package_idx = self.conda_packages.insert_full(locked_package).0;
+        let entry = self.conda_packages.entry(unique_identifier);
+        let package_idx = entry.index();
+        entry
+            .and_modify(|pkg| {
+                if let Cow::Owned(merged_package) = pkg.merge(&locked_package) {
+                    *pkg = merged_package;
+                }
+            })
+            .or_insert(locked_package);
 
         // Add the package to the environment that it is intended for.
         environment
             .packages
             .entry(platform)
             .or_default()
-            .push(EnvironmentPackageData::Conda(package_idx));
+            .insert(EnvironmentPackageData::Conda(package_idx));
 
         self
     }
@@ -136,7 +265,7 @@ impl LockFileBuilder {
             .packages
             .entry(platform)
             .or_default()
-            .push(EnvironmentPackageData::Pypi(package_idx, runtime_idx));
+            .insert(EnvironmentPackageData::Pypi(package_idx, runtime_idx));
 
         self
     }
@@ -162,7 +291,7 @@ impl LockFileBuilder {
         mut self,
         environment: impl Into<String>,
         platform: Platform,
-        locked_package: Package,
+        locked_package: LockedPackage,
     ) -> Self {
         self.add_package(environment, platform, locked_package);
         self
@@ -174,18 +303,13 @@ impl LockFileBuilder {
         &mut self,
         environment: impl Into<String>,
         platform: Platform,
-        locked_package: Package,
+        locked_package: LockedPackage,
     ) -> &mut Self {
         match locked_package {
-            Package::Conda(p) => {
-                self.add_conda_package(environment, platform, p.package_data().clone())
+            LockedPackage::Conda(p) => self.add_conda_package(environment, platform, p),
+            LockedPackage::Pypi(data, env_data) => {
+                self.add_pypi_package(environment, platform, data, env_data)
             }
-            Package::Pypi(p) => self.add_pypi_package(
-                environment,
-                platform,
-                p.package_data().clone(),
-                p.environment_data().clone(),
-            ),
         }
     }
 
@@ -237,9 +361,9 @@ impl LockFileBuilder {
         LockFile {
             inner: Arc::new(LockFileInner {
                 version: FileFormatVersion::LATEST,
-                conda_packages: self.conda_packages.into_iter().collect(),
+                conda_packages: self.conda_packages.into_values().collect(),
                 pypi_packages: self.pypi_packages.into_iter().collect(),
-                pypi_environment_package_datas: self
+                pypi_environment_package_data: self
                     .pypi_runtime_configurations
                     .into_iter()
                     .map(Into::into)
@@ -270,5 +394,85 @@ impl From<PypiPackageEnvironmentData> for HashablePypiPackageEnvironmentData {
         Self {
             extras: value.extras.into_iter().collect(),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+
+    use rattler_conda_types::{PackageName, PackageRecord, Platform, Version};
+    use url::Url;
+
+    use crate::{CondaBinaryData, LockFile};
+
+    #[test]
+    fn test_merge_records_and_purls() {
+        let record = PackageRecord {
+            subdir: "linux-64".into(),
+            ..PackageRecord::new(
+                PackageName::new_unchecked("foobar"),
+                Version::from_str("1.0.0").unwrap(),
+                "build".into(),
+            )
+        };
+
+        let record_with_purls = PackageRecord {
+            purls: Some(
+                ["pkg:pypi/foobar@1.0.0".parse().unwrap()]
+                    .into_iter()
+                    .collect(),
+            ),
+            ..record.clone()
+        };
+
+        let lock_file = LockFile::builder()
+            .with_conda_package(
+                "default",
+                Platform::Linux64,
+                CondaBinaryData {
+                    package_record: record.clone(),
+                    location: Url::parse(
+                        "https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2",
+                    )
+                    .unwrap()
+                    .into(),
+                    file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
+                    channel: None,
+                }
+                .into(),
+            )
+            .with_conda_package(
+                "default",
+                Platform::Linux64,
+                CondaBinaryData {
+                    package_record: record.clone(),
+                    location: Url::parse(
+                        "https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2",
+                    )
+                    .unwrap()
+                    .into(),
+                    file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
+                    channel: None,
+                }
+                .into(),
+            )
+            .with_conda_package(
+                "foobar",
+                Platform::Linux64,
+                CondaBinaryData {
+                    package_record: record_with_purls,
+                    location: Url::parse(
+                        "https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2",
+                    )
+                    .unwrap()
+                    .into(),
+                    file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
+                    channel: None,
+                }
+                .into(),
+            )
+            .finish();
+        insta::assert_snapshot!(lock_file.render_to_string().unwrap());
     }
 }

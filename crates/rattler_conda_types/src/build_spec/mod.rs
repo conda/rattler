@@ -1,13 +1,19 @@
-//! This module contains code to work with "build number spec". It represents the build number key of
-//! [`crate::MatchSpec`], e.g.: `>=3,<4`.
+//! This module contains code to work with "build number spec". It represents
+//! the build number key of [`crate::MatchSpec`], e.g.: `>=3,<4`.
 
 pub mod parse;
 
-pub use parse::ParseBuildNumberSpecError;
-use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
+use std::{
+    borrow::Cow,
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
-/// Named type for the build number of a package instead of explicit u64 floating about the project.
+pub use parse::ParseBuildNumberSpecError;
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// Named type for the build number of a package instead of explicit u64
+/// floating about the project.
 pub type BuildNumber = u64;
 
 /// An operator to compare two versions.
@@ -25,9 +31,9 @@ pub enum OrdOperator {
 /// Define match from some kind of operator and a specific element
 ///
 /// Ideally we could have some kind of type constraint to guarantee that
-/// there's function relating the operator and element into a function that returns bool
-/// possible TODO: create `Operator<Element>` trait
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+/// there's function relating the operator and element into a function that
+/// returns bool possible TODO: create `Operator<Element>` trait
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct OperatorConstraint<Operator, Element> {
     op: Operator,
     rhs: Element,
@@ -74,6 +80,22 @@ impl BuildNumberSpec {
             OrdOperator::Eq => build_num.eq(&self.rhs),
             OrdOperator::Ne => build_num.ne(&self.rhs),
         }
+    }
+}
+
+impl Serialize for BuildNumberSpec {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.to_string().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for BuildNumberSpec {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = Cow::<'de, str>::deserialize(deserializer)?;
+        BuildNumberSpec::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 

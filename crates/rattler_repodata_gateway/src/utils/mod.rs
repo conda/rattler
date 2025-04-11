@@ -1,9 +1,5 @@
-use std::fmt::Write;
-
-use ::url::Url;
 pub use body::BodyStreamExt;
 pub use encoding::{AsyncEncoding, Encoding};
-pub use flock::LockedFile;
 
 mod encoding;
 
@@ -11,10 +7,17 @@ mod encoding;
 pub(crate) mod simple_channel_server;
 
 mod body;
+#[cfg(not(target_arch = "wasm32"))]
 mod flock;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub use flock::LockedFile;
+
 /// Convert a URL to a cache filename
-pub(crate) fn url_to_cache_filename(url: &Url) -> String {
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn url_to_cache_filename(url: &::url::Url) -> String {
+    use std::fmt::Write;
+
     // Start Rant:
     // This function mimics behavior from Mamba which itself mimics this behavior
     // from Conda. However, I find this function absolutely ridiculous, it
@@ -46,6 +49,7 @@ pub(crate) fn url_to_cache_filename(url: &Url) -> String {
 pub(crate) mod test {
     use std::path::{Path, PathBuf};
 
+    use fs_err::tokio as tokio_fs;
     use tempfile::NamedTempFile;
     use url::Url;
 
@@ -73,7 +77,7 @@ pub(crate) mod test {
 
         // Create the parent directory if it doesn't exist
         let parent_dir = path.parent().unwrap();
-        tokio::fs::create_dir_all(&parent_dir).await.unwrap();
+        tokio_fs::create_dir_all(&parent_dir).await.unwrap();
 
         // Acquire a lock on the file to ensure we don't download the file twice.
         let mut lock = fslock::LockFile::open(&parent_dir.join(".lock")).unwrap();
@@ -95,7 +99,7 @@ pub(crate) mod test {
             "https://rattler-test.pixi.run/test-data/channels/conda-forge/{subdir}/repodata.json"
         ))
         .await?;
-        tokio::fs::write(&mut file, data.bytes().await?)
+        tokio_fs::write(&mut file, data.bytes().await?)
             .await
             .unwrap();
         file.persist(&path).unwrap();

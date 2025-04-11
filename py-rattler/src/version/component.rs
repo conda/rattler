@@ -1,4 +1,4 @@
-use pyo3::{IntoPy, PyObject, Python};
+use pyo3::{Bound, IntoPyObject, PyAny, Python};
 use rattler_conda_types::Component;
 
 pub enum PyComponent {
@@ -6,11 +6,15 @@ pub enum PyComponent {
     Number(u64),
 }
 
-impl IntoPy<PyObject> for PyComponent {
-    fn into_py(self, py: Python<'_>) -> PyObject {
+impl<'py> IntoPyObject<'py> for PyComponent {
+    type Target = PyAny;
+    type Output = Bound<'py, Self::Target>;
+    type Error = std::convert::Infallible;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         match self {
-            Self::Number(val) => val.into_py(py),
-            Self::String(val) => val.into_py(py),
+            Self::Number(val) => Ok(val.into_pyobject(py)?.into_any()),
+            Self::String(val) => Ok(val.into_pyobject(py)?.into_any()),
         }
     }
 }

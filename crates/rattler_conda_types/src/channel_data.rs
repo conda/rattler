@@ -28,7 +28,7 @@ pub struct ChannelData {
     /// A mapping of all packages in the channel
     pub packages: HashMap<String, ChannelDataPackage>,
 
-    /// The availalble subdirs for this channel
+    /// The available subdirs for this channel
     #[serde(default)]
     pub subdirs: Vec<String>,
 }

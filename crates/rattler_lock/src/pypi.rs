@@ -2,17 +2,13 @@ use crate::{PackageHashes, UrlOrPath};
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{ExtraName, PackageName, Requirement};
 use rattler_digest::{digest::Digest, Sha256};
-use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
 /// A pinned Pypi package
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug, Hash)]
+#[derive(Eq, PartialEq, Clone, Debug, Hash)]
 pub struct PypiPackageData {
     /// The name of the package.
     pub name: PackageName,
@@ -20,23 +16,19 @@ pub struct PypiPackageData {
     /// The version of the package.
     pub version: pep440_rs::Version,
 
-    /// The URL that points to where the artifact can be downloaded from.
-    #[serde(with = "crate::utils::serde::url_or_path", flatten)]
-    pub url_or_path: UrlOrPath,
+    /// The location of the package. This can be a URL or a path.
+    pub location: UrlOrPath,
 
     /// Hashes of the file pointed to by `url`.
-    #[serde(flatten)]
     pub hash: Option<PackageHashes>,
 
     /// A list of dependencies on other packages.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires_dist: Vec<Requirement>,
 
     /// The python version that this package requires.
     pub requires_python: Option<VersionSpecifiers>,
 
     /// Whether the projects should be installed in editable mode or not.
-    #[serde(default, skip_serializing_if = "should_skip_serializing_editable")]
     pub editable: bool,
 }
 
@@ -59,7 +51,7 @@ impl Ord for PypiPackageData {
         self.name
             .cmp(&other.name)
             .then_with(|| self.version.cmp(&other.version))
-            .then_with(|| self.url_or_path.cmp(&other.url_or_path))
+            .then_with(|| self.location.cmp(&other.location))
             .then_with(|| self.hash.cmp(&other.hash))
     }
 }
@@ -85,11 +77,6 @@ impl PypiPackageData {
 
         true
     }
-}
-
-/// Used in `skip_serializing_if` to skip serializing the `editable` field if it is `false`.
-fn should_skip_serializing_editable(editable: &bool) -> bool {
-    !*editable
 }
 
 /// A struct that wraps the hashable part of a source package.

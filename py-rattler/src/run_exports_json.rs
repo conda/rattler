@@ -29,6 +29,25 @@ impl From<PyRunExportsJson> for RunExportsJson {
 
 #[pymethods]
 impl PyRunExportsJson {
+    /// Constructor
+    #[new]
+    pub fn new(
+        weak: Vec<String>,
+        strong: Vec<String>,
+        noarch: Vec<String>,
+        weak_constrains: Vec<String>,
+        strong_constrains: Vec<String>,
+    ) -> Self {
+        let inner = RunExportsJson {
+            weak,
+            strong,
+            noarch,
+            weak_constrains,
+            strong_constrains,
+        };
+        Self { inner }
+    }
+
     /// Parses the package file from archive.
     /// Note: If you want to extract multiple `info/*` files then this will be slightly
     ///       slower than manually iterating over the archive entries with
@@ -92,10 +111,22 @@ impl PyRunExportsJson {
         self.inner.weak.clone()
     }
 
+    /// Set weak run exports
+    #[setter]
+    pub fn set_weak(&mut self, weak: Vec<String>) {
+        self.inner.weak = weak;
+    }
+
     /// Strong run exports apply a dependency from build to host and run.
     #[getter]
     pub fn strong(&self) -> Vec<String> {
         self.inner.strong.clone()
+    }
+
+    /// Set strong run exports
+    #[setter]
+    pub fn set_strong(&mut self, strong: Vec<String>) {
+        self.inner.strong = strong;
     }
 
     /// NoArch run exports apply a run export only to noarch packages (other run exports are ignored).
@@ -106,15 +137,33 @@ impl PyRunExportsJson {
         self.inner.noarch.clone()
     }
 
+    /// Set noarch run exports
+    #[setter]
+    pub fn set_noarch(&mut self, noarch: Vec<String>) {
+        self.inner.noarch = noarch;
+    }
+
     /// Weak constrains apply a constrain dependency from host to build, or run to host.
     #[getter]
     pub fn weak_constrains(&self) -> Vec<String> {
         self.inner.weak_constrains.clone()
     }
 
+    /// Set weak constrains
+    #[setter]
+    pub fn set_weak_constrains(&mut self, weak_constrains: Vec<String>) {
+        self.inner.weak_constrains = weak_constrains;
+    }
+
     /// Strong constrains apply a constrain dependency from build to host and run.
     #[getter]
     pub fn strong_constrains(&self) -> Vec<String> {
         self.inner.strong_constrains.clone()
+    }
+
+    /// Set strong constrains
+    #[setter]
+    pub fn set_strong_constrains(&mut self, strong_constrains: Vec<String>) {
+        self.inner.strong_constrains = strong_constrains;
     }
 }

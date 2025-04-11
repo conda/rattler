@@ -1,0 +1,5 @@
+---
+source: crates/rattler_conda_types/src/version_spec/parse.rs
+expression: "VersionSpec::from_str(\"1.2.3\", Strict).unwrap_err()"
+---
+missing range specifier for '1.2.3'. Did you mean '==1.2.3' or '1.2.3.*'?

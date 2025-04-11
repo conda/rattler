@@ -51,6 +51,14 @@ pub trait Shell {
     /// Run a script in the current shell.
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result;
 
+    /// Source completion scripts for the shell from a given prefix path.
+    /// Note: the `completions_dir` is the directory where the completions are stored.
+    /// You can use [`Self::completion_script_location`] to get the correct location for a given
+    /// shell type.
+    fn source_completions(&self, _f: &mut impl Write, _completions_dir: &Path) -> std::fmt::Result {
+        Ok(())
+    }
+
     /// Test to see if the path can be executed by the shell, based on the
     /// extension of the path.
     fn can_run_script(&self, path: &Path) -> bool {
@@ -58,7 +66,7 @@ pub trait Shell {
             && path
                 .extension()
                 .and_then(OsStr::to_str)
-                .map_or(false, |ext| ext == self.extension())
+                .is_some_and(|ext| ext == self.extension())
     }
 
     /// Executes a command in the current shell. Use [`Self::run_script`] when
@@ -91,7 +99,7 @@ pub trait Shell {
             PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var(path_var)),
         }
         // Create the shell specific list of paths.
-        let paths_string = paths_vec.join(self.path_seperator(platform));
+        let paths_string = paths_vec.join(self.path_separator(platform));
 
         self.set_env_var(f, self.path_var(platform), paths_string.as_str())
     }
@@ -106,8 +114,8 @@ pub trait Shell {
     /// shell.
     fn create_run_script_command(&self, path: &Path) -> Command;
 
-    /// Path seperator
-    fn path_seperator(&self, platform: &Platform) -> &str {
+    /// Path separator
+    fn path_separator(&self, platform: &Platform) -> &str {
         if platform.is_unix() {
             ":"
         } else {
@@ -162,9 +170,20 @@ pub trait Shell {
     fn line_ending(&self) -> &str {
         "\n"
     }
+
+    /// Return the location where completion scripts are found in a Conda environment.
+    ///
+    /// - bash: `share/bash-completion/completions`
+    /// - zsh: `share/zsh/site-functions`
+    /// - fish: `share/fish/vendor_completions.d`
+    ///
+    /// The return value must be joined with `prefix.join(completion_script_location())`.
+    fn completion_script_location(&self) -> Option<&'static Path> {
+        None
+    }
 }
 
-/// Convert a native PATH on Windows to a Unix style path usign cygpath.
+/// Convert a native PATH on Windows to a Unix style path using cygpath.
 fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
     // call cygpath on Windows to convert paths to Unix style
     let output = Command::new("cygpath")
@@ -249,13 +268,25 @@ impl Shell for Bash {
             PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var(path_var)),
         }
         // Create the shell specific list of paths.
-        let paths_string = paths_vec.join(self.path_seperator(platform));
+        let paths_string = paths_vec.join(self.path_separator(platform));
 
         self.set_env_var(f, self.path_var(platform), paths_string.as_str())
     }
 
     fn extension(&self) -> &str {
         "sh"
+    }
+
+    fn completion_script_location(&self) -> Option<&'static Path> {
+        Some(Path::new("share/bash-completion/completions"))
+    }
+
+    fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> std::fmt::Result {
+        if completions_dir.exists() {
+            let completions_glob = completions_dir.join("*");
+            writeln!(f, "source {}", completions_glob.to_string_lossy())?;
+        }
+        Ok(())
     }
 
     fn executable(&self) -> &str {
@@ -307,6 +338,19 @@ impl Shell for Zsh {
         cmd.arg(path);
         cmd
     }
+
+    fn completion_script_location(&self) -> Option<&'static Path> {
+        Some(Path::new("share/zsh/site-functions"))
+    }
+
+    fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> std::fmt::Result {
+        if completions_dir.exists() {
+            writeln!(f, "fpath+=({})", completions_dir.to_string_lossy())?;
+            writeln!(f, "autoload -Uz compinit")?;
+            writeln!(f, "compinit")?;
+        }
+        Ok(())
+    }
 }
 
 /// A [`Shell`] implementation for the Xonsh shell.
@@ -336,7 +380,7 @@ impl Shell for Xonsh {
             && path
                 .extension()
                 .and_then(OsStr::to_str)
-                .map_or(false, |ext| ext == "xsh" || ext == "sh")
+                .is_some_and(|ext| ext == "xsh" || ext == "sh")
     }
 
     fn extension(&self) -> &str {
@@ -351,6 +395,10 @@ impl Shell for Xonsh {
         let mut cmd = Command::new(self.executable());
         cmd.arg(path);
         cmd
+    }
+
+    fn completion_script_location(&self) -> Option<&'static Path> {
+        None
     }
 }
 
@@ -527,6 +575,21 @@ impl Shell for Fish {
         cmd.arg(path);
         cmd
     }
+
+    fn completion_script_location(&self) -> Option<&'static Path> {
+        Some(Path::new("share/fish/vendor_completions.d"))
+    }
+
+    fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> std::fmt::Result {
+        if completions_dir.exists() {
+            // glob all files in the completions directory using fish
+            let completions_glob = completions_dir.join("*");
+            writeln!(f, "for file in {}", completions_glob.to_string_lossy())?;
+            writeln!(f, "    source $file")?;
+            writeln!(f, "end")?;
+        }
+        Ok(())
+    }
 }
 
 fn escape_backslashes(s: &str) -> String {
@@ -603,6 +666,10 @@ impl Shell for NuShell {
         cmd.arg(path);
         cmd
     }
+
+    fn completion_script_location(&self) -> Option<&'static Path> {
+        None
+    }
 }
 
 /// A generic [`Shell`] implementation for concrete shell types.
@@ -662,16 +729,17 @@ impl ShellEnum {
 
         // Get current process information
         let mut current_pid = get_current_pid().ok()?;
-        system_info.refresh_process(current_pid);
+        system_info.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[current_pid]), true);
 
         while let Some(parent_process_id) = system_info
             .process(current_pid)
             .and_then(sysinfo::Process::parent)
         {
             // Get the name of the parent process
-            system_info.refresh_process(parent_process_id);
+            system_info
+                .refresh_processes(sysinfo::ProcessesToUpdate::Some(&[parent_process_id]), true);
             let parent_process = system_info.process(parent_process_id)?;
-            let parent_process_name = parent_process.name().to_lowercase();
+            let parent_process_name = parent_process.name().to_string_lossy().to_lowercase();
 
             let shell: Option<ShellEnum> = if parent_process_name.contains("bash") {
                 Some(Bash.into())
@@ -683,7 +751,7 @@ impl ShellEnum {
                 || (parent_process_name.contains("python")
                 && parent_process
                 .cmd().iter()
-                .any(|arg| arg.contains("xonsh")))
+                .any(|arg| arg.to_string_lossy().contains("xonsh")))
             {
                 Some(Xonsh.into())
             } else if parent_process_name.contains("fish") {
@@ -809,6 +877,16 @@ impl<T: Shell + 'static> ShellScript<T> {
         Ok(self)
     }
 
+    /// Source completion scripts for the shell from a given directory with completion scripts.
+    pub fn source_completions(
+        &mut self,
+        completions_dir: &Path,
+    ) -> Result<&mut Self, std::fmt::Error> {
+        self.shell
+            .source_completions(&mut self.contents, completions_dir)?;
+        Ok(self)
+    }
+
     /// Add contents to the script. The contents will be added as is, so make
     /// sure to format it correctly for the shell.
     pub fn append_script(&mut self, script: &Self) -> &mut Self {
@@ -918,7 +996,7 @@ mod tests {
     }
 
     #[test]
-    fn test_path_seperator() {
+    fn test_path_separator() {
         let mut script = ShellScript::new(Bash, Platform::Linux64);
         script
             .set_path(

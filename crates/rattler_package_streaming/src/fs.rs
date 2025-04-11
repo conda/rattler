@@ -32,7 +32,7 @@ pub fn extract_tar_bz2(archive: &Path, destination: &Path) -> Result<ExtractResu
 /// ```
 pub fn extract_conda(archive: &Path, destination: &Path) -> Result<ExtractResult, ExtractError> {
     let file = File::open(archive)?;
-    crate::read::extract_conda(file, destination)
+    crate::read::extract_conda_via_streaming(file, destination)
 }
 
 /// Extracts the contents a package archive at the specified path to a directory. The type of

@@ -39,6 +39,8 @@ struct Opt {
 enum Command {
     Create(commands::create::Opt),
     VirtualPackages(commands::virtual_packages::Opt),
+    InstallMenu(commands::menu::InstallOpt),
+    RemoveMenu(commands::menu::InstallOpt),
 }
 
 /// Entry point of the `rattler` cli.
@@ -72,5 +74,7 @@ async fn main() -> anyhow::Result<()> {
     match opt.command {
         Command::Create(opts) => commands::create::create(opts).await,
         Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
+        Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
+        Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
     }
 }

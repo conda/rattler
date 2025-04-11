@@ -13,51 +13,63 @@ use fxhash::{FxHashMap, FxHashSet};
 ///
 /// Note that this function only works for packages with unique names.
 pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> Vec<T> {
-    let roots = get_graph_roots(&packages, None);
-
-    let mut all_packages = packages
+    let mut all_packages: FxHashMap<String, T> = packages
         .iter()
         .cloned()
         .map(|p| (p.as_ref().name.as_normalized().to_owned(), p))
         .collect();
 
-    // Detect cycles
+    let cycles = find_all_cycles(&all_packages);
+    let cycle_breaks = break_cycles(&cycles, &all_packages);
+    let roots = get_graph_roots(&packages, &cycle_breaks);
+
+    get_topological_order(roots, &mut all_packages, &cycle_breaks)
+}
+
+/// Find cycles with DFS
+fn find_all_cycles<T: AsRef<PackageRecord>>(packages: &FxHashMap<String, T>) -> Vec<Vec<String>> {
+    let mut all_cycles = Vec::new();
     let mut visited = FxHashSet::default();
-    let mut stack = Vec::new();
-    let mut cycles = Vec::new();
 
-    // We must start from the roots, unless all packages are in a cycle, in which case we can start from any package
-    let starting_points_for_root_finding = if roots.is_empty() {
-        packages.first().map_or_else(Vec::new, |package| {
-            vec![package.as_ref().name.as_normalized().to_string()]
-        })
-    } else {
-        roots
-    };
-
-    for starting_point in &starting_points_for_root_finding {
-        if !visited.contains(starting_point) {
-            if let Some(cycle) =
-                find_cycles(starting_point, &all_packages, &mut visited, &mut stack)
-            {
-                cycles.push(cycle);
-            }
+    for package in packages.keys() {
+        if !visited.contains(package) {
+            let mut path = Vec::new();
+            dfs(package, packages, &mut visited, &mut path, &mut all_cycles);
         }
     }
 
-    // print all cycles
-    for cycle in &cycles {
-        tracing::debug!("Found cycle: {:?}", cycle);
+    all_cycles
+}
+
+fn dfs<T: AsRef<PackageRecord>>(
+    node: &str,
+    packages: &FxHashMap<String, T>,
+    visited: &mut FxHashSet<String>,
+    path: &mut Vec<String>,
+    all_cycles: &mut Vec<Vec<String>>,
+) {
+    if path.contains(&node.to_string()) {
+        // Cycle detected
+        let cycle_start = path.iter().position(|x| x == node).unwrap();
+        all_cycles.push(path[cycle_start..].to_vec());
+        return;
     }
 
-    // Break cycles
-    let cycle_breaks = break_cycles(cycles, &all_packages);
+    if visited.contains(node) {
+        return;
+    }
 
-    // obtain the new roots (packages that are not dependencies of any other package)
-    // this is needed because breaking cycles can create new roots
-    let roots = get_graph_roots(&packages, Some(&cycle_breaks));
+    visited.insert(node.to_string());
+    path.push(node.to_string());
 
-    get_topological_order(roots, &mut all_packages, &cycle_breaks)
+    if let Some(package) = packages.get(node) {
+        for dependency in package.as_ref().depends.iter() {
+            let dependency = package_name_from_match_spec(dependency);
+            dfs(dependency, packages, visited, path, all_cycles);
+        }
+    }
+
+    path.pop();
 }
 
 /// Retrieves the names of the packages that form the roots of the graph and breaks specified
@@ -65,7 +77,7 @@ pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> 
 /// A -> B will be removed)
 fn get_graph_roots<T: AsRef<PackageRecord>>(
     records: &[T],
-    cycle_breaks: Option<&FxHashSet<(String, String)>>,
+    cycle_breaks: &FxHashSet<(String, String)>,
 ) -> Vec<String> {
     let all_packages: FxHashSet<_> = records
         .iter()
@@ -81,14 +93,8 @@ fn get_graph_roots<T: AsRef<PackageRecord>>(
                 .map(|d| package_name_from_match_spec(d))
                 .filter(|d| {
                     // filter out circular dependencies
-                    if let Some(cycle_breaks) = cycle_breaks {
-                        !cycle_breaks.contains(&(
-                            r.as_ref().name.as_normalized().to_owned(),
-                            (*d).to_string(),
-                        ))
-                    } else {
-                        true
-                    }
+                    !cycle_breaks
+                        .contains(&(r.as_ref().name.as_normalized().to_owned(), (*d).to_string()))
                 })
         })
         .collect();
@@ -106,41 +112,10 @@ enum Action {
     Install(String),
 }
 
-/// Find cycles with DFS
-fn find_cycles<T: AsRef<PackageRecord>>(
-    node: &str,
-    packages: &FxHashMap<String, T>,
-    visited: &mut FxHashSet<String>,
-    stack: &mut Vec<String>,
-) -> Option<Vec<String>> {
-    visited.insert(node.to_string());
-    stack.push(node.to_string());
-
-    if let Some(package) = packages.get(node) {
-        for dependency in &package.as_ref().depends {
-            let dep_name = package_name_from_match_spec(dependency);
-
-            if !visited.contains(dep_name) {
-                if let Some(cycle) = find_cycles(dep_name, packages, visited, stack) {
-                    return Some(cycle);
-                }
-            } else if stack.contains(&dep_name.to_string()) {
-                // Cycle detected. We clone the part of the stack that forms the cycle.
-                if let Some(pos) = stack.iter().position(|x| *x == dep_name) {
-                    return Some(stack[pos..].to_vec());
-                }
-            }
-        }
-    }
-
-    stack.pop();
-    None
-}
-
 /// Breaks cycles by removing the edges that form them
 /// Edges from arch to noarch packages are removed to break the cycles.
 fn break_cycles<T: AsRef<PackageRecord>>(
-    cycles: Vec<Vec<String>>,
+    cycles: &[Vec<String>],
     packages: &FxHashMap<String, T>,
 ) -> FxHashSet<(String, String)> {
     // we record the edges that we want to remove
@@ -158,10 +133,12 @@ fn break_cycles<T: AsRef<PackageRecord>>(
             // prefer arch packages over noarch packages
             let p1_noarch = p1.as_ref().noarch.is_none();
             let p2_noarch = p2.as_ref().noarch.is_none();
+
             if p1_noarch && !p2_noarch {
                 cycle_breaks.insert((pi1.clone(), pi2.clone()));
                 break;
-            } else if !p1_noarch && p2_noarch {
+            } else if !p1_noarch && p2_noarch || i == cycle.len() - 1 {
+                // This branch should also be taken if we're at the last package in the cycle and no noarch packages are found
                 cycle_breaks.insert((pi2.clone(), pi1.clone()));
                 break;
             }
@@ -243,7 +220,7 @@ fn package_name_from_match_spec(d: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::RepoDataRecord;
+    use crate::{get_test_data_dir, RepoDataRecord};
     use rstest::rstest;
 
     /// Ensures that the packages are the same before and after the sort, and panics otherwise
@@ -341,7 +318,7 @@ mod tests {
         #[case] packages: Vec<RepoDataRecord>,
         #[case] expected_roots: &[&str],
     ) {
-        let mut roots = get_graph_roots(&packages, None);
+        let mut roots = get_graph_roots(&packages, &FxHashSet::default());
         roots.sort();
         assert_eq!(roots.as_slice(), expected_roots);
     }
@@ -352,6 +329,7 @@ mod tests {
     #[case(get_resolved_packages_for_two_roots(), "4ti2", &[("libzlib", "libgcc-ng")])]
     #[case(get_resolved_packages_for_rootless_graph(), "pip", &[("python", "pip")])]
     #[case(get_resolved_packages_for_python_pip(), "pip", &[("pip", "python"), ("libzlib", "libgcc-ng")])]
+    #[case(get_big_resolved_packages(), "panel", &[("holoviews", "panel")])]
     fn test_topological_sort(
         #[case] packages: Vec<RepoDataRecord>,
         #[case] expected_last_package: &str,
@@ -369,6 +347,14 @@ mod tests {
             last_package.package_record.name.as_normalized(),
             expected_last_package
         );
+    }
+
+    fn get_big_resolved_packages() -> Vec<RepoDataRecord> {
+        // load from test-data folder
+        let path = get_test_data_dir().join("topological-sort/big_resolution.json");
+        let repodata_json = std::fs::read_to_string(path).unwrap();
+
+        serde_json::from_str(&repodata_json).unwrap()
     }
 
     fn get_resolved_packages_for_two_roots() -> Vec<RepoDataRecord> {

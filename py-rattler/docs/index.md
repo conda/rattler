@@ -1,14 +1,14 @@
-<a href="https://github.com/mamba-org/rattler/">
+<a href="https://github.com/conda/rattler/">
     <picture>
-      <source srcset="https://github.com/mamba-org/rattler/assets/4995967/8f5a9786-f75c-4b55-8043-69c551b22459" type="image/webp">
-      <source srcset="https://github.com/mamba-org/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" type="image/png">
-      <img src="https://github.com/mamba-org/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" alt="banner">
+      <source srcset="https://github.com/conda/rattler/assets/4995967/8f5a9786-f75c-4b55-8043-69c551b22459" type="image/webp">
+      <source srcset="https://github.com/conda/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" type="image/png">
+      <img src="https://github.com/conda/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" alt="banner">
     </picture>
 </a>
 
 ## What is this?
 
-Rattler is a library that provides common functionality used within the conda ecosystem ([what is conda & conda-forge?](#what-is-conda--conda-forge)).
+Rattler is a library that provides common functionality used within the conda ecosystem ([what is conda & conda-forge?](#what-is-conda-conda-forge)).
 The goal of the library is to enable programs and other libraries to easily interact with the conda ecosystem without being dependent on Python.
 Its primary use case is as a library that you can use to provide conda related workflows in your own tools.
 
@@ -21,7 +21,7 @@ Py-rattler is the python bindings for rattler.
 Let's see an example to learn some of the functionality the library has to offer.
 
 ```python
---8<-- "examples\solve_and_install.py"
+--8<-- "examples/solve_and_install.py"
 ```
 
 Py-rattler provides friendly high level functions to download dependencies and create environments.

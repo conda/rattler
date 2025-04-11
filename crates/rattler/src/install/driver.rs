@@ -7,7 +7,7 @@ use std::{
 
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::{prefix_record::PathType, PackageRecord, PrefixRecord};
+use rattler_conda_types::{prefix::Prefix, prefix_record::PathType, PackageRecord, PrefixRecord};
 use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
@@ -29,7 +29,7 @@ use crate::install::link_script::LinkScriptError;
 /// system has available.
 pub struct InstallDriver {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
-    clobber_registry: Arc<Mutex<ClobberRegistry>>,
+    pub(crate) clobber_registry: Arc<Mutex<ClobberRegistry>>,
     execute_link_scripts: bool,
 }
 
@@ -155,10 +155,11 @@ impl InstallDriver {
         transaction: &Transaction<Old, New>,
         target_prefix: &Path,
     ) -> Result<Option<PrePostLinkResult>, PrePostLinkError> {
+        let mut result = None;
         if self.execute_link_scripts {
             match self.run_pre_unlink_scripts(transaction, target_prefix) {
                 Ok(res) => {
-                    return Ok(Some(res));
+                    result = Some(res);
                 }
                 Err(e) => {
                     tracing::error!("Error running pre-unlink scripts: {:?}", e);
@@ -166,10 +167,23 @@ impl InstallDriver {
             }
         }
 
-        Ok(None)
+        // For all packages that are removed, we need to remove menuinst entries as well
+        for record in transaction.removed_packages() {
+            let prefix_record = record.borrow();
+            if !prefix_record.installed_system_menus.is_empty() {
+                match rattler_menuinst::remove_menu_items(&prefix_record.installed_system_menus) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        tracing::warn!("Failed to remove menu item: {}", e);
+                    }
+                }
+            }
+        }
+
+        Ok(result)
     }
 
-    /// Runs a blocking task that will execute on a seperate thread. The task is
+    /// Runs a blocking task that will execute on a separate thread. The task is
     /// not started until an IO permit is acquired. This is used to make
     /// sure that the system doesn't try to acquire more IO resources than
     /// the system has available.
@@ -199,7 +213,7 @@ impl InstallDriver {
     pub fn post_process<Old: Borrow<PrefixRecord> + AsRef<New>, New: AsRef<PackageRecord>>(
         &self,
         transaction: &Transaction<Old, New>,
-        target_prefix: &Path,
+        target_prefix: &Prefix,
     ) -> Result<PostProcessResult, PostProcessingError> {
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix)
             .map_err(PostProcessingError::FailedToDetectInstalledPackages)?;

@@ -176,7 +176,7 @@ impl PathsJson {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct PrefixPlaceholder {
     /// The type of the file, either binary or text. Depending on the type of file either text
-    /// replacement is performed or CString replacement.
+    /// replacement is performed or `CString` replacement.
     pub file_mode: FileMode,
 
     /// The placeholder prefix used in the file. This is the path of the prefix when the package
@@ -337,7 +337,7 @@ mod test {
         }
 
         // shuffle the data
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         paths.shuffle(&mut rng);
 
         insta::assert_yaml_snapshot!(PathsJson {

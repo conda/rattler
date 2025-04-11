@@ -1,0 +1,45 @@
+---
+source: crates/rattler_conda_types/src/environment_yaml.rs
+assertion_line: 186
+expression: "EnvironmentYaml::from_path(&path).unwrap()"
+input_file: test-data/environments/conda_lock_dev.environment.yaml
+---
+name: conda-lock-dev
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - check-manifest
+  - docker-py
+  - doctr
+  - filelock
+  - flaky
+  - freezegun
+  - gitpython
+  - mamba
+  - mkdocs
+  - mkdocs-click
+  - mkdocs-material
+  - mkdocs-include-markdown-plugin
+  - mypy
+  - pip
+  - pre-commit
+  - pytest
+  - pytest-cov
+  - pytest-timeout
+  - pytest-xdist
+  - python-build
+  - requests-mock
+  - ruff
+  - tomli
+  - twine
+  - types-click
+  - types-filelock
+  - types-requests
+  - types-toml
+  - types-pyyaml
+  - types-freezegun
+  - types-setuptools
+  - wheel
+  - pip:
+      - types-click-default-group

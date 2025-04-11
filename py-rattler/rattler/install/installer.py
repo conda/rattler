@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 from typing import List, Optional
 
-from rattler.networking.authenticated_client import AuthenticatedClient
+from rattler.networking.client import Client
 from rattler.platform.platform import Platform
 from rattler.prefix.prefix_record import PrefixRecord
 from rattler.repo_data.record import RepoDataRecord
@@ -15,10 +15,11 @@ async def install(
     target_prefix: str | os.PathLike[str],
     cache_dir: Optional[os.PathLike[str]] = None,
     installed_packages: Optional[List[PrefixRecord]] = None,
+    reinstall_packages: Optional[set[str]] = None,
     platform: Optional[Platform] = None,
     execute_link_scripts: bool = False,
     show_progress: bool = True,
-    client: Optional[AuthenticatedClient] = None,
+    client: Optional[Client] = None,
 ) -> None:
     """
     Create an environment by downloading and linking the `dependencies` in
@@ -28,7 +29,7 @@ async def install(
 
         When `execute_link_scripts` is set to `True` the post-link and pre-unlink scripts of
         packages will be executed. These scripts are not sandboxed and can be used to execute
-        arbitraty code. It is therefor discouraged to enable executing link scripts.
+        arbitrary code. It is therefor discouraged to enable executing link scripts.
 
     Example
     -------
@@ -62,9 +63,10 @@ async def install(
                 `PrefixRecord`s from `{target_prefix}/conda-meta/`.
                 If `None` is specified then the `target_prefix` will be scanned for installed
                 packages.
+        reinstall_packages: A list of package names that should be reinstalled.
         platform: Target platform to create and link the
                 environment. Defaults to current platform.
-        execute_link_scripts: Wether to execute the post-link and pre-unlink scripts
+        execute_link_scripts: whether to execute the post-link and pre-unlink scripts
                 that may be part of a package. Defaults to False.
         show_progress: If set to `True` a progress bar will be shown on the CLI.
         client: An authenticated client to use for downloading packages. If not specified a default
@@ -76,6 +78,7 @@ async def install(
         target_prefix=str(target_prefix),
         cache_dir=cache_dir,
         installed_packages=installed_packages,
+        reinstall_packages=reinstall_packages,
         platform=platform._inner if platform is not None else None,
         client=client._client if client is not None else None,
         execute_link_scripts=execute_link_scripts,

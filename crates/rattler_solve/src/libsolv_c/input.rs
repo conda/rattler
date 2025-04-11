@@ -53,7 +53,7 @@ pub fn add_solv_file(pool: &Pool, repo: &Repo<'_>, solv_bytes: &LibcByteSlice) {
 pub fn add_repodata_records<'a>(
     pool: &Pool,
     repo: &Repo<'_>,
-    repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
+    repo_data: impl IntoIterator<Item = &'a RepoDataRecord>,
     exclude_newer: Option<&DateTime<Utc>>,
 ) -> Result<Vec<SolvableId>, SolveError> {
     // Sanity check
@@ -84,7 +84,7 @@ pub fn add_repodata_records<'a>(
     let data = repo.add_repodata();
 
     let mut solvable_ids = Vec::new();
-    for (repo_data_index, repo_data) in repo_datas.into_iter().enumerate() {
+    for (repo_data_index, repo_data) in repo_data.into_iter().enumerate() {
         // Skip packages that are newer than the specified timestamp
         match (exclude_newer, repo_data.package_record.timestamp.as_ref()) {
             (Some(exclude_newer), Some(timestamp)) if *timestamp > *exclude_newer => continue,

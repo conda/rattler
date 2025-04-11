@@ -121,4 +121,9 @@ impl PyPlatform {
     pub fn arch(&self) -> Option<PyArch> {
         self.inner.arch().map(Into::into)
     }
+
+    #[getter]
+    pub fn only_platform(&self) -> Option<&str> {
+        self.inner.only_platform()
+    }
 }

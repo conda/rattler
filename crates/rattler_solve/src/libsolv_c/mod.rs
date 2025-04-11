@@ -10,7 +10,7 @@ pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages};
 pub use libc_byte_slice::LibcByteSlice;
 use output::get_required_packages;
-use rattler_conda_types::RepoDataRecord;
+use rattler_conda_types::{MatchSpec, NamelessMatchSpec, RepoDataRecord, SolverResult};
 use wrapper::{
     flags::SolverFlag,
     pool::{Pool, Verbosity},
@@ -94,7 +94,7 @@ impl super::SolverImpl for Solver {
     >(
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
-    ) -> Result<Vec<RepoDataRecord>, SolveError> {
+    ) -> Result<SolverResult, SolveError> {
         if task.timeout.is_some() {
             return Err(SolveError::UnsupportedOperations(vec![
                 "timeout".to_string()
@@ -105,6 +105,12 @@ impl super::SolverImpl for Solver {
             return Err(SolveError::UnsupportedOperations(vec![
                 "strategy".to_string()
             ]));
+        }
+
+        if task.specs.iter().any(|spec| spec.extras.is_some()) {
+            return Err(SolveError::UnsupportedOperations(
+                vec!["extras".to_string()],
+            ));
         }
 
         // Construct a default libsolv pool
@@ -129,32 +135,31 @@ impl super::SolverImpl for Solver {
         // 0 and the channel priority map will not be populated as it will
         // not be used.
         let mut highest_priority: i32 = 0;
-        let channel_priority: HashMap<String, i32> =
-            if task.channel_priority == ChannelPriority::Strict {
-                let mut seen_channels = HashSet::new();
-                let mut channel_order: Vec<String> = Vec::new();
-                for channel in repodatas
-                    .iter()
-                    .filter(|&r| !r.records.is_empty())
-                    .map(|r| r.records[0].channel.clone())
-                {
-                    if !seen_channels.contains(&channel) {
-                        channel_order.push(channel.clone());
-                        seen_channels.insert(channel);
-                    }
+        let channel_priority = if task.channel_priority == ChannelPriority::Strict {
+            let mut seen_channels = HashSet::new();
+            let mut channel_order = Vec::new();
+            for channel in repodatas
+                .iter()
+                .filter(|&r| !r.records.is_empty())
+                .map(|r| r.records[0].channel.clone())
+            {
+                if !seen_channels.contains(&channel) {
+                    channel_order.push(channel.clone());
+                    seen_channels.insert(channel);
                 }
-                let mut channel_priority = HashMap::new();
-                for (index, channel) in channel_order.iter().enumerate() {
-                    let reverse_index = channel_order.len() - index;
-                    if index == 0 {
-                        highest_priority = reverse_index as i32;
-                    }
-                    channel_priority.insert(channel.clone(), reverse_index as i32);
+            }
+            let mut channel_priority = HashMap::new();
+            for (index, channel) in channel_order.iter().enumerate() {
+                let reverse_index = channel_order.len() - index;
+                if index == 0 {
+                    highest_priority = reverse_index as i32;
                 }
-                channel_priority
-            } else {
-                HashMap::new()
-            };
+                channel_priority.insert(channel.clone(), reverse_index as i32);
+            }
+            channel_priority
+        } else {
+            HashMap::new()
+        };
 
         // Add virtual packages
         let repo = Repo::new(&pool, "virtual_packages", highest_priority);
@@ -178,7 +183,11 @@ impl super::SolverImpl for Solver {
             } else {
                 0
             };
-            let repo = ManuallyDrop::new(Repo::new(&pool, channel_name, priority));
+            let repo = ManuallyDrop::new(Repo::new(
+                &pool,
+                channel_name.as_ref().map_or("<direct>", String::as_str),
+                priority,
+            ));
 
             if let Some(solv_file) = repodata.solv_file {
                 add_solv_file(&pool, &repo, solv_file);
@@ -239,6 +248,17 @@ impl super::SolverImpl for Solver {
             goal.install(id, true);
         }
 
+        // Add virtual packages to the queue. We want to install these as part of the
+        // solution as well. This ensures that if a package only has a constraint on a
+        // virtual package, the virtual package is installed.
+        for virtual_package in task.virtual_packages {
+            let id = pool.intern_matchspec(&MatchSpec::from_nameless(
+                NamelessMatchSpec::default(),
+                Some(virtual_package.name),
+            ));
+            goal.install(id, false);
+        }
+
         // Construct a solver and solve the problems in the queue
         let mut solver = pool.create_solver();
         solver.set_flag(SolverFlag::allow_uninstall(), true);
@@ -265,7 +285,10 @@ impl super::SolverImpl for Solver {
             )
         })?;
 
-        Ok(required_records)
+        Ok(SolverResult {
+            records: required_records,
+            features: HashMap::new(),
+        })
     }
 }
 

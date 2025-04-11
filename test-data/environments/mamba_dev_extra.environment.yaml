@@ -1,0 +1,25 @@
+# https://github.com/mamba-org/mamba/blob/main/dev/environment-dev-extra.yml
+channels:
+  - conda-forge
+dependencies:
+  # Compiler cache
+  - ccache
+  # C++ LSP tools and related packages
+  - clang-tools
+  - clang
+  - clangxx
+  - lld
+  - cmake-format
+  # Python LSP support
+  - ruff
+  - python-lsp-server-base
+  - ruff-lsp
+  # Interactive Python tools
+  - jupyterlab
+  - ipython
+  # Python Debugging
+  - ipdb
+  # Github CLI tool
+  - gh
+  # Taskfile for running scripts
+  - go-task

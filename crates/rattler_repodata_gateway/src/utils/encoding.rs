@@ -4,7 +4,7 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncBufRead, AsyncRead, ReadBuf};
 
 /// Describes the encoding of a stream
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Encoding {
     Passthrough,
     GZip,

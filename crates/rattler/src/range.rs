@@ -621,12 +621,12 @@ mod tests {
         }
 
         #[test]
-        fn intesection_of_complements_is_none(range in strategy()) {
+        fn intersection_of_complements_is_none(range in strategy()) {
             assert_eq!(range.negate().intersection(&range), Range::none());
         }
 
         #[test]
-        fn intesection_contains_both(r1 in strategy(), r2 in strategy(), version in version_strat()) {
+        fn intersection_contains_both(r1 in strategy(), r2 in strategy(), version in version_strat()) {
             assert_eq!(r1.intersection(&r2).contains(&version), r1.contains(&version) && r2.contains(&version));
         }
 

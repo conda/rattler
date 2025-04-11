@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, List, Literal
+from typing import Optional, List
 from dataclasses import dataclass
 
 from rattler.rattler import PyGateway, PySourceConfig, PyMatchSpec
 
 from rattler.channel import Channel
 from rattler.match_spec import MatchSpec
+from rattler.networking import Client, CacheAction
 from rattler.repo_data.record import RepoDataRecord
 from rattler.platform import Platform, PlatformLiteral
 from rattler.package.package_name import PackageName
-
-CacheAction = Literal["cache-or-fetch", "use-cache-only", "force-cache-only", "no-cache"]
 
 
 @dataclass
@@ -32,6 +31,9 @@ class SourceConfig:
 
     bz2_enabled: bool = True
     """Whether the BZ2 compression is enabled or not."""
+
+    sharded_enabled: bool = False
+    """Whether sharded repodata is enabled or not."""
 
     cache_action: CacheAction = "cache-or-fetch"
     """How to interact with the cache.
@@ -58,6 +60,7 @@ class SourceConfig:
             jlap_enabled=self.jlap_enabled,
             zstd_enabled=self.zstd_enabled,
             bz2_enabled=self.bz2_enabled,
+            sharded_enabled=self.sharded_enabled,
             cache_action=self.cache_action,
         )
 
@@ -70,8 +73,8 @@ class Gateway:
 
     The gateway can also easily be used concurrently, as it is designed to be
     thread-safe. When two threads are querying the same channel at the same time,
-    their requests are coallesced into a single request. This is done to reduce the
-    number of requests made to the remote server and reduce the overal memory usage.
+    their requests are coalesced into a single request. This is done to reduce the
+    number of requests made to the remote server and reduce the overall memory usage.
 
     The gateway caches the repodata internally, so if the same channel is queried
     multiple times the records will only be fetched once. However, the conversion
@@ -84,16 +87,21 @@ class Gateway:
         self,
         cache_dir: Optional[os.PathLike[str]] = None,
         default_config: Optional[SourceConfig] = None,
-        per_channel_config: Optional[dict[Channel | str, SourceConfig]] = None,
+        per_channel_config: Optional[dict[str, SourceConfig]] = None,
         max_concurrent_requests: int = 100,
+        client: Optional[Client] = None,
     ) -> None:
         """
         Arguments:
             cache_dir: The directory where the repodata should be cached. If not specified the
                        default cache directory is used.
             default_config: The default configuration for channels.
-            per_channel_config: Per channel configuration.
+            per_channel_config: Source configuration on a per-URL basis. This URL is used as a
+                                prefix, so any channel that starts with the URL uses the configuration.
+                                The configuration with the longest matching prefix is used.
             max_concurrent_requests: The maximum number of concurrent requests that can be made.
+            client: An authenticated client to use for acquiring repodata. If not specified a default
+                    client will be used.
 
         Examples
         --------
@@ -113,6 +121,7 @@ class Gateway:
                 for channel, config in (per_channel_config or {}).items()
             },
             max_concurrent_requests=max_concurrent_requests,
+            client=client._client if client is not None else None,
         )
 
     async def query(
@@ -173,6 +182,43 @@ class Gateway:
         # Convert the records into python objects
         return [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records]
 
+    async def names(
+        self, channels: List[Channel | str], platforms: List[Platform | PlatformLiteral]
+    ) -> List[PackageName]:
+        """Queries all the names of packages in a channel.
+
+        Arguments:
+            channels: The channels to query.
+            platforms: The platforms to query.
+
+        Returns:
+            A list of package names that are present in the given subdirectories.
+
+        Examples
+        --------
+        ```python
+        >>> import asyncio
+        >>> gateway = Gateway()
+        >>> records = asyncio.run(gateway.names(["conda-forge"], ["linux-64"]))
+        >>> PackageName("python") in records
+        True
+        >>>
+        ```
+        """
+
+        py_package_names = await self._gateway.names(
+            channels=[
+                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
+            ],
+            platforms=[
+                platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
+                for platform in platforms
+            ],
+        )
+
+        # Convert the records into python objects
+        return [PackageName._from_py_package_name(package_name) for package_name in py_package_names]
+
     def clear_repodata_cache(
         self, channel: Channel | str, subdirs: Optional[List[Platform | PlatformLiteral]] = None
     ) -> None:
@@ -190,10 +236,12 @@ class Gateway:
 
         Examples
         --------
+        ```python
         >>> gateway = Gateway()
         >>> gateway.clear_repodata_cache("conda-forge", ["linux-64"])
         >>> gateway.clear_repodata_cache("robostack")
         >>>
+        ```
         """
         self._gateway.clear_repodata_cache(
             channel._channel if isinstance(channel, Channel) else Channel(channel)._channel,

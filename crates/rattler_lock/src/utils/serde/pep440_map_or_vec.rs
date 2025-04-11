@@ -35,7 +35,8 @@ impl<'de> DeserializeAs<'de, Vec<Requirement>> for Pep440MapOrVec {
                         } else {
                             Some(VersionOrUrl::VersionSpecifier(spec))
                         },
-                        marker: None,
+                        #[allow(clippy::default_trait_access)]
+                        marker: Default::default(),
                         origin: None,
                     })
                 })

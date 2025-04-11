@@ -1,0 +1,5 @@
+---
+source: crates/rattler_conda_types/src/package/about.rs
+expression: serialized
+---
+{"channels":["conda-forge"],"description":"A sample package","extra":{"flow_id":"2024.08.13","some_values":{"an":"object"}},"license":"MIT","license_family":"MIT","source_url":"https://github.com/some-user/sample","summary":"This is a test package"}

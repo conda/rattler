@@ -77,11 +77,11 @@ pub enum ParseVersionErrorKind {
     /// Expected a version component
     #[error("expected a version component e.g. `2` or `rc`")]
     ExpectedComponent,
-    /// Expected a segment seperator
+    /// Expected a segment separator
     #[error("expected a '.', '-', or '_'")]
     ExpectedSegmentSeparator,
     /// Cannot mix and match dashes and underscores
-    #[error("cannot use both underscores and dashes as version segment seperators")]
+    #[error("cannot use both underscores and dashes as version segment separators")]
     CannotMixAndMatchDashesAndUnderscores,
     /// Expected the end of the string
     #[error("encountered more characters but expected none")]
@@ -369,10 +369,7 @@ pub fn version_parser(input: &str) -> IResult<&str, Version, ParseVersionErrorKi
 
     // Parse the common part of the version
     let (rest, dash_or_underscore) =
-        match version_part_parser(&mut components, &mut segments, input, None) {
-            Ok(result) => result,
-            Err(e) => return Err(e),
-        };
+        version_part_parser(&mut components, &mut segments, input, None)?;
 
     // Parse the local version part
     let rest = if let Ok((local_version_part, _)) = char::<_, (&str, ErrorKind)>('+')(rest) {
@@ -451,7 +448,6 @@ mod test {
     use crate::version::SegmentFormatter;
     use serde::Serialize;
     use std::collections::BTreeMap;
-    use std::fmt::{Display, Formatter};
     use std::path::Path;
     use std::str::FromStr;
 
@@ -510,17 +506,6 @@ mod test {
         }
 
         insta::assert_debug_snapshot!(index_map);
-    }
-
-    struct DisplayAsDebug<T>(T);
-
-    impl<T> Display for DisplayAsDebug<T>
-    where
-        for<'i> &'i T: std::fmt::Debug,
-    {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{:?}", &self.0)
-        }
     }
 
     /// Parse a large number of versions and see if parsing succeeded.

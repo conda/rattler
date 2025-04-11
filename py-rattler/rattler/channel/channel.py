@@ -25,6 +25,12 @@ class Channel:
 
         self._channel = PyChannel(name, channel_configuration._channel_configuration)
 
+    @classmethod
+    def _from_py_channel(cls, py_channel: PyChannel) -> Channel:
+        channel = cls.__new__(cls)
+        channel._channel = py_channel
+        return channel
+
     def to_lock_channel(self) -> LockChannel:
         """
         Returns a new [`LockChannel`] from existing channel.

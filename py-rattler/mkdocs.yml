@@ -55,7 +55,7 @@ theme:
 extra_css:
   - stylesheets/extra.css
 
-repo_url: https://github.com/mamba-org/rattler/
+repo_url: https://github.com/conda/rattler/
 edit_uri: edit/main/py-rattler/docs/
 
 markdown_extensions:
@@ -95,6 +95,7 @@ nav:
           - fetch: fetch_repo_data.md
           - solve: solver.md
           - install: installer.md
+          - index: index_.md
       - channel:
           - ChannelConfig: channel_config.md
           - Channel: channel.md
@@ -102,9 +103,11 @@ nav:
           - LockFile: lock_file.md
           - Environment: environment.md
           - LockedPackage: locked_package.md
+          - CondaLockedPackage: conda_locked_package.md
+          - CondaLockedBinaryPackage: conda_locked_binary_package.md
+          - CondaLockedSourcePackage: conda_locked_source_package.md
+          - PypiLockedPackage: pypi_locked_package.md
           - PackageHashes: package_hashes.md
-          - PypiPackageData: pypi_package_data.md
-          - PypiPackageEnvironmentData: pypi_package_environment_data.md
       - metadata:
           - AboutJson: about_json.md
           - RunExportsJson: run_exports_json.md
@@ -118,7 +121,7 @@ nav:
           - MatchSpec: match_spec.md
           - NamelessMatchSpec: nameless_match_spec.md
       - networking:
-          - AuthenticatedClient: authenticated_client.md
+          - Client: client.md
       - package:
           - PackageName: package_name.md
       - platform:
@@ -178,8 +181,14 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
+          paths:
+            - py-rattler
           options:
+            separate_signature: true
             show_source: false
 
   - search
   - social
+
+watch:
+  - rattler

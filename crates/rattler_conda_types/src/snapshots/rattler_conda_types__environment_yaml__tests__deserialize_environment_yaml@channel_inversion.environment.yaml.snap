@@ -1,0 +1,13 @@
+---
+source: crates/rattler_conda_types/src/environment_yaml.rs
+assertion_line: 186
+expression: "EnvironmentYaml::from_path(&path).unwrap()"
+input_file: test-data/environments/channel_inversion.environment.yaml
+---
+channels:
+  - rapidsai
+  - nvidia
+  - conda-forge
+dependencies:
+  - cudf
+  - "conda-forge::cuda-python"

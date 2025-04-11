@@ -8,11 +8,11 @@ use serde::{Deserialize, Serialize};
 /// Extracted HTTP response headers that enable caching the repodata.json files.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CacheHeaders {
-    /// The ETag HTTP cache header
+    /// The `ETag` HTTP cache header
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub etag: Option<String>,
 
-    /// The Last-Modified HTTP cache header
+    /// The `Last-Modified` HTTP cache header
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "mod")]
     pub last_modified: Option<String>,
 
@@ -72,7 +72,7 @@ impl CacheHeaders {
         if let Some(last_modified) = self
             .last_modified
             .as_deref()
-            .and_then(|last_modifed| HeaderValue::from_str(last_modifed).ok())
+            .and_then(|last_modified| HeaderValue::from_str(last_modified).ok())
         {
             headers.insert(header::IF_MODIFIED_SINCE, last_modified);
         }

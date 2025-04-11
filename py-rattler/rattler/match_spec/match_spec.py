@@ -1,10 +1,10 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Optional
+
 from rattler.channel.channel import Channel
-
-from rattler.rattler import PyMatchSpec
-
 from rattler.package.package_name import PackageName
+from rattler.rattler import PyMatchSpec
 
 if TYPE_CHECKING:
     from rattler.match_spec import NamelessMatchSpec
@@ -81,11 +81,26 @@ class MatchSpec:
     """
 
     def __init__(self, spec: str, strict: bool = False) -> None:
+        """
+        Create a new version spec.
+
+        When `strict` is `True`, some ambiguous version specs are rejected.
+
+        ```python
+        >>> MatchSpec("pip >=24.0")
+        MatchSpec("pip >=24.0")
+        >>> MatchSpec("pip 24")
+        MatchSpec("pip ==24")
+        >>> MatchSpec('python[license=MIT]')
+        MatchSpec("python[license="MIT"]")
+        >>>
+        ```
+        """
         if isinstance(spec, str):
             self._match_spec = PyMatchSpec(spec, strict)
         else:
             raise TypeError(
-                "MatchSpec constructor received unsupported type" f" {type(spec).__name__!r} for the 'spec' parameter"
+                f"MatchSpec constructor received unsupported type {type(spec).__name__!r} for the 'spec' parameter"
             )
 
     @property
@@ -128,9 +143,8 @@ class MatchSpec:
         """
         The channel of the package.
         """
-        if (channel := self._match_spec.channel) is not None:
-            return Channel(channel.name)
-        return None
+        channel = self._match_spec.channel
+        return channel and Channel._from_py_channel(channel)
 
     @property
     def subdir(self) -> Optional[str]:

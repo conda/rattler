@@ -1,0 +1,135 @@
+---
+source: crates/rattler_menuinst/src/schema.rs
+expression: schema
+---
+MenuInstSchema {
+    schema: "https://schemas.conda.org/menuinst-1.schema.json",
+    menu_name: "REQUIRED",
+    menu_items: [
+        MenuItem {
+            command: MenuItemCommand {
+                name: Simple(
+                    PlaceholderString(
+                        "REQUIRED",
+                    ),
+                ),
+                description: PlaceholderString(
+                    "REQUIRED",
+                ),
+                command: [
+                    PlaceholderString(
+                        "REQUIRED",
+                    ),
+                ],
+                icon: None,
+                precommand: None,
+                precreate: None,
+                working_dir: None,
+                activate: Some(
+                    true,
+                ),
+                terminal: Some(
+                    false,
+                ),
+            },
+            platforms: Platforms {
+                linux: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: None,
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: Linux {
+                            categories: None,
+                            dbus_activatable: None,
+                            generic_name: None,
+                            hidden: None,
+                            implements: None,
+                            keywords: None,
+                            single_main_window: None,
+                            mime_type: None,
+                            no_display: None,
+                            not_show_in: None,
+                            only_show_in: None,
+                            prefers_non_default_gpu: None,
+                            startup_notify: None,
+                            startup_wm_class: None,
+                            try_exec: None,
+                            glob_patterns: None,
+                        },
+                    },
+                ),
+                osx: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: None,
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: MacOS {
+                            cf_bundle_display_name: None,
+                            cf_bundle_identifier: None,
+                            cf_bundle_name: None,
+                            cf_bundle_spoken_name: None,
+                            cf_bundle_version: None,
+                            cf_bundle_url_types: None,
+                            cf_bundle_document_types: None,
+                            ls_application_category_type: None,
+                            ls_background_only: None,
+                            ls_environment: None,
+                            ls_minimum_system_version: None,
+                            ls_multiple_instances_prohibited: None,
+                            ls_requires_native_execution: None,
+                            ut_exported_type_declarations: None,
+                            ut_imported_type_declarations: None,
+                            ns_supports_automatic_graphics_switching: None,
+                            entitlements: None,
+                            link_in_bundle: None,
+                            event_handler: None,
+                        },
+                    },
+                ),
+                win: Some(
+                    Platform {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: None,
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        specific: Windows {
+                            desktop: Some(
+                                true,
+                            ),
+                            quicklaunch: Some(
+                                false,
+                            ),
+                            terminal_profile: None,
+                            url_protocols: None,
+                            file_extensions: None,
+                            app_user_model_id: None,
+                        },
+                    },
+                ),
+            },
+        },
+    ],
+}

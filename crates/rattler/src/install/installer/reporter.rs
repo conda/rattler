@@ -83,7 +83,7 @@ pub trait Reporter: Send + Sync {
     /// to `on_transaction_start`.
     fn on_link_start(&self, operation: usize, record: &RepoDataRecord) -> usize;
 
-    /// Called when linking of a package compelted.
+    /// Called when linking of a package completed.
     ///
     /// The `index` is the value return by `on_link_start` for the corresponding
     /// package.

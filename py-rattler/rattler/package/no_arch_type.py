@@ -10,13 +10,10 @@ class NoArchType:
     def __init__(self, noarch: Optional[str] = None) -> None:
         if noarch is None:
             self._noarch = PyNoArchType.none()
-            self._source = None
         elif noarch == "python":
             self._noarch = PyNoArchType.python()
-            self._source = "python"
         elif noarch == "generic":
             self._noarch = PyNoArchType.generic()
-            self._source = "generic"
         else:
             raise ValueError(
                 "NoArchType constructor received unsupported value " f"{noarch} for the `noarch` parameter"
@@ -27,7 +24,6 @@ class NoArchType:
         """Construct Rattler NoArchType from FFI PyNoArchType object."""
         no_arch_type = cls.__new__(cls)
         no_arch_type._noarch = py_no_arch_type
-        no_arch_type._source = py_no_arch_type
         return no_arch_type
 
     @property
@@ -137,4 +133,10 @@ class NoArchType:
         >>>
         ```
         """
-        return f'NoArchType("{self._source}")'
+
+        if self._noarch.is_python:
+            return 'NoArchType("python")'
+        elif self._noarch.is_generic:
+            return 'NoArchType("generic")'
+        else:
+            return "NoArchType(None)"

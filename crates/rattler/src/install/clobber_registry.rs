@@ -29,6 +29,14 @@ pub enum ClobberError {
     IoError(String, #[source] std::io::Error),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PathState {
+    /// A path that is installed after the transaction by a package
+    Installed(PackageNameIdx),
+    /// A path that is removed after the transaction by a package
+    Removed(PackageNameIdx),
+}
+
 /// A registry for clobbering files
 /// The registry keeps track of all files that are installed by a package and
 /// can be used to rename files that are already installed by another package.
@@ -39,7 +47,7 @@ pub struct ClobberRegistry {
 
     /// The paths that exist in the prefix and the first package that touched
     /// the file.
-    paths_registry: HashMap<PathBuf, Option<PackageNameIdx>>,
+    paths_registry: HashMap<PathBuf, PathState>,
 
     /// Paths that have been clobbered and by which package, this also
     /// includes the primary package. E.g. the package that actually wrote to
@@ -73,7 +81,10 @@ impl ClobberRegistry {
                 if let Some(original_path) = &p.original_path {
                     temp_clobbers.push((original_path, package_name_idx));
                 } else {
-                    paths_registry.insert(p.relative_path.clone(), Some(package_name_idx));
+                    paths_registry.insert(
+                        p.relative_path.clone(),
+                        PathState::Installed(package_name_idx),
+                    );
                 }
             }
         }
@@ -84,7 +95,8 @@ impl ClobberRegistry {
             clobbers
                 .entry(path.clone())
                 .or_insert_with(|| {
-                    if let Some(&Some(other_idx)) = paths_registry.get(path) {
+                    // The path can only be installed at this point
+                    if let Some(&PathState::Installed(other_idx)) = paths_registry.get(path) {
                         vec![other_idx]
                     } else {
                         Vec::new()
@@ -103,12 +115,22 @@ impl ClobberRegistry {
     /// Register that all the paths of a package are being removed.
     pub fn unregister_paths(&mut self, prefix_paths: &PrefixRecord) {
         // Find the name in the registry
-        let name_idx = PackageNameIdx(
-            self.package_names
-                .iter()
-                .position(|n| n == &prefix_paths.repodata_record.package_record.name)
-                .expect("Package name not found in registry"),
-        );
+        let Some(name_idx) = self
+            .package_names
+            .iter()
+            .position(|n| n == &prefix_paths.repodata_record.package_record.name)
+            .map(PackageNameIdx)
+        else {
+            tracing::warn!(
+                "Tried to unregister paths for a package ({}) that is not in the registry",
+                prefix_paths
+                    .repodata_record
+                    .package_record
+                    .name
+                    .as_normalized()
+            );
+            return;
+        };
 
         // Remove this package from any clobbering consideration.
         for p in &prefix_paths.paths_data.paths {
@@ -117,9 +139,13 @@ impl ClobberRegistry {
                 clobber.retain(|&idx| idx != name_idx);
             }
 
-            let paths_entry = self.paths_registry.get_mut(path).expect("entry must exist");
-            if *paths_entry == Some(name_idx) {
-                *paths_entry = None;
+            let Some(paths_entry) = self.paths_registry.get_mut(path) else {
+                tracing::warn!("The path {} is not in the registry", path.display());
+                continue;
+            };
+
+            if *paths_entry == PathState::Installed(name_idx) {
+                *paths_entry = PathState::Removed(name_idx);
             }
         }
     }
@@ -147,18 +173,52 @@ impl ClobberRegistry {
         };
 
         for (_, path) in computed_paths {
-            // if we find an entry, we have a clobbering path!
-            if let Some(&primary_package_idx) = self.paths_registry.get(path) {
-                let new_path = clobber_name(path, &self.package_names[name_idx.0]);
-                self.clobbers
-                    .entry(path.clone())
-                    .or_insert_with(|| primary_package_idx.map(|v| vec![v]).unwrap_or_default())
-                    .push(name_idx);
+            if let Some(&entry) = self.paths_registry.get(path) {
+                match entry {
+                    PathState::Installed(idx) => {
+                        // if we find an entry, we have a clobbering path!
+                        // Then we rename the current path to a clobbered path
+                        let new_path = clobber_name(path, &self.package_names[name_idx.0]);
+                        self.clobbers
+                            .entry(path.clone())
+                            .or_insert_with(|| vec![idx])
+                            .push(name_idx);
 
-                // We insert the non-renamed path here
-                clobber_paths.insert(path.clone(), new_path);
+                        // We insert the non-renamed path here
+                        clobber_paths.insert(path.clone(), new_path);
+                    }
+                    PathState::Removed(idx) => {
+                        if idx == name_idx {
+                            // This is just an update of the package itself so we don't need to
+                            // do anything special (just flip it as installed)
+                            self.paths_registry
+                                .insert(path.clone(), PathState::Installed(idx));
+                            // If we previously had clobbers with this path, we need to
+                            // add the re-installed package back to the clobbers
+                            if let Some(entry) = self.clobbers.get_mut(path) {
+                                entry.push(name_idx);
+                            }
+                        } else {
+                            // In this case, another package is installing this path. We have previously
+                            // removed this path, but since we don't know about the order of execution of
+                            // removals and installs _on the disc_ we need to first install this path to a clobbering
+                            // path and then rename it back to the original path after everything has finished.
+                            let new_path = clobber_name(path, &self.package_names[name_idx.0]);
+                            self.clobbers
+                                .entry(path.clone())
+                                // We insert an empty vector here because there is no other file that should stick around
+                                // (idx is already removed)
+                                .or_default()
+                                .push(name_idx);
+
+                            // We insert the non-renamed path here
+                            clobber_paths.insert(path.clone(), new_path);
+                        }
+                    }
+                }
             } else {
-                self.paths_registry.insert(path.clone(), Some(name_idx));
+                self.paths_registry
+                    .insert(path.clone(), PathState::Installed(name_idx));
             }
         }
 
@@ -185,6 +245,7 @@ impl ClobberRegistry {
         let mut prefix_records_to_rewrite = HashSet::new();
         let mut result = HashMap::new();
 
+        tracing::info!("Unclobbering {} files", self.clobbers.len());
         for (path, clobbered_by) in self.clobbers.iter() {
             let clobbered_by_names = clobbered_by
                 .iter()
@@ -199,11 +260,19 @@ impl ClobberRegistry {
                 .filter(|(_, n)| clobbered_by_names.contains(n))
                 .collect::<Vec<_>>();
 
-            let current_winner = self
-                .paths_registry
-                .get(path)
-                .expect("if a file is clobbered it must also be in the registry")
-                .map(|idx| &self.package_names[idx.0]);
+            let Some(current_winner_entry) = self.paths_registry.get(path) else {
+                tracing::warn!(
+                    "The path {} is clobbered but not in the registry",
+                    path.display()
+                );
+                continue;
+            };
+
+            // let current_winner = current_winner_entry.map(|idx| &self.package_names[idx.0]);
+            let current_winner = match current_winner_entry {
+                PathState::Installed(idx) => Some(&self.package_names[idx.0]),
+                PathState::Removed(_) => None,
+            };
 
             // Determine which package should write to the file
             let winner = match sorted_clobbered_by.last() {
@@ -250,7 +319,7 @@ impl ClobberRegistry {
                     let loser_path = clobber_name(path, loser_name);
 
                     // Rename the original file to a clobbered path.
-                    tracing::trace!("renaming {} to {}", path.display(), loser_path.display());
+                    tracing::debug!("renaming {} to {}", path.display(), loser_path.display());
                     fs::rename(target_prefix.join(path), target_prefix.join(&loser_path)).map_err(
                         |e| {
                             ClobberError::IoError(
@@ -264,25 +333,25 @@ impl ClobberRegistry {
                         },
                     )?;
 
-                    let loser_idx = sorted_clobbered_by
+                    if let Some(loser_idx) = sorted_clobbered_by
                         .iter()
                         .find(|(_, n)| n == loser_name)
-                        .expect("loser not found")
-                        .0;
-
-                    rename_path_in_prefix_record(
-                        &mut prefix_records[loser_idx],
-                        path,
-                        &loser_path,
-                        true,
-                    );
-                    prefix_records_to_rewrite.insert(loser_idx);
+                        .map(|(idx, _)| *idx)
+                    {
+                        rename_path_in_prefix_record(
+                            &mut prefix_records[loser_idx],
+                            path,
+                            &loser_path,
+                            true,
+                        );
+                        prefix_records_to_rewrite.insert(loser_idx);
+                    }
                 }
             }
 
             // Rename the winner
             let winner_path = clobber_name(path, &winner.1);
-            tracing::trace!("renaming {} to {}", winner_path.display(), path.display());
+            tracing::debug!("renaming {} to {}", winner_path.display(), path.display());
             fs::rename(target_prefix.join(&winner_path), target_prefix.join(path)).map_err(
                 |e| {
                     ClobberError::IoError(
@@ -365,7 +434,7 @@ mod tests {
 
     use insta::assert_yaml_snapshot;
     use rand::seq::SliceRandom;
-    use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord, Version};
+    use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
     use transaction::TransactionOperation;
 
     use crate::{
@@ -474,13 +543,14 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -532,7 +602,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
@@ -584,7 +654,7 @@ mod tests {
         for _ in 0..3 {
             let mut operations = test_operations();
             // randomize the order of the operations
-            operations.shuffle(&mut rand::thread_rng());
+            operations.shuffle(&mut rand::rng());
 
             let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
                 operations,
@@ -595,13 +665,14 @@ mod tests {
 
             // execute transaction
             let target_prefix = tempfile::tempdir().unwrap();
+            let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
             let packages_dir = tempfile::tempdir().unwrap();
             let cache = PackageCache::new(packages_dir.path());
 
             execute_transaction(
                 transaction,
-                target_prefix.path(),
+                &prefix_path,
                 &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
                 &cache,
                 &InstallDriver::default(),
@@ -627,7 +698,8 @@ mod tests {
                 ],
             );
 
-            let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+            let prefix_records: Vec<PrefixRecord> =
+                PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
 
             for record in prefix_records {
                 if record.repodata_record.package_record.name.as_normalized() == "clobber-1" {
@@ -666,7 +738,7 @@ mod tests {
         for _ in 0..3 {
             let mut operations = test_operations_nested();
             // randomize the order of the operations
-            operations.shuffle(&mut rand::thread_rng());
+            operations.shuffle(&mut rand::rng());
 
             let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
                 operations,
@@ -677,13 +749,14 @@ mod tests {
 
             // execute transaction
             let target_prefix = tempfile::tempdir().unwrap();
+            let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
             let packages_dir = tempfile::tempdir().unwrap();
             let cache = PackageCache::new(packages_dir.path());
 
             execute_transaction(
                 transaction,
-                target_prefix.path(),
+                &prefix_path,
                 &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
                 &cache,
                 &InstallDriver::default(),
@@ -736,7 +809,7 @@ mod tests {
 
             execute_transaction(
                 transaction,
-                target_prefix.path(),
+                &prefix_path,
                 &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
                 &cache,
                 &install_driver,
@@ -780,13 +853,14 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -809,7 +883,8 @@ mod tests {
 
         println!("== RUNNING UPDATE");
 
-        let mut prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let mut prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
         prefix_records.sort_by(|a, b| {
             a.repodata_record
                 .package_record
@@ -835,15 +910,17 @@ mod tests {
             .with_prefix_records(&prefix_records)
             .finish();
 
-        execute_transaction(
+        let result = execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
             &InstallOptions::default(),
         )
         .await;
+
+        println!("== RESULT: {:?}", result.clobbered_paths);
 
         assert_check_files(
             target_prefix.path(),
@@ -868,6 +945,92 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_self_clobber_update() {
+        // Create a transaction
+        let repodata_record_1 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2"),
+        );
+
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: vec![TransactionOperation::Install(repodata_record_1.clone())],
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        // execute transaction
+        let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
+
+        let packages_dir = tempfile::tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        execute_transaction(
+            transaction,
+            &prefix_path,
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &InstallDriver::default(),
+            &InstallOptions::default(),
+        )
+        .await;
+
+        // check that the files are there
+        assert_check_files(
+            target_prefix.path(),
+            &["clobber.txt", "another-clobber.txt"],
+        );
+
+        let mut prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        prefix_records.sort_by(|a, b| {
+            a.repodata_record
+                .package_record
+                .name
+                .as_normalized()
+                .cmp(b.repodata_record.package_record.name.as_normalized())
+        });
+
+        // Reinstall the same package
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: vec![TransactionOperation::Change {
+                old: prefix_records[0].clone(),
+                new: repodata_record_1,
+            }],
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&prefix_records)
+            .finish();
+
+        install_driver
+            .pre_process(&transaction, target_prefix.path())
+            .unwrap();
+        let dl_client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+        for op in &transaction.operations {
+            execute_operation(
+                &prefix_path,
+                &dl_client,
+                &cache,
+                &install_driver,
+                op.clone(),
+                &InstallOptions::default(),
+            )
+            .await;
+        }
+
+        // Check what files are in the prefix now (note that unclobbering wasn't run yet)
+        // But also, this is a reinstall so the files should just be overwritten.
+        assert_check_files(
+            target_prefix.path(),
+            &["clobber.txt", "another-clobber.txt"],
+        );
+    }
+
+    #[tokio::test]
     async fn test_clobber_update_and_remove() {
         // Create a transaction
         let operations = test_operations();
@@ -881,13 +1044,14 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -908,7 +1072,8 @@ mod tests {
             ],
         );
 
-        let mut prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let mut prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
         prefix_records.sort_by(|a, b| {
             a.repodata_record
                 .package_record
@@ -941,7 +1106,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
@@ -974,7 +1139,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
@@ -999,9 +1164,12 @@ mod tests {
         // Create a transaction
         let operations = test_python_noarch_operations();
 
-        let python_info =
-            PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), Platform::current())
-                .unwrap();
+        let python_info = PythonInfo::from_version(
+            &Version::from_str("3.11.0").unwrap(),
+            None,
+            Platform::current(),
+        )
+        .unwrap();
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
             operations,
             python_info: Some(python_info.clone()),
@@ -1011,6 +1179,7 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
@@ -1022,7 +1191,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -1060,13 +1229,14 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -1074,7 +1244,8 @@ mod tests {
         )
         .await;
 
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
 
         // remove one of the clobbering files
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
@@ -1093,7 +1264,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
@@ -1127,13 +1298,14 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -1141,7 +1313,8 @@ mod tests {
         )
         .await;
 
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
 
         // remove one of the clobbering files
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
@@ -1161,15 +1334,32 @@ mod tests {
             .with_prefix_records(&prefix_records)
             .finish();
 
-        execute_transaction(
-            transaction,
-            target_prefix.path(),
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &install_driver,
-            &InstallOptions::default(),
-        )
-        .await;
+        install_driver
+            .pre_process(&transaction, &prefix_path)
+            .unwrap();
+
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+        for op in &transaction.operations {
+            execute_operation(
+                &prefix_path,
+                &client,
+                &cache,
+                &install_driver,
+                op.clone(),
+                &InstallOptions::default(),
+            )
+            .await;
+        }
+
+        // check that `bin/python` was installed as a single clobber file
+        assert_check_files(
+            &target_prefix.path().join("bin"),
+            &["python__clobber-from-clobber-pypy"],
+        );
+
+        install_driver
+            .post_process(&transaction, &prefix_path)
+            .unwrap();
 
         assert_check_files(&target_prefix.path().join("bin"), &["python"]);
     }

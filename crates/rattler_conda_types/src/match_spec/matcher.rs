@@ -1,9 +1,11 @@
-use serde::{Serialize, Serializer};
-use std::hash::{Hash, Hasher};
 use std::{
+    borrow::Cow,
     fmt::{Display, Formatter},
+    hash::{Hash, Hasher},
     str::FromStr,
 };
+
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Match a given string either by exact match, glob or regex
 #[derive(Debug, Clone)]
@@ -11,12 +13,14 @@ pub enum StringMatcher {
     /// Match the string exactly
     Exact(String),
     /// Match the string by glob. A glob uses a * to match any characters.
-    /// For example, `*` matches any string, `py*` matches any string starting with `py`,
-    /// `*37` matches any string ending with `37` and `py*37` matches any string starting with `py` and ending with `37`.
+    /// For example, `*` matches any string, `py*` matches any string starting
+    /// with `py`, `*37` matches any string ending with `37` and `py*37`
+    /// matches any string starting with `py` and ending with `37`.
     Glob(glob::Pattern),
-    /// Match the string by regex. A regex starts with a `^`, ends with a `$` and uses the regex syntax.
-    /// For example, `^py.*37$` matches any string starting with `py` and ending with `37`.
-    /// Note that the regex is anchored, so it must match the entire string.
+    /// Match the string by regex. A regex starts with a `^`, ends with a `$`
+    /// and uses the regex syntax. For example, `^py.*37$` matches any
+    /// string starting with `py` and ending with `37`. Note that the regex
+    /// is anchored, so it must match the entire string.
     Regex(regex::Regex),
 }
 
@@ -109,14 +113,29 @@ impl Serialize for StringMatcher {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        match self {
+            StringMatcher::Exact(s) => s.serialize(serializer),
+            StringMatcher::Glob(s) => s.as_str().serialize(serializer),
+            StringMatcher::Regex(s) => s.as_str().serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for StringMatcher {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = Cow::<'de, str>::deserialize(deserializer)?;
+        StringMatcher::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use assert_matches::assert_matches;
+
+    use super::*;
 
     #[test]
     fn test_string_matcher() {
@@ -135,13 +154,33 @@ mod tests {
     }
 
     #[test]
-    fn test_string_matcher_matches() {
+    fn test_string_matcher_matches_basic() {
         assert!(StringMatcher::from_str("foo").unwrap().matches("foo"));
         assert!(!StringMatcher::from_str("foo").unwrap().matches("bar"));
+    }
+
+    #[test]
+    fn test_string_matcher_matches_glob() {
         assert!(StringMatcher::from_str("foo*").unwrap().matches("foobar"));
         assert!(StringMatcher::from_str("*oo").unwrap().matches("foo"));
         assert!(!StringMatcher::from_str("*oo").unwrap().matches("foobar"));
         assert!(StringMatcher::from_str("*oo*").unwrap().matches("foobar"));
+
+        // Conda's glob doesn't care about escaping
+        assert!(StringMatcher::from_str("foo\\*bar")
+            .unwrap()
+            .matches("foo\\bazbar"));
+        assert!(!StringMatcher::from_str("foo\\*bar")
+            .unwrap()
+            .matches("foobazbar"));
+
+        // Or any keywords other than '*'
+        assert!(!StringMatcher::from_str("foo[a-z]").unwrap().matches("fooa"));
+        assert!(!StringMatcher::from_str("foo[abc]").unwrap().matches("fooa"));
+    }
+
+    #[test]
+    fn test_string_matcher_matches_regex() {
         assert!(StringMatcher::from_str("^foo.*$")
             .unwrap()
             .matches("foobar"));
@@ -149,6 +188,12 @@ mod tests {
             .unwrap()
             .matches("foobar"));
         assert!(!StringMatcher::from_str("^[not].*$")
+            .unwrap()
+            .matches("foobar"));
+        assert!(StringMatcher::from_str("^foo\\[bar\\].*$")
+            .unwrap()
+            .matches("foo[bar]"));
+        assert!(!StringMatcher::from_str("^foo\\[bar\\].*$")
             .unwrap()
             .matches("foobar"));
     }
@@ -183,5 +228,15 @@ mod tests {
                 glob: _invalid_glob,
             })
         );
+    }
+
+    #[test]
+    fn test_empty_strings() {
+        assert!(StringMatcher::from_str("").unwrap().matches(""));
+        assert!(!StringMatcher::from_str("").unwrap().matches("foo"));
+
+        assert!(!StringMatcher::from_str("foo").unwrap().matches(""));
+        assert!(StringMatcher::from_str("^$").unwrap().matches(""));
+        assert!(StringMatcher::from_str("*").unwrap().matches(""));
     }
 }

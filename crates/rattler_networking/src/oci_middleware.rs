@@ -1,8 +1,13 @@
 //! Middleware to handle `oci://` URLs to pull artifacts from an OCI registry
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fmt::{Display, Formatter},
+};
 
-use http::header::{ACCEPT, AUTHORIZATION};
-use http::Extensions;
+use http::{
+    header::{ACCEPT, AUTHORIZATION},
+    Extensions,
+};
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use serde::Deserialize;
@@ -41,28 +46,32 @@ struct OCIToken {
     token: String,
 }
 
-impl ToString for OciAction {
-    fn to_string(&self) -> String {
+impl Display for OciAction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            OciAction::Pull => "pull".to_string(),
-            OciAction::Push => "push".to_string(),
-            OciAction::PushPull => "push,pull".to_string(),
+            OciAction::Pull => write!(f, "pull"),
+            OciAction::Push => write!(f, "push"),
+            OciAction::PushPull => write!(f, "push,pull"),
         }
     }
 }
+
 // [oci://ghcr.io/channel-mirrors/conda-forge]/[osx-arm64/xtensor]
 async fn get_token(url: &OCIUrl, action: OciAction) -> Result<String, OciMiddlewareError> {
     let token_url = url.token_url(action)?;
 
-    tracing::trace!("OCI Mirror: requesting token from {}", token_url);
+    let response = reqwest::get(token_url.clone()).await?;
 
-    let token = reqwest::get(token_url)
-        .await?
-        .json::<OCIToken>()
-        .await?
-        .token;
-
-    Ok(token)
+    match response.error_for_status() {
+        Ok(response) => {
+            let token = response.json::<OCIToken>().await?;
+            Ok(token.token)
+        }
+        Err(e) => {
+            tracing::error!("OCI Mirror: failed to get token with URL: {}", token_url);
+            Err(OciMiddlewareError::Reqwest(e))
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -74,8 +83,8 @@ struct OCIUrl {
     media_type: String,
 }
 
-/// OCI registry tags are not allowed to contain `+`, `!`, or `=`, so we need to replace them
-/// with something else (reverse of `version_build_tag`)
+/// OCI registry tags are not allowed to contain `+`, `!`, or `=`, so we need to
+/// replace them with something else (reverse of `version_build_tag`)
 #[allow(dead_code)]
 fn reverse_version_build_tag(tag: &str) -> String {
     tag.replace("__p__", "+")
@@ -83,8 +92,8 @@ fn reverse_version_build_tag(tag: &str) -> String {
         .replace("__eq__", "=")
 }
 
-/// OCI registry tags are not allowed to contain `+`, `!`, or `=`, so we need to replace them
-/// with something else
+/// OCI registry tags are not allowed to contain `+`, `!`, or `=`, so we need to
+/// replace them with something else
 fn version_build_tag(tag: &str) -> String {
     tag.replace('+', "__p__")
         .replace('!', "__e__")
@@ -103,9 +112,7 @@ impl OCIUrl {
     pub fn token_url(&self, action: OciAction) -> Result<Url, ParseError> {
         format!(
             "https://{}/token?scope=repository:{}:{}",
-            self.host,
-            self.path,
-            action.to_string()
+            self.host, self.path, action
         )
         .parse()
     }
@@ -116,7 +123,7 @@ impl OCIUrl {
 
     pub fn new(url: &Url) -> Result<Self, ParseError> {
         // get filename (last segment of path)
-        let filename = url.path_segments().unwrap().last().unwrap();
+        let filename = url.path_segments().unwrap().next_back().unwrap();
 
         let mut res = OCIUrl {
             url: url.clone(),
@@ -234,7 +241,8 @@ struct Manifest {
     annotations: Option<HashMap<String, String>>,
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 impl Middleware for OciMiddleware {
     async fn handle(
         &self,
@@ -276,8 +284,9 @@ impl Middleware for OciMiddleware {
 
 #[cfg(test)]
 mod tests {
-    use crate::OciMiddleware;
     use sha2::{Digest, Sha256};
+
+    use crate::OciMiddleware;
 
     // test pulling an image from OCI registry
     #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]

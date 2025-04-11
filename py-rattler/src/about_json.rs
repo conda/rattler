@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use pyo3::exceptions::PyValueError;
 use pyo3::{pyclass, pymethods, PyResult};
 use rattler_conda_types::package::{AboutJson, PackageFile};
 
@@ -79,10 +80,20 @@ impl PyAboutJson {
         self.inner.channels.clone()
     }
 
+    #[setter]
+    pub fn set_channels(&mut self, value: Vec<String>) {
+        self.inner.channels = value;
+    }
+
     /// Description of the package
     #[getter]
     pub fn description(&self) -> Option<String> {
         self.inner.description.clone()
+    }
+
+    #[setter]
+    pub fn set_description(&mut self, value: Option<String>) {
+        self.inner.description = value;
     }
 
     /// URL to the development page of the package
@@ -96,6 +107,18 @@ impl PyAboutJson {
             .collect()
     }
 
+    #[setter]
+    pub fn set_dev_url(&mut self, value: Vec<String>) -> PyResult<()> {
+        self.inner.dev_url = value
+            .into_iter()
+            .map(|url| {
+                url.parse()
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {e}")))
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(())
+    }
+
     /// URL to the documentation of the package
     #[getter]
     pub fn doc_url(&self) -> Vec<String> {
@@ -105,6 +128,18 @@ impl PyAboutJson {
             .into_iter()
             .map(|url| url.to_string())
             .collect()
+    }
+
+    #[setter]
+    pub fn set_doc_url(&mut self, value: Vec<String>) -> PyResult<()> {
+        self.inner.doc_url = value
+            .into_iter()
+            .map(|url| {
+                url.parse()
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {e}")))
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(())
     }
 
     /// URL to the homepage of the package
@@ -118,10 +153,27 @@ impl PyAboutJson {
             .collect()
     }
 
+    #[setter]
+    pub fn set_home(&mut self, value: Vec<String>) -> PyResult<()> {
+        self.inner.home = value
+            .into_iter()
+            .map(|url| {
+                url.parse()
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {e}")))
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(())
+    }
+
     /// Optionally, the license
     #[getter]
     pub fn license(&self) -> Option<String> {
         self.inner.license.clone()
+    }
+
+    #[setter]
+    pub fn set_license(&mut self, value: Option<String>) {
+        self.inner.license = value;
     }
 
     /// Optionally, the license family
@@ -130,15 +182,37 @@ impl PyAboutJson {
         self.inner.license_family.clone()
     }
 
+    #[setter]
+    pub fn set_license_family(&mut self, value: Option<String>) {
+        self.inner.license_family = value;
+    }
+
     /// URL to the latest source code of the package
     #[getter]
     pub fn source_url(&self) -> Option<String> {
         self.inner.source_url.clone().map(|v| v.to_string())
     }
 
+    #[setter]
+    pub fn set_source_url(&mut self, value: Option<String>) -> PyResult<()> {
+        self.inner.source_url = match value {
+            Some(url) => Some(
+                url.parse()
+                    .map_err(|e| PyValueError::new_err(format!("Invalid URL: {e}")))?,
+            ),
+            None => None,
+        };
+        Ok(())
+    }
+
     /// Short summary description
     #[getter]
     pub fn summary(&self) -> Option<String> {
         self.inner.summary.clone()
+    }
+
+    #[setter]
+    pub fn set_summary(&mut self, value: Option<String>) {
+        self.inner.summary = value;
     }
 }

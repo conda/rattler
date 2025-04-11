@@ -279,7 +279,7 @@ mod test {
     #[rstest]
     fn test_exact(#[values(Lenient, Strict)] strictness: ParseStrictness) {
         assert_eq!(
-            Constraint::from_str("1.2.3", strictness),
+            Constraint::from_str("==1.2.3", strictness),
             Ok(Constraint::Exact(
                 EqualityOperator::Equals,
                 Version::from_str("1.2.3").unwrap(),

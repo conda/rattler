@@ -1,0 +1,21 @@
+---
+source: crates/rattler_lock/src/builder.rs
+expression: lock_file.render_to_string().unwrap()
+---
+version: 6
+environments:
+  default:
+    channels: []
+    packages:
+      linux-64:
+      - conda: https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2
+  foobar:
+    channels: []
+    packages:
+      linux-64:
+      - conda: https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2
+packages:
+- conda: https://prefix.dev/example/linux-64/foobar-1.0.0-build.tar.bz2
+  channel: null
+  purls:
+  - pkg:pypi/foobar@1.0.0

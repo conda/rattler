@@ -15,10 +15,14 @@ use std::{
     sync::OnceLock,
 };
 
+/// Representation of an entry in `info/has_prefix`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HasPrefixEntry {
+    /// The prefix placeholder in the file
     pub prefix: Cow<'static, str>,
+    /// The file's mode
     pub file_mode: FileMode,
+    /// The file's relative path respective to the environment's prefix
     pub relative_path: PathBuf,
 }
 

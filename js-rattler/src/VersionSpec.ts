@@ -1,0 +1,1 @@
+export { VersionSpec } from "../pkg";

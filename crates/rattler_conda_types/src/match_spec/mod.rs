@@ -1,7 +1,11 @@
-use crate::{build_spec::BuildNumberSpec, PackageName, PackageRecord, RepoDataRecord, VersionSpec};
+use crate::{
+    build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
+    VersionSpec,
+};
+use itertools::Itertools;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
+use serde_with::{serde_as, skip_serializing_none};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::sync::Arc;
@@ -74,12 +78,12 @@ use matcher::StringMatcher;
 /// use std::sync::Arc;
 ///
 /// let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
-/// let spec = MatchSpec::from_str("foo 1.0 py27_0", Strict).unwrap();
+/// let spec = MatchSpec::from_str("foo 1.0.* py27_0", Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
-/// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0", Strict).unwrap()));
+/// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*", Strict).unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
-/// let spec = MatchSpec::from_str("foo 1.0 py27_0", Strict).unwrap();
+/// let spec = MatchSpec::from_str("foo ==1.0 py27_0", Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("==1.0", Strict).unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
@@ -89,11 +93,12 @@ use matcher::StringMatcher;
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*", Strict).unwrap()));
 /// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 ///
-/// let spec = MatchSpec::from_str("conda-forge/linux-64::foo >=1.0", Strict).unwrap();
+/// let spec = MatchSpec::from_str(r#"conda-forge::foo >=1.0[subdir="linux-64"]"#, Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0", Strict).unwrap()));
 /// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
+/// assert_eq!(spec, MatchSpec::from_str("conda-forge/linux-64::foo >=1.0", Strict).unwrap());
 ///
 /// let spec = MatchSpec::from_str("*/linux-64::foo >=1.0", Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
@@ -131,6 +136,8 @@ pub struct MatchSpec {
     pub build_number: Option<BuildNumberSpec>,
     /// Match the specific filename of the package
     pub file_name: Option<String>,
+    /// The selected optional features of the package
+    pub extras: Option<Vec<String>>,
     /// The channel of the package
     pub channel: Option<Arc<Channel>>,
     /// The subdir of the channel
@@ -145,6 +152,8 @@ pub struct MatchSpec {
     pub sha256: Option<Sha256Hash>,
     /// The url of the package
     pub url: Option<Url>,
+    /// The license of the package
+    pub license: Option<String>,
 }
 
 impl Display for MatchSpec {
@@ -179,12 +188,32 @@ impl Display for MatchSpec {
 
         let mut keys = Vec::new();
 
+        if let Some(extras) = &self.extras {
+            keys.push(format!("extras=[{}]", extras.iter().format(", ")));
+        }
+
         if let Some(md5) = &self.md5 {
-            keys.push(format!("md5={md5:x}"));
+            keys.push(format!("md5=\"{md5:x}\""));
         }
 
         if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256={sha256:x}"));
+            keys.push(format!("sha256=\"{sha256:x}\""));
+        }
+
+        if let Some(build_number) = &self.build_number {
+            keys.push(format!("build_number=\"{build_number}\""));
+        }
+
+        if let Some(file_name) = &self.file_name {
+            keys.push(format!("fn=\"{file_name}\""));
+        }
+
+        if let Some(url) = &self.url {
+            keys.push(format!("url=\"{url}\""));
+        }
+
+        if let Some(license) = &self.license {
+            keys.push(format!("license=\"{license}\""));
         }
 
         if !keys.is_empty() {
@@ -205,14 +234,25 @@ impl MatchSpec {
                 build: self.build,
                 build_number: self.build_number,
                 file_name: self.file_name,
+                extras: self.extras,
                 channel: self.channel,
                 subdir: self.subdir,
                 namespace: self.namespace,
                 md5: self.md5,
                 sha256: self.sha256,
                 url: self.url,
+                license: self.license,
             },
         )
+    }
+
+    /// Returns whether the package is a virtual package.
+    /// This is determined by the package name starting with `__`.
+    /// Not having a package name is considered not virtual.
+    pub fn is_virtual(&self) -> bool {
+        self.name
+            .as_ref()
+            .is_some_and(|name| name.as_normalized().starts_with("__"))
     }
 }
 
@@ -233,15 +273,15 @@ impl From<PackageName> for MatchSpec {
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct NamelessMatchSpec {
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub version: Option<VersionSpec>,
     /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub build: Option<StringMatcher>,
     /// The build number of the package
     pub build_number: Option<BuildNumberSpec>,
     /// Match the specific filename of the package
     pub file_name: Option<String>,
+    /// Optional extra dependencies to select for the package
+    pub extras: Option<Vec<String>>,
     /// The channel of the package
     #[serde(deserialize_with = "deserialize_channel", default)]
     pub channel: Option<Arc<Channel>>,
@@ -257,6 +297,8 @@ pub struct NamelessMatchSpec {
     pub sha256: Option<Sha256Hash>,
     /// The url of the package
     pub url: Option<Url>,
+    /// The license of the package
+    pub license: Option<String>,
 }
 
 impl Display for NamelessMatchSpec {
@@ -295,12 +337,14 @@ impl From<MatchSpec> for NamelessMatchSpec {
             build: spec.build,
             build_number: spec.build_number,
             file_name: spec.file_name,
+            extras: spec.extras,
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
             md5: spec.md5,
             sha256: spec.sha256,
             url: spec.url,
+            license: spec.license,
         }
     }
 }
@@ -314,12 +358,14 @@ impl MatchSpec {
             build: spec.build,
             build_number: spec.build_number,
             file_name: spec.file_name,
+            extras: spec.extras,
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
             md5: spec.md5,
             sha256: spec.sha256,
             url: spec.url,
+            license: spec.license,
         }
     }
 }
@@ -387,6 +433,12 @@ impl Matches<PackageRecord> for NamelessMatchSpec {
             }
         }
 
+        if let Some(license) = self.license.as_ref() {
+            if Some(license) != other.license.as_ref() {
+                return false;
+            }
+        }
+
         true
     }
 }
@@ -430,6 +482,12 @@ impl Matches<PackageRecord> for MatchSpec {
             }
         }
 
+        if let Some(license) = self.license.as_ref() {
+            if Some(license) != other.license.as_ref() {
+                return false;
+            }
+        }
+
         true
     }
 }
@@ -468,15 +526,41 @@ impl Matches<RepoDataRecord> for NamelessMatchSpec {
     }
 }
 
+impl Matches<GenericVirtualPackage> for MatchSpec {
+    /// Match a [`MatchSpec`] against a [`GenericVirtualPackage`]
+    fn matches(&self, other: &GenericVirtualPackage) -> bool {
+        if let Some(name) = self.name.as_ref() {
+            if name != &other.name {
+                return false;
+            }
+        }
+
+        if let Some(spec) = self.version.as_ref() {
+            if !spec.matches(&other.version) {
+                return false;
+            }
+        }
+
+        if let Some(build_string) = self.build.as_ref() {
+            if !build_string.matches(&other.build_string) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use itertools::Itertools;
+    use rstest::rstest;
     use std::str::FromStr;
 
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
     use crate::{
         match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
-        ParseStrictness::*, RepoDataRecord, Version,
+        ParseStrictness::*, RepoDataRecord, StringMatcher, Version, VersionSpec,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -491,8 +575,24 @@ mod tests {
     }
 
     #[test]
+    fn test_name_asterisk() {
+        // Test that MatchSpec can be created with an asterisk as the package name
+        let spec = MatchSpec::from_str("*[license=MIT]", Lenient).unwrap();
+        assert_eq!(spec.name, None);
+        assert_eq!(spec.license, Some("MIT".to_string()));
+
+        // Test with a version
+        let spec = MatchSpec::from_str("* >=1.0", Lenient).unwrap();
+        assert_eq!(spec.name, None);
+        assert_eq!(
+            spec.version,
+            Some(VersionSpec::from_str(">=1.0", Lenient).unwrap())
+        );
+    }
+
+    #[test]
     fn test_nameless_matchspec_format_eq() {
-        let spec = NamelessMatchSpec::from_str("*[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]", Strict).unwrap();
+        let spec = NamelessMatchSpec::from_str("*[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]", Lenient).unwrap();
         let spec_as_string = spec.to_string();
         let rebuild_spec = NamelessMatchSpec::from_str(&spec_as_string, Strict).unwrap();
 
@@ -543,7 +643,7 @@ mod tests {
             ..PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                String::from(""),
+                String::from("foo_bar_py310_1"),
             )
         };
 
@@ -572,6 +672,85 @@ mod tests {
 
         let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]", Strict).unwrap();
         assert!(!spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba[build=*py310_1]", Strict).unwrap();
+        assert!(spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba[build=*py310*]", Strict).unwrap();
+        assert!(spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba[build=*py39*]", Strict).unwrap();
+        assert!(!spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba * [build=*py310*]", Strict).unwrap();
+        assert!(spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba *[build=*py39*]", Strict).unwrap();
+        assert!(!spec.matches(&record));
+        assert!(spec.build == Some(StringMatcher::from_str("*py39*").unwrap()));
+
+        let spec = MatchSpec::from_str("mamba * [build=*py39*]", Strict).unwrap();
+        println!("Build: {:?}", spec.build);
+        assert!(!spec.matches(&record));
+    }
+
+    #[test]
+    fn precedence_version_build() {
+        let spec =
+            MatchSpec::from_str("foo 3.0.* [version=1.2.3, build='foobar']", Lenient).unwrap();
+        assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
+        assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
+
+        let spec = MatchSpec::from_str("foo 3.0.* abcdef[build='foobar', version=1.2.3]", Lenient)
+            .unwrap();
+        assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
+        assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
+
+        let spec =
+            NamelessMatchSpec::from_str("3.0.* [version=1.2.3, build='foobar']", Lenient).unwrap();
+        assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
+        assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
+
+        let spec =
+            NamelessMatchSpec::from_str("3.0.* abcdef[build='foobar', version=1.2.3]", Lenient)
+                .unwrap();
+        assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
+        assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
+    }
+
+    #[test]
+    fn strict_parsing_multiple_values() {
+        let spec = NamelessMatchSpec::from_str("3.0.* [version=1.2.3]", Strict);
+        assert!(spec.is_err());
+
+        let spec = NamelessMatchSpec::from_str("3.0.* foo[build='foobar']", Strict);
+        assert!(spec.is_err());
+
+        let spec = NamelessMatchSpec::from_str(
+            "3.0.* [build=baz, fn='/home/bla.tar.bz2' build='foobar']",
+            Strict,
+        );
+        assert!(spec.is_err());
+
+        let spec = MatchSpec::from_str("foo 3.0.* [version=1.2.3]", Strict);
+        assert!(spec.is_err());
+
+        let spec = MatchSpec::from_str("foo 3.0.* foo[build='foobar']", Strict);
+        assert!(spec.is_err());
+        assert!(spec
+            .unwrap_err()
+            .to_string()
+            .contains("multiple values for: build"));
+
+        let spec = MatchSpec::from_str(
+            "foo 3.0.* [build=baz, fn='/home/foo.tar.bz2', build='foobar']",
+            Strict,
+        );
+        assert!(spec.is_err());
+        assert!(spec
+            .unwrap_err()
+            .to_string()
+            .contains("multiple values for: build"));
     }
 
     #[test]
@@ -584,7 +763,7 @@ mod tests {
             ),
             file_name: String::from("mamba-1.0-py37_0"),
             url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
-            channel: String::from("mamba"),
+            channel: Some(String::from("mamba")),
         };
         let package_record = repodata_record.clone().package_record;
 
@@ -609,19 +788,122 @@ mod tests {
     }
 
     #[test]
+    fn test_field_matches() {
+        let mut repodata_record = RepoDataRecord {
+            package_record: PackageRecord::new(
+                PackageName::new_unchecked("mamba"),
+                Version::from_str("1.0").unwrap(),
+                String::from(""),
+            ),
+            file_name: String::from("mamba-1.0-py37_0"),
+            url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
+            channel: Some(String::from("mamba")),
+        };
+        repodata_record.package_record.license = Some("BSD-3-Clause".into());
+        let package_record = repodata_record.clone().package_record;
+
+        let match_spec = MatchSpec::from_str("mamba[license=BSD-3-Clause]", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+        assert!(match_spec.matches(&repodata_record));
+        assert!(match_spec.matches(&package_record));
+        assert!(nameless_spec.matches(&repodata_record));
+        assert!(nameless_spec.matches(&package_record));
+
+        let match_spec = MatchSpec::from_str("mamba[license=MIT]", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+        assert!(!match_spec.matches(&repodata_record));
+        assert!(!match_spec.matches(&package_record));
+        assert!(!nameless_spec.matches(&repodata_record));
+        assert!(!nameless_spec.matches(&package_record));
+
+        let repodata_record_no_license = RepoDataRecord {
+            package_record: PackageRecord::new(
+                PackageName::new_unchecked("mamba"),
+                Version::from_str("1.0").unwrap(),
+                String::from(""),
+            ),
+            file_name: String::from("mamba-1.0-py37_0"),
+            url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
+            channel: Some(String::from("mamba")),
+        };
+        let package_record_no_license = repodata_record_no_license.clone().package_record;
+        assert!(!match_spec.matches(&repodata_record_no_license));
+        assert!(!match_spec.matches(&package_record_no_license));
+        assert!(!nameless_spec.matches(&repodata_record_no_license));
+        assert!(!nameless_spec.matches(&package_record_no_license));
+    }
+
+    #[test]
     fn test_serialize_matchspec() {
-        let specs = ["mamba 1.0 py37_0",
-            "conda-forge::pytest[version=1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]",
+        let specs = ["mamba 1.0.* py37_0",
+            "conda-forge::pytest[version='==1.0', sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]",
             "conda-forge/linux-64::pytest",
-            "conda-forge/linux-64::pytest[version=1.0]",
-            "conda-forge/linux-64::pytest[version=1.0, build=py37_0]",
-            "conda-forge/linux-64::pytest 1.2.3"];
+            "conda-forge/linux-64::pytest[version=1.0.*]",
+            "conda-forge/linux-64::pytest[version=1.0.*, build=py37_0, license=MIT]",
+            "conda-forge/linux-64::pytest ==1.2.3"];
 
         assert_snapshot!(specs
             .into_iter()
             .map(|s| MatchSpec::from_str(s, Strict).unwrap())
             .map(|s| s.to_string())
-            .collect::<Vec<String>>()
-            .join("\n"));
+            .format("\n")
+            .to_string());
+    }
+
+    #[test]
+    fn test_serialize_json_matchspec() {
+        let specs = ["mamba 1.0.* py37_0",
+            "conda-forge::pytest[version='==1.0', sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]",
+            "conda-forge/linux-64::pytest",
+            "conda-forge/linux-64::pytest[version=1.0.*]",
+            "conda-forge/linux-64::pytest[version=1.0.*, build=py37_0]",
+            "conda-forge/linux-64::pytest ==1.2.3"];
+
+        assert_snapshot!(specs
+            .into_iter()
+            .map(|s| MatchSpec::from_str(s, Strict).unwrap())
+            .map(|s| serde_json::to_string(&s).unwrap())
+            .format("\n")
+            .to_string());
+    }
+
+    #[rstest]
+    #[case("foo >=1.0 py37_0", true)]
+    #[case("foo >=1.0 py37*", true)]
+    #[case("foo 1.0.* py38*", false)]
+    #[case("foo * py37_1", false)]
+    #[case("foo ==1.0", true)]
+    #[case("foo >=2.0", false)]
+    #[case("foo >=1.0", true)]
+    #[case("foo", true)]
+    #[case("bar", false)]
+    fn test_match_generic_virtual_package(#[case] spec_str: &str, #[case] expected: bool) {
+        let virtual_package = crate::GenericVirtualPackage {
+            name: PackageName::new_unchecked("foo"),
+            version: Version::from_str("1.0").unwrap(),
+            build_string: String::from("py37_0"),
+        };
+
+        let spec = MatchSpec::from_str(spec_str, Strict).unwrap();
+        assert_eq!(spec.matches(&virtual_package), expected);
+    }
+
+    #[test]
+    fn test_is_virtual() {
+        let spec = MatchSpec::from_str("non_virtual_name", Strict).unwrap();
+        assert!(!spec.is_virtual());
+
+        let spec = MatchSpec::from_str("__virtual_name", Strict).unwrap();
+        assert!(spec.is_virtual());
+
+        let spec = MatchSpec::from_str("non_virtual_name >=12", Strict).unwrap();
+        assert!(!spec.is_virtual());
+
+        let spec = MatchSpec::from_str("__virtual_name >=12", Strict).unwrap();
+        assert!(spec.is_virtual());
+
+        let spec =
+            MatchSpec::from_nameless(NamelessMatchSpec::from_str(">=12", Strict).unwrap(), None);
+        assert!(!spec.is_virtual());
     }
 }

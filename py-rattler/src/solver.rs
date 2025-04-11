@@ -1,6 +1,9 @@
 use chrono::DateTime;
-use pyo3::{exceptions::PyValueError, pyfunction, FromPyObject, PyAny, PyErr, PyResult, Python};
-use pyo3_asyncio::tokio::future_into_py;
+use pyo3::{
+    exceptions::PyValueError, pybacked::PyBackedStr, pyfunction, types::PyAnyMethods, Bound,
+    FromPyObject, PyAny, PyErr, PyResult, Python,
+};
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{resolvo::Solver, RepoDataIter, SolveStrategy, SolverImpl, SolverTask};
 use std::sync::Arc;
@@ -17,9 +20,10 @@ use crate::{
     PySparseRepoData, Wrap,
 };
 
-impl FromPyObject<'_> for Wrap<SolveStrategy> {
-    fn extract(ob: &'_ PyAny) -> PyResult<Self> {
-        let parsed = match &*ob.extract::<String>()? {
+impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        let parsed: PyBackedStr = ob.extract()?;
+        let parsed = match parsed.as_ref() {
             "highest" => SolveStrategy::Highest,
             "lowest" => SolveStrategy::LowestVersion,
             "lowest-direct" => SolveStrategy::LowestVersionDirect,
@@ -35,6 +39,8 @@ impl FromPyObject<'_> for Wrap<SolveStrategy> {
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
+#[pyo3(signature = (channels, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, strategy=None)
+)]
 pub fn py_solve(
     py: Python<'_>,
     channels: Vec<PyChannel>,
@@ -49,7 +55,7 @@ pub fn py_solve(
     timeout: Option<u64>,
     exclude_newer_timestamp_ms: Option<i64>,
     strategy: Option<Wrap<SolveStrategy>>,
-) -> PyResult<&'_ PyAny> {
+) -> PyResult<Bound<'_, PyAny>> {
     future_into_py(py, async move {
         let available_packages = gateway
             .inner
@@ -91,7 +97,12 @@ pub fn py_solve(
             Ok::<_, PyErr>(
                 Solver
                     .solve(task)
-                    .map(|res| res.into_iter().map(Into::into).collect::<Vec<PyRecord>>())
+                    .map(|res| {
+                        res.records
+                            .into_iter()
+                            .map(Into::into)
+                            .collect::<Vec<PyRecord>>()
+                    })
                     .map_err(PyRattlerError::from)?,
             )
         })
@@ -110,6 +121,8 @@ pub fn py_solve(
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
+#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, strategy=None)
+)]
 pub fn py_solve_with_sparse_repodata(
     py: Python<'_>,
     specs: Vec<PyMatchSpec>,
@@ -122,7 +135,7 @@ pub fn py_solve_with_sparse_repodata(
     timeout: Option<u64>,
     exclude_newer_timestamp_ms: Option<i64>,
     strategy: Option<Wrap<SolveStrategy>>,
-) -> PyResult<&'_ PyAny> {
+) -> PyResult<Bound<'_, PyAny>> {
     future_into_py(py, async move {
         let exclude_newer = exclude_newer_timestamp_ms.and_then(DateTime::from_timestamp_millis);
 
@@ -167,7 +180,12 @@ pub fn py_solve_with_sparse_repodata(
             Ok::<_, PyErr>(
                 Solver
                     .solve(task)
-                    .map(|res| res.into_iter().map(Into::into).collect::<Vec<PyRecord>>())
+                    .map(|res| {
+                        res.records
+                            .into_iter()
+                            .map(Into::into)
+                            .collect::<Vec<PyRecord>>()
+                    })
                     .map_err(PyRattlerError::from)?,
             )
         })

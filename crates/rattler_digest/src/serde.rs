@@ -58,6 +58,7 @@ where
 }
 
 /// Wrapper type for easily serializing a Hash
+#[derive(Debug, Clone)]
 pub struct SerializableHash<T: Digest>(pub Output<T>);
 
 impl<T: Digest> Serialize for SerializableHash<T>

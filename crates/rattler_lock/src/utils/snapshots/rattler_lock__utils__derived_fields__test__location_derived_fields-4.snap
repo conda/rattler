@@ -1,0 +1,20 @@
+---
+source: crates/rattler_lock/src/utils/derived_fields.rs
+expression: fields
+---
+LocationDerivedFields {
+    file_name: Some(
+        "x264-1!164.3095-h57fd34a_2.tar.bz2",
+    ),
+    name: Some(
+        "x264",
+    ),
+    version: Some(
+        "1!164.3095",
+    ),
+    build: Some(
+        "h57fd34a_2",
+    ),
+    subdir: None,
+    channel: None,
+}

@@ -6,10 +6,15 @@ pub use authentication_storage::{authentication::Authentication, storage::Authen
 pub use mirror_middleware::MirrorMiddleware;
 pub use oci_middleware::OciMiddleware;
 
-#[cfg(feature = "google-cloud-auth")]
+#[cfg(feature = "gcs")]
 pub mod gcs_middleware;
-#[cfg(feature = "google-cloud-auth")]
+#[cfg(feature = "gcs")]
 pub use gcs_middleware::GCSMiddleware;
+
+#[cfg(feature = "s3")]
+pub mod s3_middleware;
+#[cfg(feature = "s3")]
+pub use s3_middleware::S3Middleware;
 
 pub mod authentication_middleware;
 pub mod authentication_storage;
@@ -17,7 +22,3 @@ pub mod authentication_storage;
 pub mod mirror_middleware;
 pub mod oci_middleware;
 pub mod retry_policies;
-
-mod redaction;
-
-pub use redaction::{redact_known_secrets_from_url, Redact, DEFAULT_REDACTION_STR};

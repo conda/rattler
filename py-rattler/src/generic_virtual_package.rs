@@ -45,7 +45,7 @@ impl PyGenericVirtualPackage {
         }
     }
 
-    /// Contructs a string representation.
+    /// Constructs a string representation.
     pub fn as_str(&self) -> String {
         format!("{}", self.inner)
     }

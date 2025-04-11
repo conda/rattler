@@ -1,19 +1,23 @@
-use std::path::{Path, PathBuf};
+use std::{path::PathBuf, str::FromStr};
 
 use futures::TryFutureExt;
-use rattler_conda_types::{PrefixRecord, RepoDataRecord};
+use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
 use rattler_networking::retry_policies::default_retry_policy;
 use transaction::{Transaction, TransactionOperation};
+use url::Url;
 
 use crate::{
+    get_repodata_record,
     install::{transaction, unlink_package, InstallDriver, InstallOptions},
     package_cache::PackageCache,
 };
 
+use super::{driver::PostProcessResult, link_package, PythonInfo};
+
 /// Install a package into the environment and write a `conda-meta` file that
 /// contains information about how the file was linked.
 pub async fn install_package_to_environment(
-    target_prefix: &Path,
+    target_prefix: &Prefix,
     package_dir: PathBuf,
     repodata_record: RepoDataRecord,
     install_driver: &InstallDriver,
@@ -41,11 +45,12 @@ pub async fn install_package_to_environment(
         paths_data: paths.into(),
         requested_spec: None,
         link: None,
+        installed_system_menus: Vec::new(),
     };
 
     // Create the conda-meta directory if it doesnt exist yet.
-    let target_prefix = target_prefix.to_path_buf();
-    match tokio::task::spawn_blocking(move || {
+    let target_prefix = target_prefix.path().to_path_buf();
+    let result = tokio::task::spawn_blocking(move || {
         let conda_meta_path = target_prefix.join("conda-meta");
         std::fs::create_dir_all(&conda_meta_path)?;
 
@@ -53,8 +58,8 @@ pub async fn install_package_to_environment(
         let pkg_meta_path = conda_meta_path.join(prefix_record.file_name());
         prefix_record.write_to_path(pkg_meta_path, true)
     })
-    .await
-    {
+    .await;
+    match result {
         Ok(result) => Ok(result?),
         Err(err) => {
             if let Ok(panic) = err.try_into_panic() {
@@ -67,7 +72,7 @@ pub async fn install_package_to_environment(
 }
 
 pub async fn execute_operation(
-    target_prefix: &Path,
+    target_prefix: &Prefix,
     download_client: &reqwest_middleware::ClientWithMiddleware,
     package_cache: &PackageCache,
     install_driver: &InstallDriver,
@@ -95,7 +100,7 @@ pub async fn execute_operation(
                 default_retry_policy(),
                 None,
             )
-            .map_ok(|cache_dir| Some((install_record.clone(), cache_dir)))
+            .map_ok(|cache_lock| Some((install_record.clone(), cache_lock)))
             .map_err(anyhow::Error::from)
             .await
             .unwrap()
@@ -104,10 +109,10 @@ pub async fn execute_operation(
     };
 
     // If there is a package to install, do that now.
-    if let Some((record, package_dir)) = install_package {
+    if let Some((record, package_cache_lock)) = install_package {
         install_package_to_environment(
             target_prefix,
-            package_dir,
+            package_cache_lock.path().to_path_buf(),
             record.clone(),
             install_driver,
             install_options,
@@ -119,14 +124,14 @@ pub async fn execute_operation(
 
 pub async fn execute_transaction(
     transaction: Transaction<PrefixRecord, RepoDataRecord>,
-    target_prefix: &Path,
+    target_prefix: &Prefix,
     download_client: &reqwest_middleware::ClientWithMiddleware,
     package_cache: &PackageCache,
     install_driver: &InstallDriver,
     install_options: &InstallOptions,
-) {
+) -> PostProcessResult {
     install_driver
-        .pre_process(&transaction, target_prefix)
+        .pre_process(&transaction, target_prefix.path())
         .unwrap();
 
     for op in &transaction.operations {
@@ -143,7 +148,7 @@ pub async fn execute_transaction(
 
     install_driver
         .post_process(&transaction, target_prefix)
-        .unwrap();
+        .unwrap()
 }
 
 pub fn find_prefix_record<'a>(
@@ -153,4 +158,43 @@ pub fn find_prefix_record<'a>(
     prefix_records
         .iter()
         .find(|r| r.repodata_record.package_record.name.as_normalized() == name)
+}
+
+pub async fn download_and_get_prefix_record(
+    target_prefix: &Prefix,
+    package_url: Url,
+    sha256_hash: &str,
+) -> PrefixRecord {
+    let package_path = tools::download_and_cache_file_async(package_url, sha256_hash)
+        .await
+        .unwrap();
+
+    let package_dir = tempfile::TempDir::new().unwrap();
+
+    // Create package cache
+    rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
+
+    let py_info =
+        PythonInfo::from_version(&Version::from_str("3.10").unwrap(), None, Platform::Linux64)
+            .unwrap();
+    let install_options = InstallOptions {
+        python_info: Some(py_info),
+        ..InstallOptions::default()
+    };
+
+    let install_driver = InstallDriver::default();
+    // Link the package
+    let paths = link_package(
+        package_dir.path(),
+        target_prefix,
+        &install_driver,
+        install_options,
+    )
+    .await
+    .unwrap();
+
+    let repodata_record = get_repodata_record(&package_path);
+    // Construct a PrefixRecord for the package
+
+    PrefixRecord::from_repodata_record(repodata_record, None, None, paths, None, None)
 }

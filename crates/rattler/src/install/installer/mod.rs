@@ -3,7 +3,7 @@ mod error;
 mod indicatif;
 mod reporter;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     future::ready,
     path::{Path, PathBuf},
     sync::Arc,
@@ -16,9 +16,11 @@ pub use indicatif::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
     ProgressFormatter,
 };
+use itertools::Itertools;
+use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
-    Platform, PrefixRecord, RepoDataRecord,
+    PackageName, Platform, PrefixRecord, RepoDataRecord,
 };
 use rattler_networking::retry_policies::default_retry_policy;
 pub use reporter::Reporter;
@@ -26,13 +28,24 @@ use reqwest::Client;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
 
-use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
-use crate::install::link_script::LinkScriptError;
+use super::{
+    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
+};
 use crate::{
     default_cache_dir,
-    install::{clobber_registry::ClobberedPath, link_script::PrePostLinkResult},
-    package_cache::{CacheReporter, PackageCache},
+    install::{
+        clobber_registry::ClobberedPath,
+        link_script::{LinkScriptError, PrePostLinkResult},
+    },
+    package_cache::PackageCache,
 };
+
+#[derive(Default)]
+pub struct LinkOptions {
+    pub allow_symbolic_links: Option<bool>,
+    pub allow_hard_links: Option<bool>,
+    pub allow_ref_links: Option<bool>,
+}
 
 /// An installer that can install packages into a prefix.
 #[derive(Default)]
@@ -46,10 +59,9 @@ pub struct Installer {
     target_platform: Option<Platform>,
     apple_code_sign_behavior: AppleCodeSignBehavior,
     alternative_target_prefix: Option<PathBuf>,
+    reinstall_packages: Option<HashSet<PackageName>>,
     // TODO: Determine upfront if these are possible.
-    // allow_symbolic_links: Option<bool>,
-    // allow_hard_links: Option<bool>,
-    // allow_ref_links: Option<bool>,
+    link_options: LinkOptions,
 }
 
 #[derive(Debug)]
@@ -92,7 +104,7 @@ impl Installer {
     ///
     /// This function is similar to [`Self::with_io_concurrency_limit`],
     /// but modifies an existing instance.
-    pub fn set_io_concurrentcy_limit(&mut self, limit: usize) -> &mut Self {
+    pub fn set_io_concurrency_limit(&mut self, limit: usize) -> &mut Self {
         self.io_semaphore = Some(Arc::new(Semaphore::new(limit)));
         self
     }
@@ -212,10 +224,27 @@ impl Installer {
         }
     }
 
+    /// Set the packages that we want explicitly to be reinstalled.
+    #[must_use]
+    pub fn with_reinstall_packages(self, reinstall: HashSet<PackageName>) -> Self {
+        Self {
+            reinstall_packages: Some(reinstall),
+            ..self
+        }
+    }
+
+    /// Set the packages that we want explicitly to be reinstalled.
+    /// This function is similar to [`Self::with_reinstall_packages`],but
+    /// modifies an existing instance.
+    pub fn set_reinstall_packages(&mut self, reinstall: HashSet<PackageName>) -> &mut Self {
+        self.reinstall_packages = Some(reinstall);
+        self
+    }
+
     /// Sets the packages that are currently installed in the prefix. If this
     /// is not set, the installation process will first figure this out.
     ///
-    /// This function is similar to [`Self::set_installed_packages`],but
+    /// This function is similar to [`Self::with_installed_packages`],but
     /// modifies an existing instance.
     pub fn set_installed_packages(&mut self, installed: Vec<PrefixRecord>) -> &mut Self {
         self.installed = Some(installed);
@@ -264,6 +293,20 @@ impl Installer {
         self
     }
 
+    /// Sets the link options for the installer.
+    pub fn with_link_options(self, options: LinkOptions) -> Self {
+        Self {
+            link_options: options,
+            ..self
+        }
+    }
+
+    /// Sets the link options for the installer.
+    pub fn set_link_options(&mut self, options: LinkOptions) -> &mut Self {
+        self.link_options = options;
+        self
+    }
+
     /// Install the packages in the given prefix.
     pub async fn install(
         self,
@@ -281,14 +324,18 @@ impl Installer {
             )
         });
 
+        let prefix = Prefix::create(prefix.as_ref().to_path_buf()).map_err(|err| {
+            InstallerError::FailedToCreatePrefix(prefix.as_ref().to_path_buf(), err)
+        })?;
+
         // Create a future to determine the currently installed packages. We
         // can start this in parallel with the other operations and resolve it
         // when we need it.
         let installed = if let Some(installed) = self.installed {
             installed
         } else {
+            let prefix = prefix.clone();
             // TODO: Should we add progress reporting here?
-            let prefix = prefix.as_ref().to_path_buf();
             run_blocking_task(move || {
                 PrefixRecord::collect_from_prefix(&prefix)
                     .map_err(InstallerError::FailedToDetectInstalledPackages)
@@ -310,6 +357,7 @@ impl Installer {
         let transaction = Transaction::from_current_and_desired(
             installed,
             records.into_iter().collect::<Vec<_>>(),
+            self.reinstall_packages,
             target_platform,
         )?;
 
@@ -329,6 +377,9 @@ impl Installer {
             platform: Some(target_platform),
             python_info: transaction.python_info.clone(),
             apple_codesign_behavior: self.apple_code_sign_behavior,
+            allow_symbolic_links: self.link_options.allow_symbolic_links,
+            allow_hard_links: self.link_options.allow_hard_links,
+            allow_ref_links: self.link_options.allow_ref_links,
             ..InstallOptions::default()
         };
 
@@ -338,12 +389,22 @@ impl Installer {
 
         // Preprocess the transaction
         let pre_process_result = driver
-            .pre_process(&transaction, prefix.as_ref())
+            .pre_process(&transaction, &prefix)
             .map_err(InstallerError::PreProcessingFailed)?;
 
         // Execute the operations in the transaction.
         let mut pending_futures = FuturesUnordered::new();
-        for (idx, operation) in transaction.operations.iter().enumerate() {
+        for (idx, operation) in transaction
+            .operations
+            .iter()
+            .enumerate()
+            .sorted_by_key(|(_, op)| {
+                op.record_to_install()
+                    .and_then(|r| r.package_record.size)
+                    .unwrap_or(0)
+            })
+            .rev()
+        {
             let downloader = &downloader;
             let package_cache = &package_cache;
             let reporter = self.reporter.clone();
@@ -366,7 +427,7 @@ impl Installer {
                             let cache_index = r.on_populate_cache_start(idx, &record);
                             (r, cache_index)
                         });
-                        let cache_path = populate_cache(
+                        let cache_lock = populate_cache(
                             &record,
                             downloader,
                             &package_cache,
@@ -376,7 +437,7 @@ impl Installer {
                         if let Some((reporter, index)) = populate_cache_report {
                             reporter.on_populate_cache_complete(index);
                         }
-                        Ok((cache_path, record))
+                        Ok((cache_lock, record))
                     })
                     .map_err(JoinError::try_into_panic)
                     .map(|res| match res {
@@ -396,7 +457,7 @@ impl Installer {
                         .as_deref()
                         .map(move |r| (r, r.on_unlink_start(idx, record)));
                     driver.clobber_registry().unregister_paths(record);
-                    unlink_package(prefix.as_ref(), record).await.map_err(|e| {
+                    unlink_package(prefix, record).await.map_err(|e| {
                         InstallerError::UnlinkError(record.repodata_record.file_name.clone(), e)
                     })?;
                     if let Some((reporter, index)) = reporter {
@@ -405,14 +466,14 @@ impl Installer {
                 }
 
                 // Install the package if it was fetched.
-                if let Some((cached_path, record)) = package_to_install.await? {
+                if let Some((cache_lock, record)) = package_to_install.await? {
                     let reporter = reporter
                         .as_deref()
                         .map(|r| (r, r.on_link_start(idx, &record)));
                     link_package(
                         &record,
-                        prefix.as_ref(),
-                        &cached_path,
+                        prefix,
+                        cache_lock.path(),
                         base_install_options.clone(),
                         driver,
                     )
@@ -439,7 +500,7 @@ impl Installer {
         drop(pending_futures);
 
         // Post process the transaction
-        let post_process_result = driver.post_process(&transaction, prefix.as_ref())?;
+        let post_process_result = driver.post_process(&transaction, &prefix)?;
 
         if let Some(reporter) = &self.reporter {
             reporter.on_transaction_complete();
@@ -456,41 +517,52 @@ impl Installer {
 
 async fn link_package(
     record: &RepoDataRecord,
-    target_prefix: &Path,
+    target_prefix: &Prefix,
     cached_package_dir: &Path,
     install_options: InstallOptions,
     driver: &InstallDriver,
 ) -> Result<(), InstallerError> {
-    // Link the contents of the package into the prefix.
-    let paths =
-        crate::install::link_package(cached_package_dir, target_prefix, driver, install_options)
-            .await
+    let record = record.clone();
+    let target_prefix = target_prefix.clone();
+    let cached_package_dir = cached_package_dir.to_path_buf();
+    let clobber_registry = driver.clobber_registry.clone();
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    rayon::spawn_fifo(move || {
+        let inner = move || {
+            // Link the contents of the package into the prefix.
+            let paths = crate::install::link_package_sync(
+                &cached_package_dir,
+                &target_prefix,
+                clobber_registry,
+                install_options,
+            )
             .map_err(|e| InstallerError::LinkError(record.file_name.clone(), e))?;
 
-    // Construct a PrefixRecord for the package
-    let prefix_record = PrefixRecord {
-        repodata_record: record.clone(),
-        package_tarball_full_path: None,
-        extracted_package_dir: Some(cached_package_dir.to_path_buf()),
-        files: paths
-            .iter()
-            .map(|entry| entry.relative_path.clone())
-            .collect(),
-        paths_data: paths.into(),
-        // TODO: Retrieve the requested spec for this package from the request
-        requested_spec: None,
+            // Construct a PrefixRecord for the package
+            let prefix_record = PrefixRecord {
+                repodata_record: record.clone(),
+                package_tarball_full_path: None,
+                extracted_package_dir: Some(cached_package_dir.clone()),
+                files: paths
+                    .iter()
+                    .map(|entry| entry.relative_path.clone())
+                    .collect(),
+                paths_data: paths.into(),
+                // TODO: Retrieve the requested spec for this package from the request
+                requested_spec: None,
 
-        link: Some(Link {
-            source: cached_package_dir.to_path_buf(),
-            // TODO: compute the right value here based on the options and `can_hard_link` ...
-            link_type: Some(LinkType::HardLink),
-        }),
-    };
+                link: Some(Link {
+                    source: cached_package_dir,
+                    // TODO: compute the right value here based on the options and `can_hard_link`
+                    // ...
+                    link_type: Some(LinkType::HardLink),
+                }),
+                installed_system_menus: Vec::new(),
+            };
 
-    let target_prefix = target_prefix.to_path_buf();
-    driver
-        .run_blocking_io_task(move || {
-            let conda_meta_path = target_prefix.join("conda-meta");
+            let conda_meta_path = target_prefix.path().join("conda-meta");
             std::fs::create_dir_all(&conda_meta_path).map_err(|e| {
                 InstallerError::IoError("failed to create conda-meta directory".to_string(), e)
             })?;
@@ -507,9 +579,17 @@ async fn link_package(
             );
             prefix_record
                 .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
-                .map_err(|e| InstallerError::IoError(format!("failed to write {pkg_meta_path}"), e))
-        })
-        .await
+                .map_err(|e| {
+                    InstallerError::IoError(format!("failed to write {pkg_meta_path}"), e)
+                })?;
+
+            Ok(())
+        };
+
+        let _ = tx.send(inner());
+    });
+
+    rx.await.unwrap_or(Err(InstallerError::Cancelled))
 }
 
 /// Given a repodata record, fetch the package into the cache if its not already
@@ -519,7 +599,7 @@ async fn populate_cache(
     downloader: reqwest_middleware::ClientWithMiddleware,
     cache: &PackageCache,
     reporter: Option<(Arc<dyn Reporter>, usize)>,
-) -> Result<PathBuf, InstallerError> {
+) -> Result<CacheLock, InstallerError> {
     struct CacheReporterBridge {
         reporter: Arc<dyn Reporter>,
         cache_index: usize,

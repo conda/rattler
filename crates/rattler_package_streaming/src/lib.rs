@@ -2,13 +2,14 @@
 
 //! This crate provides the ability to extract a Conda package archive or specific parts of it.
 
+use simple_spawn_blocking::Cancelled;
 use std::path::PathBuf;
 use zip::result::ZipError;
 
 use rattler_digest::{Md5Hash, Sha256Hash};
 
 #[cfg(feature = "reqwest")]
-use rattler_networking::Redact;
+use rattler_redaction::Redact;
 
 pub mod read;
 pub mod seek;
@@ -24,13 +25,13 @@ pub mod write;
 #[derive(thiserror::Error, Debug)]
 #[allow(missing_docs)]
 pub enum ExtractError {
-    #[error("an io error occurred")]
+    #[error("an io error occurred: {0}")]
     IoError(#[from] std::io::Error),
 
-    #[error("could not create the destination path")]
+    #[error("could not create the destination path: {0}")]
     CouldNotCreateDestination(#[source] std::io::Error),
 
-    #[error("invalid zip archive")]
+    #[error("invalid zip archive: {0}")]
     ZipError(#[source] zip::result::ZipError),
 
     #[error("a component is missing from the Conda archive")]
@@ -59,6 +60,12 @@ impl From<ZipError> for ExtractError {
             ZipError::Io(io) => Self::IoError(io),
             e => Self::ZipError(e),
         }
+    }
+}
+
+impl From<Cancelled> for ExtractError {
+    fn from(_value: Cancelled) -> Self {
+        Self::Cancelled
     }
 }
 

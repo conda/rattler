@@ -1,0 +1,24 @@
+---
+source: crates/rattler_lock/src/utils/derived_fields.rs
+expression: "https://repo.anaconda.com/pkgs/main/linux-64/package-1.0.0-0.tar.bz2"
+---
+LocationDerivedFields {
+    file_name: Some(
+        "package-1.0.0-0.tar.bz2",
+    ),
+    name: Some(
+        "package",
+    ),
+    version: Some(
+        "1.0.0",
+    ),
+    build: Some(
+        "0",
+    ),
+    subdir: Some(
+        "linux-64",
+    ),
+    channel: Some(
+        "https://repo.anaconda.com/pkgs/main/",
+    ),
+}

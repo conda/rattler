@@ -1,17 +1,28 @@
-//! Functionality to stream and extract packages directly from a [`reqwest::Url`] within a [`tokio`]
-//! async context.
+//! Functionality to stream and extract packages directly from a
+//! [`reqwest::Url`] within a [`tokio`] async context.
 
-use crate::{DownloadReporter, ExtractError, ExtractResult};
+use std::{path::Path, sync::Arc};
+
+use fs_err::tokio as tokio_fs;
 use futures_util::stream::TryStreamExt;
 use rattler_conda_types::package::ArchiveType;
 use rattler_digest::Sha256Hash;
 use reqwest::Response;
-use std::path::Path;
-use std::sync::Arc;
 use tokio::io::BufReader;
-use tokio_util::either::Either;
-use tokio_util::io::StreamReader;
+use tokio_util::{either::Either, io::StreamReader};
+use tracing;
 use url::Url;
+use zip::result::ZipError;
+
+use crate::{DownloadReporter, ExtractError, ExtractResult};
+
+/// zipfiles may use data descriptors to signal that the decompressor needs to
+/// seek ahead in the buffer to find the compressed data length.
+/// Since we stream the package over a non seekable HTTP connection, this
+/// condition will cause an error during decompression. In this case, we
+/// fallback to reading the whole data to a buffer before attempting
+/// decompression. Read more in <https://github.com/conda/rattler/issues/794>
+const DATA_DESCRIPTOR_ERROR_MESSAGE: &str = "The file length is not available in the local header";
 
 fn error_for_status(response: reqwest::Response) -> reqwest_middleware::Result<Response> {
     response
@@ -31,7 +42,7 @@ async fn get_reader(
 
     if url.scheme() == "file" {
         let file =
-            tokio::fs::File::open(url.to_file_path().expect("Could not convert to file path"))
+            tokio_fs::File::open(url.to_file_path().expect("Could not convert to file path"))
                 .await
                 .map_err(ExtractError::IoError)?;
 
@@ -41,7 +52,8 @@ async fn get_reader(
         let mut request = client.get(url.clone());
 
         if let Some(sha256) = expected_sha256 {
-            // This is used by the OCI registry middleware to verify the sha256 of the response
+            // This is used by the OCI registry middleware to verify the sha256 of the
+            // response
             request = request.header("X-Expected-Sha256", format!("{sha256:x}"));
         }
 
@@ -62,12 +74,21 @@ async fn get_reader(
 
         // Get the response as a stream
         Ok(Either::Right(StreamReader::new(byte_stream.map_err(
-            |err| std::io::Error::new(std::io::ErrorKind::Other, err),
+            |err| {
+                if err.is_body() {
+                    std::io::Error::new(std::io::ErrorKind::Interrupted, err)
+                } else if err.is_decode() {
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, err)
+                } else {
+                    std::io::Error::new(std::io::ErrorKind::Other, err)
+                }
+            },
         ))))
     }
 }
 
-/// Extracts the contents a `.tar.bz2` package archive from the specified remote location.
+/// Extracts the contents a `.tar.bz2` package archive from the specified remote
+/// location.
 ///
 /// ```rust,no_run
 /// # #[tokio::main]
@@ -103,7 +124,8 @@ pub async fn extract_tar_bz2(
     Ok(result)
 }
 
-/// Extracts the contents a `.conda` package archive from the specified remote location.
+/// Extracts the contents a `.conda` package archive from the specified remote
+/// location.
 ///
 /// ```rust,no_run
 /// # #[tokio::main]
@@ -131,16 +153,49 @@ pub async fn extract_conda(
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
     // The `response` is used to stream in the package data
-    let reader = get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
-    let result = crate::tokio::async_read::extract_conda(reader, destination).await?;
-    if let Some(reporter) = &reporter {
-        reporter.on_download_complete();
+    let reader = get_reader(
+        url.clone(),
+        client.clone(),
+        expected_sha256,
+        reporter.clone(),
+    )
+    .await?;
+    match crate::tokio::async_read::extract_conda(reader, destination).await {
+        Ok(result) => {
+            if let Some(reporter) = &reporter {
+                reporter.on_download_complete();
+            }
+            Ok(result)
+        }
+        // https://github.com/conda/rattler/issues/794
+        Err(ExtractError::ZipError(ZipError::UnsupportedArchive(zip_error)))
+            if (zip_error.contains(DATA_DESCRIPTOR_ERROR_MESSAGE)) =>
+        {
+            tracing::warn!("Failed to stream decompress conda package from '{}' due to the presence of zip data descriptors. Falling back to non streaming decompression", url);
+            if let Some(reporter) = &reporter {
+                reporter.on_download_complete();
+            }
+            let new_reader =
+                get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
+
+            match crate::tokio::async_read::extract_conda_via_buffering(new_reader, destination)
+                .await
+            {
+                Ok(result) => {
+                    if let Some(reporter) = &reporter {
+                        reporter.on_download_complete();
+                    }
+                    Ok(result)
+                }
+                Err(e) => Err(e),
+            }
+        }
+        Err(e) => Err(e),
     }
-    Ok(result)
 }
 
-/// Extracts the contents a package archive from the specified remote location. The type of package
-/// is determined based on the path of the url.
+/// Extracts the contents a package archive from the specified remote location.
+/// The type of package is determined based on the path of the url.
 ///
 /// ```rust,no_run
 /// # #[tokio::main]

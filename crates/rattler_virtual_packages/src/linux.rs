@@ -1,4 +1,4 @@
-//! Low-level functions to dect the linux version on the system. See [`linux_version`].
+//! Low-level functions to detect the linux version on the system. See [`linux_version`].
 
 use once_cell::sync::OnceCell;
 use rattler_conda_types::{ParseVersionError, Version};
@@ -122,7 +122,6 @@ mod test {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
     pub fn doesnt_crash() {
         let version = super::try_detect_linux_version();
         println!("Linux {version:?}");

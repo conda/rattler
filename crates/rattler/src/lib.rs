@@ -1,4 +1,6 @@
-//! Rattler is an experimental library and executable to work with [Conda](http://conda.io)
+//! [![Rattler banner](https://github.com/user-attachments/assets/bfd64756-061d-49f5-af4e-388743bdb855)](https://github.com/conda/rattler)
+//!
+//! Rattler is a library and executable to work with [Conda](http://conda.io)
 //! environments. Conda is a cross-platform open-source package management
 //! system and environment management system.
 //!
@@ -6,7 +8,7 @@
 //! first conceived. Rattler is an attempt at reimplementing a lot of the
 //! machinery supporting Conda but making it available to a wider range of
 //! languages. The goal is to be able to integrate the Conda ecosystem in a wide
-//! variaty of tools that do not rely on Python. Rust has excellent support for
+//! variety of tools that do not rely on Python. Rust has excellent support for
 //! interfacing with many other languages (WASM, Javascript, Python, C, etc) and
 //! is therefore a good candidate for a reimplementation.
 #![deny(missing_docs)]
@@ -16,8 +18,7 @@ use std::path::PathBuf;
 #[cfg(feature = "cli-tools")]
 pub mod cli;
 pub mod install;
-pub use rattler_cache::package_cache;
-pub use rattler_cache::validation;
+pub use rattler_cache::{package_cache, validation};
 
 /// A helper function that returns a [`Channel`] instance that points to an
 /// empty channel on disk that is bundled with this repository.
@@ -77,6 +78,6 @@ pub(crate) fn get_repodata_record(package_path: impl AsRef<std::path::Path>) -> 
             .unwrap()
             .to_string(),
         url: url::Url::from_file_path(package_path).unwrap(),
-        channel: "test".to_string(),
+        channel: Some(String::from("test")),
     }
 }

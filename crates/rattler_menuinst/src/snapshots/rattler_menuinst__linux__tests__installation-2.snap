@@ -1,0 +1,8 @@
+---
+source: crates/rattler_menuinst/src/linux.rs
+expression: mimeapps_file_content
+---
+[Default Applications]
+text/x-spython=Spyder 6 (test-env)
+[Added Associations]
+text/x-spython=Spyder 6 (test-env)

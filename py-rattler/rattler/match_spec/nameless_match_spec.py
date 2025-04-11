@@ -17,6 +17,19 @@ class NamelessMatchSpec:
     """
 
     def __init__(self, spec: str, strict: bool = False) -> None:
+        """
+        Create a new version spec.
+
+        When `strict` is `True`, some ambiguous version specs are rejected.
+
+        ```python
+        >>> NamelessMatchSpec(">=24.0")
+        NamelessMatchSpec(">=24.0")
+        >>> NamelessMatchSpec("24")
+        NamelessMatchSpec("==24")
+        >>>
+        ```
+        """
         if isinstance(spec, str):
             self._nameless_match_spec = PyNamelessMatchSpec(spec, strict)
         else:

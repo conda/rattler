@@ -1,0 +1,12 @@
+---
+source: crates/rattler_lock/src/url_or_path.rs
+expression: sorted_entries
+---
+../_libgcc_mutex-0.1-conda_forge.tar.bz2
+..\_libgcc_mutex-0.1-conda_forge.tar.bz2
+/packages/_libgcc_mutex-0.1-conda_forge.conda
+/packages/_libgcc_mutex-0.1-conda_forge.tar.bz2
+/packages/_libgcc_mutex-0.1-conda_forge.tar.bz2
+C:\packages\_libgcc_mutex-0.1-conda_forge.tar.bz2
+https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.conda
+https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2

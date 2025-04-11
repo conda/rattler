@@ -2,6 +2,7 @@
 use std::{
     borrow::Borrow,
     collections::{HashMap, HashSet},
+    fmt::{Display, Formatter},
     path::Path,
 };
 
@@ -57,11 +58,11 @@ impl LinkScriptType {
     }
 }
 
-impl ToString for LinkScriptType {
-    fn to_string(&self) -> String {
+impl Display for LinkScriptType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            LinkScriptType::PreUnlink => "pre-unlink".to_string(),
-            LinkScriptType::PostLink => "post-link".to_string(),
+            LinkScriptType::PreUnlink => write!(f, "pre-unlink"),
+            LinkScriptType::PostLink => write!(f, "post-link"),
         }
     }
 }
@@ -103,7 +104,7 @@ pub fn run_link_scripts<'a>(
     let mut messages = HashMap::<PackageName, String>::new();
     for record in prefix_records {
         let prec = &record.repodata_record.package_record;
-        let link_file = target_prefix.join(&link_script_type.get_path(prec, platform));
+        let link_file = target_prefix.join(link_script_type.get_path(prec, platform));
 
         if link_file.exists() {
             env.insert(
@@ -231,7 +232,7 @@ impl InstallDriver {
 
 #[cfg(test)]
 mod tests {
-    use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord};
+    use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord};
 
     use crate::{
         get_repodata_record, get_test_data_dir,
@@ -253,6 +254,7 @@ mod tests {
     #[tokio::test]
     async fn test_run_link_scripts() {
         let target_prefix = tempfile::tempdir().unwrap();
+        let target_prefix = Prefix::create(target_prefix.path()).unwrap();
 
         let operations = test_operations();
 
@@ -269,7 +271,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &target_prefix,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &driver,
@@ -281,7 +283,8 @@ mod tests {
         assert!(target_prefix.path().join("i-was-post-linked").exists());
 
         // unlink the package
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(&target_prefix).unwrap();
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
             operations: vec![TransactionOperation::Remove(prefix_records[0].clone())],
             python_info: None,
@@ -291,7 +294,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &target_prefix,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &driver,
