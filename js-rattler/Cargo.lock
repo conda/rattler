@@ -73,9 +73,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.97"
+version = "1.0.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
+checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 
 [[package]]
 name = "arbitrary"
@@ -2345,7 +2345,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.16"
+version = "0.3.17"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -2375,7 +2375,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.31.6"
+version = "0.32.0"
 dependencies = [
  "chrono",
  "core-foundation 0.10.0",
@@ -2413,7 +2413,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "blake2",
  "digest",
@@ -2437,7 +2437,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.22.11"
+version = "0.22.12"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2462,7 +2462,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.35"
+version = "0.22.36"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2490,7 +2490,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "reqwest",
  "reqwest-middleware",
@@ -2499,7 +2499,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.22.4"
+version = "0.22.5"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2554,7 +2554,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.4.3"
+version = "1.4.4"
 dependencies = [
  "chrono",
  "futures",
@@ -2971,9 +2971,9 @@ dependencies = [
 
 [[package]]
 name = "self_cell"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2fdfc24bc566f839a2da4c4295b82db7d25a24253867d5c64355abb5799bdbe"
+checksum = "0f7d95a54511e0c7be3f51e8867aa8cf35148d7b9445d44de2f943e2b206e749"
 
 [[package]]
 name = "serde"
