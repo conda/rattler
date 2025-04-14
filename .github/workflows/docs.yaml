@@ -36,7 +36,7 @@ jobs:
         with:
           profile: minimal
 
-      - uses: prefix-dev/setup-pixi@8eaba7c61d661f73d558b0b477156b7b62667fa4 # v0.8.4
+      - uses: prefix-dev/setup-pixi@5044b250243a57e8c78f7c38acd73f6d7954a3cf # v0.8.7
         with:
           manifest-path: py-rattler/pixi.toml
 
