@@ -4414,6 +4414,7 @@ dependencies = [
  "pep508_rs",
  "rattler_conda_types",
  "rattler_digest",
+ "rattler_solve",
  "rstest",
  "serde",
  "serde-value",

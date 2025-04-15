@@ -17,6 +17,7 @@ indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.32.0", default-features = false }
 rattler_digest = { path = "../rattler_digest", version = "1.1.1", default-features = false }
+rattler_solve = { path = "../rattler_solve", version="1.4.4", default-features = false, features = ["serde"] }
 file_url = { path = "../file_url", version = "0.2.4" }
 pep508_rs = { workspace = true }
 pep440_rs = { workspace = true }
