@@ -87,6 +87,7 @@ mod channel;
 mod conda;
 mod file_format_version;
 mod hash;
+mod options;
 mod parse;
 mod pypi;
 mod pypi_indexes;
@@ -99,6 +100,7 @@ pub use channel::Channel;
 pub use conda::{CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, InputHash};
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
+pub use options::ResolverOptions;
 pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
@@ -157,6 +159,9 @@ struct EnvironmentData {
 
     /// The pypi indexes used to solve the environment.
     indexes: Option<PypiIndexes>,
+
+    /// The options that were used to solve the environment.
+    options: ResolverOptions,
 
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
@@ -547,6 +552,7 @@ mod test {
     #[case::v6_conda_source_path("v6/conda-path-lock.yml")]
     #[case::v6_derived_channel("v6/derived-channel-lock.yml")]
     #[case::v6_sources("v6/sources-lock.yml")]
+    #[case::v6_options("v6/options-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")

@@ -18,7 +18,8 @@ use crate::{
     file_format_version::FileFormatVersion,
     parse::{models, models::v6, V5, V6},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
+    ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, ResolverOptions,
+    UrlOrPath,
 };
 
 #[serde_as]
@@ -43,6 +44,8 @@ struct DeserializableEnvironment {
     channels: Vec<Channel>,
     #[serde(flatten)]
     indexes: Option<PypiIndexes>,
+    #[serde(default)]
+    options: ResolverOptions,
     packages: BTreeMap<Platform, Vec<DeserializablePackageSelector>>,
 }
 
@@ -197,6 +200,7 @@ fn parse_from_lock<P>(
                 EnvironmentData {
                     channels: env.channels,
                     indexes: env.indexes,
+                    options: env.options,
                     packages: env
                         .packages
                         .into_iter()
