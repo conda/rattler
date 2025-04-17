@@ -1,11 +1,14 @@
-use rattler_solve::{ChannelPriority, SolveStrategy};
+//! Defines [`SolveOptions`] and reexports from `rattler_solve` that are used.
+
+// Reexport these fields.
+pub use rattler_solve::{ChannelPriority, SolveStrategy};
 
 /// Options that were used during the resolution of the packages stored in the
 /// lock-file. These options strongly influence the outcome of the solve and are
 /// therefore stored along with the locked packages.
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct ResolverOptions {
+pub struct SolveOptions {
     /// The strategy that was used to solve the dependencies.
     #[serde(default, skip_serializing_if = "crate::utils::serde::is_default")]
     pub strategy: SolveStrategy,

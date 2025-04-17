@@ -87,7 +87,7 @@ mod channel;
 mod conda;
 mod file_format_version;
 mod hash;
-mod options;
+pub mod options;
 mod parse;
 mod pypi;
 mod pypi_indexes;
@@ -100,7 +100,7 @@ pub use channel::Channel;
 pub use conda::{CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, InputHash};
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
-pub use options::ResolverOptions;
+pub use options::SolveOptions;
 pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
@@ -161,7 +161,7 @@ struct EnvironmentData {
     indexes: Option<PypiIndexes>,
 
     /// The options that were used to solve the environment.
-    options: ResolverOptions,
+    options: SolveOptions,
 
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
@@ -279,6 +279,11 @@ impl<'lock> Environment<'lock> {
     /// Starting with version `5` of the format this should not be optional.
     pub fn pypi_indexes(&self) -> Option<&PypiIndexes> {
         self.data().indexes.as_ref()
+    }
+
+    /// Returns the solver options that were used to create this environment.
+    pub fn solve_options(&self) -> &SolveOptions {
+        &self.data().options
     }
 
     /// Returns all the packages for a specific platform in this environment.
