@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0](https://github.com/conda/rattler/compare/rattler_lock-v0.23.1...rattler_lock-v0.24.0) - 2025-04-17
+
+### Fixed
+
+- rename struct and reexport ([#1262](https://github.com/conda/rattler/pull/1262))
+
 ## [0.23.1](https://github.com/conda/rattler/compare/rattler_lock-v0.23.0...rattler_lock-v0.23.1) - 2025-04-15
 
 ### Added
