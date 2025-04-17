@@ -1457,4 +1457,16 @@ mod test {
             }
         }
     }
+
+    // check parsing `0.1.0.dev12+ga47bad07` as VersionWithSource
+    #[test]
+    fn test_version_with_source() {
+        let version = Version::from_str("0.1.0.dev12+ga47bad07").unwrap();
+        assert_eq!(version.epoch(), 0);
+        assert_eq!(version.segments().len(), 4);
+        assert_eq!(version.local_segments().len(), 1);
+        assert_eq!(version.to_string(), "0.1.0.dev12+ga47bad07");
+        // let local_segments : Vec<_> = version.local_segments().collect();
+        // assert_eq!(local_segments[0], Component::Iden("ga47bad07".into()));
+    }
 }
