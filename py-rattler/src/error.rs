@@ -169,9 +169,7 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::AuthenticationStorageError(err) => {
                 AuthenticationStorageException::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::ShellError(err) => {
-                ShellException::new_err(pretty_print_error(&err))
-            }
+            PyRattlerError::ShellError(err) => ShellException::new_err(pretty_print_error(&err)),
         }
     }
 }
