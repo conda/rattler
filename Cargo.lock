@@ -4381,7 +4381,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.24.0"
+version = "0.23.2"
 dependencies = [
  "chrono",
  "file_url",
