@@ -34,7 +34,9 @@ pub fn run_in_environment(
     let mut shell_script = shell::ShellScript::new(shell.clone(), Platform::current());
 
     for (k, v) in env_vars.iter() {
-        shell_script.set_env_var(k, v)?;
+        shell_script
+            .set_env_var(k, v)
+            .map_err(ActivationError::from)?;
     }
 
     let activator = Activator::from_path(prefix, shell.clone(), Platform::current())?;
@@ -54,11 +56,16 @@ pub fn run_in_environment(
 
     shell_script.append_script(&host_activation.script);
 
-    shell_script.run_script(script)?;
+    shell_script
+        .run_script(script)
+        .map_err(ActivationError::from)?;
     let file = tempfile::Builder::new()
         .suffix(&format!(".{}", shell.extension()))
         .tempfile()?;
-    fs_err::write(file.path(), shell_script.contents()?)?;
+    fs_err::write(
+        file.path(),
+        shell_script.contents().map_err(ActivationError::from)?,
+    )?;
 
     match shell {
         ShellEnum::Bash(_) => Ok(Command::new(shell.executable()).arg(file.path()).output()?),

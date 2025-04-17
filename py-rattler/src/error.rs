@@ -66,7 +66,7 @@ pub enum PyRattlerError {
     #[error(transparent)]
     ExtractError(#[from] ExtractError),
     #[error(transparent)]
-    ActivationScriptFormatError(std::fmt::Error),
+    ShellError(#[from] rattler_shell::shell::ShellError),
     #[error(transparent)]
     GatewayError(#[from] GatewayError),
     #[error(transparent)]
@@ -154,9 +154,6 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::ExtractError(err) => {
                 ExtractException::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::ActivationScriptFormatError(err) => {
-                ActivationScriptFormatException::new_err(pretty_print_error(&err))
-            }
             PyRattlerError::GatewayError(err) => {
                 GatewayException::new_err(pretty_print_error(&err))
             }
@@ -172,6 +169,7 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::AuthenticationStorageError(err) => {
                 AuthenticationStorageException::new_err(pretty_print_error(&err))
             }
+            PyRattlerError::ShellError(err) => ShellException::new_err(pretty_print_error(&err)),
         }
     }
 }
@@ -209,3 +207,4 @@ create_exception!(
 );
 create_exception!(exceptions, ValidatePackageRecordsException, PyException);
 create_exception!(exceptions, AuthenticationStorageException, PyException);
+create_exception!(exceptions, ShellException, PyException);
