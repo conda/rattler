@@ -1,3 +1,5 @@
+//! Defines [`SolveOptions`] and reexports from `rattler_solve` that are used.
+
 // Reexport these fields.
 pub use rattler_solve::{ChannelPriority, SolveStrategy};
 
