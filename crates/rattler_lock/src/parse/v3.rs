@@ -22,7 +22,7 @@ use crate::{
         LocationDerivedFields,
     },
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, ResolverOptions, UrlOrPath,
+    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
     DEFAULT_ENVIRONMENT_NAME,
 };
 
@@ -258,7 +258,7 @@ pub fn parse_v3_or_lower(
         channels: lock_file.metadata.channels,
         indexes: None,
         packages: per_platform,
-        options: ResolverOptions::default(),
+        options: SolveOptions::default(),
     };
 
     Ok(LockFile {

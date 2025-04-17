@@ -18,7 +18,7 @@ use crate::{
     file_format_version::FileFormatVersion,
     parse::{models, models::v6, V5, V6},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, ResolverOptions,
+    ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
     UrlOrPath,
 };
 
@@ -45,7 +45,7 @@ struct DeserializableEnvironment {
     #[serde(flatten)]
     indexes: Option<PypiIndexes>,
     #[serde(default)]
-    options: ResolverOptions,
+    options: SolveOptions,
     packages: BTreeMap<Platform, Vec<DeserializablePackageSelector>>,
 }
 

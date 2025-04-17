@@ -13,7 +13,7 @@ use rattler_conda_types::{Platform, Version};
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
     CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, ResolverOptions,
+    LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
     UrlOrPath,
 };
 
@@ -161,7 +161,7 @@ impl LockFileBuilder {
                 channels: vec![],
                 packages: HashMap::default(),
                 indexes: None,
-                options: ResolverOptions::default(),
+                options: SolveOptions::default(),
             })
     }
 
@@ -179,7 +179,7 @@ impl LockFileBuilder {
     pub fn set_options(
         &mut self,
         environment: impl Into<String>,
-        options: ResolverOptions,
+        options: SolveOptions,
     ) -> &mut Self {
         self.environment_data(environment).options = options;
         self
@@ -339,11 +339,7 @@ impl LockFileBuilder {
     }
 
     /// Sets the options for an environment.
-    pub fn with_options(
-        mut self,
-        environment: impl Into<String>,
-        options: ResolverOptions,
-    ) -> Self {
+    pub fn with_options(mut self, environment: impl Into<String>, options: SolveOptions) -> Self {
         self.set_options(environment, options);
         self
     }

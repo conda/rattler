@@ -15,7 +15,7 @@ use crate::{
     file_format_version::FileFormatVersion,
     parse::{models::v6, V6},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, ResolverOptions, UrlOrPath,
+    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
 };
 
 #[serde_as]
@@ -36,7 +36,7 @@ struct SerializableEnvironment<'a> {
     #[serde(flatten)]
     indexes: Option<&'a PypiIndexes>,
     #[serde(default, skip_serializing_if = "crate::utils::serde::is_default")]
-    options: ResolverOptions,
+    options: SolveOptions,
     packages: BTreeMap<Platform, Vec<SerializablePackageSelector<'a>>>,
 }
 
