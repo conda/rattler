@@ -281,6 +281,11 @@ impl<'lock> Environment<'lock> {
         self.data().indexes.as_ref()
     }
 
+    /// Returns the solver options that were used to create this environment.
+    pub fn solve_options(&self) -> &SolveOptions {
+        &self.data().options
+    }
+
     /// Returns all the packages for a specific platform in this environment.
     pub fn packages(
         &self,
