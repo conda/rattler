@@ -31,7 +31,7 @@ rattler = { path="../rattler", version = "0.33.5", default-features = false, fea
 rattler_conda_types = { path="../rattler_conda_types", version = "0.32.0", default-features = false }
 rattler_networking = { path="../rattler_networking", version = "0.22.12", default-features = false, features = ["gcs", "s3"] }
 rattler_repodata_gateway = { path="../rattler_repodata_gateway", version = "0.22.5", default-features = false, features = ["gateway"] }
-rattler_solve = { path="../rattler_solve", version = "1.4.4", default-features = false, features = ["resolvo", "libsolv_c"] }
+rattler_solve = { path="../rattler_solve", version = "1.4.5", default-features = false, features = ["resolvo", "libsolv_c"] }
 rattler_virtual_packages = { path="../rattler_virtual_packages", version = "2.0.10", default-features = false }
 rattler_cache = { path="../rattler_cache", version = "0.3.17", default-features = false }
 rattler_menuinst = { path="../rattler_menuinst", version = "0.2.7", default-features = false }
