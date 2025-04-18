@@ -24,6 +24,7 @@ mod generic_virtual_package;
 pub mod package;
 mod package_name;
 pub mod prefix_record;
+pub use package::PackageMetadata;
 
 #[cfg(test)]
 use std::path::{Path, PathBuf};

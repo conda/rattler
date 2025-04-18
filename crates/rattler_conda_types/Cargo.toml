@@ -14,6 +14,9 @@ readme.workspace = true
 default = ["rayon"]
 experimental_extras = []
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
 chrono = { workspace = true }
 file_url = { path = "../file_url", version = "0.2.3" }
@@ -53,6 +56,7 @@ indexmap = { workspace = true }
 dirs = { workspace = true }
 rayon = { workspace = true, optional = true }
 fs-err = { workspace = true }
+wasm-bindgen = "0.2.100"
 
 [dev-dependencies]
 rand = { workspace = true }
