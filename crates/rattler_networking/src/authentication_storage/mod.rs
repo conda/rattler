@@ -19,6 +19,9 @@ pub enum AuthenticationStorageError {
     /// An error occurred when accessing the netrc storage
     #[error("NetRcStorageError")]
     NetRcStorageError(#[from] crate::authentication_storage::backends::netrc::NetRcStorageError),
+    /// An error occurred when accessing the memory storage
+    #[error("MemoryStorageError")]
+    MemoryStorageError(#[from] crate::authentication_storage::backends::memory::MemoryStorageError),
 }
 
 /// A trait that defines the interface for authentication storage backends
