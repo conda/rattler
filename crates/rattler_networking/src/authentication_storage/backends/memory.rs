@@ -1,8 +1,5 @@
 //! in-memory storage for authentication information
-use std::{
-    collections::HashMap,
-    sync::Mutex,
-};
+use std::{collections::HashMap, sync::Mutex};
 
 use crate::{
     authentication_storage::{AuthenticationStorageError, StorageBackend},
@@ -13,7 +10,7 @@ use crate::{
 /// information backed by a in-memory hashmap
 #[derive(Debug)]
 pub struct MemoryStorage {
-    store: Mutex<HashMap<String, Authentication>>
+    store: Mutex<HashMap<String, Authentication>>,
 }
 
 impl Default for MemoryStorage {
@@ -26,7 +23,7 @@ impl MemoryStorage {
     /// Create a new empty memory storage
     pub fn new() -> Self {
         Self {
-            store: Default::default()
+            store: Default::default(),
         }
     }
 }
@@ -36,7 +33,7 @@ impl MemoryStorage {
 pub enum MemoryStorageError {
     /// Could not lock the storage
     #[error("Could not lock the storage")]
-    LockError
+    LockError,
 }
 
 impl StorageBackend for MemoryStorage {
@@ -45,18 +42,27 @@ impl StorageBackend for MemoryStorage {
         host: &str,
         authentication: &Authentication,
     ) -> Result<(), AuthenticationStorageError> {
-        let mut store = self.store.lock().map_err(|_| MemoryStorageError::LockError)?;
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|_| MemoryStorageError::LockError)?;
         store.insert(host.to_string(), authentication.clone());
         Ok(())
     }
 
     fn get(&self, host: &str) -> Result<Option<crate::Authentication>, AuthenticationStorageError> {
-        let store = self.store.lock().map_err(|_| MemoryStorageError::LockError)?;
+        let store = self
+            .store
+            .lock()
+            .map_err(|_| MemoryStorageError::LockError)?;
         Ok(store.get(host).cloned())
     }
 
     fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
-        let mut store  = self.store.lock().map_err(|_| MemoryStorageError::LockError)?;
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|_| MemoryStorageError::LockError)?;
         store.remove(host);
         Ok(())
     }
