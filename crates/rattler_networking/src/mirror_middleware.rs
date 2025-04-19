@@ -174,15 +174,22 @@ pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
-    use http::Response as HttpResponse;
-    HttpResponse::builder()
-        .status(http::StatusCode::NOT_FOUND)
-        .header("Content-Type", "text/plain")
-        .header("Content-Length", body.len().to_string())
-        .body(body.to_string())
-        .unwrap()
-        .into()
+use reqwest::Response;
+use http::StatusCode;
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn create_404_response(_url: &Url, body: &str) -> Response {
+    let mut response = Response::new(body.to_string().into());
+    *response.status_mut() = StatusCode::NOT_FOUND;
+    response.headers_mut().insert(
+        "Content-Type",
+        "text/plain".parse().unwrap()
+    );
+    response.headers_mut().insert(
+        "Content-Length",
+        body.len().to_string().parse().unwrap()
+    );
+    response
 }
 
 #[cfg(test)]
