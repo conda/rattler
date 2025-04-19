@@ -119,7 +119,12 @@ async def test_solve_channel_priority_disabled(
     assert isinstance(solved_data, list)
     assert isinstance(solved_data[0], RepoDataRecord)
     assert (
-        list(filter(lambda r: r.file_name.startswith("pytorch-cpu-0.4.1-py36_cpu_1"), solved_data))[0].channel
+        list(
+            filter(
+                lambda r: r.file_name.startswith("pytorch-cpu-0.4.1-py36_cpu_1"),
+                solved_data,
+            )
+        )[0].channel
         == pytorch_channel.base_url
     )
     assert len(solved_data) == 32

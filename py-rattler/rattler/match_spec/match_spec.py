@@ -207,7 +207,9 @@ class MatchSpec:
         >>>
         ```
         """
-        return cls._from_py_match_spec(PyMatchSpec.from_nameless(spec._nameless_match_spec, name))
+        return cls._from_py_match_spec(
+            PyMatchSpec.from_nameless(spec._nameless_match_spec, name)
+        )
 
     def __str__(self) -> str:
         """

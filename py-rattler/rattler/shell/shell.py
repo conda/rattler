@@ -61,7 +61,9 @@ class ActivationResult:
     _py_activation_result: PyActivationResult
 
     @classmethod
-    def _from_py_activation_result(cls, py_activation_result: PyActivationResult) -> ActivationResult:
+    def _from_py_activation_result(
+        cls, py_activation_result: PyActivationResult
+    ) -> ActivationResult:
         """Construct Rattler version from FFI PyActivationResult object."""
         activation_result = cls.__new__(cls)
         activation_result._py_activation_result = py_activation_result
@@ -125,8 +127,14 @@ def activate(
     >>>
     ```
     """
-    platform = Platform(platform) if isinstance(platform, str) else platform or Platform.current()
+    platform = (
+        Platform(platform)
+        if isinstance(platform, str)
+        else platform or Platform.current()
+    )
     shell = shell or Shell.bash
     return ActivationResult._from_py_activation_result(
-        PyActivator.activate(prefix, activation_variables._activation_variables, platform._inner, shell)
+        PyActivator.activate(
+            prefix, activation_variables._activation_variables, platform._inner, shell
+        )
     )

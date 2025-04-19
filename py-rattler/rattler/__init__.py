@@ -11,7 +11,12 @@ from rattler.repo_data import (
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.networking import Client, fetch_repo_data
-from rattler.virtual_package import GenericVirtualPackage, VirtualPackage, VirtualPackageOverrides, Override
+from rattler.virtual_package import (
+    GenericVirtualPackage,
+    VirtualPackage,
+    VirtualPackageOverrides,
+    Override,
+)
 from rattler.package import (
     PackageName,
     AboutJson,

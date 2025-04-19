@@ -7,7 +7,9 @@ class PatchInstructions:
     _patch_instructions: PyPatchInstructions
 
     @classmethod
-    def _from_py_patch_instructions(cls, py_patch_instructions: PyPatchInstructions) -> PatchInstructions:
+    def _from_py_patch_instructions(
+        cls, py_patch_instructions: PyPatchInstructions
+    ) -> PatchInstructions:
         """
         Construct Rattler PatchInstructions from FFI PyPatchInstructions object.
         """

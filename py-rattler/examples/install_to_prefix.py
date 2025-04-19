@@ -23,16 +23,26 @@ async def _install(
     lock_file = LockFile.from_path(lock_file_path)
     environment = lock_file.environment(environment_name)
     if environment is None:
-        raise ValueError(f"Environment {environment_name} not found in lock file {lock_file_path}")
+        raise ValueError(
+            f"Environment {environment_name} not found in lock file {lock_file_path}"
+        )
     records = environment.conda_repodata_records_for_platform(platform)
     if not records:
-        raise ValueError(f"No records found for platform {platform} in lock file {lock_file_path}")
+        raise ValueError(
+            f"No records found for platform {platform} in lock file {lock_file_path}"
+        )
     await rattler_install(
         records=records,
         target_prefix=target_prefix,
         client=Client(
             middlewares=[
-                MirrorMiddleware({"https://conda.anaconda.org/conda-forge": ["https://repo.prefix.dev/conda-forge"]}),
+                MirrorMiddleware(
+                    {
+                        "https://conda.anaconda.org/conda-forge": [
+                            "https://repo.prefix.dev/conda-forge"
+                        ]
+                    }
+                ),
                 AuthenticationMiddleware(),
             ]
         ),
@@ -50,7 +60,9 @@ def install(
     Installs a pixi.lock file to a custom prefix.
     """
     if platform not in get_args(PlatformLiteral):
-        raise ValueError(f"Invalid platform {platform}. Must be one of {get_args(PlatformLiteral)}")
+        raise ValueError(
+            f"Invalid platform {platform}. Must be one of {get_args(PlatformLiteral)}"
+        )
     asyncio.run(
         _install(
             lock_file_path=lock_file_path,

@@ -15,7 +15,8 @@ class RepoData:
     def __init__(self, path: Union[str, PathLike[str]]) -> None:
         if not isinstance(path, (str, Path)):
             raise TypeError(
-                "RepoData constructor received unsupported type " f" {type(path).__name__!r} for the `path` parameter"
+                "RepoData constructor received unsupported type "
+                f" {type(path).__name__!r} for the `path` parameter"
             )
 
         self._repo_data = PyRepoData.from_path(path)
@@ -46,7 +47,9 @@ class RepoData:
 
         return [
             RepoDataRecord._from_py_record(record)
-            for record in PyRepoData.repo_data_to_records(self._repo_data, channel._channel)
+            for record in PyRepoData.repo_data_to_records(
+                self._repo_data, channel._channel
+            )
         ]
 
     @classmethod

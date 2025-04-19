@@ -53,7 +53,9 @@ class IndexJson:
         resulting object. If the file is not in a parsable format or if the file
         could not be read, this function returns an error.
         """
-        return IndexJson._from_py_index_json(PyIndexJson.from_package_directory(Path(path)))
+        return IndexJson._from_py_index_json(
+            PyIndexJson.from_package_directory(Path(path))
+        )
 
     @staticmethod
     def from_str(string: str) -> IndexJson:
@@ -387,7 +389,9 @@ class IndexJson:
         ```
         """
         if timestamp := self._inner.timestamp:
-            return datetime.datetime.fromtimestamp(timestamp / 1000.0, tz=datetime.timezone.utc)
+            return datetime.datetime.fromtimestamp(
+                timestamp / 1000.0, tz=datetime.timezone.utc
+            )
 
         return None
 

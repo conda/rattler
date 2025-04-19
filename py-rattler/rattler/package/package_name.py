@@ -26,7 +26,9 @@ class PackageName:
         >>>
         ```
         """
-        return PackageName._from_py_package_name(PyPackageName.new_unchecked(normalized))
+        return PackageName._from_py_package_name(
+            PyPackageName.new_unchecked(normalized)
+        )
 
     @classmethod
     def _from_py_package_name(cls, py_package_name: PyPackageName) -> PackageName:

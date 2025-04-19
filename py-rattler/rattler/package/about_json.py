@@ -48,7 +48,9 @@ class AboutJson:
         resulting object. If the file is not in a parsable format or if the file
         could not be read, this function returns an error.
         """
-        return AboutJson._from_py_about_json(PyAboutJson.from_package_directory(Path(path)))
+        return AboutJson._from_py_about_json(
+            PyAboutJson.from_package_directory(Path(path))
+        )
 
     @staticmethod
     def from_str(string: str) -> AboutJson:

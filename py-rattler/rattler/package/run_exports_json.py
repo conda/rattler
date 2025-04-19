@@ -54,7 +54,11 @@ class RunExportsJson:
         ```
         """
         self._inner = PyRunExportsJson(
-            weak or [], strong or [], noarch or [], weak_constrains or [], strong_constrains or []
+            weak or [],
+            strong or [],
+            noarch or [],
+            weak_constrains or [],
+            strong_constrains or [],
         )
 
     @staticmethod
@@ -65,7 +69,9 @@ class RunExportsJson:
               slower than manually iterating over the archive entries with
               custom logic as this skips over the rest of the archive
         """
-        return RunExportsJson._from_py_run_exports_json(PyRunExportsJson.from_package_archive(path))
+        return RunExportsJson._from_py_run_exports_json(
+            PyRunExportsJson.from_package_archive(path)
+        )
 
     @staticmethod
     def from_path(path: os.PathLike[str]) -> RunExportsJson:
@@ -89,7 +95,9 @@ class RunExportsJson:
         >>>
         ```
         """
-        return RunExportsJson._from_py_run_exports_json(PyRunExportsJson.from_path(Path(path)))
+        return RunExportsJson._from_py_run_exports_json(
+            PyRunExportsJson.from_path(Path(path))
+        )
 
     @staticmethod
     def from_package_directory(path: os.PathLike[str]) -> RunExportsJson:
@@ -103,7 +111,9 @@ class RunExportsJson:
         resulting object. If the file is not in a parsable format or if the file
         could not be read, this function returns an error.
         """
-        return RunExportsJson._from_py_run_exports_json(PyRunExportsJson.from_package_directory(Path(path)))
+        return RunExportsJson._from_py_run_exports_json(
+            PyRunExportsJson.from_package_directory(Path(path))
+        )
 
     @staticmethod
     def from_str(string: str) -> RunExportsJson:
@@ -115,7 +125,9 @@ class RunExportsJson:
         string and returns the resulting object. If the file is not in a parsable
         format, this function returns an error.
         """
-        return RunExportsJson._from_py_run_exports_json(PyRunExportsJson.from_str(string))
+        return RunExportsJson._from_py_run_exports_json(
+            PyRunExportsJson.from_str(string)
+        )
 
     @staticmethod
     def package_path() -> str:
@@ -255,7 +267,9 @@ class RunExportsJson:
         self._inner.strong_constrains = value
 
     @classmethod
-    def _from_py_run_exports_json(cls, py_run_exports_json: PyRunExportsJson) -> RunExportsJson:
+    def _from_py_run_exports_json(
+        cls, py_run_exports_json: PyRunExportsJson
+    ) -> RunExportsJson:
         run_exports_json = cls.__new__(cls)
         run_exports_json._inner = py_run_exports_json
 

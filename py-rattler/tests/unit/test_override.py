@@ -1,4 +1,10 @@
-from rattler import VirtualPackage, VirtualPackageOverrides, Override, Version, PackageName
+from rattler import (
+    VirtualPackage,
+    VirtualPackageOverrides,
+    Override,
+    Version,
+    PackageName,
+)
 
 
 def test_overrides() -> None:

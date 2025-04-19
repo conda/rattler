@@ -31,7 +31,9 @@ class PlatformSingleton(type):
     def __init__(cls, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> None:
         cls._instances = {}
 
-    def __call__(cls, platform: str, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> Platform:
+    def __call__(
+        cls, platform: str, *args: Tuple[Any], **kwargs: Dict[Any, Any]
+    ) -> Platform:
         try:
             return cls._instances[platform]
         except KeyError:

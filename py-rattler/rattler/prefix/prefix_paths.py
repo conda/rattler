@@ -154,7 +154,9 @@ class PrefixPathsEntry(BasePathLike):
         return str(self._inner.path)
 
     @classmethod
-    def _from_py_paths_entry(cls, py_paths_entry: PyPrefixPathsEntry) -> PrefixPathsEntry:
+    def _from_py_paths_entry(
+        cls, py_paths_entry: PyPrefixPathsEntry
+    ) -> PrefixPathsEntry:
         """Construct Rattler PathsEntry from FFI PyPathsEntry object."""
         entry = cls.__new__(cls)
         entry._inner = py_paths_entry
@@ -417,7 +419,9 @@ class PrefixPaths:
         >>>
         ```
         """
-        return [PrefixPathsEntry._from_py_paths_entry(path) for path in self._paths.paths]
+        return [
+            PrefixPathsEntry._from_py_paths_entry(path) for path in self._paths.paths
+        ]
 
     @paths.setter
     def paths(self, paths: List[PrefixPathsEntry]) -> None:

@@ -322,10 +322,16 @@ mod test {
         let url = Url::parse("http://example.com").unwrap();
         let body = "Not Found";
         let response = create_404_response(&url, body);
-        
+
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        assert_eq!(response.headers().get("Content-Type").unwrap(), "text/plain");
-        assert_eq!(response.headers().get("Content-Length").unwrap(), body.len().to_string());
+        assert_eq!(
+            response.headers().get("Content-Type").unwrap(),
+            "text/plain"
+        );
+        assert_eq!(
+            response.headers().get("Content-Length").unwrap(),
+            body.len().to_string()
+        );
         assert_eq!(response.body().to_string(), body);
     }
 }

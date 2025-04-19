@@ -4,7 +4,11 @@ from rattler.rattler import PyChannelConfig
 
 
 class ChannelConfig:
-    def __init__(self, channel_alias: str = "https://conda.anaconda.org/", root_dir: str = os.getcwd()) -> None:
+    def __init__(
+        self,
+        channel_alias: str = "https://conda.anaconda.org/",
+        root_dir: str = os.getcwd(),
+    ) -> None:
         """
         Create a new channel configuration.
 
