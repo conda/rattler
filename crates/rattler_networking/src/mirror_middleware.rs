@@ -174,8 +174,13 @@ pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) fn create_404_response(_url: &Url, _body: &str) -> Response {
-    todo!("This is not implemented in reqwest, we need to contribute that.")
+pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
+    Response::builder()
+        .status(StatusCode::NOT_FOUND)
+        .header("Content-Type", "text/plain")
+        .header("Content-Length", body.len().to_string())
+        .body(body.to_string())
+        .unwrap()
 }
 
 #[cfg(test)]
@@ -309,5 +314,18 @@ mod test {
             assert!(path.0.len() <= len);
             len = path.0.len();
         }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[test]
+    fn test_wasm_404_response() {
+        let url = Url::parse("http://example.com").unwrap();
+        let body = "Not Found";
+        let response = create_404_response(&url, body);
+        
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.headers().get("Content-Type").unwrap(), "text/plain");
+        assert_eq!(response.headers().get("Content-Length").unwrap(), body.len().to_string());
+        assert_eq!(response.body().to_string(), body);
     }
 }
