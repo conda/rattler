@@ -9,6 +9,7 @@ use itertools::Itertools;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result};
 use url::Url;
+use http::StatusCode;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Settings for the specific mirror (e.g. no zstd or bz2 support)
@@ -174,22 +175,18 @@ pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
 }
 
 #[cfg(target_arch = "wasm32")]
-use reqwest::Response;
-use http::StatusCode;
+use reqwest::{Response, ResponseBuilderExt};
+use http::response::Builder;
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) fn create_404_response(_url: &Url, body: &str) -> Response {
-    let mut response = Response::new(body.to_string().into());
-    *response.status_mut() = StatusCode::NOT_FOUND;
-    response.headers_mut().insert(
-        "Content-Type",
-        "text/plain".parse().unwrap()
-    );
-    response.headers_mut().insert(
-        "Content-Length",
-        body.len().to_string().parse().unwrap()
-    );
-    response
+pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
+    Response::from(
+        Builder::new()
+            .status(StatusCode::NOT_FOUND)
+            .url(url.clone())
+            .body(body.to_string())
+            .unwrap(),
+    )
 }
 
 #[cfg(test)]
