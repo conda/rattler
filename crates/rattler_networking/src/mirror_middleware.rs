@@ -175,12 +175,14 @@ pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
-    Response::builder()
-        .status(StatusCode::NOT_FOUND)
+    use http::Response as HttpResponse;
+    HttpResponse::builder()
+        .status(http::StatusCode::NOT_FOUND)
         .header("Content-Type", "text/plain")
         .header("Content-Length", body.len().to_string())
         .body(body.to_string())
         .unwrap()
+        .into()
 }
 
 #[cfg(test)]
