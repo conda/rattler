@@ -16,7 +16,8 @@ class NoArchType:
             self._noarch = PyNoArchType.generic()
         else:
             raise ValueError(
-                "NoArchType constructor received unsupported value " f"{noarch} for the `noarch` parameter"
+                "NoArchType constructor received unsupported value "
+                f"{noarch} for the `noarch` parameter"
             )
 
     @classmethod

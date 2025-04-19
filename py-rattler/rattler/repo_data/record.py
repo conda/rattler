@@ -5,7 +5,9 @@ from rattler.repo_data import PackageRecord
 
 
 class RepoDataRecord(PackageRecord):
-    def __init__(self, package_record: PackageRecord, file_name: str, url: str, channel: str) -> None:
+    def __init__(
+        self, package_record: PackageRecord, file_name: str, url: str, channel: str
+    ) -> None:
         record = PyRecord.create_repodata_record(
             package_record._record,
             file_name,

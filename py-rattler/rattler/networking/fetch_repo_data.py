@@ -12,7 +12,9 @@ if TYPE_CHECKING:
     from rattler.platform import Platform
 
 
-CacheAction = Literal["cache-or-fetch", "use-cache-only", "force-cache-only", "no-cache"]
+CacheAction = Literal[
+    "cache-or-fetch", "use-cache-only", "force-cache-only", "no-cache"
+]
 Variant = Literal["after-patches", "from-packages", "current"]
 
 
@@ -100,4 +102,7 @@ async def fetch_repo_data(
         fetch_options._into_py(),
     )
 
-    return [SparseRepoData._from_py_sparse_repo_data(repo_data) for repo_data in repo_data_list]
+    return [
+        SparseRepoData._from_py_sparse_repo_data(repo_data)
+        for repo_data in repo_data_list
+    ]

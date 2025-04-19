@@ -79,7 +79,12 @@ class VirtualPackageOverrides:
         virtual_package_overrides._overrides = py_virtual_package_overrides
         return virtual_package_overrides
 
-    def __init__(self, osx: Override | None = None, libc: Override | None = None, cuda: Override | None = None) -> None:
+    def __init__(
+        self,
+        osx: Override | None = None,
+        libc: Override | None = None,
+        cuda: Override | None = None,
+    ) -> None:
         """
         Returns the default virtual package overrides. By default, none of the overrides are set.
         """
@@ -93,7 +98,9 @@ class VirtualPackageOverrides:
         """
         Returns the virtual package overrides for None.
         """
-        return cls._from_py_virtual_package_overrides(PyVirtualPackageOverrides.from_env())
+        return cls._from_py_virtual_package_overrides(
+            PyVirtualPackageOverrides.from_env()
+        )
 
     @property
     def osx(self) -> Override | None:
@@ -157,7 +164,9 @@ class VirtualPackage:
     _virtual_package: PyVirtualPackage
 
     @classmethod
-    def _from_py_virtual_package(cls, py_virtual_package: PyVirtualPackage) -> VirtualPackage:
+    def _from_py_virtual_package(
+        cls, py_virtual_package: PyVirtualPackage
+    ) -> VirtualPackage:
         """Construct Rattler VirtualPackage from FFI PyVirtualPackage object."""
         virtual_package = cls.__new__(cls)
         virtual_package._virtual_package = py_virtual_package
@@ -175,18 +184,25 @@ class VirtualPackage:
         return VirtualPackage.detect()
 
     @staticmethod
-    def detect(overrides: VirtualPackageOverrides = VirtualPackageOverrides()) -> List[VirtualPackage]:
+    def detect(
+        overrides: VirtualPackageOverrides = VirtualPackageOverrides(),
+    ) -> List[VirtualPackage]:
         """
         Returns virtual packages detected for the current system with the given overrides.
         """
-        return [VirtualPackage._from_py_virtual_package(vp) for vp in PyVirtualPackage.detect(overrides._overrides)]
+        return [
+            VirtualPackage._from_py_virtual_package(vp)
+            for vp in PyVirtualPackage.detect(overrides._overrides)
+        ]
 
     def into_generic(self) -> GenericVirtualPackage:
         """
         Returns a GenericVirtualPackage from VirtualPackage.
         """
         # subclass from Generic instead.
-        return GenericVirtualPackage._from_py_generic_virtual_package(self._virtual_package.as_generic())
+        return GenericVirtualPackage._from_py_generic_virtual_package(
+            self._virtual_package.as_generic()
+        )
 
     def __str__(self) -> str:
         """

@@ -44,7 +44,9 @@ class VersionWithSource(Version):
             self._version = version._version
 
     @classmethod
-    def _from_py_version(cls, py_version: PyVersion, source: Optional[str] = None) -> VersionWithSource:
+    def _from_py_version(
+        cls, py_version: PyVersion, source: Optional[str] = None
+    ) -> VersionWithSource:
         """Construct Rattler version from FFI PyVersion object."""
         version = cls.__new__(cls)
         version._version = py_version

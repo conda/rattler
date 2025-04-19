@@ -18,11 +18,20 @@ class Client:
     def __init__(
         self,
         middlewares: (
-            list[AuthenticationMiddleware | MirrorMiddleware | OciMiddleware | GCSMiddleware | S3Middleware] | None
+            list[
+                AuthenticationMiddleware
+                | MirrorMiddleware
+                | OciMiddleware
+                | GCSMiddleware
+                | S3Middleware
+            ]
+            | None
         ) = None,
     ) -> None:
         self._client = PyClientWithMiddleware(
-            [middleware._middleware for middleware in middlewares] if middlewares else None
+            [middleware._middleware for middleware in middlewares]
+            if middlewares
+            else None
         )
 
     @classmethod

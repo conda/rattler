@@ -40,7 +40,10 @@ def test_parse_explicit_environment_no_platform() -> None:
 
     assert spec.platform is None
     assert len(spec.packages) == 1
-    assert spec.packages[0].url == "http://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h1234.tar.bz2"
+    assert (
+        spec.packages[0].url
+        == "http://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h1234.tar.bz2"
+    )
 
 
 def test_parse_explicit_environment_from_file(tmp_path: Path) -> None:

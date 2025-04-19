@@ -81,7 +81,9 @@ class PackageRecord:
         >>>
         ```
         """
-        return PackageRecord._from_py_record(PyRecord.from_index_json(path, size, sha256, md5))
+        return PackageRecord._from_py_record(
+            PyRecord.from_index_json(path, size, sha256, md5)
+        )
 
     @staticmethod
     def sort_topologically(records: List[PackageRecord]) -> List[PackageRecord]:
@@ -112,7 +114,10 @@ class PackageRecord:
         >>>
         ```
         """
-        return [PackageRecord._from_py_record(p) for p in PyRecord.sort_topologically(records)]
+        return [
+            PackageRecord._from_py_record(p)
+            for p in PyRecord.sort_topologically(records)
+        ]
 
     @staticmethod
     def to_graph(records: List[PackageRecord]) -> nx.DiGraph:  # type: ignore[type-arg]
@@ -763,7 +768,9 @@ class PackageRecord:
         ```
         """
         if self._record.timestamp:
-            return datetime.datetime.fromtimestamp(self._record.timestamp / 1000.0, tz=datetime.timezone.utc)
+            return datetime.datetime.fromtimestamp(
+                self._record.timestamp / 1000.0, tz=datetime.timezone.utc
+            )
 
         return self._record.timestamp
 

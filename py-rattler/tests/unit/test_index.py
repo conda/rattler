@@ -16,7 +16,9 @@ from rattler.index import index_fs, index_s3
 
 
 @pytest.fixture
-def package_directory(tmp_path, package_file_ruff: Path, package_file_pytweening: Path) -> Path:
+def package_directory(
+    tmp_path, package_file_ruff: Path, package_file_pytweening: Path
+) -> Path:
     win_subdir = tmp_path / "win-64"
     noarch_subdir = tmp_path / "noarch"
     win_subdir.mkdir()
@@ -68,7 +70,9 @@ class S3Config:
     access_key_id: str
     secret_access_key: str
     region: str = "auto"
-    endpoint_url: str = "https://e1a7cde76f1780ec06bac859036dbaf7.r2.cloudflarestorage.com"
+    endpoint_url: str = (
+        "https://e1a7cde76f1780ec06bac859036dbaf7.r2.cloudflarestorage.com"
+    )
     bucket_name: str = "rattler-build-upload-test"
     channel_name: str = field(default_factory=lambda: f"channel{uuid.uuid4()}")
 
@@ -77,10 +81,14 @@ class S3Config:
 def s3_config() -> S3Config:
     access_key_id = os.environ.get("RATTLER_TEST_R2_READWRITE_ACCESS_KEY_ID")
     if not access_key_id:
-        pytest.skip("RATTLER_TEST_R2_READWRITE_ACCESS_KEY_ID environment variable is not set")
+        pytest.skip(
+            "RATTLER_TEST_R2_READWRITE_ACCESS_KEY_ID environment variable is not set"
+        )
     secret_access_key = os.environ.get("RATTLER_TEST_R2_READWRITE_SECRET_ACCESS_KEY")
     if not secret_access_key:
-        pytest.skip("RATTLER_TEST_R2_READWRITE_SECRET_ACCESS_KEY environment variable is not set")
+        pytest.skip(
+            "RATTLER_TEST_R2_READWRITE_SECRET_ACCESS_KEY environment variable is not set"
+        )
     return S3Config(
         access_key_id=access_key_id,
         secret_access_key=secret_access_key,
@@ -105,10 +113,14 @@ def s3_channel(s3_config: S3Config, s3_client) -> Iterator[str]:
     yield channel_url
 
     # Clean up the channel after the test
-    objects_to_delete = s3_client.list_objects_v2(Bucket=s3_config.bucket_name, Prefix=f"{s3_config.channel_name}/")
+    objects_to_delete = s3_client.list_objects_v2(
+        Bucket=s3_config.bucket_name, Prefix=f"{s3_config.channel_name}/"
+    )
     delete_keys = [{"Key": obj["Key"]} for obj in objects_to_delete.get("Contents", [])]
     if delete_keys:
-        result = s3_client.delete_objects(Bucket=s3_config.bucket_name, Delete={"Objects": delete_keys})
+        result = s3_client.delete_objects(
+            Bucket=s3_config.bucket_name, Delete={"Objects": delete_keys}
+        )
         assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
 
 

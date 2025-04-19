@@ -12,7 +12,9 @@ from rattler.repo_data.record import RepoDataRecord
 def serve_repo_data(xprocess) -> None:
     port, repo_name = 8912, "test-repo"
 
-    test_data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/test-server")
+    test_data_dir = os.path.join(
+        os.path.dirname(__file__), "../../../test-data/test-server"
+    )
 
     class Starter(ProcessStarter):
         # startup pattern
@@ -70,4 +72,7 @@ async def test_fetch_repo_data(
     assert repodata_record.channel == f"http://localhost:{port}/{repo}/"
     assert repodata_record.file_name == "test-package-0.1-0.tar.bz2"
     assert repodata_record.name == PackageName("test-package")
-    assert repodata_record.url == f"http://localhost:{port}/test-repo/noarch/test-package-0.1-0.tar.bz2"
+    assert (
+        repodata_record.url
+        == f"http://localhost:{port}/test-repo/noarch/test-package-0.1-0.tar.bz2"
+    )

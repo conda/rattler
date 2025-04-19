@@ -9,6 +9,7 @@ use itertools::Itertools;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result};
 use url::Url;
+use http::StatusCode;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Settings for the specific mirror (e.g. no zstd or bz2 support)
@@ -174,8 +175,28 @@ pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) fn create_404_response(_url: &Url, _body: &str) -> Response {
-    todo!("This is not implemented in reqwest, we need to contribute that.")
+use {
+    http::response::Builder,
+    reqwest::ResponseBuilderExt,
+};
+
+/// Creates a 404 Not Found response for WASM targets.
+/// 
+/// # Arguments
+/// * `url` - The URL that was not found
+/// * `body` - The error message to include in the response
+/// 
+/// # Returns
+/// A [`reqwest::Response`] with a 404 status code and the given body
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
+    Response::from(
+        Builder::new()
+            .status(StatusCode::NOT_FOUND)
+            .url(url.clone())
+            .body(body.to_string())
+            .unwrap(),
+    )
 }
 
 #[cfg(test)]
@@ -309,5 +330,24 @@ mod test {
             assert!(path.0.len() <= len);
             len = path.0.len();
         }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[test]
+    fn test_wasm_404_response() {
+        let url = Url::parse("http://example.com").unwrap();
+        let body = "Not Found";
+        let response = create_404_response(&url, body);
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            response.headers().get("Content-Type").unwrap(),
+            "text/plain"
+        );
+        assert_eq!(
+            response.headers().get("Content-Length").unwrap(),
+            body.len().to_string()
+        );
+        assert_eq!(response.body().to_string(), body);
     }
 }

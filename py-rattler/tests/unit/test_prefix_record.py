@@ -14,7 +14,13 @@ from rattler import (
 
 def test_load_prefix_record() -> None:
     r = PrefixRecord.from_path(
-        Path(__file__).parent / ".." / ".." / ".." / "test-data" / "conda-meta" / "tk-8.6.12-h8ffe710_0.json"
+        Path(__file__).parent
+        / ".."
+        / ".."
+        / ".."
+        / "test-data"
+        / "conda-meta"
+        / "tk-8.6.12-h8ffe710_0.json"
     )
     assert r.arch == "x86_64"
     assert r.build == "h8ffe710_0"
@@ -22,7 +28,10 @@ def test_load_prefix_record() -> None:
     assert r.channel == "https://conda.anaconda.org/conda-forge/win-64"
     assert len(r.constrains) == 0
     assert len(r.depends) == 2
-    assert str(r.extracted_package_dir) == "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\tk-8.6.12-h8ffe710_0"
+    assert (
+        str(r.extracted_package_dir)
+        == "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\tk-8.6.12-h8ffe710_0"
+    )
     assert r.features is None
     assert r.file_name == "tk-8.6.12-h8ffe710_0.tar.bz2"
     assert len(r.files) == len(r.paths_data.paths) == 1099
@@ -54,7 +63,13 @@ def test_load_prefix_record() -> None:
 
 def test_create_prefix_record() -> None:
     r = PrefixRecord.from_path(
-        Path(__file__).parent / ".." / ".." / ".." / "test-data" / "conda-meta" / "tk-8.6.12-h8ffe710_0.json"
+        Path(__file__).parent
+        / ".."
+        / ".."
+        / ".."
+        / "test-data"
+        / "conda-meta"
+        / "tk-8.6.12-h8ffe710_0.json"
     )
 
     r.arch = "foobar"
@@ -112,8 +127,12 @@ def test_prefix_paths() -> None:
         prefix_path_type,
         prefix_placeholder="placeholder_foo_bar",
         file_mode=FileMode("binary"),
-        sha256=bytes.fromhex("c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"),
-        sha256_in_prefix=bytes.fromhex("c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"),
+        sha256=bytes.fromhex(
+            "c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"
+        ),
+        sha256_in_prefix=bytes.fromhex(
+            "c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"
+        ),
         size_in_bytes=1024,
     )
 
@@ -121,8 +140,12 @@ def test_prefix_paths() -> None:
     assert prefix_paths_entry.path_type.hardlink
     assert prefix_paths_entry.prefix_placeholder == "placeholder_foo_bar"
     assert prefix_paths_entry.file_mode.binary
-    assert prefix_paths_entry.sha256.hex() == "c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"
     assert (
-        prefix_paths_entry.sha256_in_prefix.hex() == "c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"
+        prefix_paths_entry.sha256.hex()
+        == "c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"
+    )
+    assert (
+        prefix_paths_entry.sha256_in_prefix.hex()
+        == "c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"
     )
     assert prefix_paths_entry.size_in_bytes == 1024

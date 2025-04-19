@@ -28,7 +28,9 @@ class GenericVirtualPackage:
                 f" {type(build_string).__name__!r} for the `build_string` parameter"
             )
 
-        self._generic_virtual_package = PyGenericVirtualPackage(name._name, version._version, build_string)
+        self._generic_virtual_package = PyGenericVirtualPackage(
+            name._name, version._version, build_string
+        )
 
     @property
     def name(self) -> PackageName:

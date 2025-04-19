@@ -78,40 +78,73 @@ async def solve(
         Resolved list of `RepoDataRecord`s.
     """
 
-    platforms = platforms if platforms is not None else [Platform.current(), Platform("noarch")]
+    platforms = (
+        platforms if platforms is not None else [Platform.current(), Platform("noarch")]
+    )
 
     return [
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in await py_solve(
             channels=[
-                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
+                (
+                    channel._channel
+                    if isinstance(channel, Channel)
+                    else Channel(channel)._channel
+                )
+                for channel in channels
             ],
             platforms=[
-                platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
+                (
+                    platform._inner
+                    if isinstance(platform, Platform)
+                    else Platform(platform)._inner
+                )
                 for platform in platforms
             ],
-            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True) for spec in specs],
+            specs=[
+                (
+                    spec._match_spec
+                    if isinstance(spec, MatchSpec)
+                    else PyMatchSpec(str(spec), True)
+                )
+                for spec in specs
+            ],
             gateway=gateway._gateway,
             locked_packages=[package._record for package in locked_packages or []],
             pinned_packages=[package._record for package in pinned_packages or []],
             virtual_packages=[
-                v_package.into_generic()._generic_virtual_package
-                if isinstance(v_package, VirtualPackage)
-                else v_package._generic_virtual_package
+                (
+                    v_package.into_generic()._generic_virtual_package
+                    if isinstance(v_package, VirtualPackage)
+                    else v_package._generic_virtual_package
+                )
                 for v_package in virtual_packages or []
             ],
             channel_priority=channel_priority.value,
-            timeout=int(timeout / datetime.timedelta(microseconds=1)) if timeout else None,
-            exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
-            if exclude_newer
-            else None,
+            timeout=(
+                int(timeout / datetime.timedelta(microseconds=1)) if timeout else None
+            ),
+            exclude_newer_timestamp_ms=(
+                int(
+                    exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp()
+                    * 1000
+                )
+                if exclude_newer
+                else None
+            ),
             strategy=strategy,
-            constraints=[
-                constraint._match_spec if isinstance(constraint, MatchSpec) else PyMatchSpec(str(constraint), True)
-                for constraint in constraints
-            ]
-            if constraints is not None
-            else [],
+            constraints=(
+                [
+                    (
+                        constraint._match_spec
+                        if isinstance(constraint, MatchSpec)
+                        else PyMatchSpec(str(constraint), True)
+                    )
+                    for constraint in constraints
+                ]
+                if constraints is not None
+                else []
+            ),
         )
     ]
 
@@ -179,27 +212,49 @@ async def solve_with_sparse_repodata(
     return [
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in await py_solve_with_sparse_repodata(
-            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True) for spec in specs],
+            specs=[
+                (
+                    spec._match_spec
+                    if isinstance(spec, MatchSpec)
+                    else PyMatchSpec(str(spec), True)
+                )
+                for spec in specs
+            ],
             sparse_repodata=[package._sparse for package in sparse_repodata],
             locked_packages=[package._record for package in locked_packages or []],
             pinned_packages=[package._record for package in pinned_packages or []],
             virtual_packages=[
-                v_package.into_generic()._generic_virtual_package
-                if isinstance(v_package, VirtualPackage)
-                else v_package._generic_virtual_package
+                (
+                    v_package.into_generic()._generic_virtual_package
+                    if isinstance(v_package, VirtualPackage)
+                    else v_package._generic_virtual_package
+                )
                 for v_package in virtual_packages or []
             ],
             channel_priority=channel_priority.value,
-            timeout=int(timeout / datetime.timedelta(microseconds=1)) if timeout else None,
-            exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
-            if exclude_newer
-            else None,
+            timeout=(
+                int(timeout / datetime.timedelta(microseconds=1)) if timeout else None
+            ),
+            exclude_newer_timestamp_ms=(
+                int(
+                    exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp()
+                    * 1000
+                )
+                if exclude_newer
+                else None
+            ),
             strategy=strategy,
-            constraints=[
-                constraint._match_spec if isinstance(constraint, MatchSpec) else PyMatchSpec(str(constraint), True)
-                for constraint in constraints
-            ]
-            if constraints is not None
-            else [],
+            constraints=(
+                [
+                    (
+                        constraint._match_spec
+                        if isinstance(constraint, MatchSpec)
+                        else PyMatchSpec(str(constraint), True)
+                    )
+                    for constraint in constraints
+                ]
+                if constraints is not None
+                else []
+            ),
         )
     ]

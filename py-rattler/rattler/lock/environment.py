@@ -17,7 +17,10 @@ class Environment:
     _env: PyEnvironment
 
     def __init__(
-        self, name: str, requirements: Dict[Platform, List[RepoDataRecord]], channels: List[LockChannel]
+        self,
+        name: str,
+        requirements: Dict[Platform, List[RepoDataRecord]],
+        channels: List[LockChannel],
     ) -> None:
         """
         Create a new environment.
@@ -26,7 +29,8 @@ class Environment:
             name=name,
             # TODO: move this logic to rust
             records={
-                platform._inner: [record._record for record in records] for (platform, records) in requirements.items()
+                platform._inner: [record._record for record in records]
+                for (platform, records) in requirements.items()
             },
             channels=[channel._channel for channel in channels],
         )
@@ -103,7 +107,9 @@ class Environment:
         ```
         """
         return {
-            Platform._from_py_platform(platform): [LockedPackage._from_py_locked_package(p) for p in packages]
+            Platform._from_py_platform(platform): [
+                LockedPackage._from_py_locked_package(p) for p in packages
+            ]
             for (platform, packages) in self._env.packages_by_platform()
         }
 
@@ -126,7 +132,9 @@ class Environment:
         ```
         """
         return {
-            Platform._from_py_platform(platform): [PypiLockedPackage._from_py_locked_package(pypi) for pypi in pypi_tup]
+            Platform._from_py_platform(platform): [
+                PypiLockedPackage._from_py_locked_package(pypi) for pypi in pypi_tup
+            ]
             for (platform, pypi_tup) in self._env.pypi_packages().items()
         }
 
@@ -150,7 +158,9 @@ class Environment:
             for (platform, records) in self._env.conda_repodata_records().items()
         }
 
-    def conda_repodata_records_for_platform(self, platform: Platform) -> Optional[List[RepoDataRecord]]:
+    def conda_repodata_records_for_platform(
+        self, platform: Platform
+    ) -> Optional[List[RepoDataRecord]]:
         """
         Takes all the conda packages, converts them to [`RepoDataRecord`] and returns them or
         returns an error if the conversion failed. Returns `None` if the specified platform is not
@@ -174,7 +184,9 @@ class Environment:
             return [RepoDataRecord._from_py_record(r) for r in records]
         return None
 
-    def pypi_packages_for_platform(self, platform: Platform) -> Optional[List[PypiLockedPackage]]:
+    def pypi_packages_for_platform(
+        self, platform: Platform
+    ) -> Optional[List[PypiLockedPackage]]:
         """
         Returns all the pypi packages and their associated environment data for the specified
         platform. Returns `None` if the platform is not defined for this environment.

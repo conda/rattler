@@ -67,7 +67,10 @@ class LockFile:
         >>>
         ```
         """
-        return [(name, Environment._from_py_environment(e)) for (name, e) in self._lock_file.environments()]
+        return [
+            (name, Environment._from_py_environment(e))
+            for (name, e) in self._lock_file.environments()
+        ]
 
     def environment(self, name: str) -> Optional[Environment]:
         """
