@@ -47,6 +47,7 @@ url = "2.5.4"
 bzip2 = { version = "0.5.1", features = ["libbz2-rs-sys"] }
 
 chrono = { version = "0.4.40", features = ["wasmbind"] }
+serde_json = "1.0.140"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.45"
