@@ -4,12 +4,16 @@ use std::{
     sync::atomic::{self, AtomicUsize},
 };
 
-use http::Extensions;
+use http::{Extensions, StatusCode};
 use itertools::Itertools;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result};
 use url::Url;
-use http::StatusCode;
+
+#[cfg(target_arch = "wasm32")]
+use http::response::Builder;
+#[cfg(target_arch = "wasm32")]
+use reqwest::ResponseBuilderExt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Settings for the specific mirror (e.g. no zstd or bz2 support)
@@ -167,18 +171,12 @@ pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
     use reqwest::ResponseBuilderExt;
     Response::from(
         http::response::Builder::new()
-            .status(http::StatusCode::NOT_FOUND)
+            .status(StatusCode::NOT_FOUND)
             .url(url.clone())
             .body(body.to_string())
             .unwrap(),
     )
 }
-
-#[cfg(target_arch = "wasm32")]
-use {
-    http::response::Builder,
-    reqwest::ResponseBuilderExt,
-};
 
 /// Creates a 404 Not Found response for WASM targets.
 /// 
