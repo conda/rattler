@@ -175,8 +175,10 @@ pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
 }
 
 #[cfg(target_arch = "wasm32")]
-use reqwest::{Response, ResponseBuilderExt};
-use http::response::Builder;
+use {
+    http::response::Builder,
+    reqwest::ResponseBuilderExt,
+};
 
 /// Creates a 404 Not Found response for WASM targets.
 /// 
