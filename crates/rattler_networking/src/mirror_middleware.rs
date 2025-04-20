@@ -204,8 +204,14 @@ mod tests {
     use super::*;
 
     #[cfg(target_arch = "wasm32")]
-    #[wasm_bindgen_test::wasm_bindgen_test]
-    fn test_wasm_404_response() {
+    use wasm_bindgen_test::*;
+
+    #[cfg(target_arch = "wasm32")]
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen_test]
+    async fn test_wasm_404_response() {
         let url = Url::parse("http://example.com").unwrap();
         let body = "Mirror does not support zstd";
         let response = create_404_response(&url, body);
@@ -216,6 +222,8 @@ mod tests {
             response.headers().get("Content-Length").unwrap(),
             body.len().to_string()
         );
-        assert_eq!(response.text().unwrap(), body);
+        
+        let text = response.text().await.unwrap();
+        assert_eq!(text, body);
     }
 }
