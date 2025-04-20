@@ -1,7 +1,7 @@
 import { create_wasm_404_response } from '../js';
 
 describe('create_wasm_404_response', () => {
-  it('should create a 404 response with proper headers', () => {
+  it('should create a 404 response with proper headers', async () => {
     const url = 'http://example.com';
     const body = 'Mirror does not support zstd';
     const response = create_wasm_404_response(url, body);
@@ -9,7 +9,9 @@ describe('create_wasm_404_response', () => {
     expect(response.status).toBe(404);
     expect(response.headers.get('Content-Type')).toBe('text/plain');
     expect(response.headers.get('Content-Length')).toBe(String(body.length));
-    expect(response.text()).resolves.toBe(body);
+    
+    const text = await response.text();
+    expect(text).toBe(body);
   });
 
   it('should throw error for invalid URL', () => {

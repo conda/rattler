@@ -217,15 +217,12 @@ mod tests {
         let response = create_404_response(&url, body);
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        assert_eq!(
-            response.headers().get("Content-Type").unwrap(),
-            "text/plain"
-        );
+        assert_eq!(response.headers().get("Content-Type").unwrap(), "text/plain");
         assert_eq!(
             response.headers().get("Content-Length").unwrap(),
             body.len().to_string()
         );
-
+        
         let text = response.text().await.unwrap();
         assert_eq!(text, body);
     }
