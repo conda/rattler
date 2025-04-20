@@ -179,11 +179,11 @@ pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
 }
 
 /// Creates a 404 Not Found response for WASM targets.
-/// 
+///
 /// # Arguments
 /// * `url` - The URL that was not found
 /// * `body` - The error message to include in the response
-/// 
+///
 /// # Returns
 /// A [`reqwest::Response`] with a 404 status code and the given body
 #[cfg(target_arch = "wasm32")]
@@ -217,12 +217,15 @@ mod tests {
         let response = create_404_response(&url, body);
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        assert_eq!(response.headers().get("Content-Type").unwrap(), "text/plain");
+        assert_eq!(
+            response.headers().get("Content-Type").unwrap(),
+            "text/plain"
+        );
         assert_eq!(
             response.headers().get("Content-Length").unwrap(),
             body.len().to_string()
         );
-        
+
         let text = response.text().await.unwrap();
         assert_eq!(text, body);
     }

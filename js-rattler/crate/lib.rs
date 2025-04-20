@@ -13,8 +13,8 @@ mod version_with_source;
 
 pub use error::{JsError, JsResult};
 
-use wasm_bindgen::prelude::*;
 use rattler_networking::mirror_middleware::create_404_response;
+use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
