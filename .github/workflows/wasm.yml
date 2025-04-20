@@ -1,0 +1,38 @@
+name: WASM
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'crates/**/wasm/**'
+      - '**/wasm32*'
+      - 'Cargo.*'
+      - '.github/workflows/wasm.yml'
+
+jobs:
+  wasm-check:
+    name: WASM Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: wasm32-unknown-unknown
+
+      - name: Build WASM
+        run: |
+          cd crates/rattler_networking
+          cargo build --target wasm32-unknown-unknown
+
+      - name: Test WASM
+        run: |
+          cd crates/rattler_networking
+          wasm-pack test --node 
