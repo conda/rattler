@@ -14,6 +14,7 @@ mod version_with_source;
 pub use error::{JsError, JsResult};
 
 use wasm_bindgen::prelude::*;
+use rattler_networking::mirror_middleware::create_404_response;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -25,4 +26,11 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 #[wasm_bindgen(start)]
 pub fn start() {
     utils::set_panic_hook();
+}
+
+#[wasm_bindgen]
+pub fn create_wasm_404_response(url: &str, body: &str) -> Result<JsValue, JsError> {
+    let url = url::Url::parse(url).map_err(|e| JsError::new(&e.to_string()))?;
+    let response = create_404_response(&url, body);
+    Ok(serde_wasm_bindgen::to_value(&response)?)
 }

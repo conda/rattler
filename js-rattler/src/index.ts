@@ -6,3 +6,6 @@ export * from "./solve";
 export * from "./PackageName";
 export * from "./typeUtils";
 export * from "./PackageRecord";
+export * from "./Gateway";
+
+export { create_wasm_404_response } from '../js';

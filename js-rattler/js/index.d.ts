@@ -1,0 +1,1 @@
+export function create_wasm_404_response(url: string, body: string): Response; 
