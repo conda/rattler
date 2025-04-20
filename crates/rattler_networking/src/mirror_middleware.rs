@@ -14,6 +14,8 @@ use url::Url;
 use http::response::Builder;
 #[cfg(target_arch = "wasm32")]
 use reqwest::ResponseBuilderExt;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_futures::JsFuture;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Settings for the specific mirror (e.g. no zstd or bz2 support)
@@ -188,7 +190,7 @@ pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
 /// A [`reqwest::Response`] with a 404 status code and the given body
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
-    Response::from(
+    let mut response = Response::from(
         Builder::new()
             .status(StatusCode::NOT_FOUND)
             .url(url.clone())
@@ -196,12 +198,22 @@ pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
             .header("Content-Length", body.len().to_string())
             .body(body.to_string())
             .unwrap(),
-    )
+    );
+    response.headers_mut().insert(
+        "Content-Type",
+        reqwest::header::HeaderValue::from_static("text/plain"),
+    );
+    response.headers_mut().insert(
+        "Content-Length",
+        reqwest::header::HeaderValue::from_str(&body.len().to_string()).unwrap(),
+    );
+    response
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE};
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::*;
@@ -218,11 +230,11 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         assert_eq!(
-            response.headers().get("Content-Type").unwrap(),
+            response.headers().get(CONTENT_TYPE).unwrap(),
             "text/plain"
         );
         assert_eq!(
-            response.headers().get("Content-Length").unwrap(),
+            response.headers().get(CONTENT_LENGTH).unwrap(),
             body.len().to_string()
         );
 
