@@ -192,6 +192,8 @@ pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
         Builder::new()
             .status(StatusCode::NOT_FOUND)
             .url(url.clone())
+            .header("Content-Type", "text/plain")
+            .header("Content-Length", body.len().to_string())
             .body(body.to_string())
             .unwrap(),
     )
@@ -202,21 +204,18 @@ mod tests {
     use super::*;
 
     #[cfg(target_arch = "wasm32")]
-    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn test_wasm_404_response() {
         let url = Url::parse("http://example.com").unwrap();
-        let body = "Not Found";
+        let body = "Mirror does not support zstd";
         let response = create_404_response(&url, body);
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        assert_eq!(
-            response.headers().get("Content-Type").unwrap(),
-            "text/plain"
-        );
+        assert_eq!(response.headers().get("Content-Type").unwrap(), "text/plain");
         assert_eq!(
             response.headers().get("Content-Length").unwrap(),
             body.len().to_string()
         );
-        assert_eq!(response.body().to_string(), body);
+        assert_eq!(response.text().unwrap(), body);
     }
 }

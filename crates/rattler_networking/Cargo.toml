@@ -25,6 +25,8 @@ url = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { workspace = true, features = ["js"] }
+wasm-bindgen = "0.2"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros"] }
+wasm-bindgen-test = "0.3"
