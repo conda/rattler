@@ -44,6 +44,69 @@ This is an example of installing an environment containing `cowpy` and all its d
 
 ![Installing an environment](https://github.com/conda/rattler/assets/4995967/c7946f6e-28a9-41ef-8836-ef4b4c94d273)
 
+## Examples
+
+Here are some common usage examples for different Rattler components:
+
+### Using rattler_conda_types
+
+```rust
+use rattler_conda_types::{PackageName, VersionSpec};
+
+// Create a package name
+let pkg_name = PackageName::new("numpy").unwrap();
+
+// Create a version specification
+let version_spec = VersionSpec::parse(">=1.20").unwrap();
+```
+
+### Using rattler_package_streaming
+
+```rust
+use rattler_package_streaming::read::PackageReader;
+use std::path::Path;
+
+async fn read_package() {
+    let package_path = Path::new("path/to/package.tar.bz2");
+    let reader = PackageReader::from_path(package_path).await.unwrap();
+    
+    // Access package metadata
+    println!("Package name: {}", reader.index().package_name());
+    println!("Version: {}", reader.index().version());
+}
+```
+
+### Using rattler_shell
+
+```rust
+use rattler_shell::shell::{Shell, ShellEnum};
+
+// Get the current shell
+let current_shell = Shell::from_env().unwrap();
+
+// Generate activation script
+let script = current_shell.generate_activate_script("/path/to/env");
+println!("Activation script: {}", script);
+```
+
+### Using Python Bindings (py-rattler)
+
+```python
+from rattler import Package, Channel
+
+# Create a new channel
+channel = Channel.from_url("https://conda.anaconda.org/conda-forge")
+
+# Get package information
+pkg = Package.from_url(channel, "numpy-1.20.0-py39h6944008_0.tar.bz2")
+print(f"Package name: {pkg.name}")
+print(f"Version: {pkg.version}")
+```
+
+For more detailed examples and API documentation:
+- [Rust API Documentation](https://conda.github.io/rattler)
+- [Python API Documentation](https://conda.github.io/rattler/py-rattler)
+
 ## Give it a try!
 
 Before you begin, make sure you have the following prerequisites:
