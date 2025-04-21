@@ -15,7 +15,7 @@ jobs:
     name: WASM Build & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
         with:
           submodules: recursive
 
@@ -23,7 +23,7 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Setup Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@7a55b15108f731f29c1153fa9d2bef75c6152b66
         with:
           target: wasm32-unknown-unknown
 
