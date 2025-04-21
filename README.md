@@ -184,3 +184,121 @@ For example, it powers the backend of https://prefix.dev.
 `conda-forge` is a community-driven effort to bring new and existing software into the conda ecosystem.
 It provides _tens-of-thousands of up-to-date_ packages that are maintained by a community of contributors.
 For an overview of available packages see https://prefix.dev.
+
+## Examples
+
+Here are some practical examples showing how to use different Rattler components. Each example demonstrates common use cases and best practices:
+
+### Using rattler_conda_types
+
+```rust
+use rattler_conda_types::{PackageName, VersionSpec, Platform};
+
+// Working with package names
+let pkg_name = PackageName::new("numpy").unwrap();
+let is_valid = pkg_name.is_valid(); // true
+
+// Version specifications
+let version_spec = VersionSpec::parse(">=1.20,<2.0").unwrap();
+let version_matches = version_spec.matches(&"1.21.0".parse().unwrap()); // true
+
+// Platform handling
+let platform = Platform::current(); // Gets current platform
+println!("Current platform: {}", platform);
+```
+
+### Using rattler_package_streaming
+
+```rust
+use rattler_package_streaming::read::PackageReader;
+use std::path::Path;
+
+async fn read_package() -> Result<(), Box<dyn std::error::Error>> {
+    let package_path = Path::new("path/to/package.tar.bz2");
+    let reader = PackageReader::from_path(package_path).await?;
+    
+    // Access package metadata
+    println!("Package name: {}", reader.index().package_name());
+    println!("Version: {}", reader.index().version());
+    println!("Build string: {}", reader.index().build_string());
+    
+    // List files in the package
+    for file in reader.index().files() {
+        println!("File: {}", file);
+    }
+    
+    Ok(())
+}
+```
+
+### Using rattler_shell
+
+```rust
+use rattler_shell::shell::{Shell, ShellEnum};
+use std::path::PathBuf;
+
+// Get the current shell
+let current_shell = Shell::from_env().unwrap();
+
+// Generate activation script
+let env_path = PathBuf::from("/path/to/env");
+let script = current_shell.generate_activate_script(&env_path);
+println!("Activation script: {}", script);
+
+// Get shell-specific path separator
+let path_sep = current_shell.path_sep();
+println!("Path separator: {}", path_sep);
+```
+
+### Using Python Bindings (py-rattler)
+
+```python
+from rattler import Package, Channel, Environment
+
+# Create a new channel
+channel = Channel.from_url("https://conda.anaconda.org/conda-forge")
+
+# Get package information
+pkg = Package.from_url(channel, "numpy-1.20.0-py39h6944008_0.tar.bz2")
+print(f"Package name: {pkg.name}")
+print(f"Version: {pkg.version}")
+print(f"Build string: {pkg.build_string}")
+
+# Working with environments
+env = Environment.create("my-env")
+env.install(["python=3.9", "numpy>=1.20"])
+env.export_requirements("requirements.txt")
+```
+
+### Common Operations
+
+```rust
+use rattler::install_into_prefix;
+use rattler_conda_types::{Channel, PackageRecord};
+
+async fn install_packages() -> Result<(), Box<dyn std::error::Error>> {
+    // Configure channels
+    let channels = vec![
+        Channel::from_str("conda-forge")?,
+        Channel::from_str("defaults")?,
+    ];
+
+    // Specify packages to install
+    let packages = vec!["python=3.9", "numpy>=1.20"];
+    
+    // Install into prefix
+    install_into_prefix(
+        &packages,
+        &channels,
+        &PathBuf::from(".prefix"),
+        None,
+    ).await?;
+    
+    Ok(())
+}
+```
+
+For more detailed examples and API documentation:
+- [Rust API Documentation](https://conda.github.io/rattler)
+- [Python API Documentation](https://conda.github.io/rattler/py-rattler)
+- [Example Projects](https://github.com/conda/rattler/tree/main/examples)
