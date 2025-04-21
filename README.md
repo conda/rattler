@@ -46,66 +46,18 @@ This is an example of installing an environment containing `cowpy` and all its d
 
 ## Examples
 
-Here are some common usage examples for different Rattler components:
+For detailed examples of how to use different Rattler components, see the `examples` directory:
 
-### Using rattler_conda_types
+- [Conda Types Examples](examples/conda_types.rs) - Working with package names, versions, and platforms
+- [Package Streaming Examples](examples/package_streaming.rs) - Reading and processing package files
+- [Shell Examples](examples/shell.rs) - Working with shell environments
+- [Python Bindings Examples](examples/python_bindings.py) - Using Rattler from Python
+- [Common Operations](examples/common_operations.rs) - Common package management tasks
 
-```rust
-use rattler_conda_types::{PackageName, VersionSpec};
-
-// Create a package name
-let pkg_name = PackageName::new("numpy").unwrap();
-
-// Create a version specification
-let version_spec = VersionSpec::parse(">=1.20").unwrap();
-```
-
-### Using rattler_package_streaming
-
-```rust
-use rattler_package_streaming::read::PackageReader;
-use std::path::Path;
-
-async fn read_package() {
-    let package_path = Path::new("path/to/package.tar.bz2");
-    let reader = PackageReader::from_path(package_path).await.unwrap();
-    
-    // Access package metadata
-    println!("Package name: {}", reader.index().package_name());
-    println!("Version: {}", reader.index().version());
-}
-```
-
-### Using rattler_shell
-
-```rust
-use rattler_shell::shell::{Shell, ShellEnum};
-
-// Get the current shell
-let current_shell = Shell::from_env().unwrap();
-
-// Generate activation script
-let script = current_shell.generate_activate_script("/path/to/env");
-println!("Activation script: {}", script);
-```
-
-### Using Python Bindings (py-rattler)
-
-```python
-from rattler import Package, Channel
-
-# Create a new channel
-channel = Channel.from_url("https://conda.anaconda.org/conda-forge")
-
-# Get package information
-pkg = Package.from_url(channel, "numpy-1.20.0-py39h6944008_0.tar.bz2")
-print(f"Package name: {pkg.name}")
-print(f"Version: {pkg.version}")
-```
-
-For more detailed examples and API documentation:
+Each example demonstrates common use cases and best practices. For more detailed examples and API documentation:
 - [Rust API Documentation](https://conda.github.io/rattler)
 - [Python API Documentation](https://conda.github.io/rattler/py-rattler)
+- [Example Projects](https://github.com/conda/rattler/tree/main/examples)
 
 ## Give it a try!
 
