@@ -10,10 +10,16 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result};
 use url::Url;
 
+// WASM-specific imports
 #[cfg(target_arch = "wasm32")]
-use http::response::Builder;
-#[cfg(target_arch = "wasm32")]
-use reqwest::ResponseBuilderExt;
+use {
+    http::response::Builder,
+    reqwest::{
+        header::{HeaderValue, CONTENT_LENGTH, CONTENT_TYPE},
+        ResponseBuilderExt,
+    },
+};
+
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::JsFuture;
 
@@ -180,32 +186,34 @@ pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
     )
 }
 
-/// Creates a 404 Not Found response for WASM targets.
+/// Creates a 404 Not Found response for WASM targets with proper headers.
 ///
 /// # Arguments
 /// * `url` - The URL that was not found
 /// * `body` - The error message to include in the response
 ///
 /// # Returns
-/// A [`reqwest::Response`] with a 404 status code and the given body
+/// A [`reqwest::Response`] with a 404 status code, Content-Type and Content-Length headers
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
     let mut response = Response::from(
         Builder::new()
             .status(StatusCode::NOT_FOUND)
             .url(url.clone())
-            .header("Content-Type", "text/plain")
-            .header("Content-Length", body.len().to_string())
+            .header(CONTENT_TYPE, "text/plain")
+            .header(CONTENT_LENGTH, body.len().to_string())
             .body(body.to_string())
             .unwrap(),
     );
+    
+    // Ensure headers are set correctly
     response.headers_mut().insert(
-        "Content-Type",
-        reqwest::header::HeaderValue::from_static("text/plain"),
+        CONTENT_TYPE,
+        HeaderValue::from_static("text/plain"),
     );
     response.headers_mut().insert(
-        "Content-Length",
-        reqwest::header::HeaderValue::from_str(&body.len().to_string()).unwrap(),
+        CONTENT_LENGTH,
+        HeaderValue::from_str(&body.len().to_string()).unwrap(),
     );
     response
 }
