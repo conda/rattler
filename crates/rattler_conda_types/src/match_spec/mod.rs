@@ -560,9 +560,8 @@ mod tests {
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
     use crate::{
-        match_spec::Matches, Channel, ChannelUrl, MatchSpec,
-        NamelessMatchSpec, PackageName, PackageRecord, ParseStrictness::*, RepoDataRecord,
-        StringMatcher, Version, VersionSpec,
+        match_spec::Matches, Channel, ChannelUrl, MatchSpec, NamelessMatchSpec, PackageName,
+        PackageRecord, ParseStrictness::*, RepoDataRecord, StringMatcher, Version, VersionSpec,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
