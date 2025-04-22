@@ -98,7 +98,7 @@ impl PyActivationResult {
             .inner
             .script
             .contents()
-            .map_err(PyRattlerError::ActivationScriptFormatError)?)
+            .map_err(PyRattlerError::ShellError)?)
     }
 }
 
