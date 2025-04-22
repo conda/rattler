@@ -331,7 +331,7 @@ fn parse_records<'i>(
                 base_url,
                 key.filename,
             ),
-            channel: Some(Channel::from_url(channel_base_url.clone())),
+            channel: Some(channel_base_url.clone()),
             package_record,
             file_name: key.filename.to_owned(),
         });

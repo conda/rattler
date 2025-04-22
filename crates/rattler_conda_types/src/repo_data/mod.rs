@@ -266,7 +266,7 @@ impl RepoData {
                     base_url.as_deref(),
                     &filename,
                 ),
-                channel: Some(channel.clone()),
+                channel: Some(channel.base_url.clone()),
                 package_record,
                 file_name: filename,
             });

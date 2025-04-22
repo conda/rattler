@@ -10,7 +10,7 @@ pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages};
 pub use libc_byte_slice::LibcByteSlice;
 use output::get_required_packages;
-use rattler_conda_types::{MatchSpec, NamelessMatchSpec, RepoDataRecord, SolverResult};
+use rattler_conda_types::{ChannelUrl, MatchSpec, NamelessMatchSpec, RepoDataRecord, SolverResult};
 use wrapper::{
     flags::SolverFlag,
     pool::{Pool, Verbosity},
@@ -183,10 +183,9 @@ impl super::SolverImpl for Solver {
             } else {
                 0
             };
-            let channel_url: String = channel.as_ref().map_or(
-                "<direct>".to_string(),
-                rattler_conda_types::Channel::canonical_name,
-            );
+            let channel_url: String = channel
+                .as_ref()
+                .map_or("<direct>".to_string(), ChannelUrl::to_string);
             let repo = ManuallyDrop::new(Repo::new(&pool, &channel_url, priority));
 
             if let Some(solv_file) = repodata.solv_file {

@@ -78,6 +78,6 @@ pub(crate) fn get_repodata_record(package_path: impl AsRef<std::path::Path>) -> 
             .unwrap()
             .to_string(),
         url: url::Url::from_file_path(package_path).unwrap(),
-        channel: Some(Channel::from_directory(package_path.parent().unwrap())),
+        channel: Some(Channel::from_directory(package_path.parent().unwrap()).base_url),
     }
 }

@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, vec::Vec};
 
-use crate::{Channel, PackageName, PackageRecord};
+use crate::{ChannelUrl, PackageName, PackageRecord};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -24,7 +24,7 @@ pub struct RepoDataRecord {
     /// String representation of the channel where the package comes from. This could be a URL but
     /// it could also be a channel name. Personally I would always add the complete URL here to be
     /// explicit about where the package came from.
-    pub channel: Option<Channel>,
+    pub channel: Option<ChannelUrl>,
 }
 
 impl AsRef<PackageRecord> for RepoDataRecord {
