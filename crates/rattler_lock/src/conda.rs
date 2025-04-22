@@ -1,11 +1,11 @@
-use std::{borrow::Cow, cmp::Ordering, hash::Hash};
-
+use crate::source::SourceLocation;
+use crate::UrlOrPath;
 use rattler_conda_types::{
     ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, RepoDataRecord,
 };
 use rattler_digest::Sha256Hash;
-
-use crate::UrlOrPath;
+use std::collections::BTreeMap;
+use std::{borrow::Cow, cmp::Ordering, hash::Hash};
 
 /// A locked conda dependency can be either a binary package or a source
 /// package.
@@ -150,6 +150,10 @@ pub struct CondaSourceData {
 
     /// The input hash of the package
     pub input: Option<InputHash>,
+
+    /// Information about packages that should be built from source instead of binary.
+    /// This maps from a normalized package name to location of the source.
+    pub sources: BTreeMap<String, SourceLocation>,
 }
 
 impl From<CondaSourceData> for CondaPackageData {

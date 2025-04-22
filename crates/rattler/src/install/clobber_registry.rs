@@ -434,7 +434,7 @@ mod tests {
 
     use insta::assert_yaml_snapshot;
     use rand::seq::SliceRandom;
-    use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord, Version};
+    use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
     use transaction::TransactionOperation;
 
     use crate::{
@@ -543,13 +543,14 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -601,7 +602,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
@@ -664,13 +665,14 @@ mod tests {
 
             // execute transaction
             let target_prefix = tempfile::tempdir().unwrap();
+            let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
             let packages_dir = tempfile::tempdir().unwrap();
             let cache = PackageCache::new(packages_dir.path());
 
             execute_transaction(
                 transaction,
-                target_prefix.path(),
+                &prefix_path,
                 &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
                 &cache,
                 &InstallDriver::default(),
@@ -747,13 +749,14 @@ mod tests {
 
             // execute transaction
             let target_prefix = tempfile::tempdir().unwrap();
+            let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
             let packages_dir = tempfile::tempdir().unwrap();
             let cache = PackageCache::new(packages_dir.path());
 
             execute_transaction(
                 transaction,
-                target_prefix.path(),
+                &prefix_path,
                 &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
                 &cache,
                 &InstallDriver::default(),
@@ -806,7 +809,7 @@ mod tests {
 
             execute_transaction(
                 transaction,
-                target_prefix.path(),
+                &prefix_path,
                 &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
                 &cache,
                 &install_driver,
@@ -850,13 +853,14 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -908,7 +912,7 @@ mod tests {
 
         let result = execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
@@ -956,13 +960,14 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -1007,7 +1012,7 @@ mod tests {
         let dl_client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
         for op in &transaction.operations {
             execute_operation(
-                target_prefix.path(),
+                &prefix_path,
                 &dl_client,
                 &cache,
                 &install_driver,
@@ -1039,13 +1044,14 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -1100,7 +1106,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
@@ -1133,7 +1139,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
@@ -1173,6 +1179,7 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
@@ -1184,7 +1191,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -1222,13 +1229,14 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -1256,7 +1264,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
@@ -1290,13 +1298,14 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -1326,13 +1335,13 @@ mod tests {
             .finish();
 
         install_driver
-            .pre_process(&transaction, target_prefix.path())
+            .pre_process(&transaction, &prefix_path)
             .unwrap();
 
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
         for op in &transaction.operations {
             execute_operation(
-                target_prefix.path(),
+                &prefix_path,
                 &client,
                 &cache,
                 &install_driver,
@@ -1349,7 +1358,7 @@ mod tests {
         );
 
         install_driver
-            .post_process(&transaction, target_prefix.path())
+            .post_process(&transaction, &prefix_path)
             .unwrap();
 
         assert_check_files(&target_prefix.path().join("bin"), &["python"]);

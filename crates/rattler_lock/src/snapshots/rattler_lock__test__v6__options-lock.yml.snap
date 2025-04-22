@@ -1,0 +1,31 @@
+---
+source: crates/rattler_lock/src/lib.rs
+expression: conda_lock
+---
+version: 6
+environments:
+  with-channel-priority:
+    channels: []
+    options:
+      channel-priority: disabled
+    packages: {}
+  with-default-channel-priority:
+    channels: []
+    packages: {}
+  with-default-strategy:
+    channels: []
+    packages: {}
+  with-exclude-newer:
+    channels: []
+    options:
+      exclude-newer: "2025-04-15T12:15:00Z"
+    packages: {}
+  with-strategy:
+    channels: []
+    options:
+      strategy: lowest-version
+    packages: {}
+  without-options:
+    channels: []
+    packages: {}
+packages: []

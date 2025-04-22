@@ -7,7 +7,7 @@ use std::{
 
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::{prefix_record::PathType, PackageRecord, PrefixRecord};
+use rattler_conda_types::{prefix::Prefix, prefix_record::PathType, PackageRecord, PrefixRecord};
 use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
@@ -213,7 +213,7 @@ impl InstallDriver {
     pub fn post_process<Old: Borrow<PrefixRecord> + AsRef<New>, New: AsRef<PackageRecord>>(
         &self,
         transaction: &Transaction<Old, New>,
-        target_prefix: &Path,
+        target_prefix: &Prefix,
     ) -> Result<PostProcessResult, PostProcessingError> {
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix)
             .map_err(PostProcessingError::FailedToDetectInstalledPackages)?;
