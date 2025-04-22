@@ -1384,13 +1384,14 @@ mod tests {
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
@@ -1398,7 +1399,8 @@ mod tests {
         )
         .await;
 
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
 
         // remove one of the clobbering files
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
@@ -1417,7 +1419,7 @@ mod tests {
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
