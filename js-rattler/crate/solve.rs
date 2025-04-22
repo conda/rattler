@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use rattler_conda_types::{ChannelUrl, Channel, ChannelConfig, MatchSpec, ParseStrictness::Lenient};
+use rattler_conda_types::{
+    Channel, ChannelConfig, ChannelUrl, MatchSpec, ParseStrictness::Lenient,
+};
 use rattler_repodata_gateway::{Gateway, SourceConfig};
 use rattler_solve::{SolverImpl, SolverTask};
 use wasm_bindgen::prelude::*;
