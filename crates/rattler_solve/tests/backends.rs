@@ -213,7 +213,6 @@ fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
 macro_rules! solver_backend_tests {
     ($T:path) => {
         use chrono::{DateTime, Utc};
-        use rattler_conda_types::Channel;
         use itertools::Itertools;
 
         #[test]
