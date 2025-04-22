@@ -14,7 +14,7 @@ readme.workspace = true
 libloading = { workspace = true }
 nom = { workspace = true }
 once_cell = { workspace = true }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.32.0", default-features = false }
+rattler_conda_types = { workspace = true, default-features = false }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }

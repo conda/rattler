@@ -44,10 +44,10 @@ opendal = { workspace = true, features = [
   "services-s3",
   "services-fs",
 ], default-features = false }
-rattler_networking = { path = "../rattler_networking", version = "0.22.12", default-features = false }
-rattler_conda_types = { path = "../rattler_conda_types", version = "0.32.0" }
-rattler_digest = { path = "../rattler_digest", version = "1.1.1", default-features = false }
-rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.36", default-features = false }
+rattler_networking = { workspace = true, default-features = false }
+rattler_conda_types = { workspace = true, default-features = false }
+rattler_digest = { workspace = true, default-features = false }
+rattler_package_streaming = { workspace = true, default-features = false }
 reqwest = { workspace = true, default-features = false, features = [
   "http2",
   "macos-system-configuration",
