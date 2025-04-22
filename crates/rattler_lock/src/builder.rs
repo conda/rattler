@@ -6,7 +6,6 @@ use std::{
     sync::Arc,
 };
 
-use fxhash::FxHashMap;
 use indexmap::{IndexMap, IndexSet};
 use pep508_rs::ExtraName;
 use rattler_conda_types::{Platform, Version};
@@ -14,7 +13,8 @@ use rattler_conda_types::{Platform, Version};
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
     CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
+    LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
+    UrlOrPath,
 };
 
 /// Information about a single locked package in an environment.
@@ -153,20 +153,35 @@ impl LockFileBuilder {
         Self::default()
     }
 
-    /// Sets the pypi indexes for an environment.
-    pub fn set_pypi_indexes(
-        &mut self,
-        environment_data: impl Into<String>,
-        indexes: PypiIndexes,
-    ) -> &mut Self {
+    /// Helper function that returns the environment for the environment with the given name.
+    fn environment_data(&mut self, environment_data: impl Into<String>) -> &mut EnvironmentData {
         self.environments
             .entry(environment_data.into())
             .or_insert_with(|| EnvironmentData {
                 channels: vec![],
-                packages: FxHashMap::default(),
+                packages: HashMap::default(),
                 indexes: None,
+                options: SolveOptions::default(),
             })
-            .indexes = Some(indexes);
+    }
+
+    /// Sets the pypi indexes for an environment.
+    pub fn set_pypi_indexes(
+        &mut self,
+        environment: impl Into<String>,
+        indexes: PypiIndexes,
+    ) -> &mut Self {
+        self.environment_data(environment).indexes = Some(indexes);
+        self
+    }
+
+    /// Sets the options for a particular environment.
+    pub fn set_options(
+        &mut self,
+        environment: impl Into<String>,
+        options: SolveOptions,
+    ) -> &mut Self {
+        self.environment_data(environment).options = options;
         self
     }
 
@@ -176,14 +191,8 @@ impl LockFileBuilder {
         environment: impl Into<String>,
         channels: impl IntoIterator<Item = impl Into<Channel>>,
     ) -> &mut Self {
-        self.environments
-            .entry(environment.into())
-            .or_insert_with(|| EnvironmentData {
-                channels: vec![],
-                packages: FxHashMap::default(),
-                indexes: None,
-            })
-            .channels = channels.into_iter().map(Into::into).collect();
+        self.environment_data(environment).channels =
+            channels.into_iter().map(Into::into).collect();
         self
     }
 
@@ -198,16 +207,6 @@ impl LockFileBuilder {
         platform: Platform,
         locked_package: CondaPackageData,
     ) -> &mut Self {
-        // Get the environment
-        let environment = self
-            .environments
-            .entry(environment.into())
-            .or_insert_with(|| EnvironmentData {
-                channels: vec![],
-                packages: HashMap::default(),
-                indexes: None,
-            });
-
         let unique_identifier = UniqueCondaIdentifier::from(&locked_package);
 
         // Add the package to the list of packages.
@@ -222,7 +221,7 @@ impl LockFileBuilder {
             .or_insert(locked_package);
 
         // Add the package to the environment that it is intended for.
-        environment
+        self.environment_data(environment)
             .packages
             .entry(platform)
             .or_default()
@@ -243,16 +242,6 @@ impl LockFileBuilder {
         locked_package: PypiPackageData,
         environment_data: PypiPackageEnvironmentData,
     ) -> &mut Self {
-        // Get the environment
-        let environment = self
-            .environments
-            .entry(environment.into())
-            .or_insert_with(|| EnvironmentData {
-                channels: vec![],
-                packages: HashMap::default(),
-                indexes: None,
-            });
-
         // Add the package to the list of packages.
         let package_idx = self.pypi_packages.insert_full(locked_package).0;
         let runtime_idx = self
@@ -261,7 +250,7 @@ impl LockFileBuilder {
             .0;
 
         // Add the package to the environment that it is intended for.
-        environment
+        self.environment_data(environment)
             .packages
             .entry(platform)
             .or_default()
@@ -346,6 +335,12 @@ impl LockFileBuilder {
         indexes: PypiIndexes,
     ) -> Self {
         self.set_pypi_indexes(environment, indexes);
+        self
+    }
+
+    /// Sets the options for an environment.
+    pub fn with_options(mut self, environment: impl Into<String>, options: SolveOptions) -> Self {
+        self.set_options(environment, options);
         self
     }
 
