@@ -336,7 +336,7 @@ impl WindowsMenu {
         // install start menu shortcut
         let start_menu_link_path = self.directories.start_menu.join(&link_name);
         let shortcut = Shortcut {
-            path: &self.name,
+            path: command,
             description: &self.command.description.resolve(&self.placeholders),
             filename: &start_menu_link_path,
             arguments: Some(&args),
@@ -372,7 +372,7 @@ impl WindowsMenu {
             if self.item.quicklaunch.unwrap_or(false) {
                 let quicklaunch_link_path = quick_launch_dir.join(link_name);
                 let shortcut = Shortcut {
-                    path: &self.name,
+                    path: command,
                     description: &self.command.description.resolve(&self.placeholders),
                     filename: &quicklaunch_link_path,
                     arguments: Some(&args),
