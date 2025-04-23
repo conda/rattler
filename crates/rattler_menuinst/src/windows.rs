@@ -337,14 +337,10 @@ impl WindowsMenu {
         let link_name = format!("{}.lnk", self.name);
 
         // install start menu shortcut
-        let start_menu_link_path = self
-            .directories
-            .start_menu
-            .join(&self.menu_name)
-            .join(&link_name);
-        if !start_menu_link_path.parent().unwrap().exists() {
-            std::fs::create_dir(start_menu_link_path.parent().unwrap())?;
-        }
+        let start_menu_subdir_path = self.directories.start_menu.join(&self.menu_name);
+        std::fs::create_dir(&start_menu_subdir_path)
+            .expect(format!("Directory `{}` is existing in start menu.", &self.menu_name).as_str());
+        let start_menu_link_path = start_menu_subdir_path.join(&link_name);
         let shortcut = Shortcut {
             path: command,
             description: &self.command.description.resolve(&self.placeholders),
