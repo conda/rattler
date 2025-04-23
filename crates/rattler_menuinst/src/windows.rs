@@ -105,6 +105,7 @@ impl Directories {
 }
 
 pub struct WindowsMenu {
+    menu_name: String,
     prefix: PathBuf,
     name: String,
     item: Windows,
@@ -118,6 +119,7 @@ const SHORTCUT_EXTENSION: &str = "lnk";
 
 impl WindowsMenu {
     pub fn new(
+        menu_name: &str,
         prefix: &Path,
         item: Windows,
         command: MenuItemCommand,
@@ -135,6 +137,7 @@ impl WindowsMenu {
             .with_extension(SHORTCUT_EXTENSION);
 
         Self {
+            menu_name: menu_name.to_string(),
             prefix: prefix.to_path_buf(),
             name,
             item,
@@ -337,7 +340,7 @@ impl WindowsMenu {
         let start_menu_link_path = self
             .directories
             .start_menu
-            .join(&self.name)
+            .join(&self.menu_name)
             .join(&link_name);
         std::fs::create_dir(start_menu_link_path.parent().unwrap())?;
         let shortcut = Shortcut {
@@ -511,6 +514,7 @@ impl WindowsMenu {
 }
 
 pub(crate) fn install_menu_item(
+    menu_name: &str,
     prefix: &Path,
     windows_item: Windows,
     command: MenuItemCommand,
@@ -525,6 +529,7 @@ pub(crate) fn install_menu_item(
     };
 
     let menu = WindowsMenu::new(
+        menu_name,
         prefix,
         windows_item,
         command,

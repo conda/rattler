@@ -157,6 +157,7 @@ pub fn install_menuitems(
             if let Some(windows_item) = item.platforms.win {
                 let command = item.command.merge(windows_item.base);
                 let tracker = windows::install_menu_item(
+                    &menu_inst.menu_name,
                     prefix,
                     windows_item.specific,
                     command,
