@@ -552,7 +552,8 @@ pub(crate) fn remove_menu_item(tracker: &WindowsTracker) -> Result<(), MenuInstE
     }
 
     if let Some(subdir) = &tracker.start_menu_subdir_path {
-        if subdir.exists() {
+        // Check if subdir exists and is empty.
+        if subdir.exists() && subdir.read_dir()?.next().is_none() {
             match fs::remove_dir(subdir) {
                 Ok(_) => {}
                 Err(e) => {
