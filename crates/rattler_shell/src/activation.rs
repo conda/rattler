@@ -474,6 +474,32 @@ impl<T: Shell + Clone> Activator<T> {
         Ok(ActivationResult { script, path })
     }
 
+    /// Create a deactivation script for the environment.
+    /// This returns the deactivation script that unsets environment variables
+    /// and runs deactivation scripts.
+    pub fn deactivation(&self) -> Result<ActivationResult<T>, ActivationError> {
+        let mut script = ShellScript::new(self.shell_type.clone(), self.platform);
+        
+        // Unset all environment variables that were set by the activation
+        for (key, _) in &self.env_vars {
+            script.unset_env_var(key)?;
+        }
+        
+        // Unset CONDA_PREFIX which is set during activation
+        script.unset_env_var("CONDA_PREFIX")?;
+        
+        // Run all deactivation scripts
+        for deactivation_script in &self.deactivation_scripts {
+            script.run_script(deactivation_script)?;
+        }
+        
+        // Return the result with empty path changes (since we're just deactivating)
+        Ok(ActivationResult {
+            script,
+            path: Vec::new(),
+        })
+    }
+
     /// Runs the activation script and returns the environment variables changed
     /// in the environment after running the script.
     ///
@@ -876,5 +902,58 @@ mod tests {
     #[ignore]
     fn test_run_activation_xonsh() {
         test_run_activation(crate::shell::Xonsh.into(), false);
+    }
+
+    #[test]
+    fn test_deactivation() {
+        let tmp_dir = TempDir::new("test_deactivation").unwrap();
+        let tmp_dir_path = tmp_dir.path();
+
+        // Create an activator with some test environment variables
+        let mut env_vars = IndexMap::new();
+        env_vars.insert("TEST_VAR1".to_string(), "value1".to_string());
+        env_vars.insert("TEST_VAR2".to_string(), "value2".to_string());
+
+        let activator = Activator {
+            target_prefix: tmp_dir_path.to_path_buf(),
+            shell_type: ShellEnum::Bash(shell::Bash),
+            paths: vec![tmp_dir_path.join("bin")],
+            activation_scripts: vec![],
+            deactivation_scripts: vec![],
+            env_vars: env_vars.clone(),
+            platform: Platform::current(),
+        };
+
+        // Test the deactivation method
+        let result = activator.deactivation().unwrap();
+        let script_contents = result.script.contents().unwrap();
+
+        // For Bash, the script should include unset commands for our environment variables
+        assert!(script_contents.contains("unset TEST_VAR1"));
+        assert!(script_contents.contains("unset TEST_VAR2"));
+        assert!(script_contents.contains("unset CONDA_PREFIX"));
+
+        // Verify the deactivation method works with PowerShell too
+        let activator = Activator {
+            target_prefix: tmp_dir_path.to_path_buf(),
+            shell_type: ShellEnum::PowerShell(shell::PowerShell::default()),
+            paths: vec![tmp_dir_path.join("bin")],
+            activation_scripts: vec![],
+            deactivation_scripts: vec![],
+            env_vars,
+            platform: Platform::current(),
+        };
+
+        let result = activator.deactivation().unwrap();
+        let script_contents = result.script.contents().unwrap();
+
+        // For PowerShell, it should generate commands to unset environment variables
+        // Here we test if the correct output is generated for PowerShell
+        assert!(script_contents.contains("${Env:TEST_VAR1}=\"\"") || 
+                script_contents.contains("Remove-Item Env:TEST_VAR1"));
+        assert!(script_contents.contains("${Env:TEST_VAR2}=\"\"") || 
+                script_contents.contains("Remove-Item Env:TEST_VAR2"));
+        assert!(script_contents.contains("${Env:CONDA_PREFIX}=\"\"") || 
+                script_contents.contains("Remove-Item Env:CONDA_PREFIX"));
     }
 }
