@@ -90,6 +90,9 @@ pub struct WindowsTracker {
     /// The menu mode that was used to install the menu entries
     pub menu_mode: MenuMode,
 
+    /// The sub-directory of `menu_name` in start menu.
+    pub start_menu_subdir_path: Option<PathBuf>,
+
     /// List of shortcuts that were installed
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shortcuts: Vec<PathBuf>,
@@ -112,6 +115,7 @@ impl WindowsTracker {
     pub fn new(menu_mode: MenuMode) -> Self {
         Self {
             menu_mode,
+            start_menu_subdir_path: None,
             shortcuts: Vec::new(),
             file_extensions: Vec::new(),
             url_protocols: Vec::new(),

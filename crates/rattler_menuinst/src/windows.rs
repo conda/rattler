@@ -340,6 +340,7 @@ impl WindowsMenu {
         let start_menu_subdir_path = self.directories.start_menu.join(&self.menu_name);
         if !start_menu_subdir_path.exists() {
             std::fs::create_dir(&start_menu_subdir_path)?;
+            tracker.start_menu_subdir_path = Some(start_menu_subdir_path.clone());
         }
         let start_menu_link_path = start_menu_subdir_path.join(&link_name);
         let shortcut = Shortcut {
@@ -546,6 +547,19 @@ pub(crate) fn remove_menu_item(tracker: &WindowsTracker) -> Result<(), MenuInstE
             Ok(_) => {}
             Err(e) => {
                 tracing::warn!("Failed to remove shortcut {}: {}", file.display(), e);
+            }
+        }
+    }
+
+    if let Some(subdir) = &tracker.start_menu_subdir_path {
+        match fs::remove_dir(subdir) {
+            Ok(_) => {}
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to remove start menu sub-directory {}: {}",
+                    subdir.display(),
+                    e
+                );
             }
         }
     }
