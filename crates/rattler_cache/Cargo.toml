@@ -10,6 +10,8 @@ edition.workspace = true
 readme.workspace = true
 
 [dependencies]
+fs2 = "0.4"
+filetime = "0.2"
 
 [target.'cfg(not( target_arch = "wasm32" ))'.dependencies]
 anyhow.workspace = true
@@ -47,3 +49,6 @@ tokio-stream.workspace = true
 tower-http = { workspace = true, features = ["fs"] }
 tools = { path = "../tools" }
 reqwest-retry = { workspace = true }
+tempfile = "3.8"
+tokio = { version = "1.0", features = ["full"] }
+serde_json = "1.0"
