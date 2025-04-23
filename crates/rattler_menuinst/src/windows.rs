@@ -342,7 +342,9 @@ impl WindowsMenu {
             .start_menu
             .join(&self.menu_name)
             .join(&link_name);
-        std::fs::create_dir(start_menu_link_path.parent().unwrap())?;
+        if !start_menu_link_path.parent().unwrap().exists() {
+            std::fs::create_dir(start_menu_link_path.parent().unwrap())?;
+        }
         let shortcut = Shortcut {
             path: command,
             description: &self.command.description.resolve(&self.placeholders),
