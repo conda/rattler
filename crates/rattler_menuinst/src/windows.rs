@@ -375,8 +375,7 @@ impl WindowsMenu {
         // install quicklaunch shortcut
         if let Some(quick_launch_dir) = self.directories.quick_launch.as_ref() {
             if self.item.quicklaunch.unwrap_or(false) {
-                let quicklaunch_link_path = quick_launch_dir.join(&self.name).join(link_name);
-                std::fs::create_dir(quicklaunch_link_path.parent().unwrap())?;
+                let quicklaunch_link_path = quick_launch_dir.join(link_name);
                 let shortcut = Shortcut {
                     path: command,
                     description: &self.command.description.resolve(&self.placeholders),
