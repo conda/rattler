@@ -552,14 +552,16 @@ pub(crate) fn remove_menu_item(tracker: &WindowsTracker) -> Result<(), MenuInstE
     }
 
     if let Some(subdir) = &tracker.start_menu_subdir_path {
-        match fs::remove_dir(subdir) {
-            Ok(_) => {}
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to remove start menu sub-directory {}: {}",
-                    subdir.display(),
-                    e
-                );
+        if subdir.exists() {
+            match fs::remove_dir(subdir) {
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to remove start menu sub-directory {}: {}",
+                        subdir.display(),
+                        e
+                    );
+                }
             }
         }
     }
