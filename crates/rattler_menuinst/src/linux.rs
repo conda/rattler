@@ -17,8 +17,8 @@ use rattler_shell::shell;
 use crate::render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString};
 use crate::utils::{log_output, run_pre_create_command, slugify};
 use crate::{
-    schema::{Linux, MenuItemCommand},
     MenuInstError,
+    schema::{Linux, MenuItemCommand},
 };
 
 pub struct LinuxMenu {
@@ -661,7 +661,12 @@ mod tests {
     }
 
     impl FakeDirectories {
-        fn new() -> Self {
+        /// Creates a new `FakeDirectories` instance
+        ///
+        /// # Safety
+        /// This struct is only allowed to be used in a single-threaded context
+        /// Therefore `new` is marked as unsafe, since it cannot be guaranteed statically
+        unsafe fn new() -> Self {
             let tmp_dir = TempDir::new().unwrap();
             let data_directory = tmp_dir.path().join("data");
             let config_directory = tmp_dir.path().join("config");
@@ -695,8 +700,12 @@ mod tests {
 
     impl Drop for FakeDirectories {
         fn drop(&mut self) {
-            std::env::remove_var("XDG_DATA_HOME");
-            std::env::remove_var("XDG_CONFIG_HOME");
+            // SAFETY: FakeDirectories are only allowed to be used in a single-threaded context,
+            // so this is fine
+            unsafe {
+                std::env::remove_var("XDG_DATA_HOME");
+                std::env::remove_var("XDG_CONFIG_HOME");
+            }
         }
     }
 

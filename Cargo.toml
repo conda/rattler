@@ -11,7 +11,7 @@ categories = ["development-tools"]
 homepage = "https://github.com/conda/rattler"
 repository = "https://github.com/conda/rattler"
 license = "BSD-3-Clause"
-edition = "2021"
+edition = "2024"
 readme = "README.md"
 
 [workspace.metadata.release]
