@@ -2,7 +2,6 @@ use clap::Parser;
 use colored::Colorize;
 use std::path::PathBuf;
 use anyhow::Result;
-use rattler_shell::shell::ShellEnum;
 
 /// Check your rattler installation and environment for common issues
 #[derive(Parser, Debug)]
@@ -223,7 +222,7 @@ impl DoctorCommand {
         // Check if any critical variables are missing
         for var in critical_vars {
             if std::env::var(var).is_err() {
-                problems.push(format!("Missing environment variable: {}", var));
+                problems.push(format!("Missing environment variable: {var}"));
             }
         }
 
@@ -256,7 +255,7 @@ impl DoctorCommand {
 
         for var in deprecated_vars {
             if std::env::var(var).is_ok() {
-                problems.push(format!("Deprecated environment variable in use: {}", var));
+                problems.push(format!("Deprecated environment variable in use: {var}"));
             }
         }
 
@@ -268,7 +267,7 @@ impl DoctorCommand {
 
         for (var, message) in python_vars {
             if std::env::var(var).is_ok() {
-                problems.push(format!("Warning: {} is set - {}", var, message));
+                problems.push(format!("Warning: {var} is set - {message}"));
             }
         }
 

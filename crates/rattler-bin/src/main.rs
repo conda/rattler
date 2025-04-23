@@ -1,9 +1,8 @@
-use crate::writer::IndicatifWriter;
+use crate::commands::DoctorCommand;
 use clap::Parser;
 use indicatif::{MultiProgress, ProgressDrawTarget};
 use once_cell::sync::Lazy;
 use tracing_subscriber::{filter::LevelFilter, util::SubscriberInitExt, EnvFilter};
-use commands::{CreateCommand, DoctorCommand, MenuCommand, VirtualPackagesCommand};
 
 mod commands;
 mod writer;
@@ -32,16 +31,6 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Commands {
-    /// Create a new environment
-    Create(CreateCommand),
-    
-    /// Show the menu for an environment
-    Menu(MenuCommand),
-    
-    /// Show information about virtual packages
-    #[command(name = "virtual-packages")]
-    VirtualPackages(VirtualPackagesCommand),
-
     /// Check your rattler installation and environment for common issues
     Doctor(DoctorCommand),
 }
@@ -52,13 +41,9 @@ async fn main() -> anyhow::Result<()> {
     // Parse the command line arguments
     let cli = Cli::parse();
 
-    // Determine the logging level based on the the verbose flag and the RUST_LOG environment
-    // variable.
-    let default_filter = if cli.verbose {
-        LevelFilter::DEBUG
-    } else {
-        LevelFilter::INFO
-    };
+    // Setup default logging level
+    let default_filter = LevelFilter::INFO;
+    
     let env_filter = EnvFilter::builder()
         .with_default_directive(default_filter.into())
         .from_env()?
@@ -68,16 +53,13 @@ async fn main() -> anyhow::Result<()> {
     // Setup the tracing subscriber
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)
-        .with_writer(IndicatifWriter::new(global_multi_progress()))
+        .with_writer(writer::IndicatifWriter::new(global_multi_progress()))
         .without_time()
         .finish()
         .try_init()?;
 
-    // Dispatch the selected comment
+    // Dispatch the selected command
     match cli.command {
-        Commands::Create(cmd) => cmd.run().await,
-        Commands::Menu(cmd) => cmd.run().await,
-        Commands::VirtualPackages(cmd) => cmd.run().await,
         Commands::Doctor(cmd) => cmd.run().await,
     }
 }
