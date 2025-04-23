@@ -351,7 +351,7 @@ impl WindowsMenu {
 
         // install desktop shortcut
         if self.item.desktop.unwrap_or(true) {
-            let desktop_link_path = self.directories.desktop.join(&link_name);
+            let desktop_link_path = self.directories.desktop.join(&self.name).join(&link_name);
             let shortcut = Shortcut {
                 path: command,
                 description: &self.command.description.resolve(&self.placeholders),
@@ -370,7 +370,7 @@ impl WindowsMenu {
         // install quicklaunch shortcut
         if let Some(quick_launch_dir) = self.directories.quick_launch.as_ref() {
             if self.item.quicklaunch.unwrap_or(false) {
-                let quicklaunch_link_path = quick_launch_dir.join(link_name);
+                let quicklaunch_link_path = quick_launch_dir.join(&self.name).join(link_name);
                 let shortcut = Shortcut {
                     path: command,
                     description: &self.command.description.resolve(&self.placeholders),
