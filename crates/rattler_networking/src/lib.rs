@@ -18,7 +18,21 @@ pub use s3_middleware::S3Middleware;
 
 pub mod authentication_middleware;
 pub mod authentication_storage;
-
 pub mod mirror_middleware;
 pub mod oci_middleware;
 pub mod retry_policies;
+pub mod cloud_storage;
+
+pub use authentication_middleware::AuthenticationMiddleware;
+pub use mirror_middleware::MirrorMiddleware;
+pub use retry_policies::RetryPolicy;
+
+// Re-export cloud storage types
+pub use cloud_storage::{
+    CloudStorage,
+    CloudStorageConfig,
+    CloudStorageError,
+    CloudProvider,
+    CloudCredentials,
+    create_cloud_storage,
+};
