@@ -340,7 +340,6 @@ impl WindowsMenu {
         let start_menu_subdir_path = self.directories.start_menu.join(&self.menu_name);
         if !start_menu_subdir_path.exists() {
             std::fs::create_dir(&start_menu_subdir_path)?;
-            tracker.start_menu_subdir_path = Some(start_menu_subdir_path.clone());
         }
         let start_menu_link_path = start_menu_subdir_path.join(&link_name);
         let shortcut = Shortcut {
@@ -355,6 +354,7 @@ impl WindowsMenu {
         };
 
         create_shortcut::create_shortcut(shortcut)?;
+        tracker.start_menu_subdir_path = Some(start_menu_subdir_path.clone());
         tracker.shortcuts.push(start_menu_link_path.clone());
 
         // install desktop shortcut
