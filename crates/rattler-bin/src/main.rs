@@ -3,6 +3,7 @@ use clap::Parser;
 use indicatif::{MultiProgress, ProgressDrawTarget};
 use once_cell::sync::Lazy;
 use tracing_subscriber::{filter::LevelFilter, util::SubscriberInitExt, EnvFilter};
+use commands::{CreateCommand, DoctorCommand, MenuCommand, VirtualPackagesCommand};
 
 mod commands;
 mod writer;
@@ -21,37 +22,39 @@ pub fn global_multi_progress() -> MultiProgress {
     GLOBAL_MP.clone()
 }
 
-/// Command line options available through the `rattler` cli.
-#[derive(Debug, Parser)]
-#[clap(author, version, about, long_about = None)]
-struct Opt {
-    /// The subcommand to execute
-    #[clap(subcommand)]
-    command: Command,
-
-    /// Log verbose
-    #[clap(short, long, global = true)]
-    verbose: bool,
+/// Rattler CLI
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
 }
 
-/// Different commands supported by `rattler`.
-#[derive(Debug, clap::Subcommand)]
-enum Command {
-    Create(commands::create::Opt),
-    VirtualPackages(commands::virtual_packages::Opt),
-    InstallMenu(commands::menu::InstallOpt),
-    RemoveMenu(commands::menu::InstallOpt),
+#[derive(clap::Subcommand)]
+enum Commands {
+    /// Create a new environment
+    Create(CreateCommand),
+    
+    /// Show the menu for an environment
+    Menu(MenuCommand),
+    
+    /// Show information about virtual packages
+    #[command(name = "virtual-packages")]
+    VirtualPackages(VirtualPackagesCommand),
+
+    /// Check your rattler installation and environment for common issues
+    Doctor(DoctorCommand),
 }
 
 /// Entry point of the `rattler` cli.
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Parse the command line arguments
-    let opt = Opt::parse();
+    let cli = Cli::parse();
 
     // Determine the logging level based on the the verbose flag and the RUST_LOG environment
     // variable.
-    let default_filter = if opt.verbose {
+    let default_filter = if cli.verbose {
         LevelFilter::DEBUG
     } else {
         LevelFilter::INFO
@@ -71,10 +74,10 @@ async fn main() -> anyhow::Result<()> {
         .try_init()?;
 
     // Dispatch the selected comment
-    match opt.command {
-        Command::Create(opts) => commands::create::create(opts).await,
-        Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
-        Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
-        Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
+    match cli.command {
+        Commands::Create(cmd) => cmd.run().await,
+        Commands::Menu(cmd) => cmd.run().await,
+        Commands::VirtualPackages(cmd) => cmd.run().await,
+        Commands::Doctor(cmd) => cmd.run().await,
     }
 }

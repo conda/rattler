@@ -1,7 +1,7 @@
 [package]
 name = "rattler-bin"
 version = "0.1.0"
-edition.workspace = true
+edition = "2021"
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust binary for common Conda operations"
 categories.workspace = true
@@ -40,7 +40,17 @@ reqwest-middleware = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
+tracing = { workspace = true }
+colored = "2.0"
+rattler_shell = { path = "../rattler_shell" }
+sysinfo = "0.29"
+fs_extra = "1.3"
 
 [package.metadata.release]
 # Dont publish the binary
 release = false
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.0"
+tempfile = { workspace = true }
