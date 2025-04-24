@@ -1,17 +1,17 @@
-from rattler import Package, Channel, Environment
+from rattler import PackageName, Channel, Environment
+from typing import NoReturn
 
-def main():
+def main() -> None:
     # Create a new channel
-    channel = Channel.from_url("https://conda.anaconda.org/conda-forge")
+    channel = Channel("conda-forge")  # Using constructor instead of from_url
 
     # Get package information
-    pkg = Package.from_url(channel, "numpy-1.20.0-py39h6944008_0.tar.bz2")
-    print(f"Package name: {pkg.name}")
-    print(f"Version: {pkg.version}")
-    print(f"Build string: {pkg.build_string}")
-
-    # Working with environments
-    env = Environment.create("my-env")
+    pkg_name = PackageName.from_str("numpy")  # Using PackageName instead of Package
+    print(f"Package name: {pkg_name}")
+    
+    # Create environment and install packages
+    env = Environment()  # Using constructor instead of create
+    env.create("my-env")  # Create the environment
     env.install(["python=3.9", "numpy>=1.20"])
     env.export_requirements("requirements.txt")
 
