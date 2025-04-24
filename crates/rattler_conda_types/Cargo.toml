@@ -16,7 +16,7 @@ experimental_extras = []
 
 [dependencies]
 chrono = { workspace = true }
-file_url = { path = "../file_url", version = "0.2.4" }
+file_url = { workspace = true }
 fxhash = { workspace = true }
 glob = { workspace = true }
 hex = { workspace = true }
@@ -24,11 +24,11 @@ itertools = { workspace = true }
 lazy-regex = { workspace = true }
 nom = { workspace = true }
 purl = { workspace = true, features = ["serde"] }
-rattler_digest = { path = "../rattler_digest", version = "1.1.1", default-features = false, features = [
+rattler_digest = { workspace = true, default-features = false, features = [
   "serde",
 ] }
-rattler_macros = { path = "../rattler_macros", version = "1.0.8", default-features = false }
-rattler_redaction = { version = "0.1.10", path = "../rattler_redaction", default-features = false }
+rattler_macros = { workspace = true, default-features = false }
+rattler_redaction = { workspace = true, default-features = false }
 regex = { workspace = true }
 simd-json = { workspace = true, features = ["serde_impl"] }
 serde = { workspace = true, features = ["derive", "rc"] }
