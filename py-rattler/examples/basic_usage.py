@@ -1,19 +1,25 @@
 from rattler import PackageName, Channel, Environment
-from typing import NoReturn
+from typing import List
 
 def main() -> None:
     # Create a new channel
-    channel = Channel("conda-forge")  # Using constructor instead of from_url
+    channel = Channel("conda-forge")
 
     # Get package information
-    pkg_name = PackageName.from_str("numpy")  # Using PackageName instead of Package
+    pkg_name = PackageName("numpy")  # Using constructor directly
     print(f"Package name: {pkg_name}")
     
-    # Create environment and install packages
-    env = Environment()  # Using constructor instead of create
-    env.create("my-env")  # Create the environment
-    env.install(["python=3.9", "numpy>=1.20"])
-    env.export_requirements("requirements.txt")
+    # Define environment parameters
+    name = "my-env"
+    requirements: List[str] = ["python=3.9", "numpy>=1.20"]
+    channels = [channel]
+    
+    # Create and configure environment
+    env = Environment(
+        name=name,
+        requirements=requirements,
+        channels=channels
+    )
 
 if __name__ == "__main__":
     main() 
