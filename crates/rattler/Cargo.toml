@@ -32,20 +32,20 @@ memchr = { workspace = true }
 memmap2 = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
-rattler_cache = { path = "../rattler_cache", version = "0.3.17", default-features = false }
-rattler_conda_types = { path = "../rattler_conda_types", version = "0.32.0", default-features = false }
-rattler_digest = { path = "../rattler_digest", version = "1.1.1", default-features = false }
-rattler_networking = { path = "../rattler_networking", version = "0.22.12", default-features = false }
-rattler_shell = { path = "../rattler_shell", version = "0.22.26", default-features = false }
-rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.36", default-features = false, features = ["reqwest"] }
-rattler_menuinst = { path = "../rattler_menuinst", version = "0.2.7", default-features = false }
+rattler_cache = { workspace = true }
+rattler_conda_types = { workspace = true }
+rattler_digest = { workspace = true }
+rattler_networking = { workspace = true }
+rattler_shell = { workspace = true }
+rattler_package_streaming = { workspace = true, features = ["reqwest"] }
+rattler_menuinst = { workspace = true, default-features = false }
 rayon = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["stream", "json", "gzip"] }
 reqwest-middleware = { workspace = true }
 smallvec = { workspace = true }
-simple_spawn_blocking = { path = "../simple_spawn_blocking", version = "1.1", default-features = false, features = ["tokio"] }
+simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "io-util", "macros"] }
