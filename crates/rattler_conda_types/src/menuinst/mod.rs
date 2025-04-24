@@ -91,6 +91,7 @@ pub struct WindowsTracker {
     pub menu_mode: MenuMode,
 
     /// The sub-directory of `menu_name` in start menu.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_menu_subdir_path: Option<PathBuf>,
 
     /// List of shortcuts that were installed
