@@ -46,18 +46,23 @@ This is an example of installing an environment containing `cowpy` and all its d
 
 ## Examples
 
-For detailed examples of how to use different Rattler components, see the `examples` directory:
+For detailed examples of how to use different Rattler components, please refer to:
 
-- [Conda Types Examples](examples/conda_types.rs) - Working with package names, versions, and platforms
-- [Package Streaming Examples](examples/package_streaming.rs) - Reading and processing package files
-- [Shell Examples](examples/shell.rs) - Working with shell environments
-- [Python Bindings Examples](examples/python_bindings.py) - Using Rattler from Python
-- [Common Operations](examples/common_operations.rs) - Common package management tasks
+- [Rust API Documentation](https://conda.github.io/rattler) - Contains detailed examples and documentation for all Rust components
+- [Python API Documentation](https://conda.github.io/rattler/py-rattler) - Contains Python binding examples and documentation
+- [Example Projects](https://github.com/conda/rattler/tree/main/py-rattler/examples) - Working examples of using Rattler from Python
 
-Each example demonstrates common use cases and best practices. For more detailed examples and API documentation:
+Each component's documentation includes common use cases and best practices. The examples demonstrate how to:
+- Work with package names, versions, and platforms
+- Read and process package files
+- Work with shell environments
+- Use Rattler from Python
+- Perform common package management tasks
+
+For more detailed examples and API documentation:
 - [Rust API Documentation](https://conda.github.io/rattler)
 - [Python API Documentation](https://conda.github.io/rattler/py-rattler)
-- [Example Projects](https://github.com/conda/rattler/tree/main/examples)
+- [Example Projects](https://github.com/conda/rattler/tree/main/py-rattler/examples)
 
 ## Give it a try!
 
@@ -253,4 +258,4 @@ async fn install_packages() -> Result<(), Box<dyn std::error::Error>> {
 For more detailed examples and API documentation:
 - [Rust API Documentation](https://conda.github.io/rattler)
 - [Python API Documentation](https://conda.github.io/rattler/py-rattler)
-- [Example Projects](https://github.com/conda/rattler/tree/main/examples)
+- [Example Projects](https://github.com/conda/rattler/tree/main/py-rattler/examples)
