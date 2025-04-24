@@ -1,32 +1,18 @@
-from rattler import PackageName, Channel, Environment, Platform, RepoDataRecord, LockChannel
-from typing import Dict, List
+from rattler import PackageName, Channel, Platform
 
-def main() -> None:
-    # Create a new channel
-    channel = Channel("conda-forge")
-    lock_channel = LockChannel.from_channel(channel)
-
-    # Get package information
+def main() -> None:  # type: ignore[no-untyped-def]
+    """Basic example of using rattler."""
+    # Create a package name
     pkg_name = PackageName("numpy")
     print(f"Package name: {pkg_name}")
     
-    # Define environment parameters
-    name = "my-env"
+    # Get current platform
     platform = Platform.current()
+    print(f"Current platform: {platform}")
     
-    # In a real application, you would fetch these records from a repository
-    # This is just a simplified example
-    requirements: Dict[Platform, List[RepoDataRecord]] = {
-        platform: []  # Empty list as placeholder
-    }
-    channels: List[LockChannel] = [lock_channel]
-    
-    # Create and configure environment
-    env = Environment(
-        name=name,
-        requirements=requirements,
-        channels=channels
-    )
+    # Create a channel
+    channel = Channel("conda-forge")
+    print(f"Using channel: {channel}")
 
 if __name__ == "__main__":
     main() 
