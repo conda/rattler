@@ -181,6 +181,22 @@ pub trait Shell {
     fn completion_script_location(&self) -> Option<&'static Path> {
         None
     }
+
+    /// Restores an environment variable from its backup if it exists, otherwise unsets it.
+    ///
+    /// # Arguments
+    /// * `key` - The name of the environment variable to restore
+    /// * `backup_key` - The name of the backup environment variable
+    fn restore_env_var_if_exists(
+        &self,
+        f: &mut impl Write,
+        key: &str,
+        backup_key: &str,
+    ) -> ShellResult {
+        // Default implementation that just unsets both variables
+        self.unset_env_var(f, backup_key)?;
+        self.unset_env_var(f, key)
+    }
 }
 
 /// Convert a native PATH on Windows to a Unix style path using cygpath.
@@ -360,6 +376,25 @@ impl Shell for Bash {
 
         cmd
     }
+
+    fn restore_env_var_if_exists(
+        &self,
+        f: &mut impl Write,
+        key: &str,
+        backup_key: &str,
+    ) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if [ -n "${{{backup_key}:-}}" ]; then
+                {key}="${{{backup_key}}}"
+                unset {backup_key}
+            else
+                unset {key}
+            fi"#
+        )?)
+    }
 }
 
 /// A [`Shell`] implementation for the Zsh shell.
@@ -406,6 +441,25 @@ impl Shell for Zsh {
             writeln!(f, "compinit")?;
         }
         Ok(())
+    }
+
+    fn restore_env_var_if_exists(
+        &self,
+        f: &mut impl Write,
+        key: &str,
+        backup_key: &str,
+    ) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if [ -n "${{{backup_key}:-}}" ]; then
+                {key}="${{{backup_key}}}"
+                unset {backup_key}
+            else
+                unset {key}
+            fi"#
+        )?)
     }
 }
 
@@ -457,6 +511,24 @@ impl Shell for Xonsh {
 
     fn completion_script_location(&self) -> Option<&'static Path> {
         None
+    }
+
+    fn restore_env_var_if_exists(
+        &self,
+        f: &mut impl Write,
+        key: &str,
+        backup_key: &str,
+    ) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if {backup_key} in $env:
+                $env[{key}] = $env[{backup_key}]
+                del $env[{backup_key}]
+            else:
+                del $env[{key}]"#
+        )?)
     }
 }
 
@@ -533,6 +605,25 @@ impl Shell for CmdExe {
     fn line_ending(&self) -> &str {
         "\r\n"
     }
+
+    fn restore_env_var_if_exists(
+        &self,
+        f: &mut impl Write,
+        key: &str,
+        backup_key: &str,
+    ) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if defined {backup_key} (
+                set "{key}=%{backup_key}%"
+                set "{backup_key}="
+            ) else (
+                set "{key}="
+            )"#
+        )?)
+    }
 }
 
 /// A [`Shell`] implementation for `PowerShell`.
@@ -600,6 +691,25 @@ impl Shell for PowerShell {
     fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
         writeln!(f, r##"dir env: | %{{"{{0}}={{1}}" -f $_.Name,$_.Value}}"##)
     }
+
+    fn restore_env_var_if_exists(
+        &self,
+        f: &mut impl Write,
+        key: &str,
+        backup_key: &str,
+    ) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if (Test-Path env:{backup_key}) {{
+                $env:{key} = $env:{backup_key}
+                Remove-Item env:{backup_key}
+            }} else {{
+                Remove-Item env:{key} -ErrorAction SilentlyContinue
+            }}"#
+        )?)
+    }
 }
 
 /// A [`Shell`] implementation for the Fish shell.
@@ -653,6 +763,25 @@ impl Shell for Fish {
             writeln!(f, "end")?;
         }
         Ok(())
+    }
+
+    fn restore_env_var_if_exists(
+        &self,
+        f: &mut impl Write,
+        key: &str,
+        backup_key: &str,
+    ) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if set -q {backup_key}
+                set -gx {key} ${backup_key}
+                set -e {backup_key}
+            else
+                set -e {key}
+            end"#
+        )?)
     }
 }
 
@@ -735,6 +864,25 @@ impl Shell for NuShell {
 
     fn completion_script_location(&self) -> Option<&'static Path> {
         None
+    }
+
+    fn restore_env_var_if_exists(
+        &self,
+        f: &mut impl Write,
+        key: &str,
+        backup_key: &str,
+    ) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if ($env | get {backup_key}?) {{
+                $env.{key} = $env.{backup_key}
+                $env = $env | reject {backup_key}
+            }} else {{
+                $env = $env | reject {key}
+            }}"#
+        )?)
     }
 }
 
@@ -976,6 +1124,17 @@ impl<T: Shell + 'static> ShellScript<T> {
     /// Run `echo` in the shell script.
     pub fn echo(&mut self, text: &str) -> Result<&mut Self, std::fmt::Error> {
         self.shell.echo(&mut self.contents, text)?;
+        Ok(self)
+    }
+
+    /// Restores an environment variable from its backup if it exists, otherwise unsets it.
+    pub fn restore_env_var_if_exists(
+        &mut self,
+        key: &str,
+        backup_key: &str,
+    ) -> Result<&mut Self, ShellError> {
+        self.shell
+            .restore_env_var_if_exists(&mut self.contents, key, backup_key)?;
         Ok(self)
     }
 }

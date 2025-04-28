@@ -50,6 +50,7 @@ pub fn run_in_environment(
         conda_prefix,
         path: current_path,
         path_modification_behavior: PathModificationBehavior::default(),
+        current_env: env_vars.clone(),
     };
 
     let host_activation = activator.activation(activation_vars)?;
