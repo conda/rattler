@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0](https://github.com/conda/rattler/compare/rattler_networking-v0.22.12...rattler_networking-v0.23.0) - 2025-05-03
+
+### Added
+
+- Add MemoryStorage as authentication backend ([#1265](https://github.com/conda/rattler/pull/1265))
+
 ## [0.22.12](https://github.com/conda/rattler/compare/rattler_networking-v0.22.11...rattler_networking-v0.22.12) - 2025-04-10
 
 ### Other
