@@ -31,7 +31,12 @@ impl Prefix {
         let path = path.into();
 
         // Create the target directory if it doesn't exist
-        fs_err::create_dir_all(&path)?;
+        fs_err::create_dir_all(path.join("conda-meta"))?;
+
+        if !path.join("conda-meta/history").exists() {
+            // Create an empty history file if it doesn't exist
+            fs_err::File::create(path.join("conda-meta/history"))?;
+        }
 
         // Exclude from backups on macOS
         #[cfg(target_os = "macos")]
