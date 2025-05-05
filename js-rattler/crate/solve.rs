@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, ParseStrictness::Lenient};
+use rattler_conda_types::{
+    Channel, ChannelConfig, ChannelUrl, MatchSpec, ParseStrictness::Lenient,
+};
 use rattler_repodata_gateway::{Gateway, SourceConfig};
 use rattler_solve::{SolverImpl, SolverTask};
 use wasm_bindgen::prelude::*;
@@ -83,7 +85,7 @@ pub async fn simple_solve(
             package_name: r.package_record.name.as_source().to_string(),
             build: r.package_record.build.clone(),
             build_number: r.package_record.build_number,
-            repo_name: r.channel,
+            repo_name: r.channel.as_ref().map(ChannelUrl::to_string),
             filename: r.file_name,
             version: r.package_record.version.to_string(),
         })

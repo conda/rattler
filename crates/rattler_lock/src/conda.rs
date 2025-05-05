@@ -6,7 +6,6 @@ use rattler_conda_types::{
 use rattler_digest::Sha256Hash;
 use std::collections::BTreeMap;
 use std::{borrow::Cow, cmp::Ordering, hash::Hash};
-use url::Url;
 
 /// A locked conda dependency can be either a binary package or a source
 /// package.
@@ -228,10 +227,7 @@ impl From<RepoDataRecord> for CondaPackageData {
         Self::Binary(CondaBinaryData {
             package_record: value.package_record,
             file_name: value.file_name,
-            channel: value
-                .channel
-                .and_then(|channel| Url::parse(&channel).ok())
-                .map(Into::into),
+            channel: value.channel,
             location,
         })
     }
@@ -253,7 +249,7 @@ impl TryFrom<CondaBinaryData> for RepoDataRecord {
             package_record: value.package_record,
             file_name: value.file_name,
             url: value.location.try_into_url()?,
-            channel: value.channel.map(|channel| channel.to_string()),
+            channel: value.channel,
         })
     }
 }

@@ -2,7 +2,6 @@ use std::borrow::Cow;
 
 use cfg_if::cfg_if;
 use rattler_conda_types::{ChannelUrl, RepoDataRecord, Shard};
-use rattler_redaction::Redact;
 use url::Url;
 
 use crate::{fetch::FetchRepoDataError, GatewayError};
@@ -67,7 +66,7 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                 url: base_url
                     .join(&file_name)
                     .expect("filename is not a valid url"),
-                channel: Some(channel_base_url.url().clone().redact().to_string()),
+                channel: Some(channel_base_url.clone()),
                 package_record,
                 file_name,
             })
