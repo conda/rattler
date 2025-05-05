@@ -1,8 +1,8 @@
 //! Functionality to stream parts of a `.conda` archive for objects that implement both
 //! [`std::io::Read`] and [`std::io::Seek`] like a [`std::fs::File`] or a [`std::io::Cursor<T>`].
 
-use crate::read::{stream_tar_bz2, stream_tar_zst};
 use crate::ExtractError;
+use crate::read::{stream_tar_bz2, stream_tar_zst};
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::package::PackageFile;
 use std::fs::File;

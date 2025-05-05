@@ -2,8 +2,8 @@
 use std::{collections::HashMap, sync::Mutex};
 
 use crate::{
-    authentication_storage::{AuthenticationStorageError, StorageBackend},
     Authentication,
+    authentication_storage::{AuthenticationStorageError, StorageBackend},
 };
 
 /// A struct that implements storage and access of authentication
@@ -23,7 +23,7 @@ impl MemoryStorage {
     /// Create a new empty memory storage
     pub fn new() -> Self {
         Self {
-            store: Default::default(),
+            store: Mutex::default(),
         }
     }
 }
@@ -45,7 +45,7 @@ impl StorageBackend for MemoryStorage {
         let mut store = self
             .store
             .lock()
-            .map_err(|_| MemoryStorageError::LockError)?;
+            .map_err(|_err| MemoryStorageError::LockError)?;
         store.insert(host.to_string(), authentication.clone());
         Ok(())
     }
@@ -54,7 +54,7 @@ impl StorageBackend for MemoryStorage {
         let store = self
             .store
             .lock()
-            .map_err(|_| MemoryStorageError::LockError)?;
+            .map_err(|_err| MemoryStorageError::LockError)?;
         Ok(store.get(host).cloned())
     }
 
@@ -62,7 +62,7 @@ impl StorageBackend for MemoryStorage {
         let mut store = self
             .store
             .lock()
-            .map_err(|_| MemoryStorageError::LockError)?;
+            .map_err(|_err| MemoryStorageError::LockError)?;
         store.remove(host);
         Ok(())
     }

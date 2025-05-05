@@ -12,7 +12,7 @@ use std::{
 
 use itertools::{Either, EitherOrBoth, Itertools};
 pub use parse::{ParseVersionError, ParseVersionErrorKind};
-use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 use smallvec::SmallVec;
 
 mod flags;
@@ -981,7 +981,7 @@ impl<'v> SegmentIter<'v> {
     }
 
     /// Returns an iterator over the components of this segment.
-    pub fn components(&self) -> impl DoubleEndedIterator<Item = &'v Component> {
+    pub fn components(&self) -> impl DoubleEndedIterator<Item = &'v Component> + use<'v> {
         static IMPLICIT_DEFAULT: Component = Component::Numeral(0);
 
         let version = self.version;
@@ -1263,9 +1263,11 @@ mod test {
 
     #[test]
     fn starts_with() {
-        assert!(Version::from_str("1.2.3")
-            .unwrap()
-            .starts_with(&Version::from_str("1.2").unwrap()));
+        assert!(
+            Version::from_str("1.2.3")
+                .unwrap()
+                .starts_with(&Version::from_str("1.2").unwrap())
+        );
     }
 
     fn get_hash(spec: &impl Hash) -> u64 {
