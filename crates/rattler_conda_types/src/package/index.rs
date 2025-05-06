@@ -41,6 +41,10 @@ pub struct IndexJson {
     /// mutually exclusive features.
     pub features: Option<String>,
 
+    /// Flags that can be matched by the solver.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flags: Vec<String>,
+
     /// Optionally, the license
     pub license: Option<String>,
 
