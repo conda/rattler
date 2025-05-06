@@ -6,8 +6,10 @@ use itertools::Itertools;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
+use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
+use std::str::FromStr;
 use std::sync::Arc;
 use url::Url;
 
@@ -138,6 +140,8 @@ pub struct MatchSpec {
     pub file_name: Option<String>,
     /// The selected optional features of the package
     pub extras: Option<Vec<String>>,
+    /// The selected build flags
+    pub flags: Option<Vec<FlagMatcher>>,
     /// The channel of the package
     pub channel: Option<Arc<Channel>>,
     /// The subdir of the channel
@@ -192,6 +196,10 @@ impl Display for MatchSpec {
             keys.push(format!("extras=[{}]", extras.iter().format(", ")));
         }
 
+        if let Some(flags) = &self.flags {
+            keys.push(format!("flags=[{:?}]", flags.iter().format(", ")));
+        }
+
         if let Some(md5) = &self.md5 {
             keys.push(format!("md5=\"{md5:x}\""));
         }
@@ -224,6 +232,80 @@ impl Display for MatchSpec {
     }
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum FlagMatcher {
+    /// Match if flag exists
+    Required(String),
+    /// Match if flag doesn't exist
+    Negated(String),
+    /// Match if flag exists, but don't fail if it doesn't
+    Optional(String),
+}
+
+impl FlagMatcher {
+    pub fn matches(&self, flags: &BTreeSet<String>) -> bool {
+        match self {
+            FlagMatcher::Required(flag) => flags.contains(flag),
+            FlagMatcher::Negated(flag) => !flags.contains(flag),
+            FlagMatcher::Optional(flag) => !flags.contains(flag) || flags.contains(flag),
+        }
+    }
+}
+
+impl Display for FlagMatcher {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FlagMatcher::Required(flag) => write!(f, "{flag}"),
+            FlagMatcher::Negated(flag) => write!(f, "~{flag}"),
+            FlagMatcher::Optional(flag) => write!(f, "?{flag}"),
+        }
+    }
+}
+
+impl FromStr for FlagMatcher {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.starts_with('~') {
+            Ok(FlagMatcher::Negated(s[1..].to_string()))
+        } else if s.starts_with('?') {
+            Ok(FlagMatcher::Optional(s[1..].to_string()))
+        } else {
+            Ok(FlagMatcher::Required(s.to_string()))
+        }
+    }
+}
+
+impl Serialize for FlagMatcher {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            FlagMatcher::Required(flag) => serializer.serialize_str(flag),
+            FlagMatcher::Negated(flag) => serializer.serialize_str(&format!("~{}", flag)),
+            FlagMatcher::Optional(flag) => serializer.serialize_str(&format!("?{}", flag)),
+        }
+    }
+}
+
+// Add deserialization implementation
+impl<'de> Deserialize<'de> for FlagMatcher {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if s.starts_with('~') || s.starts_with('!') {
+            Ok(FlagMatcher::Negated(s[1..].to_string()))
+        } else if s.starts_with('?') {
+            Ok(FlagMatcher::Optional(s[1..].to_string()))
+        } else {
+            Ok(FlagMatcher::Required(s))
+        }
+    }
+}
+
 impl MatchSpec {
     /// Decomposes this instance into a [`NamelessMatchSpec`] and a name.
     pub fn into_nameless(self) -> (Option<PackageName>, NamelessMatchSpec) {
@@ -235,6 +317,7 @@ impl MatchSpec {
                 build_number: self.build_number,
                 file_name: self.file_name,
                 extras: self.extras,
+                flags: self.flags,
                 channel: self.channel,
                 subdir: self.subdir,
                 namespace: self.namespace,
@@ -282,6 +365,8 @@ pub struct NamelessMatchSpec {
     pub file_name: Option<String>,
     /// Optional extra dependencies to select for the package
     pub extras: Option<Vec<String>>,
+    /// Optional build time flags to select for the package
+    pub flags: Option<Vec<FlagMatcher>>,
     /// The channel of the package
     #[serde(deserialize_with = "deserialize_channel", default)]
     pub channel: Option<Arc<Channel>>,
@@ -338,6 +423,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             build_number: spec.build_number,
             file_name: spec.file_name,
             extras: spec.extras,
+            flags: spec.flags,
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
@@ -359,6 +445,7 @@ impl MatchSpec {
             build_number: spec.build_number,
             file_name: spec.file_name,
             extras: spec.extras,
+            flags: spec.flags,
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
@@ -435,6 +522,12 @@ impl Matches<PackageRecord> for NamelessMatchSpec {
 
         if let Some(license) = self.license.as_ref() {
             if Some(license) != other.license.as_ref() {
+                return false;
+            }
+        }
+
+        if let Some(flags) = self.flags.as_ref() {
+            if !flags.iter().all(|flag| flag.matches(&other.flags)) {
                 return false;
             }
         }
@@ -559,8 +652,10 @@ mod tests {
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
     use crate::{
-        match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
-        ParseStrictness::*, RepoDataRecord, StringMatcher, Version, VersionSpec,
+        match_spec::{FlagMatcher, Matches},
+        MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
+        ParseStrictness::*,
+        RepoDataRecord, StringMatcher, Version, VersionSpec,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -905,5 +1000,128 @@ mod tests {
         let spec =
             MatchSpec::from_nameless(NamelessMatchSpec::from_str(">=12", Strict).unwrap(), None);
         assert!(!spec.is_virtual());
+    }
+
+    #[test]
+    fn test_flagmatcher() {
+        use std::collections::BTreeSet;
+
+        // Create a set of flags to test against
+        let mut flags = BTreeSet::new();
+        flags.insert("mkl".to_string());
+        flags.insert("cuda".to_string());
+
+        // Test Required flag matcher
+        let matcher = FlagMatcher::Required("mkl".to_string());
+        assert!(matcher.matches(&flags));
+
+        let matcher = FlagMatcher::Required("nomkl".to_string());
+        assert!(!matcher.matches(&flags));
+
+        // Test Negated flag matcher
+        let matcher = FlagMatcher::Negated("nomkl".to_string());
+        assert!(matcher.matches(&flags));
+
+        let matcher = FlagMatcher::Negated("mkl".to_string());
+        assert!(!matcher.matches(&flags));
+
+        // Test Optional flag matcher
+        let matcher = FlagMatcher::Optional("mkl".to_string());
+        assert!(matcher.matches(&flags));
+
+        let matcher = FlagMatcher::Optional("nomkl".to_string());
+        assert!(matcher.matches(&flags));
+    }
+
+    #[test]
+    fn test_flagmatcher_parsing() {
+        // Test parsing standard flag
+        let matcher = FlagMatcher::from_str("mkl").unwrap();
+        assert!(matches!(matcher, FlagMatcher::Required(_)));
+
+        // Test parsing negated flag
+        let matcher = FlagMatcher::from_str("~mkl").unwrap();
+        assert!(matches!(matcher, FlagMatcher::Negated(_)));
+
+        // Test parsing optional flag
+        let matcher = FlagMatcher::from_str("?mkl").unwrap();
+        assert!(matches!(matcher, FlagMatcher::Optional(_)));
+    }
+
+    #[test]
+    fn test_flagmatcher_display() {
+        // Test display formatting for Required flag
+        let matcher = FlagMatcher::Required("mkl".to_string());
+        assert_eq!(matcher.to_string(), "mkl");
+
+        // Test display formatting for Negated flag
+        let matcher = FlagMatcher::Negated("mkl".to_string());
+        assert_eq!(matcher.to_string(), "~mkl");
+
+        // Test display formatting for Optional flag
+        let matcher = FlagMatcher::Optional("mkl".to_string());
+        assert_eq!(matcher.to_string(), "?mkl");
+    }
+
+    #[test]
+    fn test_flagmatcher_serde() {
+        use serde_json;
+
+        // Test serialization
+        let matcher = FlagMatcher::Required("mkl".to_string());
+        assert_eq!(serde_json::to_string(&matcher).unwrap(), "\"mkl\"");
+
+        let matcher = FlagMatcher::Negated("mkl".to_string());
+        assert_eq!(serde_json::to_string(&matcher).unwrap(), "\"~mkl\"");
+
+        let matcher = FlagMatcher::Optional("mkl".to_string());
+        assert_eq!(serde_json::to_string(&matcher).unwrap(), "\"?mkl\"");
+
+        // Test deserialization
+        let matcher: FlagMatcher = serde_json::from_str("\"mkl\"").unwrap();
+        assert!(matches!(matcher, FlagMatcher::Required(_)));
+
+        let matcher: FlagMatcher = serde_json::from_str("\"~mkl\"").unwrap();
+        assert!(matches!(matcher, FlagMatcher::Negated(_)));
+
+        let matcher: FlagMatcher = serde_json::from_str("\"?mkl\"").unwrap();
+        assert!(matches!(matcher, FlagMatcher::Optional(_)));
+    }
+
+    #[test]
+    fn test_matchspec_with_flags() {
+        use std::collections::BTreeSet;
+
+        // Create a package record with flags
+        let mut flags = BTreeSet::new();
+        flags.insert("mkl".to_string());
+        flags.insert("cuda".to_string());
+
+        let mut package = PackageRecord::new(
+            PackageName::new_unchecked("numpy"),
+            Version::from_str("1.0").unwrap(),
+            String::from("py37_0"),
+        );
+        package.flags = flags;
+
+        // Test match with required flag
+        let spec = MatchSpec::from_str("numpy[flags=['mkl']]", Strict).unwrap();
+        assert!(spec.matches(&package));
+
+        // Test match with negated flag
+        let spec = MatchSpec::from_str("numpy[flags=['~nomkl']]", Strict).unwrap();
+        assert!(spec.matches(&package));
+
+        // Test match with optional flag
+        let spec = MatchSpec::from_str("numpy[flags=['?mkl']]", Strict).unwrap();
+        assert!(spec.matches(&package));
+
+        // Test match with multiple flags
+        let spec = MatchSpec::from_str("numpy[flags=['mkl', 'cuda']]", Strict).unwrap();
+        assert!(spec.matches(&package));
+
+        // Test non-match with missing required flag
+        let spec = MatchSpec::from_str("numpy[flags=['nomkl']]", Strict).unwrap();
+        assert!(!spec.matches(&package));
     }
 }
