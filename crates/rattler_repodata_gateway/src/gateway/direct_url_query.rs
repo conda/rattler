@@ -63,7 +63,7 @@ impl DirectUrlQuery {
         };
 
         // Construct a cache key
-        let cache_key = CacheKey::from(archive_identifier).with_opt_sha256(self.sha256);
+        let cache_key = CacheKey::from(archive_identifier).with_opt_sha256(self.sha256).with_opt_md5(self.md5);
 
         // TODO: Optimize this by only parsing the index json from stream.
         // Get package on system
@@ -126,7 +126,7 @@ mod test {
         .unwrap();
         let package_cache = PackageCache::new(PathBuf::from("/tmp"));
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
-        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None);
+        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None, None);
 
         assert_eq!(query.url.clone(), url);
 
@@ -168,7 +168,7 @@ mod test {
         let url = Url::from_file_path(package_path).unwrap();
         let package_cache = PackageCache::new(temp_dir());
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
-        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None);
+        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None, None);
 
         assert_eq!(query.url.clone(), url);
 
