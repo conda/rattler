@@ -590,8 +590,8 @@ impl TryFrom<Url> for MatchSpec {
             .ok_or(MatchSpecUrlError::InvalidFilename(filename.to_string()))?;
 
         spec.name = Some(
-            PackageName::from_str(&archive_identifier.name).map_err(|_| {
-                MatchSpecUrlError::InvalidPackageName(archive_identifier.name.to_string())
+            PackageName::from_str(&archive_identifier.name).map_err(|_err| {
+                MatchSpecUrlError::InvalidPackageName(archive_identifier.name)
             })?,
         );
 
@@ -599,7 +599,7 @@ impl TryFrom<Url> for MatchSpec {
     }
 }
 
-/// Errors that can occur when converting a URL to a MatchSpec
+/// Errors that can occur when converting a URL to a `MatchSpec``
 #[derive(Debug, thiserror::Error)]
 pub enum MatchSpecUrlError {
     #[error("Missing filename in URL")]

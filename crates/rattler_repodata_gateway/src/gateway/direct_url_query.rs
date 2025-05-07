@@ -35,13 +35,12 @@ pub enum DirectUrlQueryError {
 }
 
 impl DirectUrlQuery {
-    // TODO add md5 here! 
     pub(crate) fn new(
         url: Url,
         package_cache: PackageCache,
         client: reqwest_middleware::ClientWithMiddleware,
         sha256: Option<Sha256Hash>,
-        md5: Option<Md5Hash>
+        md5: Option<Md5Hash>,
     ) -> Self {
         Self {
             url,
@@ -83,12 +82,12 @@ impl DirectUrlQuery {
         let index_json = IndexJson::from_package_directory(cache_lock.path())?;
         let package_record = PackageRecord::from_index_json(
             index_json,
-            None,        // Size
-            self.sha256, // sha256
-            self.md5,    // md5
+            None, // size is unknown for direct urls
+            self.sha256,
+            self.md5,
         )?;
 
-        println!("Package record build from direct url: {:?}", package_record);
+        tracing::debug!("Package record build from direct url: {:?}", package_record);
 
         Ok(Arc::new([RepoDataRecord {
             package_record,
