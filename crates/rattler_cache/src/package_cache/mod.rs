@@ -250,6 +250,7 @@ impl PackageCache {
         }
         // Sha256 of the expected package
         let sha256 = cache_key.sha256();
+        let md5 = cache_key.md5();
         let download_reporter = reporter.clone();
         // Get or fetch the package, using the specified fetch function
         self.get_or_fetch(cache_key, move |destination| {
@@ -276,8 +277,33 @@ impl PackageCache {
                     )
                         .await;
 
-                    // Extract any potential error
-                    let Err(err) = result else { return Ok(()); };
+                    let err = match result {
+                        Ok(result) => {
+                            if let Some(md5) = md5 {
+                                if md5 != result.md5 {
+                                    // Delete the package if the hash does not match
+                                    tokio_fs::remove_dir_all(&destination).await.unwrap();
+                                    return Err(ExtractError::HashMismatch {
+                                        expected: format!("{:x}", md5),
+                                        actual: format!("{:x}", result.md5),
+                                    });
+                                }
+                            }
+
+                            if let Some(sha256) = sha256 {
+                                if sha256 != result.sha256 {
+                                    // Delete the package if the hash does not match
+                                    tokio_fs::remove_dir_all(&destination).await.unwrap();
+                                    return Err(ExtractError::HashMismatch {
+                                        expected: format!("{:x}", sha256),
+                                        actual: format!("{:x}", result.sha256),
+                                    });
+                                }
+                            }
+                            return Ok(());
+                        }
+                        Err(err) => err,
+                    };
 
                     // Only retry on io errors. We assume that the user has
                     // middleware installed that handles connection retries.
