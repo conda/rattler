@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.7...rattler_menuinst-v0.2.8) - 2025-05-03
+
+### Fixed
+
+- menuinst windows shortcut path ([#1273](https://github.com/conda/rattler/pull/1273))
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
 ## [0.2.7](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.6...rattler_menuinst-v0.2.7) - 2025-04-10
 
 ### Other

@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.32.0...rattler_conda_types-v0.33.0) - 2025-05-03
+
+### Added
+
+- add `history` file to conda-meta folder ([#1289](https://github.com/conda/rattler/pull/1289))
+
+### Fixed
+
+- menuinst windows shortcut path ([#1273](https://github.com/conda/rattler/pull/1273))
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
 ## [0.32.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.31.6...rattler_conda_types-v0.32.0) - 2025-04-10
 
 ### Added
