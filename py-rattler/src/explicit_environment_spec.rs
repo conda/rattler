@@ -1,9 +1,17 @@
 use std::{path::PathBuf, str::FromStr};
 
-use pyo3::{pyclass, pymethods, PyResult};
-use rattler_conda_types::{ExplicitEnvironmentEntry, ExplicitEnvironmentSpec};
+use pyo3::{pyclass, pyfunction, pymethods, Bound, PyAny, PyResult, Python};
+use pyo3_async_runtimes::tokio::future_into_py;
+use rattler_conda_types::{
+    Channel, ChannelConfig, ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, MatchSpec, Platform,
+};
+use url::Url;
 
-use crate::{error::PyRattlerError, platform::PyPlatform};
+use crate::{
+    error::PyRattlerError,
+    platform::PyPlatform,
+    repo_data::gateway::{self, PyGateway},
+};
 
 /// The explicit environment (e.g. env.txt) file that contains a list of
 /// all URLs in a environment
@@ -88,4 +96,48 @@ impl From<PyExplicitEnvironmentEntry> for ExplicitEnvironmentEntry {
     fn from(value: PyExplicitEnvironmentEntry) -> Self {
         value.0
     }
+}
+
+#[pyfunction]
+#[pyo3(signature = (spec, prefix, gateway))]
+/// Installs the explicit environment specified by the `spec` object to the given `prefix`
+pub fn py_install_explicit_environment(
+    py: Python<'_>,
+    spec: PyExplicitEnvironmentSpec,
+    prefix: PathBuf,
+    gateway: PyGateway,
+) -> PyResult<Bound<'_, PyAny>> {
+    let specs = spec
+        .packages()
+        .into_iter()
+        .map(|entry| {
+            let url = entry.url();
+            let url = Url::parse(&url).unwrap();
+            let spec: MatchSpec = url.try_into().unwrap();
+            spec
+        })
+        .collect::<Vec<_>>();
+
+    println!("Specs: {:?}", specs);
+
+    future_into_py(py, async move {
+        let available_packages = gateway
+            .inner
+            .query(
+                std::iter::empty::<Channel>(),
+                std::iter::empty::<Platform>(),
+                specs.clone().into_iter(),
+            )
+            .recursive(false)
+            .execute()
+            .await
+            .map_err(PyRattlerError::from)
+            .unwrap();
+        println!(
+            "Available packages: {:?}, installing to: {:?}",
+            available_packages, prefix
+        );
+
+        Ok(())
+    })
 }
