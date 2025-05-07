@@ -2,6 +2,8 @@ import pytest
 from pathlib import Path
 from rattler.explicit_environment import ExplicitEnvironmentSpec
 from rattler.platform import Platform
+from rattler import Gateway
+from rattler.rattler import py_install_explicit_environment
 
 test_env = """# This file may be used to create an environment using:
 # $ conda create --name <env> --file <this file>
@@ -60,3 +62,10 @@ http://repo.anaconda.com/pkgs/main/win-64/python-3.9.0-h1234.tar.bz2"""
 def test_parse_invalid_explicit_environment() -> None:
     with pytest.raises(Exception):
         ExplicitEnvironmentSpec.from_str("invalid content # platform: invalid-platform")
+
+@pytest.mark.asyncio
+async def test_install_explicit(tmp_path: Path) -> None:
+    spec = ExplicitEnvironmentSpec.from_str(test_env)
+    dest = tmp_path / "explicit_env"
+    gateway = Gateway()
+    await py_install_explicit_environment(spec._inner, dest, gateway._gateway)

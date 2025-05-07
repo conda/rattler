@@ -6,7 +6,7 @@ use rattler_conda_types::{
     package::{ArchiveIdentifier, IndexJson, PackageFile},
     ConvertSubdirError, PackageRecord, RepoDataRecord,
 };
-use rattler_digest::Sha256Hash;
+use rattler_digest::{Md5Hash, Sha256Hash};
 use url::Url;
 
 pub(crate) struct DirectUrlQuery {
@@ -14,6 +14,8 @@ pub(crate) struct DirectUrlQuery {
     url: Url,
     /// Optional Sha256 of the file
     sha256: Option<Sha256Hash>,
+    /// Optional MD5 of the file
+    md5: Option<Md5Hash>,
     /// The client to use for fetching the package
     client: reqwest_middleware::ClientWithMiddleware,
     /// The cache to use for storing the package
@@ -33,15 +35,18 @@ pub enum DirectUrlQueryError {
 }
 
 impl DirectUrlQuery {
+    // TODO add md5 here! 
     pub(crate) fn new(
         url: Url,
         package_cache: PackageCache,
         client: reqwest_middleware::ClientWithMiddleware,
         sha256: Option<Sha256Hash>,
+        md5: Option<Md5Hash>
     ) -> Self {
         Self {
             url,
             sha256,
+            md5,
             client,
             package_cache,
         }
@@ -80,10 +85,10 @@ impl DirectUrlQuery {
             index_json,
             None,        // Size
             self.sha256, // sha256
-            None,        // md5
+            self.md5,    // md5
         )?;
 
-        tracing::debug!("Package record build from direct url: {:?}", package_record);
+        println!("Package record build from direct url: {:?}", package_record);
 
         Ok(Arc::new([RepoDataRecord {
             package_record,
