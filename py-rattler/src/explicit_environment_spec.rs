@@ -3,15 +3,11 @@ use std::{path::PathBuf, str::FromStr};
 use pyo3::{pyclass, pyfunction, pymethods, Bound, PyAny, PyResult, Python};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::{
-    Channel, ChannelConfig, ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, MatchSpec, Platform,
+    Channel, ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, MatchSpec, Platform,
 };
 use url::Url;
 
-use crate::{
-    error::PyRattlerError,
-    platform::PyPlatform,
-    repo_data::gateway::{self, PyGateway},
-};
+use crate::{error::PyRattlerError, platform::PyPlatform, repo_data::gateway::PyGateway};
 
 /// The explicit environment (e.g. env.txt) file that contains a list of
 /// all URLs in a environment
