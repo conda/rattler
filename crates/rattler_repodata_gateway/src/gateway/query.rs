@@ -136,7 +136,7 @@ impl RepoDataQuery {
         if direct_url_specs.is_empty() && channels_and_platforms.is_empty() {
             return Ok(Vec::default());
         }
-        println!("Direct URL specs: {direct_url_specs:?}");
+
         // Result offset for direct url queries.
         let direct_url_offset = usize::from(!direct_url_specs.is_empty());
 
@@ -251,7 +251,7 @@ impl RepoDataQuery {
                 // Handle any records that were fetched
                 records = pending_records.select_next_some() => {
                     let (result_idx, request_specs, records) = records?;
-                    dbg!(result_idx, &records);
+
                     if self.recursive {
                         // Extract the dependencies from the records and recursively add them to the
                         // list of package names that we need to fetch.
