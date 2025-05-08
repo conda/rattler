@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.18](https://github.com/conda/rattler/compare/rattler_cache-v0.3.17...rattler_cache-v0.3.18) - 2025-05-03
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.3.17](https://github.com/conda/rattler/compare/rattler_cache-v0.3.16...rattler_cache-v0.3.17) - 2025-04-10
+
+### Fixed
+
+- Add location to the cache key ([#1143](https://github.com/conda/rattler/pull/1143))
+
+## [0.3.16](https://github.com/conda/rattler/compare/rattler_cache-v0.3.15...rattler_cache-v0.3.16) - 2025-04-04
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.3.15](https://github.com/conda/rattler/compare/rattler_cache-v0.3.14...rattler_cache-v0.3.15) - 2025-03-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
 ## [0.3.14](https://github.com/conda/rattler/compare/rattler_cache-v0.3.13...rattler_cache-v0.3.14) - 2025-03-10
 
 ### Other

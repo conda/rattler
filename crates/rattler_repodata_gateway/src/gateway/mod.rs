@@ -18,7 +18,7 @@ use std::{
 };
 
 pub use barrier_cell::BarrierCell;
-pub use builder::GatewayBuilder;
+pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
 use dashmap::{mapref::entry::Entry, DashMap};
 pub use error::GatewayError;
@@ -167,7 +167,7 @@ struct GatewayInner {
     package_cache: PackageCache,
 
     /// A semaphore to limit the number of concurrent requests.
-    concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
+    concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 impl GatewayInner {

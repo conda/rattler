@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use futures::future::OptionFuture;
 use http::StatusCode;
 use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata};
 use reqwest_middleware::ClientWithMiddleware;
@@ -26,7 +27,7 @@ pub struct ShardedSubdir {
     shards_base_url: Url,
     package_base_url: Url,
     sharded_repodata: ShardedRepodata,
-    concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
+    concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 impl ShardedSubdir {
@@ -34,7 +35,7 @@ impl ShardedSubdir {
         channel: Channel,
         subdir: String,
         client: ClientWithMiddleware,
-        concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
+        concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, GatewayError> {
         // Construct the base url for the shards (e.g. `<channel>/<subdir>`).
@@ -119,7 +120,12 @@ impl SubdirClient for ShardedSubdir {
             .expect("failed to build shard request");
 
         let shard_bytes = {
-            let _permit = self.concurrent_requests_semaphore.acquire();
+            let _request_permit = OptionFuture::from(
+                self.concurrent_requests_semaphore
+                    .as_deref()
+                    .map(tokio::sync::Semaphore::acquire),
+            )
+            .await;
             let reporter = reporter.map(|r| (r, r.on_download_start(&shard_url)));
             let shard_response = self
                 .client

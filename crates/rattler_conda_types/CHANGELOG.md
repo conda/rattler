@@ -6,6 +6,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.32.0...rattler_conda_types-v0.33.0) - 2025-05-03
+
+### Added
+
+- add `history` file to conda-meta folder ([#1289](https://github.com/conda/rattler/pull/1289))
+
+### Fixed
+
+- menuinst windows shortcut path ([#1273](https://github.com/conda/rattler/pull/1273))
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.32.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.31.6...rattler_conda_types-v0.32.0) - 2025-04-10
+
+### Added
+
+- Add license to MatchSpec ([#1236](https://github.com/conda/rattler/pull/1236))
+
+### Fixed
+
+- MatchSpec matches if license is set ([#1247](https://github.com/conda/rattler/pull/1247))
+- add support for `asterisk (*)` in package names for `MatchSpec` ([#1245](https://github.com/conda/rattler/pull/1245))
+
+## [0.31.6](https://github.com/conda/rattler/compare/rattler_conda_types-v0.31.5...rattler_conda_types-v0.31.6) - 2025-04-04
+
+### Fixed
+
+- allow empty info key in repodata.json ([#1181](https://github.com/conda/rattler/pull/1181))
+
+### Other
+
+- add the remove_from_backup function and update the prefix ([#1155](https://github.com/conda/rattler/pull/1155))
+
+## [0.31.5](https://github.com/conda/rattler/compare/rattler_conda_types-v0.31.4...rattler_conda_types-v0.31.5) - 2025-03-14
+
+### Added
+
+- package record ([#1148](https://github.com/conda/rattler/pull/1148))
+
 ## [0.31.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.31.3...rattler_conda_types-v0.31.4) - 2025-03-10
 
 ### Added

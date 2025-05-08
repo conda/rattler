@@ -38,20 +38,20 @@ jobs:
         node-version: ["20.x"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4
         with:
           node-version: ${{ matrix.node-version }}
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@9399c7bb15d4c7d47b27263d024f0a4978346ba4 # v1
         with:
           components: clippy, rustfmt
           target: wasm32-unknown-unknown
           cache-workspaces: js-rattler -> target
 
       - name: Run rustfmt
-        uses: actions-rust-lang/rustfmt@v1
+        uses: actions-rust-lang/rustfmt@559aa3035a47390ba96088dffa783b5d26da9326 # v1
         with:
           manifest-path: js-rattler/Cargo.toml
 

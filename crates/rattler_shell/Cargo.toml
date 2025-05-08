@@ -1,6 +1,6 @@
 [package]
 name = "rattler_shell"
-version = "0.22.23"
+version = "0.23.0"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "A crate to help with activation and deactivation of a conda environment"
@@ -11,14 +11,16 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 enum_dispatch = { workspace = true }
 indexmap = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.31.4", default-features = false }
+rattler_conda_types = { workspace = true, default-features = false }
+rattler_pty = { workspace = true, default-features = false }
 serde_json = { workspace = true, features = ["preserve_order"] }
 shlex = { workspace = true }
-sysinfo = { workspace = true , optional = true }
+sysinfo = { workspace = true, optional = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -26,3 +28,4 @@ tracing = { workspace = true }
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }
 tempdir = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

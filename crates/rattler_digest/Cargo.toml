@@ -1,6 +1,6 @@
 [package]
 name = "rattler_digest"
-version = "1.0.8"
+version = "1.1.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "An simple crate used by rattler crates to compute different hashes from different sources"
@@ -19,6 +19,7 @@ serde = { workspace = true, features = ["derive"], optional = true }
 serde_with = { workspace = true }
 sha2 = { workspace = true }
 tokio = { workspace = true, features = ["io-util"], optional = true }
+url = { workspace = true }
 generic-array = { workspace = true, optional = true }
 
 [features]

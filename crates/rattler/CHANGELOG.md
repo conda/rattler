@@ -6,6 +6,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.6](https://github.com/conda/rattler/compare/rattler-v0.33.5...rattler-v0.33.6) - 2025-05-03
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.33.5](https://github.com/conda/rattler/compare/rattler-v0.33.4...rattler-v0.33.5) - 2025-04-10
+
+### Other
+
+- change `InstallOptions::target_prefix` to `Option<PathBuf>` ([#1242](https://github.com/conda/rattler/pull/1242))
+
+## [0.33.4](https://github.com/conda/rattler/compare/rattler-v0.33.3...rattler-v0.33.4) - 2025-04-04
+
+### Added
+
+- Set link options in installer ([#1178](https://github.com/conda/rattler/pull/1178))
+
+### Other
+
+- add the remove_from_backup function and update the prefix ([#1155](https://github.com/conda/rattler/pull/1155))
+
+## [0.33.3](https://github.com/conda/rattler/compare/rattler-v0.33.2...rattler-v0.33.3) - 2025-03-18
+
+### Fixed
+
+- use `create_dir_all` for `.trash` directory on Windows ([#1174](https://github.com/conda/rattler/pull/1174))
+
+## [0.33.2](https://github.com/conda/rattler/compare/rattler-v0.33.1...rattler-v0.33.2) - 2025-03-18
+
+### Other
+
+- updated the following local packages: rattler_menuinst
+
+## [0.33.1](https://github.com/conda/rattler/compare/rattler-v0.33.0...rattler-v0.33.1) - 2025-03-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_menuinst
+
 ## [0.33.0](https://github.com/conda/rattler/compare/rattler-v0.32.4...rattler-v0.33.0) - 2025-03-10
 
 ### Added

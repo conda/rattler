@@ -67,7 +67,8 @@ impl<'a> SolverMatchSpec<'a> {
         }
     }
 
-    /// Returns a mutable reference to this match spec after enabling the given feature
+    /// Returns a mutable reference to this match spec after enabling the given
+    /// feature
     pub fn set_feature(&mut self, feature: String) -> &SolverMatchSpec<'a> {
         self.feature = Some(feature);
         self
@@ -429,7 +430,8 @@ impl<'a> CondaDependencyProvider<'a> {
                                 .as_normalized()
                                 == record.package_record.name.as_normalized()
                         }) {
-                            // Check if the spec has a channel, and compare it to the repodata channel
+                            // Check if the spec has a channel, and compare it to the repodata
+                            // channel
                             if let Some(spec_channel) = &spec.channel {
                                 if record.channel.as_ref() != Some(&spec_channel.canonical_name()) {
                                     tracing::debug!("Ignoring {} {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), match &record.channel {
@@ -515,8 +517,7 @@ impl<'a> CondaDependencyProvider<'a> {
 
         // The dependencies for all candidates are always available.
         for candidates in records.values_mut() {
-            candidates.hint_dependencies_available =
-                HintDependenciesAvailable::Some(candidates.candidates.clone());
+            candidates.hint_dependencies_available = HintDependenciesAvailable::All;
         }
 
         Ok(Self {

@@ -98,7 +98,10 @@ pub fn extract_conda_via_buffering(
     compute_hashes(md5_reader)
 }
 
-fn extract_zipfile(zip_file: ZipFile<'_>, destination: &Path) -> Result<(), ExtractError> {
+fn extract_zipfile<R: std::io::Read>(
+    zip_file: ZipFile<'_, R>,
+    destination: &Path,
+) -> Result<(), ExtractError> {
     // If an error occurs while we are reading the contents of the zip we don't want to
     // seek to the end of the file. Using [`ManuallyDrop`] we prevent `drop` to be called on
     // the `file` in case the stack unwinds.

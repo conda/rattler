@@ -1,6 +1,8 @@
 //! This module provides functionality to download and cache `repodata.json`
 //! from a remote location.
 
+use std::path::PathBuf;
+
 use cfg_if::cfg_if;
 use rattler_redaction::Redact;
 use url::Url;
@@ -49,8 +51,8 @@ pub enum FetchRepoDataError {
     #[error("failed to create temporary file for repodata.json")]
     FailedToCreateTemporaryFile(#[source] std::io::Error),
 
-    #[error("failed to persist temporary repodata.json file")]
-    FailedToPersistTemporaryFile(#[from] tempfile::PersistError),
+    #[error("failed to persist temporary repodata.json file to {1:?}")]
+    FailedToPersistTemporaryFile(tempfile::PersistError, PathBuf),
 
     #[error("failed to get metadata from repodata.json file")]
     FailedToGetMetadata(#[source] std::io::Error),

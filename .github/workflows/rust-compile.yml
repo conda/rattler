@@ -29,10 +29,10 @@ jobs:
     name: Check intra-doc links
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           submodules: recursive
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@9399c7bb15d4c7d47b27263d024f0a4978346ba4 # v1
       - run: |
           RUSTDOCFLAGS="-Dwarnings -Wunreachable-pub" cargo doc --no-deps --all --all-features
 
@@ -40,14 +40,14 @@ jobs:
     name: Format and Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           submodules: recursive
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@9399c7bb15d4c7d47b27263d024f0a4978346ba4 # v1
         with:
           components: clippy, rustfmt
       - name: Run rustfmt
-        uses: actions-rust-lang/rustfmt@v1
+        uses: actions-rust-lang/rustfmt@559aa3035a47390ba96088dffa783b5d26da9326 # v1
       - name: Run clippy
         run: cargo clippy --all-targets
 
@@ -80,18 +80,18 @@ jobs:
           - { name: "Windows-aarch64",   target: aarch64-pc-windows-msvc,          os: windows-latest,                  skip-tests: true }
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           submodules: recursive
 
       - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@9399c7bb15d4c7d47b27263d024f0a4978346ba4 # v1
         with:
           target: ${{ matrix.target }}
           components: rustfmt
           cache: false
 
-      - uses: taiki-e/setup-cross-toolchain-action@v1
+      - uses: taiki-e/setup-cross-toolchain-action@0d2c6fcce937ba2ba77abf40e06449b74d60fa04 # v1
         if: matrix.target != 'x86_64-unknown-linux-musl'
         with:
           target: ${{ matrix.target }}
@@ -101,7 +101,7 @@ jobs:
           sudo apt install musl-tools gcc g++
           sudo ln -s /usr/bin/musl-gcc /usr/bin/musl-g++
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
 
       - name: Show version information (Rust, cargo, GCC)
         shell: bash
@@ -134,7 +134,7 @@ jobs:
 
       - name: Install cargo nextest
         if: ${{ !matrix.skip-tests }}
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@d4635f2de61c8b8104d59cd4aede2060638378cc # v2
         with:
           tool: cargo-nextest
 

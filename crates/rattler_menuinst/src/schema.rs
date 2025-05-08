@@ -124,7 +124,7 @@ pub struct Windows {
 
     /// Whether to create a quick launch icon in addition to the Start Menu item.
     ///
-    /// Defaults to `true` in the original implementation.
+    /// Defaults to `false` in the original implementation.
     pub quicklaunch: Option<bool>,
 
     /// Windows Terminal profile configuration.

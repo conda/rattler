@@ -6,6 +6,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.3](https://github.com/conda/rattler/compare/rattler_lock-v0.23.2...rattler_lock-v0.23.3) - 2025-05-03
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.23.2](https://github.com/conda/rattler/compare/rattler_lock-v0.23.1...rattler_lock-v0.23.2) - 2025-04-17
+
+### Fixed
+
+- rename struct and reexport ([#1262](https://github.com/conda/rattler/pull/1262))
+
+## [0.23.1](https://github.com/conda/rattler/compare/rattler_lock-v0.23.0...rattler_lock-v0.23.1) - 2025-04-15
+
+### Added
+
+- add resolver options to lock-file ([#1255](https://github.com/conda/rattler/pull/1255))
+
+## [0.23.0](https://github.com/conda/rattler/compare/rattler_lock-v0.22.49...rattler_lock-v0.23.0) - 2025-04-10
+
+### Added
+
+- add source location ([#1216](https://github.com/conda/rattler/pull/1216))
+
+## [0.22.49](https://github.com/conda/rattler/compare/rattler_lock-v0.22.48...rattler_lock-v0.22.49) - 2025-04-04
+
+### Other
+
+- add the remove_from_backup function and update the prefix ([#1155](https://github.com/conda/rattler/pull/1155))
+
+## [0.22.48](https://github.com/conda/rattler/compare/rattler_lock-v0.22.47...rattler_lock-v0.22.48) - 2025-03-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [0.22.47](https://github.com/conda/rattler/compare/rattler_lock-v0.22.46...rattler_lock-v0.22.47) - 2025-03-10
 
 ### Other

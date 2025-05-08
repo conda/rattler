@@ -1,6 +1,6 @@
 [package]
 name = "rattler_package_streaming"
-version = "0.22.33"
+version = "0.22.37"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Extract and stream of Conda package archives"
@@ -16,16 +16,16 @@ chrono = { workspace = true }
 fs-err = { workspace = true }
 futures-util = { workspace = true }
 num_cpus = { workspace = true }
-rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.4", default-features = false }
-rattler_digest = { path = "../rattler_digest", version = "1.0.8", default-features = false }
-rattler_networking = { path = "../rattler_networking", version = "0.22.9", default-features = false }
-rattler_redaction = { version = "0.1.8", path = "../rattler_redaction", features = [
+rattler_conda_types = { workspace = true, default-features = false }
+rattler_digest = { workspace = true, default-features = false }
+rattler_networking = { workspace = true, default-features = false }
+rattler_redaction = { workspace = true, features = [
   "reqwest",
   "reqwest-middleware",
 ], default-features = false }
 reqwest = { workspace = true, features = ["stream"], optional = true }
 reqwest-middleware = { workspace = true, optional = true }
-simple_spawn_blocking = { version = "1.1.0", path = "../simple_spawn_blocking", features = ["tokio"] }
+simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 serde_json = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }

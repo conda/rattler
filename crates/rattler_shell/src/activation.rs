@@ -3,7 +3,11 @@
 //! This crate provides helper functions to activate and deactivate virtual
 //! environments.
 
+#[cfg(target_family = "unix")]
+use anyhow::{Context, Result};
 use fs_err as fs;
+#[cfg(target_family = "unix")]
+use std::io::Write;
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -13,8 +17,10 @@ use std::{
 
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
+#[cfg(target_family = "unix")]
+use rattler_pty::unix::PtySession;
 
-use crate::shell::{Shell, ShellScript};
+use crate::shell::{Shell, ShellError, ShellScript};
 
 const ENV_START_SEPARATOR: &str = "____RATTLER_ENV_START____";
 
@@ -130,6 +136,10 @@ pub enum ActivationError {
     /// An error that can occur when reading or writing files
     #[error(transparent)]
     IoError(#[from] std::io::Error),
+
+    /// An error that can occur when running a command
+    #[error(transparent)]
+    ShellError(#[from] ShellError),
 
     /// An error that can occur when parsing JSON
     #[error("Invalid json for environment vars: {0} in file {1:?}")]
@@ -350,6 +360,70 @@ impl<T: Shell + Clone> Activator<T> {
             env_vars,
             platform,
         })
+    }
+
+    /// Starts a UNIX shell.
+    /// # Arguments
+    /// - `shell`: The type of shell to start. Must implement the `Shell` and `Copy` traits.
+    /// - `args`: A vector of arguments to pass to the shell.
+    /// - `env`: A `HashMap` containing environment variables to set in the shell.
+    /// - `prompt`: Prompt to the shell
+    #[cfg(target_family = "unix")]
+    #[allow(dead_code)]
+    async fn start_unix_shell<T_: Shell + Copy + 'static>(
+        shell: T_,
+        args: Vec<&str>,
+        env: &HashMap<String, String>,
+        prompt: String,
+    ) -> Result<Option<i32>> {
+        const DONE_STR: &str = "RATTLER_SHELL_ACTIVATION_DONE";
+        // create a tempfile for activation
+        let mut temp_file = tempfile::Builder::new()
+            .prefix("rattler_env_")
+            .suffix(&format!(".{}", shell.extension()))
+            .rand_bytes(3)
+            .tempfile()
+            .context("Failed to create tmp file")?;
+
+        let mut shell_script = ShellScript::new(shell, Platform::current());
+        for (key, value) in env {
+            shell_script
+                .set_env_var(key, value)
+                .context("Failed to set env var")?;
+        }
+
+        shell_script.echo(DONE_STR)?;
+
+        temp_file
+            .write_all(shell_script.contents()?.as_bytes())
+            .context("Failed to write shell script content")?;
+
+        // Write custom prompt to the env file
+        temp_file.write_all(prompt.as_bytes())?;
+
+        let mut command = std::process::Command::new(shell.executable());
+        command.args(args);
+
+        // Space added before `source` to automatically ignore it in history.
+        let mut source_command = " ".to_string();
+        shell
+            .run_script(&mut source_command, temp_file.path())
+            .context("Failed to run the script")?;
+
+        // Remove automatically added `\n`, if for some reason this fails, just ignore.
+        let source_command = source_command
+            .strip_suffix('\n')
+            .unwrap_or(source_command.as_str());
+
+        // Start process and send env activation to the shell.
+        let mut process = PtySession::new(command)?;
+        process
+            .send_line(source_command)
+            .context("Failed to send command to shell")?;
+
+        process
+            .interact(Some(DONE_STR))
+            .context("Failed to interact with shell process")
     }
 
     /// Create an activation script for a given shell and platform. This

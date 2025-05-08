@@ -1,6 +1,6 @@
 [package]
 name = "rattler_menuinst"
-version = "0.2.3"
+version = "0.2.8"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Install menu entries for a Conda package"
@@ -15,8 +15,8 @@ dirs = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tracing = { workspace = true }
-rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.4", default-features = false }
-rattler_shell = { path = "../rattler_shell", version = "0.22.23", default-features = false }
+rattler_conda_types = { workspace = true, default-features = false }
+rattler_shell = { workspace = true, default-features = false }
 thiserror = { workspace = true }
 unicode-normalization = { workspace = true }
 regex = { workspace = true }

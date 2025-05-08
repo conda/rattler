@@ -123,7 +123,7 @@ impl OCIUrl {
 
     pub fn new(url: &Url) -> Result<Self, ParseError> {
         // get filename (last segment of path)
-        let filename = url.path_segments().unwrap().last().unwrap();
+        let filename = url.path_segments().unwrap().next_back().unwrap();
 
         let mut res = OCIUrl {
             url: url.clone(),

@@ -6,6 +6,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.6](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.5...rattler_repodata_gateway-v0.22.6) - 2025-05-03
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.22.5](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.4...rattler_repodata_gateway-v0.22.5) - 2025-04-10
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.22.4](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.3...rattler_repodata_gateway-v0.22.4) - 2025-04-04
+
+### Added
+
+- more helpful error when failing to persist repodata ([#1220](https://github.com/conda/rattler/pull/1220))
+
+## [0.22.3](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.2...rattler_repodata_gateway-v0.22.3) - 2025-03-18
+
+### Added
+
+- allow to pass a semaphore for concurrency control ([#1169](https://github.com/conda/rattler/pull/1169))
+
+## [0.22.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.1...rattler_repodata_gateway-v0.22.2) - 2025-03-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
 ## [0.22.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.0...rattler_repodata_gateway-v0.22.1) - 2025-03-10
 
 ### Other

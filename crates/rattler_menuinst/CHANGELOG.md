@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.7...rattler_menuinst-v0.2.8) - 2025-05-03
+
+### Fixed
+
+- menuinst windows shortcut path ([#1273](https://github.com/conda/rattler/pull/1273))
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.2.7](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.6...rattler_menuinst-v0.2.7) - 2025-04-10
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.2.6](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.5...rattler_menuinst-v0.2.6) - 2025-04-04
+
+### Fixed
+
+- install windows start menu shortcut ([#1198](https://github.com/conda/rattler/pull/1198))
+
+### Other
+
+- change default value of  menuinst windows `quicklaunch` to `false` ([#1196](https://github.com/conda/rattler/pull/1196))
+
+## [0.2.5](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.4...rattler_menuinst-v0.2.5) - 2025-03-18
+
+### Added
+
+- allow to pass a semaphore for concurrency control ([#1169](https://github.com/conda/rattler/pull/1169))
+
+## [0.2.4](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.3...rattler_menuinst-v0.2.4) - 2025-03-14
+
+### Added
+
+- remove menu item and trackers in one function ([#1160](https://github.com/conda/rattler/pull/1160))
+
 ## [0.2.3](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.2...rattler_menuinst-v0.2.3) - 2025-03-10
 
 ### Other

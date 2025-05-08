@@ -6,6 +6,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0](https://github.com/conda/rattler/compare/rattler_shell-v0.22.26...rattler_shell-v0.23.0) - 2025-05-03
+
+### Fixed
+
+- sanitize env vars ([#1222](https://github.com/conda/rattler/pull/1222))
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.22.26](https://github.com/conda/rattler/compare/rattler_shell-v0.22.25...rattler_shell-v0.22.26) - 2025-04-10
+
+### Added
+
+- Add start_unix_shell in Activator (2/n) ([#1180](https://github.com/conda/rattler/pull/1180))
+
+## [0.22.25](https://github.com/conda/rattler/compare/rattler_shell-v0.22.24...rattler_shell-v0.22.25) - 2025-04-04
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.22.24](https://github.com/conda/rattler/compare/rattler_shell-v0.22.23...rattler_shell-v0.22.24) - 2025-03-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [0.22.23](https://github.com/conda/rattler/compare/rattler_shell-v0.22.22...rattler_shell-v0.22.23) - 2025-03-10
 
 ### Other

@@ -87,9 +87,11 @@ mod channel;
 mod conda;
 mod file_format_version;
 mod hash;
+pub mod options;
 mod parse;
 mod pypi;
 mod pypi_indexes;
+pub mod source;
 mod url_or_path;
 mod utils;
 
@@ -98,6 +100,7 @@ pub use channel::Channel;
 pub use conda::{CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, InputHash};
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
+pub use options::SolveOptions;
 pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
@@ -157,6 +160,9 @@ struct EnvironmentData {
     /// The pypi indexes used to solve the environment.
     indexes: Option<PypiIndexes>,
 
+    /// The options that were used to solve the environment.
+    options: SolveOptions,
+
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
     packages: FxHashMap<Platform, IndexSet<EnvironmentPackageData>>,
@@ -185,14 +191,12 @@ impl LockFile {
     /// Writes the conda lock to a file
     pub fn to_path(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = std::fs::File::create(path)?;
-        serde_yaml::to_writer(file, self)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+        serde_yaml::to_writer(file, self).map_err(std::io::Error::other)
     }
 
     /// Writes the conda lock to a string
     pub fn render_to_string(&self) -> Result<String, std::io::Error> {
-        serde_yaml::to_string(self)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+        serde_yaml::to_string(self).map_err(std::io::Error::other)
     }
 
     /// Returns the environment with the given name.
@@ -275,6 +279,11 @@ impl<'lock> Environment<'lock> {
     /// Starting with version `5` of the format this should not be optional.
     pub fn pypi_indexes(&self) -> Option<&PypiIndexes> {
         self.data().indexes.as_ref()
+    }
+
+    /// Returns the solver options that were used to create this environment.
+    pub fn solve_options(&self) -> &SolveOptions {
+        &self.data().options
     }
 
     /// Returns all the packages for a specific platform in this environment.
@@ -547,6 +556,8 @@ mod test {
     #[case::v5_with_and_without_purl("v5/similar-with-and-without-purl.yml")]
     #[case::v6_conda_source_path("v6/conda-path-lock.yml")]
     #[case::v6_derived_channel("v6/derived-channel-lock.yml")]
+    #[case::v6_sources("v6/sources-lock.yml")]
+    #[case::v6_options("v6/options-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")

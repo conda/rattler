@@ -28,6 +28,7 @@ use tokio::sync::Semaphore;
 use url::Url;
 
 use opendal::{
+    layers::RetryLayer,
     services::{FsConfig, S3Config},
     Configurator, Operator,
 };
@@ -127,13 +128,13 @@ pub fn package_record_from_tar_bz2(file: &Path) -> std::io::Result<PackageRecord
 /// and extract the package record from it.
 pub fn package_record_from_tar_bz2_reader(reader: impl Read) -> std::io::Result<PackageRecord> {
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
-    let reader = Cursor::new(bytes.clone());
+    let reader = Cursor::new(&bytes);
     let mut archive = read::stream_tar_bz2(reader);
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            return package_record_from_index_json(bytes, &mut entry);
+            return package_record_from_index_json(&bytes, &mut entry);
         }
     }
     Err(std::io::Error::new(
@@ -155,14 +156,14 @@ pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> 
 /// and extract the package record from it.
 pub fn package_record_from_conda_reader(reader: impl Read) -> std::io::Result<PackageRecord> {
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
-    let reader = Cursor::new(bytes.clone());
+    let reader = Cursor::new(&bytes);
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
 
     for entry in archive.entries()?.flatten() {
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            return package_record_from_index_json(bytes, &mut entry);
+            return package_record_from_index_json(&bytes, &mut entry);
         }
     }
     Err(std::io::Error::new(
@@ -196,7 +197,7 @@ async fn index_subdir(
                 tracing::info!("Could not find repodata.json. Creating new one.");
                 RepoData {
                     info: Some(ChannelInfo {
-                        subdir: subdir.to_string(),
+                        subdir: Some(subdir.to_string()),
                         base_url: None,
                     }),
                     packages: HashMap::default(),
@@ -369,7 +370,7 @@ async fn index_subdir(
 
     let repodata = RepoData {
         info: Some(ChannelInfo {
-            subdir: subdir.to_string(),
+            subdir: Some(subdir.to_string()),
             base_url: None,
         }),
         packages,
@@ -502,7 +503,7 @@ pub async fn index<T: Configurator>(
     let builder = config.into_builder();
 
     // Get all subdirs
-    let op = Operator::new(builder)?.finish();
+    let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
     let entries = op.list_with("").await?;
 
     // If requested `target_platform` subdir does not exist, we create it.

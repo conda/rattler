@@ -15,14 +15,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
           submodules: recursive
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
           lfs: false
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@f9f65f52341ba3c1d5e1901c77dc7a9e58186191 # stable
 
       - name: Disable LFS globally
         # We really don't want to checkout / clone / fetch any LFS files anymore
@@ -39,7 +39,7 @@ jobs:
           git config --global --list
 
       - name: Run release-plz
-        uses: MarcoIeni/release-plz-action@v0.5
+        uses: MarcoIeni/release-plz-action@7419a2cb1535b9c0e852b4dec626967baf65c022 # v0.5
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
