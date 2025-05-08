@@ -46,7 +46,7 @@ url = "2.5.4"
 # compatible with wasm.
 bzip2 = { version = "0.5.1", features = ["libbz2-rs-sys"] }
 
-chrono = { version = "0.4.40", features = ["wasmbind"] }
+chrono = { version = "0.4.41", features = ["wasmbind"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.45"
