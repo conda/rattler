@@ -19,9 +19,9 @@ use rattler_conda_types::{
 };
 use resolvo::{
     utils::{Pool, VersionSet},
-    Candidates, Dependencies, DependencyProvider, Interner, KnownDependencies, NameId, Problem,
-    Requirement, SolvableId, Solver as LibSolvRsSolver, SolverCache, StringId,
-    UnsolvableOrCancelled, VersionSetId, VersionSetUnionId,
+    Candidates, Dependencies, DependencyProvider, HintDependenciesAvailable, Interner,
+    KnownDependencies, NameId, Problem, Requirement, SolvableId, Solver as LibSolvRsSolver,
+    SolverCache, StringId, UnsolvableOrCancelled, VersionSetId, VersionSetUnionId,
 };
 
 use crate::{
@@ -515,7 +515,8 @@ impl<'a> CondaDependencyProvider<'a> {
 
         // The dependencies for all candidates are always available.
         for candidates in records.values_mut() {
-            candidates.hint_dependencies_available = candidates.candidates.clone();
+            candidates.hint_dependencies_available =
+                HintDependenciesAvailable::Some(candidates.candidates.clone());
         }
 
         Ok(Self {

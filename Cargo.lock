@@ -2471,6 +2471,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
+name = "human_bytes"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91f255a4535024abf7640cb288260811fc14794f62b063652ed349f9a6c2348e"
+
+[[package]]
 name = "humansize"
 version = "2.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4932,19 +4938,21 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.8.6"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5314eb4b865d39acd1b3cd05eb91b87031bb49fd1278a1bdf8d6680f1389ec29"
+checksum = "dba027c8e5dd4b5e5a690cfcfb3900d5ffe6985adb048cbd111d5aa596a6c0c8"
 dependencies = [
  "ahash",
  "bitvec",
  "elsa",
  "event-listener",
  "futures",
+ "human_bytes",
  "indexmap 2.7.1",
  "itertools 0.14.0",
  "petgraph",
  "serde",
+ "tabwriter",
  "tracing",
 ]
 
@@ -5789,6 +5797,15 @@ checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
 dependencies = [
  "core-foundation-sys",
  "libc",
+]
+
+[[package]]
+name = "tabwriter"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fce91f2f0ec87dff7e6bcbbeb267439aa1188703003c6055193c821487400432"
+dependencies = [
+ "unicode-width",
 ]
 
 [[package]]
