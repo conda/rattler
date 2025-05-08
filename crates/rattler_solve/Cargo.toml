@@ -39,7 +39,7 @@ url = { workspace = true }
 [features]
 default = ["resolvo"]
 libsolv_c = ["dep:rattler_libsolv_c", "dep:libc"]
-resolvo_diagnostics = ["resolvo/diagnostics"]
+resolvo_diagnostics = ["resolvo?/diagnostics"]
 resolvo = ["dep:resolvo", "dep:futures"]
 experimental_extras = []
 
