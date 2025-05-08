@@ -29,7 +29,7 @@ criterion = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
 once_cell = { workspace = true }
 rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = [
-    "sparse"
+    "sparse",
 ] }
 rstest = { workspace = true }
 serde_json = { workspace = true }
@@ -38,7 +38,8 @@ url = { workspace = true }
 
 [features]
 default = ["resolvo"]
-libsolv_c = ["rattler_libsolv_c", "libc"]
+libsolv_c = ["dep:rattler_libsolv_c", "dep:libc"]
+resolvo_diagnostics = ["resolvo?/diagnostics"]
 resolvo = ["dep:resolvo", "dep:futures"]
 experimental_extras = []
 
