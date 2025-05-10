@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, List
+from typing import Optional, List, Iterable
 from dataclasses import dataclass
 
 from rattler.rattler import PyGateway, PySourceConfig, PyMatchSpec
@@ -126,9 +126,9 @@ class Gateway:
 
     async def query(
         self,
-        channels: List[Channel | str],
-        platforms: List[Platform | PlatformLiteral],
-        specs: List[MatchSpec | PackageName | str],
+        channels: Iterable[Channel | str],
+        platforms: Iterable[Platform | PlatformLiteral],
+        specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
     ) -> List[List[RepoDataRecord]]:
         """Queries the gateway for repodata.
@@ -183,7 +183,7 @@ class Gateway:
         return [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records]
 
     async def names(
-        self, channels: List[Channel | str], platforms: List[Platform | PlatformLiteral]
+        self, channels: List[Channel | str], platforms: Iterable[Platform | PlatformLiteral]
     ) -> List[PackageName]:
         """Queries all the names of packages in a channel.
 
@@ -220,7 +220,7 @@ class Gateway:
         return [PackageName._from_py_package_name(package_name) for package_name in py_package_names]
 
     def clear_repodata_cache(
-        self, channel: Channel | str, subdirs: Optional[List[Platform | PlatformLiteral]] = None
+        self, channel: Channel | str, subdirs: Optional[Iterable[Platform | PlatformLiteral]] = None
     ) -> None:
         """
         Clears any in-memory cache for the given channel.
