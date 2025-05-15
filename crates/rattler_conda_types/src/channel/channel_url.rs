@@ -27,7 +27,7 @@ impl ChannelUrl {
         url.set_username("").ok();
         url.set_password(None).ok();
 
-        // Remove a `/t/token` from the url if it exists.
+        // Remove a `/t/token` from the url if it exists
         let path = url.path();
         if path.starts_with("/t/") {
             let mut parts = path.splitn(4, '/');
@@ -106,23 +106,38 @@ mod tests {
         let url = Url::parse("https://repo.anaconda.com/pkgs/main/").unwrap();
         let channel_url = ChannelUrl::from(url.clone());
         assert_eq!(channel_url.url(), &UrlWithTrailingSlash::from(url));
-        assert_eq!(channel_url.to_string(), "https://repo.anaconda.com/pkgs/main/");
+        assert_eq!(
+            channel_url.to_string(),
+            "https://repo.anaconda.com/pkgs/main/"
+        );
     }
 
     #[test]
     fn test_url_with_credentials() {
         let url = Url::parse("https://user:pass@repo.anaconda.com/pkgs/main/").unwrap();
         let channel_url = ChannelUrl::from(url);
-        assert_eq!(channel_url.to_string(), "https://repo.anaconda.com/pkgs/main/");
-        assert_eq!(channel_url.as_str_with_secrets(), "https://user:pass@repo.anaconda.com/pkgs/main/");
+        assert_eq!(
+            channel_url.to_string(),
+            "https://repo.anaconda.com/pkgs/main/"
+        );
+        assert_eq!(
+            channel_url.as_str_with_secrets(),
+            "https://user:pass@repo.anaconda.com/pkgs/main/"
+        );
     }
 
     #[test]
     fn test_url_with_token() {
         let url = Url::parse("https://repo.anaconda.com/t/secret-token/pkgs/main/").unwrap();
         let channel_url = ChannelUrl::from(url);
-        assert_eq!(channel_url.to_string(), "https://repo.anaconda.com/pkgs/main/");
-        assert_eq!(channel_url.as_str_with_secrets(), "https://repo.anaconda.com/t/secret-token/pkgs/main/");
+        assert_eq!(
+            channel_url.to_string(),
+            "https://repo.anaconda.com/pkgs/main/"
+        );
+        assert_eq!(
+            channel_url.as_str_with_secrets(),
+            "https://repo.anaconda.com/t/secret-token/pkgs/main/"
+        );
     }
 
     #[test]
