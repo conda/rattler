@@ -62,7 +62,7 @@ impl ChannelConfig {
             .iter()
             .filter_map(|(url, config)| {
                 let key_url = url.as_str().strip_suffix('/').unwrap_or(url.as_str());
-                if channel.as_str().starts_with(key_url) {
+                if channel.as_str_with_secrets().starts_with(key_url) {
                     Some((key_url.len(), config))
                 } else {
                     None

@@ -22,7 +22,27 @@ impl ChannelUrl {
     }
 
     /// Returns the string representation of the url.
-    pub fn as_str(&self) -> &str {
+    pub fn to_string(&self) -> String {
+        let mut url = self.0.as_ref().clone();
+        url.set_username("").ok();
+        url.set_password(None).ok();
+
+        // Remove a `/t/token` from the url if it exists.
+        let path = url.path();
+        if path.starts_with("/t/") {
+            let mut parts = path.splitn(4, '/');
+            let _ = parts.next();
+            let _ = parts.next();
+            let _ = parts.next();
+            url.set_path(parts.collect::<Vec<_>>().join("/").as_str());
+        }
+
+        url.to_string()
+    }
+
+    /// Returns the "raw" string representation of the url which might contain
+    /// credentials or tokens.
+    pub fn as_str_with_secrets(&self) -> &str {
         self.0.as_str()
     }
 
@@ -43,13 +63,13 @@ impl Serialize for ChannelUrl {
     where
         S: serde::Serializer,
     {
-        self.as_str().trim_end_matches('/').serialize(serializer)
+        self.to_string().trim_end_matches('/').serialize(serializer)
     }
 }
 
 impl Debug for ChannelUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.as_str())
+        write!(f, "{}", self.to_string())
     }
 }
 
@@ -74,5 +94,44 @@ impl AsRef<Url> for ChannelUrl {
 impl Display for ChannelUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", &self.0)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::url_with_trailing_slash::UrlWithTrailingSlash;
+
+    #[test]
+    fn test_channel_url() {
+        let url = Url::parse("https://repo.anaconda.com/pkgs/main/").unwrap();
+        let channel_url = ChannelUrl::from(url.clone());
+        assert_eq!(channel_url.url(), &UrlWithTrailingSlash::from(url));
+        assert_eq!(channel_url.to_string(), "https://repo.anaconda.com/pkgs/main/");
+    }
+
+    #[test]
+    fn test_url_with_credentials() {
+        let url = Url::parse("https://user:pass@repo.anaconda.com/pkgs/main/").unwrap();
+        let channel_url = ChannelUrl::from(url);
+        assert_eq!(channel_url.to_string(), "https://repo.anaconda.com/pkgs/main/");
+        assert_eq!(channel_url.as_str_with_secrets(), "https://user:pass@repo.anaconda.com/pkgs/main/");
+    }
+
+    #[test]
+    fn test_url_with_token() {
+        let url = Url::parse("https://repo.anaconda.com/t/secret-token/pkgs/main/").unwrap();
+        let channel_url = ChannelUrl::from(url);
+        assert_eq!(channel_url.to_string(), "https://repo.anaconda.com/pkgs/main/");
+        assert_eq!(channel_url.as_str_with_secrets(), "https://repo.anaconda.com/t/secret-token/pkgs/main/");
+    }
+
+    #[test]
+    fn test_platform_url() {
+        let url = Url::parse("https://repo.anaconda.com/pkgs/main/").unwrap();
+        let channel_url = ChannelUrl::from(url);
+        assert_eq!(
+            channel_url.platform_url(Platform::Linux64).as_str(),
+            "https://repo.anaconda.com/pkgs/main/linux-64/"
+        );
     }
 }

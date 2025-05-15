@@ -340,8 +340,8 @@ impl Channel {
             "https" | "http" => self
                 .name
                 .as_deref()
-                .unwrap_or_else(|| self.base_url.as_str()),
-            _ => self.base_url.as_str(),
+                .unwrap_or_else(|| &self.base_url.as_str_with_secrets()),
+            _ => &self.base_url.as_str_with_secrets(),
         }
     }
 
@@ -776,21 +776,21 @@ mod tests {
 
         for channel_str in test_channels {
             let channel = Channel::from_str(channel_str, &channel_config).unwrap();
-            assert!(channel.base_url.as_str().ends_with('/'));
-            assert!(!channel.base_url.as_str().ends_with("//"));
+            assert!(channel.base_url.as_str_with_secrets().ends_with('/'));
+            assert!(!channel.base_url.as_str_with_secrets().ends_with("//"));
 
             let named_channel = NamedChannelOrUrl::from_str(channel_str).unwrap();
             let base_url = named_channel
                 .clone()
                 .into_base_url(&channel_config)
                 .unwrap();
-            let base_url_str = base_url.as_str();
+            let base_url_str = base_url.as_str_with_secrets();
             assert!(base_url_str.ends_with('/'));
             assert!(!base_url_str.ends_with("//"));
 
             let channel = named_channel.into_channel(&channel_config).unwrap();
-            assert!(channel.base_url.as_str().ends_with('/'));
-            assert!(!channel.base_url.as_str().ends_with("//"));
+            assert!(channel.base_url.as_str_with_secrets().ends_with('/'));
+            assert!(!channel.base_url.as_str_with_secrets().ends_with("//"));
         }
     }
 
