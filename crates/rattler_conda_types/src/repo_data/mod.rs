@@ -515,7 +515,7 @@ impl PackageRecord {
             timestamp: index.timestamp,
             track_features: index.track_features,
             version: index.version,
-            purls: None,
+            purls: index.purls,
             run_exports: None,
         })
     }
