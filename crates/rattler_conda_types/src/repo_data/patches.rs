@@ -98,6 +98,7 @@ pub struct PackageRecordPatch {
 
     /// Package identifiers of packages that are equivalent to this package but from other
     /// ecosystems.
+    /// See this CEP: <https://github.com/conda/ceps/pull/63>
     pub purls: Option<BTreeSet<PackageUrl>>,
 }
 
