@@ -54,6 +54,7 @@ reqwest = { workspace = true, default-features = false, features = [
   "charset",
 ] }
 serde_json = { workspace = true }
+tar = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }

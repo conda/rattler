@@ -9,7 +9,7 @@ use futures::{stream::FuturesUnordered, StreamExt};
 use fxhash::FxHashMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rattler_conda_types::{
-    package::{ArchiveType, IndexJson, PackageFile},
+    package::{ArchiveType, IndexJson, PackageFile, RunExportsJson},
     ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData,
 };
 use rattler_networking::{Authentication, AuthenticationStorage};
@@ -151,6 +151,33 @@ pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> 
     package_record_from_conda_reader(reader)
 }
 
+fn read_index_json_from_archive(
+    bytes: &Vec<u8>,
+    archive: &mut tar::Archive<impl Read>,
+) -> std::io::Result<PackageRecord> {
+    let mut index_json = None;
+    let mut run_exports_json = None;
+    for entry in archive.entries()?.flatten() {
+        let mut entry = entry;
+        let path = entry.path()?;
+        if path.as_os_str().eq("info/index.json") {
+            index_json = Some(package_record_from_index_json(&bytes, &mut entry)?);
+        } else if path.as_os_str().eq("info/run_exports.json") {
+            run_exports_json = Some(RunExportsJson::from_reader(&mut entry)?);
+        }
+    }
+
+    if let Some(mut index_json) = index_json {
+        index_json.run_exports = run_exports_json;
+        return Ok(index_json);
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "No index.json found",
+    ))
+}
+
 /// Extract the package record from a `.conda` package file content.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
@@ -158,18 +185,7 @@ pub fn package_record_from_conda_reader(reader: impl Read) -> std::io::Result<Pa
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
     let reader = Cursor::new(&bytes);
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
-
-    for entry in archive.entries()?.flatten() {
-        let mut entry = entry;
-        let path = entry.path()?;
-        if path.as_os_str().eq("info/index.json") {
-            return package_record_from_index_json(&bytes, &mut entry);
-        }
-    }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        "No index.json found",
-    ))
+    read_index_json_from_archive(&bytes, &mut archive)
 }
 
 async fn index_subdir(
@@ -368,6 +384,7 @@ async fn index_subdir(
         }
     }
 
+    // TODO: don't serialize run_exports and purls but in their own files
     let repodata = RepoData {
         info: Some(ChannelInfo {
             subdir: Some(subdir.to_string()),
@@ -379,6 +396,7 @@ async fn index_subdir(
         version: Some(2),
     };
 
+    // TODO: also write shards
     tracing::info!("Writing repodata to {}", repodata_path);
     let repodata_bytes = serde_json::to_vec(&repodata)?;
     op.write(&repodata_path, repodata_bytes).await?;

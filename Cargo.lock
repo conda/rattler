@@ -4311,6 +4311,7 @@ dependencies = [
  "rattler_package_streaming",
  "reqwest",
  "serde_json",
+ "tar",
  "tempfile",
  "tokio",
  "tools",
