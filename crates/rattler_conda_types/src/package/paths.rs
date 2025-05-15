@@ -311,7 +311,7 @@ mod test {
         .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
-        let package_dir = package_dir.into_path();
+        let package_dir = package_dir.keep();
         println!("{}", package_dir.display());
 
         insta::assert_yaml_snapshot!(
