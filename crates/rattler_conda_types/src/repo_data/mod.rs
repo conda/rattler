@@ -267,7 +267,7 @@ impl RepoData {
                     base_url.as_deref(),
                     &filename,
                 ),
-                channel: Some(channel.base_url.to_string()),
+                channel: Some(channel.base_url.to_sanitized_string()),
                 package_record,
                 file_name: filename,
             });

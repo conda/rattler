@@ -22,7 +22,7 @@ impl ChannelUrl {
     }
 
     /// Returns the string representation of the url.
-    pub fn to_string(&self) -> String {
+    pub fn to_sanitized_string(&self) -> String {
         let mut url = self.0.as_ref().clone();
         url.set_username("").ok();
         url.set_password(None).ok();
@@ -63,13 +63,15 @@ impl Serialize for ChannelUrl {
     where
         S: serde::Serializer,
     {
-        self.to_string().trim_end_matches('/').serialize(serializer)
+        self.to_sanitized_string()
+            .trim_end_matches('/')
+            .serialize(serializer)
     }
 }
 
 impl Debug for ChannelUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", self.to_sanitized_string())
     }
 }
 
@@ -107,7 +109,7 @@ mod tests {
         let channel_url = ChannelUrl::from(url.clone());
         assert_eq!(channel_url.url(), &UrlWithTrailingSlash::from(url));
         assert_eq!(
-            channel_url.to_string(),
+            channel_url.to_sanitized_string(),
             "https://repo.anaconda.com/pkgs/main/"
         );
     }
@@ -117,7 +119,7 @@ mod tests {
         let url = Url::parse("https://user:pass@repo.anaconda.com/pkgs/main/").unwrap();
         let channel_url = ChannelUrl::from(url);
         assert_eq!(
-            channel_url.to_string(),
+            channel_url.to_sanitized_string(),
             "https://repo.anaconda.com/pkgs/main/"
         );
         assert_eq!(
@@ -131,7 +133,7 @@ mod tests {
         let url = Url::parse("https://repo.anaconda.com/t/secret-token/pkgs/main/").unwrap();
         let channel_url = ChannelUrl::from(url);
         assert_eq!(
-            channel_url.to_string(),
+            channel_url.to_sanitized_string(),
             "https://repo.anaconda.com/pkgs/main/"
         );
         assert_eq!(

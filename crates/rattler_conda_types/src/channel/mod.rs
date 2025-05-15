@@ -340,8 +340,8 @@ impl Channel {
             "https" | "http" => self
                 .name
                 .as_deref()
-                .unwrap_or_else(|| &self.base_url.as_str_with_secrets()),
-            _ => &self.base_url.as_str_with_secrets(),
+                .unwrap_or_else(|| self.base_url.as_str_with_secrets()),
+            _ => self.base_url.as_str_with_secrets(),
         }
     }
 
@@ -592,7 +592,7 @@ mod tests {
         assert_eq!(channel.name(), "conda-forge");
         assert_eq!(channel.platforms, None);
         assert_eq!(
-            channel.base_url.to_string(),
+            channel.base_url.to_sanitized_string(),
             "https://conda.anaconda.org/conda-forge/"
         );
 
@@ -616,7 +616,7 @@ mod tests {
         );
         assert_eq!(channel.platforms, None);
         assert_eq!(
-            channel.base_url.to_string(),
+            channel.base_url.to_sanitized_string(),
             "file:///var/channels/conda-forge/"
         );
 

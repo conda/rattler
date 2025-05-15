@@ -39,7 +39,10 @@ impl Debug for LocationDerivedFields {
             .field("version", &self.version.as_ref().map(|s| s.as_str()))
             .field("build", &self.build)
             .field("subdir", &self.subdir)
-            .field("channel", &self.channel.as_ref().map(ChannelUrl::as_str))
+            .field(
+                "channel",
+                &self.channel.as_ref().map(ChannelUrl::to_sanitized_string),
+            )
             .finish()
     }
 }

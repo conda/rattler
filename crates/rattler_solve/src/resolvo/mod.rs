@@ -445,7 +445,7 @@ impl<'a> CondaDependencyProvider<'a> {
                                         spec_channel
                                             .name
                                             .clone()
-                                            .unwrap_or(spec_channel.base_url.to_string())
+                                            .unwrap_or(spec_channel.base_url.to_sanitized_string())
                                     );
                                     candidates
                                         .excluded
