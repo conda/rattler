@@ -139,7 +139,11 @@ impl PyEnvironment {
             &name,
             channels.into_iter().map(|c| {
                 rattler_lock::Channel::from(
-                    c.inner.base_url.as_str().trim_end_matches('/').to_string(),
+                    c.inner
+                        .base_url
+                        .to_sanitized_string()
+                        .trim_end_matches('/')
+                        .to_string(),
                 )
             }),
         );
