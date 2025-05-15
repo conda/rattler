@@ -59,6 +59,7 @@ pub struct IndexJson {
     pub platform: Option<String>,
 
     /// A list of Package URLs identifying this package.
+    /// See this CEP: https://github.com/conda/ceps/pull/63
     pub purls: Option<BTreeSet<PackageUrl>>,
 
     /// Optionally a path within the environment of the site-packages directory.
