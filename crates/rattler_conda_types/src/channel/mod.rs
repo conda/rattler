@@ -184,7 +184,7 @@ impl serde::Serialize for NamedChannelOrUrl {
 }
 
 /// `Channel`s are the primary source of package information.
-#[derive(Debug, Clone, Serialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq, Hash)]
 pub struct Channel {
     /// The platforms supported by this channel, or None if no explicit
     /// platforms have been specified.

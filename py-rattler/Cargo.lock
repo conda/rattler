@@ -1037,9 +1037,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.35"
+version = "4.5.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8aa86934b44c19c50f87cc2790e19f54f7a67aedb64101c2e1a2e5ecfb73944"
+checksum = "e958897981290da2a852763fe9cdb89cd36977a5d729023127095fa94d95e2ff"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1058,9 +1058,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.35"
+version = "4.5.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2414dbb2dd0695280da6ea9261e327479e9d37b0630f6b53ba2a11c60c679fd9"
+checksum = "83b0f35019843db2160b5bb19ae09b4e6411ac33fc6a712003c33e03090e2489"
 dependencies = [
  "anstream",
  "anstyle",
@@ -3095,9 +3095,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.72"
+version = "0.10.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fedfea7d58a1f73118430a55da6a286e7b044961736ce96a16a17068ea25e5da"
+checksum = "5e14130c6a98cd258fdcb0fb6d744152343ff729cbfcb28c656a9d12b999fbcd"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -3136,9 +3136,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.107"
+version = "0.9.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8288979acd84749c744a9014b4382d42b8f7b2592847b5afb2ed29e5d16ede07"
+checksum = "8bb61ea9811cc39e3c2069f40b8b8e2e70d8569b361f879786cc7ed48b777cdd"
 dependencies = [
  "cc",
  "libc",
@@ -3508,7 +3508,7 @@ dependencies = [
  "pep508_rs",
  "pyo3",
  "pyo3-async-runtimes",
- "pyo3-build-config 0.24.1",
+ "pyo3-build-config 0.24.2",
  "pyo3-file",
  "rattler",
  "rattler_conda_types",
@@ -3574,9 +3574,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-build-config"
-version = "0.24.1"
+version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e27165889bd793000a098bb966adc4300c312497ea25cf7a690a9f0ac5aa5fc1"
+checksum = "99636d423fa2ca130fa5acde3059308006d46f98caac629418e53f7ebb1e9999"
 dependencies = [
  "once_cell",
  "target-lexicon 0.13.2",
@@ -3802,7 +3802,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.33.4"
+version = "0.33.5"
 dependencies = [
  "anyhow",
  "console",
@@ -3843,7 +3843,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.16"
+version = "0.3.17"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -3873,7 +3873,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.31.6"
+version = "0.32.0"
 dependencies = [
  "chrono",
  "core-foundation 0.10.0",
@@ -3911,7 +3911,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "blake2",
  "digest",
@@ -3927,7 +3927,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.22.3"
+version = "0.22.5"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3953,7 +3953,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.22.49"
+version = "0.23.2"
 dependencies = [
  "chrono",
  "file_url",
@@ -3964,6 +3964,7 @@ dependencies = [
  "pep508_rs",
  "rattler_conda_types",
  "rattler_digest",
+ "rattler_solve",
  "serde",
  "serde-value",
  "serde_repr",
@@ -3984,7 +3985,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "chrono",
  "configparser",
@@ -4012,7 +4013,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.22.11"
+version = "0.22.12"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4041,7 +4042,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.35"
+version = "0.22.36"
 dependencies = [
  "bzip2",
  "chrono",
@@ -4068,8 +4069,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_pty"
+version = "0.2.0"
+dependencies = [
+ "libc",
+ "nix",
+ "signal-hook",
+]
+
+[[package]]
 name = "rattler_redaction"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "reqwest",
  "reqwest-middleware",
@@ -4078,7 +4088,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.22.4"
+version = "0.22.5"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4133,13 +4143,15 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.22.25"
+version = "0.22.26"
 dependencies = [
+ "anyhow",
  "enum_dispatch",
  "fs-err",
  "indexmap 2.9.0",
  "itertools 0.14.0",
  "rattler_conda_types",
+ "rattler_pty",
  "serde_json",
  "shlex",
  "tempfile",
@@ -4149,24 +4161,23 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.4.3"
+version = "1.4.5"
 dependencies = [
  "chrono",
  "futures",
- "indexmap 2.9.0",
  "itertools 0.14.0",
  "rattler_conda_types",
  "rattler_digest",
  "resolvo",
+ "serde",
  "tempfile",
  "thiserror 2.0.12",
  "tracing",
- "url",
 ]
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.0.9"
+version = "2.0.10"
 dependencies = [
  "archspec",
  "libloading",
@@ -4401,9 +4412,9 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.8.6"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5314eb4b865d39acd1b3cd05eb91b87031bb49fd1278a1bdf8d6680f1389ec29"
+checksum = "996e40b356864ad72942a9ef6815df7f219b7b42ccc791906d3e0a17df5d66ab"
 dependencies = [
  "ahash",
  "bitvec",
@@ -4920,6 +4931,16 @@ name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
+
+[[package]]
+name = "signal-hook"
+version = "0.3.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8621587d4798caf8eb44879d42e56b9a93ea5dcd315a6487c357130095b62801"
+dependencies = [
+ "libc",
+ "signal-hook-registry",
+]
 
 [[package]]
 name = "signal-hook-registry"

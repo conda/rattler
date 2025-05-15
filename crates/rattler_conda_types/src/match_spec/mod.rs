@@ -555,12 +555,13 @@ mod tests {
     use itertools::Itertools;
     use rstest::rstest;
     use std::str::FromStr;
+    use url::Url;
 
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
     use crate::{
-        match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
-        ParseStrictness::*, RepoDataRecord, StringMatcher, Version, VersionSpec,
+        match_spec::Matches, Channel, ChannelUrl, MatchSpec, NamelessMatchSpec, PackageName,
+        PackageRecord, ParseStrictness::*, RepoDataRecord, StringMatcher, Version, VersionSpec,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -763,7 +764,7 @@ mod tests {
             ),
             file_name: String::from("mamba-1.0-py37_0"),
             url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
-            channel: Some(String::from("mamba")),
+            channel: Some(Channel::from_url(url::Url::parse("https://mamba.io").unwrap()).base_url),
         };
         let package_record = repodata_record.clone().package_record;
 
@@ -797,7 +798,7 @@ mod tests {
             ),
             file_name: String::from("mamba-1.0-py37_0"),
             url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
-            channel: Some(String::from("mamba")),
+            channel: Some(ChannelUrl::from(Url::from_str("https://mamba.io").unwrap())),
         };
         repodata_record.package_record.license = Some("BSD-3-Clause".into());
         let package_record = repodata_record.clone().package_record;
@@ -824,7 +825,7 @@ mod tests {
             ),
             file_name: String::from("mamba-1.0-py37_0"),
             url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
-            channel: Some(String::from("mamba")),
+            channel: Some(ChannelUrl::from(Url::from_str("https://mamba.io").unwrap())),
         };
         let package_record_no_license = repodata_record_no_license.clone().package_record;
         assert!(!match_spec.matches(&repodata_record_no_license));
