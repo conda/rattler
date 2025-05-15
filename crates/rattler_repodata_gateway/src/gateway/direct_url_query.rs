@@ -63,7 +63,9 @@ impl DirectUrlQuery {
         };
 
         // Construct a cache key
-        let cache_key = CacheKey::from(archive_identifier).with_opt_sha256(self.sha256).with_opt_md5(self.md5);
+        let cache_key = CacheKey::from(archive_identifier)
+            .with_opt_sha256(self.sha256)
+            .with_opt_md5(self.md5);
 
         // TODO: Optimize this by only parsing the index json from stream.
         // Get package on system
