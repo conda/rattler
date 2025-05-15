@@ -35,13 +35,15 @@ class PlatformSingleton(type):
         try:
             return cls._instances[platform]
         except KeyError:
-            instance = super().__call__(platform, *args, **kwargs)
-            cls._instances[platform] = instance
-            return instance
+            pass
+
+        instance = super().__call__(platform, *args, **kwargs)
+        cls._instances[platform] = instance
+        return instance
 
 
 class Platform(metaclass=PlatformSingleton):
-    def __init__(self, value: PlatformLiteral):
+    def __init__(self, value: PlatformLiteral | str):
         self._inner = PyPlatform(value)
 
     @classmethod
@@ -159,7 +161,7 @@ class Platform(metaclass=PlatformSingleton):
         return self._inner.is_unix
 
     @property
-    def arch(self) -> Arch:
+    def arch(self) -> Optional[Arch]:
         """
         Return the architecture of the platform.
 
@@ -173,7 +175,8 @@ class Platform(metaclass=PlatformSingleton):
         >>>
         ```
         """
-        return Arch._from_py_arch(self._inner.arch())
+        arch = self._inner.arch()
+        return Arch._from_py_arch(arch) if arch is not None else None
 
     @property
     def only_platform(self) -> Optional[str]:

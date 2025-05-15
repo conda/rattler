@@ -50,7 +50,7 @@ pub fn py_install<'a>(
                 .collect::<Result<HashSet<_>, _>>()
         })
         .transpose()
-        .map_err(|_| PyTypeError::new_err("cannot convert to conda PackageName"))?;
+        .map_err(|_err| PyTypeError::new_err("cannot convert to conda PackageName"))?;
 
     let platform = platform.map(|p| p.inner);
     let client = client.map(|c| c.inner);
