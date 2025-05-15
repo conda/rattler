@@ -572,7 +572,7 @@ impl LinuxMenu {
         if xdg_mime(&file_path, self.mode, XdgMimeOperation::Install).is_ok() {
             // keep temp dir in prefix around and the temp file
             // because we re-use it when unregistering the mime type.
-            let _ = temp_dir.into_path();
+            let _ = temp_dir.keep();
             tracker.registered_mime_files.push(file_path);
         } else {
             if let Some(parent) = xml_path.parent() {

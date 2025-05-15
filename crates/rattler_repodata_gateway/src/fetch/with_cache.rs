@@ -1103,7 +1103,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1170,7 +1170,7 @@ mod test {
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1199,7 +1199,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1241,7 +1241,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1290,7 +1290,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1345,7 +1345,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             authenticated_client,
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1393,7 +1393,7 @@ mod test {
         let _result = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             Some(reporter.clone()),
         )
@@ -1416,7 +1416,7 @@ mod test {
             Url::parse(format!("file://{}", subdir_path.path().to_str().unwrap()).as_str())
                 .unwrap(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1438,7 +1438,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
