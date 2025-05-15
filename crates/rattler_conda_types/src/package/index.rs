@@ -60,6 +60,7 @@ pub struct IndexJson {
 
     /// A list of Package URLs identifying this package.
     /// See this CEP: <https://github.com/conda/ceps/pull/63>
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purls: Option<BTreeSet<PackageUrl>>,
 
     /// Optionally a path within the environment of the site-packages directory.
