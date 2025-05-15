@@ -1,10 +1,25 @@
 from __future__ import annotations
 import os
+from enum import Enum
 from typing import List, Optional
 
-from rattler.rattler import PyRecord
+from rattler.rattler import PyRecord, PyLink
 from rattler.prefix.prefix_paths import PrefixPaths
 from rattler.repo_data.record import RepoDataRecord
+
+
+class LinkType(Enum):
+    HARDLINK = ("hardlink",)
+    COPY = ("copy",)
+    SOFTLINK = ("softlink",)
+    DIRECTORY = ("directory",)
+
+
+class Link:
+    _inner: PyLink
+
+    def __init__(self, path: os.PathLike[str], type: Optional[LinkType]) -> None:
+        self._inner = PyLink(path, type.value if type else None)
 
 
 class PrefixRecord(RepoDataRecord):
@@ -22,6 +37,7 @@ class PrefixRecord(RepoDataRecord):
         self,
         repodata_record: RepoDataRecord,
         paths_data: PrefixPaths,
+        link: Optional[Link] = None,
         package_tarball_full_path: Optional[os.PathLike[str]] = None,
         extracted_package_dir: Optional[os.PathLike[str]] = None,
         requested_spec: Optional[str] = None,
@@ -30,6 +46,7 @@ class PrefixRecord(RepoDataRecord):
         record = PyRecord.create_prefix_record(
             repodata_record._record,
             paths_data._paths,
+            link._inner if link else None,
             package_tarball_full_path,
             extracted_package_dir,
             requested_spec,

@@ -5,10 +5,10 @@ import datetime
 
 from rattler import VersionWithSource
 from rattler.match_spec.match_spec import MatchSpec
-from rattler.package.no_arch_type import NoArchType
+from rattler.package.no_arch_type import NoArchType, NoArchLiteral
 from rattler.package.package_name import PackageName
 from rattler.platform.platform import Platform
-from rattler.rattler import PyRecord
+from rattler.rattler import PyRecord, ParsePlatformError
 
 if TYPE_CHECKING:
     import networkx as nx
@@ -189,9 +189,9 @@ class PackageRecord:
         build: str,
         build_number: int,
         subdir: str | Platform,
-        arch: Optional[str],
-        platform: Optional[str],
-        noarch: Optional[NoArchType] = None,
+        arch: Optional[str] = None,
+        platform: Optional[str] = None,
+        noarch: Optional[NoArchType | NoArchLiteral] = None,
         depends: Optional[List[str]] = None,
         constrains: Optional[List[str]] = None,
         sha256: Optional[bytes] = None,
@@ -204,11 +204,18 @@ class PackageRecord:
         license_family: Optional[str] = None,
         python_site_packages_path: Optional[str] = None,
     ) -> None:
-        # Convert Platform to str
+        if isinstance(subdir, str):
+            try:
+                subdir = Platform(subdir)
+            except ParsePlatformError:
+                # if the string is not a valid platform, we just keep it as a string
+                pass
+
         if isinstance(subdir, Platform):
-            arch = str(subdir.arch)
-            platform = subdir.only_platform
-            subdir = str(subdir)
+            if arch is None:
+                subdir_arch = subdir.arch
+                arch = str(subdir_arch) if subdir_arch is not None else arch
+            platform = subdir.only_platform if platform is None else platform
 
         # convert str to PackageName
         if isinstance(name, str):
@@ -218,15 +225,18 @@ class PackageRecord:
         if isinstance(version, str):
             version = VersionWithSource(version)
 
+        if not isinstance(noarch, NoArchType):
+            noarch = NoArchType(noarch)
+
         self._record = PyRecord.create(
             name._name,
             (version._version, version._source),
             build,
             build_number,
-            subdir,
-            arch,
+            str(subdir),
+            str(arch) if arch is not None else None,
             platform,
-            noarch,
+            noarch._noarch,
             python_site_packages_path,
         )
 

@@ -106,29 +106,29 @@ pub struct PyLink {
     #[pyo3(get, set)]
     pub source: PathBuf,
     #[pyo3(get, set)]
-    pub type_: String,
+    pub type_: Option<String>,
 }
 
 #[pymethods]
 impl PyLink {
     #[new]
-    pub fn new(source: PathBuf, type_: String) -> Self {
-        Self { source, type_ }
+    #[pyo3(signature = (source, r#type=None))]
+    pub fn new(source: PathBuf, r#type: Option<String>) -> Self {
+        Self {
+            source,
+            type_: r#type,
+        }
     }
 }
 
 impl From<PyLink> for Link {
     fn from(value: PyLink) -> Self {
-        let link_type = if value.type_.is_empty() {
-            None
-        } else {
-            match value.type_.as_str() {
-                "hardlink" => Some(LinkType::HardLink),
-                "softlink" => Some(LinkType::SoftLink),
-                "copy" => Some(LinkType::Copy),
-                "directory" => Some(LinkType::Directory),
-                _ => None,
-            }
+        let link_type = match value.type_.as_deref() {
+            Some("hardlink") => Some(LinkType::HardLink),
+            Some("softlink") => Some(LinkType::SoftLink),
+            Some("copy") => Some(LinkType::Copy),
+            Some("directory") => Some(LinkType::Directory),
+            _ => None,
         };
 
         Link {
