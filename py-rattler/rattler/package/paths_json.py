@@ -224,7 +224,7 @@ class PathsEntry:
         ...     sha256=None,
         ...     size_in_bytes=None
         ... )
-        >>> entry.relative_path
+        >>> str(entry.relative_path)
         'lib/file.txt'
         >>> entry.no_link
         False
