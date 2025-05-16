@@ -12,9 +12,9 @@ readme.workspace = true
 
 [features]
 default = ["native-tls"]
-native-tls = ["reqwest/native-tls", "google-cloud-auth?/default-tls"]
-rustls-tls = ["reqwest/rustls-tls", "google-cloud-auth?/rustls-tls"]
-gcs = ["google-cloud-auth", "google-cloud-token"]
+native-tls = ["reqwest/native-tls"]
+rustls-tls = ["reqwest/rustls-tls"]
+gcs = ["google-cloud-auth"]
 s3 = ["aws-config", "aws-sdk-s3"]
 
 [dependencies]
@@ -24,7 +24,6 @@ base64 = { workspace = true }
 dirs = { workspace = true }
 fs-err = { workspace = true }
 google-cloud-auth = { workspace = true, optional = true }
-google-cloud-token = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true }
 aws-sdk-s3 = { workspace = true, optional = true }
 http = { workspace = true }
