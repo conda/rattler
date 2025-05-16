@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use rattler_conda_types::{
-    ParseChannelError, Channel, ChannelConfig, MatchSpec, ParseStrictness::Lenient, PackageName, Version, RepoDataRecord, PackageRecord, NoArchType,
+    ParseChannelError, Channel, ChannelConfig, MatchSpec, ParseStrictness::Lenient, PackageName, Version, RepoDataRecord, PackageRecord,
 };
 use rattler_repodata_gateway::{Gateway, SourceConfig};
 use rattler_solve::{SolverImpl, SolverTask};
@@ -12,9 +12,6 @@ use crate::{error::JsError, platform::JsPlatform};
 
 use web_sys::console::log_1;
 use serde::{Serialize, Deserialize};
-
-use std::collections::BTreeMap;
-use chrono::{DateTime, Utc};
 
 use url::Url;
 
@@ -41,11 +38,9 @@ struct JsLockedPackage {
     url: String,
     package_name: String,
     build: String,
-    build_number: u64,
     repo_name: Option<String>,
     filename: String,
-    version: String,
-    subdir: String,
+    version: String
 }
 
 /// Solve a set of specs with the given channels and platforms.
@@ -94,55 +89,42 @@ pub async fn simple_solve(
         .execute()
         .await?;
 
-    let js_locked_packages: Vec<JsLockedPackage> =
-        serde_wasm_bindgen::from_value(locked_packages).map_err(JsError::from)?;
+  
+  let installed_packages: Option<Vec<RepoDataRecord>> = if locked_packages.is_null() || locked_packages.is_undefined() {
+        None
+    } else {
+        let js_locked_packages: Vec<JsLockedPackage> =
+            serde_wasm_bindgen::from_value(locked_packages).map_err(JsError::from)?;
 
-    let locked_packages = js_locked_packages
-        .into_iter()
-        .map(|pkg| {
-            let url = Url::parse(&pkg.url).map_err(|e| JsError::from(ParseChannelError::from(e)))?;
+        let records = js_locked_packages
+            .into_iter()
+            .map(|pkg| {
+                let url = Url::parse(&pkg.url)
+                    .map_err(|e| JsError::from(ParseChannelError::from(e)))?;
 
+                  let rec = PackageRecord {
+                    ..PackageRecord::new(
+                        PackageName::try_from(pkg.package_name.clone())?,
+                        Version::from_str(&pkg.version)?,
+                        pkg.build.clone(),
+                    )
+                };
 
-        let package_record = PackageRecord {
-                name: PackageName::try_from(pkg.package_name.clone())?,
-                version: Version::from_str(&pkg.version)?.into(),
-                build:  pkg.build.clone(),
-                build_number: pkg.build_number,
-                subdir: "unknown".to_string(),
-                md5: None,
-                sha256: None,
-                size: None,
-                arch: None,
-                platform: None,
-                depends: vec![],
-                extra_depends: std::collections::BTreeMap::new(),
-                constrains: vec![],
-                track_features: vec![],
-                features: None,
-                noarch:  NoArchType::none(),
-                license: None,
-                license_family: None,
-                timestamp: None,
-                python_site_packages_path: None,
-                legacy_bz2_md5: None,
-                legacy_bz2_size: None,
-                purls: None,
-                run_exports: None,
-            };
-
-
-            Ok(RepoDataRecord {
-                url,
-                file_name: pkg.filename,
-                channel: pkg.repo_name,
-                package_record,
+                Ok(RepoDataRecord {
+                    url,
+                    file_name: pkg.filename,
+                    channel: pkg.repo_name,
+                    package_record:rec.clone()
+                })
             })
-        })
-        .collect::<Result<Vec<_>, JsError>>()?;
+            .collect::<Result<Vec<_>, JsError>>()?;
 
-    let task = SolverTask {
+        Some(records)
+    };
+
+        let task = SolverTask {
         specs,
-        locked_packages,
+        locked_packages: installed_packages.unwrap_or_default(),
         pinned_packages: vec![],
         ..repodata.iter().collect::<SolverTask<_>>()
     };
