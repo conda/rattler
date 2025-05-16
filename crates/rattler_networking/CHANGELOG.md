@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0](https://github.com/conda/rattler/compare/rattler_networking-v0.23.0...rattler_networking-v0.24.0) - 2025-05-16
+
+### Other
+
+- update dependencies of js-rattler and py-rattler as well ([#1317](https://github.com/conda/rattler/pull/1317))
+- update GCS authentication ([#1314](https://github.com/conda/rattler/pull/1314))
+
 ## [0.23.0](https://github.com/conda/rattler/compare/rattler_networking-v0.22.12...rattler_networking-v0.23.0) - 2025-05-03
 
 ### Added
