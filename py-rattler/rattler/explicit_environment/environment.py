@@ -4,7 +4,6 @@ from typing import List, Optional
 from rattler.rattler import PyExplicitEnvironmentSpec as _PyExplicitEnvironmentSpec
 from rattler.rattler import PyExplicitEnvironmentEntry as _PyExplicitEnvironmentEntry
 from rattler.platform import Platform
-from rattler.repo_data.gateway import Gateway
 
 
 class ExplicitEnvironmentEntry:
@@ -68,7 +67,3 @@ class ExplicitEnvironmentSpec:
     def packages(self) -> List[ExplicitEnvironmentEntry]:
         """Returns the environment entries (URLs) specified in the explicit environment specification"""
         return [ExplicitEnvironmentEntry(p) for p in self._inner.packages()]
-
-    def install(self, target_prefix: Path, gateway: Gateway) -> None:
-        """Installs the explicit environment to the specified target prefix"""
-        self._inner.install(target_prefix, gateway)

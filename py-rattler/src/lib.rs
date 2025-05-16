@@ -39,9 +39,7 @@ use error::{
     ParsePlatformException, PyRattlerError, SolverException, TransactionException,
     ValidatePackageRecordsException, VersionBumpException,
 };
-use explicit_environment_spec::{
-    py_install_explicit_environment, PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec,
-};
+use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
 use index::{py_index_fs, py_index_s3};
 use index_json::PyIndexJson;
@@ -173,7 +171,6 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     // Explicit environment specification
     m.add_class::<PyExplicitEnvironmentSpec>()?;
     m.add_class::<PyExplicitEnvironmentEntry>()?;
-    m.add_function(wrap_pyfunction!(py_install_explicit_environment, &m)?)?;
 
     // Exceptions
     m.add(
