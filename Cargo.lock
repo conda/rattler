@@ -4456,7 +4456,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
- "retry-policies 0.5.0",
+ "retry-policies",
  "rstest",
  "serde",
  "serde_json",
@@ -4562,7 +4562,7 @@ dependencies = [
  "rattler_redaction",
  "reqwest",
  "reqwest-middleware",
- "retry-policies 0.5.0",
+ "retry-policies",
  "rmp-serde",
  "rstest",
  "self_cell",
@@ -4928,7 +4928,7 @@ dependencies = [
  "parking_lot 0.11.2",
  "reqwest",
  "reqwest-middleware",
- "retry-policies 0.4.0",
+ "retry-policies",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
@@ -4960,15 +4960,6 @@ name = "retry-policies"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5875471e6cab2871bc150ecb8c727db5113c9338cc3354dc5ee3425b6aa40a1c"
-dependencies = [
- "rand 0.8.5",
-]
-
-[[package]]
-name = "retry-policies"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "503c78f59814e2664c9980b739b19e40f549233ecf39928040ee54fdd431f614"
 dependencies = [
  "rand 0.8.5",
 ]
