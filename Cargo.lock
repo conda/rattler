@@ -4307,6 +4307,7 @@ dependencies = [
  "tracing",
  "typed-path",
  "url",
+ "wasm-bindgen",
 ]
 
 [[package]]
