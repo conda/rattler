@@ -3,7 +3,7 @@ use fxhash::{FxHashMap, FxHashSet};
 use rattler_digest::Sha256Hash;
 use serde::{Deserialize, Serialize};
 
-use crate::PackageRecord;
+use crate::{PackageRecord, Platform};
 
 /// The sharded repodata holds a hashmap of package name -> shard (hash).
 /// This index file is stored under `<channel>/<subdir>/repodata_shards.msgpack.zst`
@@ -19,7 +19,7 @@ pub struct ShardedRepodata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShardedSubdirInfo {
     /// The name of the subdirectory
-    pub subdir: String,
+    pub subdir: Platform,
 
     /// The base url of the subdirectory. This is the location where the actual
     /// packages are stored.
@@ -47,4 +47,14 @@ pub struct Shard {
     /// The file names of all removed for this shard
     #[serde(default)]
     pub removed: FxHashSet<String>,
+}
+
+impl Default for Shard {
+    fn default() -> Self {
+        Self {
+            packages: FxHashMap::default(),
+            conda_packages: FxHashMap::default(),
+            removed: FxHashSet::default(),
+        }
+    }
 }

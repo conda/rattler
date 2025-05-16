@@ -53,12 +53,16 @@ reqwest = { workspace = true, default-features = false, features = [
   "macos-system-configuration",
   "charset",
 ] }
+rmp-serde = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 tar = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 url = { workspace = true }
+zstd = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

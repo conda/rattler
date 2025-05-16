@@ -9,14 +9,18 @@ use futures::{stream::FuturesUnordered, StreamExt};
 use fxhash::FxHashMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rattler_conda_types::{
-    package::{ArchiveType, IndexJson, PackageFile, RunExportsJson},
-    ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData,
+    package::{ArchiveIdentifier, ArchiveType, IndexJson, PackageFile, RunExportsJson},
+    ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
+    ShardedSubdirInfo,
 };
+use rattler_digest::Sha256Hash;
 use rattler_networking::{Authentication, AuthenticationStorage};
 use rattler_package_streaming::{
     read,
     seek::{self, stream_conda_content},
 };
+use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
     io::{Cursor, Read, Seek},
@@ -396,7 +400,26 @@ async fn index_subdir(
         version: Some(2),
     };
 
-    // TODO: also write shards
+    write_repodata(repodata, repodata_path, repodata_patch, true, subdir, op).await
+}
+
+fn serialize_msgpack_zst<T>(val: &T) -> Result<Vec<u8>>
+where
+    T: Serialize + ?Sized,
+{
+    let msgpack = rmp_serde::to_vec(val)?;
+    let encoded = zstd::stream::encode_all(&msgpack[..], 0)?;
+    Ok(encoded)
+}
+
+async fn write_repodata(
+    repodata: RepoData,
+    repodata_path: String,
+    repodata_patch: Option<PatchInstructions>,
+    sharded: bool,
+    subdir: Platform,
+    op: Operator,
+) -> Result<()> {
     tracing::info!("Writing repodata to {}", repodata_path);
     let repodata_bytes = serde_json::to_vec(&repodata)?;
     op.write(&repodata_path, repodata_bytes).await?;
@@ -409,10 +432,72 @@ async fn index_subdir(
         let patched_repodata_bytes = serde_json::to_vec(&patched_repodata)?;
         op.write(&patched_repodata_path, patched_repodata_bytes)
             .await?;
+        // todo: do sharded here as well
     }
-    // todo: also write repodata.json.bz2, repodata.json.zst, repodata.json.jlap and sharded repodata once available in rattler
-    // https://github.com/conda/rattler/issues/1096
 
+    if sharded {
+        let mut shards_by_package_names: HashMap<String, Shard> = HashMap::new();
+        for (k, package_record) in repodata.conda_packages {
+            let package_name = package_record.name.as_normalized();
+            let shard = shards_by_package_names
+                .entry(package_name.into())
+                .or_insert_with(|| Shard::default());
+            shard.conda_packages.insert(k, package_record);
+        }
+        for (k, package_record) in repodata.packages {
+            let package_name = package_record.name.as_normalized();
+            let shard = shards_by_package_names
+                .entry(package_name.into())
+                .or_insert_with(|| Shard::default());
+            shard.packages.insert(k, package_record);
+        }
+        for package in repodata.removed {
+            let package_name = ArchiveIdentifier::try_from_filename(package.as_str())
+                .context("Could not determine archive identifier for {package}")?
+                .name;
+            let shard = shards_by_package_names
+                .entry(package_name.into())
+                .or_insert_with(|| Shard::default());
+            shard.removed.insert(package);
+        }
+
+        // calculate digests for shards
+        let shards = shards_by_package_names
+            .iter()
+            .map(|(k, shard)| {
+                serialize_msgpack_zst(shard).map(|encoded| {
+                    let mut hasher = Sha256::new();
+                    hasher.update(&encoded);
+                    let digest: Sha256Hash = hasher.finalize().into();
+                    (k, (digest, encoded))
+                })
+            })
+            .collect::<Result<HashMap<_, _>>>()?;
+
+        let sharded_repodata = ShardedRepodata {
+            info: ShardedSubdirInfo {
+                subdir,
+                base_url: "".into(),
+                shards_base_url: "./shards/".into(), // todo: make configurable?
+            },
+            shards: shards
+                .iter()
+                .map(|(&k, (digest, _))| (k.clone(), digest.clone()))
+                .collect(),
+        };
+
+        // todo: parallelize
+        for (_, (digest, encoded_shard)) in shards {
+            let shard_path = format!("{subdir}/shards/{digest:x}.msgpack.zst");
+            op.write(&shard_path, encoded_shard).await?;
+        }
+
+        let msgpack_path = format!("{subdir}/repodata_shards.msgpack.zst");
+        let sharded_repodata_encoded = serialize_msgpack_zst(&sharded_repodata)?;
+        op.write(&msgpack_path, sharded_repodata_encoded).await?;
+    }
+    // todo: also write repodata.json.zst
+    // https://github.com/conda/rattler/issues/1096
     Ok(())
 }
 
