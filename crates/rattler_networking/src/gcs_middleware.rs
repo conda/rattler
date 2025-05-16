@@ -37,7 +37,6 @@ impl Middleware for GCSMiddleware {
 async fn authenticate_with_google_cloud(mut req: Request) -> MiddlewareResult<Request> {
     let scopes = ["https://www.googleapis.com/auth/devstorage.read_only"];
 
-    // let config = Config::default().with_scopes(&scopes);
     match AccessTokenCredentialBuilder::default()
         .with_scopes(scopes)
         .build()
