@@ -1668,7 +1668,7 @@ dependencies = [
 
 [[package]]
 name = "file_url"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "itertools 0.14.0",
  "percent-encoding",
@@ -3484,7 +3484,7 @@ dependencies = [
 
 [[package]]
 name = "py-rattler"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3768,7 +3768,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.33.6"
+version = "0.33.7"
 dependencies = [
  "anyhow",
  "console",
@@ -3809,7 +3809,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.18"
+version = "0.3.19"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -3839,7 +3839,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "chrono",
  "core-foundation 0.10.0",
@@ -3876,7 +3876,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "blake2",
  "digest",
@@ -3892,7 +3892,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.22.6"
+version = "0.22.7"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3918,7 +3918,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.23.3"
+version = "0.23.4"
 dependencies = [
  "chrono",
  "file_url",
@@ -3942,7 +3942,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_macros"
-version = "1.0.8"
+version = "1.0.9"
 dependencies = [
  "quote",
  "syn",
@@ -3950,7 +3950,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "chrono",
  "configparser",
@@ -3978,7 +3978,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4006,7 +4006,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.37"
+version = "0.22.38"
 dependencies = [
  "bzip2",
  "chrono",
@@ -4034,7 +4034,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_pty"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "libc",
  "nix",
@@ -4052,7 +4052,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.22.6"
+version = "0.22.7"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4107,7 +4107,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4125,7 +4125,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.4.6"
+version = "2.0.0"
 dependencies = [
  "chrono",
  "futures",
@@ -4141,7 +4141,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.0.11"
+version = "2.0.12"
 dependencies = [
  "archspec",
  "libloading",
