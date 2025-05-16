@@ -79,6 +79,8 @@ pub enum PyRattlerError {
     ValidatePackageRecordsError(#[from] ValidatePackageRecordsError),
     #[error(transparent)]
     AuthenticationStorageError(#[from] AuthenticationStorageError),
+    #[error(transparent)]
+    MatchSpecUrlError(#[from] rattler_conda_types::MatchSpecUrlError),
 }
 
 fn pretty_print_error(mut err: &dyn Error) -> String {
@@ -170,6 +172,9 @@ impl From<PyRattlerError> for PyErr {
                 AuthenticationStorageException::new_err(pretty_print_error(&err))
             }
             PyRattlerError::ShellError(err) => ShellException::new_err(pretty_print_error(&err)),
+            PyRattlerError::MatchSpecUrlError(err) => {
+                InvalidMatchSpecException::new_err(pretty_print_error(&err))
+            }
         }
     }
 }

@@ -601,18 +601,23 @@ impl TryFrom<Url> for MatchSpec {
 /// Errors that can occur when converting a URL to a `MatchSpec`
 #[derive(Debug, thiserror::Error)]
 pub enum MatchSpecUrlError {
+    /// The URL is missing a conda package filename
     #[error("Missing filename in URL")]
     MissingFilename,
 
+    /// The URL fragment is not a valid SHA256 digest
     #[error("Invalid SHA256 digest: {0}")]
     InvalidSha256(String),
 
+    /// The URL fragment is not a valid MD5 digest
     #[error("Invalid MD5 digest: {0}")]
     InvalidMd5(String),
 
+    /// The filename is not a valid conda package filename
     #[error("Invalid filename: {0}")]
     InvalidFilename(String),
 
+    /// The package name is not a valid conda package name
     #[error("Invalid package name: {0}")]
     InvalidPackageName(String),
 }
