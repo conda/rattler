@@ -87,6 +87,7 @@ class AboutJson:
         ```python
         >>> str(AboutJson.package_path())
         'info/about.json'
+        >>>
         ```
         """
         return PyAboutJson.package_path()
