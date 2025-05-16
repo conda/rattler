@@ -44,8 +44,13 @@ async fn authenticate_with_google_cloud(mut req: Request) -> MiddlewareResult<Re
     {
         Ok(token_source) => {
             let extensions = http::Extensions::new();
-            req.headers_mut()
-                .extend(token_source.headers(extensions).await.unwrap());
+            let headers = match token_source.headers(extensions).await {
+                Ok(headers) => headers,
+                Err(e) => {
+                    return Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e)));
+                }
+            };
+            req.headers_mut().extend(headers);
             Ok(req)
         }
         Err(e) => Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e))),
