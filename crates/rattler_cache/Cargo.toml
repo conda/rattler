@@ -9,6 +9,11 @@ license.workspace = true
 edition.workspace = true
 readme.workspace = true
 
+[features]
+default = ["rustls-tls"]
+rustls-tls = ["reqwest/rustls-tls", "reqwest-middleware/rustls-tls", "rattler_networking/rustls-tls", "rattler_package_streaming/rustls-tls"]
+native-tls = ["reqwest/native-tls", "rattler_networking/native-tls", "rattler_package_streaming/native-tls"]
+
 [dependencies]
 
 [target.'cfg(not( target_arch = "wasm32" ))'.dependencies]
