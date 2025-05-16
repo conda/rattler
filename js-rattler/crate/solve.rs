@@ -1,15 +1,23 @@
 use std::path::PathBuf;
+use std::str::FromStr;
 
-use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, ParseStrictness::Lenient};
+use rattler_conda_types::{
+    ParseChannelError, Channel, ChannelConfig, MatchSpec, ParseStrictness::Lenient, PackageName, Version, RepoDataRecord, PackageRecord,
+};
 use rattler_repodata_gateway::{Gateway, SourceConfig};
 use rattler_solve::{SolverImpl, SolverTask};
 use wasm_bindgen::prelude::*;
 
 use crate::{error::JsError, platform::JsPlatform};
 
-/// A package that has been solved by the solver.
-/// @public
+use web_sys::console::log_1;
+use serde::{Serialize, Deserialize};
+
+use url::Url;
+
+
 #[wasm_bindgen(getter_with_clone)]
+#[derive(Serialize)]
 pub struct SolvedPackage {
     pub url: String,
     #[wasm_bindgen(js_name = "packageName")]
@@ -23,6 +31,18 @@ pub struct SolvedPackage {
     pub version: String,
 }
 
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct JsLockedPackage {
+    url: String,
+    package_name: String,
+    build: String,
+    repo_name: Option<String>,
+    filename: String,
+    version: String
+}
+
 /// Solve a set of specs with the given channels and platforms.
 /// @public
 #[wasm_bindgen(js_name = "simpleSolve")]
@@ -33,6 +53,7 @@ pub async fn simple_solve(
     #[wasm_bindgen(param_description = "The channels to request for repodata of packages")]
     channels: Vec<String>,
     #[wasm_bindgen(param_description = "The platforms to solve for")] platforms: Vec<JsPlatform>,
+    #[wasm_bindgen(param_description = "Installed packages")] locked_packages: JsValue,
 ) -> Result<Vec<SolvedPackage>, JsError> {
     // TODO: Dont hardcode
     let channel_config = ChannelConfig::default_with_root_dir(PathBuf::from(""));
@@ -61,20 +82,58 @@ pub async fn simple_solve(
             ..rattler_repodata_gateway::ChannelConfig::default()
         })
         .finish();
+
     let repodata = gateway
         .query(channels, platforms, specs.iter().cloned())
         .recursive(true)
         .execute()
         .await?;
 
-    // Solve
-    let task = SolverTask {
+  
+  let installed_packages: Option<Vec<RepoDataRecord>> = if locked_packages.is_null() || locked_packages.is_undefined() {
+        None
+    } else {
+        let js_locked_packages: Vec<JsLockedPackage> =
+            serde_wasm_bindgen::from_value(locked_packages).map_err(JsError::from)?;
+
+        let records = js_locked_packages
+            .into_iter()
+            .map(|pkg| {
+                let url = Url::parse(&pkg.url)
+                    .map_err(|e| JsError::from(ParseChannelError::from(e)))?;
+
+                  let rec = PackageRecord {
+                    ..PackageRecord::new(
+                        PackageName::try_from(pkg.package_name.clone())?,
+                        Version::from_str(&pkg.version)?,
+                        pkg.build.clone(),
+                    )
+                };
+
+                Ok(RepoDataRecord {
+                    url,
+                    file_name: pkg.filename,
+                    channel: pkg.repo_name,
+                    package_record:rec.clone()
+                })
+            })
+            .collect::<Result<Vec<_>, JsError>>()?;
+
+        Some(records)
+    };
+
+        let task = SolverTask {
         specs,
+        locked_packages: installed_packages.unwrap_or_default(),
+        pinned_packages: vec![],
         ..repodata.iter().collect::<SolverTask<_>>()
     };
+
     let solved = rattler_solve::resolvo::Solver.solve(task)?;
 
-    // Convert to JS types
+    let js_value = serde_wasm_bindgen::to_value(&solved.records).unwrap();
+    log_1(&js_value);
+
     Ok(solved
         .records
         .into_iter()
