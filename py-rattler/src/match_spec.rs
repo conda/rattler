@@ -132,4 +132,14 @@ impl PyMatchSpec {
             ),
         })
     }
+
+    #[staticmethod]
+    pub fn from_url(url: &str) -> PyResult<Self> {
+        let url = url::Url(url)
+            .map_err(|_| PyRattlerError::InvalidUrl(url.to_string()))?;
+
+        Ok(MatchSpec::from(url)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
+    }
 }

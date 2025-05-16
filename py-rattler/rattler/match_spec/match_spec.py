@@ -209,6 +209,21 @@ class MatchSpec:
         """
         return cls._from_py_match_spec(PyMatchSpec.from_nameless(spec._nameless_match_spec, name))
 
+    @classmethod
+    def from_url(cls, url: str) -> MatchSpec:
+        """
+        Constructs a MatchSpec from a URL.
+
+        Examples
+        --------
+        ```python
+        >>> MatchSpec.from_url('https://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h3.tar.bz2')
+        MatchSpec("python ==3.9.0=h3")
+        >>>
+        ```
+        """
+        return cls._from_py_match_spec(PyMatchSpec.from_url(url))
+
     def __str__(self) -> str:
         """
         Returns a string representation of the MatchSpec.
