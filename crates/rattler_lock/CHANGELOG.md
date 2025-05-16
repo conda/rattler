@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.4](https://github.com/conda/rattler/compare/rattler_lock-v0.23.3...rattler_lock-v0.23.4) - 2025-05-16
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.23.3](https://github.com/conda/rattler/compare/rattler_lock-v0.23.2...rattler_lock-v0.23.3) - 2025-05-03
 
 ### Other
