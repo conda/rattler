@@ -82,7 +82,7 @@ class PathsJson:
         return PathsJson._from_py_paths_json(PyPathsJson.from_str(string))
 
     @staticmethod
-    def package_path() -> str:
+    def package_path() -> Path:
         """
         Returns the path to the file within the Conda archive.
 
@@ -254,7 +254,7 @@ class PathsEntry:
         self._inner = PyPathsEntry(relative_path, no_link, path_type._inner, prefix_placeholder, sha256, size_in_bytes)
 
     @property
-    def relative_path(self) -> str:
+    def relative_path(self) -> Path:
         """
         The relative path from the root of the package.
 
@@ -265,10 +265,10 @@ class PathsEntry:
         ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[0]
-        >>> entry.relative_path
+        >>> str(entry.relative_path)
         'Lib/site-packages/conda-22.9.0-py3.8.egg-info/PKG-INFO'
         >>> entry.relative_path = "new/path"
-        >>> entry.relative_path
+        >>> str(entry.relative_path)
         'new/path'
         >>>
         ```
