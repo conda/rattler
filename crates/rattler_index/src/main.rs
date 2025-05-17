@@ -27,11 +27,11 @@ struct Cli {
 
     /// Whether to write repodata.json.zst.
     #[arg(long, default_value = "true", global = true)]
-    write_zst: bool,
+    write_zst: Option<bool>,
 
     /// Whether to write sharded repodata.
     #[arg(long, default_value = "true", global = true)]
-    write_shards: bool,
+    write_shards: Option<bool>,
 
     /// Whether to force the re-indexing of all packages.
     /// Note that this will create a new repodata.json instead of updating the existing one.
@@ -120,8 +120,8 @@ async fn main() -> anyhow::Result<()> {
                 channel,
                 cli.target_platform,
                 cli.repodata_patch,
-                cli.write_zst,
-                cli.write_shards,
+                cli.write_zst.unwrap_or(true),
+                cli.write_shards.unwrap_or(true),
                 cli.force,
                 cli.max_parallel,
                 Some(multi_progress),
@@ -147,8 +147,8 @@ async fn main() -> anyhow::Result<()> {
                 session_token,
                 cli.target_platform,
                 cli.repodata_patch,
-                cli.write_zst,
-                cli.write_shards,
+                cli.write_zst.unwrap_or(true),
+                cli.write_shards.unwrap_or(true),
                 cli.force,
                 cli.max_parallel,
                 Some(multi_progress),
