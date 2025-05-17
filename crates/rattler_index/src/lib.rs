@@ -165,7 +165,7 @@ fn read_index_json_from_archive(
         let mut entry = entry;
         let path = entry.path()?;
         if path.as_os_str().eq("info/index.json") {
-            index_json = Some(package_record_from_index_json(&bytes, &mut entry)?);
+            index_json = Some(package_record_from_index_json(bytes, &mut entry)?);
         } else if path.as_os_str().eq("info/run_exports.json") {
             run_exports_json = Some(RunExportsJson::from_reader(&mut entry)?);
         }
@@ -441,23 +441,21 @@ async fn write_repodata(
             let package_name = package_record.name.as_normalized();
             let shard = shards_by_package_names
                 .entry(package_name.into())
-                .or_insert_with(|| Shard::default());
+                .or_default();
             shard.conda_packages.insert(k, package_record);
         }
         for (k, package_record) in repodata.packages {
             let package_name = package_record.name.as_normalized();
             let shard = shards_by_package_names
                 .entry(package_name.into())
-                .or_insert_with(|| Shard::default());
+                .or_default();
             shard.packages.insert(k, package_record);
         }
         for package in repodata.removed {
             let package_name = ArchiveIdentifier::try_from_filename(package.as_str())
                 .context("Could not determine archive identifier for {package}")?
                 .name;
-            let shard = shards_by_package_names
-                .entry(package_name.into())
-                .or_insert_with(|| Shard::default());
+            let shard = shards_by_package_names.entry(package_name).or_default();
             shard.removed.insert(package);
         }
 
@@ -468,7 +466,7 @@ async fn write_repodata(
                 serialize_msgpack_zst(shard).map(|encoded| {
                     let mut hasher = Sha256::new();
                     hasher.update(&encoded);
-                    let digest: Sha256Hash = hasher.finalize().into();
+                    let digest: Sha256Hash = hasher.finalize();
                     (k, (digest, encoded))
                 })
             })
@@ -482,7 +480,7 @@ async fn write_repodata(
             },
             shards: shards
                 .iter()
-                .map(|(&k, (digest, _))| (k.clone(), digest.clone()))
+                .map(|(&k, (digest, _))| (k.clone(), *digest))
                 .collect(),
         };
 

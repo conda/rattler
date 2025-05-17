@@ -35,7 +35,7 @@ pub struct ShardedSubdirInfo {
 }
 
 /// An individual shard that contains repodata for a single package name.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Shard {
     /// The records for all `.tar.bz2` packages
     pub packages: FxHashMap<String, PackageRecord>,
@@ -47,14 +47,4 @@ pub struct Shard {
     /// The file names of all removed for this shard
     #[serde(default)]
     pub removed: FxHashSet<String>,
-}
-
-impl Default for Shard {
-    fn default() -> Self {
-        Self {
-            packages: FxHashMap::default(),
-            conda_packages: FxHashMap::default(),
-            removed: FxHashSet::default(),
-        }
-    }
 }
