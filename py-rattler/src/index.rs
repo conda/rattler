@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use crate::{error::PyRattlerError, platform::PyPlatform};
 
 #[pyfunction]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 #[pyo3(signature = (channel_directory, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=32))]
 pub fn py_index_fs(
     py: Python<'_>,
@@ -38,7 +39,7 @@ pub fn py_index_fs(
 }
 
 #[pyfunction]
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 #[pyo3(signature = (channel_url, region, endpoint_url, force_path_style, access_key_id=None,secret_access_key=None, session_token=None, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=32))]
 pub fn py_index_s3(
     py: Python<'_>,
