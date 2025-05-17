@@ -105,11 +105,13 @@ async fn test_index_empty_directory_creates_noarch_repodata() {
     let temp_dir = tempfile::tempdir().unwrap();
     let noarch_path = temp_dir.path().join("noarch");
     let repodata_path = noarch_path.join("repodata.json");
+    let repodata_msgpack_path = noarch_path.join("repodata_shards.msgpack.zst");
 
     let res = index_fs(temp_dir.path(), None, None, true, 100, None).await;
 
     assert!(res.is_ok());
     assert!(noarch_path.is_dir());
-    assert_eq!(fs::read_dir(&noarch_path).unwrap().count(), 1);
+    assert_eq!(fs::read_dir(&noarch_path).unwrap().count(), 2);
     assert!(repodata_path.is_file());
+    assert!(repodata_msgpack_path.is_file());
 }
