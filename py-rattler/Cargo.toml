@@ -1,6 +1,6 @@
 [package]
 name = "py-rattler"
-version = "0.11.0"
+version = "0.12.0"
 edition = "2021"
 license = "BSD-3-Clause"
 publish = false
@@ -48,13 +48,13 @@ rattler_solve = { path = "../crates/rattler_solve", default-features = false, fe
 rattler_index = { path = "../crates/rattler_index" }
 rattler_lock = { path = "../crates/rattler_lock", default-features = false }
 rattler_package_streaming = { path = "../crates/rattler_package_streaming", default-features = false }
-pyo3 = { version = "0.23.5", features = [
+pyo3 = { version = "0.24.0", features = [
     "abi3-py38",
     "extension-module",
     "multiple-pymethods",
     "chrono",
 ] }
-pyo3-async-runtimes = { version = "0.23.0", features = ["tokio-runtime"] }
+pyo3-async-runtimes = { version = "0.24.0", features = ["tokio-runtime"] }
 tokio = { version = "1.44" }
 
 reqwest = { version = "0.12.15", default-features = false }
@@ -66,10 +66,10 @@ url = "2.5.4"
 openssl = { version = "0.10", optional = true }
 pep508_rs = "0.9.2"
 serde_json = "1.0.140"
-pyo3-file = "0.10.0"
+pyo3-file = "0.12.0"
 
 [build-dependencies]
-pyo3-build-config = "0.24.1"
+pyo3-build-config = "0.25.0"
 
 
 [patch.crates-io]

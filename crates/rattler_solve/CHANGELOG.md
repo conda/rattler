@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0](https://github.com/conda/rattler/compare/rattler_solve-v1.4.6...rattler_solve-v2.0.0) - 2025-05-16
+
+### Added
+
+- allows enabling of resolvo diagnostics ([#1296](https://github.com/conda/rattler/pull/1296))
+
 ## [1.4.6](https://github.com/conda/rattler/compare/rattler_solve-v1.4.5...rattler_solve-v1.4.6) - 2025-05-03
 
 ### Other

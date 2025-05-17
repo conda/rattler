@@ -62,7 +62,7 @@ use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlac
 use platform::{PyArch, PyPlatform};
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
 use pyo3::prelude::*;
-use record::PyRecord;
+use record::{PyLink, PyRecord};
 use repo_data::{
     gateway::{PyFetchRepoDataOptions, PyGateway, PySourceConfig},
     patch_instructions::PyPatchInstructions,
@@ -126,6 +126,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyFetchRepoDataOptions>()?;
 
     m.add_class::<PyRecord>()?;
+    m.add_class::<PyLink>()?;
 
     m.add_function(wrap_pyfunction!(py_fetch_repo_data, &m)?)?;
     m.add_class::<PyGenericVirtualPackage>()?;

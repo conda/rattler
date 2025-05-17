@@ -41,7 +41,7 @@ pub use generic_virtual_package::GenericVirtualPackage;
 pub use match_spec::{
     matcher::{StringMatcher, StringMatcherParseError},
     parse::ParseMatchSpecError,
-    MatchSpec, Matches, NamelessMatchSpec,
+    MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
 };
 pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
 pub use package_name::{InvalidPackageNameError, PackageName};

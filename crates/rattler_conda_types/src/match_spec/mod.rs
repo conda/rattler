@@ -1,13 +1,16 @@
+use crate::package::ArchiveIdentifier;
 use crate::{
     build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
     VersionSpec,
 };
 use itertools::Itertools;
+use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
+use std::str::FromStr;
 use std::sync::Arc;
 use url::Url;
 
@@ -548,6 +551,75 @@ impl Matches<GenericVirtualPackage> for MatchSpec {
         }
         true
     }
+}
+
+/// Convert a URL to a [`MatchSpec`]. This parses the URL and adds a `#sha256:...` or `md5=...`
+/// from the fragment of the URL if it exists.
+impl TryFrom<Url> for MatchSpec {
+    type Error = MatchSpecUrlError;
+
+    fn try_from(value: Url) -> Result<Self, Self::Error> {
+        let mut spec = MatchSpec::default();
+        let mut url_without_fragment = value.clone();
+        url_without_fragment.set_fragment(None);
+        spec.url = Some(url_without_fragment);
+
+        // Handle URL fragment for checksums
+        if let Some(fragment) = value.fragment() {
+            if fragment.starts_with("sha256:") {
+                let sha256 = fragment.trim_start_matches("sha256:");
+                spec.sha256 = Some(
+                    parse_digest_from_hex::<Sha256>(sha256)
+                        .ok_or(MatchSpecUrlError::InvalidSha256(fragment.to_string()))?,
+                );
+            } else if !fragment.is_empty() {
+                spec.md5 = Some(
+                    parse_digest_from_hex::<Md5>(fragment)
+                        .ok_or(MatchSpecUrlError::InvalidMd5(fragment.to_string()))?,
+                );
+            }
+        }
+
+        // Parse the filename from the URL and extract package information
+        let filename = value
+            .path_segments()
+            .and_then(Iterator::last)
+            .ok_or(MatchSpecUrlError::MissingFilename)?;
+
+        let archive_identifier = ArchiveIdentifier::try_from_filename(filename)
+            .ok_or(MatchSpecUrlError::InvalidFilename(filename.to_string()))?;
+
+        spec.name = Some(
+            PackageName::from_str(&archive_identifier.name)
+                .map_err(|_err| MatchSpecUrlError::InvalidPackageName(archive_identifier.name))?,
+        );
+
+        Ok(spec)
+    }
+}
+
+/// Errors that can occur when converting a URL to a `MatchSpec`
+#[derive(Debug, thiserror::Error)]
+pub enum MatchSpecUrlError {
+    /// The URL is missing a conda package filename
+    #[error("Missing filename in URL")]
+    MissingFilename,
+
+    /// The URL fragment is not a valid SHA256 digest
+    #[error("Invalid SHA256 digest: {0}")]
+    InvalidSha256(String),
+
+    /// The URL fragment is not a valid MD5 digest
+    #[error("Invalid MD5 digest: {0}")]
+    InvalidMd5(String),
+
+    /// The filename is not a valid conda package filename
+    #[error("Invalid filename: {0}")]
+    InvalidFilename(String),
+
+    /// The package name is not a valid conda package name
+    #[error("Invalid package name: {0}")]
+    InvalidPackageName(String),
 }
 
 #[cfg(test)]

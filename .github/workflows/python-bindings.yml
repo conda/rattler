@@ -32,11 +32,11 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           submodules: recursive
-      - uses: prefix-dev/setup-pixi@8eaba7c61d661f73d558b0b477156b7b62667fa4 # v0.8.4
+      - uses: prefix-dev/setup-pixi@19eac09b398e3d0c747adc7921926a6d802df4da # v0.8.8
         with:
           manifest-path: py-rattler/pixi.toml
           environments: test
-      - uses: actions-rust-lang/setup-rust-toolchain@9399c7bb15d4c7d47b27263d024f0a4978346ba4 # v1
+      - uses: actions-rust-lang/setup-rust-toolchain@9d7e65c320fdb52dcd45ffaa68deb6c02c8754d9 # v1
         with:
           components: clippy, rustfmt
       - name: Format and Lint

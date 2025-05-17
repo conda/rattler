@@ -1,6 +1,6 @@
 [package]
 name = "file_url"
-version = "0.2.4"
+version = "0.2.5"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Helper functions to work with file:// urls"
@@ -13,7 +13,7 @@ url = { workspace = true }
 percent-encoding = { workspace = true }
 itertools = { workspace = true }
 typed-path = { workspace = true }
-thiserror = "2.0.11"
+thiserror = "2.0.12"
 
 [dev-dependencies]
 rstest = { workspace = true }
