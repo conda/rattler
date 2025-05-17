@@ -426,7 +426,8 @@ where
     Ok(encoded)
 }
 
-async fn write_repodata(
+/// Write a `repodata.json` for all packages in the given configurator's root.
+pub async fn write_repodata(
     repodata: RepoData,
     repodata_patch: Option<PatchInstructions>,
     write_zst: bool,
