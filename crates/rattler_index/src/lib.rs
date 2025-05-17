@@ -196,6 +196,7 @@ pub fn package_record_from_conda_reader(reader: impl Read) -> std::io::Result<Pa
     read_index_json_from_archive(&bytes, &mut archive)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn index_subdir(
     subdir: Platform,
     op: Operator,
@@ -570,7 +571,7 @@ pub async fn index_fs(
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given S3 URL.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub async fn index_s3(
     channel: Url,
     region: String,
@@ -644,6 +645,7 @@ pub async fn index_s3(
 ///    2. Collect all registered packages from `repodata.json` (if exists)
 ///    3. Determine which packages to add to and to delete from `repodata.json`
 ///    4. Write `repodata.json` back
+#[allow(clippy::too_many_arguments)]
 pub async fn index<T: Configurator>(
     target_platform: Option<Platform>,
     config: T,
