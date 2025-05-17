@@ -37,6 +37,10 @@ use opendal::{
     Configurator, Operator,
 };
 
+const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
+const REPODATA: &str = "repodata.json";
+const REPODATA_SHARDS: &str = "repodata_shards.msgpack.zst";
+
 /// Extract the package record from an `index.json` file.
 pub fn package_record_from_index_json<T: Read>(
     package_as_bytes: impl AsRef<[u8]>,
@@ -196,18 +200,19 @@ async fn index_subdir(
     subdir: Platform,
     op: Operator,
     force: bool,
+    write_zst: bool,
+    write_shards: bool,
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
 ) -> Result<()> {
-    let repodata_path = if repodata_patch.is_some() {
-        format!("{subdir}/repodata_from_packages.json")
-    } else {
-        format!("{subdir}/repodata.json")
-    };
     let mut registered_packages: FxHashMap<String, PackageRecord> = HashMap::default();
     if !force {
-        let repodata_bytes = op.read(&repodata_path).await;
+        let repodata_bytes = if repodata_patch.is_some() {
+            op.read(&format!("{subdir}/{REPODATA_FROM_PACKAGES}")).await
+        } else {
+            op.read(&format!("{subdir}/{REPODATA}")).await
+        };
         let repodata: RepoData = match repodata_bytes {
             Ok(bytes) => serde_json::from_slice(&bytes.to_vec())?,
             Err(e) => {
@@ -400,7 +405,15 @@ async fn index_subdir(
         version: Some(2),
     };
 
-    write_repodata(repodata, repodata_path, repodata_patch, true, subdir, op).await
+    write_repodata(
+        repodata,
+        repodata_patch,
+        write_zst,
+        write_shards,
+        subdir,
+        op,
+    )
+    .await
 }
 
 fn serialize_msgpack_zst<T>(val: &T) -> Result<Vec<u8>>
@@ -414,28 +427,45 @@ where
 
 async fn write_repodata(
     repodata: RepoData,
-    repodata_path: String,
     repodata_patch: Option<PatchInstructions>,
-    sharded: bool,
+    write_zst: bool,
+    write_shards: bool,
     subdir: Platform,
     op: Operator,
 ) -> Result<()> {
-    tracing::info!("Writing repodata to {}", repodata_path);
-    let repodata_bytes = serde_json::to_vec(&repodata)?;
-    op.write(&repodata_path, repodata_bytes).await?;
-
-    if let Some(instructions) = repodata_patch {
-        let patched_repodata_path = format!("{subdir}/repodata.json");
-        tracing::info!("Writing patched repodata to {}", patched_repodata_path);
-        let mut patched_repodata = repodata.clone();
-        patched_repodata.apply_patches(&instructions);
-        let patched_repodata_bytes = serde_json::to_vec(&patched_repodata)?;
-        op.write(&patched_repodata_path, patched_repodata_bytes)
+    if repodata_patch.is_some() {
+        let unpatched_repodata_path = format!("{subdir}/{REPODATA_FROM_PACKAGES}");
+        tracing::info!("Writing unpatched repodata to {unpatched_repodata_path}");
+        let unpatched_repodata_bytes = serde_json::to_vec(&repodata)?;
+        op.write(&unpatched_repodata_path, unpatched_repodata_bytes)
             .await?;
-        // todo: do sharded here as well
     }
 
-    if sharded {
+    let repodata = if let Some(instructions) = repodata_patch {
+        tracing::info!("Patching repodata");
+        let mut patched_repodata = repodata.clone();
+        patched_repodata.apply_patches(&instructions);
+        patched_repodata
+    } else {
+        repodata
+    };
+
+    let repodata_bytes = serde_json::to_vec(&repodata)?;
+    if write_zst {
+        tracing::info!("Compressing repodata bytes");
+        let repodata_zst_bytes = zstd::stream::encode_all(&repodata_bytes[..], 19)?;
+        let repodata_zst_path = format!("{subdir}/{REPODATA}.zst");
+        tracing::info!("Writing zst repodata to {repodata_zst_path}");
+        op.write(&repodata_zst_path, repodata_zst_bytes).await?;
+    }
+
+    let repodata_path = format!("{subdir}/{REPODATA}");
+    tracing::info!("Writing repodata to {repodata_path}");
+    op.write(&repodata_path, repodata_bytes).await?;
+
+    if write_shards {
+        // See CEP 16 <https://github.com/conda/ceps/blob/main/cep-0016.md>
+        tracing::info!("Creating sharded repodata");
         let mut shards_by_package_names: HashMap<String, Shard> = HashMap::new();
         for (k, package_record) in repodata.conda_packages {
             let package_name = package_record.name.as_normalized();
@@ -476,7 +506,7 @@ async fn write_repodata(
             info: ShardedSubdirInfo {
                 subdir,
                 base_url: "".into(),
-                shards_base_url: "./shards/".into(), // todo: make configurable?
+                shards_base_url: "./shards/".into(),
             },
             shards: shards
                 .iter()
@@ -484,18 +514,31 @@ async fn write_repodata(
                 .collect(),
         };
 
-        // todo: parallelize
+        let mut tasks = FuturesUnordered::new();
+        // todo max parallel
         for (_, (digest, encoded_shard)) in shards {
-            let shard_path = format!("{subdir}/shards/{digest:x}.msgpack.zst");
-            op.write(&shard_path, encoded_shard).await?;
+            let op = op.clone();
+            let future = async move || {
+                let shard_path = format!("{subdir}/shards/{digest:x}.msgpack.zst");
+                tracing::trace!("Writing repodata shard to {shard_path}");
+                op.write(&shard_path, encoded_shard).await
+            };
+            tasks.push(tokio::spawn(future()));
+        }
+        while let Some(join_result) = tasks.next().await {
+            match join_result {
+                Ok(Ok(_)) => {}
+                Ok(Err(e)) => Err(e)?,
+                Err(join_err) => Err(join_err)?,
+            }
         }
 
-        let msgpack_path = format!("{subdir}/repodata_shards.msgpack.zst");
+        let repodata_shards_path = format!("{subdir}/{REPODATA_SHARDS}");
+        tracing::trace!("Writing repodata shards to {repodata_shards_path}");
         let sharded_repodata_encoded = serialize_msgpack_zst(&sharded_repodata)?;
-        op.write(&msgpack_path, sharded_repodata_encoded).await?;
+        op.write(&repodata_shards_path, sharded_repodata_encoded)
+            .await?;
     }
-    // todo: also write repodata.json.zst
-    // https://github.com/conda/rattler/issues/1096
     Ok(())
 }
 
@@ -505,6 +548,8 @@ pub async fn index_fs(
     channel: impl Into<PathBuf>,
     target_platform: Option<Platform>,
     repodata_patch: Option<String>,
+    write_zst: bool,
+    write_shards: bool,
     force: bool,
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
@@ -515,6 +560,8 @@ pub async fn index_fs(
         target_platform,
         config,
         repodata_patch,
+        write_zst,
+        write_shards,
         force,
         max_parallel,
         multi_progress,
@@ -534,6 +581,8 @@ pub async fn index_s3(
     session_token: Option<String>,
     target_platform: Option<Platform>,
     repodata_patch: Option<String>,
+    write_zst: bool,
+    write_shards: bool,
     force: bool,
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
@@ -574,6 +623,8 @@ pub async fn index_s3(
         target_platform,
         s3_config,
         repodata_patch,
+        write_zst,
+        write_shards,
         force,
         max_parallel,
         multi_progress,
@@ -597,6 +648,8 @@ pub async fn index<T: Configurator>(
     target_platform: Option<Platform>,
     config: T,
     repodata_patch: Option<String>,
+    write_zst: bool,
+    write_shards: bool,
     force: bool,
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
@@ -670,6 +723,8 @@ pub async fn index<T: Configurator>(
             *subdir,
             op.clone(),
             force,
+            write_zst,
+            write_shards,
             repodata_patch
                 .as_ref()
                 .and_then(|p| p.subdirs.get(&subdir.to_string()).cloned()),
