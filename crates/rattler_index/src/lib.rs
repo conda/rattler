@@ -421,7 +421,7 @@ fn serialize_msgpack_zst<T>(val: &T) -> Result<Vec<u8>>
 where
     T: Serialize + ?Sized,
 {
-    let msgpack = rmp_serde::to_vec(val)?;
+    let msgpack = rmp_serde::to_vec_named(val)?;
     let encoded = zstd::stream::encode_all(&msgpack[..], 0)?;
     Ok(encoded)
 }
