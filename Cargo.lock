@@ -3821,6 +3821,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "pixi_config"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "console",
+ "dirs",
+ "fs-err",
+ "insta",
+ "itertools 0.14.0",
+ "rattler",
+ "rattler_conda_types",
+ "rattler_networking",
+ "rattler_package_streaming",
+ "rattler_repodata_gateway",
+ "reqwest",
+ "rstest",
+ "serde",
+ "serde_ignored",
+ "serde_json",
+ "thiserror 2.0.12",
+ "toml_edit",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "pkcs8"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5385,6 +5412,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "serde_ignored"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b516445dac1e3535b6d658a7b528d771153dfb272ed4180ca4617a20550365ff"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
