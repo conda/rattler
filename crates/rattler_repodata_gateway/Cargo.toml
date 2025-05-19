@@ -87,7 +87,7 @@ tower-http = { workspace = true, features = ["fs", "compression-gzip", "trace"] 
 tracing-test = { workspace = true }
 
 [features]
-default = ['native-tls']
+default = ['rustls-tls']
 native-tls = ['reqwest/native-tls', 'reqwest/native-tls-alpn', 'rattler_networking/native-tls', 'rattler_cache/native-tls', 'rattler_redaction/native-tls']
 rustls-tls = ['reqwest/rustls-tls', 'rattler_networking/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_redaction/rustls-tls']
 sparse = ["rattler_conda_types", "memmap2", "self_cell", "superslice", "itertools", "serde_json/raw_value"]
