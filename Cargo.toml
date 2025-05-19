@@ -78,7 +78,7 @@ aws-config = { version = "=1.5.18", default-features = false, features = [
   "sso",
   "credentials-process",
 ] }
-aws-sdk-s3 = { version = "1.85.0", default-features = false, features = [
+aws-sdk-s3 = { version = "1.86.0", default-features = false, features = [
   "rt-tokio",
   "rustls",
   "sigv4a",
