@@ -11,7 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ["native-tls"]
+default = ["rustls-tls"]
 native-tls = ["reqwest/native-tls"]
 rustls-tls = ["reqwest/rustls-tls"]
 gcs = ["google-cloud-auth"]
