@@ -137,8 +137,7 @@ async fn main() -> anyhow::Result<()> {
             secret_access_key,
             session_token,
         } => {
-            index_s3(
-                IndexS3Config {
+            index_s3(IndexS3Config {
                 channel,
                 region,
                 endpoint_url,
@@ -153,7 +152,7 @@ async fn main() -> anyhow::Result<()> {
                 force: cli.force,
                 max_parallel: cli.max_parallel,
                 multi_progress: Some(multi_progress),
-        })
+            })
             .await
         }
     }?;
