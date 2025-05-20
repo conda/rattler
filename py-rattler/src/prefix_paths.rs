@@ -130,13 +130,13 @@ impl PyPrefixPathType {
             "pyc_file" => Ok(Self {
                 inner: PathType::PycFile,
             }),
-            "windows_python_entrypoint_script" => Ok(Self {
+            "windows_python_entry_point_script" => Ok(Self {
                 inner: PathType::WindowsPythonEntryPointScript,
             }),
-            "windows_python_entrypoint_exe" => Ok(Self {
+            "windows_python_entry_point_exe" => Ok(Self {
                 inner: PathType::WindowsPythonEntryPointExe,
             }),
-            "unix_python_entrypoint" => Ok(Self {
+            "unix_python_entry_point" => Ok(Self {
                 inner: PathType::UnixPythonEntryPoint,
             }),
             _ => Err(PyValueError::new_err("Invalid path type")),
@@ -169,20 +169,20 @@ impl PyPrefixPathType {
 
     /// A Windows entry point python script (a <entrypoint>-script.py Python script file)
     #[getter]
-    pub fn windows_python_entrypoint_script(&self) -> bool {
+    pub fn windows_python_entry_point_script(&self) -> bool {
         matches!(&self.inner, PathType::WindowsPythonEntryPointScript)
     }
 
     /// A Windows Python entry point executable (a <entrypoint>.exe file)
     #[getter]
-    pub fn windows_python_entrypoint_exe(&self) -> bool {
+    pub fn windows_python_entry_point_exe(&self) -> bool {
         matches!(&self.inner, PathType::WindowsPythonEntryPointExe)
     }
 
     /// This file is a Python entry point executable for Unix (a `<entrypoint>` Python script file)
     /// Entry points are created in the `bin/...` directory when installing Python noarch packages
     #[getter]
-    pub fn unix_python_entrypoint(&self) -> bool {
+    pub fn unix_python_entry_point(&self) -> bool {
         matches!(&self.inner, PathType::UnixPythonEntryPoint)
     }
 }

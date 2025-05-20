@@ -42,7 +42,7 @@ tokio = { workspace = true, features = ["fs"] }
 zstd = { workspace = true, features = ["zstdmt"] }
 
 [features]
-default = ["native-tls"]
+default = ["rustls-tls"]
 native-tls = ["rattler_networking/native-tls", "rattler_redaction/native-tls"]
 rustls-tls = ["rattler_networking/rustls-tls", "rattler_redaction/rustls-tls"]
 reqwest = ["dep:reqwest-middleware", "dep:reqwest"]

@@ -165,14 +165,14 @@ impl SparseRepoData {
     /// This works by iterating over all elements in the `packages` and
     /// `conda_packages` fields of the repodata and returning the unique
     /// package names.
-    pub fn package_names(&self) -> impl Iterator<Item = &'_ str> + '_ {
+    pub fn package_names(&self) -> impl Iterator<Item = &'_ str> {
         let repo_data = self.inner.borrow_repo_data();
-        repo_data
-            .packages
+        let tar_baz2_packages = repo_data.packages.iter().map(|(name, _)| name.package);
+        let conda_packages = repo_data
+            .conda_packages
             .iter()
-            .chain(repo_data.conda_packages.iter())
-            .map(|(name, _)| name.package)
-            .dedup()
+            .map(|(name, _)| name.package);
+        tar_baz2_packages.merge(conda_packages).dedup()
     }
 
     /// Returns all the records for the specified package name.
@@ -495,7 +495,10 @@ impl<'de> TryFrom<&'de str> for PackageFilename<'de> {
 
 #[cfg(test)]
 mod test {
-    use std::path::{Path, PathBuf};
+    use std::{
+        collections::HashSet,
+        path::{Path, PathBuf},
+    };
 
     use bytes::Bytes;
     use fs_err as fs;
@@ -526,6 +529,15 @@ mod test {
                 test_dir().join("channels/conda-forge/linux-64/repodata.json"),
             ),
         ]
+    }
+
+    fn dummy_repo_data() -> (Channel, &'static str, PathBuf) {
+        let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+        (
+            Channel::from_str("dummy", &channel_config).unwrap(),
+            "linux-64",
+            test_dir().join("channels/dummy/linux-64/repodata.json"),
+        )
     }
 
     async fn default_repo_data_bytes() -> Vec<(Channel, &'static str, Bytes)> {
@@ -719,5 +731,14 @@ mod test {
 
         assert_eq!(repo_data.packages.len(), 0);
         assert_eq!(sparse_repodata.package_names().try_len().unwrap(), 0);
+    }
+
+    #[test]
+    fn dedup_packages() {
+        let (channel, platform, path) = dummy_repo_data();
+        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
+        let names = sparse.package_names().collect_vec();
+        let deduped_names = names.iter().copied().collect::<HashSet<_>>();
+        assert_eq!(names.len(), deduped_names.len());
     }
 }
