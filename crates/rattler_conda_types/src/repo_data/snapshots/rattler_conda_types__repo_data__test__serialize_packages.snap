@@ -334,7 +334,7 @@ packages:
     timestamp: 1715610974
     version: "2"
 packages.conda:
-  bors-1.1-bla_1.tar.bz2:
+  bors-1.1-bla_1.conda:
     build: bla_1
     build_number: 1
     depends: []
