@@ -11,7 +11,6 @@ from rattler.rattler import py_solve, PyMatchSpec, py_solve_with_sparse_repodata
 from rattler.platform.platform import PlatformLiteral
 from rattler.repo_data.gateway import Gateway
 from rattler.repo_data.record import RepoDataRecord
-from rattler.repo_data.sparse import VariantSelection
 from rattler.virtual_package.generic import GenericVirtualPackage
 
 SolveStrategy = Literal["highest", "lowest", "lowest-direct"]
