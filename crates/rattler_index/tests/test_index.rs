@@ -58,16 +58,16 @@ async fn test_index() {
     )
     .unwrap();
 
-    let res = index_fs(
-        temp_dir.path(),
-        Some(Platform::Win64),
-        None,
-        true,
-        true,
-        true,
-        100,
-        None,
-    )
+    let res = index_fs(IndexFsConfig {
+        channel: temp_dir.path(),
+        target_platform: Some(Platform::Win64),
+        repodata_patch: None,
+        write_zst: true,
+        write_shards: true,
+        force: true,
+        max_parallel: 32,
+        multi_progress: None,
+    })
     .await;
     assert!(res.is_ok());
 
@@ -119,7 +119,8 @@ async fn test_index_empty_directory_creates_noarch_repodata() {
         force: true,
         max_parallel: 100,
         multi_progress: None,
-    }).await;
+    })
+    .await;
 
     assert!(res.is_ok());
     assert!(noarch_path.is_dir());
