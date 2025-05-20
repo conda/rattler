@@ -40,6 +40,7 @@ use opendal::{
 const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
 const REPODATA: &str = "repodata.json";
 const REPODATA_SHARDS: &str = "repodata_shards.msgpack.zst";
+const ZSTD_REPODATA_COMPRESSION_LEVEL: i32 = 19;
 
 /// Extract the package record from an `index.json` file.
 pub fn package_record_from_index_json<T: Read>(
@@ -455,7 +456,8 @@ pub async fn write_repodata(
     let repodata_bytes = serde_json::to_vec(&repodata)?;
     if write_zst {
         tracing::info!("Compressing repodata bytes");
-        let repodata_zst_bytes = zstd::stream::encode_all(&repodata_bytes[..], 19)?;
+        let repodata_zst_bytes =
+            zstd::stream::encode_all(&repodata_bytes[..], ZSTD_REPODATA_COMPRESSION_LEVEL)?;
         let repodata_zst_path = format!("{subdir}/{REPODATA}.zst");
         tracing::info!("Writing zst repodata to {repodata_zst_path}");
         op.write(&repodata_zst_path, repodata_zst_bytes).await?;
@@ -506,9 +508,10 @@ pub async fn write_repodata(
 
         let sharded_repodata = ShardedRepodata {
             info: ShardedSubdirInfo {
-                subdir,
+                subdir: subdir.to_string(),
                 base_url: "".into(),
                 shards_base_url: "./shards/".into(),
+                created_at: None,
             },
             shards: shards
                 .iter()
@@ -544,18 +547,43 @@ pub async fn write_repodata(
     Ok(())
 }
 
+/// Configuration for `index_fs`
+pub struct IndexFsConfig<T>
+{
+    /// The channel to index.
+    pub channel: T,
+    /// The target platform to index.
+    pub target_platform: Option<Platform>,
+    /// The path to a repodata patch to apply to the index.
+    pub repodata_patch: Option<String>,
+    /// Whether to write the repodata as a zstd-compressed file.
+    pub write_zst: bool,
+    /// Whether to write the repodata shards.
+    pub write_shards: bool,
+    /// Whether to force the index to be written.
+    pub force: bool,
+    /// The maximum number of parallel tasks to run.
+    pub max_parallel: usize,
+    /// The multi-progress bar to use for the index.
+    pub multi_progress: Option<MultiProgress>,
+}
+
 /// Create a new `repodata.json` for all packages in the channel at the given directory.
-#[allow(clippy::too_many_arguments)]
-pub async fn index_fs(
-    channel: impl Into<PathBuf>,
-    target_platform: Option<Platform>,
-    repodata_patch: Option<String>,
-    write_zst: bool,
-    write_shards: bool,
-    force: bool,
-    max_parallel: usize,
-    multi_progress: Option<MultiProgress>,
-) -> anyhow::Result<()> {
+pub async fn index_fs<T>(
+    IndexFsConfig {
+        channel,
+        target_platform,
+        repodata_patch,
+        write_zst,
+        write_shards,
+        force,
+        max_parallel,
+        multi_progress,
+    }: IndexFsConfig<T>,
+) -> anyhow::Result<()>
+where
+    T: Into<PathBuf>,
+{
     let mut config = FsConfig::default();
     config.root = Some(channel.into().canonicalize()?.to_string_lossy().to_string());
     index(
@@ -571,23 +599,57 @@ pub async fn index_fs(
     .await
 }
 
+/// Configuration for `index_s3`
+pub struct IndexS3Config {
+    /// The channel to index.
+    pub channel: Url,
+    /// The region of the S3 bucket.
+    pub region: String,
+    /// The endpoint URL of the S3 bucket.
+    pub endpoint_url: Url,
+    /// Whether to force path style for the S3 bucket.
+    pub force_path_style: bool,
+    /// The access key ID for the S3 bucket.
+    pub access_key_id: Option<String>,
+    /// The secret access key for the S3 bucket.
+    pub secret_access_key: Option<String>,
+    /// The session token for the S3 bucket.
+    pub session_token: Option<String>,
+    /// The target platform to index.
+    pub target_platform: Option<Platform>,
+    /// The path to a repodata patch to apply to the index.
+    pub repodata_patch: Option<String>,
+    /// Whether to write the repodata as a zstd-compressed file.
+    pub write_zst: bool,
+    /// Whether to write the repodata shards.
+    pub write_shards: bool,
+    /// Whether to force the index to be written.
+    pub force: bool,
+    /// The maximum number of parallel tasks to run.
+    pub max_parallel: usize,
+    /// The multi-progress bar to use for the index.
+    pub multi_progress: Option<MultiProgress>,
+}
+
 /// Create a new `repodata.json` for all packages in the channel at the given S3 URL.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub async fn index_s3(
-    channel: Url,
-    region: String,
-    endpoint_url: Url,
-    force_path_style: bool,
-    access_key_id: Option<String>,
-    secret_access_key: Option<String>,
-    session_token: Option<String>,
-    target_platform: Option<Platform>,
-    repodata_patch: Option<String>,
-    write_zst: bool,
-    write_shards: bool,
-    force: bool,
-    max_parallel: usize,
-    multi_progress: Option<MultiProgress>,
+    IndexS3Config {
+        channel,
+        region,
+        endpoint_url,
+        force_path_style,
+        access_key_id,
+        secret_access_key,
+        session_token,
+        target_platform,
+        repodata_patch,
+        write_zst,
+        write_shards,
+        force,
+        max_parallel,
+        multi_progress,
+    }: IndexS3Config,
 ) -> anyhow::Result<()> {
     let mut s3_config = S3Config::default();
     s3_config.root = Some(channel.path().to_string());

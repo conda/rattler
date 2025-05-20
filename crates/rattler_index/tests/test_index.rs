@@ -5,7 +5,7 @@ use std::{
 };
 
 use rattler_conda_types::Platform;
-use rattler_index::index_fs;
+use rattler_index::{index_fs, IndexFsConfig};
 use serde_json::Value;
 
 fn test_data_dir() -> PathBuf {
@@ -110,7 +110,16 @@ async fn test_index_empty_directory_creates_noarch_repodata() {
     let repodata_zst_path = noarch_path.join("repodata.json");
     let repodata_msgpack_path = noarch_path.join("repodata_shards.msgpack.zst");
 
-    let res = index_fs(temp_dir.path(), None, None, true, true, true, 100, None).await;
+    let res = index_fs(IndexFsConfig {
+        channel: temp_dir.path(),
+        target_platform: None,
+        repodata_patch: None,
+        write_zst: true,
+        write_shards: true,
+        force: true,
+        max_parallel: 100,
+        multi_progress: None,
+    }).await;
 
     assert!(res.is_ok());
     assert!(noarch_path.is_dir());

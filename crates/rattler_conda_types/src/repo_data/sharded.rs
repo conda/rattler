@@ -5,7 +5,7 @@ use fxhash::{FxHashMap, FxHashSet};
 use rattler_digest::Sha256Hash;
 use serde::{Deserialize, Serialize};
 
-use crate::{PackageRecord, Platform};
+use crate::PackageRecord;
 
 /// The sharded repodata holds a hashmap of package name -> shard (hash).
 /// This index file is stored under
@@ -24,7 +24,7 @@ pub struct ShardedRepodata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShardedSubdirInfo {
     /// The name of the subdirectory
-    pub subdir: Platform,
+    pub subdir: String,
 
     /// The base url of the subdirectory. This is the location where the actual
     /// packages are stored.
