@@ -3909,11 +3909,16 @@ dependencies = [
  "rattler_networking",
  "rattler_package_streaming",
  "reqwest",
+ "rmp-serde",
+ "serde",
  "serde_json",
+ "sha2",
+ "tar",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "url",
+ "zstd",
 ]
 
 [[package]]

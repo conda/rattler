@@ -1,7 +1,7 @@
 use pyo3::{pyfunction, Bound, PyAny, PyResult, Python};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::Platform;
-use rattler_index::{index_fs, index_s3};
+use rattler_index::{index_fs, index_s3, IndexFsConfig, IndexS3Config};
 use url::Url;
 
 use std::path::PathBuf;
@@ -24,14 +24,16 @@ pub fn py_index_fs(
     future_into_py(py, async move {
         let target_platform = target_platform.map(Platform::from);
         index_fs(
-            channel_directory,
-            target_platform,
-            repodata_patch,
-            write_zst,
-            write_shards,
-            force,
-            max_parallel,
-            None,
+            IndexFsConfig {
+                channel: channel_directory,
+                target_platform,
+                repodata_patch,
+                write_zst,
+                write_shards,
+                force,
+                max_parallel,
+                multi_progress: None,
+            },
         )
         .await
         .map_err(|e| PyRattlerError::from(e).into())
@@ -62,20 +64,22 @@ pub fn py_index_s3(
     let target_platform = target_platform.map(Platform::from);
     future_into_py(py, async move {
         index_s3(
-            channel_url,
-            region,
-            endpoint_url,
-            force_path_style,
-            access_key_id,
-            secret_access_key,
-            session_token,
-            target_platform,
-            repodata_patch,
-            write_zst,
-            write_shards,
-            force,
-            max_parallel,
-            None,
+            IndexS3Config {
+                channel: channel_url,
+                region,
+                endpoint_url,
+                force_path_style,
+                access_key_id,
+                secret_access_key,
+                session_token,
+                target_platform,
+                repodata_patch,
+                write_zst,
+                write_shards,
+                force,
+                max_parallel,
+                multi_progress: None,
+            },
         )
         .await
         .map_err(|e| PyRattlerError::from(e).into())
