@@ -10,7 +10,7 @@ use rattler_repodata_gateway::{Gateway, SourceConfig};
 use rattler_solve::{SolverImpl, SolverTask};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use url::Url;
 use wasm_bindgen::prelude::*;
 
@@ -88,13 +88,25 @@ pub async fn simple_solve(
         .execute()
         .await?;
 
-    let (installed_packages, installed_filter_keys): (Option<Vec<RepoDataRecord>>, HashSet<_>) =
+    // We need this to find depens for locked packages
+    let repodata_keys: HashMap<(String, String, String), Vec<String>> = repodata
+        .iter()
+        .flat_map(|r| r.iter())
+        .map(|rec| {
+            let name = rec.package_record.name.as_normalized().to_string();
+            let version = rec.package_record.version.to_string();
+            let build = rec.package_record.build.clone();
+            ((name, version, build), rec.package_record.depends.clone())
+        })
+        .collect();
+
+    let installed_packages: Option<Vec<RepoDataRecord>> =
         if locked_packages.is_null() || locked_packages.is_undefined() {
-            (None, HashSet::new())
+            None
         } else {
             let js_locked_packages: Vec<JsLockedPackage> =
                 serde_wasm_bindgen::from_value(locked_packages).map_err(JsError::from)?;
-            let js_locked_packages_for_filter = js_locked_packages.clone();
+
             let records = js_locked_packages
                 .into_iter()
                 .map(|pkg| {
@@ -137,23 +149,33 @@ pub async fn simple_solve(
                 })
                 .collect::<Result<Vec<_>, JsError>>()?;
 
-            let installed_filter_keys: HashSet<_> = js_locked_packages_for_filter
-                .into_iter()
-                .map(|pkg| {
-                    Ok((
-                        PackageName::try_from(pkg.package_name.clone())?,
-                        Version::from_str(&pkg.version)?.into(),
-                        pkg.build.clone(),
-                    ))
-                })
-                .collect::<Result<_, JsError>>()?;
-
-            (Some(records), installed_filter_keys)
+            Some(records)
         };
+
+    // if a locked package does not include depends then depends will be taken from repodata
+    let enriched_installed_packages: Vec<RepoDataRecord> = installed_packages
+        .unwrap_or_default()
+        .into_iter()
+        .map(|mut rec| {
+            let key = (
+                rec.package_record.name.as_normalized().to_string(),
+                rec.package_record.version.to_string(),
+                rec.package_record.build.clone(),
+            );
+
+            if rec.package_record.depends.is_empty() {
+                if let Some(deps) = repodata_keys.get(&key) {
+                    rec.package_record.depends = deps.clone();
+                }
+            }
+
+            rec
+        })
+        .collect();
 
     let task = SolverTask {
         specs,
-        locked_packages: installed_packages.unwrap_or_default(),
+        locked_packages: enriched_installed_packages,
         pinned_packages: vec![],
         ..repodata.iter().collect::<SolverTask<_>>()
     };
@@ -163,14 +185,6 @@ pub async fn simple_solve(
     Ok(solved
         .records
         .into_iter()
-        .filter(|r| {
-            let key = (
-                r.package_record.name.clone(),
-                r.package_record.version.clone(),
-                r.package_record.build.clone(),
-            );
-            !installed_filter_keys.contains(&key)
-        })
         .map(|r| SolvedPackage {
             url: r.url.to_string(),
             package_name: r.package_record.name.as_source().to_string(),

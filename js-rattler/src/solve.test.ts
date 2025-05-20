@@ -10,6 +10,7 @@ describe("solving", () => {
                 "https://prefix.dev/conda-forge",
             ],
             ["emscripten-wasm32", "noarch"],
+            []
         ).then((result) => {
             const expectedPrefixes = [
                 "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/python-",
