@@ -12,7 +12,6 @@ use std::{
 
 use bytes::Bytes;
 use fs_err as fs;
-use itertools::Itertools;
 use rattler_conda_types::{
     compute_package_url, Channel, ChannelInfo, PackageName, PackageRecord, RepoDataRecord,
 };
@@ -165,14 +164,15 @@ impl SparseRepoData {
     /// This works by iterating over all elements in the `packages` and
     /// `conda_packages` fields of the repodata and returning the unique
     /// package names.
-    pub fn package_names(&self) -> impl Iterator<Item = &'_ str> + '_ {
+    pub fn package_names(&self) -> impl Iterator<Item = &'_ str> {
         let repo_data = self.inner.borrow_repo_data();
         repo_data
             .packages
             .iter()
             .chain(repo_data.conda_packages.iter())
             .map(|(name, _)| name.package)
-            .dedup()
+            .collect::<HashSet<_>>()
+            .into_iter()
     }
 
     /// Returns all the records for the specified package name.
