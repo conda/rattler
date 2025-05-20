@@ -511,7 +511,7 @@ pub async fn write_repodata(
                 subdir: subdir.to_string(),
                 base_url: "".into(),
                 shards_base_url: "./shards/".into(),
-                created_at: None,
+                created_at: Some(chrono::Utc::now()),
             },
             shards: shards
                 .iter()
