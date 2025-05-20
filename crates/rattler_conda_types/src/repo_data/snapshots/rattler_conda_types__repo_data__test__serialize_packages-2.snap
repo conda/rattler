@@ -368,6 +368,54 @@ expression: json
       "version": "2"
     }
   },
-  "packages.conda": {},
+  "packages.conda": {
+    "bors-2.1-bla_1.conda": {
+      "build": "bla_1",
+      "build_number": 1,
+      "depends": [],
+      "license": "MIT",
+      "license_family": "MIT",
+      "md5": "bc13aa58e2092bcb0b97c561373d3905",
+      "name": "bors",
+      "sha256": "97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a",
+      "size": 414494,
+      "subdir": "linux-64",
+      "timestamp": 1715610974,
+      "version": "2.1"
+    },
+    "foobar-2.0-bla_1.conda": {
+      "build": "bla_1",
+      "build_number": 1,
+      "depends": [
+        "bors <2.0"
+      ],
+      "license": "MIT",
+      "license_family": "MIT",
+      "md5": "bc13aa58e2092bcb0b97c561373d3905",
+      "name": "foobar",
+      "sha256": "97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a",
+      "size": 414494,
+      "subdir": "linux-64",
+      "timestamp": 1605110689658,
+      "version": "2.0"
+    },
+    "issue_717-2.1-bla_1.conda": {
+      "build": "issue_717",
+      "build_number": 0,
+      "constrains": [
+        "ray[default,data] >=2.9.0,<3.0.0"
+      ],
+      "depends": [],
+      "license": "MIT",
+      "license_family": "MIT",
+      "md5": "bc13aa58e2092bcb0b97c561373d3905",
+      "name": "issue_717",
+      "sha256": "97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a",
+      "size": 414494,
+      "subdir": "linux-64",
+      "timestamp": 1715610974,
+      "version": "2.1"
+    }
+  },
   "repodata_version": 2
 }
