@@ -68,7 +68,7 @@ pub fn package_record_from_index_json<T: Read>(
         python_site_packages_path: index.python_site_packages_path,
         legacy_bz2_md5: None,
         legacy_bz2_size: None,
-        purls: None,
+        purls: index.purls,
         run_exports: None,
     };
 

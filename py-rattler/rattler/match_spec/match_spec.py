@@ -209,6 +209,25 @@ class MatchSpec:
         """
         return cls._from_py_match_spec(PyMatchSpec.from_nameless(spec._nameless_match_spec, name))
 
+    @classmethod
+    def from_url(cls, url: str) -> MatchSpec:
+        """
+        Constructs a MatchSpec from a URL.
+
+        Examples
+        --------
+        ```python
+        >>> MatchSpec.from_url('https://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h3.tar.bz2')
+        MatchSpec("python[url="https://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h3.tar.bz2"]")
+        >>> MatchSpec.from_url('https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2#d7c89558ba9fa0495403155b64376d81')
+        MatchSpec("_libgcc_mutex[md5="d7c89558ba9fa0495403155b64376d81", url="https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2"]")
+        >>> MatchSpec.from_url('https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2#sha256:adfa71f158cbd872a36394c56c3568e6034aa55c623634b37a4836bd036e6b91')
+        MatchSpec("_libgcc_mutex[sha256="adfa71f158cbd872a36394c56c3568e6034aa55c623634b37a4836bd036e6b91", url="https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2"]")
+        >>>
+        ```
+        """
+        return cls._from_py_match_spec(PyMatchSpec.from_url(url))
+
     def __str__(self) -> str:
         """
         Returns a string representation of the MatchSpec.

@@ -1,11 +1,11 @@
-use std::path::Path;
+use std::{collections::BTreeSet, path::Path};
 
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
 use super::PackageFile;
-use crate::{NoArchType, PackageName, VersionWithSource};
+use crate::{NoArchType, PackageName, PackageUrl, VersionWithSource};
 
 /// A representation of the `index.json` file found in package archives.
 ///
@@ -57,6 +57,11 @@ pub struct IndexJson {
 
     /// Optionally, the OS the package is build for.
     pub platform: Option<String>,
+
+    /// A list of Package URLs identifying this package.
+    /// See this CEP: <https://github.com/conda/ceps/pull/63>
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purls: Option<BTreeSet<PackageUrl>>,
 
     /// Optionally a path within the environment of the site-packages directory.
     /// This field is only present for python interpreter packages.
@@ -125,7 +130,7 @@ mod test {
         .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
-        let package_dir = package_dir.into_path();
+        let package_dir = package_dir.keep();
         println!("{}", package_dir.display());
 
         insta::assert_yaml_snapshot!(IndexJson::from_package_directory(&package_dir).unwrap());

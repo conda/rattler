@@ -851,8 +851,8 @@ mod tests {
         pub fn new_test() -> Self {
             // Create a temporary directory for testing
             Self {
-                location: tempfile::tempdir().unwrap().into_path(),
-                nested_location: tempfile::tempdir().unwrap().into_path(),
+                location: tempfile::tempdir().unwrap().keep(),
+                nested_location: tempfile::tempdir().unwrap().keep(),
             }
         }
     }
