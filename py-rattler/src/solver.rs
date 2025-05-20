@@ -162,6 +162,9 @@ pub fn py_solve_with_sparse_repodata<'py>(
             let available_packages =
                 SparseRepoData::load_records_recursive(repo_data_refs, package_names, None)?;
 
+            // Force drop the locks to avoid holding them longer than necessary.
+            drop(repo_data_locks);
+
             let task = SolverTask {
                 available_packages: available_packages
                     .iter()
