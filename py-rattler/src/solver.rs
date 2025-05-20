@@ -17,7 +17,7 @@ use crate::{
     platform::PyPlatform,
     record::PyRecord,
     repo_data::gateway::PyGateway,
-    PySparseRepoData, Wrap,
+    PySparseRepoData, PyVariantSelection, Wrap,
 };
 
 impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
@@ -121,7 +121,7 @@ pub fn py_solve(
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, strategy=None)
+#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, variant_selection, timeout=None, exclude_newer_timestamp_ms=None, strategy=None)
 )]
 pub fn py_solve_with_sparse_repodata(
     py: Python<'_>,
@@ -132,6 +132,7 @@ pub fn py_solve_with_sparse_repodata(
     pinned_packages: Vec<PyRecord>,
     virtual_packages: Vec<PyGenericVirtualPackage>,
     channel_priority: PyChannelPriority,
+    variant_selection: PyVariantSelection,
     timeout: Option<u64>,
     exclude_newer_timestamp_ms: Option<i64>,
     strategy: Option<Wrap<SolveStrategy>>,
@@ -153,6 +154,7 @@ pub fn py_solve_with_sparse_repodata(
                 sparse_repodata.iter().map(Arc::as_ref),
                 package_names,
                 None,
+                variant_selection.into(),
             )?;
 
             let task = SolverTask {

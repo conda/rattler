@@ -14,7 +14,8 @@ use bytes::Bytes;
 use fs_err as fs;
 use itertools::Itertools;
 use rattler_conda_types::{
-    compute_package_url, Channel, ChannelInfo, PackageName, PackageRecord, RepoDataRecord,
+    compute_package_url, package::ArchiveType, Channel, ChannelInfo, PackageName, PackageRecord,
+    RepoDataRecord,
 };
 use rattler_redaction::Redact;
 use serde::{
@@ -24,6 +25,37 @@ use serde::{
 use serde_json::value::RawValue;
 use superslice::Ext;
 use thiserror::Error;
+
+/// Defines how different variants of packages are consolidated.
+#[derive(
+    Default,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    strum::Display,
+    strum::VariantNames,
+    strum::EnumString,
+    strum::IntoStaticStr,
+)]
+#[strum(serialize_all = "kebab-case")]
+pub enum VariantSelection {
+    /// Only the tar.bz2 packages are used
+    OnlyTarBz2,
+
+    /// Only the conda packages are used
+    OnlyConda,
+
+    /// Both .tar.bz2 and .conda packages are used, but if a .conda exists that
+    /// represents the same content as a .tar.bz2, the .conda package is
+    /// selected and the .tar.bz2 is discarded.
+    #[default]
+    PreferConda,
+
+    /// Both .tar.bz2 and .conda packages are used
+    Both,
+}
 
 /// A struct to enable loading records from a `repodata.json` file on demand.
 /// Since most of the time you don't need all the records from the
@@ -176,27 +208,23 @@ impl SparseRepoData {
     }
 
     /// Returns all the records for the specified package name.
-    pub fn load_records(&self, package_name: &PackageName) -> io::Result<Vec<RepoDataRecord>> {
+    pub fn load_records(
+        &self,
+        package_name: &PackageName,
+        variant_consolidation: VariantSelection,
+    ) -> io::Result<Vec<RepoDataRecord>> {
         let repo_data = self.inner.borrow_repo_data();
         let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
-        let mut records = parse_records(
+        parse_records(
             package_name,
             &repo_data.packages,
-            base_url,
-            &self.channel,
-            &self.subdir,
-            self.patch_record_fn,
-        )?;
-        let mut conda_records = parse_records(
-            package_name,
             &repo_data.conda_packages,
+            variant_consolidation,
             base_url,
             &self.channel,
             &self.subdir,
             self.patch_record_fn,
-        )?;
-        records.append(&mut conda_records);
-        Ok(records)
+        )
     }
 
     /// Given a set of [`SparseRepoData`]s load all the records for the packages
@@ -209,6 +237,7 @@ impl SparseRepoData {
         repo_data: impl IntoIterator<Item = &'a SparseRepoData>,
         package_names: impl IntoIterator<Item = PackageName>,
         patch_function: Option<fn(&mut PackageRecord)>,
+        variant_consolidation: VariantSelection,
     ) -> io::Result<Vec<Vec<RepoDataRecord>>> {
         let repo_data: Vec<_> = repo_data.into_iter().collect();
 
@@ -235,20 +264,13 @@ impl SparseRepoData {
                 let mut records = parse_records(
                     &next_package,
                     &repo_data_packages.packages,
-                    base_url,
-                    &repo_data.channel,
-                    &repo_data.subdir,
-                    patch_function,
-                )?;
-                let mut conda_records = parse_records(
-                    &next_package,
                     &repo_data_packages.conda_packages,
+                    variant_consolidation,
                     base_url,
                     &repo_data.channel,
                     &repo_data.subdir,
                     patch_function,
                 )?;
-                records.append(&mut conda_records);
 
                 // Iterate over all packages to find recursive dependencies.
                 for record in records.iter() {
@@ -302,21 +324,110 @@ struct LazyRepoData<'i> {
     conda_packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
 }
 
+/// Returns an iterator over the packages in the slice that match the given
+/// package name.
+fn find_package_in_slice<'a, 'i: 'a>(
+    slice: &'a [(PackageFilename<'i>, &'i RawValue)],
+    package_name: &PackageName,
+) -> impl Iterator<Item = (PackageFilename<'i>, &'i RawValue)> + 'a {
+    let range =
+        slice.equal_range_by(|(package, _)| package.package.cmp(package_name.as_normalized()));
+    slice[range]
+        .iter()
+        .map(|(filename, raw_json)| (*filename, *raw_json))
+}
+
+/// Takes an iterator over package filenames and raw json values and returns an
+/// iterator that also includes the filename without an extension.
+fn add_stripped_filename<'i>(
+    slice: impl Iterator<Item = (PackageFilename<'i>, &'i RawValue)>,
+    ext: ArchiveType,
+) -> impl Iterator<Item = (PackageFilename<'i>, &'i RawValue, &'i str)> {
+    slice.map(move |(filename, raw_json)| {
+        (
+            filename,
+            raw_json,
+            filename
+                .filename
+                .strip_suffix(ext.extension())
+                .unwrap_or(filename.filename),
+        )
+    })
+}
+
 /// Parse the records for the specified package from the raw index
+#[allow(clippy::too_many_arguments)]
 fn parse_records<'i>(
     package_name: &PackageName,
-    packages: &[(PackageFilename<'i>, &'i RawValue)],
+    tar_bz2_packages: &[(PackageFilename<'i>, &'i RawValue)],
+    conda_packages: &[(PackageFilename<'i>, &'i RawValue)],
+    variant_consolidation: VariantSelection,
+    base_url: Option<&str>,
+    channel: &Channel,
+    subdir: &str,
+    patch_function: Option<fn(&mut PackageRecord)>,
+) -> io::Result<Vec<RepoDataRecord>> {
+    match variant_consolidation {
+        VariantSelection::PreferConda => {
+            let tar_bz2_packages = add_stripped_filename(
+                find_package_in_slice(tar_bz2_packages, package_name),
+                ArchiveType::TarBz2,
+            );
+            let conda_packages = add_stripped_filename(
+                find_package_in_slice(conda_packages, package_name),
+                ArchiveType::Conda,
+            );
+            let deduplicated_packages = conda_packages
+                // Merge the conda and tar.bz2 packages together based on their filename without
+                // extension.
+                .merge_by(tar_bz2_packages, |(_, _, left), (_, _, right)| {
+                    left <= right
+                })
+                // Deduplicate repeated packages based on their filename without extension. (this
+                // removes the .tar.bz2 in favor of the .conda)
+                .dedup_by(|(_, _, left), (_, _, right)| left == right)
+                .map(|(filename, raw_json, _)| (filename, raw_json));
+            parse_records_raw(
+                deduplicated_packages,
+                base_url,
+                channel,
+                subdir,
+                patch_function,
+            )
+        }
+        VariantSelection::Both => {
+            let tar_bz2_packages = find_package_in_slice(tar_bz2_packages, package_name);
+            let conda_packages = find_package_in_slice(conda_packages, package_name);
+            parse_records_raw(
+                tar_bz2_packages.chain(conda_packages),
+                base_url,
+                channel,
+                subdir,
+                patch_function,
+            )
+        }
+        VariantSelection::OnlyTarBz2 => {
+            let tar_bz2_packages = find_package_in_slice(tar_bz2_packages, package_name);
+            parse_records_raw(tar_bz2_packages, base_url, channel, subdir, patch_function)
+        }
+        VariantSelection::OnlyConda => {
+            let conda_packages = find_package_in_slice(conda_packages, package_name);
+            parse_records_raw(conda_packages, base_url, channel, subdir, patch_function)
+        }
+    }
+}
+
+fn parse_records_raw<'i>(
+    packages: impl Iterator<Item = (PackageFilename<'i>, &'i RawValue)>,
     base_url: Option<&str>,
     channel: &Channel,
     subdir: &str,
     patch_function: Option<fn(&mut PackageRecord)>,
 ) -> io::Result<Vec<RepoDataRecord>> {
     let channel_name = channel.base_url.clone();
-
-    let package_indices =
-        packages.equal_range_by(|(package, _)| package.package.cmp(package_name.as_normalized()));
-    let mut result = Vec::with_capacity(package_indices.len());
-    for (key, raw_json) in &packages[package_indices] {
+    let expected_capacity = packages.size_hint();
+    let mut result = Vec::with_capacity(expected_capacity.1.unwrap_or(expected_capacity.0));
+    for (filename, raw_json) in packages {
         let mut package_record: PackageRecord = serde_json::from_str(raw_json.get())?;
         // Overwrite subdir if its empty
         if package_record.subdir.is_empty() {
@@ -330,11 +441,11 @@ fn parse_records<'i>(
                     .join(&format!("{}/", &package_record.subdir))
                     .expect("failed determine repo_base_url"),
                 base_url,
-                key.filename,
+                filename.filename,
             ),
             channel: Some(channel_name.url().clone().redact().to_string()),
             package_record,
-            file_name: key.filename.to_owned(),
+            file_name: filename.filename.to_owned(),
         });
     }
 
@@ -357,6 +468,7 @@ pub async fn load_repo_data_recursively(
     repo_data_paths: impl IntoIterator<Item = (Channel, impl Into<String>, impl AsRef<Path>)>,
     package_names: impl IntoIterator<Item = PackageName>,
     patch_function: Option<fn(&mut PackageRecord)>,
+    variant_consolidation: VariantSelection,
 ) -> Result<Vec<Vec<RepoDataRecord>>, io::Error> {
     use futures::{StreamExt, TryFutureExt, TryStreamExt};
 
@@ -378,7 +490,12 @@ pub async fn load_repo_data_recursively(
         .try_collect::<Vec<_>>()
         .await?;
 
-    SparseRepoData::load_records_recursive(&lazy_repo_data, package_names, patch_function)
+    SparseRepoData::load_records_recursive(
+        &lazy_repo_data,
+        package_names,
+        patch_function,
+        variant_consolidation,
+    )
 }
 
 fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
@@ -454,6 +571,7 @@ fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
 
 /// A struct that holds both a filename and the part of the filename thats just
 /// the package name.
+#[derive(Copy, Clone)]
 struct PackageFilename<'i> {
     package: &'i str,
     filename: &'i str,
@@ -506,7 +624,7 @@ mod test {
     use rattler_conda_types::{Channel, ChannelConfig, PackageName, RepoData, RepoDataRecord};
     use rstest::rstest;
 
-    use super::{load_repo_data_recursively, PackageFilename, SparseRepoData};
+    use super::{load_repo_data_recursively, PackageFilename, SparseRepoData, VariantSelection};
     use crate::utils::test::fetch_repo_data;
 
     fn test_dir() -> PathBuf {
@@ -554,6 +672,7 @@ mod test {
     fn load_sparse_from_bytes(
         repo_data: &[(Channel, &'static str, Bytes)],
         package_names: impl IntoIterator<Item = impl AsRef<str>>,
+        variant_consolidation: VariantSelection,
     ) -> Vec<Vec<RepoDataRecord>> {
         let sparse: Vec<_> = repo_data
             .iter()
@@ -565,11 +684,13 @@ mod test {
         let package_names = package_names
             .into_iter()
             .map(|name| PackageName::try_from(name.as_ref()).unwrap());
-        SparseRepoData::load_records_recursive(&sparse, package_names, None).unwrap()
+        SparseRepoData::load_records_recursive(&sparse, package_names, None, variant_consolidation)
+            .unwrap()
     }
 
     async fn load_sparse(
         package_names: impl IntoIterator<Item = impl AsRef<str>>,
+        variant_consolidation: VariantSelection,
     ) -> Vec<Vec<RepoDataRecord>> {
         tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
 
@@ -582,6 +703,7 @@ mod test {
                 .into_iter()
                 .map(|name| PackageName::try_from(name.as_ref()).unwrap()),
             None,
+            variant_consolidation,
         )
         .await
         .unwrap()
@@ -589,13 +711,14 @@ mod test {
 
     #[tokio::test]
     async fn test_empty_sparse_load() {
-        let sparse_empty_data = load_sparse(Vec::<String>::new()).await;
+        let sparse_empty_data =
+            load_sparse(Vec::<String>::new(), VariantSelection::default()).await;
         assert_eq!(sparse_empty_data, vec![vec![], vec![]]);
     }
 
     #[tokio::test]
     async fn test_sparse_single() {
-        let sparse_empty_data = load_sparse(["_libgcc_mutex"]).await;
+        let sparse_empty_data = load_sparse(["_libgcc_mutex"], VariantSelection::default()).await;
         let total_records = sparse_empty_data
             .iter()
             .map(std::vec::Vec::len)
@@ -606,7 +729,11 @@ mod test {
 
     #[tokio::test]
     async fn test_parse_duplicate() {
-        let sparse_empty_data = load_sparse(["_libgcc_mutex", "_libgcc_mutex"]).await;
+        let sparse_empty_data = load_sparse(
+            ["_libgcc_mutex", "_libgcc_mutex"],
+            VariantSelection::default(),
+        )
+        .await;
         let total_records = sparse_empty_data
             .iter()
             .map(std::vec::Vec::len)
@@ -619,7 +746,8 @@ mod test {
 
     #[tokio::test]
     async fn test_sparse_jupyterlab_detectron2() {
-        let sparse_empty_data = load_sparse(["jupyterlab", "detectron2"]).await;
+        let sparse_empty_data =
+            load_sparse(["jupyterlab", "detectron2"], VariantSelection::default()).await;
 
         let total_records = sparse_empty_data
             .iter()
@@ -631,7 +759,7 @@ mod test {
 
     #[tokio::test]
     async fn test_sparse_rubin_env() {
-        let sparse_empty_data = load_sparse(["rubin-env"]).await;
+        let sparse_empty_data = load_sparse(["rubin-env"], VariantSelection::default()).await;
 
         let total_records = sparse_empty_data
             .iter()
@@ -669,7 +797,8 @@ mod test {
         ];
 
         // Memmapped
-        let sparse_empty_data = load_sparse(package_names.clone()).await;
+        let sparse_empty_data =
+            load_sparse(package_names.clone(), VariantSelection::default()).await;
 
         let total_records = sparse_empty_data.iter().map(Vec::len).sum::<usize>();
 
@@ -677,7 +806,8 @@ mod test {
 
         // Bytes
         let repo_data = default_repo_data_bytes().await;
-        let sparse_empty_data = load_sparse_from_bytes(&repo_data, package_names);
+        let sparse_empty_data =
+            load_sparse_from_bytes(&repo_data, package_names, VariantSelection::default());
 
         let total_records = sparse_empty_data.iter().map(Vec::len).sum::<usize>();
 
@@ -740,5 +870,25 @@ mod test {
         let names = sparse.package_names().collect_vec();
         let deduped_names = names.iter().copied().collect::<HashSet<_>>();
         assert_eq!(names.len(), deduped_names.len());
+    }
+
+    #[rstest]
+    #[case(VariantSelection::Both)]
+    #[case(VariantSelection::PreferConda)]
+    #[case(VariantSelection::OnlyTarBz2)]
+    #[case(VariantSelection::OnlyConda)]
+    fn test_only_conda(#[case] variant: VariantSelection) {
+        let (channel, platform, path) = dummy_repo_data();
+        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
+        let records = sparse
+            .load_records(&PackageName::try_from("bors").unwrap(), variant)
+            .unwrap()
+            .into_iter()
+            .map(|record| record.file_name)
+            .collect::<Vec<_>>();
+
+        insta::with_settings!({snapshot_suffix => variant.to_string()}, {
+            insta::assert_snapshot!(records.join("\n"));
+        });
     }
 }

@@ -4,9 +4,36 @@ from pathlib import Path
 from typing import List
 from rattler.channel.channel import Channel
 from rattler.package.package_name import PackageName
+from enum import Enum
 
-from rattler.rattler import PySparseRepoData
+from rattler.rattler import PySparseRepoData, PyVariantSelection
 from rattler.repo_data.record import RepoDataRecord
+
+
+class VariantSelection(Enum):
+    """
+    Enum that describes what to do if both a `.tar.bz2` and a `.conda` package is available.
+    """
+
+    ONLY_TAR_BZ2 = PyVariantSelection.OnlyTarBz2
+    """
+    Only use the `.tar.bz2` packages, ignore all `.conda` packages.
+    """
+
+    ONLY_CONDA = PyVariantSelection.OnlyConda
+    """
+    Only use the `.conda` packages, ignore all `.tar.bz2` packages.
+    """
+
+    PREFER_CONDA = PyVariantSelection.PreferConda
+    """
+    Only use the `.conda` packages if there are both a `.tar.bz2` and a `.conda` package available.
+    """
+
+    BOTH = PyVariantSelection.Both
+    """
+    Use both the `.tar.bz2` and the `.conda` packages.
+    """
 
 
 class SparseRepoData:
@@ -64,7 +91,9 @@ class SparseRepoData:
         """
         return self._sparse.package_names()
 
-    def load_records(self, package_name: PackageName) -> List[RepoDataRecord]:
+    def load_records(
+        self, package_name: PackageName, variant_selection: VariantSelection = VariantSelection.PREFER_CONDA
+    ) -> List[RepoDataRecord]:
         """
         Returns all the records for the specified package name.
 
@@ -86,7 +115,10 @@ class SparseRepoData:
         ```
         """
         # maybe change package_name to Union[str, PackageName]
-        return [RepoDataRecord._from_py_record(record) for record in self._sparse.load_records(package_name._name)]
+        return [
+            RepoDataRecord._from_py_record(record)
+            for record in self._sparse.load_records(package_name._name, variant_selection.value)
+        ]
 
     @property
     def subdir(self) -> str:
@@ -112,6 +144,7 @@ class SparseRepoData:
     def load_records_recursive(
         repo_data: List[SparseRepoData],
         package_names: List[PackageName],
+        variant_selection: VariantSelection = VariantSelection.PREFER_CONDA,
     ) -> List[List[RepoDataRecord]]:
         """
         Given a set of [`SparseRepoData`]s load all the records
@@ -137,8 +170,7 @@ class SparseRepoData:
         return [
             [RepoDataRecord._from_py_record(record) for record in list_of_records]
             for list_of_records in PySparseRepoData.load_records_recursive(
-                [r._sparse for r in repo_data],
-                [p._name for p in package_names],
+                [r._sparse for r in repo_data], [p._name for p in package_names], variant_selection.value
             )
         ]
 

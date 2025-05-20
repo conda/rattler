@@ -6,7 +6,7 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
     ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
 };
-use rattler_repodata_gateway::sparse::SparseRepoData;
+use rattler_repodata_gateway::sparse::{SparseRepoData, VariantSelection};
 use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
 use url::Url;
 
@@ -133,8 +133,13 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
     let sparse_repo_data = read_real_world_repo_data();
 
     let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
-    let available_packages =
-        SparseRepoData::load_records_recursive(sparse_repo_data, names, None).unwrap();
+    let available_packages = SparseRepoData::load_records_recursive(
+        sparse_repo_data,
+        names,
+        None,
+        VariantSelection::default(),
+    )
+    .unwrap();
 
     let solver_task = SolverTask {
         specs: specs.clone(),
@@ -1397,8 +1402,13 @@ fn compare_solve(task: CompareTask<'_>) {
     let sparse_repo_data = read_real_world_repo_data();
 
     let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
-    let available_packages =
-        SparseRepoData::load_records_recursive(sparse_repo_data, names, None).unwrap();
+    let available_packages = SparseRepoData::load_records_recursive(
+        sparse_repo_data,
+        names,
+        None,
+        VariantSelection::default(),
+    )
+    .unwrap();
 
     let extract_pkgs = |records: Vec<RepoDataRecord>| {
         let mut pkgs = records
@@ -1530,7 +1540,8 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
     let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
 
     let available_packages =
-        SparseRepoData::load_records_recursive(repo_data, names, None).unwrap();
+        SparseRepoData::load_records_recursive(repo_data, names, None, VariantSelection::default())
+            .unwrap();
 
     let task = SolverTask {
         specs: specs.clone(),

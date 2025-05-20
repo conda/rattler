@@ -66,7 +66,7 @@ use record::{PyLink, PyRecord};
 use repo_data::{
     gateway::{PyFetchRepoDataOptions, PyGateway, PySourceConfig},
     patch_instructions::PyPatchInstructions,
-    sparse::PySparseRepoData,
+    sparse::{PySparseRepoData, PyVariantSelection},
     PyRepoData,
 };
 use run_exports_json::PyRunExportsJson;
@@ -119,6 +119,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyActivator>()?;
 
     m.add_class::<PySparseRepoData>()?;
+    m.add_class::<PyVariantSelection>()?;
     m.add_class::<PyRepoData>()?;
     m.add_class::<PyPatchInstructions>()?;
     m.add_class::<PyGateway>()?;

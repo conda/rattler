@@ -334,6 +334,19 @@ packages:
     timestamp: 1715610974
     version: "2"
 packages.conda:
+  bors-1.1-bla_1.tar.bz2:
+    build: bla_1
+    build_number: 1
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: bors
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1605110689658
+    version: "1.1"
   bors-2.1-bla_1.conda:
     build: bla_1
     build_number: 1
