@@ -548,10 +548,9 @@ pub async fn write_repodata(
 }
 
 /// Configuration for `index_fs`
-pub struct IndexFsConfig<T>
-{
+pub struct IndexFsConfig {
     /// The channel to index.
-    pub channel: T,
+    pub channel: PathBuf,
     /// The target platform to index.
     pub target_platform: Option<Platform>,
     /// The path to a repodata patch to apply to the index.
@@ -569,7 +568,7 @@ pub struct IndexFsConfig<T>
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given directory.
-pub async fn index_fs<T>(
+pub async fn index_fs(
     IndexFsConfig {
         channel,
         target_platform,
@@ -579,13 +578,10 @@ pub async fn index_fs<T>(
         force,
         max_parallel,
         multi_progress,
-    }: IndexFsConfig<T>,
-) -> anyhow::Result<()>
-where
-    T: Into<PathBuf>,
-{
+    }: IndexFsConfig,
+) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
-    config.root = Some(channel.into().canonicalize()?.to_string_lossy().to_string());
+    config.root = Some(channel.canonicalize()?.to_string_lossy().to_string());
     index(
         target_platform,
         config,

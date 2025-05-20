@@ -59,7 +59,7 @@ async fn test_index() {
     .unwrap();
 
     let res = index_fs(IndexFsConfig {
-        channel: temp_dir.path(),
+        channel: temp_dir.path().into(),
         target_platform: Some(Platform::Win64),
         repodata_patch: None,
         write_zst: true,
@@ -111,7 +111,7 @@ async fn test_index_empty_directory_creates_noarch_repodata() {
     let repodata_msgpack_path = noarch_path.join("repodata_shards.msgpack.zst");
 
     let res = index_fs(IndexFsConfig {
-        channel: temp_dir.path(),
+        channel: temp_dir.path().into(),
         target_platform: None,
         repodata_patch: None,
         write_zst: true,
