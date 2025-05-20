@@ -628,7 +628,6 @@ pub struct IndexS3Config {
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given S3 URL.
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub async fn index_s3(
     IndexS3Config {
         channel,
