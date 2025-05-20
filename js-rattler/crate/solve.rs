@@ -88,7 +88,7 @@ pub async fn simple_solve(
         .execute()
         .await?;
 
-    // We need this to find depens for locked packages
+    // We need this to find depends for locked packages
     let repodata_keys: HashMap<(String, String, String), Vec<String>> = repodata
         .iter()
         .flat_map(|r| r.iter())
