@@ -89,20 +89,20 @@ pub async fn simple_solve(
         .await?;
 
     // We need this to find depends for locked packages
-    let repodata_keys: HashMap<(String, String, String), Vec<String>> = repodata
+    let repodata_keys: HashMap<(String, String, &String), &Vec<String>> = repodata
         .iter()
         .flat_map(|r| r.iter())
         .map(|rec| {
             let name = rec.package_record.name.as_normalized().to_string();
             let version = rec.package_record.version.to_string();
-            let build = rec.package_record.build.clone();
-            ((name, version, build), rec.package_record.depends.clone())
+            let build = &rec.package_record.build;
+            ((name, version, build), &rec.package_record.depends)
         })
         .collect();
 
-    let installed_packages: Option<Vec<RepoDataRecord>> =
+    let mut installed_packages: Vec<RepoDataRecord> =
         if locked_packages.is_null() || locked_packages.is_undefined() {
-            None
+            vec![]
         } else {
             let js_locked_packages: Vec<JsLockedPackage> =
                 serde_wasm_bindgen::from_value(locked_packages).map_err(JsError::from)?;
@@ -149,34 +149,27 @@ pub async fn simple_solve(
                 })
                 .collect::<Result<Vec<_>, JsError>>()?;
 
-            Some(records)
+            records
         };
 
     // if a locked package does not include depends then depends will be taken from repodata
-    let enriched_installed_packages: Vec<RepoDataRecord> = installed_packages
-        .unwrap_or_default()
-        .into_iter()
-        .map(|mut rec| {
-            let key = (
-                rec.package_record.name.as_normalized().to_string(),
-                rec.package_record.version.to_string(),
-                rec.package_record.build.clone(),
-            );
+    for records in installed_packages.iter_mut() {
+        let key = (
+            records.package_record.name.as_normalized().to_string(),
+            records.package_record.version.to_string(),
+            &records.package_record.build,
+        );
 
-            if rec.package_record.depends.is_empty() {
-                if let Some(deps) = repodata_keys.get(&key) {
-                    rec.package_record.depends = deps.clone();
-                }
+        if records.package_record.depends.is_empty() {
+            if let Some(deps) = repodata_keys.get(&key) {
+                records.package_record.depends = deps.to_vec();
             }
-
-            rec
-        })
-        .collect();
+        }
+    }
 
     let task = SolverTask {
         specs,
-        locked_packages: enriched_installed_packages,
-        pinned_packages: vec![],
+        locked_packages: installed_packages,
         ..repodata.iter().collect::<SolverTask<_>>()
     };
 
