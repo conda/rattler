@@ -185,7 +185,7 @@ pub async fn simple_solve(
         }
 
         let task = SolverTask {
-            specs,
+            specs: filtered_specs,
             locked_packages: installed_packages,
             ..repodata.iter().collect::<SolverTask<_>>()
         };
