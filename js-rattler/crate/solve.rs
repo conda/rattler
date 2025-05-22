@@ -3,8 +3,8 @@ use std::str::FromStr;
 
 use crate::{error::JsError, platform::JsPlatform};
 use rattler_conda_types::{
-    Channel, ChannelConfig, MatchSpec, NoArchType, PackageName, PackageRecord, ParseChannelError,
-    ParseStrictness::Lenient, RepoDataRecord, Version, Matches,
+    Channel, ChannelConfig, MatchSpec, Matches, NoArchType, PackageName, PackageRecord,
+    ParseChannelError, ParseStrictness::Lenient, RepoDataRecord, Version,
 };
 use rattler_repodata_gateway::{Gateway, SourceConfig};
 use rattler_solve::{SolverImpl, SolverTask};
@@ -98,7 +98,7 @@ pub async fn simple_solve(
                         arch: None,
                         platform: None,
                         depends: pkg.depends.unwrap_or_default(),
-                        subdir:pkg.subdir.unwrap_or_else(|| "unknown".to_string()),
+                        subdir: pkg.subdir.unwrap_or_else(|| "unknown".to_string()),
                         extra_depends: BTreeMap::new(),
                         constrains: vec![],
                         track_features: vec![],
@@ -127,17 +127,17 @@ pub async fn simple_solve(
         };
 
     //if we do not need to solve the same packages, then filter them
-    let filtered_specs: Vec<MatchSpec> = specs.clone()
-    .into_iter()
-    .filter(|spec| {
-        let matched = installed_packages
-            .iter()
-            .any(|rec| spec.matches(&rec.package_record));
+    let filtered_specs: Vec<MatchSpec> = specs
+        .clone()
+        .into_iter()
+        .filter(|spec| {
+            let matched = installed_packages
+                .iter()
+                .any(|rec| spec.matches(&rec.package_record));
 
-        !matched
-    })
-    .collect();
-
+            !matched
+        })
+        .collect();
 
     if filtered_specs.is_empty() {
         Ok(vec![])
@@ -206,7 +206,7 @@ pub async fn simple_solve(
                 filename: r.file_name,
                 version: r.package_record.version.to_string(),
                 depends: r.package_record.depends,
-                subdir: r.package_record.subdir
+                subdir: r.package_record.subdir,
             })
             .collect())
     }
