@@ -3490,6 +3490,7 @@ dependencies = [
  "chrono",
  "futures",
  "openssl",
+ "parking_lot",
  "pep508_rs",
  "pyo3",
  "pyo3-async-runtimes",
