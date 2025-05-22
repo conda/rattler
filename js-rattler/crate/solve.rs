@@ -121,7 +121,7 @@ pub async fn simple_solve(
                         package_record: rec.clone(),
                     })
                 })
-                .collect::<Result<Vec<_>, JsError>>()?;
+                .collect::<Result<Vec<_>, JsError>>()?
         };
 
     //if we do not need to solve the same packages, then filter them
