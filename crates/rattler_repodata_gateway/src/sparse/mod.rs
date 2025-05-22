@@ -295,7 +295,7 @@ impl SparseRepoData {
         )
     }
 
-    /// Returns all the records for the specified package name.
+    /// Returns all the records for the specified package format(s).
     pub fn load_all_records(
         &self,
         variant_consolidation: PackageFormatSelection,
