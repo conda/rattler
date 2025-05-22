@@ -144,9 +144,9 @@ impl PySparseRepoData {
             .collect::<Vec<_>>())
     }
 
-    pub fn load_matching_records<'py>(
+    pub fn load_matching_records(
         &self,
-        specs: Vec<PyRef<'py, PyMatchSpec>>,
+        specs: Vec<PyRef<'_, PyMatchSpec>>,
         package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<Vec<PyRecord>> {
         let lock = self.inner.read();

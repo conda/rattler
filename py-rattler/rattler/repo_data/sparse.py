@@ -103,7 +103,9 @@ class SparseRepoData:
         """
         self._sparse.close()
 
-    def package_names(self, package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA) -> List[str]:
+    def package_names(
+        self, package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA
+    ) -> List[str]:
         """
         Returns a list over all package names in this repodata file.
         This works by iterating over all elements in the `packages` and
@@ -127,7 +129,9 @@ class SparseRepoData:
         """
         return self._sparse.package_names(package_format_selection.value)
 
-    def package_count(self, package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA) -> int:
+    def package_count(
+        self, package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA
+    ) -> int:
         """
         Returns the total number of packages in this repodata file.
         :return:
@@ -135,7 +139,9 @@ class SparseRepoData:
         return self._sparse.package_count(package_format_selection.value)
 
     def load_records(
-        self, package_name: str|PackageName, package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA
+        self,
+        package_name: str | PackageName,
+        package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
     ) -> List[RepoDataRecord]:
         """
         Returns all the records for the specified package name.
@@ -191,7 +197,9 @@ class SparseRepoData:
         ]
 
     def load_matching_records(
-            self, specs: Iterable[MatchSpec], package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA
+        self,
+        specs: Iterable[MatchSpec],
+        package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
     ) -> List[RepoDataRecord]:
         """
         Returns all the records that match any of the specified MatchSpecs.
@@ -210,7 +218,9 @@ class SparseRepoData:
         """
         return [
             RepoDataRecord._from_py_record(record)
-            for record in self._sparse.load_matching_records([spec._match_spec for spec in specs], package_format_selection.value)
+            for record in self._sparse.load_matching_records(
+                [spec._match_spec for spec in specs], package_format_selection.value
+            )
         ]
 
     @property
