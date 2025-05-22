@@ -3,19 +3,12 @@
 
 #![allow(clippy::mem_forget)]
 
-use std::{
-    collections::{HashSet, VecDeque},
-    fmt, io,
-    marker::PhantomData,
-    path::Path,
-};
-
 use bytes::Bytes;
 use fs_err as fs;
 use itertools::Itertools;
 use rattler_conda_types::{
-    compute_package_url, package::ArchiveType, Channel, ChannelInfo, PackageName, PackageRecord,
-    RepoDataRecord,
+    compute_package_url, package::ArchiveType, Channel, ChannelInfo, MatchSpec, Matches,
+    PackageName, PackageRecord, RepoDataRecord,
 };
 use rattler_redaction::Redact;
 use serde::{
@@ -23,6 +16,13 @@ use serde::{
     Deserialize, Deserializer,
 };
 use serde_json::value::RawValue;
+use std::borrow::Borrow;
+use std::{
+    collections::{HashSet, VecDeque},
+    fmt, io,
+    marker::PhantomData,
+    path::Path,
+};
 use superslice::Ext;
 use thiserror::Error;
 
@@ -197,14 +197,81 @@ impl SparseRepoData {
     /// This works by iterating over all elements in the `packages` and
     /// `conda_packages` fields of the repodata and returning the unique
     /// package names.
-    pub fn package_names(&self) -> impl Iterator<Item = &'_ str> {
+    pub fn package_names(
+        &self,
+        package_format_selection: PackageFormatSelection,
+    ) -> impl Iterator<Item = &'_ str> {
         let repo_data = self.inner.borrow_repo_data();
-        let tar_baz2_packages = repo_data.packages.iter().map(|(name, _)| name.package);
-        let conda_packages = repo_data
-            .conda_packages
-            .iter()
-            .map(|(name, _)| name.package);
-        tar_baz2_packages.merge(conda_packages).dedup()
+
+        fn select_package_name<'i>((filename, _): &(PackageFilename<'i>, &'i RawValue)) -> &'i str {
+            filename.package
+        }
+
+        let tar_baz2_packages = repo_data.packages.iter().map(select_package_name);
+        let conda_packages = repo_data.conda_packages.iter().map(select_package_name);
+
+        match package_format_selection {
+            PackageFormatSelection::Both | PackageFormatSelection::PreferConda => {
+                itertools::Either::Left(tar_baz2_packages.merge(conda_packages).dedup())
+            }
+            PackageFormatSelection::OnlyTarBz2 => {
+                itertools::Either::Right(tar_baz2_packages.dedup())
+            }
+            PackageFormatSelection::OnlyConda => itertools::Either::Right(conda_packages.dedup()),
+        }
+    }
+
+    /// Returns the number of records in this instance.
+    pub fn record_count(&self, package_format_selection: PackageFormatSelection) -> usize {
+        match package_format_selection {
+            PackageFormatSelection::PreferConda => {
+                let repo_data = self.inner.borrow_repo_data();
+                let tar_baz2_packages = repo_data.packages.iter().map(|(name, _)| name.package);
+                let conda_packages = repo_data
+                    .conda_packages
+                    .iter()
+                    .map(|(name, _)| name.package);
+                tar_baz2_packages.merge(conda_packages).dedup().count()
+            }
+            PackageFormatSelection::Both => {
+                self.inner.borrow_repo_data().packages.len()
+                    + self.inner.borrow_repo_data().conda_packages.len()
+            }
+            PackageFormatSelection::OnlyTarBz2 => self.inner.borrow_repo_data().packages.len(),
+            PackageFormatSelection::OnlyConda => self.inner.borrow_repo_data().conda_packages.len(),
+        }
+    }
+
+    /// Returns all the records that matches any of the specified match spec.
+    pub fn load_matching_records(
+        &self,
+        spec: impl IntoIterator<Item = impl Borrow<MatchSpec>>,
+        variant_consolidation: PackageFormatSelection,
+    ) -> io::Result<Vec<RepoDataRecord>> {
+        let mut result = Vec::new();
+        let repo_data = self.inner.borrow_repo_data();
+        let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
+        for (package_name, specs) in &spec.into_iter().chunk_by(|spec| spec.borrow().name.clone()) {
+            let grouped_specs = specs.into_iter().collect::<Vec<_>>();
+            let mut parsed_records = parse_records(
+                package_name.as_ref(),
+                &repo_data.packages,
+                &repo_data.conda_packages,
+                variant_consolidation,
+                base_url,
+                &self.channel,
+                &self.subdir,
+                self.patch_record_fn,
+                |record| {
+                    grouped_specs
+                        .iter()
+                        .any(|spec| spec.borrow().matches(&record.package_record))
+                },
+            )?;
+            result.append(&mut parsed_records);
+        }
+
+        Ok(result)
     }
 
     /// Returns all the records for the specified package name.
@@ -216,7 +283,7 @@ impl SparseRepoData {
         let repo_data = self.inner.borrow_repo_data();
         let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
         parse_records(
-            package_name,
+            Some(package_name),
             &repo_data.packages,
             &repo_data.conda_packages,
             variant_consolidation,
@@ -224,6 +291,27 @@ impl SparseRepoData {
             &self.channel,
             &self.subdir,
             self.patch_record_fn,
+            |_| true, // Dont filter anything out
+        )
+    }
+
+    /// Returns all the records for the specified package format(s).
+    pub fn load_all_records(
+        &self,
+        variant_consolidation: PackageFormatSelection,
+    ) -> io::Result<Vec<RepoDataRecord>> {
+        let repo_data = self.inner.borrow_repo_data();
+        let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
+        parse_records(
+            None,
+            &repo_data.packages,
+            &repo_data.conda_packages,
+            variant_consolidation,
+            base_url,
+            &self.channel,
+            &self.subdir,
+            self.patch_record_fn,
+            |_| true,
         )
     }
 
@@ -262,7 +350,7 @@ impl SparseRepoData {
 
                 // Get all records from the repodata
                 let mut records = parse_records(
-                    &next_package,
+                    Some(&next_package),
                     &repo_data_packages.packages,
                     &repo_data_packages.conda_packages,
                     variant_consolidation,
@@ -270,6 +358,7 @@ impl SparseRepoData {
                     &repo_data.channel,
                     &repo_data.subdir,
                     patch_function,
+                    |_| true,
                 )?;
 
                 // Iterate over all packages to find recursive dependencies.
@@ -328,10 +417,15 @@ struct LazyRepoData<'i> {
 /// package name.
 fn find_package_in_slice<'a, 'i: 'a>(
     slice: &'a [(PackageFilename<'i>, &'i RawValue)],
-    package_name: &PackageName,
+    package_name: Option<&PackageName>,
 ) -> impl Iterator<Item = (PackageFilename<'i>, &'i RawValue)> + 'a {
-    let range =
-        slice.equal_range_by(|(package, _)| package.package.cmp(package_name.as_normalized()));
+    let range = match package_name {
+        None => 0..slice.len(),
+        Some(package_name) => {
+            slice.equal_range_by(|(package, _)| package.package.cmp(package_name.as_normalized()))
+        }
+    };
+
     slice[range]
         .iter()
         .map(|(filename, raw_json)| (*filename, *raw_json))
@@ -357,8 +451,8 @@ fn add_stripped_filename<'i>(
 
 /// Parse the records for the specified package from the raw index
 #[allow(clippy::too_many_arguments)]
-fn parse_records<'i>(
-    package_name: &PackageName,
+fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
+    package_name: Option<&PackageName>,
     tar_bz2_packages: &[(PackageFilename<'i>, &'i RawValue)],
     conda_packages: &[(PackageFilename<'i>, &'i RawValue)],
     variant_consolidation: PackageFormatSelection,
@@ -366,6 +460,7 @@ fn parse_records<'i>(
     channel: &Channel,
     subdir: &str,
     patch_function: Option<fn(&mut PackageRecord)>,
+    filter_function: F,
 ) -> io::Result<Vec<RepoDataRecord>> {
     match variant_consolidation {
         PackageFormatSelection::PreferConda => {
@@ -393,6 +488,7 @@ fn parse_records<'i>(
                 channel,
                 subdir,
                 patch_function,
+                filter_function,
             )
         }
         PackageFormatSelection::Both => {
@@ -404,59 +500,92 @@ fn parse_records<'i>(
                 channel,
                 subdir,
                 patch_function,
+                filter_function,
             )
         }
         PackageFormatSelection::OnlyTarBz2 => {
             let tar_bz2_packages = find_package_in_slice(tar_bz2_packages, package_name);
-            parse_records_raw(tar_bz2_packages, base_url, channel, subdir, patch_function)
+            parse_records_raw(
+                tar_bz2_packages,
+                base_url,
+                channel,
+                subdir,
+                patch_function,
+                filter_function,
+            )
         }
         PackageFormatSelection::OnlyConda => {
             let conda_packages = find_package_in_slice(conda_packages, package_name);
-            parse_records_raw(conda_packages, base_url, channel, subdir, patch_function)
+            parse_records_raw(
+                conda_packages,
+                base_url,
+                channel,
+                subdir,
+                patch_function,
+                filter_function,
+            )
         }
     }
 }
 
-fn parse_records_raw<'i>(
+fn parse_record_raw<'i>(
+    (filename, raw_json): (PackageFilename<'i>, &'i RawValue),
+    base_url: Option<&str>,
+    channel: &Channel,
+    channel_name: Option<String>,
+    subdir: &str,
+    patch_function: Option<fn(&mut PackageRecord)>,
+) -> io::Result<RepoDataRecord> {
+    let mut package_record: PackageRecord = serde_json::from_str(raw_json.get())?;
+    // Overwrite subdir if its empty
+    if package_record.subdir.is_empty() {
+        package_record.subdir = subdir.to_owned();
+    }
+    let mut record = RepoDataRecord {
+        url: compute_package_url(
+            &channel
+                .base_url
+                .url()
+                .join(&format!("{}/", &package_record.subdir))
+                .expect("failed determine repo_base_url"),
+            base_url,
+            filename.filename,
+        ),
+        channel: channel_name.clone(),
+        package_record,
+        file_name: filename.filename.to_owned(),
+    };
+
+    // Apply the patch function if one was specified
+    if let Some(patch_fn) = patch_function {
+        patch_fn(&mut record.package_record);
+    }
+
+    Ok(record)
+}
+
+fn parse_records_raw<'i, F: Fn(&RepoDataRecord) -> bool>(
     packages: impl Iterator<Item = (PackageFilename<'i>, &'i RawValue)>,
     base_url: Option<&str>,
     channel: &Channel,
     subdir: &str,
     patch_function: Option<fn(&mut PackageRecord)>,
+    filter_function: F,
 ) -> io::Result<Vec<RepoDataRecord>> {
-    let channel_name = channel.base_url.clone();
-    let expected_capacity = packages.size_hint();
-    let mut result = Vec::with_capacity(expected_capacity.1.unwrap_or(expected_capacity.0));
-    for (filename, raw_json) in packages {
-        let mut package_record: PackageRecord = serde_json::from_str(raw_json.get())?;
-        // Overwrite subdir if its empty
-        if package_record.subdir.is_empty() {
-            package_record.subdir = subdir.to_owned();
-        }
-        result.push(RepoDataRecord {
-            url: compute_package_url(
-                &channel
-                    .base_url
-                    .url()
-                    .join(&format!("{}/", &package_record.subdir))
-                    .expect("failed determine repo_base_url"),
+    let channel_name = channel.base_url.url().clone().redact().to_string();
+    packages
+        .map(move |record| {
+            parse_record_raw(
+                record,
                 base_url,
-                filename.filename,
-            ),
-            channel: Some(channel_name.url().clone().redact().to_string()),
-            package_record,
-            file_name: filename.filename.to_owned(),
-        });
-    }
-
-    // Apply the patch function if one was specified
-    if let Some(patch_fn) = patch_function {
-        for record in &mut result {
-            patch_fn(&mut record.package_record);
-        }
-    }
-
-    Ok(result)
+                channel,
+                Some(channel_name.clone()),
+                subdir,
+                patch_function,
+            )
+        })
+        .filter_ok(filter_function)
+        .collect()
 }
 
 /// A helper function that immediately loads the records for the given packages
@@ -621,7 +750,9 @@ mod test {
     use bytes::Bytes;
     use fs_err as fs;
     use itertools::Itertools;
-    use rattler_conda_types::{Channel, ChannelConfig, PackageName, RepoData, RepoDataRecord};
+    use rattler_conda_types::{
+        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness, RepoData, RepoDataRecord,
+    };
     use rstest::rstest;
 
     use super::{
@@ -866,23 +997,33 @@ mod test {
         .unwrap();
 
         assert_eq!(repo_data.packages.len(), 0);
-        assert_eq!(sparse_repodata.package_names().try_len().unwrap(), 0);
+        assert_eq!(
+            sparse_repodata
+                .package_names(PackageFormatSelection::default())
+                .try_len()
+                .unwrap(),
+            0
+        );
     }
 
-    #[test]
-    fn dedup_packages() {
+    #[rstest]
+    #[case::both(PackageFormatSelection::Both)]
+    #[case::prefer_conda(PackageFormatSelection::PreferConda)]
+    #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2)]
+    #[case::only_conda(PackageFormatSelection::OnlyConda)]
+    fn dedup_packages(#[case] variant: PackageFormatSelection) {
         let (channel, platform, path) = dummy_repo_data();
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
-        let names = sparse.package_names().collect_vec();
+        let names = sparse.package_names(variant).collect_vec();
         let deduped_names = names.iter().copied().collect::<HashSet<_>>();
         assert_eq!(names.len(), deduped_names.len());
     }
 
     #[rstest]
-    #[case(PackageFormatSelection::Both)]
-    #[case(PackageFormatSelection::PreferConda)]
-    #[case(PackageFormatSelection::OnlyTarBz2)]
-    #[case(PackageFormatSelection::OnlyConda)]
+    #[case::both(PackageFormatSelection::Both)]
+    #[case::prefer_conda(PackageFormatSelection::PreferConda)]
+    #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2)]
+    #[case::only_conda(PackageFormatSelection::OnlyConda)]
     fn test_only_conda(#[case] variant: PackageFormatSelection) {
         let (channel, platform, path) = dummy_repo_data();
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
@@ -896,5 +1037,47 @@ mod test {
         insta::with_settings!({snapshot_suffix => variant.to_string()}, {
             insta::assert_snapshot!(records.join("\n"));
         });
+    }
+
+    #[test]
+    fn test_query() {
+        let (channel, platform, path) = dummy_repo_data();
+        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
+        let records = sparse
+            .load_matching_records(
+                vec![
+                    MatchSpec::from_str("bors 1.*", ParseStrictness::Lenient).unwrap(),
+                    MatchSpec::from_str("issue_717", ParseStrictness::Lenient).unwrap(),
+                ],
+                PackageFormatSelection::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .map(|record| record.file_name)
+            .collect::<Vec<_>>();
+
+        insta::assert_snapshot!(records.join("\n"), @r###"
+        bors-1.0-bla_1.tar.bz2
+        bors-1.1-bla_1.conda
+        bors-1.2.1-bla_1.tar.bz2
+        issue_717-2.1-bla_1.conda
+        "###);
+    }
+
+    #[test]
+    fn test_nameless_query() {
+        let (channel, platform, path) = dummy_repo_data();
+        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
+        let records = sparse
+            .load_matching_records(
+                vec![MatchSpec::from_str("* 12.5", ParseStrictness::Lenient).unwrap()],
+                PackageFormatSelection::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .map(|record| record.file_name)
+            .collect::<Vec<_>>();
+
+        insta::assert_snapshot!(records.join("\n"), @"cuda-version-12.5-hd4f0392_3.conda");
     }
 }

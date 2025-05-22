@@ -1,8 +1,10 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import List, Optional, Type, Literal
+from typing import List, Optional, Type, Literal, Iterable
 from types import TracebackType
+
+from rattler.match_spec.match_spec import MatchSpec
 from rattler.channel.channel import Channel
 from rattler.package.package_name import PackageName
 from enum import Enum
@@ -101,7 +103,9 @@ class SparseRepoData:
         """
         self._sparse.close()
 
-    def package_names(self) -> List[str]:
+    def package_names(
+        self, package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA
+    ) -> List[str]:
         """
         Returns a list over all package names in this repodata file.
         This works by iterating over all elements in the `packages` and
@@ -123,10 +127,21 @@ class SparseRepoData:
         >>>
         ```
         """
-        return self._sparse.package_names()
+        return self._sparse.package_names(package_format_selection.value)
+
+    def record_count(
+        self, package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA
+    ) -> int:
+        """
+        Returns the total number of packages in this repodata file.
+        :return:
+        """
+        return self._sparse.record_count(package_format_selection.value)
 
     def load_records(
-        self, package_name: PackageName, variant_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA
+        self,
+        package_name: str | PackageName,
+        package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
     ) -> List[RepoDataRecord]:
         """
         Returns all the records for the specified package name.
@@ -147,10 +162,65 @@ class SparseRepoData:
         >>>
         ```
         """
+        if not isinstance(package_name, PackageName):
+            package_name = PackageName(package_name)
+        return [
+            RepoDataRecord._from_py_record(record)
+            for record in self._sparse.load_records(package_name._name, package_format_selection.value)
+        ]
+
+    def load_all_records(
+        self, package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA
+    ) -> List[RepoDataRecord]:
+        """
+        Returns all the records for the specified package name.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import Channel, ChannelConfig, RepoDataRecord, PackageName
+        >>> channel = Channel("dummy", ChannelConfig())
+        >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
+        >>> sparse_data = SparseRepoData(channel, "linux-64", path)
+        >>> records = sparse_data.load_all_records()
+        >>> records
+        [...]
+        >>> isinstance(records[0], RepoDataRecord)
+        True
+        >>>
+        ```
+        """
         # maybe change package_name to Union[str, PackageName]
         return [
             RepoDataRecord._from_py_record(record)
-            for record in self._sparse.load_records(package_name._name, variant_selection.value)
+            for record in self._sparse.load_all_records(package_format_selection.value)
+        ]
+
+    def load_matching_records(
+        self,
+        specs: Iterable[MatchSpec],
+        package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
+    ) -> List[RepoDataRecord]:
+        """
+        Returns all the records that match any of the specified MatchSpecs.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import Channel, ChannelConfig, RepoDataRecord, PackageName
+        >>> channel = Channel("dummy", ChannelConfig())
+        >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
+        >>> sparse_data = SparseRepoData(channel, "linux-64", path)
+        >>> [record.file_name for record in sparse_data.load_matching_records([MatchSpec("* 12.5")])]
+        ['cuda-version-12.5-hd4f0392_3.conda']
+        >>>
+        ```
+        """
+        return [
+            RepoDataRecord._from_py_record(record)
+            for record in self._sparse.load_matching_records(
+                [spec._match_spec for spec in specs], package_format_selection.value
+            )
         ]
 
     @property
@@ -176,7 +246,7 @@ class SparseRepoData:
     def load_records_recursive(
         repo_data: List[SparseRepoData],
         package_names: List[PackageName],
-        variant_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
+        package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
     ) -> List[List[RepoDataRecord]]:
         """
         Given a set of [`SparseRepoData`]s load all the records
@@ -202,7 +272,7 @@ class SparseRepoData:
         return [
             [RepoDataRecord._from_py_record(record) for record in list_of_records]
             for list_of_records in PySparseRepoData.load_records_recursive(
-                [r._sparse for r in repo_data], [p._name for p in package_names], variant_selection.value
+                [r._sparse for r in repo_data], [p._name for p in package_names], package_format_selection.value
             )
         ]
 
