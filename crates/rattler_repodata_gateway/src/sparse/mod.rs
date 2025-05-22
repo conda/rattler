@@ -243,7 +243,7 @@ impl SparseRepoData {
     }
 
     /// Returns all the records that matches any of the specified match spec.
-    pub fn load_matching_records<'m>(
+    pub fn load_matching_records(
         &self,
         spec: impl IntoIterator<Item = impl Borrow<MatchSpec>>,
         variant_consolidation: PackageFormatSelection,
