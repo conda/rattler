@@ -81,7 +81,7 @@ pub async fn simple_solve(
             let js_locked_packages: Vec<JsLockedPackage> =
                 serde_wasm_bindgen::from_value(locked_packages).map_err(JsError::from)?;
 
-            let records = js_locked_packages
+            js_locked_packages
                 .into_iter()
                 .map(|pkg| {
                     let url = Url::parse(&pkg.url)
@@ -123,7 +123,6 @@ pub async fn simple_solve(
                 })
                 .collect::<Result<Vec<_>, JsError>>()?;
 
-            records
         };
 
     //if we do not need to solve the same packages, then filter them
