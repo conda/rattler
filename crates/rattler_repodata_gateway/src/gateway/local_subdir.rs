@@ -92,7 +92,7 @@ impl SubdirClient for LocalSubdirClient {
     fn package_names(&self) -> Vec<String> {
         let sparse_repodata: Arc<SparseRepoData> = self.sparse.clone();
         sparse_repodata
-            .package_names()
+            .package_names(PackageFormatSelection::PreferConda)
             .map(std::convert::Into::into)
             .collect()
     }

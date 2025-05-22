@@ -1,10 +1,11 @@
 use std::{path::PathBuf, sync::Arc};
 
-use pyo3::{pyclass, pymethods, Bound, PyResult, Python};
+use pyo3::{pyclass, pymethods, Bound, PyRef, PyResult, Python};
 
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 
 use crate::channel::PyChannel;
+use crate::match_spec::PyMatchSpec;
 use crate::package_name::PyPackageName;
 use crate::record::PyRecord;
 use parking_lot::RwLock;
@@ -87,12 +88,29 @@ impl PySparseRepoData {
         Ok(SparseRepoData::from_file(channel.into(), subdir, path, None)?.into())
     }
 
-    pub fn package_names(&self) -> PyResult<Vec<String>> {
+    pub fn package_names(
+        &self,
+        package_format_selection: PyPackageFormatSelection,
+    ) -> PyResult<Vec<String>> {
         let lock = self.inner.read();
         let Some(sparse) = lock.as_ref() else {
             return Err(PyValueError::new_err("I/O operation on closed file."));
         };
-        Ok(sparse.package_names().map(Into::into).collect::<Vec<_>>())
+        Ok(sparse
+            .package_names(package_format_selection.into())
+            .map(Into::into)
+            .collect::<Vec<_>>())
+    }
+
+    pub fn package_count(
+        &self,
+        package_format_selection: PyPackageFormatSelection,
+    ) -> PyResult<usize> {
+        let lock = self.inner.read();
+        let Some(sparse) = lock.as_ref() else {
+            return Err(PyValueError::new_err("I/O operation on closed file."));
+        };
+        Ok(sparse.package_count(package_format_selection.into()))
     }
 
     pub fn load_records(
@@ -106,6 +124,40 @@ impl PySparseRepoData {
         };
         Ok(sparse
             .load_records(&package_name.inner, package_format_selection.into())?
+            .into_iter()
+            .map(Into::into)
+            .collect::<Vec<_>>())
+    }
+
+    pub fn load_all_records(
+        &self,
+        package_format_selection: PyPackageFormatSelection,
+    ) -> PyResult<Vec<PyRecord>> {
+        let lock = self.inner.read();
+        let Some(sparse) = lock.as_ref() else {
+            return Err(PyValueError::new_err("I/O operation on closed file."));
+        };
+        Ok(sparse
+            .load_all_records(package_format_selection.into())?
+            .into_iter()
+            .map(Into::into)
+            .collect::<Vec<_>>())
+    }
+
+    pub fn load_matching_records<'py>(
+        &self,
+        specs: Vec<PyRef<'py, PyMatchSpec>>,
+        package_format_selection: PyPackageFormatSelection,
+    ) -> PyResult<Vec<PyRecord>> {
+        let lock = self.inner.read();
+        let Some(sparse) = lock.as_ref() else {
+            return Err(PyValueError::new_err("I/O operation on closed file."));
+        };
+        Ok(sparse
+            .load_matching_records(
+                specs.iter().map(|spec| &spec.inner),
+                package_format_selection.into(),
+            )?
             .into_iter()
             .map(Into::into)
             .collect::<Vec<_>>())
