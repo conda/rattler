@@ -95,7 +95,11 @@ impl PySparseRepoData {
         Ok(sparse.package_names().map(Into::into).collect::<Vec<_>>())
     }
 
-    pub fn load_records(&self, package_name: &PyPackageName, package_format_selection: PyPackageFormatSelection) -> PyResult<Vec<PyRecord>> {
+    pub fn load_records(
+        &self,
+        package_name: &PyPackageName,
+        package_format_selection: PyPackageFormatSelection,
+    ) -> PyResult<Vec<PyRecord>> {
         let lock = self.inner.read();
         let Some(sparse) = lock.as_ref() else {
             return Err(PyValueError::new_err("I/O operation on closed file."));
@@ -141,12 +145,15 @@ impl PySparseRepoData {
 
         py.allow_threads(move || {
             let package_names = package_names.into_iter().map(Into::into);
-            Ok(
-                SparseRepoData::load_records_recursive(repo_data_refs, package_names, None, package_format_selection.into())?
-                    .into_iter()
-                    .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>())
-                    .collect::<Vec<_>>(),
-            )
+            Ok(SparseRepoData::load_records_recursive(
+                repo_data_refs,
+                package_names,
+                None,
+                package_format_selection.into(),
+            )?
+            .into_iter()
+            .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>())
+            .collect::<Vec<_>>())
         })
     }
 }

@@ -160,8 +160,12 @@ pub fn py_solve_with_sparse_repodata<'py>(
                 .iter()
                 .filter_map(|match_spec| match_spec.inner.name.clone());
 
-            let available_packages =
-                SparseRepoData::load_records_recursive(repo_data_refs, package_names, None, package_format_selection.into())?;
+            let available_packages = SparseRepoData::load_records_recursive(
+                repo_data_refs,
+                package_names,
+                None,
+                package_format_selection.into(),
+            )?;
 
             // Force drop the locks to avoid holding them longer than necessary.
             drop(repo_data_locks);
