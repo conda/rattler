@@ -2,7 +2,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use pyo3::{pyclass, pymethods, Bound, PyResult, Python};
 
-use rattler_repodata_gateway::sparse::SparseRepoData;
+use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 
 use crate::channel::PyChannel;
 use crate::package_name::PyPackageName;
@@ -36,6 +36,50 @@ impl From<SparseRepoData> for PySparseRepoData {
     }
 }
 
+#[pyclass(eq)]
+#[derive(Copy, Clone, PartialEq)]
+pub enum PyPackageFormatSelection {
+    OnlyTarBz2,
+    OnlyConda,
+    PreferConda,
+    Both,
+}
+
+impl Default for PyPackageFormatSelection {
+    fn default() -> Self {
+        PackageFormatSelection::default().into()
+    }
+}
+
+impl From<PackageFormatSelection> for PyPackageFormatSelection {
+    fn from(value: PackageFormatSelection) -> Self {
+        match value {
+            PackageFormatSelection::OnlyTarBz2 => PyPackageFormatSelection::OnlyTarBz2,
+            PackageFormatSelection::OnlyConda => PyPackageFormatSelection::OnlyConda,
+            PackageFormatSelection::PreferConda => PyPackageFormatSelection::PreferConda,
+            PackageFormatSelection::Both => PyPackageFormatSelection::Both,
+        }
+    }
+}
+
+impl From<PyPackageFormatSelection> for PackageFormatSelection {
+    fn from(value: PyPackageFormatSelection) -> Self {
+        match value {
+            PyPackageFormatSelection::OnlyTarBz2 => PackageFormatSelection::OnlyTarBz2,
+            PyPackageFormatSelection::OnlyConda => PackageFormatSelection::OnlyConda,
+            PyPackageFormatSelection::PreferConda => PackageFormatSelection::PreferConda,
+            PyPackageFormatSelection::Both => PackageFormatSelection::Both,
+        }
+    }
+}
+
+#[pymethods]
+impl PyPackageFormatSelection {
+    fn __repr__(&self) -> &'static str {
+        PackageFormatSelection::from(*self).into()
+    }
+}
+
 #[pymethods]
 impl PySparseRepoData {
     #[new]
@@ -51,13 +95,17 @@ impl PySparseRepoData {
         Ok(sparse.package_names().map(Into::into).collect::<Vec<_>>())
     }
 
-    pub fn load_records(&self, package_name: &PyPackageName) -> PyResult<Vec<PyRecord>> {
+    pub fn load_records(
+        &self,
+        package_name: &PyPackageName,
+        package_format_selection: PyPackageFormatSelection,
+    ) -> PyResult<Vec<PyRecord>> {
         let lock = self.inner.read();
         let Some(sparse) = lock.as_ref() else {
             return Err(PyValueError::new_err("I/O operation on closed file."));
         };
         Ok(sparse
-            .load_records(&package_name.inner)?
+            .load_records(&package_name.inner, package_format_selection.into())?
             .into_iter()
             .map(Into::into)
             .collect::<Vec<_>>())
@@ -77,6 +125,7 @@ impl PySparseRepoData {
         py: Python<'py>,
         repo_data: Vec<Bound<'py, PySparseRepoData>>,
         package_names: Vec<PyPackageName>,
+        package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<Vec<Vec<PyRecord>>> {
         // Acquire read locks on the SparseRepoData instances. This allows us to safely access the
         // object in another thread.
@@ -96,12 +145,15 @@ impl PySparseRepoData {
 
         py.allow_threads(move || {
             let package_names = package_names.into_iter().map(Into::into);
-            Ok(
-                SparseRepoData::load_records_recursive(repo_data_refs, package_names, None)?
-                    .into_iter()
-                    .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>())
-                    .collect::<Vec<_>>(),
-            )
+            Ok(SparseRepoData::load_records_recursive(
+                repo_data_refs,
+                package_names,
+                None,
+                package_format_selection.into(),
+            )?
+            .into_iter()
+            .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>())
+            .collect::<Vec<_>>())
         })
     }
 }
