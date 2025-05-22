@@ -2,7 +2,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use pyo3::{pyclass, pymethods, PyResult, Python};
 
-use rattler_repodata_gateway::sparse::{SparseRepoData, VariantSelection};
+use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 
 use crate::channel::PyChannel;
 use crate::package_name::PyPackageName;
@@ -30,30 +30,46 @@ impl<'a> From<&'a PySparseRepoData> for &'a SparseRepoData {
 }
 
 #[pyclass(eq)]
-#[derive(Copy, Clone, PartialEq, Default)]
-pub enum PyVariantSelection {
+#[derive(Copy, Clone, PartialEq)]
+pub enum PyPackageFormatSelection {
     OnlyTarBz2,
     OnlyConda,
-    #[default]
     PreferConda,
     Both,
 }
 
-impl From<PyVariantSelection> for VariantSelection {
-    fn from(value: PyVariantSelection) -> Self {
+impl Default for PyPackageFormatSelection {
+    fn default() -> Self {
+        PackageFormatSelection::default().into()
+    }
+}
+
+impl From<PackageFormatSelection> for PyPackageFormatSelection {
+    fn from(value: PackageFormatSelection) -> Self {
         match value {
-            PyVariantSelection::OnlyTarBz2 => VariantSelection::OnlyTarBz2,
-            PyVariantSelection::OnlyConda => VariantSelection::OnlyConda,
-            PyVariantSelection::PreferConda => VariantSelection::PreferConda,
-            PyVariantSelection::Both => VariantSelection::Both,
+            PackageFormatSelection::OnlyTarBz2 => PyPackageFormatSelection::OnlyTarBz2,
+            PackageFormatSelection::OnlyConda => PyPackageFormatSelection::OnlyConda,
+            PackageFormatSelection::PreferConda => PyPackageFormatSelection::PreferConda,
+            PackageFormatSelection::Both => PyPackageFormatSelection::Both,
+        }
+    }
+}
+
+impl From<PyPackageFormatSelection> for PackageFormatSelection {
+    fn from(value: PyPackageFormatSelection) -> Self {
+        match value {
+            PyPackageFormatSelection::OnlyTarBz2 => PackageFormatSelection::OnlyTarBz2,
+            PyPackageFormatSelection::OnlyConda => PackageFormatSelection::OnlyConda,
+            PyPackageFormatSelection::PreferConda => PackageFormatSelection::PreferConda,
+            PyPackageFormatSelection::Both => PackageFormatSelection::Both,
         }
     }
 }
 
 #[pymethods]
-impl PyVariantSelection {
+impl PyPackageFormatSelection {
     fn __repr__(&self) -> &'static str {
-        VariantSelection::from(*self).into()
+        PackageFormatSelection::from(*self).into()
     }
 }
 
@@ -74,14 +90,11 @@ impl PySparseRepoData {
     pub fn load_records(
         &self,
         package_name: &PyPackageName,
-        variant_selection: Option<PyVariantSelection>,
+        package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<Vec<PyRecord>> {
         Ok(self
             .inner
-            .load_records(
-                &package_name.inner,
-                variant_selection.unwrap_or_default().into(),
-            )?
+            .load_records(&package_name.inner, package_format_selection.into())?
             .into_iter()
             .map(Into::into)
             .collect::<Vec<_>>())
@@ -97,7 +110,7 @@ impl PySparseRepoData {
         py: Python<'_>,
         repo_data: Vec<PySparseRepoData>,
         package_names: Vec<PyPackageName>,
-        variant_selection: Option<PyVariantSelection>,
+        package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<Vec<Vec<PyRecord>>> {
         py.allow_threads(move || {
             let repo_data = repo_data.iter().map(Into::into);
@@ -106,7 +119,7 @@ impl PySparseRepoData {
                 repo_data,
                 package_names,
                 None,
-                variant_selection.unwrap_or_default().into(),
+                package_format_selection.into(),
             )?
             .into_iter()
             .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>())

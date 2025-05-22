@@ -7,7 +7,7 @@ use itertools::Itertools;
 use rattler_conda_types::{
     Channel, MatchSpec, PackageName, ParseStrictness::Lenient, RepoDataRecord,
 };
-use rattler_repodata_gateway::sparse::{SparseRepoData, VariantSelection};
+use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{resolvo::CondaDependencyProvider, ChannelPriority, SolveStrategy};
 use resolvo::{Interner, SolverCache};
 use rstest::*;
@@ -28,7 +28,7 @@ fn load_repodata(package_name: &PackageName) -> Vec<Vec<RepoDataRecord>> {
         &[sparse_repo_data],
         [package_name.clone()],
         None,
-        VariantSelection::default(),
+        PackageFormatSelection::default(),
     )
     .expect("failed to load records")
 }

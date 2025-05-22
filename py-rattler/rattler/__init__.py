@@ -8,6 +8,7 @@ from rattler.repo_data import (
     SparseRepoData,
     Gateway,
     SourceConfig,
+    PackageFormatSelection,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.networking import Client, fetch_repo_data
@@ -70,6 +71,7 @@ __all__ = [
     "PrefixPathsEntry",
     "PrefixPathType",
     "SparseRepoData",
+    "PackageFormatSelection",
     "LockFile",
     "Environment",
     "LockChannel",

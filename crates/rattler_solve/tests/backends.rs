@@ -6,7 +6,7 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
     ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
 };
-use rattler_repodata_gateway::sparse::{SparseRepoData, VariantSelection};
+use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
 use url::Url;
 
@@ -137,7 +137,7 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
         sparse_repo_data,
         names,
         None,
-        VariantSelection::default(),
+        PackageFormatSelection::default(),
     )
     .unwrap();
 
@@ -1406,7 +1406,7 @@ fn compare_solve(task: CompareTask<'_>) {
         sparse_repo_data,
         names,
         None,
-        VariantSelection::default(),
+        PackageFormatSelection::default(),
     )
     .unwrap();
 
@@ -1539,9 +1539,13 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
     let specs = vec![spec.clone()];
     let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
 
-    let available_packages =
-        SparseRepoData::load_records_recursive(repo_data, names, None, VariantSelection::default())
-            .unwrap();
+    let available_packages = SparseRepoData::load_records_recursive(
+        repo_data,
+        names,
+        None,
+        PackageFormatSelection::default(),
+    )
+    .unwrap();
 
     let task = SolverTask {
         specs: specs.clone(),

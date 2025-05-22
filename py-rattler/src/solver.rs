@@ -17,7 +17,7 @@ use crate::{
     platform::PyPlatform,
     record::PyRecord,
     repo_data::gateway::PyGateway,
-    PySparseRepoData, PyVariantSelection, Wrap,
+    PyPackageFormatSelection, PySparseRepoData, Wrap,
 };
 
 impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
@@ -132,7 +132,7 @@ pub fn py_solve_with_sparse_repodata(
     pinned_packages: Vec<PyRecord>,
     virtual_packages: Vec<PyGenericVirtualPackage>,
     channel_priority: PyChannelPriority,
-    variant_selection: PyVariantSelection,
+    variant_selection: PyPackageFormatSelection,
     timeout: Option<u64>,
     exclude_newer_timestamp_ms: Option<i64>,
     strategy: Option<Wrap<SolveStrategy>>,

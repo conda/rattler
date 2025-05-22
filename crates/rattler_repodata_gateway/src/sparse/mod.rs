@@ -40,7 +40,7 @@ use thiserror::Error;
     strum::IntoStaticStr,
 )]
 #[strum(serialize_all = "kebab-case")]
-pub enum VariantSelection {
+pub enum PackageFormatSelection {
     /// Only the tar.bz2 packages are used
     OnlyTarBz2,
 
@@ -211,7 +211,7 @@ impl SparseRepoData {
     pub fn load_records(
         &self,
         package_name: &PackageName,
-        variant_consolidation: VariantSelection,
+        variant_consolidation: PackageFormatSelection,
     ) -> io::Result<Vec<RepoDataRecord>> {
         let repo_data = self.inner.borrow_repo_data();
         let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
@@ -237,7 +237,7 @@ impl SparseRepoData {
         repo_data: impl IntoIterator<Item = &'a SparseRepoData>,
         package_names: impl IntoIterator<Item = PackageName>,
         patch_function: Option<fn(&mut PackageRecord)>,
-        variant_consolidation: VariantSelection,
+        variant_consolidation: PackageFormatSelection,
     ) -> io::Result<Vec<Vec<RepoDataRecord>>> {
         let repo_data: Vec<_> = repo_data.into_iter().collect();
 
@@ -361,14 +361,14 @@ fn parse_records<'i>(
     package_name: &PackageName,
     tar_bz2_packages: &[(PackageFilename<'i>, &'i RawValue)],
     conda_packages: &[(PackageFilename<'i>, &'i RawValue)],
-    variant_consolidation: VariantSelection,
+    variant_consolidation: PackageFormatSelection,
     base_url: Option<&str>,
     channel: &Channel,
     subdir: &str,
     patch_function: Option<fn(&mut PackageRecord)>,
 ) -> io::Result<Vec<RepoDataRecord>> {
     match variant_consolidation {
-        VariantSelection::PreferConda => {
+        PackageFormatSelection::PreferConda => {
             let tar_bz2_packages = add_stripped_filename(
                 find_package_in_slice(tar_bz2_packages, package_name),
                 ArchiveType::TarBz2,
@@ -395,7 +395,7 @@ fn parse_records<'i>(
                 patch_function,
             )
         }
-        VariantSelection::Both => {
+        PackageFormatSelection::Both => {
             let tar_bz2_packages = find_package_in_slice(tar_bz2_packages, package_name);
             let conda_packages = find_package_in_slice(conda_packages, package_name);
             parse_records_raw(
@@ -406,11 +406,11 @@ fn parse_records<'i>(
                 patch_function,
             )
         }
-        VariantSelection::OnlyTarBz2 => {
+        PackageFormatSelection::OnlyTarBz2 => {
             let tar_bz2_packages = find_package_in_slice(tar_bz2_packages, package_name);
             parse_records_raw(tar_bz2_packages, base_url, channel, subdir, patch_function)
         }
-        VariantSelection::OnlyConda => {
+        PackageFormatSelection::OnlyConda => {
             let conda_packages = find_package_in_slice(conda_packages, package_name);
             parse_records_raw(conda_packages, base_url, channel, subdir, patch_function)
         }
@@ -468,7 +468,7 @@ pub async fn load_repo_data_recursively(
     repo_data_paths: impl IntoIterator<Item = (Channel, impl Into<String>, impl AsRef<Path>)>,
     package_names: impl IntoIterator<Item = PackageName>,
     patch_function: Option<fn(&mut PackageRecord)>,
-    variant_consolidation: VariantSelection,
+    variant_consolidation: PackageFormatSelection,
 ) -> Result<Vec<Vec<RepoDataRecord>>, io::Error> {
     use futures::{StreamExt, TryFutureExt, TryStreamExt};
 
@@ -624,7 +624,9 @@ mod test {
     use rattler_conda_types::{Channel, ChannelConfig, PackageName, RepoData, RepoDataRecord};
     use rstest::rstest;
 
-    use super::{load_repo_data_recursively, PackageFilename, SparseRepoData, VariantSelection};
+    use super::{
+        load_repo_data_recursively, PackageFilename, PackageFormatSelection, SparseRepoData,
+    };
     use crate::utils::test::fetch_repo_data;
 
     fn test_dir() -> PathBuf {
@@ -672,7 +674,7 @@ mod test {
     fn load_sparse_from_bytes(
         repo_data: &[(Channel, &'static str, Bytes)],
         package_names: impl IntoIterator<Item = impl AsRef<str>>,
-        variant_consolidation: VariantSelection,
+        variant_consolidation: PackageFormatSelection,
     ) -> Vec<Vec<RepoDataRecord>> {
         let sparse: Vec<_> = repo_data
             .iter()
@@ -690,7 +692,7 @@ mod test {
 
     async fn load_sparse(
         package_names: impl IntoIterator<Item = impl AsRef<str>>,
-        variant_consolidation: VariantSelection,
+        variant_consolidation: PackageFormatSelection,
     ) -> Vec<Vec<RepoDataRecord>> {
         tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
 
@@ -712,13 +714,14 @@ mod test {
     #[tokio::test]
     async fn test_empty_sparse_load() {
         let sparse_empty_data =
-            load_sparse(Vec::<String>::new(), VariantSelection::default()).await;
+            load_sparse(Vec::<String>::new(), PackageFormatSelection::default()).await;
         assert_eq!(sparse_empty_data, vec![vec![], vec![]]);
     }
 
     #[tokio::test]
     async fn test_sparse_single() {
-        let sparse_empty_data = load_sparse(["_libgcc_mutex"], VariantSelection::default()).await;
+        let sparse_empty_data =
+            load_sparse(["_libgcc_mutex"], PackageFormatSelection::default()).await;
         let total_records = sparse_empty_data
             .iter()
             .map(std::vec::Vec::len)
@@ -731,7 +734,7 @@ mod test {
     async fn test_parse_duplicate() {
         let sparse_empty_data = load_sparse(
             ["_libgcc_mutex", "_libgcc_mutex"],
-            VariantSelection::default(),
+            PackageFormatSelection::default(),
         )
         .await;
         let total_records = sparse_empty_data
@@ -746,8 +749,11 @@ mod test {
 
     #[tokio::test]
     async fn test_sparse_jupyterlab_detectron2() {
-        let sparse_empty_data =
-            load_sparse(["jupyterlab", "detectron2"], VariantSelection::default()).await;
+        let sparse_empty_data = load_sparse(
+            ["jupyterlab", "detectron2"],
+            PackageFormatSelection::default(),
+        )
+        .await;
 
         let total_records = sparse_empty_data
             .iter()
@@ -759,7 +765,7 @@ mod test {
 
     #[tokio::test]
     async fn test_sparse_rubin_env() {
-        let sparse_empty_data = load_sparse(["rubin-env"], VariantSelection::default()).await;
+        let sparse_empty_data = load_sparse(["rubin-env"], PackageFormatSelection::default()).await;
 
         let total_records = sparse_empty_data
             .iter()
@@ -798,7 +804,7 @@ mod test {
 
         // Memmapped
         let sparse_empty_data =
-            load_sparse(package_names.clone(), VariantSelection::default()).await;
+            load_sparse(package_names.clone(), PackageFormatSelection::default()).await;
 
         let total_records = sparse_empty_data.iter().map(Vec::len).sum::<usize>();
 
@@ -807,7 +813,7 @@ mod test {
         // Bytes
         let repo_data = default_repo_data_bytes().await;
         let sparse_empty_data =
-            load_sparse_from_bytes(&repo_data, package_names, VariantSelection::default());
+            load_sparse_from_bytes(&repo_data, package_names, PackageFormatSelection::default());
 
         let total_records = sparse_empty_data.iter().map(Vec::len).sum::<usize>();
 
@@ -877,7 +883,7 @@ mod test {
     #[case(VariantSelection::PreferConda)]
     #[case(VariantSelection::OnlyTarBz2)]
     #[case(VariantSelection::OnlyConda)]
-    fn test_only_conda(#[case] variant: VariantSelection) {
+    fn test_only_conda(#[case] variant: PackageFormatSelection) {
         let (channel, platform, path) = dummy_repo_data();
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
         let records = sparse

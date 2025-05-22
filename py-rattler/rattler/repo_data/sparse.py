@@ -6,31 +6,31 @@ from rattler.channel.channel import Channel
 from rattler.package.package_name import PackageName
 from enum import Enum
 
-from rattler.rattler import PySparseRepoData, PyVariantSelection
+from rattler.rattler import PySparseRepoData, PyPackageFormatSelection
 from rattler.repo_data.record import RepoDataRecord
 
 
-class VariantSelection(Enum):
+class PackageFormatSelection(Enum):
     """
     Enum that describes what to do if both a `.tar.bz2` and a `.conda` package is available.
     """
 
-    ONLY_TAR_BZ2 = PyVariantSelection.OnlyTarBz2
+    ONLY_TAR_BZ2 = PyPackageFormatSelection.OnlyTarBz2
     """
     Only use the `.tar.bz2` packages, ignore all `.conda` packages.
     """
 
-    ONLY_CONDA = PyVariantSelection.OnlyConda
+    ONLY_CONDA = PyPackageFormatSelection.OnlyConda
     """
     Only use the `.conda` packages, ignore all `.tar.bz2` packages.
     """
 
-    PREFER_CONDA = PyVariantSelection.PreferConda
+    PREFER_CONDA = PyPackageFormatSelection.PreferConda
     """
     Only use the `.conda` packages if there are both a `.tar.bz2` and a `.conda` package available.
     """
 
-    BOTH = PyVariantSelection.Both
+    BOTH = PyPackageFormatSelection.Both
     """
     Use both the `.tar.bz2` and the `.conda` packages.
     """
@@ -92,7 +92,7 @@ class SparseRepoData:
         return self._sparse.package_names()
 
     def load_records(
-        self, package_name: PackageName, variant_selection: VariantSelection = VariantSelection.PREFER_CONDA
+        self, package_name: PackageName, variant_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA
     ) -> List[RepoDataRecord]:
         """
         Returns all the records for the specified package name.
@@ -144,7 +144,7 @@ class SparseRepoData:
     def load_records_recursive(
         repo_data: List[SparseRepoData],
         package_names: List[PackageName],
-        variant_selection: VariantSelection = VariantSelection.PREFER_CONDA,
+        variant_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
     ) -> List[List[RepoDataRecord]]:
         """
         Given a set of [`SparseRepoData`]s load all the records

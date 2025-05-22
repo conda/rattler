@@ -3,7 +3,7 @@ use std::path::Path;
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use futures::FutureExt;
 use rattler_conda_types::{Channel, MatchSpec};
-use rattler_repodata_gateway::sparse::{SparseRepoData, VariantSelection};
+use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{resolvo::CondaDependencyProvider, ChannelPriority};
 use resolvo::SolverCache;
 
@@ -16,7 +16,7 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
         [sparse_repo_data],
         [package_name.clone()],
         None,
-        VariantSelection::default(),
+        PackageFormatSelection::default(),
     )
     .expect("failed to load records");
 
