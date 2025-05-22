@@ -1,7 +1,8 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Type, Literal
+from types import TracebackType
 from rattler.channel.channel import Channel
 from rattler.package.package_name import PackageName
 from enum import Enum
@@ -66,6 +67,40 @@ class SparseRepoData:
             )
         self._sparse = PySparseRepoData(channel._channel, subdir, str(path))
 
+    def close(self) -> None:
+        """
+        Closes any mapped resources associated with this `SparseRepoData`
+        instance. It is good practice to call this method when you are done
+        with it. This is especially important if you want to modify or delete
+        the file from which this instance was created.
+
+        This method will release all resources associated with this instance,
+        including those that are currently being used on another thread. This
+        method will block until all resources are released.
+
+        This method has no effect if the file is already closed. Once the
+        instance is closed, any operation on the instance will raise a
+        `ValueError`.
+
+        As a convenience, it is allowed to call this method more than once;
+        only the first call, however, will have an effect.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import Channel, ChannelConfig
+        >>> channel = Channel("dummy", ChannelConfig())
+        >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
+        >>> sparse_data = SparseRepoData(channel, "linux-64", path)
+        >>> sparse_data.close()
+        >>> sparse_data.package_names() # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        ValueError: I/O operation on closed file.
+        >>>
+        ```
+        """
+        self._sparse.close()
+
     def package_names(self) -> List[str]:
         """
         Returns a list over all package names in this repodata file.
@@ -78,9 +113,8 @@ class SparseRepoData:
         ```python
         >>> from rattler import Channel, ChannelConfig
         >>> channel = Channel("dummy", ChannelConfig())
-        >>> subdir = "test-data/dummy/noarch"
         >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
-        >>> sparse_data = SparseRepoData(channel, subdir, path)
+        >>> sparse_data = SparseRepoData(channel, "linux-64", path)
         >>> package_names = sparse_data.package_names()
         >>> package_names
         [...]
@@ -102,9 +136,8 @@ class SparseRepoData:
         ```python
         >>> from rattler import Channel, ChannelConfig, RepoDataRecord, PackageName
         >>> channel = Channel("dummy", ChannelConfig())
-        >>> subdir = "test-data/dummy/noarch"
         >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
-        >>> sparse_data = SparseRepoData(channel, subdir, path)
+        >>> sparse_data = SparseRepoData(channel, "linux-64", path)
         >>> package_name = PackageName(sparse_data.package_names()[0])
         >>> records = sparse_data.load_records(package_name)
         >>> records
@@ -130,11 +163,10 @@ class SparseRepoData:
         ```python
         >>> from rattler import Channel, ChannelConfig
         >>> channel = Channel("dummy", ChannelConfig())
-        >>> subdir = "test-data/dummy/noarch"
         >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
-        >>> sparse_data = SparseRepoData(channel, subdir, path)
+        >>> sparse_data = SparseRepoData(channel, "linux-64", path)
         >>> sparse_data.subdir
-        'test-data/dummy/noarch'
+        'linux-64'
         >>>
         ```
         """
@@ -160,7 +192,7 @@ class SparseRepoData:
         >>> channel = Channel("dummy")
         >>> subdir = "test-data/dummy/linux-64"
         >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
-        >>> sparse_data = SparseRepoData(channel, subdir, path)
+        >>> sparse_data = SparseRepoData(channel, "linux-64", path)
         >>> package_name = PackageName("python")
         >>> SparseRepoData.load_records_recursive([sparse_data], [package_name])
         [...]
@@ -192,12 +224,57 @@ class SparseRepoData:
         ```python
         >>> from rattler import Channel, ChannelConfig
         >>> channel = Channel("dummy", ChannelConfig())
-        >>> subdir = "test-data/dummy/noarch"
         >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
-        >>> sparse_data = SparseRepoData(channel, subdir, path)
+        >>> sparse_data = SparseRepoData(channel, "linux-64", path)
         >>> sparse_data
-        SparseRepoData(subdir="test-data/dummy/noarch")
+        SparseRepoData(subdir="linux-64")
         >>>
         ```
         """
         return f'SparseRepoData(subdir="{self.subdir}")'
+
+    def __enter__(self) -> SparseRepoData:
+        """
+        Returns the `SparseRepoData` instance itself. This is used to
+        enable the use of the `with` statement to automatically close
+        the instance when done.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import Channel, ChannelConfig
+        >>> channel = Channel("dummy", ChannelConfig())
+        >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
+        >>> with SparseRepoData(channel, "linux-64", path) as sparse_data:
+        ...     print(sparse_data)
+        ...
+        SparseRepoData(subdir="linux-64")
+        >>>
+        ```
+        """
+        return self
+
+    def __exit__(
+        self,
+        exctype: Optional[Type[BaseException]],
+        excinst: Optional[BaseException],
+        exctb: Optional[TracebackType],
+    ) -> Literal[False]:
+        """
+        Closes the `SparseRepoData` instance when exiting the `with` statement.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import Channel, ChannelConfig
+        >>> channel = Channel("dummy", ChannelConfig())
+        >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
+        >>> with SparseRepoData(channel, "linux-64", path) as sparse_data:
+        ...     print(sparse_data)
+        ...
+        SparseRepoData(subdir="linux-64")
+        >>>
+        ```
+        """
+        self.close()
+        return False

@@ -879,10 +879,10 @@ mod test {
     }
 
     #[rstest]
-    #[case(VariantSelection::Both)]
-    #[case(VariantSelection::PreferConda)]
-    #[case(VariantSelection::OnlyTarBz2)]
-    #[case(VariantSelection::OnlyConda)]
+    #[case(PackageFormatSelection::Both)]
+    #[case(PackageFormatSelection::PreferConda)]
+    #[case(PackageFormatSelection::OnlyTarBz2)]
+    #[case(PackageFormatSelection::OnlyConda)]
     fn test_only_conda(#[case] variant: PackageFormatSelection) {
         let (channel, platform, path) = dummy_repo_data();
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();

@@ -134,7 +134,7 @@ jobs:
 
       - name: Install cargo nextest
         if: ${{ !matrix.skip-tests }}
-        uses: taiki-e/install-action@83254c543806f3224380bf1001d6fac8feaf2d0b # v2
+        uses: taiki-e/install-action@941e8a4d9d7cdb696bd4f017cf54aca281f8ffff # v2
         with:
           tool: cargo-nextest
 
