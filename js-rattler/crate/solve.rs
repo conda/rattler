@@ -41,7 +41,7 @@ struct JsLockedPackage {
     filename: String,
     version: String,
     depends: Option<Vec<String>>,
-    build_number: u64,
+    build_number: Option<u64>,
     subdir: Option<String>,
 }
 
@@ -91,7 +91,7 @@ pub async fn simple_solve(
                         name: PackageName::try_from(pkg.package_name.clone())?,
                         version: Version::from_str(&pkg.version)?.into(),
                         build: pkg.build.clone(),
-                        build_number: pkg.build_number,
+                        build_number: pkg.build_number.unwrap_or_default(),
                         md5: None,
                         sha256: None,
                         size: None,
