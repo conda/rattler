@@ -102,7 +102,7 @@ impl PySparseRepoData {
             .collect::<Vec<_>>())
     }
 
-    pub fn package_count(
+    pub fn record_count(
         &self,
         package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<usize> {
@@ -110,7 +110,7 @@ impl PySparseRepoData {
         let Some(sparse) = lock.as_ref() else {
             return Err(PyValueError::new_err("I/O operation on closed file."));
         };
-        Ok(sparse.package_count(package_format_selection.into()))
+        Ok(sparse.record_count(package_format_selection.into()))
     }
 
     pub fn load_records(

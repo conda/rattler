@@ -129,14 +129,14 @@ class SparseRepoData:
         """
         return self._sparse.package_names(package_format_selection.value)
 
-    def package_count(
+    def record_count(
         self, package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA
     ) -> int:
         """
         Returns the total number of packages in this repodata file.
         :return:
         """
-        return self._sparse.package_count(package_format_selection.value)
+        return self._sparse.record_count(package_format_selection.value)
 
     def load_records(
         self,

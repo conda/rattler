@@ -221,8 +221,8 @@ impl SparseRepoData {
         }
     }
 
-    /// Returns the number of packages in this instance.
-    pub fn package_count(&self, package_format_selection: PackageFormatSelection) -> usize {
+    /// Returns the number of records in this instance.
+    pub fn record_count(&self, package_format_selection: PackageFormatSelection) -> usize {
         match package_format_selection {
             PackageFormatSelection::PreferConda => {
                 let repo_data = self.inner.borrow_repo_data();
