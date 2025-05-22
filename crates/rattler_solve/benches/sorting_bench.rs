@@ -3,9 +3,8 @@ use std::path::Path;
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use futures::FutureExt;
 use rattler_conda_types::{Channel, MatchSpec};
-use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::resolvo::CondaDependencyProvider;
-use rattler_solve::ChannelPriority;
+use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
+use rattler_solve::{resolvo::CondaDependencyProvider, ChannelPriority};
 use resolvo::SolverCache;
 
 fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) {
@@ -13,9 +12,13 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
         MatchSpec::from_str(spec, rattler_conda_types::ParseStrictness::Lenient).unwrap();
     let package_name = match_spec.name.clone().unwrap();
 
-    let repodata =
-        SparseRepoData::load_records_recursive([sparse_repo_data], [package_name.clone()], None)
-            .expect("failed to load records");
+    let repodata = SparseRepoData::load_records_recursive(
+        [sparse_repo_data],
+        [package_name.clone()],
+        None,
+        PackageFormatSelection::default(),
+    )
+    .expect("failed to load records");
 
     // Construct a cache
     c.bench_function(&format!("sort {spec}"), |b| {

@@ -26,6 +26,7 @@ vendored-openssl = ["openssl", "openssl/vendored"]
 anyhow = "1.0.97"
 chrono = { version = "0.4" }
 futures = "0.3.31"
+parking_lot = { version = "0.12.3", features = ["arc_lock", "send_guard"] }
 
 rattler = { path = "../crates/rattler", default-features = false, features = [
     "indicatif",

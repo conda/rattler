@@ -4576,6 +4576,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "simple_spawn_blocking",
+ "strum",
  "superslice",
  "tempfile",
  "thiserror 2.0.12",

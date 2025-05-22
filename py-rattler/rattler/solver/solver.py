@@ -6,7 +6,7 @@ from rattler import Channel, Platform, VirtualPackage, SparseRepoData
 from rattler.match_spec.match_spec import MatchSpec
 
 from rattler.channel import ChannelPriority
-from rattler.rattler import py_solve, PyMatchSpec, py_solve_with_sparse_repodata
+from rattler.rattler import py_solve, PyMatchSpec, py_solve_with_sparse_repodata, PyPackageFormatSelection
 
 from rattler.platform.platform import PlatformLiteral
 from rattler.repo_data.gateway import Gateway
@@ -127,6 +127,7 @@ async def solve_with_sparse_repodata(
     exclude_newer: Optional[datetime.datetime] = None,
     strategy: SolveStrategy = "highest",
     constraints: Optional[Sequence[MatchSpec | str]] = None,
+    use_only_tar_bz2: bool = False,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -171,6 +172,7 @@ async def solve_with_sparse_repodata(
         constraints: Additional constraints that should be satisfied by the solver.
             Packages included in the `constraints` are not necessarily installed,
             but they must be satisfied by the solution.
+        use_only_tar_bz2: If `True` only `.tar.bz2` packages are used. If `False` `.conda` packages are preferred.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -191,6 +193,9 @@ async def solve_with_sparse_repodata(
             ],
             channel_priority=channel_priority.value,
             timeout=int(timeout / datetime.timedelta(microseconds=1)) if timeout else None,
+            package_format_selection=PyPackageFormatSelection.OnlyTarBz2
+            if use_only_tar_bz2
+            else PyPackageFormatSelection.PreferConda,
             exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
             if exclude_newer
             else None,

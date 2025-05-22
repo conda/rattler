@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, SamplingMode};
 use rattler_conda_types::ParseStrictness::Strict;
 use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
-use rattler_repodata_gateway::sparse::SparseRepoData;
+use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{SolverImpl, SolverTask};
 
 fn conda_json_path() -> String {
@@ -55,8 +55,13 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
     ];
 
     let names = specs.iter().map(|s| s.name.clone().unwrap());
-    let available_packages =
-        SparseRepoData::load_records_recursive(&sparse_repo_data, names, None).unwrap();
+    let available_packages = SparseRepoData::load_records_recursive(
+        &sparse_repo_data,
+        names,
+        None,
+        PackageFormatSelection::default(),
+    )
+    .unwrap();
 
     #[cfg(feature = "libsolv_c")]
     group.bench_function("libsolv_c", |b| {
