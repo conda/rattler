@@ -9,14 +9,18 @@ use futures::{stream::FuturesUnordered, StreamExt};
 use fxhash::FxHashMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rattler_conda_types::{
-    package::{ArchiveType, IndexJson, PackageFile},
-    ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData,
+    package::{ArchiveIdentifier, ArchiveType, IndexJson, PackageFile, RunExportsJson},
+    ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
+    ShardedSubdirInfo,
 };
+use rattler_digest::Sha256Hash;
 use rattler_networking::{Authentication, AuthenticationStorage};
 use rattler_package_streaming::{
     read,
     seek::{self, stream_conda_content},
 };
+use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
     io::{Cursor, Read, Seek},
@@ -32,6 +36,11 @@ use opendal::{
     services::{FsConfig, S3Config},
     Configurator, Operator,
 };
+
+const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
+const REPODATA: &str = "repodata.json";
+const REPODATA_SHARDS: &str = "repodata_shards.msgpack.zst";
+const ZSTD_REPODATA_COMPRESSION_LEVEL: i32 = 19;
 
 /// Extract the package record from an `index.json` file.
 pub fn package_record_from_index_json<T: Read>(
@@ -151,6 +160,33 @@ pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> 
     package_record_from_conda_reader(reader)
 }
 
+fn read_index_json_from_archive(
+    bytes: &Vec<u8>,
+    archive: &mut tar::Archive<impl Read>,
+) -> std::io::Result<PackageRecord> {
+    let mut index_json = None;
+    let mut run_exports_json = None;
+    for entry in archive.entries()?.flatten() {
+        let mut entry = entry;
+        let path = entry.path()?;
+        if path.as_os_str().eq("info/index.json") {
+            index_json = Some(package_record_from_index_json(bytes, &mut entry)?);
+        } else if path.as_os_str().eq("info/run_exports.json") {
+            run_exports_json = Some(RunExportsJson::from_reader(&mut entry)?);
+        }
+    }
+
+    if let Some(mut index_json) = index_json {
+        index_json.run_exports = run_exports_json;
+        return Ok(index_json);
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "No index.json found",
+    ))
+}
+
 /// Extract the package record from a `.conda` package file content.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
@@ -158,36 +194,27 @@ pub fn package_record_from_conda_reader(reader: impl Read) -> std::io::Result<Pa
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
     let reader = Cursor::new(&bytes);
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
-
-    for entry in archive.entries()?.flatten() {
-        let mut entry = entry;
-        let path = entry.path()?;
-        if path.as_os_str().eq("info/index.json") {
-            return package_record_from_index_json(&bytes, &mut entry);
-        }
-    }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        "No index.json found",
-    ))
+    read_index_json_from_archive(&bytes, &mut archive)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn index_subdir(
     subdir: Platform,
     op: Operator,
     force: bool,
+    write_zst: bool,
+    write_shards: bool,
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
 ) -> Result<()> {
-    let repodata_path = if repodata_patch.is_some() {
-        format!("{subdir}/repodata_from_packages.json")
-    } else {
-        format!("{subdir}/repodata.json")
-    };
     let mut registered_packages: FxHashMap<String, PackageRecord> = HashMap::default();
     if !force {
-        let repodata_bytes = op.read(&repodata_path).await;
+        let repodata_bytes = if repodata_patch.is_some() {
+            op.read(&format!("{subdir}/{REPODATA_FROM_PACKAGES}")).await
+        } else {
+            op.read(&format!("{subdir}/{REPODATA}")).await
+        };
         let repodata: RepoData = match repodata_bytes {
             Ok(bytes) => serde_json::from_slice(&bytes.to_vec())?,
             Err(e) => {
@@ -368,6 +395,7 @@ async fn index_subdir(
         }
     }
 
+    // TODO: don't serialize run_exports and purls but in their own files
     let repodata = RepoData {
         info: Some(ChannelInfo {
             subdir: Some(subdir.to_string()),
@@ -379,41 +407,187 @@ async fn index_subdir(
         version: Some(2),
     };
 
-    tracing::info!("Writing repodata to {}", repodata_path);
-    let repodata_bytes = serde_json::to_vec(&repodata)?;
-    op.write(&repodata_path, repodata_bytes).await?;
+    write_repodata(
+        repodata,
+        repodata_patch,
+        write_zst,
+        write_shards,
+        subdir,
+        op,
+    )
+    .await
+}
 
-    if let Some(instructions) = repodata_patch {
-        let patched_repodata_path = format!("{subdir}/repodata.json");
-        tracing::info!("Writing patched repodata to {}", patched_repodata_path);
-        let mut patched_repodata = repodata.clone();
-        patched_repodata.apply_patches(&instructions);
-        let patched_repodata_bytes = serde_json::to_vec(&patched_repodata)?;
-        op.write(&patched_repodata_path, patched_repodata_bytes)
+fn serialize_msgpack_zst<T>(val: &T) -> Result<Vec<u8>>
+where
+    T: Serialize + ?Sized,
+{
+    let msgpack = rmp_serde::to_vec_named(val)?;
+    let encoded = zstd::stream::encode_all(&msgpack[..], 0)?;
+    Ok(encoded)
+}
+
+/// Write a `repodata.json` for all packages in the given configurator's root.
+pub async fn write_repodata(
+    repodata: RepoData,
+    repodata_patch: Option<PatchInstructions>,
+    write_zst: bool,
+    write_shards: bool,
+    subdir: Platform,
+    op: Operator,
+) -> Result<()> {
+    if repodata_patch.is_some() {
+        let unpatched_repodata_path = format!("{subdir}/{REPODATA_FROM_PACKAGES}");
+        tracing::info!("Writing unpatched repodata to {unpatched_repodata_path}");
+        let unpatched_repodata_bytes = serde_json::to_vec(&repodata)?;
+        op.write(&unpatched_repodata_path, unpatched_repodata_bytes)
             .await?;
     }
-    // todo: also write repodata.json.bz2, repodata.json.zst, repodata.json.jlap and sharded repodata once available in rattler
-    // https://github.com/conda/rattler/issues/1096
 
+    let repodata = if let Some(instructions) = repodata_patch {
+        tracing::info!("Patching repodata");
+        let mut patched_repodata = repodata.clone();
+        patched_repodata.apply_patches(&instructions);
+        patched_repodata
+    } else {
+        repodata
+    };
+
+    let repodata_bytes = serde_json::to_vec(&repodata)?;
+    if write_zst {
+        tracing::info!("Compressing repodata bytes");
+        let repodata_zst_bytes =
+            zstd::stream::encode_all(&repodata_bytes[..], ZSTD_REPODATA_COMPRESSION_LEVEL)?;
+        let repodata_zst_path = format!("{subdir}/{REPODATA}.zst");
+        tracing::info!("Writing zst repodata to {repodata_zst_path}");
+        op.write(&repodata_zst_path, repodata_zst_bytes).await?;
+    }
+
+    let repodata_path = format!("{subdir}/{REPODATA}");
+    tracing::info!("Writing repodata to {repodata_path}");
+    op.write(&repodata_path, repodata_bytes).await?;
+
+    if write_shards {
+        // See CEP 16 <https://github.com/conda/ceps/blob/main/cep-0016.md>
+        tracing::info!("Creating sharded repodata");
+        let mut shards_by_package_names: HashMap<String, Shard> = HashMap::new();
+        for (k, package_record) in repodata.conda_packages {
+            let package_name = package_record.name.as_normalized();
+            let shard = shards_by_package_names
+                .entry(package_name.into())
+                .or_default();
+            shard.conda_packages.insert(k, package_record);
+        }
+        for (k, package_record) in repodata.packages {
+            let package_name = package_record.name.as_normalized();
+            let shard = shards_by_package_names
+                .entry(package_name.into())
+                .or_default();
+            shard.packages.insert(k, package_record);
+        }
+        for package in repodata.removed {
+            let package_name = ArchiveIdentifier::try_from_filename(package.as_str())
+                .context("Could not determine archive identifier for {package}")?
+                .name;
+            let shard = shards_by_package_names.entry(package_name).or_default();
+            shard.removed.insert(package);
+        }
+
+        // calculate digests for shards
+        let shards = shards_by_package_names
+            .iter()
+            .map(|(k, shard)| {
+                serialize_msgpack_zst(shard).map(|encoded| {
+                    let mut hasher = Sha256::new();
+                    hasher.update(&encoded);
+                    let digest: Sha256Hash = hasher.finalize();
+                    (k, (digest, encoded))
+                })
+            })
+            .collect::<Result<HashMap<_, _>>>()?;
+
+        let sharded_repodata = ShardedRepodata {
+            info: ShardedSubdirInfo {
+                subdir: subdir.to_string(),
+                base_url: "".into(),
+                shards_base_url: "./shards/".into(),
+                created_at: Some(chrono::Utc::now()),
+            },
+            shards: shards
+                .iter()
+                .map(|(&k, (digest, _))| (k.clone(), *digest))
+                .collect(),
+        };
+
+        let mut tasks = FuturesUnordered::new();
+        // todo max parallel
+        for (_, (digest, encoded_shard)) in shards {
+            let op = op.clone();
+            let future = async move || {
+                let shard_path = format!("{subdir}/shards/{digest:x}.msgpack.zst");
+                tracing::trace!("Writing repodata shard to {shard_path}");
+                op.write(&shard_path, encoded_shard).await
+            };
+            tasks.push(tokio::spawn(future()));
+        }
+        while let Some(join_result) = tasks.next().await {
+            match join_result {
+                Ok(Ok(_)) => {}
+                Ok(Err(e)) => Err(e)?,
+                Err(join_err) => Err(join_err)?,
+            }
+        }
+
+        let repodata_shards_path = format!("{subdir}/{REPODATA_SHARDS}");
+        tracing::trace!("Writing repodata shards to {repodata_shards_path}");
+        let sharded_repodata_encoded = serialize_msgpack_zst(&sharded_repodata)?;
+        op.write(&repodata_shards_path, sharded_repodata_encoded)
+            .await?;
+    }
     Ok(())
 }
 
+/// Configuration for `index_fs`
+pub struct IndexFsConfig {
+    /// The channel to index.
+    pub channel: PathBuf,
+    /// The target platform to index.
+    pub target_platform: Option<Platform>,
+    /// The path to a repodata patch to apply to the index.
+    pub repodata_patch: Option<String>,
+    /// Whether to write the repodata as a zstd-compressed file.
+    pub write_zst: bool,
+    /// Whether to write the repodata shards.
+    pub write_shards: bool,
+    /// Whether to force the index to be written.
+    pub force: bool,
+    /// The maximum number of parallel tasks to run.
+    pub max_parallel: usize,
+    /// The multi-progress bar to use for the index.
+    pub multi_progress: Option<MultiProgress>,
+}
+
 /// Create a new `repodata.json` for all packages in the channel at the given directory.
-#[allow(clippy::too_many_arguments)]
 pub async fn index_fs(
-    channel: impl Into<PathBuf>,
-    target_platform: Option<Platform>,
-    repodata_patch: Option<String>,
-    force: bool,
-    max_parallel: usize,
-    multi_progress: Option<MultiProgress>,
+    IndexFsConfig {
+        channel,
+        target_platform,
+        repodata_patch,
+        write_zst,
+        write_shards,
+        force,
+        max_parallel,
+        multi_progress,
+    }: IndexFsConfig,
 ) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
-    config.root = Some(channel.into().canonicalize()?.to_string_lossy().to_string());
+    config.root = Some(channel.canonicalize()?.to_string_lossy().to_string());
     index(
         target_platform,
         config,
         repodata_patch,
+        write_zst,
+        write_shards,
         force,
         max_parallel,
         multi_progress,
@@ -421,21 +595,56 @@ pub async fn index_fs(
     .await
 }
 
+/// Configuration for `index_s3`
+pub struct IndexS3Config {
+    /// The channel to index.
+    pub channel: Url,
+    /// The region of the S3 bucket.
+    pub region: String,
+    /// The endpoint URL of the S3 bucket.
+    pub endpoint_url: Url,
+    /// Whether to force path style for the S3 bucket.
+    pub force_path_style: bool,
+    /// The access key ID for the S3 bucket.
+    pub access_key_id: Option<String>,
+    /// The secret access key for the S3 bucket.
+    pub secret_access_key: Option<String>,
+    /// The session token for the S3 bucket.
+    pub session_token: Option<String>,
+    /// The target platform to index.
+    pub target_platform: Option<Platform>,
+    /// The path to a repodata patch to apply to the index.
+    pub repodata_patch: Option<String>,
+    /// Whether to write the repodata as a zstd-compressed file.
+    pub write_zst: bool,
+    /// Whether to write the repodata shards.
+    pub write_shards: bool,
+    /// Whether to force the index to be written.
+    pub force: bool,
+    /// The maximum number of parallel tasks to run.
+    pub max_parallel: usize,
+    /// The multi-progress bar to use for the index.
+    pub multi_progress: Option<MultiProgress>,
+}
+
 /// Create a new `repodata.json` for all packages in the channel at the given S3 URL.
-#[allow(clippy::too_many_arguments)]
 pub async fn index_s3(
-    channel: Url,
-    region: String,
-    endpoint_url: Url,
-    force_path_style: bool,
-    access_key_id: Option<String>,
-    secret_access_key: Option<String>,
-    session_token: Option<String>,
-    target_platform: Option<Platform>,
-    repodata_patch: Option<String>,
-    force: bool,
-    max_parallel: usize,
-    multi_progress: Option<MultiProgress>,
+    IndexS3Config {
+        channel,
+        region,
+        endpoint_url,
+        force_path_style,
+        access_key_id,
+        secret_access_key,
+        session_token,
+        target_platform,
+        repodata_patch,
+        write_zst,
+        write_shards,
+        force,
+        max_parallel,
+        multi_progress,
+    }: IndexS3Config,
 ) -> anyhow::Result<()> {
     let mut s3_config = S3Config::default();
     s3_config.root = Some(channel.path().to_string());
@@ -473,6 +682,8 @@ pub async fn index_s3(
         target_platform,
         s3_config,
         repodata_patch,
+        write_zst,
+        write_shards,
         force,
         max_parallel,
         multi_progress,
@@ -492,10 +703,13 @@ pub async fn index_s3(
 ///    2. Collect all registered packages from `repodata.json` (if exists)
 ///    3. Determine which packages to add to and to delete from `repodata.json`
 ///    4. Write `repodata.json` back
+#[allow(clippy::too_many_arguments)]
 pub async fn index<T: Configurator>(
     target_platform: Option<Platform>,
     config: T,
     repodata_patch: Option<String>,
+    write_zst: bool,
+    write_shards: bool,
     force: bool,
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
@@ -569,6 +783,8 @@ pub async fn index<T: Configurator>(
             *subdir,
             op.clone(),
             force,
+            write_zst,
+            write_shards,
             repodata_patch
                 .as_ref()
                 .and_then(|p| p.subdirs.get(&subdir.to_string()).cloned()),

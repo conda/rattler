@@ -3897,6 +3897,7 @@ version = "0.22.7"
 dependencies = [
  "anyhow",
  "bytes",
+ "chrono",
  "clap",
  "clap-verbosity-flag",
  "console",
@@ -3910,11 +3911,16 @@ dependencies = [
  "rattler_networking",
  "rattler_package_streaming",
  "reqwest",
+ "rmp-serde",
+ "serde",
  "serde_json",
+ "sha2",
+ "tar",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "url",
+ "zstd",
 ]
 
 [[package]]

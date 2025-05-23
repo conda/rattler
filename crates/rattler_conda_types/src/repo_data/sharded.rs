@@ -44,7 +44,7 @@ pub struct ShardedSubdirInfo {
 }
 
 /// An individual shard that contains repodata for a single package name.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Shard {
     /// The records for all `.tar.bz2` packages
     pub packages: FxHashMap<String, PackageRecord>,

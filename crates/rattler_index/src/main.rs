@@ -1,7 +1,7 @@
 use clap::{arg, Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Platform;
-use rattler_index::{index_fs, index_s3};
+use rattler_index::{index_fs, index_s3, IndexFsConfig, IndexS3Config};
 use url::Url;
 
 fn parse_s3_url(value: &str) -> Result<Url, String> {
@@ -24,6 +24,14 @@ struct Cli {
 
     #[command(flatten)]
     verbosity: Verbosity,
+
+    /// Whether to write repodata.json.zst.
+    #[arg(long, default_value = "true", global = true)]
+    write_zst: Option<bool>,
+
+    /// Whether to write sharded repodata.
+    #[arg(long, default_value = "true", global = true)]
+    write_shards: Option<bool>,
 
     /// Whether to force the re-indexing of all packages.
     /// Note that this will create a new repodata.json instead of updating the existing one.
@@ -108,14 +116,16 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::FileSystem { channel } => {
-            index_fs(
+            index_fs(IndexFsConfig {
                 channel,
-                cli.target_platform,
-                cli.repodata_patch,
-                cli.force,
-                cli.max_parallel,
-                Some(multi_progress),
-            )
+                target_platform: cli.target_platform,
+                repodata_patch: cli.repodata_patch,
+                write_zst: cli.write_zst.unwrap_or(true),
+                write_shards: cli.write_shards.unwrap_or(true),
+                force: cli.force,
+                max_parallel: cli.max_parallel,
+                multi_progress: Some(multi_progress),
+            })
             .await
         }
         Commands::S3 {
@@ -127,7 +137,7 @@ async fn main() -> anyhow::Result<()> {
             secret_access_key,
             session_token,
         } => {
-            index_s3(
+            index_s3(IndexS3Config {
                 channel,
                 region,
                 endpoint_url,
@@ -135,12 +145,14 @@ async fn main() -> anyhow::Result<()> {
                 access_key_id,
                 secret_access_key,
                 session_token,
-                cli.target_platform,
-                cli.repodata_patch,
-                cli.force,
-                cli.max_parallel,
-                Some(multi_progress),
-            )
+                target_platform: cli.target_platform,
+                repodata_patch: cli.repodata_patch,
+                write_zst: cli.write_zst.unwrap_or(true),
+                write_shards: cli.write_shards.unwrap_or(true),
+                force: cli.force,
+                max_parallel: cli.max_parallel,
+                multi_progress: Some(multi_progress),
+            })
             .await
         }
     }?;
