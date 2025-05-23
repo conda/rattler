@@ -112,17 +112,13 @@ pub async fn simple_solve(
         };
 
     //if we do not need to solve the same packages, then filter them
-    let filtered_specs: Vec<MatchSpec> = specs
-        .clone()
-        .into_iter()
-        .filter(|spec| {
-            !installed_packages
-                .iter()
-                .any(|rec| spec.matches(&rec.package_record))
-        })
-        .collect();
+    let all_matched = specs.clone().iter().all(|spec| {
+        installed_packages
+            .iter()
+            .any(|rec| spec.matches(&rec.package_record))
+    });
 
-    if filtered_specs.is_empty() {
+    if all_matched {
         return Ok(vec![]);
     }
     // Fetch the repodata
@@ -170,7 +166,7 @@ pub async fn simple_solve(
     }
 
     let task = SolverTask {
-        specs: filtered_specs,
+        specs,
         locked_packages: installed_packages,
         ..repodata.iter().collect::<SolverTask<_>>()
     };
