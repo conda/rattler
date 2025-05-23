@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.7...rattler_repodata_gateway-v0.23.0) - 2025-05-23
+
+### Added
+
+- *(py)* query based on matchspec and package count ([#1347](https://github.com/conda/rattler/pull/1347))
+- control over selection of .conda and .tar.bz2 ([#1344](https://github.com/conda/rattler/pull/1344))
+
+### Fixed
+
+- *(py)* package count was incorrect for prefer-conda ([#1350](https://github.com/conda/rattler/pull/1350))
+- properly dedup package names ([#1342](https://github.com/conda/rattler/pull/1342))
+- consistent usage of rustls-tls / native-tls feature ([#1324](https://github.com/conda/rattler/pull/1324))
+
 ## [0.22.7](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.6...rattler_repodata_gateway-v0.22.7) - 2025-05-16
 
 ### Other
