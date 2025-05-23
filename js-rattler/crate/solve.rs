@@ -15,34 +15,21 @@ use url::Url;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(getter_with_clone)]
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct SolvedPackage {
     pub url: String,
     #[wasm_bindgen(js_name = "packageName")]
     pub package_name: String,
     pub build: String,
     #[wasm_bindgen(js_name = "buildNumber")]
-    pub build_number: u64,
+    pub build_number: Option<u64>,
     #[wasm_bindgen(js_name = "repoName")]
     pub repo_name: Option<String>,
     pub filename: String,
     pub version: String,
-    pub depends: Vec<String>,
-    pub subdir: String,
-}
-
-#[derive(Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct JsLockedPackage {
-    url: String,
-    package_name: String,
-    build: String,
-    repo_name: Option<String>,
-    filename: String,
-    version: String,
-    depends: Option<Vec<String>>,
-    build_number: Option<u64>,
-    subdir: Option<String>,
+    pub depends: Option<Vec<String>>,
+    pub subdir: Option<String>,
 }
 
 /// Solve a set of specs with the given channels and platforms.
@@ -78,7 +65,7 @@ pub async fn simple_solve(
         if locked_packages.is_null() || locked_packages.is_undefined() {
             vec![]
         } else {
-            let js_locked_packages: Vec<JsLockedPackage> =
+            let js_locked_packages: Vec<SolvedPackage> =
                 serde_wasm_bindgen::from_value(locked_packages).map_err(JsError::from)?;
 
             js_locked_packages
@@ -129,83 +116,80 @@ pub async fn simple_solve(
         .clone()
         .into_iter()
         .filter(|spec| {
-            let matched = installed_packages
+            !installed_packages
                 .iter()
-                .any(|rec| spec.matches(&rec.package_record));
-
-            !matched
+                .any(|rec| spec.matches(&rec.package_record))
         })
         .collect();
 
     if filtered_specs.is_empty() {
-        Ok(vec![])
-    } else {
-        // Fetch the repodata
-        let gateway = Gateway::builder()
-            .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-                default: SourceConfig {
-                    sharded_enabled: true,
-                    ..SourceConfig::default()
-                },
-                ..rattler_repodata_gateway::ChannelConfig::default()
-            })
-            .finish();
+        return Ok(vec![]);
+    }
+    // Fetch the repodata
+    let gateway = Gateway::builder()
+        .with_channel_config(rattler_repodata_gateway::ChannelConfig {
+            default: SourceConfig {
+                sharded_enabled: true,
+                ..SourceConfig::default()
+            },
+            ..rattler_repodata_gateway::ChannelConfig::default()
+        })
+        .finish();
 
-        let repodata = gateway
-            .query(channels, platforms, specs.iter().cloned())
-            .recursive(true)
-            .execute()
-            .await?;
+    let repodata = gateway
+        .query(channels, platforms, specs.iter().cloned())
+        .recursive(true)
+        .execute()
+        .await?;
 
-        // We need this to find depends for locked packages
-        let repodata_keys: HashMap<(String, String, &String), &Vec<String>> = repodata
-            .iter()
-            .flat_map(|r| r.iter())
-            .map(|rec| {
-                let name = rec.package_record.name.as_normalized().to_string();
-                let version = rec.package_record.version.to_string();
-                let build = &rec.package_record.build;
-                ((name, version, build), &rec.package_record.depends)
-            })
-            .collect();
+    // We need this to find depends for locked packages
+    let repodata_keys: HashMap<(String, String, &String), &Vec<String>> = repodata
+        .iter()
+        .flat_map(|r| r.iter())
+        .map(|rec| {
+            let name = rec.package_record.name.as_normalized().to_string();
+            let version = rec.package_record.version.to_string();
+            let build = &rec.package_record.build;
+            ((name, version, build), &rec.package_record.depends)
+        })
+        .collect();
 
-        // if a locked package does not include depends then depends will be taken from repodata
-        for records in installed_packages.iter_mut() {
-            let key = (
-                records.package_record.name.as_normalized().to_string(),
-                records.package_record.version.to_string(),
-                &records.package_record.build,
-            );
+    // if a locked package does not include depends then depends will be taken from repodata
+    for records in installed_packages.iter_mut() {
+        let key = (
+            records.package_record.name.as_normalized().to_string(),
+            records.package_record.version.to_string(),
+            &records.package_record.build,
+        );
 
-            if records.package_record.depends.is_empty() {
-                if let Some(deps) = repodata_keys.get(&key) {
-                    records.package_record.depends = deps.to_vec();
-                }
+        if records.package_record.depends.is_empty() {
+            if let Some(deps) = repodata_keys.get(&key) {
+                records.package_record.depends = deps.to_vec();
             }
         }
-
-        let task = SolverTask {
-            specs: filtered_specs,
-            locked_packages: installed_packages,
-            ..repodata.iter().collect::<SolverTask<_>>()
-        };
-
-        let solved = rattler_solve::resolvo::Solver.solve(task)?;
-
-        Ok(solved
-            .records
-            .into_iter()
-            .map(|r| SolvedPackage {
-                url: r.url.to_string(),
-                package_name: r.package_record.name.as_source().to_string(),
-                build: r.package_record.build.clone(),
-                build_number: r.package_record.build_number,
-                repo_name: r.channel,
-                filename: r.file_name,
-                version: r.package_record.version.to_string(),
-                depends: r.package_record.depends,
-                subdir: r.package_record.subdir,
-            })
-            .collect())
     }
+
+    let task = SolverTask {
+        specs: filtered_specs,
+        locked_packages: installed_packages,
+        ..repodata.iter().collect::<SolverTask<_>>()
+    };
+
+    let solved = rattler_solve::resolvo::Solver.solve(task)?;
+
+    Ok(solved
+        .records
+        .into_iter()
+        .map(|r| SolvedPackage {
+            url: r.url.to_string(),
+            package_name: r.package_record.name.as_source().to_string(),
+            build: r.package_record.build.clone(),
+            build_number: Some(r.package_record.build_number),
+            repo_name: r.channel,
+            filename: r.file_name,
+            version: r.package_record.version.to_string(),
+            depends: Some(r.package_record.depends.clone()),
+            subdir: Some(r.package_record.subdir.clone()),
+        })
+        .collect())
 }
