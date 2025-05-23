@@ -201,12 +201,11 @@ impl SparseRepoData {
         &self,
         package_format_selection: PackageFormatSelection,
     ) -> impl Iterator<Item = &'_ str> {
-        let repo_data = self.inner.borrow_repo_data();
-
         fn select_package_name<'i>((filename, _): &(PackageFilename<'i>, &'i RawValue)) -> &'i str {
             filename.package
         }
 
+        let repo_data = self.inner.borrow_repo_data();
         let tar_baz2_packages = repo_data.packages.iter().map(select_package_name);
         let conda_packages = repo_data.conda_packages.iter().map(select_package_name);
 
@@ -226,12 +225,19 @@ impl SparseRepoData {
         match package_format_selection {
             PackageFormatSelection::PreferConda => {
                 let repo_data = self.inner.borrow_repo_data();
-                let tar_baz2_packages = repo_data.packages.iter().map(|(name, _)| name.package);
-                let conda_packages = repo_data
-                    .conda_packages
-                    .iter()
-                    .map(|(name, _)| name.package);
-                tar_baz2_packages.merge(conda_packages).dedup().count()
+                let tar_bz2_packages = repo_data.packages.iter().map(|(filename, _)| {
+                    filename
+                        .filename
+                        .strip_suffix(ArchiveType::TarBz2.extension())
+                        .unwrap_or(filename.filename)
+                });
+                let conda_packages = repo_data.conda_packages.iter().map(|(filename, _)| {
+                    filename
+                        .filename
+                        .strip_suffix(ArchiveType::Conda.extension())
+                        .unwrap_or(filename.filename)
+                });
+                conda_packages.merge(tar_bz2_packages).dedup().count()
             }
             PackageFormatSelection::Both => {
                 self.inner.borrow_repo_data().packages.len()
@@ -1024,7 +1030,7 @@ mod test {
     #[case::prefer_conda(PackageFormatSelection::PreferConda)]
     #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2)]
     #[case::only_conda(PackageFormatSelection::OnlyConda)]
-    fn test_only_conda(#[case] variant: PackageFormatSelection) {
+    fn test_package_format_selection(#[case] variant: PackageFormatSelection) {
         let (channel, platform, path) = dummy_repo_data();
         let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
         let records = sparse
@@ -1037,6 +1043,18 @@ mod test {
         insta::with_settings!({snapshot_suffix => variant.to_string()}, {
             insta::assert_snapshot!(records.join("\n"));
         });
+    }
+
+    #[rstest]
+    #[case::both(PackageFormatSelection::Both, 29)]
+    #[case::prefer_conda(PackageFormatSelection::PreferConda, 25)]
+    #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, 24)]
+    #[case::only_conda(PackageFormatSelection::OnlyConda, 5)]
+    fn test_record_count(#[case] variant: PackageFormatSelection, #[case] expected_count: usize) {
+        let (channel, platform, path) = dummy_repo_data();
+        let sparse = SparseRepoData::from_file(channel, platform, path, None).unwrap();
+        let count = sparse.record_count(variant);
+        assert_eq!(count, expected_count);
     }
 
     #[test]
