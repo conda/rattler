@@ -117,7 +117,7 @@ class Gateway:
             cache_dir=cache_dir,
             default_config=default_config._into_py(),
             per_channel_config={
-                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel: config._into_py()
+                channel: config._into_py()
                 for channel, config in (per_channel_config or {}).items()
             },
             max_concurrent_requests=max_concurrent_requests,
