@@ -116,10 +116,7 @@ class Gateway:
         self._gateway = PyGateway(
             cache_dir=cache_dir,
             default_config=default_config._into_py(),
-            per_channel_config={
-                channel: config._into_py()
-                for channel, config in (per_channel_config or {}).items()
-            },
+            per_channel_config={channel: config._into_py() for channel, config in (per_channel_config or {}).items()},
             max_concurrent_requests=max_concurrent_requests,
             client=client._client if client is not None else None,
         )
