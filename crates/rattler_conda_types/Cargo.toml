@@ -55,7 +55,7 @@ rayon = { workspace = true, optional = true }
 fs-err = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-foundation = { version = "0.10.0" }
+core-foundation = { version = "0.10.1" }
 
 [dev-dependencies]
 rand = { workspace = true }
