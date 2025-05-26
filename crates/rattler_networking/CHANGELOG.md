@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0](https://github.com/conda/rattler/compare/rattler_networking-v0.24.0...rattler_networking-v0.25.0) - 2025-05-23
+
+### Fixed
+
+- consistent usage of rustls-tls / native-tls feature ([#1324](https://github.com/conda/rattler/pull/1324))
+
 ## [0.24.0](https://github.com/conda/rattler/compare/rattler_networking-v0.23.0...rattler_networking-v0.24.0) - 2025-05-16
 
 ### Other

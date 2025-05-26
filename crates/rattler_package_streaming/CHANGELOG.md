@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.39](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.38...rattler_package_streaming-v0.22.39) - 2025-05-23
+
+### Fixed
+
+- consistent usage of rustls-tls / native-tls feature ([#1324](https://github.com/conda/rattler/pull/1324))
+
 ## [0.22.38](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.37...rattler_package_streaming-v0.22.38) - 2025-05-16
 
 ### Other
