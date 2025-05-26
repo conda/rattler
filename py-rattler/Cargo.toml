@@ -56,7 +56,7 @@ pyo3 = { version = "0.24.0", features = [
     "chrono",
 ] }
 pyo3-async-runtimes = { version = "0.24.0", features = ["tokio-runtime"] }
-tokio = { version = "1.44" }
+tokio = { version = "1.45" }
 
 reqwest = { version = "0.12.15", default-features = false }
 reqwest-middleware = "0.4.2"
