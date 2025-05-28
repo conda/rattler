@@ -60,56 +60,54 @@ pub async fn simple_solve(
         .into_iter()
         .map(|p| serde_wasm_bindgen::from_value(p.into()))
         .collect::<Result<Vec<_>, _>>()?;
-
-    let mut installed_packages: Vec<RepoDataRecord> =
+    let js_locked_packages: Vec<SolvedPackage> =
         if locked_packages.is_null() || locked_packages.is_undefined() {
             vec![]
         } else {
-            let js_locked_packages: Vec<SolvedPackage> =
-                serde_wasm_bindgen::from_value(locked_packages).map_err(JsError::from)?;
-
-            js_locked_packages
-                .into_iter()
-                .map(|pkg| {
-                    let url = Url::parse(&pkg.url)
-                        .map_err(|e| JsError::from(ParseChannelError::from(e)))?;
-
-                    let rec = PackageRecord {
-                        name: PackageName::try_from(pkg.package_name.clone())?,
-                        version: Version::from_str(&pkg.version)?.into(),
-                        build: pkg.build.clone(),
-                        build_number: pkg.build_number.unwrap_or_default(),
-                        md5: None,
-                        sha256: None,
-                        size: None,
-                        arch: None,
-                        platform: None,
-                        depends: pkg.depends.unwrap_or_default(),
-                        subdir: pkg.subdir.unwrap_or_else(|| "unknown".to_string()),
-                        extra_depends: BTreeMap::new(),
-                        constrains: vec![],
-                        track_features: vec![],
-                        features: None,
-                        noarch: NoArchType::none(),
-                        license: None,
-                        license_family: None,
-                        timestamp: None,
-                        python_site_packages_path: None,
-                        legacy_bz2_md5: None,
-                        legacy_bz2_size: None,
-                        purls: None,
-                        run_exports: None,
-                    };
-
-                    Ok(RepoDataRecord {
-                        url,
-                        file_name: pkg.filename,
-                        channel: pkg.repo_name,
-                        package_record: rec.clone(),
-                    })
-                })
-                .collect::<Result<Vec<_>, JsError>>()?
+            serde_wasm_bindgen::from_value(locked_packages).map_err(JsError::from)?
         };
+    let mut installed_packages: Vec<RepoDataRecord> = js_locked_packages
+        .clone()
+        .into_iter()
+        .map(|pkg| {
+            let url =
+                Url::parse(&pkg.url).map_err(|e| JsError::from(ParseChannelError::from(e)))?;
+
+            let rec = PackageRecord {
+                name: PackageName::try_from(pkg.package_name.clone())?,
+                version: Version::from_str(&pkg.version)?.into(),
+                build: pkg.build.clone(),
+                build_number: pkg.build_number.unwrap_or_default(),
+                md5: None,
+                sha256: None,
+                size: None,
+                arch: None,
+                platform: None,
+                depends: pkg.depends.unwrap_or_default(),
+                subdir: pkg.subdir.unwrap_or_else(|| "unknown".to_string()),
+                extra_depends: BTreeMap::new(),
+                constrains: vec![],
+                track_features: vec![],
+                features: None,
+                noarch: NoArchType::none(),
+                license: None,
+                license_family: None,
+                timestamp: None,
+                python_site_packages_path: None,
+                legacy_bz2_md5: None,
+                legacy_bz2_size: None,
+                purls: None,
+                run_exports: None,
+            };
+
+            Ok(RepoDataRecord {
+                url,
+                file_name: pkg.filename,
+                channel: pkg.repo_name,
+                package_record: rec.clone(),
+            })
+        })
+        .collect::<Result<Vec<_>, JsError>>()?;
 
     //if we do not need to solve the same packages, then filter them
     let all_matched = specs.clone().iter().all(|spec| {
@@ -119,7 +117,7 @@ pub async fn simple_solve(
     });
 
     if all_matched {
-        return Ok(vec![]);
+        return Ok(js_locked_packages);
     }
     // Fetch the repodata
     let gateway = Gateway::builder()
