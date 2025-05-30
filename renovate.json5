@@ -5,6 +5,7 @@
   enabledManagers: ["github-actions", "pixi", "cargo", "npm"],
   commitMessagePrefix: "chore(ci):",
   ignorePaths: ["**/test-data/**"],
+  labels: ["dependencies"],
   packageRules: [
     {
       groupName: "GitHub Actions",
