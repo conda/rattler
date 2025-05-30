@@ -104,10 +104,10 @@ if __name__ == "__main__":
 
 ### Javascript
 
-To use the Javascript bindings, you can install the `@baszalmstra/rattler` package via npm. rattler is compiled to WebAssembly and can be used in the browser or in Node.js.
+To use the Javascript bindings, you can install the `@conda-org/rattler` package via npm. rattler is compiled to WebAssembly and can be used in the browser or in Node.js.
 
 ```bash
-npm install @baszalmstra/rattler  # probably going to be renamed to @conda-org/rattler soon
+npm install @conda-org/rattler
 ```
 
 Using rattler from Javascript is useful to get access to the same version comparison functions as used throughout the conda ecosystem. It is also used as part of [`mambajs`](https://github.com/emscripten-forge/mambajs) which uses the rattler library to solve and install packages from the emscripten-forge channel _in the browser_.
