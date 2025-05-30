@@ -83,9 +83,12 @@ jobs:
           node-version: '20.x'
           registry-url: 'https://registry.npmjs.org'
       - run: npm ci
+        working-directory: js-rattler
       - run: npm run build
+        working-directory: js-rattler
       - run: npm publish --provenance --access public
         if: ${{ inputs.tag }}
+        working-directory: js-rattler
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
