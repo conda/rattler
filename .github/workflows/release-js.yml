@@ -49,6 +49,7 @@ jobs:
         run: |
           # Switch to the commit we want to release
           git checkout ${{ inputs.sha }}
+          cd js-rattler
           version=$(npm pkg get version --workspaces=false | tr -d \")
           if [ "${{ inputs.tag }}" != "${version}" ]; then
             echo "The input tag does not match the version from package.js:" >&2
