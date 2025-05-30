@@ -9,6 +9,7 @@
     {
       "groupName": "GitHub Actions",
       "matchManagers": ["github-actions"]
+      
     },
     {
       "description": "We run multiple macOS runner versions on purpose since 13 runs on x86_64",
@@ -25,6 +26,10 @@
       "matchPackageNames": "rust",
       "matchManagers": ["pixi"],
       "enabled": false
+    },
+    {
+      "groupName": "Cargo",
+      "matchManagers": ["cargo"]
     }
   ]
 }
