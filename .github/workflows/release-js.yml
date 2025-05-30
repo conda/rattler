@@ -111,7 +111,7 @@ jobs:
         with:
           merge-multiple: true
           path: tarball
-      - run: npm publish --provenance --access public tarball/conda-org-rattler-*.tgz
+      - run: npm publish --provenance --access public ./tarball/conda-org-rattler-*.tgz
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
