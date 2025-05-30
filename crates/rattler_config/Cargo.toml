@@ -1,0 +1,40 @@
+[package]
+authors = ["The Pixi and Rattler authors <hi@prefix.dev>"]
+description = "Common configuration for the Pixi and Rattler projects"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+name = "pixi_config"
+readme.workspace = true
+repository.workspace = true
+version = "0.1.0"
+
+[features]
+default = ["rustls-tls"]
+rustls-tls = ["reqwest/rustls-tls", "rattler_networking/rustls-tls", "rattler_repodata_gateway/rustls-tls", "rattler_package_streaming/rustls-tls"]
+native-tls = ["reqwest/native-tls", "rattler_networking/native-tls", "rattler_repodata_gateway/native-tls", "rattler_package_streaming/native-tls"]
+
+[dependencies]
+clap = { workspace = true, features = ["std", "derive", "env"] }
+console = { workspace = true }
+dirs = { workspace = true }
+fs-err = { workspace = true }
+itertools = { workspace = true }
+anyhow = { workspace = true }
+rattler = { workspace = true }
+rattler_conda_types = { workspace = true }
+rattler_networking = {  workspace = true, default-features = false, features = ["s3"] }
+rattler_package_streaming = { workspace = true, default-features = false }
+rattler_repodata_gateway = { workspace = true, default-features = false, features = ["gateway"] }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_ignored = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+toml_edit = { workspace = true, features = ["serde"] }
+tracing = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true, features = ["yaml"] }
+rstest = { workspace = true }
