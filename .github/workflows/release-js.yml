@@ -93,7 +93,7 @@ jobs:
   tag-release:
     name: Tag release
     runs-on: ubuntu-latest
-    needs: upload-release
+    needs: build-and-upload-release
     # If you don't set an input tag, it's a dry run (no uploads).
     if: ${{ inputs.tag }}
     permissions:
