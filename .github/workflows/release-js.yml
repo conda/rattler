@@ -1,0 +1,111 @@
+name: "JS Release"
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The version to tag, without the leading 'v'. If omitted, will initiate a dry run (no uploads)."
+        type: string
+      sha:
+        description: "The full sha of the commit to be released. If omitted, the latest commit on the default branch will be used."
+        default: ""
+        type: string
+  pull_request:
+    paths:
+      # And when we change this workflow itself...
+      - .github/workflows/release-js.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PACKAGE_NAME: js-rattler
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  validate-tag:
+    name: Validate tag
+    runs-on: ubuntu-latest
+    # If you don't set an input tag, it's a dry run (no uploads).
+    if: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: main # We checkout the main branch to check for the commit
+      - name: Check main branch
+        if: ${{ inputs.sha }}
+        run: |
+          # Fetch the main branch since a shallow checkout is used by default
+          git fetch origin main --unshallow
+          if ! git branch --contains ${{ inputs.sha }} | grep -E '(^|\s)main$'; then
+            echo "The specified sha is not on the main branch" >&2
+            exit 1
+          fi
+      - name: Check tag consistency
+        run: |
+          # Switch to the commit we want to release
+          git checkout ${{ inputs.sha }}
+          version=$(npm pkg get version --workspaces=false | tr -d \")
+          if [ "${{ inputs.tag }}" != "${version}" ]; then
+            echo "The input tag does not match the version from package.js:" >&2
+            echo "${{ inputs.tag }}" >&2
+            echo "${version}" >&2
+            exit 1
+          else
+            echo "Releasing ${version}"
+          fi
+
+  build-and-upload-release:
+    name: Build & Upload to NPM
+    runs-on: ubuntu-latest
+    needs:
+      - validate-tag
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          lfs: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@f9f65f52341ba3c1d5e1901c77dc7a9e58186191 # stable
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci
+      - run: npm run build
+      - run: npm publish --provenance --access public
+        if: ${{ inputs.tag }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  tag-release:
+    name: Tag release
+    runs-on: ubuntu-latest
+    needs: build-and-upload-release
+    # If you don't set an input tag, it's a dry run (no uploads).
+    if: ${{ inputs.tag }}
+    permissions:
+      # For git tag
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ inputs.sha }}
+      - name: git tag
+        run: |
+          git config user.email "hi@prefix.dev"
+          git config user.name "Prefix.dev Release CI"
+          git tag -m "js-rattler-v${{ inputs.tag }}" "js-rattler-v${{ inputs.tag }}"
+          # If there is duplicate tag, this will fail. The publish to npm action will have been a noop (due to skip
+          # existing), so we make a non-destructive exit here
+          git push --tags
