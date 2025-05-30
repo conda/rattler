@@ -1,6 +1,6 @@
 [package]
 name = "rattler_macros"
-version = "1.0.9"
+version = "1.0.10"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "A crate that provideds some procedural macros for the rattler project"
