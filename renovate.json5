@@ -32,5 +32,10 @@
       matchManagers: ["cargo"],
       separateMajorMinor: false,
     },
+    {
+      groupName: "npm",
+      matchManagers: ["npm"],
+      separateMajorMinor: false,
+    },
   ],
 }
