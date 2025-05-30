@@ -93,6 +93,13 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             _ => {}
         };
 
+        // The one with more _flags_ is sorted lower
+        match a_record.flags_len().cmp(&b_record.flags_len()) {
+            Ordering::Greater => return Ordering::Less,
+            Ordering::Less => return Ordering::Greater,
+            Ordering::Equal => {}
+        }
+
         // Otherwise, select the variant with the highest version
         match (self.strategy, a_record.version().cmp(b_record.version())) {
             (CompareStrategy::Default, Ordering::Greater)

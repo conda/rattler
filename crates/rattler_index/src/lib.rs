@@ -22,6 +22,7 @@ use rattler_package_streaming::{
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{
+    collections::{BTreeMap, BTreeSet},
     collections::{HashMap, HashSet},
     io::{Cursor, Read, Seek},
     path::{Path, PathBuf},
@@ -66,7 +67,8 @@ pub fn package_record_from_index_json<T: Read>(
         arch: index.arch,
         platform: index.platform,
         depends: index.depends,
-        extra_depends: std::collections::BTreeMap::new(),
+        extra_depends: BTreeMap::new(),
+        flags: BTreeSet::from_iter(index.flags.into_iter()),
         constrains: index.constrains,
         track_features: index.track_features,
         features: index.features,
