@@ -1,35 +1,36 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
-  "schedule": ["on tuesday"],
-  "enabledManagers": ["github-actions", "pixi", "cargo", "npm"],
-  "commitMessagePrefix": "chore(ci):",
-  "ignorePaths": ["**/test-data/**"],
-  "packageRules": [
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended"],
+  schedule: ["on tuesday"],
+  enabledManagers: ["github-actions", "pixi", "cargo", "npm"],
+  commitMessagePrefix: "chore(ci):",
+  ignorePaths: ["**/test-data/**"],
+  packageRules: [
     {
-      "groupName": "GitHub Actions",
-      "matchManagers": ["github-actions"]
-      
+      groupName: "GitHub Actions",
+      matchManagers: ["github-actions"],
     },
     {
-      "description": "We run multiple macOS runner versions on purpose since 13 runs on x86_64",
-      "matchPackageNames": "macos",
-      "matchManagers": ["github-actions"],
-      "enabled": false
+      description: "We run multiple macOS runner versions on purpose since 13 runs on x86_64",
+      matchPackageNames: "macos",
+      matchManagers: ["github-actions"],
+      enabled: false,
     },
     {
-      "groupName": "Pixi",
-      "matchManagers": ["pixi"]
+      groupName: "Pixi",
+      matchManagers: ["pixi"],
+      separateMajorMinor: false,
     },
     {
-      "description": "We want to update Rust manually and keep it in sync with rust-toolchain",
-      "matchPackageNames": "rust",
-      "matchManagers": ["pixi"],
-      "enabled": false
+      description: "We want to update Rust manually and keep it in sync with rust-toolchain",
+      matchPackageNames: "rust",
+      matchManagers: ["pixi"],
+      enabled: false,
     },
     {
-      "groupName": "Cargo",
-      "matchManagers": ["cargo"]
-    }
-  ]
+      groupName: "Cargo",
+      matchManagers: ["cargo"],
+      separateMajorMinor: false,
+    },
+  ],
 }
