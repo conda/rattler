@@ -10,7 +10,7 @@ use fs_err::File;
 use plist::Value;
 use rattler_conda_types::{menuinst::MacOsTracker, Platform};
 use rattler_shell::{
-    activation::{ActivationError, ActivationVariables, Activator},
+    activation::{ActivationError, ActivationVariables, Activator, PathModificationBehavior},
     shell,
 };
 use sha2::{Digest as _, Sha256};
@@ -656,7 +656,11 @@ impl MacOSMenu {
         if self.command.activate.unwrap_or(false) {
             // create a bash activation script and emit it into the script
             let activator = Activator::from_path(&self.prefix, shell::Bash, Platform::current())?;
-            let activation_env = activator.run_activation(ActivationVariables::default(), None)?;
+            let activation_variables = ActivationVariables {
+                path_modification_behavior: PathModificationBehavior::Prepend,
+                ..Default::default()
+            };
+            let activation_env = activator.run_activation(activation_variables, None)?;
 
             for (k, v) in activation_env {
                 lines.push(format!(r#"export {k}="{v}""#));

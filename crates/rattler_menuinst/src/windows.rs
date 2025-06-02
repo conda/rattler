@@ -5,7 +5,7 @@ use rattler_conda_types::{
     Platform,
 };
 use rattler_shell::{
-    activation::{ActivationVariables, Activator},
+    activation::{ActivationVariables, Activator, PathModificationBehavior},
     shell,
 };
 use registry::{notify_shell_changes, FileExtension, UrlProtocol};
@@ -162,7 +162,11 @@ impl WindowsMenu {
             // create a bash activation script and emit it into the script
             let activator =
                 Activator::from_path(&self.prefix, shell::CmdExe, Platform::current()).unwrap();
-            let activation_env = activator.run_activation(ActivationVariables::default(), None)?;
+            let activation_variables = ActivationVariables {
+                path_modification_behavior: PathModificationBehavior::Prepend,
+                ..Default::default()
+            };
+            let activation_env = activator.run_activation(activation_variables, None)?;
 
             for (k, v) in activation_env {
                 lines.push(format!(r#"set "{k}={v}""#));
