@@ -187,12 +187,7 @@ pub trait Shell {
     /// # Arguments
     /// * `key` - The name of the environment variable to restore
     /// * `backup_key` - The name of the backup environment variable
-    fn restore_env_var_if_exists(
-        &self,
-        f: &mut impl Write,
-        key: &str,
-        backup_key: &str,
-    ) -> ShellResult {
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
         // Default implementation that just unsets both variables
         self.unset_env_var(f, backup_key)?;
         self.unset_env_var(f, key)
@@ -377,12 +372,7 @@ impl Shell for Bash {
         cmd
     }
 
-    fn restore_env_var_if_exists(
-        &self,
-        f: &mut impl Write,
-        key: &str,
-        backup_key: &str,
-    ) -> ShellResult {
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
         validate_env_var_name(key)?;
         validate_env_var_name(backup_key)?;
         Ok(writeln!(
@@ -443,12 +433,7 @@ impl Shell for Zsh {
         Ok(())
     }
 
-    fn restore_env_var_if_exists(
-        &self,
-        f: &mut impl Write,
-        key: &str,
-        backup_key: &str,
-    ) -> ShellResult {
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
         validate_env_var_name(key)?;
         validate_env_var_name(backup_key)?;
         Ok(writeln!(
@@ -513,12 +498,7 @@ impl Shell for Xonsh {
         None
     }
 
-    fn restore_env_var_if_exists(
-        &self,
-        f: &mut impl Write,
-        key: &str,
-        backup_key: &str,
-    ) -> ShellResult {
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
         validate_env_var_name(key)?;
         validate_env_var_name(backup_key)?;
         Ok(writeln!(
@@ -606,12 +586,7 @@ impl Shell for CmdExe {
         "\r\n"
     }
 
-    fn restore_env_var_if_exists(
-        &self,
-        f: &mut impl Write,
-        key: &str,
-        backup_key: &str,
-    ) -> ShellResult {
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
         validate_env_var_name(key)?;
         validate_env_var_name(backup_key)?;
         Ok(writeln!(
@@ -692,12 +667,7 @@ impl Shell for PowerShell {
         writeln!(f, r##"dir env: | %{{"{{0}}={{1}}" -f $_.Name,$_.Value}}"##)
     }
 
-    fn restore_env_var_if_exists(
-        &self,
-        f: &mut impl Write,
-        key: &str,
-        backup_key: &str,
-    ) -> ShellResult {
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
         validate_env_var_name(key)?;
         validate_env_var_name(backup_key)?;
         Ok(writeln!(
@@ -765,12 +735,7 @@ impl Shell for Fish {
         Ok(())
     }
 
-    fn restore_env_var_if_exists(
-        &self,
-        f: &mut impl Write,
-        key: &str,
-        backup_key: &str,
-    ) -> ShellResult {
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
         validate_env_var_name(key)?;
         validate_env_var_name(backup_key)?;
         Ok(writeln!(
@@ -866,12 +831,7 @@ impl Shell for NuShell {
         None
     }
 
-    fn restore_env_var_if_exists(
-        &self,
-        f: &mut impl Write,
-        key: &str,
-        backup_key: &str,
-    ) -> ShellResult {
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
         validate_env_var_name(key)?;
         validate_env_var_name(backup_key)?;
         Ok(writeln!(
@@ -1128,13 +1088,13 @@ impl<T: Shell + 'static> ShellScript<T> {
     }
 
     /// Restores an environment variable from its backup if it exists, otherwise unsets it.
-    pub fn restore_env_var_if_exists(
+    pub fn restore_env_var(
         &mut self,
         key: &str,
         backup_key: &str,
     ) -> Result<&mut Self, ShellError> {
         self.shell
-            .restore_env_var_if_exists(&mut self.contents, key, backup_key)?;
+            .restore_env_var(&mut self.contents, key, backup_key)?;
         Ok(self)
     }
 }

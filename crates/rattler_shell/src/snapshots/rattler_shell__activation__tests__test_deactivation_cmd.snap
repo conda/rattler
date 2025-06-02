@@ -1,0 +1,23 @@
+---
+source: crates/rattler_shell/src/activation.rs
+expression: script_contents
+---
+@chcp 65001 > nul
+if defined PIXI_ENV_SHLVL_0_TEST_VAR1 (
+                set "TEST_VAR1=%PIXI_ENV_SHLVL_0_TEST_VAR1%"
+                set "PIXI_ENV_SHLVL_0_TEST_VAR1="
+            ) else (
+                set "TEST_VAR1="
+            )
+if defined PIXI_ENV_SHLVL_0_TEST_VAR2 (
+                set "TEST_VAR2=%PIXI_ENV_SHLVL_0_TEST_VAR2%"
+                set "PIXI_ENV_SHLVL_0_TEST_VAR2="
+            ) else (
+                set "TEST_VAR2="
+            )
+if defined PIXI_ENV_SHLVL_0_CONDA_PREFIX (
+                set "CONDA_PREFIX=%PIXI_ENV_SHLVL_0_CONDA_PREFIX%"
+                set "PIXI_ENV_SHLVL_0_CONDA_PREFIX="
+            ) else (
+                set "CONDA_PREFIX="
+            )

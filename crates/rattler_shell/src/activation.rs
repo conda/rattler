@@ -62,10 +62,10 @@ impl ActivationVariables {
     /// variables.
     pub fn from_env() -> Result<Self, std::env::VarError> {
         // Read all environment variables here
-        let current_env = std::env::vars().collect();
+        let current_env: HashMap<String, String> = std::env::vars().collect();
 
         Ok(Self {
-            conda_prefix: std::env::var("CONDA_PREFIX").ok().map(PathBuf::from),
+            conda_prefix: current_env.get("CONDA_PREFIX").map(|p| PathBuf::from(p)),
             path: None,
             path_modification_behavior: PathModificationBehavior::Prepend,
             current_env,
@@ -467,14 +467,18 @@ impl<T: Shell + Clone> Activator<T> {
         script.set_path(path.as_slice(), variables.path_modification_behavior)?;
 
         // Get the current shell level
-        let shlvl = std::env::var("SHLVL")
-            .ok()
+        let shlvl = variables
+            .current_env
+            .get("SHLVL")
             .and_then(|s| s.parse::<i32>().ok())
             .unwrap_or(1);
 
         // Save original CONDA_PREFIX value if it exists
-        if let Ok(existing_prefix) = std::env::var("CONDA_PREFIX") {
-            script.set_env_var(&format!("PIXI_ENV_{shlvl}_CONDA_PREFIX"), &existing_prefix)?;
+        if let Some(existing_prefix) = variables.current_env.get("CONDA_PREFIX") {
+            script.set_env_var(
+                &format!("PIXI_ENV_SHLVL_{shlvl}_CONDA_PREFIX"),
+                existing_prefix,
+            )?;
         }
 
         // Set new CONDA_PREFIX
@@ -483,8 +487,8 @@ impl<T: Shell + Clone> Activator<T> {
         // For each environment variable that was set during activation
         for (key, value) in &self.env_vars {
             // Save original value if it exists
-            if let Ok(existing_value) = std::env::var(key) {
-                script.set_env_var(&format!("PIXI_ENV_{shlvl}_{key}"), &existing_value)?;
+            if let Some(existing_value) = variables.current_env.get(key) {
+                script.set_env_var(&format!("PIXI_ENV_SHLVL_{shlvl}_{key}"), existing_value)?;
             }
             // Set new value
             script.set_env_var(key, value)?;
@@ -514,13 +518,13 @@ impl<T: Shell + Clone> Activator<T> {
 
         // For each environment variable that was set during activation
         for (key, _) in &self.env_vars {
-            let backup_key = format!("PIXI_ENV_{prev_shlvl}_{key}");
-            script.restore_env_var_if_exists(key, &backup_key)?;
+            let backup_key = format!("PIXI_ENV_SHLVL_{prev_shlvl}_{key}");
+            script.restore_env_var(key, &backup_key)?;
         }
 
         // Handle CONDA_PREFIX restoration
-        let backup_prefix = format!("PIXI_ENV_{prev_shlvl}_CONDA_PREFIX");
-        script.restore_env_var_if_exists("CONDA_PREFIX", &backup_prefix)?;
+        let backup_prefix = format!("PIXI_ENV_SHLVL_{prev_shlvl}_CONDA_PREFIX");
+        script.restore_env_var("CONDA_PREFIX", &backup_prefix)?;
 
         // Run all deactivation scripts
         for deactivation_script in &self.deactivation_scripts {
@@ -954,54 +958,40 @@ mod tests {
         env_vars.insert("TEST_VAR1".to_string(), "value1".to_string());
         env_vars.insert("TEST_VAR2".to_string(), "value2".to_string());
 
-        let activator = Activator {
-            target_prefix: tmp_dir_path.to_path_buf(),
-            shell_type: ShellEnum::Bash(shell::Bash),
-            paths: vec![tmp_dir_path.join("bin")],
-            activation_scripts: vec![],
-            deactivation_scripts: vec![],
-            env_vars: env_vars.clone(),
-            platform: Platform::current(),
-        };
+        // Test all shell types
+        let shell_types = vec![
+            ("bash", ShellEnum::Bash(shell::Bash)),
+            ("zsh", ShellEnum::Zsh(shell::Zsh)),
+            ("fish", ShellEnum::Fish(shell::Fish)),
+            ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
+            ("cmd", ShellEnum::CmdExe(shell::CmdExe)),
+            (
+                "powershell",
+                ShellEnum::PowerShell(shell::PowerShell::default()),
+            ),
+            ("nushell", ShellEnum::NuShell(shell::NuShell)),
+        ];
 
-        // Test the deactivation method
-        let result = activator.deactivation().unwrap();
-        let script_contents = result.script.contents().unwrap();
+        for (shell_name, shell_type) in shell_types {
+            let activator = Activator {
+                target_prefix: tmp_dir_path.to_path_buf(),
+                shell_type: shell_type.clone(),
+                paths: vec![tmp_dir_path.join("bin")],
+                activation_scripts: vec![],
+                deactivation_scripts: vec![],
+                env_vars: env_vars.clone(),
+                platform: Platform::current(),
+            };
 
-        // For Bash, the script should include restore commands for our environment variables
-        assert!(script_contents.contains("if [ -n \"${PIXI_ENV_0_TEST_VAR1:-}\" ]; then"));
-        assert!(script_contents.contains("TEST_VAR1=\"${PIXI_ENV_0_TEST_VAR1}\""));
-        assert!(script_contents.contains("unset PIXI_ENV_0_TEST_VAR1"));
-        assert!(script_contents.contains("if [ -n \"${PIXI_ENV_0_TEST_VAR2:-}\" ]; then"));
-        assert!(script_contents.contains("TEST_VAR2=\"${PIXI_ENV_0_TEST_VAR2}\""));
-        assert!(script_contents.contains("unset PIXI_ENV_0_TEST_VAR2"));
-        assert!(script_contents.contains("if [ -n \"${PIXI_ENV_0_CONDA_PREFIX:-}\" ]; then"));
-        assert!(script_contents.contains("CONDA_PREFIX=\"${PIXI_ENV_0_CONDA_PREFIX}\""));
-        assert!(script_contents.contains("unset PIXI_ENV_0_CONDA_PREFIX"));
+            let result = activator.deactivation().unwrap();
+            let mut script_contents = result.script.contents().unwrap();
 
-        // Verify the deactivation method works with PowerShell too
-        let activator = Activator {
-            target_prefix: tmp_dir_path.to_path_buf(),
-            shell_type: ShellEnum::PowerShell(shell::PowerShell::default()),
-            paths: vec![tmp_dir_path.join("bin")],
-            activation_scripts: vec![],
-            deactivation_scripts: vec![],
-            env_vars,
-            platform: Platform::current(),
-        };
+            // For cmd.exe, normalize line endings for snapshots
+            if shell_name == "cmd" {
+                script_contents = script_contents.replace("\r\n", "\n");
+            }
 
-        let result = activator.deactivation().unwrap();
-        let script_contents = result.script.contents().unwrap();
-
-        // For PowerShell, it should generate commands to restore environment variables
-        assert!(script_contents.contains("if (Test-Path env:PIXI_ENV_0_TEST_VAR1) {"));
-        assert!(script_contents.contains("$env:TEST_VAR1 = $env:PIXI_ENV_0_TEST_VAR1"));
-        assert!(script_contents.contains("Remove-Item env:PIXI_ENV_0_TEST_VAR1"));
-        assert!(script_contents.contains("if (Test-Path env:PIXI_ENV_0_TEST_VAR2) {"));
-        assert!(script_contents.contains("$env:TEST_VAR2 = $env:PIXI_ENV_0_TEST_VAR2"));
-        assert!(script_contents.contains("Remove-Item env:PIXI_ENV_0_TEST_VAR2"));
-        assert!(script_contents.contains("if (Test-Path env:PIXI_ENV_0_CONDA_PREFIX) {"));
-        assert!(script_contents.contains("$env:CONDA_PREFIX = $env:PIXI_ENV_0_CONDA_PREFIX"));
-        assert!(script_contents.contains("Remove-Item env:PIXI_ENV_0_CONDA_PREFIX"));
+            insta::assert_snapshot!(format!("test_deactivation_{}", shell_name), script_contents);
+        }
     }
 }
