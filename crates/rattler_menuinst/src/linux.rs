@@ -11,7 +11,7 @@ use tempfile::TempDir;
 mod mime_config;
 
 use rattler_conda_types::Platform;
-use rattler_shell::activation::{ActivationVariables, Activator};
+use rattler_shell::activation::{ActivationVariables, Activator, PathModificationBehavior};
 use rattler_shell::shell;
 
 use crate::render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString};
@@ -300,7 +300,11 @@ impl LinuxMenu {
         if self.command.activate.unwrap_or(false) {
             // create a bash activation script and emit it into the script
             let activator = Activator::from_path(&self.prefix, shell::Bash, Platform::current())?;
-            let activation_env = activator.run_activation(ActivationVariables::default(), None)?;
+            let activation_variables = ActivationVariables {
+                path_modification_behavior: PathModificationBehavior::Prepend,
+                ..Default::default()
+            };
+            let activation_env = activator.run_activation(activation_variables, None)?;
 
             for (k, v) in activation_env {
                 envs.push(format!(r#"{k}="{v}""#));
