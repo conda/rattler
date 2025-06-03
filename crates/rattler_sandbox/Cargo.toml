@@ -1,6 +1,6 @@
 [package]
 name = "rattler_sandbox"
-version = "0.1.8"
+version = "0.1.9"
 description = "A crate to run executables in a sandbox"
 categories.workspace = true
 homepage.workspace = true
