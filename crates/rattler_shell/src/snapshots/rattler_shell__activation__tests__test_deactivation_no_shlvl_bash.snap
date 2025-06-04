@@ -1,0 +1,23 @@
+---
+source: crates/rattler_shell/src/activation.rs
+expression: script_contents
+---
+if [ -n "${PIXI_ENV_SHLVL_1_TEST_VAR1:-}" ]; then
+                TEST_VAR1="${PIXI_ENV_SHLVL_1_TEST_VAR1}"
+                unset PIXI_ENV_SHLVL_1_TEST_VAR1
+            else
+                unset TEST_VAR1
+            fi
+if [ -n "${PIXI_ENV_SHLVL_1_TEST_VAR2:-}" ]; then
+                TEST_VAR2="${PIXI_ENV_SHLVL_1_TEST_VAR2}"
+                unset PIXI_ENV_SHLVL_1_TEST_VAR2
+            else
+                unset TEST_VAR2
+            fi
+if [ -n "${PIXI_ENV_SHLVL_1_CONDA_PREFIX:-}" ]; then
+                CONDA_PREFIX="${PIXI_ENV_SHLVL_1_CONDA_PREFIX}"
+                unset PIXI_ENV_SHLVL_1_CONDA_PREFIX
+            else
+                unset CONDA_PREFIX
+            fi
+export PIXI_SHLVL="1"

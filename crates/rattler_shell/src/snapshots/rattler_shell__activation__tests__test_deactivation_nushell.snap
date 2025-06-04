@@ -2,21 +2,9 @@
 source: crates/rattler_shell/src/activation.rs
 expression: script_contents
 ---
-if ($env | get PIXI_ENV_SHLVL_0_TEST_VAR1?) {
-                $env.TEST_VAR1 = $env.PIXI_ENV_SHLVL_0_TEST_VAR1
-                $env = $env | reject PIXI_ENV_SHLVL_0_TEST_VAR1
-            } else {
-                $env = $env | reject TEST_VAR1
-            }
-if ($env | get PIXI_ENV_SHLVL_0_TEST_VAR2?) {
-                $env.TEST_VAR2 = $env.PIXI_ENV_SHLVL_0_TEST_VAR2
-                $env = $env | reject PIXI_ENV_SHLVL_0_TEST_VAR2
-            } else {
-                $env = $env | reject TEST_VAR2
-            }
-if ($env | get PIXI_ENV_SHLVL_0_CONDA_PREFIX?) {
-                $env.CONDA_PREFIX = $env.PIXI_ENV_SHLVL_0_CONDA_PREFIX
-                $env = $env | reject PIXI_ENV_SHLVL_0_CONDA_PREFIX
-            } else {
-                $env = $env | reject CONDA_PREFIX
-            }
+echo 'Warning: PIXI_SHLVL not set. This may indicate a broken workflow.'
+echo 'Proceeding to unset pixi variables without restoring previous values.'
+hide-env TEST_VAR1
+hide-env TEST_VAR2
+hide-env CONDA_PREFIX
+hide-env PIXI_SHLVL
