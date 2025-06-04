@@ -12,11 +12,13 @@ pub enum AuthenticationStorageError {
     #[error("FileStorageError")]
     FileStorageError(#[from] crate::authentication_storage::backends::file::FileStorageError),
     /// An error occurred when accessing the keyring storage
+    #[cfg(feature = "keyring")]
     #[error("KeyringStorageError")]
     KeyringStorageError(
         #[from] crate::authentication_storage::backends::keyring::KeyringAuthenticationStorageError,
     ),
     /// An error occurred when accessing the netrc storage
+    #[cfg(feature = "netrc")]
     #[error("NetRcStorageError")]
     NetRcStorageError(#[from] crate::authentication_storage::backends::netrc::NetRcStorageError),
     /// An error occurred when accessing the memory storage

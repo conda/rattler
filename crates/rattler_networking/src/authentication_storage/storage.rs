@@ -9,16 +9,23 @@ use std::{
 use url::Url;
 
 use crate::authentication_storage::{
-    backends::{file::FileStorage, keyring::KeyringAuthenticationStorageError},
+    backends::{file::FileStorage},
     AuthenticationStorageError,
 };
 
 use super::{
     authentication::Authentication,
-    backends::{keyring::KeyringAuthenticationStorage, netrc::NetRcStorage},
-    StorageBackend,
+        StorageBackend,
 };
 
+#[cfg(feature = "netrc")]
+use super::backends::netrc::NetRcStorage;
+
+#[cfg(feature = "keyring")]
+use crate::authentication_storage::keyring::KeyringAuthenticationStorageError;
+
+#[cfg(feature = "keyring")]
+use super::backends::keyring::KeyringAuthenticationStorage;
 #[derive(Debug, Clone)]
 /// This struct implements storage and access of authentication
 /// information backed by multiple storage backends
@@ -57,8 +64,11 @@ impl AuthenticationStorage {
             );
             storage.add_backend(Arc::from(FileStorage::from_path(path.into())?));
         }
+        #[cfg(feature = "keyring")]
         storage.add_backend(Arc::from(KeyringAuthenticationStorage::default()));
+        #[cfg(feature = "dirs")]
         storage.add_backend(Arc::from(FileStorage::new()?));
+        #[cfg(feature = "netrc")]
         storage.add_backend(Arc::from(NetRcStorage::from_env().unwrap_or_else(
             |(path, err)| {
                 tracing::warn!("error reading netrc file from {}: {}", path.display(), err);
@@ -83,7 +93,8 @@ impl AuthenticationStorage {
         }
 
         for backend in &self.backends {
-            if let Err(e) = backend.store(host, authentication) {
+            if let Err(_e) = backend.store(host, authentication) {
+                #[cfg(feature = "keyring")]
                 if let AuthenticationStorageError::KeyringStorageError(
                     KeyringAuthenticationStorageError::StorageError(_),
                 ) = e
@@ -120,7 +131,8 @@ impl AuthenticationStorage {
                     return Ok(Some(auth));
                 }
                 Ok(None) => {}
-                Err(e) => {
+                Err(_e) => {
+                    #[cfg(feature = "keyring")]
                     if let AuthenticationStorageError::KeyringStorageError(
                         KeyringAuthenticationStorageError::StorageError(_),
                     ) = e
@@ -221,7 +233,8 @@ impl AuthenticationStorage {
         let mut all_failed = true;
 
         for backend in &self.backends {
-            if let Err(e) = backend.delete(host) {
+            if let Err(_e) = backend.delete(host) {
+                #[cfg(feature = "keyring")]
                 if let AuthenticationStorageError::KeyringStorageError(
                     KeyringAuthenticationStorageError::StorageError(_),
                 ) = e
