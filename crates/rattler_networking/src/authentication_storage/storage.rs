@@ -8,21 +8,15 @@ use std::{
 };
 use url::Url;
 
-use crate::authentication_storage::{
-    backends::{file::FileStorage},
-    AuthenticationStorageError,
-};
+use crate::authentication_storage::{backends::file::FileStorage, AuthenticationStorageError};
 
-use super::{
-    authentication::Authentication,
-        StorageBackend,
-};
+use super::{authentication::Authentication, StorageBackend};
 
 #[cfg(feature = "netrc")]
 use super::backends::netrc::NetRcStorage;
 
 #[cfg(feature = "keyring")]
-use crate::authentication_storage::keyring::KeyringAuthenticationStorageError;
+use crate::authentication_storage::backends::keyring::KeyringAuthenticationStorageError;
 
 #[cfg(feature = "keyring")]
 use super::backends::keyring::KeyringAuthenticationStorage;
@@ -93,15 +87,16 @@ impl AuthenticationStorage {
         }
 
         for backend in &self.backends {
-            if let Err(_e) = backend.store(host, authentication) {
+            #[allow(unused_variables)]
+            if let Err(error) = backend.store(host, authentication) {
                 #[cfg(feature = "keyring")]
                 if let AuthenticationStorageError::KeyringStorageError(
                     KeyringAuthenticationStorageError::StorageError(_),
-                ) = e
+                ) = error
                 {
-                    tracing::debug!("Error storing credentials in keyring: {}", e);
+                    tracing::debug!("Error storing credentials in keyring: {}", error);
                 } else {
-                    tracing::warn!("Error storing credentials from backend: {}", e);
+                    tracing::warn!("Error storing credentials from backend: {}", error);
                 }
             } else {
                 return Ok(());
@@ -135,11 +130,11 @@ impl AuthenticationStorage {
                     #[cfg(feature = "keyring")]
                     if let AuthenticationStorageError::KeyringStorageError(
                         KeyringAuthenticationStorageError::StorageError(_),
-                    ) = e
+                    ) = _e
                     {
-                        tracing::trace!("Error storing credentials in keyring: {}", e);
+                        tracing::trace!("Error storing credentials in keyring: {}", _e);
                     } else {
-                        tracing::warn!("Error retrieving credentials from backend: {}", e);
+                        tracing::warn!("Error retrieving credentials from backend: {}", _e);
                     }
                 }
             }
@@ -233,15 +228,16 @@ impl AuthenticationStorage {
         let mut all_failed = true;
 
         for backend in &self.backends {
-            if let Err(_e) = backend.delete(host) {
+            #[allow(unused_variables)]
+            if let Err(error) = backend.delete(host) {
                 #[cfg(feature = "keyring")]
                 if let AuthenticationStorageError::KeyringStorageError(
                     KeyringAuthenticationStorageError::StorageError(_),
-                ) = e
+                ) = error
                 {
-                    tracing::debug!("Error deleting credentials in keyring: {}", e);
+                    tracing::debug!("Error deleting credentials in keyring: {}", error);
                 } else {
-                    tracing::warn!("Error deleting credentials from backend: {}", e);
+                    tracing::warn!("Error deleting credentials from backend: {}", error);
                 }
             } else {
                 all_failed = false;
