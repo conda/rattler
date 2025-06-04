@@ -23,7 +23,7 @@ impl MemoryStorage {
     /// Create a new empty memory storage
     pub fn new() -> Self {
         Self {
-            store: Default::default(),
+            store: Mutex::default(),
         }
     }
 }
