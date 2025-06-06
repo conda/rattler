@@ -1,3 +1,7 @@
+//! This module provides utilities for handling and normalizing URLs
+//! that are required to end with a trailing slash. It ensures consistency
+//! in URL formatting for downstream processing or matching logic.
+
 use std::{
     fmt::{Display, Formatter},
     ops::Deref,
