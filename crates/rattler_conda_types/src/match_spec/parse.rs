@@ -19,7 +19,7 @@ use url::Url;
 
 use super::{
     matcher::{StringMatcher, StringMatcherParseError},
-    MatchSpec,
+    FlagMatcher, MatchSpec,
 };
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
@@ -227,9 +227,8 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
     }
 }
 
-#[cfg(feature = "experimental_extras")]
 /// Parses a list of optional dependencies from a string `feat1, feat2, feat3]` -> `vec![feat1, feat2, feat3]`.
-pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
+pub fn parse_list(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     use nom::{
         combinator::{all_consuming, map},
         multi::separated_list1,
@@ -282,7 +281,7 @@ fn parse_bracket_vec_into_components(
                 // Optional features are still experimental
                 #[cfg(feature = "experimental_extras")]
                 {
-                    match_spec.extras = Some(parse_extras(value)?);
+                    match_spec.extras = Some(parse_list(value)?);
                 }
                 #[cfg(not(feature = "experimental_extras"))]
                 {
@@ -325,6 +324,15 @@ fn parse_bracket_vec_into_components(
                 match_spec.subdir = match_spec.subdir.or(subdir);
             }
             "license" => match_spec.license = Some(value.to_string()),
+            "flags" => {
+                match_spec.flags = Some(
+                    parse_list(value)
+                        .unwrap()
+                        .iter()
+                        .map(|s| FlagMatcher::from_str(s).unwrap())
+                        .collect(),
+                );
+            }
             // TODO: Still need to add `track_features`, `features`, and `license_family`
             // to the match spec.
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
@@ -1424,6 +1432,7 @@ mod tests {
                 )
                 .unwrap(),
             ),
+            flags: None,
             license: Some("MIT".into()),
         });
 
@@ -1462,15 +1471,15 @@ mod tests {
     #[test]
     fn test_parse_extras() {
         assert_eq!(
-            parse_extras("bar,baz").unwrap(),
+            parse_list("bar,baz").unwrap(),
             vec!["bar".to_string(), "baz".to_string()]
         );
-        assert_eq!(parse_extras("bar").unwrap(), vec!["bar".to_string()]);
+        assert_eq!(parse_list("bar").unwrap(), vec!["bar".to_string()]);
         assert_eq!(
-            parse_extras("bar, baz").unwrap(),
+            parse_list("bar, baz").unwrap(),
             vec!["bar".to_string(), "baz".to_string()]
         );
-        assert!(parse_extras("[bar,baz]").is_err());
+        assert!(parse_list("[bar,baz]").is_err());
     }
 
     #[cfg(feature = "experimental_extras")]
