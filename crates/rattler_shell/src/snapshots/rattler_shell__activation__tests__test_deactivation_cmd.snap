@@ -3,9 +3,9 @@ source: crates/rattler_shell/src/activation.rs
 expression: script_contents
 ---
 @chcp 65001 > nul
-@ECHO Warning: PIXI_SHLVL not set. This may indicate a broken workflow.
-@ECHO Proceeding to unset pixi variables without restoring previous values.
+@ECHO Warning: CONDA_SHLVL not set. This may indicate a broken workflow.
+@ECHO Proceeding to unset conda variables without restoring previous values.
 @SET TEST_VAR1=
 @SET TEST_VAR2=
 @SET CONDA_PREFIX=
-@SET PIXI_SHLVL=
+@SET CONDA_SHLVL=

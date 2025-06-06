@@ -3,9 +3,9 @@ source: crates/rattler_shell/src/activation.rs
 expression: script_contents
 ---
 $OutputEncoding = [System.Console]::OutputEncoding = [System.Console]::InputEncoding = [System.Text.Encoding]::UTF8
-echo 'Warning: PIXI_SHLVL not set. This may indicate a broken workflow.'
-echo 'Proceeding to unset pixi variables without restoring previous values.'
+echo 'Warning: CONDA_SHLVL not set. This may indicate a broken workflow.'
+echo 'Proceeding to unset conda variables without restoring previous values.'
 ${Env:TEST_VAR1}=""
 ${Env:TEST_VAR2}=""
 ${Env:CONDA_PREFIX}=""
-${Env:PIXI_SHLVL}=""
+${Env:CONDA_SHLVL}=""

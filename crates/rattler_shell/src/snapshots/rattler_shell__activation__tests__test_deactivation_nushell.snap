@@ -2,9 +2,9 @@
 source: crates/rattler_shell/src/activation.rs
 expression: script_contents
 ---
-echo 'Warning: PIXI_SHLVL not set. This may indicate a broken workflow.'
-echo 'Proceeding to unset pixi variables without restoring previous values.'
+echo 'Warning: CONDA_SHLVL not set. This may indicate a broken workflow.'
+echo 'Proceeding to unset conda variables without restoring previous values.'
 hide-env TEST_VAR1
 hide-env TEST_VAR2
 hide-env CONDA_PREFIX
-hide-env PIXI_SHLVL
+hide-env CONDA_SHLVL

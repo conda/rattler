@@ -469,14 +469,18 @@ impl<T: Shell + Clone> Activator<T> {
         // Get the current shell level
         let shlvl = variables
             .current_env
-            .get("PIXI_SHLVL")
+            .get("CONDA_SHLVL")
             .and_then(|s| s.parse::<i32>().ok())
             .unwrap_or(0);
+
+        // Set the new CONDA_SHLVL first
+        let new_shlvl = shlvl + 1;
+        script.set_env_var("CONDA_SHLVL", &new_shlvl.to_string())?;
 
         // Save original CONDA_PREFIX value if it exists
         if let Some(existing_prefix) = variables.current_env.get("CONDA_PREFIX") {
             script.set_env_var(
-                &format!("PIXI_ENV_SHLVL_{shlvl}_CONDA_PREFIX"),
+                &format!("CONDA_ENV_SHLVL_{shlvl}_CONDA_PREFIX"),
                 existing_prefix,
             )?;
         }
@@ -488,14 +492,11 @@ impl<T: Shell + Clone> Activator<T> {
         for (key, value) in &self.env_vars {
             // Save original value if it exists
             if let Some(existing_value) = variables.current_env.get(key) {
-                script.set_env_var(&format!("PIXI_ENV_SHLVL_{shlvl}_{key}"), existing_value)?;
+                script.set_env_var(&format!("CONDA_ENV_SHLVL_{shlvl}_{key}"), existing_value)?;
             }
             // Set new value
             script.set_env_var(key, value)?;
         }
-
-        // Set the new PIXI_SHLVL
-        script.set_env_var("PIXI_SHLVL", &(shlvl + 1).to_string())?;
 
         for activation_script in &self.activation_scripts {
             script.run_script(activation_script)?;
@@ -513,18 +514,19 @@ impl<T: Shell + Clone> Activator<T> {
     ) -> Result<ActivationResult<T>, ActivationError> {
         let mut script = ShellScript::new(self.shell_type.clone(), self.platform);
 
-        // Get the current PIXI shell level from passed environment variables
-        let current_pixi_shlvl = variables
+        // Get the current CONDA shell level from passed environment variables
+        let current_conda_shlvl = variables
             .current_env
-            .get("PIXI_SHLVL")
+            .get("CONDA_SHLVL")
             .and_then(|s| s.parse::<i32>().ok());
 
-        match current_pixi_shlvl {
-            None | Some(0) => {
-                // Handle edge case: PIXI_SHLVL not set or invalid
-                script.echo("Warning: PIXI_SHLVL not set. This may indicate a broken workflow.")?;
+        match current_conda_shlvl {
+            None => {
+                // Handle edge case: CONDA_SHLVL not set
+                script
+                    .echo("Warning: CONDA_SHLVL not set. This may indicate a broken workflow.")?;
                 script.echo(
-                    "Proceeding to unset pixi variables without restoring previous values.",
+                    "Proceeding to unset conda variables without restoring previous values.",
                 )?;
 
                 // Just unset without restoring
@@ -532,26 +534,40 @@ impl<T: Shell + Clone> Activator<T> {
                     script.unset_env_var(key)?;
                 }
                 script.unset_env_var("CONDA_PREFIX")?;
-                script.unset_env_var("PIXI_SHLVL")?;
+                script.unset_env_var("CONDA_SHLVL")?;
+            }
+            Some(level) if level <= 0 => {
+                // Handle edge case: CONDA_SHLVL zero or negative
+                script.echo("Warning: CONDA_SHLVL is zero or negative. This may indicate a broken workflow.")?;
+                script.echo(
+                    "Proceeding to unset conda variables without restoring previous values.",
+                )?;
+
+                // Just unset without restoring
+                for (key, _) in &self.env_vars {
+                    script.unset_env_var(key)?;
+                }
+                script.unset_env_var("CONDA_PREFIX")?;
+                script.unset_env_var("CONDA_SHLVL")?;
             }
             Some(current_level) => {
                 let prev_shlvl = current_level - 1;
 
                 // For each environment variable that was set during activation
                 for (key, _) in &self.env_vars {
-                    let backup_key = format!("PIXI_ENV_SHLVL_{prev_shlvl}_{key}");
+                    let backup_key = format!("CONDA_ENV_SHLVL_{prev_shlvl}_{key}");
                     script.restore_env_var(key, &backup_key)?;
                 }
 
                 // Handle CONDA_PREFIX restoration
-                let backup_prefix = format!("PIXI_ENV_SHLVL_{prev_shlvl}_CONDA_PREFIX");
+                let backup_prefix = format!("CONDA_ENV_SHLVL_{prev_shlvl}_CONDA_PREFIX");
                 script.restore_env_var("CONDA_PREFIX", &backup_prefix)?;
 
-                // Update PIXI_SHLVL
+                // Update CONDA_SHLVL
                 if prev_shlvl == 0 {
-                    script.unset_env_var("PIXI_SHLVL")?;
+                    script.unset_env_var("CONDA_SHLVL")?;
                 } else {
-                    script.set_env_var("PIXI_SHLVL", &prev_shlvl.to_string())?;
+                    script.set_env_var("CONDA_SHLVL", &prev_shlvl.to_string())?;
                 }
             }
         }
@@ -1013,8 +1029,8 @@ mod tests {
                 platform: Platform::current(),
             };
 
-            // Test edge case: PIXI_SHLVL not set (current behavior)
-            let test_env = HashMap::new(); // Empty environment - no PIXI_SHLVL set
+            // Test edge case: CONDA_SHLVL not set (current behavior)
+            let test_env = HashMap::new(); // Empty environment - no CONDA_SHLVL set
             let result = activator
                 .deactivation(ActivationVariables {
                     conda_prefix: None,

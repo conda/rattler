@@ -4,5 +4,5 @@ expression: script
 ---
 @chcp 65001 > nul
 @SET "PATH=__PREFIX__/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:%PATH%"
+@SET "CONDA_SHLVL=1"
 @SET "CONDA_PREFIX=__PREFIX__"
-@SET "PIXI_SHLVL=1"

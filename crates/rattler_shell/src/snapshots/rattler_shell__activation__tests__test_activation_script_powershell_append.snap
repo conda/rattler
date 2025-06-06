@@ -4,5 +4,5 @@ expression: script
 ---
 $OutputEncoding = [System.Console]::OutputEncoding = [System.Console]::InputEncoding = [System.Text.Encoding]::UTF8
 ${Env:PATH} = "$Env:PATH:__PREFIX__/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin"
+${Env:CONDA_SHLVL} = "1"
 ${Env:CONDA_PREFIX} = "__PREFIX__"
-${Env:PIXI_SHLVL} = "1"
