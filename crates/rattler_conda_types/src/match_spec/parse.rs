@@ -10,7 +10,6 @@ use nom::{
     sequence::{delimited, preceded, separated_pair, terminated},
     Finish, IResult,
 };
-
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use smallvec::SmallVec;
 use thiserror::Error;
@@ -228,7 +227,8 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
 }
 
 #[cfg(feature = "experimental_extras")]
-/// Parses a list of optional dependencies from a string `feat1, feat2, feat3]` -> `vec![feat1, feat2, feat3]`.
+/// Parses a list of optional dependencies from a string `feat1, feat2, feat3]`
+/// -> `vec![feat1, feat2, feat3]`.
 pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     use nom::{
         combinator::{all_consuming, map},
@@ -387,22 +387,38 @@ fn split_version_and_build(
     input: &str,
     strictness: ParseStrictness,
 ) -> Result<(&str, Option<&str>), ParseMatchSpecError> {
+    fn maybe_recognize_lenient_constraint<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        strictness: ParseStrictness,
+    ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
+        move |input: &'a str| {
+            if strictness == Lenient {
+                alt((parse_special_equality, recognize_constraint))(input)
+            } else {
+                recognize_constraint(input)
+            }
+        }
+    }
+
     fn parse_version_constraint_or_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-        input: &'a str,
-    ) -> IResult<&'a str, &'a str, E> {
-        alt((
-            delimited(tag("("), parse_version_group, tag(")")),
-            recognize_constraint,
-        ))(input)
+        strictness: ParseStrictness,
+    ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
+        move |input: &'a str| {
+            alt((
+                delimited(tag("("), parse_version_group(strictness), tag(")")),
+                maybe_recognize_lenient_constraint(strictness),
+            ))(input)
+        }
     }
 
     fn parse_version_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-        input: &'a str,
-    ) -> IResult<&'a str, &'a str, E> {
-        recognize(separated_list1(
-            whitespace_enclosed(one_of(",|")),
-            parse_version_constraint_or_group,
-        ))(input)
+        strictness: ParseStrictness,
+    ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
+        move |input: &'a str| {
+            recognize(separated_list1(
+                whitespace_enclosed(one_of(",|")),
+                parse_version_constraint_or_group(strictness),
+            ))(input)
+        }
     }
 
     // Special case handling of `=*`, `=1.2.3`, or `=1*`
@@ -429,12 +445,9 @@ fn split_version_and_build(
     ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
         move |input: &'a str| {
             if strictness == Lenient {
-                terminated(
-                    alt((parse_special_equality, parse_version_group)),
-                    opt(one_of(" =")),
-                )(input)
+                terminated(parse_version_group(strictness), opt(one_of(" =")))(input)
             } else {
-                terminated(parse_version_group, space0)(input)
+                terminated(parse_version_group(strictness), space0)(input)
             }
         }
     }
@@ -744,13 +757,13 @@ mod tests {
         parse_channel_and_subdir, split_version_and_build, strip_brackets, strip_package_name,
         BracketVec, MatchSpec, ParseMatchSpecError,
     };
-    use crate::{
-        match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
-        NamelessMatchSpec, ParseChannelError, ParseStrictness, ParseStrictness::*, VersionSpec,
-    };
-
     #[cfg(feature = "experimental_extras")]
     use crate::match_spec::parse::parse_extras;
+    use crate::{
+        match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
+        NamelessMatchSpec, ParseChannelError, ParseStrictness, ParseStrictness::*, Version,
+        VersionSpec,
+    };
 
     fn channel_config() -> ChannelConfig {
         ChannelConfig::default_with_root_dir(
@@ -1113,6 +1126,8 @@ mod tests {
             "channel/win-64::foobar[channel=conda-forge, subdir=linux-64]",
             // Issue #1004
             "numpy>=2.*.*",
+            // Pixi issue 3922
+            "bird_tool_utils_python =0.*,>=0.4.1",
         ];
 
         let evaluated: IndexMap<_, _> = specs
@@ -1437,6 +1452,18 @@ mod tests {
             .map(|s| MatchSpec::from_str(s, Strict).unwrap())
             .collect::<Vec<_>>();
         assert_eq!(specs, parsed_specs);
+    }
+
+    #[test]
+    fn test_pixi_issue_3922() {
+        let match_spec = MatchSpec::from_str(
+            "bird_tool_utils_python =0.*,>=0.4.1",
+            ParseStrictness::Lenient,
+        )
+        .unwrap();
+        let version_spec = match_spec.version.unwrap();
+        let version = Version::from_str("0.4.1").unwrap();
+        assert!(version_spec.matches(&version))
     }
 
     #[cfg(feature = "experimental_extras")]
