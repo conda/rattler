@@ -8,6 +8,7 @@ use rattler_shell::{
     activation::{ActivationResult, ActivationVariables, Activator, PathModificationBehavior},
     shell::{Bash, CmdExe, Fish, PowerShell, ShellEnum, Xonsh, Zsh},
 };
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 #[pyclass]
