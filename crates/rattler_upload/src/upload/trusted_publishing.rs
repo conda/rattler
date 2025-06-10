@@ -12,7 +12,8 @@ use std::ffi::OsString;
 use thiserror::Error;
 use url::Url;
 
-use crate::{console_utils::github_action_runner, consts};
+use crate::utils::console_utils::github_action_runner;
+use crate::utils::consts;
 
 /// If applicable, attempt obtaining a token for trusted publishing.
 pub async fn check_trusted_publishing(
