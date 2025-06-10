@@ -1,11 +1,12 @@
 //! Command-line options.
-
-use std::{ path::PathBuf };
-
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use clap::{Parser, arg };
 use rattler_solve::ChannelPriority;
 use url::Url;
 use rattler_conda_types::{NamedChannelOrUrl, Platform };
+use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
+use rattler_networking::{mirror_middleware, s3_middleware};
+use tracing::warn;
 
 /// Container for rattler_solver::ChannelPriority so that it can be parsed
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -13,7 +14,21 @@ pub struct ChannelPriorityWrapper {
     /// The ChannelPriority value to be used when building the Configuration
     pub value: ChannelPriority,
 }
+impl FromStr for ChannelPriorityWrapper {
+    type Err = String;
 
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "strict" => Ok(ChannelPriorityWrapper {
+                value: ChannelPriority::Strict,
+            }),
+            "disabled" => Ok(ChannelPriorityWrapper {
+                value: ChannelPriority::Disabled,
+            }),
+            _ => Err("Channel priority must be either 'strict' or 'disabled'".to_string()),
+        }
+    }
+}
 
 
 /// Common opts that are shared between [`Rebuild`] and [`Build`]` subcommands
@@ -51,6 +66,82 @@ pub struct CommonOpts {
     /// Channel priority to use when solving
     #[arg(long)]
     pub channel_priority: Option<ChannelPriorityWrapper>,
+}
+
+#[derive(Clone, Debug)]
+#[allow(missing_docs)]
+pub struct CommonData {
+    pub output_dir: PathBuf,
+    pub experimental: bool,
+    pub auth_file: Option<PathBuf>,
+    pub channel_priority: ChannelPriority,
+    pub s3_config: HashMap<String, s3_middleware::S3Config>,
+    pub mirror_config: HashMap<Url, Vec<mirror_middleware::Mirror>>,
+    pub allow_insecure_host: Option<Vec<String>>,
+}
+
+impl CommonData {
+    /// Create a new instance of `CommonData`
+    pub fn new(
+        output_dir: Option<PathBuf>,
+        experimental: bool,
+        auth_file: Option<PathBuf>,
+        config: pixi_config::Config,
+        channel_priority: Option<ChannelPriority>,
+        allow_insecure_host: Option<Vec<String>>,
+    ) -> Self {
+        // mirror config
+        // todo: this is a duplicate in pixi and pixi-pack: do it like in `compute_s3_config`
+        let mut mirror_config = HashMap::new();
+        tracing::debug!("Using mirrors: {:?}", config.mirror_map());
+
+        fn ensure_trailing_slash(url: &url::Url) -> url::Url {
+            if url.path().ends_with('/') {
+                url.clone()
+            } else {
+                // Do not use `join` because it removes the last element
+                format!("{}/", url)
+                    .parse()
+                    .expect("Failed to add trailing slash to URL")
+            }
+        }
+
+        for (key, value) in config.mirror_map() {
+            let mut mirrors = Vec::new();
+            for v in value {
+                mirrors.push(mirror_middleware::Mirror {
+                    url: ensure_trailing_slash(v),
+                    no_jlap: false,
+                    no_bz2: false,
+                    no_zstd: false,
+                    max_failures: None,
+                });
+            }
+            mirror_config.insert(ensure_trailing_slash(key), mirrors);
+        }
+
+        let s3_config = config.compute_s3_config();
+        Self {
+            output_dir: output_dir.unwrap_or_else(|| PathBuf::from("./output")),
+            experimental,
+            auth_file,
+            s3_config,
+            mirror_config,
+            channel_priority: channel_priority.unwrap_or(ChannelPriority::Strict),
+            allow_insecure_host,
+        }
+    }
+
+    fn from_opts_and_config(value: CommonOpts, config: pixi_config::Config) -> Self {
+        Self::new(
+            value.output_dir,
+            value.experimental,
+            value.auth_file,
+            config,
+            value.channel_priority.map(|c| c.value),
+            value.allow_insecure_host,
+        )
+    }
 }
 
 

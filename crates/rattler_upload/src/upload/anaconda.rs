@@ -11,8 +11,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 use tracing::info;
 use url::Url;
-
-use crate::url_with_trailing_slash::UrlWithTrailingSlash;
+use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 
 use super::VERSION;
 use super::package::ExtractedPackage;
