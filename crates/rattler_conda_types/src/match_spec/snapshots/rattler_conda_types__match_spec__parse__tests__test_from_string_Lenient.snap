@@ -1,7 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
 expression: evaluated
-snapshot_kind: text
 ---
 blas *.* mkl:
   name: blas
@@ -138,3 +137,6 @@ rust ~=1.2.3:
 numpy>=2.*.*:
   name: numpy
   version: ">=2"
+"bird_tool_utils_python =0.*,>=0.4.1":
+  name: bird_tool_utils_python
+  version: "0.*,>=0.4.1"
