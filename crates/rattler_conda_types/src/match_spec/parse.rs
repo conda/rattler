@@ -1127,7 +1127,7 @@ mod tests {
             // Issue #1004
             "numpy>=2.*.*",
             // Pixi issue 3922
-            "bird_tool_utils_python =0.*,>=0.4.1"
+            "bird_tool_utils_python =0.*,>=0.4.1",
         ];
 
         let evaluated: IndexMap<_, _> = specs
