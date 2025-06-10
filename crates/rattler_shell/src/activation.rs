@@ -1175,6 +1175,10 @@ mod tests {
 
             let mut script_contents = result.script.contents().unwrap();
 
+            // Normalize temporary directory paths for consistent snapshots
+            let prefix = tmp_dir_path.to_str().unwrap();
+            script_contents = script_contents.replace(prefix, "__PREFIX__");
+
             // For cmd.exe, normalize line endings for snapshots
             if *shell_name == "cmd" {
                 script_contents = script_contents.replace("\r\n", "\n");
@@ -1197,6 +1201,9 @@ mod tests {
                 .unwrap();
 
             let mut script_contents = result.script.contents().unwrap();
+
+            let prefix = tmp_dir_path.to_str().unwrap();
+            script_contents = script_contents.replace(prefix, "__PREFIX__");
 
             // For cmd.exe, normalize line endings for snapshots
             if *shell_name == "cmd" {

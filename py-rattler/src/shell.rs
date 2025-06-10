@@ -56,6 +56,7 @@ impl PyActivationVariables {
             conda_prefix,
             path,
             path_modification_behavior: path_modification_behavior.0,
+            current_env: HashMap::new(),
         };
         activation_vars.into()
     }

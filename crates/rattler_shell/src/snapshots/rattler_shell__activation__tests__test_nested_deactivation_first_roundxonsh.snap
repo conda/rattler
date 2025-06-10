@@ -1,0 +1,9 @@
+---
+source: crates/rattler_shell/src/activation.rs
+expression: script_contents
+---
+$PATH = "__PREFIX__/bin:${PATH}"
+$CONDA_SHLVL = "2"
+$CONDA_PREFIX = "__PREFIX__"
+$CONDA_ENV_SHLVL_2_TEST_VAR1 = "first_value"
+$TEST_VAR1 = "second_value"
