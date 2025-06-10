@@ -467,6 +467,8 @@ impl<T: Shell + Clone> Activator<T> {
         script.set_path(path.as_slice(), variables.path_modification_behavior)?;
 
         // Get the current shell level
+        // For us, zero is the starting point, so we will increment it
+        // meaning that we will set CONDA_SHLVL to 1 on the first activation.
         let shlvl = variables
             .current_env
             .get("CONDA_SHLVL")
@@ -480,7 +482,7 @@ impl<T: Shell + Clone> Activator<T> {
         // Save original CONDA_PREFIX value if it exists
         if let Some(existing_prefix) = variables.current_env.get("CONDA_PREFIX") {
             script.set_env_var(
-                &format!("CONDA_ENV_SHLVL_{shlvl}_CONDA_PREFIX"),
+                &format!("CONDA_ENV_SHLVL_{new_shlvl}_CONDA_PREFIX"),
                 existing_prefix,
             )?;
         }
@@ -492,7 +494,10 @@ impl<T: Shell + Clone> Activator<T> {
         for (key, value) in &self.env_vars {
             // Save original value if it exists
             if let Some(existing_value) = variables.current_env.get(key) {
-                script.set_env_var(&format!("CONDA_ENV_SHLVL_{shlvl}_{key}"), existing_value)?;
+                script.set_env_var(
+                    &format!("CONDA_ENV_SHLVL_{new_shlvl}_{key}"),
+                    existing_value,
+                )?;
             }
             // Set new value
             script.set_env_var(key, value)?;
@@ -536,7 +541,7 @@ impl<T: Shell + Clone> Activator<T> {
                 script.unset_env_var("CONDA_PREFIX")?;
                 script.unset_env_var("CONDA_SHLVL")?;
             }
-            Some(level) if level <= 0 => {
+            Some(current_level) if current_level <= 0 => {
                 // Handle edge case: CONDA_SHLVL zero or negative
                 script.echo("Warning: CONDA_SHLVL is zero or negative. This may indicate a broken workflow.")?;
                 script.echo(
@@ -551,17 +556,18 @@ impl<T: Shell + Clone> Activator<T> {
                 script.unset_env_var("CONDA_SHLVL")?;
             }
             Some(current_level) => {
-                let prev_shlvl = current_level - 1;
-
+                // Unset the current level
                 // For each environment variable that was set during activation
                 for (key, _) in &self.env_vars {
-                    let backup_key = format!("CONDA_ENV_SHLVL_{prev_shlvl}_{key}");
+                    let backup_key = format!("CONDA_ENV_SHLVL_{current_level}_{key}");
                     script.restore_env_var(key, &backup_key)?;
                 }
 
                 // Handle CONDA_PREFIX restoration
-                let backup_prefix = format!("CONDA_ENV_SHLVL_{prev_shlvl}_CONDA_PREFIX");
+                let backup_prefix = format!("CONDA_ENV_SHLVL_{current_level}_CONDA_PREFIX");
                 script.restore_env_var("CONDA_PREFIX", &backup_prefix)?;
+
+                let prev_shlvl = current_level - 1;
 
                 // Update CONDA_SHLVL
                 if prev_shlvl == 0 {
@@ -1047,6 +1053,226 @@ mod tests {
             }
 
             insta::assert_snapshot!(format!("test_deactivation_{}", shell_name), script_contents);
+        }
+    }
+
+    #[test]
+    fn test_deactivation_when_activated() {
+        let tmp_dir = TempDir::new("test_deactivation").unwrap();
+        let tmp_dir_path = tmp_dir.path();
+
+        // Create an activator with some test environment variables
+        let mut env_vars = IndexMap::new();
+        env_vars.insert("TEST_VAR1".to_string(), "value1".to_string());
+        env_vars.insert("TEST_VAR2".to_string(), "value2".to_string());
+
+        // Test all shell types
+        let shell_types = vec![
+            ("bash", ShellEnum::Bash(shell::Bash)),
+            ("zsh", ShellEnum::Zsh(shell::Zsh)),
+            ("fish", ShellEnum::Fish(shell::Fish)),
+            ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
+            ("cmd", ShellEnum::CmdExe(shell::CmdExe)),
+            (
+                "powershell",
+                ShellEnum::PowerShell(shell::PowerShell::default()),
+            ),
+            ("nushell", ShellEnum::NuShell(shell::NuShell)),
+        ];
+
+        for (shell_name, shell_type) in shell_types {
+            let activator = Activator {
+                target_prefix: tmp_dir_path.to_path_buf(),
+                shell_type: shell_type.clone(),
+                paths: vec![tmp_dir_path.join("bin")],
+                activation_scripts: vec![],
+                deactivation_scripts: vec![],
+                env_vars: env_vars.clone(),
+                platform: Platform::current(),
+            };
+
+            // CONDA_SHLVL to set to the initial leve ( 1 meaning that it's activated)
+            let test_env = HashMap::from([
+                ("CONDA_SHLVL".to_string(), "1".to_string()),
+                (
+                    "CONDA_PREFIX".to_string(),
+                    tmp_dir_path.to_str().unwrap().to_string(),
+                ),
+            ]);
+            let result = activator
+                .deactivation(ActivationVariables {
+                    conda_prefix: None,
+                    path: None,
+                    path_modification_behavior: PathModificationBehavior::Prepend,
+                    current_env: test_env,
+                })
+                .unwrap();
+            let mut script_contents = result.script.contents().unwrap();
+
+            // For cmd.exe, normalize line endings for snapshots
+            if shell_name == "cmd" {
+                script_contents = script_contents.replace("\r\n", "\n");
+            }
+
+            insta::assert_snapshot!(
+                format!("test_deactivation_when_activated{}", shell_name),
+                script_contents
+            );
+        }
+    }
+
+    #[test]
+    fn test_nested_deactivation() {
+        let tmp_dir = TempDir::new("test_deactivation").unwrap();
+        let tmp_dir_path = tmp_dir.path();
+
+        // Create an activator with some test environment variables
+        let mut first_env_vars = IndexMap::new();
+        first_env_vars.insert("TEST_VAR1".to_string(), "first_value".to_string());
+
+        // Test all shell types
+        let shell_types = vec![
+            ("bash", ShellEnum::Bash(shell::Bash)),
+            ("zsh", ShellEnum::Zsh(shell::Zsh)),
+            ("fish", ShellEnum::Fish(shell::Fish)),
+            ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
+            ("cmd", ShellEnum::CmdExe(shell::CmdExe)),
+            (
+                "powershell",
+                ShellEnum::PowerShell(shell::PowerShell::default()),
+            ),
+            ("nushell", ShellEnum::NuShell(shell::NuShell)),
+        ];
+
+        // now lets activate again an environment
+        // we reuse the same TEST_VAR1 variable to check that it is correctly restored
+        let mut second_env_vars = IndexMap::new();
+        second_env_vars.insert("TEST_VAR1".to_string(), "second_value".to_string());
+
+        for (shell_name, shell_type) in &shell_types {
+            let activator = Activator {
+                target_prefix: tmp_dir_path.to_path_buf(),
+                shell_type: shell_type.clone(),
+                paths: vec![tmp_dir_path.join("bin")],
+                activation_scripts: vec![],
+                deactivation_scripts: vec![],
+                env_vars: second_env_vars.clone(),
+                platform: Platform::current(),
+            };
+
+            let mut existing_env_vars = HashMap::new();
+            existing_env_vars.insert("TEST_VAR1".to_string(), "first_value".to_string());
+            existing_env_vars.insert("CONDA_SHLVL".to_string(), "1".to_string());
+
+            let result = activator
+                .activation(ActivationVariables {
+                    conda_prefix: None,
+                    path: None,
+                    path_modification_behavior: PathModificationBehavior::Prepend,
+                    current_env: existing_env_vars,
+                })
+                .unwrap();
+
+            let mut script_contents = result.script.contents().unwrap();
+
+            // For cmd.exe, normalize line endings for snapshots
+            if *shell_name == "cmd" {
+                script_contents = script_contents.replace("\r\n", "\n");
+            }
+
+            insta::assert_snapshot!(
+                format!("test_nested_deactivation_first_round{}", shell_name),
+                script_contents
+            );
+
+            // and now lets deactivate the environment
+            let activated_env = HashMap::from([("CONDA_SHLVL".to_string(), "2".to_string())]);
+            let result = activator
+                .deactivation(ActivationVariables {
+                    conda_prefix: None,
+                    path: None,
+                    path_modification_behavior: PathModificationBehavior::Prepend,
+                    current_env: activated_env,
+                })
+                .unwrap();
+
+            let mut script_contents = result.script.contents().unwrap();
+
+            // For cmd.exe, normalize line endings for snapshots
+            if *shell_name == "cmd" {
+                script_contents = script_contents.replace("\r\n", "\n");
+            }
+
+            insta::assert_snapshot!(
+                format!("test_nested_deactivation_second_round{}", shell_name),
+                script_contents
+            );
+        }
+    }
+
+    #[test]
+    fn test_reseting_conda_shlvl() {
+        let tmp_dir = TempDir::new("test_deactivation").unwrap();
+        let tmp_dir_path = tmp_dir.path();
+
+        // Create an activator with some test environment variables
+        let mut first_env_vars = IndexMap::new();
+        first_env_vars.insert("TEST_VAR1".to_string(), "first_value".to_string());
+
+        // Test all shell types
+        let shell_types = vec![
+            ("bash", ShellEnum::Bash(shell::Bash)),
+            ("zsh", ShellEnum::Zsh(shell::Zsh)),
+            ("fish", ShellEnum::Fish(shell::Fish)),
+            ("xonsh", ShellEnum::Xonsh(shell::Xonsh)),
+            ("cmd", ShellEnum::CmdExe(shell::CmdExe)),
+            (
+                "powershell",
+                ShellEnum::PowerShell(shell::PowerShell::default()),
+            ),
+            ("nushell", ShellEnum::NuShell(shell::NuShell)),
+        ];
+
+        // now lets activate again an environment
+        // we reuse the same TEST_VAR1 variable to check that it is correctly restored
+        let mut second_env_vars = IndexMap::new();
+        second_env_vars.insert("TEST_VAR1".to_string(), "second_value".to_string());
+
+        for (shell_name, shell_type) in &shell_types {
+            let activator = Activator {
+                target_prefix: tmp_dir_path.to_path_buf(),
+                shell_type: shell_type.clone(),
+                paths: vec![tmp_dir_path.join("bin")],
+                activation_scripts: vec![],
+                deactivation_scripts: vec![],
+                env_vars: second_env_vars.clone(),
+                platform: Platform::current(),
+            };
+
+            let mut existing_env_vars = HashMap::new();
+            existing_env_vars.insert("TEST_VAR1".to_string(), "first_value".to_string());
+            existing_env_vars.insert("CONDA_SHLVL".to_string(), "1".to_string());
+
+            let result = activator
+                .deactivation(ActivationVariables {
+                    conda_prefix: None,
+                    path: None,
+                    path_modification_behavior: PathModificationBehavior::Prepend,
+                    current_env: existing_env_vars,
+                })
+                .unwrap();
+
+            let mut script_contents = result.script.contents().unwrap();
+
+            // For cmd.exe, normalize line endings for snapshots
+            if *shell_name == "cmd" {
+                script_contents = script_contents.replace("\r\n", "\n");
+            }
+
+            insta::assert_snapshot!(
+                format!("test_reseting_conda_shlvl{}", shell_name),
+                script_contents
+            );
         }
     }
 }
