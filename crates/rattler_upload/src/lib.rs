@@ -1,8 +1,10 @@
 pub mod upload;
+pub(crate) mod utils;
 
 use upload::opt::{UploadOpts, ServerType, QuetzData, ArtifactoryData, CondaForgeData, PrefixData, AnacondaData };
-use miette;
+use miette::{IntoDiagnostic};
 use rattler_conda_types::package::{ArchiveType};
+use crate::utils::tool_configuration;
 
 /// Upload.
 pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
