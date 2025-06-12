@@ -1179,6 +1179,9 @@ mod tests {
             let prefix = tmp_dir_path.to_str().unwrap();
             script_contents = script_contents.replace(prefix, "__PREFIX__");
 
+            // on windows we need to replace Path with PATH
+            script_contents = script_contents.replace("Path", "PATH");
+
             // For cmd.exe, normalize line endings for snapshots
             if *shell_name == "cmd" {
                 script_contents = script_contents.replace("\r\n", "\n");
