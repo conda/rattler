@@ -3,8 +3,8 @@ use std::str::FromStr;
 
 use crate::{error::JsError, platform::JsPlatform};
 use rattler_conda_types::{
-    Channel, ChannelConfig, MatchSpec, Matches, NoArchType, PackageName, PackageRecord,
-    ParseChannelError, ParseStrictness::Lenient, RepoDataRecord, Version,
+    Channel, ChannelConfig, MatchSpec, NoArchType, PackageName, PackageRecord, ParseChannelError,
+    ParseStrictness::Lenient, RepoDataRecord, Version,
 };
 use rattler_repodata_gateway::{Gateway, SourceConfig};
 use rattler_solve::{SolverImpl, SolverTask};
@@ -109,16 +109,6 @@ pub async fn simple_solve(
         })
         .collect::<Result<Vec<_>, JsError>>()?;
 
-    //if we do not need to solve the same packages, then filter them
-    let all_matched = specs.clone().iter().all(|spec| {
-        installed_packages
-            .iter()
-            .any(|rec| spec.matches(&rec.package_record))
-    });
-
-    if all_matched {
-        return Ok(js_locked_packages);
-    }
     // Fetch the repodata
     let gateway = Gateway::builder()
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
