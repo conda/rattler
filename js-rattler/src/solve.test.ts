@@ -95,9 +95,11 @@ describe("solving", () => {
         ).then((result) => {
             const expectedPrefixes = [
                 "https://repo.prefix.dev/emscripten-forge-dev/emscripten-wasm32/numpy-2.2.0-",
+                "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/python_abi-",
+                "https://prefix.dev/emscripten-forge-dev/noarch/emscripten-abi-",
             ];
 
-            const urls = result.map((pkg) => pkg.url).sort();
+            const urls = result.map((pkg) => pkg.url);
             expect(urls.length).toBe(expectedPrefixes.length);
 
             urls.forEach((url, index) => {
