@@ -1,6 +1,6 @@
 {
     "name": "@conda-org/rattler",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "description": "Javascript bindings to the rattler library",
     "repository": {
         "type": "git",
