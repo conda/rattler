@@ -4,9 +4,6 @@
 //! environments.
 
 #[cfg(target_family = "unix")]
-use anyhow::{Context, Result};
-use fs_err as fs;
-#[cfg(target_family = "unix")]
 use std::io::Write;
 use std::{
     collections::HashMap,
@@ -15,6 +12,9 @@ use std::{
     process::ExitStatus,
 };
 
+#[cfg(target_family = "unix")]
+use anyhow::{Context, Result};
+use fs_err as fs;
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
 #[cfg(target_family = "unix")]
@@ -371,9 +371,11 @@ impl<T: Shell + Clone> Activator<T> {
 
     /// Starts a UNIX shell.
     /// # Arguments
-    /// - `shell`: The type of shell to start. Must implement the `Shell` and `Copy` traits.
+    /// - `shell`: The type of shell to start. Must implement the `Shell` and
+    ///   `Copy` traits.
     /// - `args`: A vector of arguments to pass to the shell.
-    /// - `env`: A `HashMap` containing environment variables to set in the shell.
+    /// - `env`: A `HashMap` containing environment variables to set in the
+    ///   shell.
     /// - `prompt`: Prompt to the shell
     #[cfg(target_family = "unix")]
     #[allow(dead_code)]
@@ -1177,14 +1179,8 @@ mod tests {
 
             // Normalize temporary directory paths for consistent snapshots
             let prefix = tmp_dir_path.to_str().unwrap();
-            let prefix_for_replacement = prefix.replace('\\', "/");
-
-            // debug the prefix
-            dbg!(&prefix);
-            dbg!(&script_contents);
-            // debug the prefix
-
-            script_contents = script_contents.replace(&prefix_for_replacement, "__PREFIX__");
+            script_contents = script_contents.replace(&prefix, "__PREFIX__");
+            script_contents = script_contents.replace(&prefix.replace("\\", "\\\\"), "__PREFIX__");
 
             // on windows we need to replace Path with PATH
             script_contents = script_contents.replace("Path", "PATH");
@@ -1192,6 +1188,14 @@ mod tests {
             // For cmd.exe, normalize line endings for snapshots
             if *shell_name == "cmd" {
                 script_contents = script_contents.replace("\r\n", "\n");
+            }
+
+            if cfg!(windows) {
+                // Replace backslashes with forward slashes for consistency in snapshots as well
+                // as ; with :
+                script_contents = script_contents.replace("\\\\", "\\");
+                script_contents = script_contents.replace("\\", "/");
+                script_contents = script_contents.replace(";", ":");
             }
 
             insta::assert_snapshot!(
