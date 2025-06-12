@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::config::Config;
+use crate::config::{Config, MergeError, ValidationError};
 
 // detect proxy env vars like curl: https://curl.se/docs/manpage.html
 static ENV_HTTP_PROXY: LazyLock<Option<String>> = LazyLock::new(|| {
@@ -23,7 +23,6 @@ static ENV_NO_PROXY: LazyLock<Option<String>> = LazyLock::new(|| {
 });
 static USE_PROXY_FROM_ENV: LazyLock<bool> =
     LazyLock::new(|| (*ENV_HTTPS_PROXY).is_some() || (*ENV_HTTP_PROXY).is_some());
-
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -76,7 +75,7 @@ impl Config for ProxyConfig {
         "proxy".to_string()
     }
 
-    fn merge_config(self, other: &Self) -> Result<Self, miette::Error> {
+    fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
         Ok(Self {
             https: other.https.as_ref().or(self.https.as_ref()).cloned(),
             http: other.http.as_ref().or(self.http.as_ref()).cloned(),
@@ -88,10 +87,10 @@ impl Config for ProxyConfig {
         })
     }
 
-    fn validate(&self) -> Result<(), miette::Error> {
+    fn validate(&self) -> Result<(), ValidationError> {
         if self.https.is_none() && self.http.is_none() {
-            return Err(miette::miette!(
-                "At least one of https or http proxy must be set"
+            return Err(ValidationError::Invalid(
+                "At least one of https or http proxy must be set".to_string(),
             ));
         }
         Ok(())

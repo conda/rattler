@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::config::Config;
+use crate::config::{Config, MergeError, ValidationError};
 
 // Making the default values part of pixi_config to allow for printing the
 // default settings in the future.
@@ -53,7 +53,7 @@ impl Config for ConcurrencyConfig {
         "concurrency".to_string()
     }
 
-    fn merge_config(self, other: &Self) -> Result<Self, miette::Error> {
+    fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
         Ok(Self {
             solves: if other.solves != ConcurrencyConfig::default().solves {
                 other.solves
@@ -68,10 +68,21 @@ impl Config for ConcurrencyConfig {
         })
     }
 
-    fn validate(&self) -> Result<(), miette::Error> {
-        if self.solves == 0 || self.downloads == 0 {
-            return Err(miette::miette!("Concurrency values must be greater than 0"));
+    fn validate(&self) -> Result<(), ValidationError> {
+        if self.solves == 0 {
+            return Err(ValidationError::InvalidValue(
+                "solves".to_string(),
+                "The number of concurrent solves must be greater than 0".to_string(),
+            ));
         }
+
+        if self.downloads == 0 {
+            return Err(ValidationError::InvalidValue(
+                "downloads".to_string(),
+                "The number of concurrent downloads must be greater than 0".to_string(),
+            ));
+        }
+
         Ok(())
     }
 

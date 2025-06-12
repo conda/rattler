@@ -1,9 +1,9 @@
 use rattler_conda_types::package::ArchiveType;
 use rattler_package_streaming::write::CompressionLevel;
-use serde::{Deserialize, Serialize, de::Error};
+use serde::{de::Error, Deserialize, Serialize};
 use std::str::FromStr;
 
-use crate::config::Config;
+use crate::config::{Config, MergeError, ValidationError};
 
 /// Container for the package format and compression level
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -114,7 +114,7 @@ impl Config for BuildConfig {
         "build".to_string()
     }
 
-    fn merge_config(self, other: &Self) -> Result<Self, miette::Error> {
+    fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
         return Ok(Self {
             package_format: other
                 .package_format
@@ -124,7 +124,7 @@ impl Config for BuildConfig {
         });
     }
 
-    fn validate(&self) -> Result<(), miette::Error> {
+    fn validate(&self) -> Result<(), ValidationError> {
         Ok(())
     }
 

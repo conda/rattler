@@ -12,6 +12,7 @@ readme.workspace = true
 
 [dependencies]
 console = { workspace = true }
+thiserror = { workspace = true }
 fs-err = { workspace = true }
 miette = { workspace = true }
 rattler_conda_types = { workspace = true }

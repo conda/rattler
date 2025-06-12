@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::config::Config;
+use crate::config::{Config, MergeError, ValidationError};
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -83,7 +83,7 @@ impl Config for RepodataConfig {
 
     /// Merge the given RepodataConfig into the current one.
     /// The `other` configuration should take priority over the current one.
-    fn merge_config(self, other: &Self) -> Result<Self, miette::Error> {
+    fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
         // Make `other` mutable to allow for moving the values out of it.
         let mut merged = self.clone();
         merged.default = merged.default.merge(other.default.clone());
@@ -97,10 +97,14 @@ impl Config for RepodataConfig {
         Ok(merged)
     }
 
-    fn validate(&self) -> Result<(), miette::Error> {
+    fn validate(&self) -> Result<(), ValidationError> {
         if self.default.is_empty() && self.per_channel.is_empty() {
-            return Err(miette::miette!("RepodataConfig must not be empty"));
+            return Err(ValidationError::InvalidValue(
+                "repodata".to_string(),
+                "RepodataConfig must not be empty".to_string(),
+            ));
         }
+
         Ok(())
     }
 

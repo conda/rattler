@@ -1,16 +1,16 @@
 use std::path::Path;
 use std::path::PathBuf;
 
+use miette::miette;
 use miette::Context;
 use miette::IntoDiagnostic;
-use miette::miette;
 use serde::de::DeserializeOwned;
 use url::Url;
 
-use crate::config::Config;
-use crate::config::ConfigBase;
 use crate::config::proxy::ProxyConfig;
 use crate::config::s3::S3Options;
+use crate::config::Config;
+use crate::config::ConfigBase;
 
 impl<T> ConfigBase<T>
 where

@@ -3,9 +3,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use miette::IntoDiagnostic;
 use rattler_conda_types::{ChannelConfig, NamedChannelOrUrl};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use thiserror::Error;
 use url::Url;
 
 use crate::config::{
@@ -21,6 +21,43 @@ pub mod repodata_config;
 pub mod run_post_link_scripts;
 pub mod s3;
 use crate::config::channel_config::default_channel_config;
+
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum ValidationError {
+    /// Missing required field.
+    #[error("Missing required field: {0}")]
+    MissingRequiredField(String),
+
+    /// Invalid value for a field.
+    #[error("Invalid value for field {0}: {1}")]
+    InvalidValue(String, String),
+
+    /// Invalid configuration for various reason.
+    #[error("Invalid configuration: {0}")]
+    Invalid(String),
+}
+
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum MergeError {
+    /// Error merging configurations.
+    #[error("Error merging configurations: {0}")]
+    Error(String),
+}
+
+#[derive(Error, Debug)]
+pub enum LoadError {
+    /// Error loading configuration.
+    #[error("Error merging configuration files: {0} ({1})")]
+    MergeError(MergeError, PathBuf),
+
+    /// IO error while reading configuration file.
+    #[error("IO error while reading configuration file: {0}")]
+    IoError(#[from] std::io::Error),
+
+    /// Error parsing configuration file.
+    #[error("Error parsing configuration file: {0}")]
+    ParseError(#[from] toml::de::Error),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConfigBase<T> {
@@ -126,10 +163,10 @@ pub trait Config:
 
     /// Merge another configuration (file) into this one.
     /// Note: the "other" configuration should take priority over the current one.
-    fn merge_config(self, other: &Self) -> Result<Self, miette::Error>;
+    fn merge_config(self, other: &Self) -> Result<Self, MergeError>;
 
     /// Validate the configuration.
-    fn validate(&self) -> Result<(), miette::Error>;
+    fn validate(&self) -> Result<(), ValidationError>;
 
     fn is_default(&self) -> bool {
         self == &Self::default()
@@ -143,7 +180,7 @@ impl<T> ConfigBase<T>
 where
     T: Config + DeserializeOwned,
 {
-    pub fn load_from_files<I, P>(paths: I) -> Result<Self, miette::Error>
+    pub fn load_from_files<I, P>(paths: I) -> Result<Self, LoadError>
     where
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
@@ -151,12 +188,17 @@ where
         let mut config = ConfigBase::<T>::default();
 
         for path in paths {
-            let content = std::fs::read_to_string(path.as_ref()).into_diagnostic()?;
-            let other: ConfigBase<T> = toml::from_str(&content).into_diagnostic()?;
-            config = config.merge_config(&other)?;
+            let content = std::fs::read_to_string(path.as_ref())?;
+            let other: ConfigBase<T> = toml::from_str(&content)?;
+            config = config.merge_config(&other).map_err(|e| {
+                LoadError::MergeError(
+                    e,
+                    path.as_ref().to_path_buf(),
+                )
+            })?;
         }
 
-        // config.validate().into_diagnostic()?;
+        // config.validate()?;
         Ok(config)
     }
 }
@@ -171,7 +213,7 @@ where
 
     /// Merge another configuration (file) into this one.
     /// Note: the "other" configuration should take priority over the current one.
-    fn merge_config(self, other: &Self) -> Result<Self, miette::Error> {
+    fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
         Ok(Self {
             s3_options: self
                 .s3_options
@@ -216,7 +258,7 @@ where
         })
     }
 
-    fn validate(&self) -> Result<(), miette::Error> {
+    fn validate(&self) -> Result<(), ValidationError> {
         Ok(())
     }
 
