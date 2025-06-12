@@ -22,7 +22,7 @@ jobs:
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
           lfs: false
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@f9f65f52341ba3c1d5e1901c77dc7a9e58186191 # stable
+        uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e8b695cdcc8de1b # stable
 
       - name: Disable LFS globally
         # We really don't want to checkout / clone / fetch any LFS files anymore
