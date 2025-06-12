@@ -1,0 +1,10 @@
+---
+source: crates/rattler_shell/src/activation.rs
+expression: script_contents
+---
+@chcp 65001 > nul
+@SET "PATH=__PREFIX__/bin:%PATH%"
+@SET "CONDA_SHLVL=2"
+@SET "CONDA_PREFIX=__PREFIX__"
+@SET "CONDA_ENV_SHLVL_2_TEST_VAR1=first_value"
+@SET "TEST_VAR1=second_value"
