@@ -416,6 +416,233 @@ mod tests {
     }
 
     #[test]
+    fn test_config_edit_and_save_snapshot() {
+        let mut config = TestConfig::default();
+
+        // Edit multiple configuration values
+        config
+            .set(
+                "default-channels",
+                Some(r#"["conda-forge", "bioconda", "pytorch"]"#.to_string()),
+            )
+            .unwrap();
+        config
+            .set("tls-no-verify", Some("true".to_string()))
+            .unwrap();
+        config
+            .set("concurrency.solves", Some("12".to_string()))
+            .unwrap();
+        config
+            .set("concurrency.downloads", Some("24".to_string()))
+            .unwrap();
+        config
+            .set(
+                "authentication-override-file",
+                Some("/home/user/.rattler-auth".to_string()),
+            )
+            .unwrap();
+        config
+            .set(
+                "mirrors",
+                Some(r#"{"https://conda.anaconda.org": ["https://mirror1.com", "https://mirror2.com"]}"#.to_string()),
+            )
+            .unwrap();
+
+        // Use the config's to_toml() method for consistent serialization
+        let toml_output = config.to_toml().unwrap();
+        insta::assert_snapshot!("basic_config_edit", toml_output);
+    }
+
+    #[test]
+    fn test_proxy_config_edit_snapshot() {
+        let mut config = TestConfig::default();
+
+        // Edit proxy configuration
+        config
+            .set(
+                "proxy-config.https",
+                Some("https://corporate-proxy.example.com:8080".to_string()),
+            )
+            .unwrap();
+        config
+            .set(
+                "proxy-config.http",
+                Some("http://corporate-proxy.example.com:8080".to_string()),
+            )
+            .unwrap();
+        config
+            .set(
+                "proxy-config.non-proxy-hosts",
+                Some(r#"["localhost", "127.0.0.1", "*.internal.com"]"#.to_string()),
+            )
+            .unwrap();
+
+        // Use the config's to_toml() method for consistent serialization
+        let toml_output = config.to_toml().unwrap();
+        insta::assert_snapshot!("proxy_config_edit", toml_output);
+    }
+
+    #[test]
+    fn test_repodata_config_edit_snapshot() {
+        let mut config = TestConfig::default();
+
+        // Edit repodata configuration
+        config
+            .set("repodata-config.disable-jlap", Some("true".to_string()))
+            .unwrap();
+        config
+            .set("repodata-config.disable-bzip2", Some("false".to_string()))
+            .unwrap();
+        config
+            .set("repodata-config.disable-zstd", Some("true".to_string()))
+            .unwrap();
+        config
+            .set("repodata-config.disable-sharded", Some("false".to_string()))
+            .unwrap();
+
+        // Use the config's to_toml() method for consistent serialization
+        let toml_output = config.to_toml().unwrap();
+        insta::assert_snapshot!("repodata_config_edit", toml_output);
+    }
+
+    #[test]
+    fn test_s3_config_edit_snapshot() {
+        let mut config = TestConfig::default();
+
+        // Add S3 bucket configurations
+        config
+            .set(
+                "s3-options.production-bucket",
+                Some(r#"{"endpoint-url": "https://s3.us-east-1.amazonaws.com", "region": "us-east-1", "force-path-style": false}"#.to_string()),
+            )
+            .unwrap();
+        config
+            .set(
+                "s3-options.dev-bucket",
+                Some(r#"{"endpoint-url": "https://minio.dev.example.com", "region": "us-west-2", "force-path-style": true}"#.to_string()),
+            )
+            .unwrap();
+
+        // Edit individual S3 bucket properties
+        config
+            .set(
+                "s3-options.production-bucket.region",
+                Some("us-west-1".to_string()),
+            )
+            .unwrap();
+
+        // Use the config's to_toml() method for consistent serialization
+        let toml_output = config.to_toml().unwrap();
+        insta::assert_snapshot!("s3_config_edit", toml_output);
+    }
+
+    #[test]
+    fn test_comprehensive_config_edit_snapshot() {
+        let mut config = TestConfig::default();
+
+        // Edit comprehensive configuration covering all areas
+        config
+            .set(
+                "default-channels",
+                Some(r#"["conda-forge", "bioconda", "nvidia", "pytorch"]"#.to_string()),
+            )
+            .unwrap();
+        config
+            .set("tls-no-verify", Some("false".to_string()))
+            .unwrap();
+        config
+            .set(
+                "authentication-override-file",
+                Some("/etc/conda/auth.json".to_string()),
+            )
+            .unwrap();
+        config
+            .set("concurrency.solves", Some("16".to_string()))
+            .unwrap();
+        config
+            .set("concurrency.downloads", Some("32".to_string()))
+            .unwrap();
+        config
+            .set(
+                "mirrors",
+                Some(r#"{
+                    "https://conda.anaconda.org": ["https://mirror.example.com", "https://backup.example.com"],
+                    "https://repo.continuum.io": ["https://fast-mirror.net"]
+                }"#.to_string()),
+            )
+            .unwrap();
+        config
+            .set(
+                "proxy-config.https",
+                Some("https://secure-proxy.company.com:443".to_string()),
+            )
+            .unwrap();
+        config
+            .set(
+                "proxy-config.non-proxy-hosts",
+                Some(r#"["localhost", "*.company.com", "10.0.0.0/8"]"#.to_string()),
+            )
+            .unwrap();
+        config
+            .set("repodata-config.disable-jlap", Some("false".to_string()))
+            .unwrap();
+        config
+            .set("repodata-config.disable-zstd", Some("false".to_string()))
+            .unwrap();
+        config
+            .set(
+                "s3-options.company-bucket",
+                Some(r#"{"endpoint-url": "https://s3.company.com", "region": "company-region", "force-path-style": true}"#.to_string()),
+            )
+            .unwrap();
+        config
+            .set("run-post-link-scripts", Some("insecure".to_string()))
+            .unwrap();
+
+        // Use the config's to_toml() method for consistent serialization
+        let toml_output = config.to_toml().unwrap();
+        insta::assert_snapshot!("comprehensive_config_edit", toml_output);
+    }
+
+    #[test]
+    fn test_config_save_and_load_roundtrip_snapshot() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("roundtrip.toml");
+
+        let mut original_config = TestConfig::default();
+
+        // Configure a complex setup
+        original_config
+            .set(
+                "default-channels",
+                Some(r#"["conda-forge", "pytorch", "nvidia"]"#.to_string()),
+            )
+            .unwrap();
+        original_config
+            .set("concurrency.solves", Some("6".to_string()))
+            .unwrap();
+        original_config
+            .set(
+                "s3-options.test-bucket",
+                Some(r#"{"endpoint-url": "https://s3.amazonaws.com", "region": "us-east-1", "force-path-style": false}"#.to_string()),
+            )
+            .unwrap();
+
+        // Save the config using the save() method
+        original_config.save(&config_path).unwrap();
+
+        // Read the saved TOML content
+        let saved_content = std::fs::read_to_string(&config_path).unwrap();
+        insta::assert_snapshot!("config_save_roundtrip", saved_content);
+
+        // Verify roundtrip consistency by loading and comparing
+        let loaded_config = TestConfig::load_from_files(&[&config_path]).unwrap();
+        assert_eq!(loaded_config.default_channels.len(), 3);
+        assert_eq!(loaded_config.concurrency.solves, 6);
+        assert!(loaded_config.s3_options.contains_key("test-bucket"));
+    }
+
+    #[test]
     fn test_config_error_handling() {
         let mut config = TestConfig::default();
 

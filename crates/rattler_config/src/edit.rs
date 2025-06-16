@@ -410,7 +410,7 @@ where
 
     /// Save the config to the given path.
     pub fn save(&self, to: &Path) -> Result<(), ConfigEditError> {
-        let contents = toml::to_string_pretty(&self)?;
+        let contents = self.to_toml()?;
         tracing::debug!("Saving config to: {}", to.display());
 
         let parent = to.parent().expect("config path should have a parent");
@@ -418,5 +418,10 @@ where
 
         fs_err::write(to, contents)?;
         Ok(())
+    }
+
+    /// Convert the config to a TOML string.
+    pub fn to_toml(&self) -> Result<String, ConfigEditError> {
+        toml::to_string_pretty(&self).map_err(ConfigEditError::TomlSerializeError)
     }
 }
