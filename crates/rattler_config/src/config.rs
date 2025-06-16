@@ -190,12 +190,9 @@ where
         for path in paths {
             let content = std::fs::read_to_string(path.as_ref())?;
             let other: ConfigBase<T> = toml::from_str(&content)?;
-            config = config.merge_config(&other).map_err(|e| {
-                LoadError::MergeError(
-                    e,
-                    path.as_ref().to_path_buf(),
-                )
-            })?;
+            config = config
+                .merge_config(&other)
+                .map_err(|e| LoadError::MergeError(e, path.as_ref().to_path_buf()))?;
         }
 
         // config.validate()?;
