@@ -4311,6 +4311,7 @@ version = "0.1.0"
 dependencies = [
  "console",
  "fs-err",
+ "indexmap 2.9.0",
  "insta",
  "rattler_conda_types",
  "rattler_package_streaming",

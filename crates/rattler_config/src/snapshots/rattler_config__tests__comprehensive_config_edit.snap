@@ -14,11 +14,11 @@ run_post_link_scripts = "insecure"
 array_field = []
 
 [mirrors]
-"https://repo.continuum.io/" = ["https://fast-mirror.net/"]
 "https://conda.anaconda.org/" = [
     "https://mirror.example.com/",
     "https://backup.example.com/",
 ]
+"https://repo.continuum.io/" = ["https://fast-mirror.net/"]
 
 [repodata_config]
 disable-jlap = false

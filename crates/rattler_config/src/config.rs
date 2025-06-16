@@ -1,8 +1,6 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
+use indexmap::IndexMap;
 use rattler_conda_types::{ChannelConfig, NamedChannelOrUrl};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
@@ -79,8 +77,8 @@ pub struct ConfigBase<T> {
     pub tls_no_verify: Option<bool>,
 
     #[serde(default)]
-    #[serde(skip_serializing_if = "HashMap::is_empty")]
-    pub mirrors: HashMap<Url, Vec<Url>>,
+    #[serde(skip_serializing_if = "IndexMap::is_empty")]
+    pub mirrors: IndexMap<Url, Vec<Url>>,
 
     #[serde(default, skip_serializing_if = "BuildConfig::is_default")]
     pub build: BuildConfig,
@@ -105,8 +103,8 @@ pub struct ConfigBase<T> {
 
     /// Configuration for S3.
     #[serde(default)]
-    #[serde(skip_serializing_if = "HashMap::is_empty")]
-    pub s3_options: HashMap<String, S3Options>,
+    #[serde(skip_serializing_if = "IndexMap::is_empty")]
+    pub s3_options: IndexMap<String, S3Options>,
 
     /// Run the post link scripts
     #[serde(default)]
@@ -141,13 +139,13 @@ where
             default_channels: Vec::new(),
             authentication_override_file: None,
             tls_no_verify: Some(false), // Default to false if not set
-            mirrors: HashMap::new(),
+            mirrors: IndexMap::new(),
             build: BuildConfig::default(),
             channel_config: default_channel_config(),
             repodata_config: RepodataConfig::default(),
             concurrency: ConcurrencyConfig::default(),
             proxy_config: ProxyConfig::default(),
-            s3_options: HashMap::new(),
+            s3_options: IndexMap::new(),
             run_post_link_scripts: None,
             extensions: T::default(),
             loaded_from: Vec::new(),
