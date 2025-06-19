@@ -18,7 +18,7 @@ pub enum AuthenticationStorageError {
         #[from] crate::authentication_storage::backends::keyring::KeyringAuthenticationStorageError,
     ),
     /// An error occurred when accessing the netrc storage
-    #[cfg(feature = "netrc")]
+    #[cfg(feature = "netrc-rs")]
     #[error("NetRcStorageError")]
     NetRcStorageError(#[from] crate::authentication_storage::backends::netrc::NetRcStorageError),
     /// An error occurred when accessing the memory storage

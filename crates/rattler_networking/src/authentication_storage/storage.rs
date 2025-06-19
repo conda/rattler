@@ -12,7 +12,7 @@ use crate::authentication_storage::{backends::file::FileStorage, AuthenticationS
 
 use super::{authentication::Authentication, StorageBackend};
 
-#[cfg(feature = "netrc")]
+#[cfg(feature = "netrc-rs")]
 use super::backends::netrc::NetRcStorage;
 
 #[cfg(feature = "keyring")]
@@ -62,7 +62,7 @@ impl AuthenticationStorage {
         storage.add_backend(Arc::from(KeyringAuthenticationStorage::default()));
         #[cfg(feature = "dirs")]
         storage.add_backend(Arc::from(FileStorage::new()?));
-        #[cfg(feature = "netrc")]
+        #[cfg(feature = "netrc-rs")]
         storage.add_backend(Arc::from(NetRcStorage::from_env().unwrap_or_else(
             |(path, err)| {
                 tracing::warn!("error reading netrc file from {}: {}", path.display(), err);

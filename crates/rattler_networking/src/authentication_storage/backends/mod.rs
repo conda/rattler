@@ -4,5 +4,5 @@ pub mod file;
 #[cfg(feature = "keyring")]
 pub mod keyring;
 pub mod memory;
-#[cfg(feature = "netrc")]
+#[cfg(feature = "netrc-rs")]
 pub mod netrc;

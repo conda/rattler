@@ -16,9 +16,7 @@ native-tls = ["reqwest/native-tls"]
 rustls-tls = ["reqwest/rustls-tls"]
 gcs = ["google-cloud-auth"]
 s3 = ["aws-config", "aws-sdk-s3"]
-netrc = ["netrc-rs"]
-keyring = ["dep:keyring"]
-system-integration = ["keyring", "netrc", "dirs"]
+system-integration = ["keyring", "netrc-rs", "dirs"]
 
 [dependencies]
 anyhow = { workspace = true }
