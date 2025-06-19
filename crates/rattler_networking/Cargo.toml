@@ -11,31 +11,32 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ["rustls-tls"]
+default = ["rustls-tls", "system-integration"]
 native-tls = ["reqwest/native-tls"]
 rustls-tls = ["reqwest/rustls-tls"]
 gcs = ["google-cloud-auth"]
 s3 = ["aws-config", "aws-sdk-s3"]
+system-integration = ["keyring", "netrc-rs", "dirs"]
 
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
-dirs = { workspace = true }
+dirs = { workspace = true, optional = true}
 fs-err = { workspace = true }
 google-cloud-auth = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true }
 aws-sdk-s3 = { workspace = true, optional = true }
 http = { workspace = true }
 itertools = { workspace = true }
-keyring = { workspace = true, features = [
+keyring = { workspace = true, optional = true, features = [
     "apple-native",
     "windows-native",
     "async-secret-service",
     "async-io",
     "crypto-rust",
 ] }
-netrc-rs = { workspace = true }
+netrc-rs = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = { workspace = true }
 retry-policies = { workspace = true }

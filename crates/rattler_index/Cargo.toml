@@ -45,7 +45,7 @@ opendal = { workspace = true, features = [
   "services-s3",
   "services-fs",
 ], default-features = false }
-rattler_networking = { workspace = true, default-features = false }
+rattler_networking = { workspace = true, default-features = false, features = ["system-integration"] }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
