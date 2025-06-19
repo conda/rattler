@@ -153,6 +153,7 @@ where
     }
 }
 
+/// An empty dummy configuration extension that we can use when no extension is needed.
 impl Config for () {
     fn get_extension_name(&self) -> String {
         "__NONE__".to_string()
