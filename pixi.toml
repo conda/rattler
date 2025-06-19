@@ -22,25 +22,25 @@ test = "cargo nextest run --workspace --no-default-features --features=rustls-tl
 rattler = "cargo run --bin rattler --release --"
 
 [dependencies]
-cxx-compiler = "~=1.6.0"
+cxx-compiler = "~=1.9.0"
 openssl = "~=3.1"
 make = "~=4.3"
 pkg-config = "~=0.29.2"
 rust = "~=1.85.0"
-cmake = "~=3.26.4"
+cmake = "~=4.0.3"
 cargo-nextest = ">=0.9.91,<0.10"
 
 [target.linux-64.dependencies]
-clang = ">=18.1.8,<19.0"
+clang = ">=20.1.7,<20.2"
 compilers = ">=1.6.0"
 mold = ">=2.33.0,<3.0"
 [target.linux-64.activation]
 scripts = ["scripts/activate_linux.sh"]
 
 [feature.lint.dependencies]
-pre-commit = ">=3.7.1,<4"
-pre-commit-hooks = ">=4.6.0,<5"
-ruff = ">=0.4.8,<0.5"
+pre-commit = ">=4.2,<5"
+pre-commit-hooks = ">=5,<6"
+ruff = ">=0.12,<0.13"
 typos = ">=1.23.1,<2"
 
 [feature.lint.tasks]
