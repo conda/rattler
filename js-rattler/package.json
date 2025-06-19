@@ -24,11 +24,8 @@
         }
     },
     "scripts": {
-        "fix:types": "shx sed -i \"^.*LIBBZ2_RS_SYS.*$\" \"\" pkg/js_rattler_bg.wasm.d.ts pkg/js_rattler.d.ts",
         "build:wasm": "wasm-pack build --mode normal --release",
         "build:wasm:debug": "wasm-pack build --mode normal --debug",
-        "postbuild:wasm": "npm run fix:types",
-        "postbuild:wasm:debug": "npm run fix:types",
         "build:esm": "npm run build:wasm -- --target web    && rollup -c rollup.config.esm.mjs",
         "build:cjs": "npm run build:wasm -- --target nodejs && rollup -c rollup.config.cjs.mjs",
         "build:types": "rollup -c rollup.config.types.mjs",
