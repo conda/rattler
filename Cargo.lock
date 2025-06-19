@@ -4310,6 +4310,7 @@ name = "rattler_config"
 version = "0.1.0"
 dependencies = [
  "console",
+ "dirs",
  "fs-err",
  "indexmap 2.9.0",
  "insta",
