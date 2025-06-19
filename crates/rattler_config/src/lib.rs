@@ -98,7 +98,10 @@ mod tests {
                 Some(r#"["conda-forge", "bioconda"]"#.to_string()),
             )
             .unwrap();
-        assert_eq!(config.default_channels.as_ref().map(std::vec::Vec::len), Some(2));
+        assert_eq!(
+            config.default_channels.as_ref().map(std::vec::Vec::len),
+            Some(2)
+        );
 
         // Test editing authentication override file
         config
@@ -298,7 +301,10 @@ mod tests {
         let merged = config1.merge_config(&config2).unwrap();
 
         // The second config should take priority for overlapping fields
-        assert_eq!(merged.default_channels.as_ref().map(std::vec::Vec::len), Some(1));
+        assert_eq!(
+            merged.default_channels.as_ref().map(std::vec::Vec::len),
+            Some(1)
+        );
         assert_eq!(
             merged.default_channels.as_ref().map(|v| v[0].to_string()),
             Some("bioconda".to_string())
@@ -417,7 +423,10 @@ mod tests {
         // Load config from file
         let loaded_config = TestConfig::load_from_files([&config_path]).unwrap();
         assert_eq!(
-            loaded_config.default_channels.as_ref().map(std::vec::Vec::len),
+            loaded_config
+                .default_channels
+                .as_ref()
+                .map(std::vec::Vec::len),
             Some(2)
         );
         assert_eq!(loaded_config.tls_no_verify, Some(true));
@@ -647,7 +656,10 @@ mod tests {
         // Verify roundtrip consistency by loading and comparing
         let loaded_config = TestConfig::load_from_files([&config_path]).unwrap();
         assert_eq!(
-            loaded_config.default_channels.as_ref().map(std::vec::Vec::len),
+            loaded_config
+                .default_channels
+                .as_ref()
+                .map(std::vec::Vec::len),
             Some(3)
         );
         assert_eq!(loaded_config.concurrency.solves, 6);
@@ -761,7 +773,10 @@ mod tests {
         assert_eq!(merged.concurrency.downloads, 8);
 
         // User config values are preserved where not overridden
-        assert_eq!(merged.default_channels.as_ref().map(std::vec::Vec::len), Some(1));
+        assert_eq!(
+            merged.default_channels.as_ref().map(std::vec::Vec::len),
+            Some(1)
+        );
         assert_eq!(
             merged.authentication_override_file,
             Some(PathBuf::from("/home/user/.conda-auth"))
