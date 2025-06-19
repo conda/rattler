@@ -61,8 +61,8 @@ pub enum LoadError {
 pub struct ConfigBase<T> {
     #[serde(default)]
     #[serde(alias = "default_channels")] // BREAK: remove to stop supporting snake_case alias
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub default_channels: Vec<NamedChannelOrUrl>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_channels: Option<Vec<NamedChannelOrUrl>>,
 
     /// Path to the file containing the authentication token.
     #[serde(default)]
@@ -136,7 +136,7 @@ where
 {
     fn default() -> Self {
         Self {
-            default_channels: Vec::new(),
+            default_channels: None,
             authentication_override_file: None,
             tls_no_verify: Some(false), // Default to false if not set
             mirrors: IndexMap::new(),
@@ -150,6 +150,24 @@ where
             extensions: T::default(),
             loaded_from: Vec::new(),
         }
+    }
+}
+
+impl Config for () {
+    fn get_extension_name(&self) -> String {
+        "__NONE__".to_string()
+    }
+
+    fn merge_config(self, _other: &Self) -> Result<Self, MergeError> {
+        Ok(Self::default())
+    }
+
+    fn validate(&self) -> Result<(), ValidationError> {
+        Ok(())
+    }
+
+    fn keys(&self) -> Vec<String> {
+        vec![]
     }
 }
 
@@ -216,11 +234,12 @@ where
                 .chain(other.s3_options.iter())
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),
-            default_channels: if other.default_channels.is_empty() {
-                self.default_channels.clone()
-            } else {
-                other.default_channels.clone()
-            },
+            // Use the other configuration's default channels if available
+            default_channels: other
+                .default_channels
+                .as_ref()
+                .or(self.default_channels.as_ref())
+                .cloned(),
             // Currently this is always the default so it doesn't matter which one we take.
             channel_config: self.channel_config,
             authentication_override_file: other
