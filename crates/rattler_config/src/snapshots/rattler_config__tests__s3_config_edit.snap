@@ -1,0 +1,18 @@
+---
+source: crates/rattler_config/src/lib.rs
+expression: toml_output
+---
+tls_no_verify = false
+array_field = []
+
+[s3_options.production-bucket]
+endpoint-url = "https://s3.us-east-1.amazonaws.com/"
+region = "us-west-1"
+force-path-style = false
+
+[s3_options.dev-bucket]
+endpoint-url = "https://minio.dev.example.com/"
+region = "us-west-2"
+force-path-style = true
+
+[nested]
