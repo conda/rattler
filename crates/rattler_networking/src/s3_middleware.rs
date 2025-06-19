@@ -29,9 +29,9 @@ pub enum S3Config {
 }
 
 #[cfg(feature = "rattler_config")]
-pub fn compute_s3_config<M>(s3_options: &M) -> HashMap<String, s3_middleware::S3Config>
+pub fn compute_s3_config<M>(s3_options: &M) -> HashMap<String, S3Config>
 where
-    M: IntoIterator<Item = (String, S3Options)> + Clone,
+    M: IntoIterator<Item = (String, rattler_config::config::s3::S3Options)> + Clone,
 {
     s3_options
         .clone()
@@ -39,7 +39,7 @@ where
         .map(|(k, v)| {
             (
                 k,
-                s3_middleware::S3Config::Custom {
+                S3Config::Custom {
                     endpoint_url: v.endpoint_url,
                     region: v.region,
                     force_path_style: v.force_path_style,
