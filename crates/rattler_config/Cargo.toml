@@ -23,7 +23,6 @@ thiserror = { workspace = true }
 fs-err = { workspace = true }
 indexmap = { workspace = true }
 rattler_conda_types = { workspace = true }
-rattler_package_streaming = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 toml = { workspace = true }

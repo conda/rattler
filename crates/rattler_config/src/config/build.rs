@@ -1,5 +1,4 @@
-use rattler_conda_types::package::ArchiveType;
-use rattler_package_streaming::write::CompressionLevel;
+use rattler_conda_types::{compression_level::CompressionLevel, package::ArchiveType};
 use serde::{de::Error, Deserialize, Serialize};
 use std::str::FromStr;
 

@@ -19,6 +19,7 @@ mod utils;
 mod version;
 pub mod version_spec;
 
+pub mod compression_level;
 mod environment_yaml;
 mod generic_virtual_package;
 pub mod package;

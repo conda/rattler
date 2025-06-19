@@ -28,6 +28,27 @@ pub enum S3Config {
     },
 }
 
+#[cfg(feature = "rattler_config")]
+pub fn compute_s3_config<M>(s3_options: &M) -> HashMap<String, s3_middleware::S3Config>
+where
+    M: IntoIterator<Item = (String, S3Options)> + Clone,
+{
+    s3_options
+        .clone()
+        .into_iter()
+        .map(|(k, v)| {
+            (
+                k,
+                s3_middleware::S3Config::Custom {
+                    endpoint_url: v.endpoint_url,
+                    region: v.region,
+                    force_path_style: v.force_path_style,
+                },
+            )
+        })
+        .collect()
+}
+
 /// Wrapper around S3 client.
 #[derive(Clone, Debug)]
 pub struct S3 {

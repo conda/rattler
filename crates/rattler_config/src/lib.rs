@@ -79,7 +79,7 @@ mod tests {
     #[test]
     fn test_config_default() {
         let config = TestConfig::default();
-        assert_eq!(config.default_channels, Vec::new());
+        assert_eq!(config.default_channels, None);
         assert_eq!(config.authentication_override_file, None);
         assert_eq!(config.tls_no_verify, Some(false));
         assert!(config.mirrors.is_empty());
@@ -98,7 +98,7 @@ mod tests {
                 Some(r#"["conda-forge", "bioconda"]"#.to_string()),
             )
             .unwrap();
-        assert_eq!(config.default_channels.len(), 2);
+        assert_eq!(config.default_channels.as_ref().map(|v| v.len()), Some(2));
 
         // Test editing authentication override file
         config
@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn test_config_merge() {
         let config1 = TestConfig {
-            default_channels: vec!["conda-forge".parse().unwrap()],
+            default_channels: Some(vec!["conda-forge".parse().unwrap()]),
             tls_no_verify: Some(false),
             extensions: TestExtension {
                 custom_field: Some("original".to_string()),
@@ -284,7 +284,7 @@ mod tests {
         };
 
         let config2 = TestConfig {
-            default_channels: vec!["bioconda".parse().unwrap()],
+            default_channels: Some(vec!["bioconda".parse().unwrap()]),
             authentication_override_file: Some(PathBuf::from("/new/auth")),
             extensions: TestExtension {
                 custom_field: Some("updated".to_string()),
@@ -298,8 +298,11 @@ mod tests {
         let merged = config1.merge_config(&config2).unwrap();
 
         // The second config should take priority for overlapping fields
-        assert_eq!(merged.default_channels.len(), 1);
-        assert_eq!(merged.default_channels[0].to_string(), "bioconda");
+        assert_eq!(merged.default_channels.as_ref().map(|v| v.len()), Some(1));
+        assert_eq!(
+            merged.default_channels.as_ref().map(|v| v[0].to_string()),
+            Some("bioconda".to_string())
+        );
         assert_eq!(
             merged.authentication_override_file,
             Some(PathBuf::from("/new/auth"))
@@ -413,7 +416,10 @@ mod tests {
 
         // Load config from file
         let loaded_config = TestConfig::load_from_files(&[&config_path]).unwrap();
-        assert_eq!(loaded_config.default_channels.len(), 2);
+        assert_eq!(
+            loaded_config.default_channels.as_ref().map(|v| v.len()),
+            Some(2)
+        );
         assert_eq!(loaded_config.tls_no_verify, Some(true));
         assert_eq!(loaded_config.concurrency.solves, 8);
     }
@@ -640,7 +646,10 @@ mod tests {
 
         // Verify roundtrip consistency by loading and comparing
         let loaded_config = TestConfig::load_from_files(&[&config_path]).unwrap();
-        assert_eq!(loaded_config.default_channels.len(), 3);
+        assert_eq!(
+            loaded_config.default_channels.as_ref().map(|v| v.len()),
+            Some(3)
+        );
         assert_eq!(loaded_config.concurrency.solves, 6);
         assert!(loaded_config.s3_options.contains_key("test-bucket"));
     }
@@ -712,13 +721,13 @@ mod tests {
     #[test]
     fn test_merge_multiple_configs() {
         let base_config = TestConfig {
-            default_channels: vec!["defaults".parse().unwrap()],
+            default_channels: Some(vec!["defaults".parse().unwrap()]),
             tls_no_verify: Some(false),
             ..Default::default()
         };
 
         let user_config = TestConfig {
-            default_channels: vec!["conda-forge".parse().unwrap()],
+            default_channels: Some(vec!["conda-forge".parse().unwrap()]),
             authentication_override_file: Some(PathBuf::from("/home/user/.conda-auth")),
             extensions: TestExtension {
                 custom_field: Some("user-value".to_string()),
@@ -752,7 +761,7 @@ mod tests {
         assert_eq!(merged.concurrency.downloads, 8);
 
         // User config values are preserved where not overridden
-        assert_eq!(merged.default_channels.len(), 1);
+        assert_eq!(merged.default_channels.as_ref().map(|v| v.len()), Some(1));
         assert_eq!(
             merged.authentication_override_file,
             Some(PathBuf::from("/home/user/.conda-auth"))
