@@ -7,7 +7,7 @@ use crate::config::{Config, MergeError, ValidationError};
 /// The default maximum number of concurrent solves that can be run at once.
 /// Defaulting to the number of CPUs available.
 fn default_max_concurrent_solves() -> usize {
-    std::thread::available_parallelism().map_or(1, |n| n.get())
+    std::thread::available_parallelism().map_or(1, std::num::NonZero::get)
 }
 
 /// The default maximum number of concurrent downloads that can be run at once.
@@ -55,15 +55,15 @@ impl Config for ConcurrencyConfig {
 
     fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
         Ok(Self {
-            solves: if other.solves != ConcurrencyConfig::default().solves {
-                other.solves
-            } else {
+            solves: if other.solves == ConcurrencyConfig::default().solves {
                 self.solves
-            },
-            downloads: if other.downloads != ConcurrencyConfig::default().downloads {
-                other.downloads
             } else {
+                other.solves
+            },
+            downloads: if other.downloads == ConcurrencyConfig::default().downloads {
                 self.downloads
+            } else {
+                other.downloads
             },
         })
     }

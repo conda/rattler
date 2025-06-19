@@ -98,7 +98,7 @@ mod tests {
                 Some(r#"["conda-forge", "bioconda"]"#.to_string()),
             )
             .unwrap();
-        assert_eq!(config.default_channels.as_ref().map(|v| v.len()), Some(2));
+        assert_eq!(config.default_channels.as_ref().map(std::vec::Vec::len), Some(2));
 
         // Test editing authentication override file
         config
@@ -228,7 +228,7 @@ mod tests {
             Url::parse("https://s3.example.com").unwrap()
         );
         assert_eq!(bucket_config.region, "us-west-2");
-        assert_eq!(bucket_config.force_path_style, true);
+        assert!(bucket_config.force_path_style);
 
         // Test editing individual bucket properties
         config
@@ -256,7 +256,7 @@ mod tests {
                 Some("false".to_string()),
             )
             .unwrap();
-        assert_eq!(config.s3_options["mybucket"].force_path_style, false);
+        assert!(!config.s3_options["mybucket"].force_path_style);
     }
 
     #[test]
@@ -298,7 +298,7 @@ mod tests {
         let merged = config1.merge_config(&config2).unwrap();
 
         // The second config should take priority for overlapping fields
-        assert_eq!(merged.default_channels.as_ref().map(|v| v.len()), Some(1));
+        assert_eq!(merged.default_channels.as_ref().map(std::vec::Vec::len), Some(1));
         assert_eq!(
             merged.default_channels.as_ref().map(|v| v[0].to_string()),
             Some("bioconda".to_string())
@@ -349,7 +349,7 @@ mod tests {
 
         // Verify different configurations
         assert_eq!(config.s3_options["production"].region, "us-east-1");
-        assert_eq!(config.s3_options["development"].force_path_style, true);
+        assert!(config.s3_options["development"].force_path_style);
         assert_eq!(
             config.s3_options["staging"].endpoint_url,
             Url::parse("https://s3.staging.example.com").unwrap()
@@ -415,9 +415,9 @@ mod tests {
         assert!(content.contains("[concurrency]"));
 
         // Load config from file
-        let loaded_config = TestConfig::load_from_files(&[&config_path]).unwrap();
+        let loaded_config = TestConfig::load_from_files([&config_path]).unwrap();
         assert_eq!(
-            loaded_config.default_channels.as_ref().map(|v| v.len()),
+            loaded_config.default_channels.as_ref().map(std::vec::Vec::len),
             Some(2)
         );
         assert_eq!(loaded_config.tls_no_verify, Some(true));
@@ -645,9 +645,9 @@ mod tests {
         insta::assert_snapshot!("config_save_roundtrip", saved_content);
 
         // Verify roundtrip consistency by loading and comparing
-        let loaded_config = TestConfig::load_from_files(&[&config_path]).unwrap();
+        let loaded_config = TestConfig::load_from_files([&config_path]).unwrap();
         assert_eq!(
-            loaded_config.default_channels.as_ref().map(|v| v.len()),
+            loaded_config.default_channels.as_ref().map(std::vec::Vec::len),
             Some(3)
         );
         assert_eq!(loaded_config.concurrency.solves, 6);
@@ -761,7 +761,7 @@ mod tests {
         assert_eq!(merged.concurrency.downloads, 8);
 
         // User config values are preserved where not overridden
-        assert_eq!(merged.default_channels.as_ref().map(|v| v.len()), Some(1));
+        assert_eq!(merged.default_channels.as_ref().map(std::vec::Vec::len), Some(1));
         assert_eq!(
             merged.authentication_override_file,
             Some(PathBuf::from("/home/user/.conda-auth"))

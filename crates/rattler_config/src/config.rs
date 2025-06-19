@@ -160,7 +160,7 @@ impl Config for () {
     }
 
     fn merge_config(self, _other: &Self) -> Result<Self, MergeError> {
-        Ok(Self::default())
+        Ok(())
     }
 
     fn validate(&self) -> Result<(), ValidationError> {
@@ -279,8 +279,6 @@ where
 
     /// Gather all the keys of the configuration.
     fn keys(&self) -> Vec<String> {
-        let mut keys = Vec::new();
-
         fn get_keys(config: &impl Config) -> Vec<String> {
             config
                 .keys()
@@ -289,13 +287,15 @@ where
                 .collect()
         }
 
+        let mut keys = Vec::new();
+
         keys.extend(get_keys(&self.build));
         keys.extend(get_keys(&self.repodata_config));
         keys.extend(get_keys(&self.concurrency));
         keys.extend(get_keys(&self.proxy_config));
         keys.extend(get_keys(&self.extensions));
 
-        keys.extend(self.s3_options.keys().map(|k| format!("s3.{}", k)));
+        keys.extend(self.s3_options.keys().map(|k| format!("s3.{k}")));
         keys.push("default_channels".to_string());
         keys.push("authentication_override_file".to_string());
         keys.push("tls_no_verify".to_string());
@@ -304,7 +304,7 @@ where
         keys.push("extensions".to_string());
         keys.push("default".to_string());
 
-        return keys;
+        keys
     }
 }
 

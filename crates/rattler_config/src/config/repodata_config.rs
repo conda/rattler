@@ -81,7 +81,7 @@ impl Config for RepodataConfig {
         "repodata".to_string()
     }
 
-    /// Merge the given RepodataConfig into the current one.
+    /// Merge the given `RepodataConfig` into the current one.
     /// The `other` configuration should take priority over the current one.
     fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
         // Make `other` mutable to allow for moving the values out of it.
