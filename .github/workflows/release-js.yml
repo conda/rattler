@@ -70,8 +70,14 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           lfs: false
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        with:
+          workspaces: js-rattler
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@f9f65f52341ba3c1d5e1901c77dc7a9e58186191 # stable
+        run: |
+          rustup component add clippy rustfmt
+          rustup target add wasm32-unknown-unknown
+          rustup component add rust-src --target wasm32-unknown-unknown
       - name: Install Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:

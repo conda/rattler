@@ -43,11 +43,13 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           submodules: recursive
-      - uses: actions-rust-lang/setup-rust-toolchain@fb51252c7ba57d633bc668f941da052e410add48 # v1
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
-          components: clippy, rustfmt
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install Rust toolchain
+        run: rustup component add clippy rustfmt
       - name: Run rustfmt
-        uses: actions-rust-lang/rustfmt@559aa3035a47390ba96088dffa783b5d26da9326 # v1
+        run: cargo fmt --all --check
       - name: Run clippy
         run: cargo clippy --all-targets
 
@@ -85,11 +87,10 @@ jobs:
           submodules: recursive
 
       - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@fb51252c7ba57d633bc668f941da052e410add48 # v1
-        with:
-          target: ${{ matrix.target }}
-          components: rustfmt
-          cache: false
+        run: |
+          rustup component add rustfmt
+          rustup target add ${{ matrix.target }}
+          rustup component add rust-src --target ${{ matrix.target }}
 
       - uses: taiki-e/setup-cross-toolchain-action@0123528f956f923e7a476f4cc04882bc005e7c89 # v1
         if: matrix.target != 'x86_64-unknown-linux-musl'
