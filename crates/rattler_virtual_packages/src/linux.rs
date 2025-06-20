@@ -80,14 +80,15 @@ fn parse_linux_version(version_str: &str) -> Result<Version, ParseLinuxVersionEr
 fn extract_linux_version_part(version_str: &str) -> Option<&str> {
     use nom::character::complete::{char, digit1};
     use nom::combinator::{opt, recognize};
-    use nom::sequence::{pair, tuple};
-    let result: Result<_, nom::Err<nom::error::Error<_>>> = recognize(tuple((
+    use nom::sequence::{pair};
+    use nom::Parser;
+    let result: Result<_, nom::Err<nom::error::Error<_>>> = recognize((
         digit1,
         char('.'),
         digit1,
         opt(pair(char('.'), digit1)),
         opt(pair(char('.'), digit1)),
-    )))(version_str);
+    )).parse(version_str);
     let (_rest, version_part) = result.ok()?;
 
     Some(version_part)
