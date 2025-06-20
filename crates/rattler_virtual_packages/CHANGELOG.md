@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.14](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.13...rattler_virtual_packages-v2.0.14) - 2025-06-20
+
+### Fixed
+
+- fix code to use nom 8
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
 ## [2.0.13](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.12...rattler_virtual_packages-v2.0.13) - 2025-05-23
 
 ### Other
