@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::config::{Config, MergeError, ValidationError};
+use crate::{
+    config::{Config, MergeError, ValidationError},
+    edit::ConfigEditError,
+};
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -110,5 +113,78 @@ impl Config for RepodataConfig {
 
     fn keys(&self) -> Vec<String> {
         vec!["default".to_string(), "per-channel".to_string()]
+    }
+
+    fn set(
+        &mut self,
+        key: &str,
+        value: Option<String>,
+    ) -> Result<(), crate::config::ConfigEditError> {
+        if key == "repodata-config" {
+            *self = value
+                .map(|v| {
+                    serde_json::de::from_str(&v).map_err(|e| ConfigEditError::JsonParseError {
+                        key: key.to_string(),
+                        source: e,
+                    })
+                })
+                .transpose()?
+                .unwrap_or_default();
+            return Ok(());
+        } else if !key.starts_with("repodata-config.") {
+            return Err(ConfigEditError::UnknownKeyInner {
+                key: key.to_string(),
+            });
+        }
+
+        let subkey = key.strip_prefix("repodata-config.").unwrap();
+        match subkey {
+            "disable-jlap" => {
+                self.default.disable_jlap = value
+                    .map(|v| {
+                        v.parse().map_err(|e| ConfigEditError::BoolParseError {
+                            key: key.to_string(),
+                            source: e,
+                        })
+                    })
+                    .transpose()?;
+            }
+            "disable-bzip2" => {
+                self.default.disable_bzip2 = value
+                    .map(|v| {
+                        v.parse().map_err(|e| ConfigEditError::BoolParseError {
+                            key: key.to_string(),
+                            source: e,
+                        })
+                    })
+                    .transpose()?;
+            }
+            "disable-zstd" => {
+                self.default.disable_zstd = value
+                    .map(|v| {
+                        v.parse().map_err(|e| ConfigEditError::BoolParseError {
+                            key: key.to_string(),
+                            source: e,
+                        })
+                    })
+                    .transpose()?;
+            }
+            "disable-sharded" => {
+                self.default.disable_sharded = value
+                    .map(|v| {
+                        v.parse().map_err(|e| ConfigEditError::BoolParseError {
+                            key: key.to_string(),
+                            source: e,
+                        })
+                    })
+                    .transpose()?;
+            }
+            _ => {
+                return Err(ConfigEditError::UnknownKeyInner {
+                    key: key.to_string(),
+                })
+            }
+        }
+        Ok(())
     }
 }

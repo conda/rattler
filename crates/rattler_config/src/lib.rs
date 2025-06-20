@@ -2,7 +2,6 @@ pub mod config;
 #[cfg(feature = "edit")]
 pub mod edit;
 
-
 #[cfg(test)]
 mod tests {
     use crate::config::{Config, ConfigBase, MergeError, ValidationError};

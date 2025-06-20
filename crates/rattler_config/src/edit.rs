@@ -6,7 +6,6 @@ use thiserror::Error;
 use url::Url;
 
 use crate::config::proxy::ProxyConfig;
-use crate::config::s3::S3Options;
 use crate::config::Config;
 use crate::config::ConfigBase;
 
@@ -14,6 +13,9 @@ use crate::config::ConfigBase;
 pub enum ConfigEditError {
     #[error("Unknown configuration key: {key}\nSupported keys:\n\t{supported_keys}")]
     UnknownKey { key: String, supported_keys: String },
+
+    #[error("Unknown key: {key}")]
+    UnknownKeyInner { key: String },
 
     #[error("Configuration key '{key}' requires a value")]
     MissingValue { key: String },
@@ -139,149 +141,11 @@ where
             //     ));
             // }
             key if key.starts_with("repodata-config") => {
-                if key == "repodata-config" {
-                    self.repodata_config = value
-                        .map(|v| {
-                            serde_json::de::from_str(&v).map_err(|e| {
-                                ConfigEditError::JsonParseError {
-                                    key: key.to_string(),
-                                    source: e,
-                                }
-                            })
-                        })
-                        .transpose()?
-                        .unwrap_or_default();
-                    return Ok(());
-                } else if !key.starts_with("repodata-config.") {
-                    return Err(ConfigEditError::UnknownKey {
-                        key: key.to_string(),
-                        supported_keys: get_supported_keys(self),
-                    });
-                }
-
-                let subkey = key.strip_prefix("repodata-config.").unwrap();
-                match subkey {
-                    "disable-jlap" => {
-                        self.repodata_config.default.disable_jlap = value
-                            .map(|v| {
-                                v.parse().map_err(|e| ConfigEditError::BoolParseError {
-                                    key: key.to_string(),
-                                    source: e,
-                                })
-                            })
-                            .transpose()?;
-                    }
-                    "disable-bzip2" => {
-                        self.repodata_config.default.disable_bzip2 = value
-                            .map(|v| {
-                                v.parse().map_err(|e| ConfigEditError::BoolParseError {
-                                    key: key.to_string(),
-                                    source: e,
-                                })
-                            })
-                            .transpose()?;
-                    }
-                    "disable-zstd" => {
-                        self.repodata_config.default.disable_zstd = value
-                            .map(|v| {
-                                v.parse().map_err(|e| ConfigEditError::BoolParseError {
-                                    key: key.to_string(),
-                                    source: e,
-                                })
-                            })
-                            .transpose()?;
-                    }
-                    "disable-sharded" => {
-                        self.repodata_config.default.disable_sharded = value
-                            .map(|v| {
-                                v.parse().map_err(|e| ConfigEditError::BoolParseError {
-                                    key: key.to_string(),
-                                    source: e,
-                                })
-                            })
-                            .transpose()?;
-                    }
-                    _ => {
-                        return Err(ConfigEditError::UnknownKey {
-                            key: key.to_string(),
-                            supported_keys: get_supported_keys(self),
-                        })
-                    }
-                }
+                self.repodata_config.set(key, value)?;
                 Ok(())
             }
             key if key.starts_with("s3-options") => {
-                if key == "s3-options" {
-                    let value = value.ok_or_else(|| ConfigEditError::MissingValue {
-                        key: key.to_string(),
-                    })?;
-                    self.s3_options = serde_json::de::from_str(&value).map_err(|e| {
-                        ConfigEditError::JsonParseError {
-                            key: key.to_string(),
-                            source: e,
-                        }
-                    })?;
-                    return Ok(());
-                }
-                let Some(subkey) = key.strip_prefix("s3-options.") else {
-                    return Err(ConfigEditError::UnknownKey {
-                        key: key.to_string(),
-                        supported_keys: get_supported_keys(self),
-                    });
-                };
-                if let Some((bucket, rest)) = subkey.split_once('.') {
-                    if !self.s3_options.contains_key(bucket) {
-                        return Err(ConfigEditError::BucketNotFound {
-                            bucket: bucket.to_string(),
-                        });
-                    }
-                    let bucket_config = self.s3_options.get_mut(bucket).unwrap();
-                    match rest {
-                        "endpoint-url" => {
-                            let value = value.ok_or_else(|| ConfigEditError::MissingValue {
-                                key: key.to_string(),
-                            })?;
-                            bucket_config.endpoint_url =
-                                Url::parse(&value).map_err(|e| ConfigEditError::UrlParseError {
-                                    key: key.to_string(),
-                                    source: e,
-                                })?;
-                        }
-                        "region" => {
-                            bucket_config.region =
-                                value.ok_or_else(|| ConfigEditError::MissingValue {
-                                    key: key.to_string(),
-                                })?;
-                        }
-                        "force-path-style" => {
-                            let value = value.ok_or_else(|| ConfigEditError::MissingValue {
-                                key: key.to_string(),
-                            })?;
-                            bucket_config.force_path_style =
-                                value.parse().map_err(|e| ConfigEditError::BoolParseError {
-                                    key: key.to_string(),
-                                    source: e,
-                                })?;
-                        }
-                        _ => {
-                            return Err(ConfigEditError::UnknownKey {
-                                key: key.to_string(),
-                                supported_keys: get_supported_keys(self),
-                            })
-                        }
-                    }
-                } else {
-                    let value = value.ok_or_else(|| ConfigEditError::MissingValue {
-                        key: key.to_string(),
-                    })?;
-                    let s3_options: S3Options = serde_json::de::from_str(&value).map_err(|e| {
-                        ConfigEditError::JsonParseError {
-                            key: key.to_string(),
-                            source: e,
-                        }
-                    })?;
-                    self.s3_options.insert(subkey.to_string(), s3_options);
-                }
+                self.s3_options.set(key, value)?;
                 Ok(())
             }
             key if key.starts_with("concurrency.") => {

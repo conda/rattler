@@ -6,9 +6,10 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
+use crate::config::s3::S3OptionsMap;
 use crate::config::{
     build::BuildConfig, concurreny::ConcurrencyConfig, proxy::ProxyConfig,
-    repodata_config::RepodataConfig, run_post_link_scripts::RunPostLinkScripts, s3::S3Options,
+    repodata_config::RepodataConfig, run_post_link_scripts::RunPostLinkScripts,
 };
 
 pub mod build;
@@ -109,8 +110,8 @@ pub struct ConfigBase<T> {
 
     /// Configuration for S3.
     #[serde(default)]
-    #[serde(skip_serializing_if = "IndexMap::is_empty")]
-    pub s3_options: IndexMap<String, S3Options>,
+    #[serde(skip_serializing_if = "S3OptionsMap::is_default")]
+    pub s3_options: S3OptionsMap,
 
     /// Run the post link scripts
     #[serde(default)]
@@ -150,7 +151,7 @@ where
             repodata_config: RepodataConfig::default(),
             concurrency: ConcurrencyConfig::default(),
             proxy_config: ProxyConfig::default(),
-            s3_options: IndexMap::new(),
+            s3_options: S3OptionsMap::default(),
             run_post_link_scripts: None,
             extensions: T::default(),
             loaded_from: Vec::new(),
@@ -243,12 +244,7 @@ where
     /// Note: the "other" configuration should take priority over the current one.
     fn merge_config(self, other: &Self) -> Result<Self, MergeError> {
         Ok(Self {
-            s3_options: self
-                .s3_options
-                .iter()
-                .chain(other.s3_options.iter())
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
+            s3_options: self.s3_options.merge_config(&other.s3_options)?,
             // Use the other configuration's default channels if available
             default_channels: other
                 .default_channels
@@ -308,8 +304,8 @@ where
         keys.extend(get_keys(&self.concurrency));
         keys.extend(get_keys(&self.proxy_config));
         keys.extend(get_keys(&self.extensions));
+        keys.extend(get_keys(&self.s3_options));
 
-        keys.extend(self.s3_options.keys().map(|k| format!("s3.{k}")));
         keys.push("default_channels".to_string());
         keys.push("authentication_override_file".to_string());
         keys.push("tls_no_verify".to_string());
