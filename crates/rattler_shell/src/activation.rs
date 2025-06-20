@@ -1179,7 +1179,7 @@ mod tests {
 
             // Normalize temporary directory paths for consistent snapshots
             let prefix = tmp_dir_path.to_str().unwrap();
-            script_contents = script_contents.replace(&prefix, "__PREFIX__");
+            script_contents = script_contents.replace(prefix, "__PREFIX__");
             script_contents = script_contents.replace(&prefix.replace("\\", "\\\\"), "__PREFIX__");
 
             // on windows we need to replace Path with PATH
