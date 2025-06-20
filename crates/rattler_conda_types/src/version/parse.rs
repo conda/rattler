@@ -8,7 +8,7 @@ use nom::character::complete::{alpha1, char, digit1, one_of};
 use nom::combinator::{map, opt, value};
 use nom::error::{ErrorKind, FromExternalError, ParseError};
 use nom::sequence::terminated;
-use nom::{IResult, Parser};
+use nom::IResult;
 use smallvec::SmallVec;
 use std::{
     convert::Into,
@@ -110,7 +110,7 @@ impl<'i> FromExternalError<&'i str, ParseVersionErrorKind> for ParseVersionError
 /// Parses the epoch part of a version. This is a number followed by `'!'` at the start of the
 /// version string.
 pub fn epoch_parser(input: &str) -> IResult<&str, u64, ParseVersionErrorKind> {
-    let (rest, digits) = terminated(digit1, char('!')).parse(input)?;
+    let (rest, digits) = terminated(digit1, char('!'))(input)?;
     let epoch = digits
         .parse()
         .map_err(ParseVersionErrorKind::EpochMustBeInteger)
@@ -139,7 +139,7 @@ fn component_parser<'i>(input: &'i str) -> IResult<&'i str, Component, ParseVers
         map(alpha1, |alpha: &'i str| {
             Component::Iden(alpha.to_lowercase().into_boxed_str())
         }),
-    )).parse(input)
+    ))(input)
 }
 
 /// Parses a version segment from a list of components.
@@ -168,7 +168,7 @@ fn segment_parser<'i>(
 
     // Loop until we can't find any more components
     loop {
-        let (remaining, component) = match opt(component_parser).parse(rest) {
+        let (remaining, component) = match opt(component_parser)(rest) {
             Ok((i, o)) => (i, o),
             Err(e) => {
                 // Remove any components that we may have added.
@@ -205,7 +205,7 @@ fn trailing_dash_underscore_parser(
     dash_or_underscore: Option<char>,
 ) -> IResult<&str, (Option<Component>, Option<char>), ParseVersionErrorKind> {
     // Parse a - or _. Return early if it cannot be found.
-    let (rest, Some(separator)) = opt(one_of::<_, _, (&str, ErrorKind)>("-_")).parse(input)
+    let (rest, Some(separator)) = opt(one_of::<_, _, (&str, ErrorKind)>("-_"))(input)
         .map_err(|e| e.map(|(_, kind)| ParseVersionErrorKind::Nom(kind)))?
     else {
         return Ok((input, (None, dash_or_underscore)));
@@ -250,7 +250,7 @@ fn version_part_parser<'i>(
     // Iterate over any additional segments that we find.
     let result = loop {
         // Parse a version segment separator.
-        let (rest, separator) = match opt(one_of("-._")).parse(input) {
+        let (rest, separator) = match opt(one_of("-._"))(input) {
             Ok((_, None)) => {
                 // No additional separator found, exit early.
                 return Ok((input, dash_or_underscore));
@@ -361,7 +361,7 @@ pub fn version_parser(input: &str) -> IResult<&str, Version, ParseVersionErrorKi
     }
 
     // Parse an optional epoch.
-    let (input, epoch) = opt(epoch_parser).parse(input)?;
+    let (input, epoch) = opt(epoch_parser)(input)?;
     if let Some(epoch) = epoch {
         components.push(epoch.into());
         flags = flags.with_has_epoch(true);

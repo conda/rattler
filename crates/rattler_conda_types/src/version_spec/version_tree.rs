@@ -5,12 +5,11 @@ use nom::{
     bytes::complete::{tag, take_while},
     character::complete::{alpha1, digit1, multispace0, u32},
     combinator::{all_consuming, cut, map, not, opt, recognize, value},
-    error::{context, ContextError, ParseError},
+    error::{context, convert_error, ContextError, ParseError},
     multi::{many0, separated_list1},
-    sequence::{delimited, preceded, terminated},
-    IResult, Parser,
+    sequence::{delimited, preceded, terminated, tuple},
+    IResult,
 };
-use nom_language::error::convert_error;
 use thiserror::Error;
 
 use crate::version_spec::{
@@ -59,15 +58,14 @@ fn parse_operator<'a, E: ParseError<&'a str>>(
             VersionOperators::StrictRange(StrictRangeOperator::Compatible),
             tag("~="),
         ),
-    ))
-    .parse(input)
+    ))(input)
 }
 
 /// Recognizes the version epoch
 fn parse_version_epoch<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     input: &'a str,
 ) -> Result<(&'a str, u32), nom::Err<E>> {
-    terminated(u32, tag("!")).parse(input)
+    terminated(u32, tag("!"))(input)
 }
 
 /// A parser that recognizes a version
@@ -83,9 +81,9 @@ pub(crate) fn recognize_version<'a, E: ParseError<&'a str> + ContextError<&'a st
             let num = digit1;
             let glob = tag("*");
             if allow_glob {
-                alt((ident, num, glob)).parse(input)
+                alt((ident, num, glob))(input)
             } else {
-                alt((ident, num)).parse(input)
+                alt((ident, num))(input)
             }
         }
     }
@@ -95,19 +93,18 @@ pub(crate) fn recognize_version<'a, E: ParseError<&'a str> + ContextError<&'a st
         allow_glob: bool,
     ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
         move |input: &'a str| {
-            recognize((
+            recognize(tuple((
                 recognize_version_component(allow_glob),
                 many0(preceded(
                     opt(take_while(|c: char| c == '.' || c == '-' || c == '_')),
                     recognize_version_component(allow_glob),
                 )),
-            ))
-            .parse(input)
+            )))(input)
         }
     }
 
     move |input: &'a str| {
-        recognize((
+        recognize(tuple((
             // Optional version epoch
             opt(context("epoch", parse_version_epoch)),
             // Version components
@@ -117,8 +114,7 @@ pub(crate) fn recognize_version<'a, E: ParseError<&'a str> + ContextError<&'a st
                 tag("+"),
                 cut(context("local", recognize_version_components(allow_glob))),
             )),
-        ))
-        .parse(input)
+        )))(input)
     }
 }
 
@@ -134,8 +130,7 @@ pub(crate) fn recognize_version_with_star<'a, E: ParseError<&'a str> + ContextEr
         ),
         // Just a *
         tag("*"),
-    ))
-    .parse(input)
+    ))(input)
 }
 
 /// A parser that recognized a constraint but does not actually parse it.
@@ -156,8 +151,7 @@ pub(crate) fn recognize_constraint<'a, E: ParseError<&'a str> + ContextError<&'a
             )),
             cut(context("version", recognize_version_with_star)),
         )),
-    ))
-    .parse(input)
+    ))(input)
 }
 
 impl<'a> TryFrom<&'a str> for VersionTree<'a> {
@@ -177,8 +171,7 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
                 map(recognize_constraint, |constraint| {
                     VersionTree::Term(constraint)
                 }),
-            ))
-            .parse(input)
+            ))(input)
         }
 
         /// Given multiple version tree components, flatten the structure as
@@ -206,8 +199,7 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
             input: &'a str,
         ) -> Result<(&'a str, VersionTree<'a>), nom::Err<E>> {
             let (rest, group) =
-                separated_list1(delimited(multispace0, tag(","), multispace0), parse_term)
-                    .parse(input)?;
+                separated_list1(delimited(multispace0, tag(","), multispace0), parse_term)(input)?;
             Ok((rest, flatten_group(LogicalOperator::And, group)))
         }
 
@@ -218,12 +210,11 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
             let (rest, group) = separated_list1(
                 delimited(multispace0, tag("|"), multispace0),
                 parse_and_group,
-            )
-            .parse(input)?;
+            )(input)?;
             Ok((rest, flatten_group(LogicalOperator::Or, group)))
         }
 
-        match all_consuming(parse_or_group).parse(input) {
+        match all_consuming(parse_or_group)(input) {
             Ok((_, tree)) => Ok(tree),
             Err(nom::Err::Error(e) | nom::Err::Failure(e)) => {
                 Err(ParseVersionTreeError::ParseError(convert_error(input, e)))

@@ -1,6 +1,15 @@
 use std::{borrow::Cow, collections::HashSet, ops::Not, str::FromStr, sync::Arc};
 
-use nom::{branch::alt, bytes::complete::{tag, take_till1, take_until, take_while, take_while1}, character::complete::{char, multispace0, one_of, space0}, combinator::{opt, recognize}, error::{context, ContextError, ParseError}, multi::{separated_list0, separated_list1}, sequence::{delimited, preceded, separated_pair, terminated}, Finish, IResult, Parser};
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_till1, take_until, take_while, take_while1},
+    character::complete::{char, multispace0, one_of, space0},
+    combinator::{opt, recognize},
+    error::{context, ContextError, ParseError},
+    multi::{separated_list0, separated_list1},
+    sequence::{delimited, preceded, separated_pair, terminated},
+    Finish, IResult,
+};
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use smallvec::SmallVec;
 use thiserror::Error;
@@ -139,15 +148,15 @@ fn strip_if(input: &str) -> (&str, Option<&str>) {
 type BracketVec<'a> = SmallVec<[(&'a str, &'a str); 2]>;
 
 /// A parse combinator to filter whitespace if front and after another parser.
-fn whitespace_enclosed<'a, P, E: ParseError<&'a str>>(
-    mut inner: P,
-) -> impl Parser<&'a str, Output = <P as Parser<&'a str>>::Output, Error = E>
+fn whitespace_enclosed<'a, F, O, E: ParseError<&'a str>>(
+    mut inner: F,
+) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
 where
-    P: Parser<&'a str, Error = E>,
+    F: FnMut(&'a str) -> IResult<&'a str, O, E>,
 {
     move |input: &'a str| {
         let (input, _) = multispace0(input)?;
-        let (input, o2) = inner.parse(input)?;
+        let (input, o2) = inner(input)?;
         multispace0(input).map(|(i, _)| (i, o2))
     }
 }
@@ -159,7 +168,7 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
         whitespace_enclosed(context(
             "key",
             take_while(|c: char| c.is_alphanumeric() || c == '_' || c == '-'),
-        )).parse(input)
+        ))(input)
     }
 
     /// Parses a value in a bracket string.
@@ -172,22 +181,22 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
                 delimited(char('['), take_until("]"), char(']')),
                 take_till1(|c| c == ',' || c == ']' || c == '\'' || c == '"'),
             )),
-        )).parse(input)
+        ))(input)
     }
 
     /// Parses a `key=value` pair
     fn parse_key_value(input: &str) -> IResult<&str, (&str, &str)> {
-        separated_pair(parse_key, char('='), parse_value).parse(input)
+        separated_pair(parse_key, char('='), parse_value)(input)
     }
 
     /// Parses a list of `key=value` pairs separated by commas
     fn parse_key_value_list(input: &str) -> IResult<&str, Vec<(&str, &str)>> {
-        separated_list0(whitespace_enclosed(char(',')), parse_key_value).parse(input)
+        separated_list0(whitespace_enclosed(char(',')), parse_key_value)(input)
     }
 
     /// Parses an entire bracket string
     fn parse_bracket_list(input: &str) -> IResult<&str, Vec<(&str, &str)>> {
-        delimited(char('['), parse_key_value_list, char(']')).parse(input)
+        delimited(char('['), parse_key_value_list, char(']'))(input)
     }
 
     match parse_bracket_list(input).finish() {
@@ -231,14 +240,14 @@ pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
             multispace0,
             take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-'),
             multispace0,
-        ).parse(i)
+        )(i)
     }
 
     fn parse_features(i: &str) -> IResult<&str, Vec<String>> {
-        separated_list1(char(','), map(parse_feature_name, |s: &str| s.to_string())).parse(i)
+        separated_list1(char(','), map(parse_feature_name, |s: &str| s.to_string()))(i)
     }
 
-    match all_consuming(parse_features).parse(input).finish() {
+    match all_consuming(parse_features)(input).finish() {
         Ok((_remaining, features)) => Ok(features),
         Err(_e) => Err(ParseMatchSpecError::InvalidBracket),
     }
@@ -383,7 +392,7 @@ fn split_version_and_build(
     ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
         move |input: &'a str| {
             if strictness == Lenient {
-                alt((parse_special_equality, recognize_constraint)).parse(input)
+                alt((parse_special_equality, recognize_constraint))(input)
             } else {
                 recognize_constraint(input)
             }
@@ -397,7 +406,7 @@ fn split_version_and_build(
             alt((
                 delimited(tag("("), parse_version_group(strictness), tag(")")),
                 maybe_recognize_lenient_constraint(strictness),
-            )).parse(input)
+            ))(input)
         }
     }
 
@@ -408,7 +417,7 @@ fn split_version_and_build(
             recognize(separated_list1(
                 whitespace_enclosed(one_of(",|")),
                 parse_version_constraint_or_group(strictness),
-            )).parse(input)
+            ))(input)
         }
     }
 
@@ -428,7 +437,7 @@ fn split_version_and_build(
         recognize(preceded(
             tag("="),
             alt((version_followed_by_glob, just_star)),
-        )).parse(input)
+        ))(input)
     }
 
     fn parse_version_and_build_separator<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
@@ -436,9 +445,9 @@ fn split_version_and_build(
     ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
         move |input: &'a str| {
             if strictness == Lenient {
-                terminated(parse_version_group(strictness), opt(one_of(" ="))).parse(input)
+                terminated(parse_version_group(strictness), opt(one_of(" =")))(input)
             } else {
-                terminated(parse_version_group(strictness), space0).parse(input)
+                terminated(parse_version_group(strictness), space0)(input)
             }
         }
     }
@@ -447,7 +456,7 @@ fn split_version_and_build(
         Ok((rest, version)) => {
             let build_string = rest.trim();
 
-            // Check the validity of the build string
+            // Check validity of the build string
             if strictness == Strict
                 && build_string.contains(|c: char| !c.is_alphanumeric() && c != '_' && c != '*')
             {
@@ -461,7 +470,7 @@ fn split_version_and_build(
                 build_string.is_empty().not().then_some(build_string),
             ))
         }
-        Err(nom_language::error::VerboseError { .. }) => Err(ParseMatchSpecError::InvalidVersionAndBuild(
+        Err(nom::error::VerboseError { .. }) => Err(ParseMatchSpecError::InvalidVersionAndBuild(
             input.to_string(),
         )),
     }

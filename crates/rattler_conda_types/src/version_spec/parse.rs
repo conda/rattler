@@ -4,7 +4,8 @@ use nom::{
     character::complete::char,
     combinator::opt,
     error::{ErrorKind, ParseError},
-    IResult, Parser,
+    sequence::tuple,
+    IResult,
 };
 use thiserror::Error;
 
@@ -99,7 +100,7 @@ fn regex_constraint_parser(
 ) -> impl FnMut(&str) -> IResult<&str, Constraint, ParseConstraintError> {
     move |input: &str| {
         let (_rest, (preceder, _, terminator)) =
-            (opt(char('^')), take_while(|c| c != '$'), opt(char('$'))).parse(input)?;
+            tuple((opt(char('^')), take_while(|c| c != '$'), opt(char('$'))))(input)?;
         match (preceder, terminator) {
             (None, None) => Err(nom::Err::Error(ParseConstraintError::UnterminatedRegex)),
             (_, None) | (None, _) => {
@@ -117,7 +118,7 @@ fn any_constraint_parser(
     strictness: ParseStrictness,
 ) -> impl FnMut(&str) -> IResult<&str, Constraint, ParseConstraintError> {
     move |input: &str| {
-        let (remaining, (_, trailing)) = (tag("*"), opt(tag(".*"))).parse(input)?;
+        let (remaining, (_, trailing)) = tuple((tag("*"), opt(tag(".*"))))(input)?;
 
         // `*.*` is not allowed in strict mode
         if trailing.is_some() && strictness == ParseStrictness::Strict {
@@ -332,8 +333,7 @@ pub fn constraint_parser(
             regex_constraint_parser(strictness),
             any_constraint_parser(strictness),
             logical_constraint_parser(strictness),
-        ))
-        .parse(input)
+        ))(input)
     }
 }
 
