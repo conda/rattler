@@ -44,17 +44,21 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node-version }}
-      - uses: actions-rust-lang/setup-rust-toolchain@fb51252c7ba57d633bc668f941da052e410add48 # v1
+
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
-          components: clippy, rustfmt
-          target: wasm32-unknown-unknown
-          cache-workspaces: js-rattler -> target
+          workspaces: js-rattler
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install Rust toolchain
+        run: |
+          rustup component add clippy rustfmt
+          rustup target add wasm32-unknown-unknown
+          rustup component add rust-src --target wasm32-unknown-unknown
 
       - name: Run rustfmt
-        uses: actions-rust-lang/rustfmt@559aa3035a47390ba96088dffa783b5d26da9326 # v1
-        with:
-          manifest-path: js-rattler/Cargo.toml
-
+        working-directory: js-rattler
+        run: cargo fmt --all --check
       - name: Run clippy
         run: cargo clippy --all-targets
         working-directory: js-rattler

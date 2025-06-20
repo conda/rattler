@@ -173,10 +173,10 @@ unicode-normalization = "0.1.24"
 uuid = { version = "1.17.0", default-features = false }
 walkdir = "2.5.0"
 wasmtimer = "0.4.1"
-which = "7.0.3"
+which = "8.0.0"
 windows-sys = { version = "0.59.0", default-features = false }
 winver = { version = "1.0.0" }
-zip = { version = "3.0.0", default-features = false }
+zip = { version = ">=3.0.0,<4.1", default-features = false }
 zstd = { version = "0.13.3", default-features = false }
 
 # These are the all the crates defined in the workspace. We pin all of them together because they are always updated in tendem.

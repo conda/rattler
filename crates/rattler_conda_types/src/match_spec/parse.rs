@@ -148,11 +148,11 @@ fn strip_if(input: &str) -> (&str, Option<&str>) {
 type BracketVec<'a> = SmallVec<[(&'a str, &'a str); 2]>;
 
 /// A parse combinator to filter whitespace if front and after another parser.
-fn whitespace_enclosed<'a, P, E: ParseError<&'a str>>(
-    mut inner: P,
-) -> impl Parser<&'a str, Output = <P as Parser<&'a str>>::Output, Error = E>
+fn whitespace_enclosed<'a, F, O, E: ParseError<&'a str>>(
+    mut inner: F,
+) -> impl Parser<&'a str, Output = O, Error = E>
 where
-    P: Parser<&'a str, Error = E>,
+    F: Parser<&'a str, Output = O, Error = E>,
 {
     move |input: &'a str| {
         let (input, _) = multispace0(input)?;
@@ -462,7 +462,7 @@ fn split_version_and_build(
         Ok((rest, version)) => {
             let build_string = rest.trim();
 
-            // Check the validity of the build string
+            // Check validity of the build string
             if strictness == Strict
                 && build_string.contains(|c: char| !c.is_alphanumeric() && c != '_' && c != '*')
             {

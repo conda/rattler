@@ -1,4 +1,11 @@
-use crate::{package::paths::FileMode, package::PackageFile};
+use std::{
+    borrow::Cow,
+    hint::black_box,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::OnceLock,
+};
+
 use nom::{
     branch::alt,
     bytes::complete::{tag, tag_no_case, take_till1},
@@ -7,13 +14,8 @@ use nom::{
     sequence::{preceded, terminated},
     IResult, Parser,
 };
-use std::{
-    borrow::Cow,
-    hint::black_box,
-    path::{Path, PathBuf},
-    str::FromStr,
-    sync::OnceLock,
-};
+
+use crate::package::{paths::FileMode, PackageFile};
 
 /// Representation of an entry in `info/has_prefix`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,7 +31,8 @@ pub struct HasPrefixEntry {
 /// Representation of the `info/has_prefix` file in older package archives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HasPrefix {
-    /// A list of files in the package that contain the `prefix` (and need prefix replacement).
+    /// A list of files in the package that contain the `prefix` (and need
+    /// prefix replacement).
     pub files: Vec<HasPrefixEntry>,
 }
 
@@ -48,11 +51,13 @@ impl PackageFile for HasPrefix {
     }
 }
 
-/// Returns the default placeholder path. Although this is just a constant it is constructed at
-/// runtime. This ensures that the string itself is not present in the binary when compiled. The
-/// reason we want that is that conda-build (and friends) tries to replace this placeholder in the
-/// binary to point to the actual path in the installed conda environment. In this case we don't
-/// want to that so we deliberately break up the string and reconstruct it at runtime.
+/// Returns the default placeholder path. Although this is just a constant it is
+/// constructed at runtime. This ensures that the string itself is not present
+/// in the binary when compiled. The reason we want that is that conda-build
+/// (and friends) tries to replace this placeholder in the binary to point to
+/// the actual path in the installed conda environment. In this case we don't
+/// want to that so we deliberately break up the string and reconstruct it at
+/// runtime.
 fn placeholder_string() -> &'static str {
     static PLACEHOLDER: OnceLock<String> = OnceLock::new();
     PLACEHOLDER
@@ -70,7 +75,8 @@ impl FromStr for HasPrefixEntry {
     type Err = std::io::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        /// Parses `<prefix> <file_mode> <path>` and fails if there is more input.
+        /// Parses `<prefix> <file_mode> <path>` and fails if there is more
+        /// input.
         fn prefix_file_mode_path(buf: &str) -> IResult<&str, HasPrefixEntry> {
             all_consuming(map(
                 (
@@ -148,9 +154,10 @@ impl FromStr for HasPrefixEntry {
 
 #[cfg(test)]
 mod test {
+    use std::{borrow::Cow, path::PathBuf, str::FromStr};
+
     use super::*;
     use crate::package::FileMode;
-    use std::{borrow::Cow, path::PathBuf, str::FromStr};
 
     #[test]
     fn test_placeholder() {
