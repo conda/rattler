@@ -1,12 +1,3 @@
-use crate::{package::paths::FileMode, package::PackageFile};
-use nom::{
-    branch::alt,
-    bytes::complete::{tag, tag_no_case, take_till1},
-    character::complete::multispace1,
-    combinator::{all_consuming, map, value},
-    sequence::{preceded, terminated, tuple},
-    IResult,
-};
 use std::{
     borrow::Cow,
     hint::black_box,
@@ -14,6 +5,17 @@ use std::{
     str::FromStr,
     sync::OnceLock,
 };
+
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, tag_no_case, take_till1},
+    character::complete::multispace1,
+    combinator::{all_consuming, map, value},
+    sequence::{preceded, terminated},
+    IResult, Parser,
+};
+
+use crate::package::{paths::FileMode, PackageFile};
 
 /// Representation of an entry in `info/has_prefix`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,7 +31,8 @@ pub struct HasPrefixEntry {
 /// Representation of the `info/has_prefix` file in older package archives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HasPrefix {
-    /// A list of files in the package that contain the `prefix` (and need prefix replacement).
+    /// A list of files in the package that contain the `prefix` (and need
+    /// prefix replacement).
     pub files: Vec<HasPrefixEntry>,
 }
 
@@ -48,11 +51,13 @@ impl PackageFile for HasPrefix {
     }
 }
 
-/// Returns the default placeholder path. Although this is just a constant it is constructed at
-/// runtime. This ensures that the string itself is not present in the binary when compiled. The
-/// reason we want that is that conda-build (and friends) tries to replace this placeholder in the
-/// binary to point to the actual path in the installed conda environment. In this case we don't
-/// want to that so we deliberately break up the string and reconstruct it at runtime.
+/// Returns the default placeholder path. Although this is just a constant it is
+/// constructed at runtime. This ensures that the string itself is not present
+/// in the binary when compiled. The reason we want that is that conda-build
+/// (and friends) tries to replace this placeholder in the binary to point to
+/// the actual path in the installed conda environment. In this case we don't
+/// want to that so we deliberately break up the string and reconstruct it at
+/// runtime.
 fn placeholder_string() -> &'static str {
     static PLACEHOLDER: OnceLock<String> = OnceLock::new();
     PLACEHOLDER
@@ -70,22 +75,24 @@ impl FromStr for HasPrefixEntry {
     type Err = std::io::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        /// Parses `<prefix> <file_mode> <path>` and fails if there is more input.
+        /// Parses `<prefix> <file_mode> <path>` and fails if there is more
+        /// input.
         fn prefix_file_mode_path(buf: &str) -> IResult<&str, HasPrefixEntry> {
             all_consuming(map(
-                tuple((
+                (
                     possibly_quoted_string,
                     multispace1,
                     file_mode,
                     multispace1,
                     possibly_quoted_string,
-                )),
+                ),
                 |(prefix, _, file_mode, _, path)| HasPrefixEntry {
                     prefix: Cow::Owned(prefix.into_owned()),
                     file_mode,
                     relative_path: PathBuf::from(&*path),
                 },
-            ))(buf)
+            ))
+            .parse(buf)
         }
 
         /// Parses "<path>" and fails if there is more input.
@@ -94,7 +101,8 @@ impl FromStr for HasPrefixEntry {
                 prefix: Cow::Borrowed(placeholder_string()),
                 file_mode: FileMode::Text,
                 relative_path: PathBuf::from(&*path),
-            }))(buf)
+            }))
+            .parse(buf)
         }
 
         /// Parses "text|binary" as a [`FileMode`]
@@ -102,7 +110,8 @@ impl FromStr for HasPrefixEntry {
             alt((
                 value(FileMode::Text, tag_no_case("text")),
                 value(FileMode::Binary, tag_no_case("binary")),
-            ))(buf)
+            ))
+            .parse(buf)
         }
 
         /// Parses either a quoted or an unquoted string.
@@ -110,7 +119,8 @@ impl FromStr for HasPrefixEntry {
             alt((
                 map(quoted_string, Cow::Owned),
                 map(take_till1(char::is_whitespace), Cow::Borrowed),
-            ))(buf)
+            ))
+            .parse(buf)
         }
 
         /// Parses a quoted string and delimited '\"'
@@ -132,10 +142,11 @@ impl FromStr for HasPrefixEntry {
             }
 
             let qs = preceded(tag("\""), in_quotes);
-            terminated(qs, tag("\""))(buf)
+            terminated(qs, tag("\"")).parse(buf)
         }
 
-        alt((prefix_file_mode_path, only_path))(s)
+        alt((prefix_file_mode_path, only_path))
+            .parse(s)
             .map(|(_, res)| res)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
     }
@@ -143,9 +154,10 @@ impl FromStr for HasPrefixEntry {
 
 #[cfg(test)]
 mod test {
+    use std::{borrow::Cow, path::PathBuf, str::FromStr};
+
     use super::*;
     use crate::package::FileMode;
-    use std::{borrow::Cow, path::PathBuf, str::FromStr};
 
     #[test]
     fn test_placeholder() {
