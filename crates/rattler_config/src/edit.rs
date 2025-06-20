@@ -397,13 +397,18 @@ where
             }
             _ => {
                 // We don't know this key, but possibly an extension does.
-                // self.extensions.set(key, value)
-                //     .into_diagnostic()
-                //     .wrap_err(format!("failed to set extension key '{}'", key))?;
-                Err(ConfigEditError::UnknownKey {
-                    key: key.to_string(),
-                    supported_keys: get_supported_keys(self),
-                })
+                self.extensions.set(key, value).map_err(|e| match e {
+                    // Update the error to include all supported keys.
+                    ConfigEditError::UnknownKey {
+                        key,
+                        supported_keys: _,
+                    } => ConfigEditError::UnknownKey {
+                        key,
+                        supported_keys: get_supported_keys(self),
+                    },
+                    _ => e,
+                })?;
+                Ok(())
             }
         }
     }

@@ -11,11 +11,8 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-# feature to get default configuration directories for pixi
-pixi = ["dirs"]
 edit = []
-default = ["pixi", "edit"]
-
+default = ["edit"]
 
 [dependencies]
 console = { workspace = true }
@@ -28,7 +25,6 @@ serde_json = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
-dirs = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -19,6 +19,8 @@ pub mod repodata_config;
 pub mod run_post_link_scripts;
 pub mod s3;
 use crate::config::channel_config::default_channel_config;
+#[cfg(feature = "edit")]
+use crate::edit::ConfigEditError;
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum ValidationError {
@@ -55,6 +57,10 @@ pub enum LoadError {
     /// Error parsing configuration file.
     #[error("Error parsing configuration file: {0}")]
     ParseError(#[from] toml::de::Error),
+
+    /// Error validating configuration.
+    #[error("Error validating configuration: {0}")]
+    ValidationError(#[from] ValidationError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,7 +121,6 @@ pub struct ConfigBase<T> {
     pub extensions: T,
 
     #[serde(skip)]
-    #[serde(alias = "loaded_from")] // BREAK: remove to stop supporting snake_case alias
     pub loaded_from: Vec<PathBuf>,
     // Missing in rattler but should be available in pixi:
     //   experimental
@@ -191,6 +196,15 @@ pub trait Config:
 
     /// Get the valid keys of the configuration.
     fn keys(&self) -> Vec<String>;
+
+    /// Set a key in the configuration.
+    #[cfg(feature = "edit")]
+    fn set(&mut self, key: &str, _value: Option<String>) -> Result<(), ConfigEditError> {
+        Err(ConfigEditError::UnknownKey {
+            key: key.to_string(),
+            supported_keys: self.keys().join(", "),
+        })
+    }
 }
 
 impl<T> ConfigBase<T>
@@ -212,7 +226,7 @@ where
                 .map_err(|e| LoadError::MergeError(e, path.as_ref().to_path_buf()))?;
         }
 
-        // config.validate()?;
+        config.validate()?;
         Ok(config)
     }
 }

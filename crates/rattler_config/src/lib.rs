@@ -1,8 +1,7 @@
 pub mod config;
 #[cfg(feature = "edit")]
 pub mod edit;
-#[cfg(feature = "pixi")]
-pub mod pixi;
+
 
 #[cfg(test)]
 mod tests {
