@@ -1,11 +1,18 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: ["config:recommended"],
-  schedule: ["on tuesday"],
   enabledManagers: ["github-actions", "pixi", "cargo", "npm"],
   commitMessagePrefix: "chore(ci):",
+  separateMajorMinor: false,
   ignorePaths: ["**/test-data/**"],
   labels: ["dependencies"],
+  schedule: ["before 4am on Tuesday"],
+  prHourlyLimit: 10,
+  cargo: {
+    // See https://docs.renovatebot.com/configuration-options/#rangestrategy
+    rangeStrategy: "update-lockfile",
+    fileMatch: ["^crates/.*Cargo\\.toml$"],
+  },
   packageRules: [
     {
       description: "Pin GitHub Actions to immutable SHAs.",
@@ -25,10 +32,6 @@
       enabled: false,
     },
     {
-      "groupName": "Pixi",
-      "matchManagers": ["pixi"]
-    },
-    {
       "groupName": "Pixi-Lock",
       "matchManagers": ["pixi"],
       "matchUpdateTypes": ["lockFileMaintenance"]
@@ -40,17 +43,10 @@
       enabled: false,
     },
     {
-      "groupName": "Cargo",
-      "matchManagers": ["cargo"]
-    },
-    {
-      "groupName": "Cargo-Lock",
-      "matchManagers": ["cargo"],
-      "matchUpdateTypes": ["lockFileMaintenance"]
-    },
-    {
-      groupName: "npm",
-      matchManagers: ["npm"],
+      groupName: "Rust dev-dependencies",
+      matchManagers: ["cargo"],
+      matchDepTypes: ["devDependencies"],
+      description: "Weekly update of Rust development dependencies",
     },
     {
       "groupName": "Npm-Lock",
