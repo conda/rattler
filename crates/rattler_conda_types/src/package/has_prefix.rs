@@ -4,8 +4,8 @@ use nom::{
     bytes::complete::{tag, tag_no_case, take_till1},
     character::complete::multispace1,
     combinator::{all_consuming, map, value},
-    sequence::{preceded, terminated, tuple},
-    IResult,
+    sequence::{preceded, terminated},
+    IResult, Parser,
 };
 use std::{
     borrow::Cow,
@@ -73,19 +73,20 @@ impl FromStr for HasPrefixEntry {
         /// Parses `<prefix> <file_mode> <path>` and fails if there is more input.
         fn prefix_file_mode_path(buf: &str) -> IResult<&str, HasPrefixEntry> {
             all_consuming(map(
-                tuple((
+                (
                     possibly_quoted_string,
                     multispace1,
                     file_mode,
                     multispace1,
                     possibly_quoted_string,
-                )),
+                ),
                 |(prefix, _, file_mode, _, path)| HasPrefixEntry {
                     prefix: Cow::Owned(prefix.into_owned()),
                     file_mode,
                     relative_path: PathBuf::from(&*path),
                 },
-            ))(buf)
+            ))
+            .parse(buf)
         }
 
         /// Parses "<path>" and fails if there is more input.
@@ -94,7 +95,8 @@ impl FromStr for HasPrefixEntry {
                 prefix: Cow::Borrowed(placeholder_string()),
                 file_mode: FileMode::Text,
                 relative_path: PathBuf::from(&*path),
-            }))(buf)
+            }))
+            .parse(buf)
         }
 
         /// Parses "text|binary" as a [`FileMode`]
@@ -102,7 +104,8 @@ impl FromStr for HasPrefixEntry {
             alt((
                 value(FileMode::Text, tag_no_case("text")),
                 value(FileMode::Binary, tag_no_case("binary")),
-            ))(buf)
+            ))
+            .parse(buf)
         }
 
         /// Parses either a quoted or an unquoted string.
@@ -110,7 +113,8 @@ impl FromStr for HasPrefixEntry {
             alt((
                 map(quoted_string, Cow::Owned),
                 map(take_till1(char::is_whitespace), Cow::Borrowed),
-            ))(buf)
+            ))
+            .parse(buf)
         }
 
         /// Parses a quoted string and delimited '\"'
@@ -132,10 +136,11 @@ impl FromStr for HasPrefixEntry {
             }
 
             let qs = preceded(tag("\""), in_quotes);
-            terminated(qs, tag("\""))(buf)
+            terminated(qs, tag("\"")).parse(buf)
         }
 
-        alt((prefix_file_mode_path, only_path))(s)
+        alt((prefix_file_mode_path, only_path))
+            .parse(s)
             .map(|(_, res)| res)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
     }

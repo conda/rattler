@@ -36,7 +36,7 @@ jobs:
         with:
           manifest-path: py-rattler/pixi.toml
           environments: test
-      - uses: actions-rust-lang/setup-rust-toolchain@9d7e65c320fdb52dcd45ffaa68deb6c02c8754d9 # v1
+      - uses: actions-rust-lang/setup-rust-toolchain@fb51252c7ba57d633bc668f941da052e410add48 # v1
         with:
           components: clippy, rustfmt
       - name: Format and Lint
