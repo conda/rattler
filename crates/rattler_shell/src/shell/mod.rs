@@ -32,7 +32,7 @@ use crate::activation::PathModificationBehavior;
 /// let shell = Bash;
 /// shell.set_env_var(&mut script, "FOO", "bar").unwrap();
 ///
-/// assert_eq!(script, "export FOO=\"bar\"\n");
+/// assert_eq!(script, "export FOO=bar\n");
 /// ```
 #[enum_dispatch(ShellEnum)]
 pub trait Shell {
@@ -283,7 +283,8 @@ pub struct Bash;
 impl Shell for Bash {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
         validate_env_var_name(env_var)?;
-        Ok(writeln!(f, "export {env_var}=\"{value}\"")?)
+        let quoted_value = shlex::try_quote(value).unwrap_or_default();
+        Ok(writeln!(f, "export {env_var}={quoted_value}")?)
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult {
@@ -293,7 +294,9 @@ impl Shell for Bash {
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> ShellResult {
-        Ok(writeln!(f, ". \"{}\"", path.to_string_lossy())?)
+        let lossy_path = path.to_string_lossy();
+        let quoted_path = shlex::try_quote(&lossy_path).unwrap_or_default();
+        Ok(writeln!(f, ". {}", quoted_path)?)
     }
 
     fn set_path(
@@ -313,7 +316,7 @@ impl Shell for Bash {
                     match native_path_to_unix(path.to_string_lossy().as_ref()) {
                         Ok(path) => path,
                         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                            // This indicates that the cypath executable could not be found. In that
+                            // This indicates that the cygpath executable could not be found. In that
                             // case we just ignore any conversion and use the windows path directly.
                             path.to_string_lossy().to_string()
                         }
@@ -335,7 +338,21 @@ impl Shell for Bash {
         // Create the shell specific list of paths.
         let paths_string = paths_vec.join(self.path_separator(platform));
 
-        self.set_env_var(f, self.path_var(platform), paths_string.as_str())
+        let path_var = self.path_var(platform);
+        let paths_str = paths_string.as_str();
+        // Use double quotes "" so that ${PATH} is substituted. Calling set_env_var
+        // would correctly escape ${PATH} so that it literally is in the result.
+        Ok(writeln!(f, "export {path_var}=\"{paths_str}\"")?)
+    }
+
+    /// For Bash, the separator in the path variable is always ":", even on Windows
+    fn path_separator(&self, _platform: &Platform) -> &str {
+        ":"
+    }
+
+    /// For Bash, the path variable is always all capital PATH, even on Windows.
+    fn path_var(&self, _platform: &Platform) -> &str {
+        "PATH"
     }
 
     fn extension(&self) -> &str {
@@ -348,8 +365,21 @@ impl Shell for Bash {
 
     fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> ShellResult {
         if completions_dir.exists() {
-            let completions_glob = completions_dir.join("*");
-            writeln!(f, "source {}", completions_glob.to_string_lossy())?;
+            // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
+            let completions_dir_str = if cfg!(windows) {
+                match native_path_to_unix(completions_dir.to_string_lossy().as_ref()) {
+                    Ok(path) => path,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                        // This indicates that the cygpath executable could not be found. In that
+                        // case we just ignore any conversion and use the windows path directly.
+                        completions_dir.to_string_lossy().to_string()
+                    }
+                    Err(e) => panic!("{e}"),
+                }
+            } else {
+                completions_dir.to_string_lossy().to_string()
+            };
+            writeln!(f, "source {}/*", completions_dir_str)?;
         }
         Ok(())
     }
@@ -1109,12 +1139,28 @@ mod tests {
     fn test_bash() {
         let mut script = ShellScript::new(Bash, Platform::Linux64);
 
+        let paths = vec![PathBuf::from("bar"), PathBuf::from("a/b")];
+
         script
             .set_env_var("FOO", "bar")
             .unwrap()
+            .set_env_var("FOO2", "a b")
+            .unwrap()
+            .set_env_var("FOO3", "a\\b")
+            .unwrap()
+            .set_env_var("FOO4", "${UNEXPANDED_VAR}")
+            .unwrap()
             .unset_env_var("FOO")
             .unwrap()
+            .set_path(&paths, PathModificationBehavior::Append)
+            .unwrap()
+            .set_path(&paths, PathModificationBehavior::Prepend)
+            .unwrap()
+            .set_path(&paths, PathModificationBehavior::Replace)
+            .unwrap()
             .run_script(&PathBuf::from_str("foo.sh").unwrap())
+            .unwrap()
+            .run_script(&PathBuf::from_str("a\\foo.sh").unwrap())
             .unwrap();
 
         insta::assert_snapshot!(script.contents);
@@ -1191,7 +1237,7 @@ mod tests {
                 PathModificationBehavior::Prepend,
             )
             .unwrap();
-        assert!(script.contents.contains("/foo;/bar"));
+        assert!(script.contents.contains("/foo:/bar"));
     }
 
     #[test]

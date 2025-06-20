@@ -3,7 +3,7 @@ source: crates/rattler_shell/src/activation.rs
 expression: script_contents
 ---
 export PATH="__PREFIX__/bin:${PATH}"
-export CONDA_SHLVL="2"
-export CONDA_PREFIX="__PREFIX__"
-export CONDA_ENV_SHLVL_2_TEST_VAR1="first_value"
-export TEST_VAR1="second_value"
+export CONDA_SHLVL=2
+export CONDA_PREFIX=__PREFIX__
+export CONDA_ENV_SHLVL_2_TEST_VAR1=first_value
+export TEST_VAR1=second_value

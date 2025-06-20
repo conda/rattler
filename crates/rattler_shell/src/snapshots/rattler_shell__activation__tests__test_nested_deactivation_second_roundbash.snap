@@ -14,4 +14,4 @@ if [ -n "${CONDA_ENV_SHLVL_2_CONDA_PREFIX:-}" ]; then
             else
                 unset CONDA_PREFIX
             fi
-export CONDA_SHLVL="1"
+export CONDA_SHLVL=1

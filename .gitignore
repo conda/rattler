@@ -20,7 +20,6 @@ target/
 
 # pixi
 .pixi/
-pixi.lock
 
 # test files that we download
 test-data/channels/conda-forge/
