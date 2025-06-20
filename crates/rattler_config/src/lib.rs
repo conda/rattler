@@ -81,7 +81,7 @@ mod tests {
         assert_eq!(config.authentication_override_file, None);
         assert_eq!(config.tls_no_verify, Some(false));
         assert!(config.mirrors.is_empty());
-        assert!(config.s3_options.is_empty());
+        assert!(config.s3_options.0.is_empty());
         assert_eq!(config.extensions, TestExtension::default());
     }
 
@@ -222,8 +222,8 @@ mod tests {
             .unwrap();
 
         // Verify the bucket was added
-        assert!(config.s3_options.contains_key("mybucket"));
-        let bucket_config = &config.s3_options["mybucket"];
+        assert!(config.s3_options.0.contains_key("mybucket"));
+        let bucket_config = &config.s3_options.0["mybucket"];
         assert_eq!(
             bucket_config.endpoint_url,
             Url::parse("https://s3.example.com").unwrap()
@@ -238,7 +238,7 @@ mod tests {
                 Some("eu-central-1".to_string()),
             )
             .unwrap();
-        assert_eq!(config.s3_options["mybucket"].region, "eu-central-1");
+        assert_eq!(config.s3_options.0["mybucket"].region, "eu-central-1");
 
         config
             .set(
@@ -247,7 +247,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(
-            config.s3_options["mybucket"].endpoint_url,
+            config.s3_options.0["mybucket"].endpoint_url,
             Url::parse("https://s3.eu-central-1.amazonaws.com").unwrap()
         );
 
@@ -257,7 +257,7 @@ mod tests {
                 Some("false".to_string()),
             )
             .unwrap();
-        assert!(!config.s3_options["mybucket"].force_path_style);
+        assert!(!config.s3_options.0["mybucket"].force_path_style);
     }
 
     #[test]
@@ -346,16 +346,16 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(config.s3_options.len(), 3);
-        assert!(config.s3_options.contains_key("production"));
-        assert!(config.s3_options.contains_key("development"));
-        assert!(config.s3_options.contains_key("staging"));
+        assert_eq!(config.s3_options.0.len(), 3);
+        assert!(config.s3_options.0.contains_key("production"));
+        assert!(config.s3_options.0.contains_key("development"));
+        assert!(config.s3_options.0.contains_key("staging"));
 
         // Verify different configurations
-        assert_eq!(config.s3_options["production"].region, "us-east-1");
-        assert!(config.s3_options["development"].force_path_style);
+        assert_eq!(config.s3_options.0["production"].region, "us-east-1");
+        assert!(config.s3_options.0["development"].force_path_style);
         assert_eq!(
-            config.s3_options["staging"].endpoint_url,
+            config.s3_options.0["staging"].endpoint_url,
             Url::parse("https://s3.staging.example.com").unwrap()
         );
     }
@@ -661,7 +661,7 @@ mod tests {
             Some(3)
         );
         assert_eq!(loaded_config.concurrency.solves, 6);
-        assert!(loaded_config.s3_options.contains_key("test-bucket"));
+        assert!(loaded_config.s3_options.0.contains_key("test-bucket"));
     }
 
     #[test]
