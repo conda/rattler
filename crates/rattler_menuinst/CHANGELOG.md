@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.11](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.10...rattler_menuinst-v0.2.11) - 2025-06-21
+
+### Fixed
+
+- use $PATH prepend behavior in `menuinst` activation ([#1376](https://github.com/conda/rattler/pull/1376))
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
 ## [0.2.10](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.9...rattler_menuinst-v0.2.10) - 2025-05-23
 
 ### Other
