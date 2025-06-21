@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.1](https://github.com/conda/rattler/compare/rattler_networking-v0.25.0...rattler_networking-v0.25.1) - 2025-06-21
+
+### Added
+
+- make rattler_networking system integration optional ([#1381](https://github.com/conda/rattler/pull/1381))
+
+### Fixed
+
+- reduce s3 into to trace ([#1395](https://github.com/conda/rattler/pull/1395))
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
 ## [0.25.0](https://github.com/conda/rattler/compare/rattler_networking-v0.24.0...rattler_networking-v0.25.0) - 2025-05-23
 
 ### Fixed
