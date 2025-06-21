@@ -1,0 +1,18 @@
+---
+source: crates/rattler_shell/src/activation.rs
+expression: script_contents
+---
+@chcp 65001 > nul
+if defined CONDA_ENV_SHLVL_2_TEST_VAR1 (
+                set "TEST_VAR1=%CONDA_ENV_SHLVL_2_TEST_VAR1%"
+                set "CONDA_ENV_SHLVL_2_TEST_VAR1="
+            ) else (
+                set "TEST_VAR1="
+            )
+if defined CONDA_ENV_SHLVL_2_CONDA_PREFIX (
+                set "CONDA_PREFIX=%CONDA_ENV_SHLVL_2_CONDA_PREFIX%"
+                set "CONDA_ENV_SHLVL_2_CONDA_PREFIX="
+            ) else (
+                set "CONDA_PREFIX="
+            )
+@SET "CONDA_SHLVL=1"

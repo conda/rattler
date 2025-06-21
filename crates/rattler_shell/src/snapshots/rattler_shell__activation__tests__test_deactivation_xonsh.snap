@@ -1,0 +1,10 @@
+---
+source: crates/rattler_shell/src/activation.rs
+expression: script_contents
+---
+echo 'Warning: CONDA_SHLVL not set. This may indicate a broken workflow.'
+echo 'Proceeding to unset conda variables without restoring previous values.'
+del $TEST_VAR1
+del $TEST_VAR2
+del $CONDA_PREFIX
+del $CONDA_SHLVL
