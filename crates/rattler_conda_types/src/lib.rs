@@ -15,7 +15,7 @@ mod platform;
 mod repo_data;
 mod repo_data_record;
 mod run_export;
-mod utils;
+pub mod utils;
 mod version;
 pub mod version_spec;
 
