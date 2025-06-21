@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.40](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.39...rattler_package_streaming-v0.22.40) - 2025-06-21
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
 ## [0.22.39](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.38...rattler_package_streaming-v0.22.39) - 2025-05-23
 
 ### Fixed
