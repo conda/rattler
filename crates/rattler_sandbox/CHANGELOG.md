@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9](https://github.com/conda/rattler/compare/rattler_sandbox-v0.1.8...rattler_sandbox-v0.1.9) - 2025-06-23
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
 ## [0.1.8](https://github.com/conda/rattler/compare/rattler_sandbox-v0.1.7...rattler_sandbox-v0.1.8) - 2025-05-16
 
 ### Other
