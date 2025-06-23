@@ -28,6 +28,7 @@ pub enum S3Config {
 }
 
 #[cfg(feature = "rattler_config")]
+/// Compute the S3 configuration from the given S3 options.
 pub fn compute_s3_config<M>(s3_options: &M) -> HashMap<String, S3Config>
 where
     M: IntoIterator<Item = (String, rattler_config::config::s3::S3Options)> + Clone,
