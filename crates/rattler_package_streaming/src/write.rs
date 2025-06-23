@@ -110,7 +110,8 @@ fn total_size(base_path: &Path, paths: &[PathBuf]) -> u64 {
 /// ```no_run
 /// use std::path::PathBuf;
 /// use std::fs::File;
-/// use rattler_package_streaming::write::{write_tar_bz2_package, CompressionLevel};
+/// use rattler_package_streaming::write::{write_tar_bz2_package};
+/// use rattler_conda_types::compression_level::CompressionLevel;
 ///
 /// let paths = vec![PathBuf::from("info/recipe/meta.yaml"), PathBuf::from("info/recipe/conda_build_config.yaml")];
 /// let mut file = File::create("test.tar.bz2").unwrap();
