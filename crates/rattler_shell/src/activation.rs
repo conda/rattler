@@ -1185,7 +1185,7 @@ mod tests {
                 script_contents = script_contents.replace("=\"__PREFIX__\"", "=__PREFIX__");
             }
             // script_contents = script_contents.replace(&prefix.replace("\\", "\\\\"), "__PREFIX__");
-            script_contents = script_contents.replace(&prefix, "__PREFIX__");
+            script_contents = script_contents.replace(prefix, "__PREFIX__");
 
             // on windows we need to replace Path with PATH
             script_contents = script_contents.replace("Path", "PATH");
