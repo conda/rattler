@@ -49,7 +49,6 @@ impl RepodataChannelConfig {
     }
 }
 
-
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct RepodataConfig {
