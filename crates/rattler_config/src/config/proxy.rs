@@ -3,7 +3,10 @@ use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::config::{Config, MergeError, ValidationError};
+use crate::{
+    config::{Config, MergeError, ValidationError},
+    edit::ConfigEditError,
+};
 
 // detect proxy env vars like curl: https://curl.se/docs/manpage.html
 static ENV_HTTP_PROXY: LazyLock<Option<String>> = LazyLock::new(|| {
@@ -102,5 +105,70 @@ impl Config for ProxyConfig {
             "http".to_string(),
             "non-proxy-hosts".to_string(),
         ]
+    }
+
+    fn set(
+        &mut self,
+        key: &str,
+        value: Option<String>,
+    ) -> Result<(), crate::config::ConfigEditError> {
+        if key == "proxy-config" {
+            if let Some(value) = value {
+                *self = serde_json::de::from_str(&value).map_err(|e| {
+                    ConfigEditError::JsonParseError {
+                        key: key.to_string(),
+                        source: e,
+                    }
+                })?;
+            } else {
+                *self = ProxyConfig::default();
+            }
+            return Ok(());
+        } else if !key.starts_with("proxy-config.") {
+            return Err(ConfigEditError::UnknownKeyInner {
+                key: key.to_string(),
+            });
+        }
+
+        let subkey = key.strip_prefix("proxy-config.").unwrap();
+        match subkey {
+            "https" => {
+                self.https = value
+                    .map(|v| {
+                        Url::parse(&v).map_err(|e| ConfigEditError::UrlParseError {
+                            key: key.to_string(),
+                            source: e,
+                        })
+                    })
+                    .transpose()?;
+            }
+            "http" => {
+                self.http = value
+                    .map(|v| {
+                        Url::parse(&v).map_err(|e| ConfigEditError::UrlParseError {
+                            key: key.to_string(),
+                            source: e,
+                        })
+                    })
+                    .transpose()?;
+            }
+            "non-proxy-hosts" => {
+                self.non_proxy_hosts = value
+                    .map(|v| {
+                        serde_json::de::from_str(&v).map_err(|e| ConfigEditError::JsonParseError {
+                            key: key.to_string(),
+                            source: e,
+                        })
+                    })
+                    .transpose()?
+                    .unwrap_or_default();
+            }
+            _ => {
+                return Err(ConfigEditError::UnknownKeyInner {
+                    key: key.to_string(),
+                })
+            }
+        }
+        Ok(())
     }
 }

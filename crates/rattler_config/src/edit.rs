@@ -1,13 +1,9 @@
 use std::path::Path;
 use std::path::PathBuf;
 
+use crate::config::{Config, ConfigBase};
 use serde::de::DeserializeOwned;
 use thiserror::Error;
-use url::Url;
-
-use crate::config::proxy::ProxyConfig;
-use crate::config::Config;
-use crate::config::ConfigBase;
 
 #[derive(Error, Debug)]
 pub enum ConfigEditError {
@@ -196,67 +192,7 @@ where
                 Ok(())
             }
             key if key.starts_with("proxy-config") => {
-                if key == "proxy-config" {
-                    if let Some(value) = value {
-                        self.proxy_config = serde_json::de::from_str(&value).map_err(|e| {
-                            ConfigEditError::JsonParseError {
-                                key: key.to_string(),
-                                source: e,
-                            }
-                        })?;
-                    } else {
-                        self.proxy_config = ProxyConfig::default();
-                    }
-                    return Ok(());
-                } else if !key.starts_with("proxy-config.") {
-                    return Err(ConfigEditError::UnknownKey {
-                        key: key.to_string(),
-                        supported_keys: get_supported_keys(self),
-                    });
-                }
-
-                let subkey = key.strip_prefix("proxy-config.").unwrap();
-                match subkey {
-                    "https" => {
-                        self.proxy_config.https = value
-                            .map(|v| {
-                                Url::parse(&v).map_err(|e| ConfigEditError::UrlParseError {
-                                    key: key.to_string(),
-                                    source: e,
-                                })
-                            })
-                            .transpose()?;
-                    }
-                    "http" => {
-                        self.proxy_config.http = value
-                            .map(|v| {
-                                Url::parse(&v).map_err(|e| ConfigEditError::UrlParseError {
-                                    key: key.to_string(),
-                                    source: e,
-                                })
-                            })
-                            .transpose()?;
-                    }
-                    "non-proxy-hosts" => {
-                        self.proxy_config.non_proxy_hosts = value
-                            .map(|v| {
-                                serde_json::de::from_str(&v).map_err(|e| {
-                                    ConfigEditError::JsonParseError {
-                                        key: key.to_string(),
-                                        source: e,
-                                    }
-                                })
-                            })
-                            .transpose()?
-                            .unwrap_or_default();
-                    }
-                    _ => {
-                        return Err(ConfigEditError::UnknownKey {
-                            key: key.to_string(),
-                            supported_keys: get_supported_keys(self),
-                        })
-                    }
-                }
+                self.proxy_config.set(key, value)?;
                 Ok(())
             }
             _ => {
