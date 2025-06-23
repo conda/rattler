@@ -7,7 +7,6 @@ use aws_config::BehaviorVersion;
 use aws_sdk_s3::presigning::PresigningConfig;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
-use tracing::info;
 use url::Url;
 
 use crate::{Authentication, AuthenticationStorage};
@@ -66,7 +65,7 @@ pub struct S3Middleware {
 impl S3Middleware {
     /// Create a new S3 middleware.
     pub fn new(config: HashMap<String, S3Config>, auth_storage: AuthenticationStorage) -> Self {
-        info!("Creating S3 middleware using {:?}", config);
+        tracing::trace!("Creating S3 middleware using {:?}", config);
         Self {
             s3: S3::new(config, auth_storage),
         }
