@@ -116,6 +116,6 @@ impl Config for S3OptionsMap {
     }
 
     fn keys(&self) -> Vec<String> {
-        self.0.keys().map(|key| key.to_string()).collect()
+        self.0.keys().map(ToString::to_string).collect()
     }
 }
