@@ -22,7 +22,7 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
-  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3
+  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,experimental_extras
 
 jobs:
   check-rustdoc-links:
@@ -61,6 +61,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # TODO: We are using 22.04 because for some reason we have a SIGSEV on the libsolv tests on newer versions of Ubuntu.
           - { name: "Linux-x86_64",      target: x86_64-unknown-linux-musl,        os: ubuntu-22.04 }
           - { name: "Linux-aarch64",     target: aarch64-unknown-linux-musl,       os: ubuntu-latest, skip-tests: true }
           - { name: "Linux-arm",         target: arm-unknown-linux-musleabi,       os: ubuntu-latest, use-cross: true, skip-tests: true }
@@ -119,6 +120,23 @@ jobs:
         run: |
           echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls-tls" >> $GITHUB_OUTPUT
 
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        if: startsWith(matrix.os, 'ubuntu')
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false # Takes a lot of time so lets leave it
+          docker-images: true
+          swap-storage: true
+
       - name: Build
         run: >
           cargo build
@@ -148,7 +166,7 @@ jobs:
         run: >
           cargo nextest run
           --workspace
-          --features ${{ env.DEFAULT_FEATURES }},experimental_extras
+          --features ${{ env.DEFAULT_FEATURES }}
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}
