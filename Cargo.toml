@@ -102,6 +102,7 @@ libz-sys = { version = "1.1.22", default-features = false }
 md-5 = "0.10.6"
 memchr = "2.7.4"
 memmap2 = "0.9.5"
+miette = "7.6.0"
 netrc-rs = "0.1.2"
 nom = "8.0.0"
 nom-language = "0.1.0"
@@ -161,6 +162,7 @@ thiserror = "2.0"
 tokio = { version = "1.45.1", default-features = false }
 tokio-stream = "0.1.17"
 tokio-util = "0.7.15"
+toml = "0.8.23"
 tower = { version = "0.5.2", default-features = false }
 tower-http = { version = "0.6.4", default-features = false }
 tracing = "0.1.41"
@@ -184,6 +186,7 @@ file_url = { path = "crates/file_url", version = "=0.2.5", default-features = fa
 rattler = { path = "crates/rattler", version = "=0.34.0", default-features = false }
 rattler_cache = { path = "crates/rattler_cache", version = "=0.3.20", default-features = false }
 rattler_conda_types = { path = "crates/rattler_conda_types", version = "=0.35.0", default-features = false }
+rattler_config = { path = "crates/rattler_config", version = "=0.1.0", default-features = false }
 rattler_digest = { path = "crates/rattler_digest", version = "=1.1.2", default-features = false }
 rattler_index = { path = "crates/rattler_index", version = "=0.23.0", default-features = false }
 rattler_libsolv_c = { path = "crates/rattler_libsolv_c", version = "=1.2.1", default-features = false }

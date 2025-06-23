@@ -4,6 +4,7 @@ use std::io::{self, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use chrono::{Datelike, Timelike};
+use rattler_conda_types::compression_level::CompressionLevel;
 use rattler_conda_types::package::PackageMetadata;
 use zip::DateTime;
 
@@ -81,60 +82,6 @@ fn sort_paths<'a>(paths: &'a [PathBuf], base_path: &'a Path) -> (Vec<PathBuf>, V
     (info_paths, other_paths)
 }
 
-/// Select the compression level to use for the package
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CompressionLevel {
-    /// Use the lowest compression level (zstd: 1, bzip2: 1)
-    Lowest,
-    /// Use the highest compression level (zstd: 22, bzip2: 9)
-    Highest,
-    /// Use the default compression level (zstd: 15, bzip2: 9)
-    #[default]
-    Default,
-    /// Use a numeric compression level (zstd: 1-22, bzip2: 1-9)
-    Numeric(i32),
-}
-
-impl CompressionLevel {
-    /// convert the compression level to a zstd compression level
-    pub fn to_zstd_level(self) -> Result<i32, std::io::Error> {
-        match self {
-            CompressionLevel::Lowest => Ok(-7),
-            CompressionLevel::Highest => Ok(22),
-            CompressionLevel::Default => Ok(15),
-            CompressionLevel::Numeric(n) => {
-                if (-7..=22).contains(&n) {
-                    Ok(n)
-                } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "zstd compression level must be between -7 and 22",
-                    ))
-                }
-            }
-        }
-    }
-
-    /// convert the compression level to a bzip2 compression level
-    pub fn to_bzip2_level(self) -> Result<bzip2::Compression, std::io::Error> {
-        match self {
-            CompressionLevel::Lowest => Ok(bzip2::Compression::new(1)),
-            CompressionLevel::Default | CompressionLevel::Highest => Ok(bzip2::Compression::new(9)),
-            CompressionLevel::Numeric(n) => {
-                if (1..=9).contains(&n) {
-                    // this conversion from i32 to u32 cannot panic because of the check above
-                    Ok(bzip2::Compression::new(n.try_into().unwrap()))
-                } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "bzip2 compression level must be between 1 and 9",
-                    ))
-                }
-            }
-        }
-    }
-}
-
 fn total_size(base_path: &Path, paths: &[PathBuf]) -> u64 {
     paths
         .iter()
@@ -163,7 +110,8 @@ fn total_size(base_path: &Path, paths: &[PathBuf]) -> u64 {
 /// ```no_run
 /// use std::path::PathBuf;
 /// use std::fs::File;
-/// use rattler_package_streaming::write::{write_tar_bz2_package, CompressionLevel};
+/// use rattler_package_streaming::write::{write_tar_bz2_package};
+/// use rattler_conda_types::compression_level::CompressionLevel;
 ///
 /// let paths = vec![PathBuf::from("info/recipe/meta.yaml"), PathBuf::from("info/recipe/conda_build_config.yaml")];
 /// let mut file = File::create("test.tar.bz2").unwrap();
@@ -183,7 +131,7 @@ pub fn write_tar_bz2_package<W: Write>(
 ) -> Result<(), std::io::Error> {
     let mut archive = tar::Builder::new(bzip2::write::BzEncoder::new(
         writer,
-        compression_level.to_bzip2_level()?,
+        bzip2::Compression::new(compression_level.to_bzip2_level()?),
     ));
     archive.follow_symlinks(false);
 
