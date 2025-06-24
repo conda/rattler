@@ -1123,7 +1123,7 @@ mod tests {
         assert!(validate_env_var_name("").is_err());
         assert!(validate_env_var_name("VAR=1").is_err());
         assert!(validate_env_var_name("VAR\n").is_err());
-        assert!(validate_env_var_name("VAR\0123").is_err());
+        assert!(validate_env_var_name("VAR\x00123").is_err());
         assert!(validate_env_var_name("VAR\r123").is_err());
     }
 
