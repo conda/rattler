@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.4](https://github.com/conda/rattler/compare/rattler_shell-v0.23.3...rattler_shell-v0.23.4) - 2025-06-24
+
+### Fixed
+
+- simplify validate env vars ([#1465](https://github.com/conda/rattler/pull/1465))
+
 ## [0.23.3](https://github.com/conda/rattler/compare/rattler_shell-v0.23.2...rattler_shell-v0.23.3) - 2025-06-23
 
 ### Fixed

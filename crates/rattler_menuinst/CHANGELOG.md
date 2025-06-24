@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.12](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.11...rattler_menuinst-v0.2.12) - 2025-06-24
+
+### Other
+
+- *(ci)* Update Rust crate windows to 0.61.0 ([#1462](https://github.com/conda/rattler/pull/1462))
+
 ## [0.2.11](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.10...rattler_menuinst-v0.2.11) - 2025-06-23
 
 ### Fixed
