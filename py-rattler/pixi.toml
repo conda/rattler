@@ -85,4 +85,4 @@ repl = ["repl"]
 
 [dependencies]
 requests = ">=2.32.3,<2.33"
-types-requests = ">=2.32.0.20240602,<2.32.1"
+types-requests = ">=2.32.4.20250611,<2.32.5"
