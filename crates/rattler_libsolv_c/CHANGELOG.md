@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.2.1...rattler_libsolv_c-v1.2.2) - 2025-06-23
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
 ## [1.2.1](https://github.com/conda/rattler/compare/rattler_libsolv_c-v1.2.0...rattler_libsolv_c-v1.2.1) - 2025-05-16
 
 ### Other

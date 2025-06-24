@@ -27,6 +27,28 @@ pub enum S3Config {
     },
 }
 
+#[cfg(feature = "rattler_config")]
+/// Compute the S3 configuration from the given S3 options.
+pub fn compute_s3_config<M>(s3_options: &M) -> HashMap<String, S3Config>
+where
+    M: IntoIterator<Item = (String, rattler_config::config::s3::S3Options)> + Clone,
+{
+    s3_options
+        .clone()
+        .into_iter()
+        .map(|(k, v)| {
+            (
+                k,
+                S3Config::Custom {
+                    endpoint_url: v.endpoint_url,
+                    region: v.region,
+                    force_path_style: v.force_path_style,
+                },
+            )
+        })
+        .collect()
+}
+
 /// Wrapper around S3 client.
 #[derive(Clone, Debug)]
 pub struct S3 {

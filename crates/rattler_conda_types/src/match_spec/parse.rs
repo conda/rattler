@@ -8,7 +8,7 @@ use nom::{
     error::{context, ContextError, ParseError},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, preceded, separated_pair, terminated},
-    Finish, IResult,
+    Finish, IResult, Parser,
 };
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use smallvec::SmallVec;
@@ -150,13 +150,13 @@ type BracketVec<'a> = SmallVec<[(&'a str, &'a str); 2]>;
 /// A parse combinator to filter whitespace if front and after another parser.
 fn whitespace_enclosed<'a, F, O, E: ParseError<&'a str>>(
     mut inner: F,
-) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
+) -> impl Parser<&'a str, Output = O, Error = E>
 where
-    F: FnMut(&'a str) -> IResult<&'a str, O, E>,
+    F: Parser<&'a str, Output = O, Error = E>,
 {
     move |input: &'a str| {
         let (input, _) = multispace0(input)?;
-        let (input, o2) = inner(input)?;
+        let (input, o2) = inner.parse(input)?;
         multispace0(input).map(|(i, _)| (i, o2))
     }
 }
@@ -168,7 +168,8 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
         whitespace_enclosed(context(
             "key",
             take_while(|c: char| c.is_alphanumeric() || c == '_' || c == '-'),
-        ))(input)
+        ))
+        .parse(input)
     }
 
     /// Parses a value in a bracket string.
@@ -181,22 +182,23 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
                 delimited(char('['), take_until("]"), char(']')),
                 take_till1(|c| c == ',' || c == ']' || c == '\'' || c == '"'),
             )),
-        ))(input)
+        ))
+        .parse(input)
     }
 
     /// Parses a `key=value` pair
     fn parse_key_value(input: &str) -> IResult<&str, (&str, &str)> {
-        separated_pair(parse_key, char('='), parse_value)(input)
+        separated_pair(parse_key, char('='), parse_value).parse(input)
     }
 
     /// Parses a list of `key=value` pairs separated by commas
     fn parse_key_value_list(input: &str) -> IResult<&str, Vec<(&str, &str)>> {
-        separated_list0(whitespace_enclosed(char(',')), parse_key_value)(input)
+        separated_list0(whitespace_enclosed(char(',')), parse_key_value).parse(input)
     }
 
     /// Parses an entire bracket string
     fn parse_bracket_list(input: &str) -> IResult<&str, Vec<(&str, &str)>> {
-        delimited(char('['), parse_key_value_list, char(']'))(input)
+        delimited(char('['), parse_key_value_list, char(']')).parse(input)
     }
 
     match parse_bracket_list(input).finish() {
@@ -240,14 +242,15 @@ pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
             multispace0,
             take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-'),
             multispace0,
-        )(i)
+        )
+        .parse(i)
     }
 
     fn parse_features(i: &str) -> IResult<&str, Vec<String>> {
-        separated_list1(char(','), map(parse_feature_name, |s: &str| s.to_string()))(i)
+        separated_list1(char(','), map(parse_feature_name, |s: &str| s.to_string())).parse(i)
     }
 
-    match all_consuming(parse_features)(input).finish() {
+    match all_consuming(parse_features).parse(input).finish() {
         Ok((_remaining, features)) => Ok(features),
         Err(_e) => Err(ParseMatchSpecError::InvalidBracket),
     }
@@ -392,7 +395,7 @@ fn split_version_and_build(
     ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
         move |input: &'a str| {
             if strictness == Lenient {
-                alt((parse_special_equality, recognize_constraint))(input)
+                alt((parse_special_equality, recognize_constraint)).parse(input)
             } else {
                 recognize_constraint(input)
             }
@@ -406,7 +409,8 @@ fn split_version_and_build(
             alt((
                 delimited(tag("("), parse_version_group(strictness), tag(")")),
                 maybe_recognize_lenient_constraint(strictness),
-            ))(input)
+            ))
+            .parse(input)
         }
     }
 
@@ -417,7 +421,8 @@ fn split_version_and_build(
             recognize(separated_list1(
                 whitespace_enclosed(one_of(",|")),
                 parse_version_constraint_or_group(strictness),
-            ))(input)
+            ))
+            .parse(input)
         }
     }
 
@@ -437,7 +442,8 @@ fn split_version_and_build(
         recognize(preceded(
             tag("="),
             alt((version_followed_by_glob, just_star)),
-        ))(input)
+        ))
+        .parse(input)
     }
 
     fn parse_version_and_build_separator<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
@@ -445,9 +451,9 @@ fn split_version_and_build(
     ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
         move |input: &'a str| {
             if strictness == Lenient {
-                terminated(parse_version_group(strictness), opt(one_of(" =")))(input)
+                terminated(parse_version_group(strictness), opt(one_of(" ="))).parse(input)
             } else {
-                terminated(parse_version_group(strictness), space0)(input)
+                terminated(parse_version_group(strictness), space0).parse(input)
             }
         }
     }
@@ -470,9 +476,9 @@ fn split_version_and_build(
                 build_string.is_empty().not().then_some(build_string),
             ))
         }
-        Err(nom::error::VerboseError { .. }) => Err(ParseMatchSpecError::InvalidVersionAndBuild(
-            input.to_string(),
-        )),
+        Err(nom_language::error::VerboseError { .. }) => Err(
+            ParseMatchSpecError::InvalidVersionAndBuild(input.to_string()),
+        ),
     }
 }
 /// Parse version and build string.

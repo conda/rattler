@@ -251,24 +251,14 @@ fn validate_env_var_name(name: &str) -> Result<(), ShellError> {
         ));
     }
 
-    // First character must be alphabetic or underscore
-    if !name
-        .chars()
-        .next()
-        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-    {
-        return Err(ShellError::InvalidName(
-            name.to_string(),
-            "must start with a letter or underscore",
-        ));
-    }
-
-    // Rest must be alphanumeric or underscore
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-        return Err(ShellError::InvalidName(
-            name.to_string(),
-            "must contain only letters, numbers, and underscores",
-        ));
+    // Check for control characters (0-31 and 127) and equals sign
+    for ch in name.chars() {
+        if ch.is_control() || ch == '=' {
+            return Err(ShellError::InvalidName(
+                name.to_string(),
+                "name cannot contain control characters or '='",
+            ));
+        }
     }
 
     Ok(())
@@ -1208,7 +1198,7 @@ mod tests {
 
     #[cfg(feature = "sysinfo")]
     #[test]
-    fn test_from_parent_process_doenst_crash() {
+    fn test_from_parent_process_doesnt_crash() {
         let shell = ShellEnum::from_parent_process();
         println!("Detected shell: {shell:?}");
     }
@@ -1246,13 +1236,14 @@ mod tests {
         assert!(validate_env_var_name("PATH").is_ok());
         assert!(validate_env_var_name("_PATH").is_ok());
         assert!(validate_env_var_name("MY_VAR_123").is_ok());
+        assert!(validate_env_var_name("ProgramFiles(x86)").is_ok());
 
         // Invalid cases
         assert!(validate_env_var_name("").is_err());
-        assert!(validate_env_var_name("123ABC").is_err());
-        assert!(validate_env_var_name("MY-VAR").is_err());
-        assert!(validate_env_var_name("MY VAR").is_err());
-        assert!(validate_env_var_name("MY.VAR").is_err());
+        assert!(validate_env_var_name("VAR=1").is_err());
+        assert!(validate_env_var_name("VAR\n").is_err());
+        assert!(validate_env_var_name("VAR\x00123").is_err());
+        assert!(validate_env_var_name("VAR\r123").is_err());
     }
 
     #[test]

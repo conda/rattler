@@ -1,8 +1,7 @@
+use rattler_conda_types::compression_level::CompressionLevel;
 use rattler_conda_types::package::ArchiveType;
 use rattler_package_streaming::read::{extract_conda_via_streaming, extract_tar_bz2};
-use rattler_package_streaming::write::{
-    write_conda_package, write_tar_bz2_package, CompressionLevel,
-};
+use rattler_package_streaming::write::{write_conda_package, write_tar_bz2_package};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;

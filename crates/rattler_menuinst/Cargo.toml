@@ -1,6 +1,6 @@
 [package]
 name = "rattler_menuinst"
-version = "0.2.10"
+version = "0.2.11"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Install menu entries for a Conda package"
@@ -37,7 +37,7 @@ shlex = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 known-folders = "1.2.0"
-windows = { version = "0.60.0", features = [
+windows = { version = "0.61.0", features = [
     "Win32_System_Com_StructuredStorage",
     "Win32_UI_Shell_PropertiesSystem",
     "Win32_Storage_EnhancedStorage",
