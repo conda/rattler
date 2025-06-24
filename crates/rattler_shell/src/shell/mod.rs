@@ -1114,6 +1114,7 @@ mod tests {
         assert!(validate_env_var_name("PATH").is_ok());
         assert!(validate_env_var_name("_PATH").is_ok());
         assert!(validate_env_var_name("MY_VAR_123").is_ok());
+        assert!(validate_env_var_name("ProgramFiles(x86)").is_ok());
 
         // Invalid cases
         assert!(validate_env_var_name("").is_err());
