@@ -1,8 +1,10 @@
 ---
 source: crates/rattler_shell/src/activation.rs
-expression: script
+expression: script_contents
 ---
 $OutputEncoding = [System.Console]::OutputEncoding = [System.Console]::InputEncoding = [System.Text.Encoding]::UTF8
-${Env:PATH} = "__PREFIX__/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin"
-${Env:CONDA_SHLVL} = "1"
+${Env:PATH} = "__PREFIX__/bin:$Env:PATH"
+${Env:CONDA_SHLVL} = "2"
 ${Env:CONDA_PREFIX} = "__PREFIX__"
+${Env:CONDA_ENV_SHLVL_2_TEST_VAR1} = "first_value"
+${Env:TEST_VAR1} = "second_value"
