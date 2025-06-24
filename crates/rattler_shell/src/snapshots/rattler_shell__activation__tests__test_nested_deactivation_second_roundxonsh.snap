@@ -1,0 +1,15 @@
+---
+source: crates/rattler_shell/src/activation.rs
+expression: script_contents
+---
+if CONDA_ENV_SHLVL_2_TEST_VAR1 in $env:
+                $env[TEST_VAR1] = $env[CONDA_ENV_SHLVL_2_TEST_VAR1]
+                del $env[CONDA_ENV_SHLVL_2_TEST_VAR1]
+            else:
+                del $env[TEST_VAR1]
+if CONDA_ENV_SHLVL_2_CONDA_PREFIX in $env:
+                $env[CONDA_PREFIX] = $env[CONDA_ENV_SHLVL_2_CONDA_PREFIX]
+                del $env[CONDA_ENV_SHLVL_2_CONDA_PREFIX]
+            else:
+                del $env[CONDA_PREFIX]
+$CONDA_SHLVL = "1"
