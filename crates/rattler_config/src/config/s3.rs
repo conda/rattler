@@ -2,7 +2,9 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{config::Config, edit::ConfigEditError};
+use crate::config::Config;
+#[cfg(feature = "edit")]
+use crate::edit::ConfigEditError;
 
 #[derive(Default, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct S3OptionsMap(pub IndexMap<String, S3Options>);

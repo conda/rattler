@@ -1,6 +1,7 @@
 use pyo3::{pyfunction, Bound, PyAny, PyResult, Python};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::Platform;
+use rattler_config::config::concurreny::default_max_concurrent_solves;
 use rattler_index::{index_fs, index_s3, IndexFsConfig, IndexS3Config};
 use url::Url;
 
@@ -10,7 +11,7 @@ use crate::{error::PyRattlerError, platform::PyPlatform};
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-#[pyo3(signature = (channel_directory, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=32))]
+#[pyo3(signature = (channel_directory, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=None))]
 pub fn py_index_fs(
     py: Python<'_>,
     channel_directory: PathBuf,
@@ -19,7 +20,7 @@ pub fn py_index_fs(
     write_zst: bool,
     write_shards: bool,
     force: bool,
-    max_parallel: usize,
+    max_parallel: Option<usize>,
 ) -> PyResult<Bound<'_, PyAny>> {
     future_into_py(py, async move {
         let target_platform = target_platform.map(Platform::from);
@@ -30,7 +31,7 @@ pub fn py_index_fs(
             write_zst,
             write_shards,
             force,
-            max_parallel,
+            max_parallel: max_parallel.unwrap_or_else(default_max_concurrent_solves),
             multi_progress: None,
         })
         .await
@@ -40,7 +41,7 @@ pub fn py_index_fs(
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-#[pyo3(signature = (channel_url, region, endpoint_url, force_path_style, access_key_id=None,secret_access_key=None, session_token=None, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=32))]
+#[pyo3(signature = (channel_url, region, endpoint_url, force_path_style, access_key_id=None,secret_access_key=None, session_token=None, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=None))]
 pub fn py_index_s3(
     py: Python<'_>,
     channel_url: String,
@@ -55,7 +56,7 @@ pub fn py_index_s3(
     write_zst: bool,
     write_shards: bool,
     force: bool,
-    max_parallel: usize,
+    max_parallel: Option<usize>,
 ) -> PyResult<Bound<'_, PyAny>> {
     let channel_url = Url::parse(&channel_url).map_err(PyRattlerError::from)?;
     let endpoint_url = Url::parse(&endpoint_url).map_err(PyRattlerError::from)?;
@@ -74,7 +75,7 @@ pub fn py_index_s3(
             write_zst,
             write_shards,
             force,
-            max_parallel,
+            max_parallel: max_parallel.unwrap_or_else(default_max_concurrent_solves),
             multi_progress: None,
         })
         .await

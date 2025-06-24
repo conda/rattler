@@ -14,7 +14,7 @@ async def index_fs(
     write_zst: bool = True,
     write_shards: bool = True,
     force: bool = False,
-    max_parallel: int = 128,
+    max_parallel: int | None = None,
 ) -> None:
     """
     Indexes dependencies in the `channel_directory` for one or more subdirectories within said directory.
@@ -57,7 +57,7 @@ async def index_s3(
     write_zst: bool = True,
     write_shards: bool = True,
     force: bool = False,
-    max_parallel: int = 32,
+    max_parallel: int | None = None,
 ) -> None:
     """
     Indexes dependencies in the `channel_url` for one or more subdirectories in the S3 directory.

@@ -606,10 +606,13 @@ pub struct IndexS3Config {
     /// Whether to force path style for the S3 bucket.
     pub force_path_style: bool,
     /// The access key ID for the S3 bucket.
+    /// If not set, the authentication storage will be queried.
     pub access_key_id: Option<String>,
     /// The secret access key for the S3 bucket.
+    /// If not set, the authentication storage will be queried.
     pub secret_access_key: Option<String>,
     /// The session token for the S3 bucket.
+    /// If not set, the authentication storage will be queried.
     pub session_token: Option<String>,
     /// The target platform to index.
     pub target_platform: Option<Platform>,

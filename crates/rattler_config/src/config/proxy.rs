@@ -3,10 +3,9 @@ use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{
-    config::{Config, MergeError, ValidationError},
-    edit::ConfigEditError,
-};
+use crate::config::{Config, MergeError, ValidationError};
+#[cfg(feature = "edit")]
+use crate::edit::ConfigEditError;
 
 // detect proxy env vars like curl: https://curl.se/docs/manpage.html
 static ENV_HTTP_PROXY: LazyLock<Option<String>> = LazyLock::new(|| {
@@ -107,6 +106,7 @@ impl Config for ProxyConfig {
         ]
     }
 
+    #[cfg(feature = "edit")]
     fn set(
         &mut self,
         key: &str,

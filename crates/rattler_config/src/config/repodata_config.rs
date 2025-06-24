@@ -3,10 +3,9 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{
-    config::{Config, MergeError, ValidationError},
-    edit::ConfigEditError,
-};
+use crate::config::{Config, MergeError, ValidationError};
+#[cfg(feature = "edit")]
+use crate::edit::ConfigEditError;
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -103,6 +102,7 @@ impl Config for RepodataConfig {
         vec!["default".to_string(), "per-channel".to_string()]
     }
 
+    #[cfg(feature = "edit")]
     fn set(
         &mut self,
         key: &str,
