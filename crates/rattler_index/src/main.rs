@@ -155,7 +155,7 @@ async fn main() -> anyhow::Result<()> {
             secret_access_key,
             session_token,
         } => {
-            let bucket = channel.host().unwrap().to_string(); // todo proper error
+            let bucket = channel.host().context("Invalid S3 url")?.to_string();
             let s3_config = config
                 .as_ref()
                 .and_then(|config| config.s3_options.0.get(&bucket));
