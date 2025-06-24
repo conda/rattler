@@ -681,7 +681,7 @@ mod tests {
     use super::*;
     #[cfg(unix)]
     use crate::activation::PathModificationBehavior;
-    use crate::{shell, shell::ShellEnum};
+    use crate::shell::{self, native_path_to_unix, ShellEnum};
 
     #[test]
     fn test_collect_scripts() {
@@ -1190,8 +1190,10 @@ mod tests {
             }
 
             script_contents = script_contents.replace(&prefix, "__PREFIX__");
-            // on windows anmd bash it will be quoted with shlex::try_quote
+            // on windows and bash it will be quoted with shlex::try_quote
             if cfg!(windows) && *shell_name == "bash" {
+                let unix_path = native_path_to_unix(&prefix).unwrap();
+                script_contents = script_contents.replace(&unix_path, "__PREFIX__");
                 script_contents = script_contents.replace("=\"__PREFIX__\"", "=__PREFIX__");
             }
 

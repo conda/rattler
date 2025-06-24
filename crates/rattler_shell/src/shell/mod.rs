@@ -195,7 +195,7 @@ pub trait Shell {
 }
 
 /// Convert a native PATH on Windows to a Unix style path using cygpath.
-fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
+pub(crate) fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
     // call cygpath on Windows to convert paths to Unix style
     let output = Command::new("cygpath")
         .arg("--unix")
