@@ -4,7 +4,9 @@ use rattler_networking::{
     AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, MirrorMiddleware,
     OciMiddleware, S3Middleware,
 };
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest_middleware::ClientWithMiddleware;
+use std::collections::HashMap;
 
 #[pyclass]
 #[repr(transparent)]
@@ -16,10 +18,28 @@ pub struct PyClientWithMiddleware {
 #[pymethods]
 impl PyClientWithMiddleware {
     #[new]
-    #[pyo3(signature = (middlewares=None))]
-    pub fn new(middlewares: Option<Vec<PyMiddleware>>) -> PyResult<Self> {
+    #[pyo3(signature = (middlewares=None, headers=None))]
+    pub fn new(
+        middlewares: Option<Vec<PyMiddleware>>,
+        headers: Option<HashMap<String, String>>,
+    ) -> PyResult<Self> {
         let middlewares = middlewares.unwrap_or_default();
-        let mut client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new());
+
+        let mut client_builder = reqwest::Client::builder();
+
+        if let Some(headers) = headers {
+            let mut header_map = HeaderMap::new();
+            for (key, value) in headers {
+                let header_name =
+                    HeaderName::from_bytes(key.as_bytes()).map_err(PyRattlerError::from)?;
+                let header_value = HeaderValue::from_str(&value).map_err(PyRattlerError::from)?;
+                header_map.insert(header_name, header_value);
+            }
+            client_builder = client_builder.default_headers(header_map);
+        }
+
+        let mut client = reqwest_middleware::ClientBuilder::new(client_builder.build().unwrap());
+
         for middleware in middlewares {
             match middleware {
                 PyMiddleware::Mirror(middleware) => {

@@ -5,7 +5,7 @@ use std::{
 };
 
 use http::{
-    header::{ACCEPT, AUTHORIZATION},
+    header::{ACCEPT, AUTHORIZATION, USER_AGENT},
     Extensions,
 };
 use reqwest::{Request, Response};
@@ -14,6 +14,8 @@ use serde::Deserialize;
 use url::{ParseError, Url};
 
 use crate::mirror_middleware::create_404_response;
+
+static RATTLER_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
 #[derive(thiserror::Error, Debug)]
 enum OciMiddlewareError {
@@ -183,6 +185,13 @@ impl OCIUrl {
                 .expect("Could not parse token header"),
         );
 
+        req.headers_mut().insert(
+            USER_AGENT,
+            RATTLER_USER_AGENT
+                .parse()
+                .expect("Could not parse user-agent header"),
+        );
+
         // if we know the hash, we can pull the artifact directly
         // if we don't, we need to pull the manifest and then pull the artifact
         if let Some(expected_sha_hash) = req
@@ -199,6 +208,7 @@ impl OCIUrl {
                 .get(manifest_url)
                 .header(AUTHORIZATION, format!("Bearer {token}"))
                 .header(ACCEPT, "application/vnd.oci.image.manifest.v1+json")
+                .header(USER_AGENT, RATTLER_USER_AGENT)
                 .send()
                 .await?;
 
