@@ -1178,22 +1178,7 @@ mod tests {
             let mut script_contents = result.script.contents().unwrap();
 
             // Normalize temporary directory paths for consistent snapshots
-            let prefix = tmp_dir_path.to_str().unwrap();
-            script_contents = script_contents.replace(prefix, "__PREFIX__");
-            // on windows it will be quoted with shlex::try_quote
-            if cfg!(windows) {
-                script_contents = script_contents.replace("=\"__PREFIX__\"", "=__PREFIX__");
-            }
-            script_contents = script_contents.replace(&prefix.replace("\\", "\\\\"), "__PREFIX__");
-            // script_contents = script_contents.replace(prefix, "__PREFIX__");
-
-            // on windows we need to replace Path with PATH
-            script_contents = script_contents.replace("Path", "PATH");
-
-            // For cmd.exe, normalize line endings for snapshots
-            if *shell_name == "cmd" {
-                script_contents = script_contents.replace("\r\n", "\n");
-            }
+            let mut prefix = tmp_dir_path.to_str().unwrap().to_string();
 
             if cfg!(windows) {
                 // Replace backslashes with forward slashes for consistency in snapshots as well
@@ -1201,6 +1186,21 @@ mod tests {
                 script_contents = script_contents.replace("\\\\", "\\");
                 script_contents = script_contents.replace("\\", "/");
                 script_contents = script_contents.replace(";", ":");
+                prefix = prefix.replace("\\", "/");
+            }
+
+            script_contents = script_contents.replace(&prefix, "__PREFIX__");
+            // on windows anmd bash it will be quoted with shlex::try_quote
+            if cfg!(windows) && *shell_name == "bash" {
+                script_contents = script_contents.replace("=\"__PREFIX__\"", "=__PREFIX__");
+            }
+
+            // on windows we need to replace Path with PATH
+            script_contents = script_contents.replace("Path", "PATH");
+
+            // For cmd.exe, normalize line endings for snapshots
+            if *shell_name == "cmd" {
+                script_contents = script_contents.replace("\r\n", "\n");
             }
 
             insta::assert_snapshot!(
