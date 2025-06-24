@@ -4164,7 +4164,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.34.1"
+version = "0.34.2"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4364,7 +4364,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.23.1"
+version = "0.23.2"
 dependencies = [
  "anyhow",
  "bytes",
@@ -4447,7 +4447,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "chrono",
  "configparser",
@@ -4564,7 +4564,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.23.1"
+version = "0.23.2"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4640,7 +4640,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.23.3"
+version = "0.23.4"
 dependencies = [
  "anyhow",
  "enum_dispatch",
