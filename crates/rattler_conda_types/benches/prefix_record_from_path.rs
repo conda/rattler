@@ -1,11 +1,11 @@
+use criterion::{criterion_group, criterion_main, Criterion};
 use rattler_conda_types::RecordFromPath;
+use rattler_conda_types::{PackageRecord, PrefixRecord};
+use std::hint::black_box;
 use std::{
     fs::{self},
     path::{Path, PathBuf},
 };
-
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use rattler_conda_types::{PackageRecord, PrefixRecord};
 
 fn process_json_files_from_dir(dir: &Path) {
     let entries = fs::read_dir(dir).expect("Directory not found");

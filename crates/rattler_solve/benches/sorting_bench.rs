@@ -1,6 +1,6 @@
-use std::path::Path;
+use std::{hint::black_box, path::Path};
 
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use futures::FutureExt;
 use rattler_conda_types::{Channel, MatchSpec};
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
