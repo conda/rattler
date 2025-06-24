@@ -240,11 +240,14 @@ fn validate_env_var_name(name: &str) -> Result<(), ShellError> {
         ));
     }
 
-    if name.contains(['=', '\n', '\r', '\t']) {
-        return Err(ShellError::InvalidName(
-            name.to_string(),
-            "name cannot contain '=', '\\n', '\\r', or '\\t'",
-        ));
+    // Check for control characters (0-31 and 127) and equals sign
+    for ch in name.chars() {
+        if ch.is_control() || ch == '=' {
+            return Err(ShellError::InvalidName(
+                name.to_string(),
+                "name cannot contain control characters or '='",
+            ));
+        }
     }
 
     Ok(())
@@ -1120,6 +1123,8 @@ mod tests {
         assert!(validate_env_var_name("").is_err());
         assert!(validate_env_var_name("VAR=1").is_err());
         assert!(validate_env_var_name("VAR\n").is_err());
+        assert!(validate_env_var_name("VAR\0123").is_err());
+        assert!(validate_env_var_name("VAR\r123").is_err());
     }
 
     #[test]
