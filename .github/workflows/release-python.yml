@@ -160,7 +160,7 @@ jobs:
           manylinux: '2_28'
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --out dist  --no-default-features --features rustls-tls
-      - uses: uraimo/run-on-arch-action@aa8e672a03e10b403401927ea2ceda57e1b68ac3 # v3
+      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
         with:
@@ -209,7 +209,7 @@ jobs:
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --out dist --no-default-features --features native-tls,vendored-openssl
-      - uses: uraimo/run-on-arch-action@aa8e672a03e10b403401927ea2ceda57e1b68ac3 # v3
+      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
         with:
@@ -305,7 +305,7 @@ jobs:
           manylinux: musllinux_1_2
           args: --release --out dist --no-default-features --features rustls-tls
           docker-options: ${{ matrix.platform.maturin_docker_options }}
-      - uses: uraimo/run-on-arch-action@aa8e672a03e10b403401927ea2ceda57e1b68ac3 # v3
+      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: Test wheel
         with:
           arch: ${{ matrix.platform.arch }}
