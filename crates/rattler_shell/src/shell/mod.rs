@@ -240,23 +240,10 @@ fn validate_env_var_name(name: &str) -> Result<(), ShellError> {
         ));
     }
 
-    // First character must be alphabetic or underscore
-    if !name
-        .chars()
-        .next()
-        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-    {
+    if name.contains(['=', '\n', '\r', '\t']) {
         return Err(ShellError::InvalidName(
             name.to_string(),
-            "must start with a letter or underscore",
-        ));
-    }
-
-    // Rest must be alphanumeric or underscore
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-        return Err(ShellError::InvalidName(
-            name.to_string(),
-            "must contain only letters, numbers, and underscores",
+            "name cannot contain '=', '\\n', '\\r', or '\\t'",
         ));
     }
 
@@ -1089,7 +1076,7 @@ mod tests {
 
     #[cfg(feature = "sysinfo")]
     #[test]
-    fn test_from_parent_process_doenst_crash() {
+    fn test_from_parent_process_doesnt_crash() {
         let shell = ShellEnum::from_parent_process();
         println!("Detected shell: {shell:?}");
     }
@@ -1130,10 +1117,8 @@ mod tests {
 
         // Invalid cases
         assert!(validate_env_var_name("").is_err());
-        assert!(validate_env_var_name("123ABC").is_err());
-        assert!(validate_env_var_name("MY-VAR").is_err());
-        assert!(validate_env_var_name("MY VAR").is_err());
-        assert!(validate_env_var_name("MY.VAR").is_err());
+        assert!(validate_env_var_name("VAR=1").is_err());
+        assert!(validate_env_var_name("VAR\n").is_err());
     }
 
     #[test]
