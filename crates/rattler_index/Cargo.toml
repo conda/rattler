@@ -12,7 +12,7 @@ readme.workspace = true
 default-run = "rattler-index"
 
 [features]
-default = ["rustls-tls"]
+default = ["rustls-tls", "rattler_config"]
 native-tls = [
   "reqwest/native-tls",
   "reqwest/native-tls-alpn",
