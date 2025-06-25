@@ -16,7 +16,7 @@ use super::{
     clobber_registry::{ClobberError, ClobberRegistry, ClobberedPath},
     link_script::{PrePostLinkError, PrePostLinkResult},
     unlink::{recursively_remove_empty_directories, UnlinkError},
-    Transaction,
+    Transaction, TransactionOperation,
 };
 use crate::install::link_script::LinkScriptError;
 
@@ -156,6 +156,7 @@ impl InstallDriver {
         target_prefix: &Path,
     ) -> Result<Option<PrePostLinkResult>, PrePostLinkError> {
         let mut result = None;
+
         if self.execute_link_scripts {
             match self.run_pre_unlink_scripts(transaction, target_prefix) {
                 Ok(res) => {
@@ -169,7 +170,7 @@ impl InstallDriver {
 
         // For all packages that are removed, we need to remove menuinst entries as well
         for record in transaction.removed_packages() {
-            let prefix_record = record.borrow();
+            let prefix_record: &PrefixRecord = record.borrow();
             if !prefix_record.installed_system_menus.is_empty() {
                 match rattler_menuinst::remove_menu_items(&prefix_record.installed_system_menus) {
                     Ok(_) => {}
@@ -221,7 +222,7 @@ impl InstallDriver {
         let required_packages =
             PackageRecord::sort_topologically(prefix_records.iter().collect::<Vec<_>>());
 
-        self.remove_empty_directories(transaction, &prefix_records, target_prefix)
+        self.remove_empty_directories(&transaction.operations, &prefix_records, target_prefix)
             .unwrap_or_else(|e| {
                 tracing::warn!("Failed to remove empty directories: {} (ignored)", e);
             });
@@ -246,7 +247,7 @@ impl InstallDriver {
     /// records.
     pub fn remove_empty_directories<Old: Borrow<PrefixRecord>, New>(
         &self,
-        transaction: &Transaction<Old, New>,
+        operations: &[TransactionOperation<Old, New>],
         new_prefix_records: &[PrefixRecord],
         target_prefix: &Path,
     ) -> Result<(), UnlinkError> {
@@ -263,7 +264,10 @@ impl InstallDriver {
         }
 
         // find all removed directories
-        for record in transaction.removed_packages().map(Borrow::borrow) {
+        for record in operations
+            .iter()
+            .filter_map(|op| op.record_to_remove().map(Borrow::borrow))
+        {
             let mut removed_directories = HashSet::new();
 
             for paths in record.paths_data.paths.iter() {
@@ -278,7 +282,8 @@ impl InstallDriver {
 
             // Sort the directories by length, so that we delete the deepest directories
             // first.
-            let mut directories: IndexSet<_> = removed_directories.into_iter().sorted().collect();
+            let mut directories: IndexSet<&Path> =
+                removed_directories.into_iter().sorted().collect();
 
             while let Some(directory) = directories.pop() {
                 let directory_path = target_prefix.join(directory);

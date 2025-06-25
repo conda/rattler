@@ -150,6 +150,16 @@ impl ClobberRegistry {
         }
     }
 
+    /// Check if we have the package name already registered, otherwise register it.
+    fn get_package_name_index(&mut self, name: &PackageName) -> PackageNameIdx {
+        if let Some(idx) = self.package_names.iter().position(|n| n == name) {
+            PackageNameIdx(idx)
+        } else {
+            self.package_names.push(name.clone());
+            PackageNameIdx(self.package_names.len() - 1)
+        }
+    }
+
     /// Register the paths of a package before linking a package in
     /// order to determine which files may clobber other files (clobbering files
     /// are those that are present in multiple packages).
@@ -165,12 +175,7 @@ impl ClobberRegistry {
         let name = &index_json.name.clone();
 
         // check if we have the package name already registered
-        let name_idx = if let Some(idx) = self.package_names.iter().position(|n| n == name) {
-            PackageNameIdx(idx)
-        } else {
-            self.package_names.push(name.clone());
-            PackageNameIdx(self.package_names.len() - 1)
-        };
+        let name_idx = self.get_package_name_index(name);
 
         for (_, path) in computed_paths {
             if let Some(&entry) = self.paths_registry.get(path) {
@@ -193,6 +198,7 @@ impl ClobberRegistry {
                             // do anything special (just flip it as installed)
                             self.paths_registry
                                 .insert(path.clone(), PathState::Installed(idx));
+
                             // If we previously had clobbers with this path, we need to
                             // add the re-installed package back to the clobbers
                             if let Some(entry) = self.clobbers.get_mut(path) {
@@ -285,7 +291,10 @@ impl ClobberRegistry {
                 tracing::info!(
                     "The path {} is clobbered by multiple packages ({}) but ultimately the file from {} is kept.",
                     path.display(),
-                    sorted_clobbered_by.iter().map(|(_, n)| n.as_normalized()).format(", "),
+                    sorted_clobbered_by
+                        .iter()
+                        .map(|(_, n)| n.as_normalized())
+                        .format(", "),
                     &winner.1.as_normalized()
                 );
             }
@@ -1362,5 +1371,70 @@ mod tests {
             .unwrap();
 
         assert_check_files(&target_prefix.path().join("bin"), &["python"]);
+    }
+
+    #[tokio::test]
+    async fn test_dir_to_file_upgrade() {
+        let repodata_record_1 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-directory-upgrade-0.1.0-h4616a5c_0.conda"),
+        );
+        let repodata_record_2 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-directory-upgrade-0.2.0-h4616a5c_0.conda"),
+        );
+
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: vec![TransactionOperation::Install(repodata_record_1)],
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        // execute transaction
+        let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
+
+        let packages_dir = tempfile::tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        execute_transaction(
+            transaction,
+            &prefix_path,
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &InstallDriver::default(),
+            &InstallOptions::default(),
+        )
+        .await;
+
+        assert!(target_prefix.path().join("xbin").is_dir());
+
+        let prefix_records: Vec<PrefixRecord> =
+            PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: vec![TransactionOperation::Change {
+                old: prefix_records[0].clone(),
+                new: repodata_record_2,
+            }],
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&prefix_records)
+            .finish();
+
+        execute_transaction(
+            transaction,
+            &prefix_path,
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &install_driver,
+            &InstallOptions::default(),
+        )
+        .await;
+
+        assert!(target_prefix.path().join("xbin").is_file());
     }
 }
