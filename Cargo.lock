@@ -1016,9 +1016,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.18.1"
+version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "793db76d6187cd04dff33004d8e6c9cc4e05cd330500379d2394209271b4aeee"
+checksum = "46c5e41b57b8bba42a04676d81cb89e9ee8e859a1a66f80a5a72e1cb76b34d43"
 
 [[package]]
 name = "byteorder"
@@ -4150,7 +4150,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.34.2"
+version = "0.34.3"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4226,7 +4226,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.21"
+version = "0.3.22"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4264,7 +4264,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.35.1"
+version = "0.35.2"
 dependencies = [
  "assert_matches",
  "chrono",
@@ -4313,7 +4313,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "console",
  "fs-err",
@@ -4350,7 +4350,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.23.2"
+version = "0.23.3"
 dependencies = [
  "anyhow",
  "bytes",
@@ -4397,7 +4397,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.23.6"
+version = "0.23.7"
 dependencies = [
  "chrono",
  "file_url",
@@ -4434,7 +4434,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.12"
+version = "0.2.13"
 dependencies = [
  "chrono",
  "configparser",
@@ -4463,7 +4463,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.1"
+version = "0.25.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4499,7 +4499,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.40"
+version = "0.22.41"
 dependencies = [
  "assert_matches",
  "bzip2",
@@ -4551,7 +4551,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.23.2"
+version = "0.23.3"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4627,7 +4627,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.23.4"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4649,7 +4649,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "2.1.1"
+version = "2.1.2"
 dependencies = [
  "chrono",
  "criterion",
@@ -4675,7 +4675,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.0.14"
+version = "2.0.15"
 dependencies = [
  "archspec",
  "libloading",
