@@ -5,7 +5,7 @@ use std::{
 };
 
 use http::{
-    header::{ACCEPT, AUTHORIZATION, USER_AGENT},
+    header::{ACCEPT, AUTHORIZATION},
     Extensions,
 };
 use reqwest::{Request, Response};
@@ -14,8 +14,6 @@ use serde::Deserialize;
 use url::{ParseError, Url};
 
 use crate::mirror_middleware::create_404_response;
-
-static RATTLER_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
 #[derive(thiserror::Error, Debug)]
 enum OciMiddlewareError {
