@@ -185,13 +185,6 @@ impl OCIUrl {
                 .expect("Could not parse token header"),
         );
 
-        req.headers_mut().insert(
-            USER_AGENT,
-            RATTLER_USER_AGENT
-                .parse()
-                .expect("Could not parse user-agent header"),
-        );
-
         // if we know the hash, we can pull the artifact directly
         // if we don't, we need to pull the manifest and then pull the artifact
         if let Some(expected_sha_hash) = req
@@ -208,7 +201,6 @@ impl OCIUrl {
                 .get(manifest_url)
                 .header(AUTHORIZATION, format!("Bearer {token}"))
                 .header(ACCEPT, "application/vnd.oci.image.manifest.v1+json")
-                .header(USER_AGENT, RATTLER_USER_AGENT)
                 .send()
                 .await?;
 
