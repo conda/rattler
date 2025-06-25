@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0](https://github.com/conda/rattler/compare/rattler_shell-v0.23.4...rattler_shell-v0.24.0) - 2025-06-25
+
+### Added
+
+- Add `deactivation()` method to Activator ([#1278](https://github.com/conda/rattler/pull/1278))
+
 ## [0.23.4](https://github.com/conda/rattler/compare/rattler_shell-v0.23.3...rattler_shell-v0.23.4) - 2025-06-24
 
 ### Fixed
