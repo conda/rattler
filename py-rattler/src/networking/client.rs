@@ -8,6 +8,8 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest_middleware::ClientWithMiddleware;
 use std::collections::HashMap;
 
+static RATTLER_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+
 #[pyclass]
 #[repr(transparent)]
 #[derive(Clone)]
@@ -36,6 +38,9 @@ impl PyClientWithMiddleware {
                 header_map.insert(header_name, header_value);
             }
             client_builder = client_builder.default_headers(header_map);
+        } else {
+            client_builder =
+                client_builder.user_agent(format!("py-rattler/{}", env!("CARGO_PKG_VERSION")));
         }
 
         let mut client = reqwest_middleware::ClientBuilder::new(client_builder.build().unwrap());
