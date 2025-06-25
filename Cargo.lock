@@ -4364,6 +4364,7 @@ dependencies = [
  "indicatif",
  "opendal",
  "rattler_conda_types",
+ "rattler_config",
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",

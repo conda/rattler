@@ -12,7 +12,7 @@ readme.workspace = true
 default-run = "rattler-index"
 
 [features]
-default = ["rustls-tls"]
+default = ["rustls-tls", "rattler_config"]
 native-tls = [
   "reqwest/native-tls",
   "reqwest/native-tls-alpn",
@@ -45,7 +45,10 @@ opendal = { workspace = true, features = [
   "services-s3",
   "services-fs",
 ], default-features = false }
-rattler_networking = { workspace = true, default-features = false, features = ["system-integration"] }
+rattler_config = { workspace = true, optional = true }
+rattler_networking = { workspace = true, default-features = false, features = [
+  "system-integration",
+] }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }

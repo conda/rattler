@@ -1,22 +1,21 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    config::{Config, MergeError, ValidationError},
-    edit::ConfigEditError,
-};
+use crate::config::{Config, MergeError, ValidationError};
+#[cfg(feature = "edit")]
+use crate::edit::ConfigEditError;
 
 // Making the default values part of pixi_config to allow for printing the
 // default settings in the future.
 /// The default maximum number of concurrent solves that can be run at once.
 /// Defaulting to the number of CPUs available.
-fn default_max_concurrent_solves() -> usize {
+pub fn default_max_concurrent_solves() -> usize {
     std::thread::available_parallelism().map_or(1, std::num::NonZero::get)
 }
 
 /// The default maximum number of concurrent downloads that can be run at once.
 /// 50 is a reasonable default for the number of concurrent downloads.
 /// More verification is needed to determine the optimal number.
-fn default_max_concurrent_downloads() -> usize {
+pub fn default_max_concurrent_downloads() -> usize {
     50
 }
 
@@ -93,6 +92,7 @@ impl Config for ConcurrencyConfig {
         vec!["solves".to_string(), "downloads".to_string()]
     }
 
+    #[cfg(feature = "edit")]
     fn set(
         &mut self,
         key: &str,

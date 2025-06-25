@@ -36,6 +36,7 @@ rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", defaul
     "gateway",
 ] }
 rattler_conda_types = { path = "../crates/rattler_conda_types", default-features = false }
+rattler_config = { path = "../crates/rattler_config", default-features = false }
 rattler_digest = { path = "../crates/rattler_digest" }
 rattler_networking = { path = "../crates/rattler_networking", default-features = false, features = [
     "gcs",
