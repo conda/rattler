@@ -336,11 +336,11 @@ pub enum RunExportsCacheError {
     #[error("{0}")]
     Persist(#[from] PersistError),
 
-    /// An error occured when extracting `run_exports` from archive
+    /// An error occurred when extracting `run_exports` from archive
     #[error(transparent)]
     Extract(#[from] ExtractError),
 
-    /// An error occured when serializing `run_exports`
+    /// An error occurred when serializing `run_exports`
     #[error(transparent)]
     Serialize(#[from] serde_json::Error),
 

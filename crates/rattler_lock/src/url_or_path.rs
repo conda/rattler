@@ -149,7 +149,7 @@ impl UrlOrPath {
     }
 
     /// Returns the file name of the path or url. If the path or url ends in a
-    /// directory seperator `None` is returned.
+    /// directory separator `None` is returned.
     pub fn file_name(&self) -> Option<&str> {
         match self {
             UrlOrPath::Path(path) if !path.as_str().ends_with(['/', '\\']) => path.file_name(),

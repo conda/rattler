@@ -5,24 +5,24 @@ recipe:
 outputs:
   - package:
       name: clobber-1
-    
-    build:  
+
+    build:
       noarch: generic
       script:
         - echo "clobber-1 v2" > $PREFIX/clobber.txt
 
   - package:
       name: clobber-2
-    
-    build:  
+
+    build:
       noarch: generic
       script:
         - echo "clobber-2 v2" > $PREFIX/clobber.txt
 
   - package:
       name: clobber-3
-    
-    build:  
+
+    build:
       noarch: generic
       script:
         - echo "clobber-3 v2" > $PREFIX/clobber.txt

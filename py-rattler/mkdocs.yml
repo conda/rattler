@@ -2,16 +2,16 @@ site_name: "py-rattler"
 
 theme:
   name: material
-  palette:
-    primary: yellow
-    accent: yellow
-    scheme: slate
   site_url: https://prefix.dev
   font:
     text: Red Hat Text
     code: JetBrains Mono
 
   palette:
+    - primary: yellow
+      accent: yellow
+      scheme: slate
+
     # Palette toggle for automatic mode
     - media: "(prefers-color-scheme)"
       toggle:

@@ -118,7 +118,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - add `rattler_menuinst` crate (#840)
 - better readme (#118)
 - replace zulip with discord (#116)
-- move all conda types to seperate crate
+- move all conda types to separate crate
 
 ### Fixed
 

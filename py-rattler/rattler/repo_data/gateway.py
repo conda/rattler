@@ -37,7 +37,7 @@ class SourceConfig:
 
     cache_action: CacheAction = "cache-or-fetch"
     """How to interact with the cache.
-    
+
     * `'cache-or-fetch'` (default): Use the cache if its up to date or fetch from the URL if there is no valid cached value.
     * `'use-cache-only'`: Only use the cache, but error out if the cache is not up to date
     * `'force-cache-only'`: Only use the cache, ignore whether or not it is up to date.

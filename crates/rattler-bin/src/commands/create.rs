@@ -200,7 +200,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     .await
     .context("failed to load repodata")?;
 
-    // Determine the number of recors
+    // Determine the number of records
     let total_records: usize = repo_data.iter().map(RepoData::len).sum();
     println!(
         "Loaded {} records in {:?}",
