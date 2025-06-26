@@ -1,4 +1,3 @@
 # DetectVirtualPackageError
 
 ::: rattler.exceptions.DetectVirtualPackageError
-

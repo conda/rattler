@@ -1,17 +1,17 @@
 # This is a versions and the result of parsing them with Conda.
-# 
+#
 # To recreate this do the following:
 #
 # 1. Initially versions are extracted from repodata.json using the following jq expression:
-# 
+#
 #    ```shell
 #    jq -n -r '[inputs | .packages[], ."packages.conda"[] | .version] | unique[]' repodata1.json repodata2.json ... repodataN.json > versions.txt
 #    ```
-# 
+#
 #    This produces a list of unique versions found in a bunch of repodata files.
 #
 # 2. The following python code is then run to use Conda to parse the versions:
-# 
+#
 #    ```python
 #    from conda.models.version import VersionOrder
 #

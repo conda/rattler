@@ -244,7 +244,8 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
                     env_vars.insert(key.to_string(), value.to_string());
                 } else {
                     tracing::warn!(
-                        "WARNING: environment variable {key} has no string value (path: {env_var_file:?})");
+                        "WARNING: environment variable {key} has no string value (path: {env_var_file:?})"
+                    );
                 }
             }
         }
@@ -267,14 +268,16 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
         for (key, value) in state_env_vars {
             if state_env_vars.contains_key(key) {
                 tracing::warn!(
-                    "WARNING: environment variable {key} already defined in packages (path: {state_file:?})");
+                    "WARNING: environment variable {key} already defined in packages (path: {state_file:?})"
+                );
             }
 
             if let Some(value) = value.as_str() {
                 env_vars.insert(key.to_uppercase(), value.to_string());
             } else {
                 tracing::warn!(
-                    "WARNING: environment variable {key} has no string value (path: {state_file:?})");
+                    "WARNING: environment variable {key} has no string value (path: {state_file:?})"
+                );
             }
         }
     }
@@ -1093,7 +1096,7 @@ mod tests {
                 platform: Platform::current(),
             };
 
-            // CONDA_SHLVL to set to the initial leve ( 1 meaning that it's activated)
+            // CONDA_SHLVL to set to the initial level ( 1 meaning that it's activated)
             let test_env = HashMap::from([
                 ("CONDA_SHLVL".to_string(), "1".to_string()),
                 (
@@ -1242,7 +1245,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reseting_conda_shlvl() {
+    fn test_resetting_conda_shlvl() {
         let tmp_dir = TempDir::new("test_deactivation").unwrap();
         let tmp_dir_path = tmp_dir.path();
 
@@ -1301,7 +1304,7 @@ mod tests {
             }
 
             insta::assert_snapshot!(
-                format!("test_reseting_conda_shlvl{}", shell_name),
+                format!("test_resetting_conda_shlvl{}", shell_name),
                 script_contents
             );
         }

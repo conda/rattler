@@ -1,4 +1,3 @@
 # InvalidPackageNameError
 
 ::: rattler.exceptions.InvalidPackageNameError
-

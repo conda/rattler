@@ -56,7 +56,7 @@ async def create_environment(
 
 
 """
-Example usage: 
+Example usage:
 python3 -m examples.cli --prefix ~/Downloads/test python=3.12 flask  --lockfile ~/Downloads/test.lock --channel conda-forge
 """
 
