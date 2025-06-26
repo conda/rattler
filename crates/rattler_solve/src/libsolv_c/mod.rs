@@ -10,7 +10,7 @@ pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages};
 pub use libc_byte_slice::LibcByteSlice;
 use output::get_required_packages;
-use rattler_conda_types::{MatchSpec, NamelessMatchSpec, RepoDataRecord, SolverResult};
+use rattler_conda_types::{match_spec::package_name_matcher::PackageNameMatcher, MatchSpec, NamelessMatchSpec, RepoDataRecord, SolverResult};
 use wrapper::{
     flags::SolverFlag,
     pool::{Pool, Verbosity},
@@ -254,7 +254,7 @@ impl super::SolverImpl for Solver {
         for virtual_package in task.virtual_packages {
             let id = pool.intern_matchspec(&MatchSpec::from_nameless(
                 NamelessMatchSpec::default(),
-                Some(virtual_package.name),
+                Some(PackageNameMatcher::Exact(virtual_package.name)),
             ));
             goal.install(id, false);
         }

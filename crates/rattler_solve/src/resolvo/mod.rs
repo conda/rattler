@@ -13,9 +13,7 @@ use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::{
-    package::ArchiveType, version_spec::EqualityOperator, BuildNumberSpec, GenericVirtualPackage,
-    MatchSpec, Matches, NamelessMatchSpec, OrdOperator, PackageName, PackageRecord,
-    ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult, StringMatcher, VersionSpec,
+    match_spec::package_name_matcher::{package_name_matcher_to_package_name, PackageNameMatcher}, package::ArchiveType, version_spec::EqualityOperator, BuildNumberSpec, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, OrdOperator, PackageName, PackageRecord, ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult, StringMatcher, VersionSpec
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -293,7 +291,7 @@ impl<'a> CondaDependencyProvider<'a> {
         let direct_dependencies = match_specs
             .iter()
             .filter_map(|spec| spec.name.as_ref())
-            .map(|name| pool.intern_package_name(name.as_normalized()))
+            .map(|name| pool.intern_package_name(package_name_matcher_to_package_name(name).as_normalized()))
             .collect();
 
         // TODO: Normalize these channel names to urls so we can compare them correctly.
@@ -424,9 +422,10 @@ impl<'a> CondaDependencyProvider<'a> {
                     // Add to excluded when package is not in the specified channel.
                     if !channel_specific_specs.is_empty() {
                         if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
-                            spec.name
+                            package_name_matcher_to_package_name(spec.name
                                 .as_ref()
                                 .expect("expecting a name")
+                            )
                                 .as_normalized()
                                 == record.package_record.name.as_normalized()
                         }) {
@@ -668,7 +667,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
                 // Add a dependency back to the base package with exact version
                 let base_spec = MatchSpec {
-                    name: Some(record.package_record.name.clone()),
+                    name: Some(PackageNameMatcher::Exact(record.package_record.name.clone())),
                     version: Some(VersionSpec::Exact(
                         EqualityOperator::Equals,
                         record.package_record.version.version().clone(),
@@ -687,7 +686,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
                 let (name, nameless_spec) = base_spec.into_nameless();
                 let name_id = self.pool.intern_package_name(
-                    name.expect("cannot use matchspec without a name")
+                    package_name_matcher_to_package_name(&name.expect("cannot use matchspec without a name"))
                         .as_normalized(),
                 );
                 let version_set_id = self.pool.intern_version_set(name_id, nameless_spec.into());
@@ -845,6 +844,10 @@ impl super::SolverImpl for Solver {
             let (name, nameless_spec) = spec.clone().into_nameless();
             let features = &spec.extras;
             let name = name.expect("cannot use matchspec without a name");
+            let name = match name {
+                PackageNameMatcher::Exact(name) => name,
+                _ => panic!("Packages with no name are not supported"),
+            };
             let name_id = provider.pool.intern_package_name(name.as_normalized());
             let mut reqs = vec![provider
                 .pool
@@ -884,7 +887,7 @@ impl super::SolverImpl for Solver {
             .map(|spec| {
                 let (name, spec) = spec.clone().into_nameless();
                 let name = name.expect("cannot use matchspec without a name");
-                let name_id = provider.pool.intern_package_name(name.as_normalized());
+                let name_id = provider.pool.intern_package_name(package_name_matcher_to_package_name(&name).as_normalized());
                 provider.pool.intern_version_set(name_id, spec.into())
             })
             .collect();
@@ -947,8 +950,8 @@ fn parse_match_spec(
 
         for feature in features {
             let name_with_feature = NameType::BaseWithFeature(
-                name.as_ref()
-                    .expect("Packages with no name are not supported")
+                package_name_matcher_to_package_name(name.as_ref()
+                    .expect("Packages with no name are not supported"))
                     .as_normalized()
                     .to_owned(),
                 feature.to_string(),
@@ -963,9 +966,9 @@ fn parse_match_spec(
         }
     } else {
         let dependency_name = pool.intern_package_name(
-            name.as_ref()
+            package_name_matcher_to_package_name(name.as_ref()
                 .expect("Packages with no name are not supported")
-                .as_normalized(),
+        ).as_normalized(),
         );
         let version_set_id = pool.intern_version_set(dependency_name, spec.into());
         version_set_ids.push(version_set_id);
