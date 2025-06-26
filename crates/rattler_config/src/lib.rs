@@ -747,7 +747,7 @@ mod tests {
         };
 
         let project_config = TestConfig {
-            concurrency: crate::config::concurreny::ConcurrencyConfig {
+            concurrency: crate::config::concurrency::ConcurrencyConfig {
                 solves: 4,
                 downloads: 8,
             },

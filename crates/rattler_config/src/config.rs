@@ -8,13 +8,13 @@ use url::Url;
 
 use crate::config::s3::S3OptionsMap;
 use crate::config::{
-    build::BuildConfig, concurreny::ConcurrencyConfig, proxy::ProxyConfig,
+    build::BuildConfig, concurrency::ConcurrencyConfig, proxy::ProxyConfig,
     repodata_config::RepodataConfig, run_post_link_scripts::RunPostLinkScripts,
 };
 
 pub mod build;
 pub mod channel_config;
-pub mod concurreny;
+pub mod concurrency;
 pub mod proxy;
 pub mod repodata_config;
 pub mod run_post_link_scripts;
@@ -98,7 +98,7 @@ pub struct ConfigBase<T> {
     #[serde(default, skip_serializing_if = "RepodataConfig::is_empty")]
     pub repodata_config: RepodataConfig,
 
-    /// Configuration for the concurreny of rattler.
+    /// Configuration for the concurrency of rattler.
     #[serde(default)]
     #[serde(skip_serializing_if = "ConcurrencyConfig::is_default")]
     pub concurrency: ConcurrencyConfig,

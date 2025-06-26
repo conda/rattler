@@ -1,7 +1,7 @@
 use pyo3::{pyfunction, Bound, PyAny, PyResult, Python};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_conda_types::Platform;
-use rattler_config::config::concurreny::default_max_concurrent_solves;
+use rattler_config::config::concurrency::default_max_concurrent_solves;
 use rattler_index::{index_fs, index_s3, IndexFsConfig, IndexS3Config};
 use url::Url;
 
