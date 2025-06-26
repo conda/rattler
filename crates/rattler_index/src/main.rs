@@ -4,7 +4,7 @@ use anyhow::Context;
 use clap::{arg, Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Platform;
-use rattler_config::config::concurreny::default_max_concurrent_solves;
+use rattler_config::config::concurrency::default_max_concurrent_solves;
 use rattler_index::{index_fs, index_s3, IndexFsConfig, IndexS3Config};
 use url::Url;
 
