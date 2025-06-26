@@ -147,7 +147,7 @@ pub async fn empty_trash(target_prefix: &Path) -> Result<(), UnlinkError> {
             return Err(UnlinkError::FailedToReadDirectory(
                 trash_dir.to_string_lossy().to_string(),
                 e,
-            ))
+            ));
         }
     }
 
@@ -195,7 +195,7 @@ pub async fn unlink_package(
                     return Err(UnlinkError::FailedToDeleteFile(
                         paths.relative_path.to_string_lossy().to_string(),
                         e,
-                    ))
+                    ));
                 }
             },
         }
@@ -263,7 +263,7 @@ mod tests {
         .unwrap();
 
         install_driver
-            .remove_empty_directories(&transaction, &[], environment_dir.path())
+            .remove_empty_directories(&transaction.operations, &[], environment_dir.path())
             .unwrap();
 
         // check that the environment is completely empty except for the conda-meta
@@ -327,7 +327,7 @@ mod tests {
         .unwrap();
 
         install_driver
-            .remove_empty_directories(&transaction, &[], target_prefix.path())
+            .remove_empty_directories(&transaction.operations, &[], target_prefix.path())
             .unwrap();
 
         // check that the environment is completely empty except for the conda-meta
@@ -373,10 +373,22 @@ mod tests {
         let prefix = Prefix::create(target_prefix).unwrap();
         let trash_dir = target_prefix.join(".trash");
         let files = [
-            ("https://conda.anaconda.org/conda-forge/win-64/bat-0.24.0-ha073cba_1.conda", "65a125b7a6e7fd7e5d4588ee537b5db2c984ed71e4832f7041f691c2cfd73504"),
-            ("https://conda.anaconda.org/conda-forge/win-64/ucrt-10.0.22621.0-h57928b3_1.conda", "db8dead3dd30fb1a032737554ce91e2819b43496a0db09927edf01c32b577450"),
-            ("https://conda.anaconda.org/conda-forge/win-64/vc-14.3-ha32ba9b_23.conda", "986ddaf8feec2904eac9535a7ddb7acda1a1dfb9482088fdb8129f1595181663"),
-            ("https://conda.anaconda.org/conda-forge/win-64/vc14_runtime-14.42.34433-he29a5d6_23.conda", "c483b090c4251a260aba6ff3e83a307bcfb5fb24ad7ced872ab5d02971bd3a49"),
+            (
+                "https://conda.anaconda.org/conda-forge/win-64/bat-0.24.0-ha073cba_1.conda",
+                "65a125b7a6e7fd7e5d4588ee537b5db2c984ed71e4832f7041f691c2cfd73504",
+            ),
+            (
+                "https://conda.anaconda.org/conda-forge/win-64/ucrt-10.0.22621.0-h57928b3_1.conda",
+                "db8dead3dd30fb1a032737554ce91e2819b43496a0db09927edf01c32b577450",
+            ),
+            (
+                "https://conda.anaconda.org/conda-forge/win-64/vc-14.3-ha32ba9b_23.conda",
+                "986ddaf8feec2904eac9535a7ddb7acda1a1dfb9482088fdb8129f1595181663",
+            ),
+            (
+                "https://conda.anaconda.org/conda-forge/win-64/vc14_runtime-14.42.34433-he29a5d6_23.conda",
+                "c483b090c4251a260aba6ff3e83a307bcfb5fb24ad7ced872ab5d02971bd3a49",
+            ),
         ];
         let conda_meta_path = target_prefix.join("conda-meta");
         std::fs::create_dir_all(&conda_meta_path).unwrap();
