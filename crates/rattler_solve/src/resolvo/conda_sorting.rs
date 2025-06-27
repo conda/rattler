@@ -51,7 +51,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         &solvable.record
     }
 
-    /// Referece to the pool
+    /// Reference to the pool
     fn pool(&self) -> &Pool<SolverMatchSpec<'repo>, NameType> {
         &self.solver.provider().pool
     }

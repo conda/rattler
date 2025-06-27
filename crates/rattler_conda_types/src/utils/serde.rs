@@ -157,7 +157,7 @@ pub(crate) fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(
 }
 
 /// A helper to serialize and deserialize `track_features` in repodata. Track
-/// features are expected to be a space seperated list. However, in the past we
+/// features are expected to be a space separated list. However, in the past we
 /// have serialized and deserialized them as a list of strings so for
 /// deserialization that behavior is retained.
 pub struct Features;

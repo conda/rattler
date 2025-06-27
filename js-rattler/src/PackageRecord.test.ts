@@ -23,7 +23,7 @@ describe("PackageRecord", () => {
             });
         }).not.toThrow();
     });
-    it("creation from json retuns the same json", () => {
+    it("creation from json returns the same json", () => {
         expect(
             new PackageRecord({
                 build: "py36h1af98f8_1",

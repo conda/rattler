@@ -447,9 +447,11 @@ where
         } else if !cache_dir_exists {
             tracing::debug!("cache directory does not exist, fetching package");
         } else if hash_mismatch {
-            tracing::warn!("hash mismatch, wanted a package with hash {} but the cached package has hash {}, fetching package",
+            tracing::warn!(
+                "hash mismatch, wanted a package with hash {} but the cached package has hash {}, fetching package",
                 given_sha.map_or(String::from("<unknown>"), |s| format!("{s:x}")),
-                locked_sha256.map_or(String::from("<unknown>"), |s| format!("{s:x}")));
+                locked_sha256.map_or(String::from("<unknown>"), |s| format!("{s:x}"))
+            );
         }
 
         // If the cache is stale, we need to fetch the package again. We have to acquire
@@ -850,7 +852,7 @@ mod test {
 
         let file_name = get_file_name_from_path(cache_lock_without_origin_hash.path());
         let path_hash = compute_bytes_digest::<Sha256>(package_path.to_string_lossy().as_bytes());
-        let expected_file_name = format!("clobber-python-0.1.0-cpython-{:x}", path_hash);
+        let expected_file_name = format!("clobber-python-0.1.0-cpython-{path_hash:x}");
         assert_eq!(file_name, expected_file_name);
     }
 
