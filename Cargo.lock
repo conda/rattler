@@ -1251,7 +1251,7 @@ version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e57e3272f0190c3f1584272d613719ba5fc7df7f4942fe542e63d949cf3a649b"
 dependencies = [
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
 ]
 
 [[package]]
@@ -2273,7 +2273,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "http 0.2.12",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -2292,7 +2292,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http 1.3.1",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -2785,9 +2785,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.9.0"
+version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cea70ddb795996207ad57735b50c5982d8844f38ba9ee5f1aedcfb708a2aa11e"
+checksum = "fe4cd85333e22411419a0bcae1297d25e58c9443848b11dc6a86fefe8c78a661"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.4",
@@ -3680,7 +3680,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faee7227064121fcadcd2ff788ea26f0d8f2bd23a0574da11eca23bc935bcc05"
 dependencies = [
  "boxcar",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "itertools 0.13.0",
  "once_cell",
  "pep440_rs",
@@ -3752,7 +3752,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772"
 dependencies = [
  "fixedbitset",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
 ]
 
 [[package]]
@@ -3865,7 +3865,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d77244ce2d584cd84f6a15f86195b8c9b2a0dfbfd817c09e0464244091a58ed"
 dependencies = [
  "base64 0.22.1",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "quick-xml",
  "serde",
  "time",
@@ -4162,7 +4162,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.34.4"
+version = "0.34.5"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4174,7 +4174,7 @@ dependencies = [
  "fs-err",
  "futures",
  "humantime",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "indicatif",
  "insta",
  "itertools 0.14.0",
@@ -4238,7 +4238,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.23"
+version = "0.3.24"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4276,7 +4276,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.35.3"
+version = "0.35.4"
 dependencies = [
  "assert_matches",
  "chrono",
@@ -4290,7 +4290,7 @@ dependencies = [
  "glob",
  "hex",
  "hex-literal",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "insta",
  "itertools 0.14.0",
  "lazy-regex",
@@ -4325,11 +4325,11 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "console",
  "fs-err",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "insta",
  "rattler_conda_types",
  "serde",
@@ -4362,7 +4362,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.24.1"
+version = "0.24.2"
 dependencies = [
  "anyhow",
  "bytes",
@@ -4409,12 +4409,12 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.23.8"
+version = "0.23.9"
 dependencies = [
  "chrono",
  "file_url",
  "fxhash",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "insta",
  "itertools 0.14.0",
  "pep440_rs",
@@ -4446,7 +4446,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.14"
+version = "0.2.15"
 dependencies = [
  "chrono",
  "configparser",
@@ -4475,7 +4475,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.3"
+version = "0.25.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4511,7 +4511,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.42"
+version = "0.22.43"
 dependencies = [
  "assert_matches",
  "bzip2",
@@ -4563,7 +4563,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.23.4"
+version = "0.23.5"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4639,12 +4639,12 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.24.1"
+version = "0.24.2"
 dependencies = [
  "anyhow",
  "enum_dispatch",
  "fs-err",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "insta",
  "itertools 0.14.0",
  "rattler_conda_types",
@@ -4661,7 +4661,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "2.1.3"
+version = "2.1.4"
 dependencies = [
  "chrono",
  "criterion",
@@ -4687,7 +4687,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.0.16"
+version = "2.0.17"
 dependencies = [
  "archspec",
  "libloading",
@@ -4859,9 +4859,9 @@ dependencies = [
 
 [[package]]
 name = "reqsign"
-version = "0.16.3"
+version = "0.16.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9323c0afb30e54f793f4705b10c890395bccc87c6e6ea62c4e7e82d09a380dc6"
+checksum = "0e81996ab38ccfb2e295ecd3250c0fb7717e29ab8814d4bc0fd6097338d87518"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4883,6 +4883,7 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2",
+ "tokio",
 ]
 
 [[package]]
@@ -4984,7 +4985,7 @@ dependencies = [
  "event-listener",
  "futures",
  "human_bytes",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "itertools 0.14.0",
  "petgraph",
  "serde",
@@ -5442,7 +5443,7 @@ version = "1.0.140"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20068b6e96dc6c9bd23e01df8827e6c7e1f2fddd43c21810382803c136b99373"
 dependencies = [
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "itoa",
  "memchr",
  "ryu",
@@ -5491,7 +5492,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "schemars",
  "serde",
  "serde_derive",
@@ -5518,7 +5519,7 @@ version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "itoa",
  "ryu",
  "serde",
@@ -6146,7 +6147,7 @@ version = "0.22.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41fe8c660ae4257887cf66394862d21dbca4a6ddd26f04a3560410406a2f819a"
 dependencies = [
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "serde",
  "serde_spanned",
  "toml_datetime",
@@ -7329,7 +7330,7 @@ dependencies = [
  "arbitrary",
  "crc32fast",
  "flate2",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "memchr",
  "time",
  "zopfli",
