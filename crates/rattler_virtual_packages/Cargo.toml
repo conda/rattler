@@ -1,6 +1,6 @@
 [package]
 name = "rattler_virtual_packages"
-version = "2.0.16"
+version = "2.0.17"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Library to work with and detect Conda virtual packages"

@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.35.3...rattler_conda_types-v0.35.4) - 2025-06-27
+
+### Fixed
+
+- use kebab-case ([#1482](https://github.com/conda/rattler/pull/1482))
+
 ## [0.35.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.35.2...rattler_conda_types-v0.35.3) - 2025-06-26
 
 ### Fixed
