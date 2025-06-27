@@ -20,9 +20,10 @@ class Client:
         middlewares: (
             list[AuthenticationMiddleware | MirrorMiddleware | OciMiddleware | GCSMiddleware | S3Middleware] | None
         ) = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self._client = PyClientWithMiddleware(
-            [middleware._middleware for middleware in middlewares] if middlewares else None
+            [middleware._middleware for middleware in middlewares] if middlewares else None, headers
         )
 
     @classmethod
