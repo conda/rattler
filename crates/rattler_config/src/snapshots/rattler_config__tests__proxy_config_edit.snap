@@ -2,10 +2,10 @@
 source: crates/rattler_config/src/lib.rs
 expression: toml_output
 ---
-tls_no_verify = false
+tls-no-verify = false
 array_field = []
 
-[proxy_config]
+[proxy-config]
 https = "https://corporate-proxy.example.com:8080/"
 http = "http://corporate-proxy.example.com:8080/"
 non-proxy-hosts = [

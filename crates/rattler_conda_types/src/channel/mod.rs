@@ -31,6 +31,7 @@ const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
 /// Url but instead only specify the name of the channel and reading the primary
 /// server address from a configuration file (e.g. `.condarc`).
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 pub struct ChannelConfig {
     /// A url to prefix to channel names that don't start with a Url. Usually
     /// this Url refers to the `https://conda.anaconda.org` server but users are free to change this. This allows
@@ -38,11 +39,13 @@ pub struct ChannelConfig {
     /// "conda-forge" actually refers to `<https://conda.anaconda.org/conda-forge>`).
     ///
     /// The default value is: <https://conda.anaconda.org>
+    #[serde(alias = "channel_alias")] // Continue supporting snake_case alias
     pub channel_alias: Url,
 
     /// For local channels, the root directory from which to resolve relative
     /// paths. Most of the time you would initialize this with the current
     /// working directory.
+    #[serde(alias = "root_dir")] // Continue supporting snake_case alias
     pub root_dir: PathBuf,
 }
 

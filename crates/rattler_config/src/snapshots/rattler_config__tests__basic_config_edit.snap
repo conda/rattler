@@ -2,13 +2,13 @@
 source: crates/rattler_config/src/lib.rs
 expression: toml_output
 ---
-default_channels = [
+default-channels = [
     "conda-forge",
     "bioconda",
     "pytorch",
 ]
-authentication_override_file = "/home/user/.rattler-auth"
-tls_no_verify = true
+authentication-override-file = "/home/user/.rattler-auth"
+tls-no-verify = true
 array_field = []
 
 [mirrors]

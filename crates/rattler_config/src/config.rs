@@ -65,6 +65,7 @@ pub enum LoadError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct ConfigBase<T> {
     #[serde(default)]
     #[serde(alias = "default_channels")] // BREAK: remove to stop supporting snake_case alias
