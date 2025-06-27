@@ -1,0 +1,61 @@
+default-channels = ["conda-forge"]
+
+tls-no-verify = false
+
+authentication-override-file = "/path/to/your/override.json"
+
+run-post-link-scripts = "false" # set to "insecure" to allow running post-link scripts
+
+[repodata-config]
+# disable fetching of jlap, bz2 or zstd repodata files.
+# This should only be used for specific old versions of artifactory and other non-compliant
+# servers.
+disable-bzip2 = true   # don't try to download repodata.json.bz2
+disable-jlap = true    # don't try to download repodata.jlap
+disable-sharded = true # don't try to download sharded repodata
+disable-zstd = true    # don't try to download repodata.json.zst
+
+[repodata-config."https://prefix.dev"]
+disable-sharded = false
+
+
+[s3-options.my-bucket]
+endpoint-url = "https://my-s3-compatible-host.com"
+force-path-style = true
+region = "us-east-1"
+
+[concurrency]
+# The maximum number of concurrent downloads
+# Defaults to 50 as that was found to be a good balance between speed and stability
+downloads = 5
+
+# The maximum number of concurrent dependency resolves
+# Defaults to a heuristic based on the number of cores on the system
+solves = 2
+
+[experimental]
+# Enable the use of the environment activation cache
+use-environment-activation-cache = true
+
+[mirrors]
+# redirect all requests for conda-forge to the prefix.dev mirror
+"https://conda.anaconda.org/conda-forge" = ["https://prefix.dev/conda-forge"]
+
+# redirect all requests for bioconda to one of the three listed mirrors
+# Note: for repodata we try the first mirror first.
+"https://conda.anaconda.org/bioconda" = [
+  "https://conda.anaconda.org/bioconda",
+  # OCI registries are also supported
+  "oci://ghcr.io/channel-mirrors/bioconda",
+  # S3-compatible storage is also supported
+  "s3://my-s3-bucket/bioconda",
+  "https://prefix.dev/bioconda",
+]
+
+[build]
+package-format = "tarbz2:3"
+
+# These values are currently _SKIPPED_ in serde, so should not affect anything
+[channel_config]
+root-dir = "/path/to/your/channels"
+channel-alias = "https://friendly.conda.server"
