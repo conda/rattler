@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.35.2...rattler_conda_types-v0.35.3) - 2025-06-26
+
+### Fixed
+
+- allow track_features to be patched to null ([#1477](https://github.com/conda/rattler/pull/1477))
+
 ## [0.35.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.35.1...rattler_conda_types-v0.35.2) - 2025-06-25
 
 ### Other
