@@ -6,7 +6,7 @@ use std::{
 
 use futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
-use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, Platform};
+use rattler_conda_types::{match_spec::package_name_matcher::package_name_matcher_to_package_name, Channel, MatchSpec, Matches, PackageName, Platform};
 
 use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
 use crate::Reporter;
@@ -118,12 +118,12 @@ impl RepoDataQuery {
                     .name
                     .clone()
                     .ok_or(GatewayError::MatchSpecWithoutName(Box::new(spec.clone())))?;
-                seen.insert(name.clone());
+                seen.insert(package_name_matcher_to_package_name(&name.clone()));
                 direct_url_specs.push((spec.clone(), url, name));
             } else if let Some(name) = &spec.name {
-                seen.insert(name.clone());
+                seen.insert(package_name_matcher_to_package_name(&name.clone()));
                 let pending = pending_package_specs
-                    .entry(name.clone())
+                    .entry(package_name_matcher_to_package_name(&name.clone()))
                     .or_insert_with(|| SourceSpecs::Input(vec![]));
                 let SourceSpecs::Input(input_specs) = pending else {
                     panic!("RootSpecs::Input was overwritten by RootSpecs::Transitive");
@@ -197,11 +197,11 @@ impl RepoDataQuery {
 
                             // Check if record actually has the same name
                             if let Some(record) = record.first() {
-                                if record.package_record.name != name {
+                                if !name.matches(&record.package_record.name) {
                                     // Using as_source to get the closest to the retrieved input.
                                     return Err(GatewayError::UrlRecordNameMismatch(
                                         record.package_record.name.as_source().to_string(),
-                                        name.as_source().to_string(),
+                                        name.to_string(),
                                     ));
                                 }
                             }

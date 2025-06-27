@@ -7,8 +7,7 @@ use bytes::Bytes;
 use fs_err as fs;
 use itertools::Itertools;
 use rattler_conda_types::{
-    compute_package_url, package::ArchiveType, Channel, ChannelInfo, MatchSpec, Matches,
-    PackageName, PackageRecord, RepoDataRecord,
+    compute_package_url, match_spec::package_name_matcher::PackageNameMatcher, package::ArchiveType, Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord
 };
 use rattler_redaction::Redact;
 use serde::{
@@ -259,6 +258,10 @@ impl SparseRepoData {
         let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
         for (package_name, specs) in &spec.into_iter().chunk_by(|spec| spec.borrow().name.clone()) {
             let grouped_specs = specs.into_iter().collect::<Vec<_>>();
+            let package_name = match package_name {
+                Some(PackageNameMatcher::Exact(name)) => Some(name),
+                _ => None, // todo: this can lead to unexpected results in some scenarios
+            };
             let mut parsed_records = parse_records(
                 package_name.as_ref(),
                 &repo_data.packages,
