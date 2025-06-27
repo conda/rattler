@@ -816,10 +816,14 @@ mod tests {
         assert_eq!(config.mirrors.len(), 2);
         assert!(config.s3_options.0.contains_key("my-bucket"));
 
-        assert_eq!(config.build.package_format, Some(PackageFormatAndCompression {
-            archive_type: rattler_conda_types::package::ArchiveType::TarBz2,
-            compression_level: rattler_conda_types::compression_level::CompressionLevel::Numeric(3)
-        }));
+        assert_eq!(
+            config.build.package_format,
+            Some(PackageFormatAndCompression {
+                archive_type: rattler_conda_types::package::ArchiveType::TarBz2,
+                compression_level:
+                    rattler_conda_types::compression_level::CompressionLevel::Numeric(3)
+            })
+        );
 
         // The following config is _NOT LOADED_ from test data, so we are just checking if it has the default values
         assert_ne!(
