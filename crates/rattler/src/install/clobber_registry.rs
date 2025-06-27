@@ -37,6 +37,16 @@ enum PathState {
     Removed(PackageNameIdx),
 }
 
+impl PathState {
+    /// Returns `true` if the path state is [`Installed`].
+    ///
+    /// [`Installed`]: PathState::Installed
+    #[must_use]
+    fn is_installed(&self) -> bool {
+        matches!(self, Self::Installed(..))
+    }
+}
+
 /// A registry for clobbering files
 /// The registry keeps track of all files that are installed by a package and
 /// can be used to rename files that are already installed by another package.
@@ -160,6 +170,18 @@ impl ClobberRegistry {
         }
     }
 
+    /// Get path state of a path. This function is a little more sophisticated
+    /// than just getting path from hash map. We can have a case where dir is
+    /// overwritten by file path to which is prefix of this directory, or vice
+    /// versa. For example we can have paths `dir` and `dir/clobber.txt`. Choose
+    /// one of those to be registered first, then we return state of the other.
+    fn path_state<'a>(&'a self, path: &PathBuf) -> Option<&'a PathState> {
+        // let registered_paths = self.paths_registry.keys();
+        // //
+        // let matched_path: &PathBuf = if path.is_dir() { path } else { todo!() };
+        self.paths_registry.get(path)
+    }
+
     /// Register the paths of a package before linking a package in
     /// order to determine which files may clobber other files (clobbering files
     /// are those that are present in multiple packages).
@@ -171,61 +193,68 @@ impl ClobberRegistry {
         index_json: &IndexJson,
         computed_paths: &Vec<(PathsEntry, PathBuf)>,
     ) -> HashMap<PathBuf, PathBuf> {
-        let mut clobber_paths = HashMap::new();
         let name = &index_json.name.clone();
 
         // check if we have the package name already registered
         let name_idx = self.get_package_name_index(name);
 
+        self.register_paths_by_idx(name_idx, computed_paths)
+    }
+
+    fn register_paths_by_idx(
+        &mut self,
+        name_idx: PackageNameIdx,
+        computed_paths: &Vec<(PathsEntry, PathBuf)>,
+    ) -> HashMap<PathBuf, PathBuf> {
+        let mut clobber_paths = HashMap::new();
+
         for (_, path) in computed_paths {
-            if let Some(&entry) = self.paths_registry.get(path) {
-                match entry {
-                    PathState::Installed(idx) => {
-                        // if we find an entry, we have a clobbering path!
-                        // Then we rename the current path to a clobbered path
-                        let new_path = clobber_name(path, &self.package_names[name_idx.0]);
-                        self.clobbers
-                            .entry(path.clone())
-                            .or_insert_with(|| vec![idx])
-                            .push(name_idx);
-
-                        // We insert the non-renamed path here
-                        clobber_paths.insert(path.clone(), new_path);
-                    }
-                    PathState::Removed(idx) => {
-                        if idx == name_idx {
-                            // This is just an update of the package itself so we don't need to
-                            // do anything special (just flip it as installed)
-                            self.paths_registry
-                                .insert(path.clone(), PathState::Installed(idx));
-
-                            // If we previously had clobbers with this path, we need to
-                            // add the re-installed package back to the clobbers
-                            if let Some(entry) = self.clobbers.get_mut(path) {
-                                entry.push(name_idx);
-                            }
-                        } else {
-                            // In this case, another package is installing this path. We have previously
-                            // removed this path, but since we don't know about the order of execution of
-                            // removals and installs _on the disc_ we need to first install this path to a clobbering
-                            // path and then rename it back to the original path after everything has finished.
-                            let new_path = clobber_name(path, &self.package_names[name_idx.0]);
-                            self.clobbers
-                                .entry(path.clone())
-                                // We insert an empty vector here because there is no other file that should stick around
-                                // (idx is already removed)
-                                .or_default()
-                                .push(name_idx);
-
-                            // We insert the non-renamed path here
-                            clobber_paths.insert(path.clone(), new_path);
-                        }
-                    }
-                }
-            } else {
+            let Some(&path_state) = self.path_state(path) else {
                 self.paths_registry
                     .insert(path.clone(), PathState::Installed(name_idx));
-            }
+                continue;
+            };
+
+            match path_state {
+                PathState::Removed(idx) if idx == name_idx => {
+                    // This is just an update of the package itself so we don't need to
+                    // do anything special (just flip it as installed)
+                    self.paths_registry
+                        .insert(path.clone(), PathState::Installed(name_idx));
+
+                    // If we previously had clobbers with this path, we need to
+                    // add the re-installed package back to the clobbers
+                    if let Some(entry) = self.clobbers.get_mut(path) {
+                        entry.push(name_idx);
+                    }
+                }
+                PathState::Installed(idx) | PathState::Removed(idx) => {
+                    // We have a clobbering path!
+                    //
+                    // If path state is installed, then we rename the current path to a clobbered path .
+                    //
+                    // If path state is removed, another package is installing
+                    // this path. We have previously removed this path, but
+                    // since we don't know about the order of execution of
+                    // removals and installs _on the disc_ we need to first
+                    // install this path to a clobbering path and then rename it
+                    // back to the original path after everything has finished.
+                    let new_path = clobber_name(path, &self.package_names[name_idx.0]);
+                    self.clobbers
+                        .entry(path.clone())
+                        .or_insert_with(|| {
+                            if path_state.is_installed() {
+                                vec![idx]
+                            } else {
+                                vec![]
+                            }
+                        })
+                        .push(name_idx);
+
+                    // We insert the non-renamed path here
+                    clobber_paths.insert(path.clone(), new_path);
+                }
+            };
         }
 
         clobber_paths
@@ -281,10 +310,9 @@ impl ClobberRegistry {
             };
 
             // Determine which package should write to the file
-            let winner = match sorted_clobbered_by.last() {
-                Some(winner) => winner,
+            let Some(winner) = sorted_clobbered_by.last() else {
                 // In this case, all files have been removed and we can skip any unclobbering
-                None => continue,
+                continue;
             };
 
             if clobbered_by.len() > 1 {
@@ -424,11 +452,7 @@ fn rename_path_in_prefix_record(
     for path in record.paths_data.paths.iter_mut() {
         if path.relative_path == old_path {
             path.relative_path = new_path.to_path_buf();
-            path.original_path = if new_path_is_clobber {
-                Some(old_path.to_path_buf())
-            } else {
-                None
-            };
+            path.original_path = new_path_is_clobber.then(|| old_path.to_path_buf());
         }
     }
 }
@@ -1449,34 +1473,37 @@ mod tests {
             get_test_data_dir().join("clobber/clobber-without-dir-0.1.0-h4616a5c_0.conda"),
         );
 
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations: vec![TransactionOperation::Install(repodata_record_with_dir)],
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
+        // let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+        //     operations: vec![TransactionOperation::Install(repodata_record_with_dir)],
+        //     python_info: None,
+        //     current_python_info: None,
+        //     platform: Platform::current(),
+        // };
 
         // execute transaction
         let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
-        execute_transaction(
-            transaction,
-            target_prefix.path(),
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &InstallDriver::default(),
-            &InstallOptions::default(),
-        )
-        .await;
+        // execute_transaction(
+        //     transaction,
+        //     &prefix_path,
+        //     &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+        //     &cache,
+        //     &InstallDriver::default(),
+        //     &InstallOptions::default(),
+        // )
+        // .await;
 
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        // let prefix_records: Vec<PrefixRecord> =
+        //     PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
 
         // remove one of the clobbering files
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
             operations: vec![
-                TransactionOperation::Remove(prefix_records[0].clone()),
+                // TransactionOperation::Remove(prefix_records[0].clone()),
+                TransactionOperation::Install(repodata_record_with_dir),
                 TransactionOperation::Install(repodata_record_without_dir),
             ],
             python_info: None,
@@ -1484,19 +1511,19 @@ mod tests {
             platform: Platform::current(),
         };
 
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
+        let install_driver = InstallDriver::builder().with_prefix_records(&[]).finish();
 
         execute_transaction(
             transaction,
-            target_prefix.path(),
+            &prefix_path,
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
             &InstallOptions::default(),
         )
         .await;
+
+        // assert!(target_prefix.path().join("dir").is_dir())
 
         assert_check_files(&target_prefix.path(), &["dir"]);
     }
