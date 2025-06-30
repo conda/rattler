@@ -183,6 +183,7 @@ zstd = { version = "0.13.3", default-features = false }
 
 # These are the all the crates defined in the workspace. We pin all of them together because they are always updated in tendem.
 file_url = { path = "crates/file_url", version = "=0.2.5", default-features = false }
+path_trie = { path = "crates/path_trie", version = "=0.1.0", default-features = false }
 rattler = { path = "crates/rattler", version = "=0.34.6", default-features = false }
 rattler_cache = { path = "crates/rattler_cache", version = "=0.3.25", default-features = false }
 rattler_conda_types = { path = "crates/rattler_conda_types", version = "=0.35.5", default-features = false }
