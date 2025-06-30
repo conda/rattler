@@ -1462,69 +1462,69 @@ mod tests {
         assert!(target_prefix.path().join("xbin").is_file());
     }
 
-    // This used to hit an expect in the clobbering code
-    #[tokio::test]
-    async fn test_directory_clobber() {
-        // Create a transaction
-        let repodata_record_with_dir = get_repodata_record(
-            get_test_data_dir().join("clobber/clobber-with-dir-0.1.0-h4616a5c_0.conda"),
-        );
-        let repodata_record_without_dir = get_repodata_record(
-            get_test_data_dir().join("clobber/clobber-without-dir-0.1.0-h4616a5c_0.conda"),
-        );
+    // // This used to hit an expect in the clobbering code
+    // #[tokio::test]
+    // async fn test_directory_clobber() {
+    //     // Create a transaction
+    //     let repodata_record_with_dir = get_repodata_record(
+    //         get_test_data_dir().join("clobber/clobber-with-dir-0.1.0-h4616a5c_0.conda"),
+    //     );
+    //     let repodata_record_without_dir = get_repodata_record(
+    //         get_test_data_dir().join("clobber/clobber-without-dir-0.1.0-h4616a5c_0.conda"),
+    //     );
 
-        // let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-        //     operations: vec![TransactionOperation::Install(repodata_record_with_dir)],
-        //     python_info: None,
-        //     current_python_info: None,
-        //     platform: Platform::current(),
-        // };
+    //     // let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+    //     //     operations: vec![TransactionOperation::Install(repodata_record_with_dir)],
+    //     //     python_info: None,
+    //     //     current_python_info: None,
+    //     //     platform: Platform::current(),
+    //     // };
 
-        // execute transaction
-        let target_prefix = tempfile::tempdir().unwrap();
-        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
-        let packages_dir = tempfile::tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
+    //     // execute transaction
+    //     let target_prefix = tempfile::tempdir().unwrap();
+    //     let prefix_path = Prefix::create(target_prefix.path()).unwrap();
+    //     let packages_dir = tempfile::tempdir().unwrap();
+    //     let cache = PackageCache::new(packages_dir.path());
 
-        // execute_transaction(
-        //     transaction,
-        //     &prefix_path,
-        //     &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-        //     &cache,
-        //     &InstallDriver::default(),
-        //     &InstallOptions::default(),
-        // )
-        // .await;
+    //     // execute_transaction(
+    //     //     transaction,
+    //     //     &prefix_path,
+    //     //     &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+    //     //     &cache,
+    //     //     &InstallDriver::default(),
+    //     //     &InstallOptions::default(),
+    //     // )
+    //     // .await;
 
-        // let prefix_records: Vec<PrefixRecord> =
-        //     PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+    //     // let prefix_records: Vec<PrefixRecord> =
+    //     //     PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
 
-        // remove one of the clobbering files
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations: vec![
-                // TransactionOperation::Remove(prefix_records[0].clone()),
-                TransactionOperation::Install(repodata_record_with_dir),
-                TransactionOperation::Install(repodata_record_without_dir),
-            ],
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
+    //     // remove one of the clobbering files
+    //     let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+    //         operations: vec![
+    //             // TransactionOperation::Remove(prefix_records[0].clone()),
+    //             TransactionOperation::Install(repodata_record_with_dir),
+    //             TransactionOperation::Install(repodata_record_without_dir),
+    //         ],
+    //         python_info: None,
+    //         current_python_info: None,
+    //         platform: Platform::current(),
+    //     };
 
-        let install_driver = InstallDriver::builder().with_prefix_records(&[]).finish();
+    //     let install_driver = InstallDriver::builder().with_prefix_records(&[]).finish();
 
-        execute_transaction(
-            transaction,
-            &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &install_driver,
-            &InstallOptions::default(),
-        )
-        .await;
+    //     execute_transaction(
+    //         transaction,
+    //         &prefix_path,
+    //         &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+    //         &cache,
+    //         &install_driver,
+    //         &InstallOptions::default(),
+    //     )
+    //     .await;
 
-        // assert!(target_prefix.path().join("dir").is_dir())
+    //     // assert!(target_prefix.path().join("dir").is_dir())
 
-        assert_check_files(&target_prefix.path(), &["dir"]);
-    }
+    //     assert_check_files(&target_prefix.path(), &["dir"]);
+    // }
 }

@@ -21,6 +21,7 @@ mod driver;
 mod entry_point;
 pub mod link;
 pub mod link_script;
+mod package_path_resolver;
 mod python;
 mod transaction;
 pub mod unlink;
@@ -31,7 +32,7 @@ mod test_utils;
 
 use std::{
     cmp::Ordering,
-    collections::{binary_heap::PeekMut, BinaryHeap, HashMap, HashSet},
+    collections::{BinaryHeap, HashMap, HashSet, binary_heap::PeekMut},
     fs,
     future::ready,
     io::ErrorKind,
@@ -42,7 +43,7 @@ use std::{
 pub use apple_codesign::AppleCodeSignBehavior;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
-use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt, stream::FuturesUnordered};
 #[cfg(feature = "indicatif")]
 pub use installer::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
@@ -50,12 +51,13 @@ pub use installer::{
 };
 pub use installer::{Installer, InstallerError, Reporter};
 use itertools::Itertools;
-pub use link::{link_file, LinkFileError, LinkMethod};
+pub use link::{LinkFileError, LinkMethod, link_file};
 pub use python::PythonInfo;
 use rattler_conda_types::{
+    Platform,
     package::{IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
     prefix::Prefix,
-    prefix_record, Platform,
+    prefix_record,
 };
 use rayon::{
     iter::Either,
@@ -410,7 +412,7 @@ pub async fn link_package(
             {
                 Ok(Ok(linked_file)) => linked_file,
                 Ok(Err(e)) => {
-                    return Err(InstallError::FailedToLink(entry.relative_path.clone(), e))
+                    return Err(InstallError::FailedToLink(entry.relative_path.clone(), e));
                 }
                 Err(Ok(payload)) => std::panic::resume_unwind(payload),
                 Err(Err(_err)) => return Err(InstallError::Cancelled),
@@ -811,7 +813,7 @@ pub fn link_package_sync(
                         return vec![Err(InstallError::FailedToLink(
                             entry.relative_path.clone(),
                             e,
-                        ))]
+                        ))];
                     }
                 };
 
@@ -1144,9 +1146,9 @@ fn paths_have_same_filesystem_sync(a: &Path, b: &Path) -> bool {
 mod test {
     use std::{env::temp_dir, process::Command, str::FromStr};
 
-    use futures::{stream, StreamExt};
+    use futures::{StreamExt, stream};
     use rattler_conda_types::{
-        package::ArchiveIdentifier, ExplicitEnvironmentSpec, Platform, Version,
+        ExplicitEnvironmentSpec, Platform, Version, package::ArchiveIdentifier,
     };
     use rattler_lock::LockFile;
     use tempfile::tempdir;
@@ -1154,7 +1156,7 @@ mod test {
 
     use crate::{
         get_test_data_dir,
-        install::{link_package, InstallDriver, InstallOptions, Prefix, PythonInfo},
+        install::{InstallDriver, InstallOptions, Prefix, PythonInfo, link_package},
         package_cache::PackageCache,
     };
 
@@ -1167,7 +1169,11 @@ mod test {
             get_test_data_dir().join(format!("python/explicit-env-{current_platform}.txt"));
         let env = ExplicitEnvironmentSpec::from_path(&explicit_env_path).unwrap();
 
-        assert_eq!(env.platform, Some(current_platform), "the platform for which the explicit lock file was created does not match the current platform");
+        assert_eq!(
+            env.platform,
+            Some(current_platform),
+            "the platform for which the explicit lock file was created does not match the current platform"
+        );
 
         test_install_python(
             env.packages.into_iter().map(|p| p.url),
@@ -1190,7 +1196,9 @@ mod test {
             .expect("no default environment in lock file");
 
         let Some(packages) = lock_env.packages(current_platform) else {
-            panic!("the platform for which the explicit lock file was created does not match the current platform")
+            panic!(
+                "the platform for which the explicit lock file was created does not match the current platform"
+            )
         };
 
         test_install_python(
