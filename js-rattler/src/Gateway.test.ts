@@ -4,15 +4,15 @@ import { Gateway } from "./Gateway";
 describe("Gateway", () => {
     describe("constructor", () => {
         it("works without arguments", () => {
-            expect(() => new Gateway()).not.toThrowError();
-            expect(() => new Gateway(null)).not.toThrowError();
-            expect(() => new Gateway(undefined)).not.toThrowError();
+            expect(() => new Gateway()).not.toThrow();
+            expect(() => new Gateway(null)).not.toThrow();
+            expect(() => new Gateway(undefined)).not.toThrow();
         });
         it("throws on invalid arguments", () => {
-            expect(() => new Gateway(true as any)).toThrowError();
+            expect(() => new Gateway(true as any)).toThrow();
         });
         it("accepts an empty object", () => {
-            expect(() => new Gateway({})).not.toThrowError();
+            expect(() => new Gateway({})).not.toThrow();
         });
         it("accepts null for maxConcurrentRequests", () => {
             expect(
@@ -20,7 +20,7 @@ describe("Gateway", () => {
                     new Gateway({
                         maxConcurrentRequests: null,
                     }),
-            ).not.toThrowError();
+            ).not.toThrow();
         });
         it("accepts empty channelConfig", () => {
             expect(
@@ -28,7 +28,7 @@ describe("Gateway", () => {
                     new Gateway({
                         channelConfig: {},
                     }),
-            ).not.toThrowError();
+            ).not.toThrow();
         });
         it("accepts perChannel channelConfig", () => {
             expect(
@@ -45,7 +45,7 @@ describe("Gateway", () => {
                             },
                         },
                     }),
-            ).not.toThrowError();
+            ).not.toThrow();
         });
     });
     describe("names", () => {
