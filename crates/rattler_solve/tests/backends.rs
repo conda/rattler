@@ -1069,7 +1069,7 @@ mod resolvo {
 
     #[cfg(feature = "experimental_extras")]
     /// Attempts to enable two optional features that conflict: `[with-oldbors,with-latest-bors]`.
-    /// This should fail because one requests `bors <2.0` and the other requests `bors >=2.0`.  
+    /// This should fail because one requests `bors <2.0` and the other requests `bors >=2.0`.
     #[test]
     fn test_solve_dummy_repo_extra_depends_conflict_resolvo() {
         let result = solve::<rattler_solve::resolvo::Solver>(

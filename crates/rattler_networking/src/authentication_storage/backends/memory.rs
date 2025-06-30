@@ -45,7 +45,7 @@ impl StorageBackend for MemoryStorage {
         let mut store = self
             .store
             .lock()
-            .map_err(|_| MemoryStorageError::LockError)?;
+            .map_err(|_err| MemoryStorageError::LockError)?;
         store.insert(host.to_string(), authentication.clone());
         Ok(())
     }
@@ -54,7 +54,7 @@ impl StorageBackend for MemoryStorage {
         let store = self
             .store
             .lock()
-            .map_err(|_| MemoryStorageError::LockError)?;
+            .map_err(|_err| MemoryStorageError::LockError)?;
         Ok(store.get(host).cloned())
     }
 
@@ -62,7 +62,7 @@ impl StorageBackend for MemoryStorage {
         let mut store = self
             .store
             .lock()
-            .map_err(|_| MemoryStorageError::LockError)?;
+            .map_err(|_err| MemoryStorageError::LockError)?;
         store.remove(host);
         Ok(())
     }

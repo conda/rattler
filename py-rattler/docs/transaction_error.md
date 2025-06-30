@@ -1,4 +1,3 @@
 # TransactionError
 
 ::: rattler.exceptions.TransactionError
-

@@ -13,13 +13,14 @@ license = "BSD-3-Clause"
 
 [tasks]
 build = "cargo build"
-fmt = "cargo fmt"
-lint = "cargo clippy"
+fmt = "cargo fmt --all"
+lint = "cargo clippy --all-targets -- -D warnings -Dclippy::dbg_macro"
 check = "cargo check"
 # libsolv compilation cannot find pixi's clang for some reason
 # so we skip that test for now
-test = "cargo nextest run --workspace --no-default-features --features=rustls-tls -E 'not test(libsolv_bindings_up_to_date)'"
+test = "cargo nextest run --workspace --no-default-features --features=indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,experimental_extras,edit,rattler_config -E 'not test(libsolv_bindings_up_to_date)' --no-fail-fast"
 rattler = "cargo run --bin rattler --release --"
+doc = "RUSTDOCFLAGS='-Dwarnings -Wunreachable-pub' cargo doc --no-deps --all --all-features"
 
 [dependencies]
 cxx-compiler = "~=1.6.0"
@@ -45,7 +46,7 @@ typos = ">=1.23.1,<2"
 
 [feature.lint.tasks]
 pre-commit-install = "pre-commit install"
-pre-commit-run = "pre-commit run"
+pre-commit-run = "pre-commit run --all-files --hook-stage manual"
 
 [environments]
 lint = { features = [

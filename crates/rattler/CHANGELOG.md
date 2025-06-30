@@ -479,4 +479,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - every crate should have its own version ([#557](https://github.com/conda/rattler/pull/557))
 
 ## [0.19.0](https://github.com/baszalmstra/rattler/compare/rattler-v0.18.0...rattler-v0.19.0) - 2024-02-26
-
