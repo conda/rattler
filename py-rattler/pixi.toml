@@ -21,7 +21,7 @@ build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
 build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release"
 
 [feature.build.target.linux-64.dependencies]
-patchelf = "~=0.17.2"
+patchelf = "~=0.18.0"
 
 [feature.test.dependencies]
 # Python 3.8 is the minimum supported version, so we use that for testing
