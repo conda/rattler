@@ -7,16 +7,16 @@ use std::{
 
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::{prefix::Prefix, prefix_record::PathType, PackageRecord, PrefixRecord};
-use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
+use rattler_conda_types::{PackageRecord, PrefixRecord, prefix::Prefix, prefix_record::PathType};
+use simple_spawn_blocking::{Cancelled, tokio::run_blocking_task};
 use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
 
 use super::{
+    Transaction, TransactionOperation,
     clobber_registry::{ClobberError, ClobberRegistry, ClobberedPath},
     link_script::{PrePostLinkError, PrePostLinkResult},
-    unlink::{recursively_remove_empty_directories, UnlinkError},
-    Transaction, TransactionOperation,
+    unlink::{UnlinkError, recursively_remove_empty_directories},
 };
 use crate::install::link_script::LinkScriptError;
 
@@ -227,9 +227,10 @@ impl InstallDriver {
                 tracing::warn!("Failed to remove empty directories: {} (ignored)", e);
             });
 
-        let clobbered_paths = self
-            .clobber_registry()
-            .unclobber(&required_packages, target_prefix)?;
+        let clobbered_paths = dbg!(
+            self.clobber_registry()
+                .unclobber(&required_packages, target_prefix)
+        )?;
 
         let post_link_result = if self.execute_link_scripts {
             Some(self.run_post_link_scripts(transaction, &required_packages, target_prefix))

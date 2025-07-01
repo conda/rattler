@@ -291,10 +291,9 @@ mod test {
         .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
-        insta::assert_yaml_snapshot!(PathsJson::from_deprecated_package_directory(
-            package_dir.path()
-        )
-        .unwrap());
+        insta::assert_yaml_snapshot!(
+            PathsJson::from_deprecated_package_directory(package_dir.path()).unwrap()
+        );
     }
 
     #[test]

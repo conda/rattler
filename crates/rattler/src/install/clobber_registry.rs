@@ -12,7 +12,12 @@ use itertools::Itertools;
 use rattler_conda_types::{
     PackageName, PrefixRecord,
     package::{IndexJson, PathsEntry},
+    prefix_record,
 };
+
+use super::package_path_resolver::*;
+
+const CLOBBER_TEMPLATE: &str = "__clobber-from-";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClobberedPath {
@@ -29,139 +34,58 @@ pub enum ClobberError {
     IoError(String, #[source] std::io::Error),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PathState {
-    /// A path that is installed after the transaction by a package
-    Installed(PackageNameIdx),
-    /// A path that is removed after the transaction by a package
-    Removed(PackageNameIdx),
-}
-
-impl PathState {
-    /// Returns `true` if the path state is [`Installed`].
-    ///
-    /// [`Installed`]: PathState::Installed
-    #[must_use]
-    fn is_installed(&self) -> bool {
-        matches!(self, Self::Installed(..))
-    }
-}
-
 /// A registry for clobbering files
 /// The registry keeps track of all files that are installed by a package and
 /// can be used to rename files that are already installed by another package.
 #[derive(Debug, Default, Clone)]
 pub struct ClobberRegistry {
-    /// A cache of package names
+    /// A cache and priority list of package names.
     package_names: Vec<PackageName>,
 
-    /// The paths that exist in the prefix and the first package that touched
-    /// the file.
-    paths_registry: HashMap<PathBuf, PathState>,
+    /// Resolver responsible for detecting clobbers (collisions).
+    path_resolver: PackagePathResolver,
 
-    /// Paths that have been clobbered and by which package, this also
-    /// includes the primary package. E.g. the package that actually wrote to
-    /// the file.
-    clobbers: HashMap<PathBuf, Vec<PackageNameIdx>>,
+    /// Store conflicts that we found.
+    ///
+    /// We need this to report only new conflicts in return value of `register_paths`.
+    conflicts: Vec<Conflict>,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 struct PackageNameIdx(usize);
 
-static CLOBBER_TEMPLATE: &str = "__clobber-from-";
-
-fn clobber_template(package_name: &PackageName) -> String {
-    format!("{CLOBBER_TEMPLATE}{}", package_name.as_normalized())
-}
-
 impl ClobberRegistry {
     /// Create a new clobber registry that is initialized with the given prefix
     /// records.
     pub fn new<'i>(prefix_records: impl IntoIterator<Item = &'i PrefixRecord>) -> Self {
-        let mut package_names = Vec::new();
-        let mut paths_registry = HashMap::new();
-        let mut temp_clobbers = Vec::new();
+        let mut registry = ClobberRegistry::default();
 
         for prefix_record in prefix_records {
-            let package_name = prefix_record.repodata_record.package_record.name.clone();
-            package_names.push(package_name.clone());
-            let package_name_idx = PackageNameIdx(package_names.len() - 1);
+            let name = prefix_record.name();
+            let paths = prefix_record.paths_data.paths.iter().map(|pe| pe.path());
 
-            for p in &prefix_record.paths_data.paths {
-                if let Some(original_path) = &p.original_path {
-                    temp_clobbers.push((original_path, package_name_idx));
-                } else {
-                    paths_registry.insert(
-                        p.relative_path.clone(),
-                        PathState::Installed(package_name_idx),
-                    );
-                }
-            }
+            registry.register_paths_by_name(name, paths);
         }
 
-        let mut clobbers = HashMap::with_capacity(temp_clobbers.len());
-        for (path, originating_package_idx) in temp_clobbers.iter() {
-            let path = *path;
-            clobbers
-                .entry(path.clone())
-                .or_insert_with(|| {
-                    // The path can only be installed at this point
-                    if let Some(&PathState::Installed(other_idx)) = paths_registry.get(path) {
-                        vec![other_idx]
-                    } else {
-                        Vec::new()
-                    }
-                })
-                .push(*originating_package_idx);
-        }
-
-        Self {
-            package_names,
-            paths_registry,
-            clobbers,
-        }
+        registry
     }
 
     /// Register that all the paths of a package are being removed.
     pub fn unregister_paths(&mut self, prefix_paths: &PrefixRecord) {
-        // Find the name in the registry
-        let Some(name_idx) = self
-            .package_names
-            .iter()
-            .position(|n| n == &prefix_paths.repodata_record.package_record.name)
-            .map(PackageNameIdx)
-        else {
-            tracing::warn!(
-                "Tried to unregister paths for a package ({}) that is not in the registry",
-                prefix_paths
-                    .repodata_record
-                    .package_record
-                    .name
-                    .as_normalized()
-            );
-            return;
-        };
-
-        // Remove this package from any clobbering consideration.
-        for p in &prefix_paths.paths_data.paths {
-            let path = p.original_path.as_ref().unwrap_or(&p.relative_path);
-            if let Some(clobber) = self.clobbers.get_mut(path) {
-                clobber.retain(|&idx| idx != name_idx);
-            }
-
-            let Some(paths_entry) = self.paths_registry.get_mut(path) else {
-                tracing::warn!("The path {} is not in the registry", path.display());
-                continue;
-            };
-
-            if *paths_entry == PathState::Installed(name_idx) {
-                *paths_entry = PathState::Removed(name_idx);
-            }
-        }
+        let package_name = prefix_paths.repodata_record.package_record.name.clone();
+        // Assume that normalized name in different two different PackageName are unique.
+        let normalized_name = package_name.as_normalized();
+        self.path_resolver.remove_package(normalized_name);
+        // Since we're need to report new conflicts only in
+        // `register_paths` we can simply copy current state of
+        // conflicts from the `path_resolver` as its `remove_package`
+        // method will recalculate conflicts in package removal if
+        // some conflict existed before.
+        self.sync_conflicts();
     }
 
     /// Check if we have the package name already registered, otherwise register it.
-    fn get_package_name_index(&mut self, name: &PackageName) -> PackageNameIdx {
+    fn get_or_insert_name_index(&mut self, name: &PackageName) -> PackageNameIdx {
         if let Some(idx) = self.package_names.iter().position(|n| n == name) {
             PackageNameIdx(idx)
         } else {
@@ -170,16 +94,16 @@ impl ClobberRegistry {
         }
     }
 
-    /// Get path state of a path. This function is a little more sophisticated
-    /// than just getting path from hash map. We can have a case where dir is
-    /// overwritten by file path to which is prefix of this directory, or vice
-    /// versa. For example we can have paths `dir` and `dir/clobber.txt`. Choose
-    /// one of those to be registered first, then we return state of the other.
-    fn path_state<'a>(&'a self, path: &PathBuf) -> Option<&'a PathState> {
-        // let registered_paths = self.paths_registry.keys();
-        // //
-        // let matched_path: &PathBuf = if path.is_dir() { path } else { todo!() };
-        self.paths_registry.get(path)
+    // /// Returns `PackageName` from the `PackageNameIdx`.
+    // fn get_package_name(&self, idx: PackageNameIdx) -> Option<&PackageName> {
+    //     self.package_names.get(idx.0)
+    // }
+
+    /// Returns `PackageName` from the package normalized name.
+    fn get_package_name_from_normalized(&self, name: &str) -> Option<&PackageName> {
+        self.package_names
+            .iter()
+            .find(|p| p.as_normalized() == name)
     }
 
     /// Register the paths of a package before linking a package in
@@ -191,73 +115,71 @@ impl ClobberRegistry {
     pub fn register_paths(
         &mut self,
         index_json: &IndexJson,
-        computed_paths: &Vec<(PathsEntry, PathBuf)>,
+        computed_paths: &[(PathsEntry, PathBuf)],
     ) -> HashMap<PathBuf, PathBuf> {
-        let name = &index_json.name.clone();
+        let name = &index_json.name;
 
-        // check if we have the package name already registered
-        let name_idx = self.get_package_name_index(name);
-
-        self.register_paths_by_idx(name_idx, computed_paths)
+        self.register_paths_by_name(name, computed_paths.iter().map(|p| &p.1))
     }
 
-    fn register_paths_by_idx(
-        &mut self,
-        name_idx: PackageNameIdx,
-        computed_paths: &Vec<(PathsEntry, PathBuf)>,
+    fn register_paths_by_name<'a>(
+        &'a mut self,
+        name: &PackageName,
+        computed_paths: impl IntoIterator<Item = &'a PathBuf>,
     ) -> HashMap<PathBuf, PathBuf> {
-        let mut clobber_paths = HashMap::new();
+        let normalized_name = name.as_normalized();
+        let package_idx = self.get_or_insert_name_index(name);
 
-        for (_, path) in computed_paths {
-            let Some(&path_state) = self.path_state(path) else {
-                self.paths_registry
-                    .insert(path.clone(), PathState::Installed(name_idx));
-                continue;
-            };
+        let paths = self.construct_paths_for_resolver(computed_paths);
 
-            match path_state {
-                PathState::Removed(idx) if idx == name_idx => {
-                    // This is just an update of the package itself so we don't need to
-                    // do anything special (just flip it as installed)
-                    self.paths_registry
-                        .insert(path.clone(), PathState::Installed(name_idx));
+        self.path_resolver
+            .add_package(normalized_name, package_idx.0, &paths);
 
-                    // If we previously had clobbers with this path, we need to
-                    // add the re-installed package back to the clobbers
-                    if let Some(entry) = self.clobbers.get_mut(path) {
-                        entry.push(name_idx);
-                    }
-                }
-                PathState::Installed(idx) | PathState::Removed(idx) => {
-                    // We have a clobbering path!
-                    //
-                    // If path state is installed, then we rename the current path to a clobbered path .
-                    //
-                    // If path state is removed, another package is installing
-                    // this path. We have previously removed this path, but
-                    // since we don't know about the order of execution of
-                    // removals and installs _on the disc_ we need to first
-                    // install this path to a clobbering path and then rename it
-                    // back to the original path after everything has finished.
-                    let new_path = clobber_name(path, &self.package_names[name_idx.0]);
-                    self.clobbers
-                        .entry(path.clone())
-                        .or_insert_with(|| {
-                            if path_state.is_installed() {
-                                vec![idx]
-                            } else {
-                                vec![]
-                            }
-                        })
-                        .push(name_idx);
+        // We want to update conflicts in path resovler to obtain
+        // difference for correct link paths.
+        self.path_resolver.resolve_conflicts();
 
-                    // We insert the non-renamed path here
-                    clobber_paths.insert(path.clone(), new_path);
-                }
-            };
-        }
+        // Map that will be used to link file to appropriate place to
+        // avoid writing two different files to the same place.
+        self.get_conflicts_link_paths()
+    }
 
-        clobber_paths
+    /// Compute conflict difference and return map from original package path to link path.
+    ///
+    /// For example if package A has path `a/b` and another package B
+    /// has path `a/b`, then second one will be linked to
+    /// `a/b__clobber-from-B`.
+    fn get_conflicts_link_paths(&self) -> HashMap<PathBuf, PathBuf> {
+        // TODO: Store conflicting paths under __clobbers__/pkg/
+        // directory.  This will make merging of directories a great
+        // deal easier in comparison with previous approach.
+        todo!()
+    }
+
+    /// Syncronize conflicts state with `path_resolver`.
+    fn sync_conflicts(&mut self) {
+        self.conflicts = self.path_resolver.get_conflicts().into();
+    }
+
+    /// Construct vector of paths accepted by path resolver `add_package` method.
+    ///
+    /// For resolver to work properly we also have to store all ancestors of each path.
+    fn construct_paths_for_resolver<'a>(
+        &self,
+        initial_paths: impl IntoIterator<Item = &'a PathBuf>,
+    ) -> Vec<(&'a Path, EntryType)> {
+        initial_paths
+            .into_iter()
+            .flat_map(|p: &PathBuf| {
+                let mut it = p.ancestors();
+                let file = it.next().map(|p| (p, EntryType::File));
+                let parents = it
+                    .filter(|&p| !p.as_os_str().is_empty())
+                    .map(|p| (p, EntryType::Directory))
+                    .collect::<Vec<_>>();
+                parents.into_iter().rev().chain(file)
+            })
+            .collect()
     }
 
     /// Unclobber the paths after all installation steps have been completed.
@@ -267,162 +189,104 @@ impl ClobberRegistry {
         sorted_prefix_records: &[&PrefixRecord],
         target_prefix: &Path,
     ) -> Result<HashMap<PathBuf, ClobberedPath>, ClobberError> {
-        let conda_meta = target_prefix.join("conda-meta");
-        let sorted_names = sorted_prefix_records
+        // Needed for step 7.
+        let mut prefix_records_to_rewrite = vec![]; // TODO
+
+        // TODO: There are several steps that we have to do, and not all of them are currently implemented.
+        //
+        // 1. [x] Save current priorities from path resolver in case unclobber will be called second time.
+        // 2. [x] Reprioritize based on the given sorted_prefix_records to get correct paths in the final layout.
+        // 3. [x] Resolve paths based on the path resolver conflicts.
+        // 4. [x] Restore original priorities.
+        // 5. [ ] Swap current owner (first one who took ownership) of path with winner.
+        // 6. [x] Compute result of unclobbering.
+        // 7. [ ] Write conda-meta file.
+        // 8. [x] Return result of unclobbering.
+
+        // 1
+        let original_priorities = self.path_resolver.priorities();
+
+        // 2
+        let new_priorities = sorted_prefix_records
             .iter()
-            .map(|p| p.repodata_record.package_record.name.clone())
-            .collect::<IndexSet<_>>();
+            .enumerate()
+            .map(|(priority, &pr)| {
+                let name = pr.name().as_normalized().to_string();
+                (name, priority)
+            })
+            .collect();
+        self.path_resolver.reprioritize(&new_priorities);
 
-        let mut prefix_records = sorted_prefix_records
+        // 3
+        self.path_resolver.resolve_conflicts();
+
+        // 4
+        self.path_resolver.reprioritize(&original_priorities);
+
+        // 6
+        let result = self
+            .path_resolver
+            .get_conflicts()
             .iter()
-            .map(|x| (*x).clone())
-            .collect::<Vec<PrefixRecord>>();
-        let mut prefix_records_to_rewrite = HashSet::new();
-        let mut result = HashMap::new();
+            .map(|conflict| self.conflict_to_clobbered_path(conflict))
+            .collect();
 
-        tracing::info!("Unclobbering {} files", self.clobbers.len());
-        for (path, clobbered_by) in self.clobbers.iter() {
-            let clobbered_by_names = clobbered_by
-                .iter()
-                .map(|&idx| &self.package_names[idx.0])
-                .collect::<IndexSet<_>>();
+        // 7
+        self.update_conda_meta(target_prefix, &prefix_records_to_rewrite)?;
 
-            // Extract the subset of clobbered_by that is in sorted_prefix_records
-            let sorted_clobbered_by = sorted_names
-                .iter()
-                .cloned()
-                .enumerate()
-                .filter(|(_, n)| clobbered_by_names.contains(n))
-                .collect::<Vec<_>>();
-
-            let Some(current_winner_entry) = self.paths_registry.get(path) else {
-                tracing::warn!(
-                    "The path {} is clobbered but not in the registry",
-                    path.display()
-                );
-                continue;
-            };
-
-            // let current_winner = current_winner_entry.map(|idx| &self.package_names[idx.0]);
-            let current_winner = match current_winner_entry {
-                PathState::Installed(idx) => Some(&self.package_names[idx.0]),
-                PathState::Removed(_) => None,
-            };
-
-            // Determine which package should write to the file
-            let Some(winner) = sorted_clobbered_by.last() else {
-                // In this case, all files have been removed and we can skip any unclobbering
-                continue;
-            };
-
-            if clobbered_by.len() > 1 {
-                tracing::info!(
-                    "The path {} is clobbered by multiple packages ({}) but ultimately the file from {} is kept.",
-                    path.display(),
-                    sorted_clobbered_by
-                        .iter()
-                        .map(|(_, n)| n.as_normalized())
-                        .format(", "),
-                    &winner.1.as_normalized()
-                );
-            }
-
-            if clobbered_by.len() > 1 {
-                result.insert(
-                    path.clone(),
-                    ClobberedPath {
-                        package: winner.1.clone(),
-                        other_packages: sorted_clobbered_by
-                            .iter()
-                            .rev()
-                            .skip(1)
-                            .rev()
-                            .map(|(_, n)| n.clone())
-                            .collect(),
-                    },
-                );
-            }
-
-            // If the package that wrote to the file initially is already the package that
-            // should write it, we can skip modifying this file in the first place.
-            if Some(&winner.1) == current_winner {
-                continue;
-            }
-
-            // If the path currently exists, we need to rename it.
-            let full_path = target_prefix.join(path);
-            if full_path.exists() {
-                if let Some(loser_name) = current_winner {
-                    let loser_path = clobber_name(path, loser_name);
-
-                    // Rename the original file to a clobbered path.
-                    tracing::debug!("renaming {} to {}", path.display(), loser_path.display());
-                    fs::rename(target_prefix.join(path), target_prefix.join(&loser_path)).map_err(
-                        |e| {
-                            ClobberError::IoError(
-                                format!(
-                                    "failed to rename {} to {}",
-                                    path.display(),
-                                    loser_path.display()
-                                ),
-                                e,
-                            )
-                        },
-                    )?;
-
-                    if let Some(loser_idx) = sorted_clobbered_by
-                        .iter()
-                        .find(|(_, n)| n == loser_name)
-                        .map(|(idx, _)| *idx)
-                    {
-                        rename_path_in_prefix_record(
-                            &mut prefix_records[loser_idx],
-                            path,
-                            &loser_path,
-                            true,
-                        );
-                        prefix_records_to_rewrite.insert(loser_idx);
-                    }
-                }
-            }
-
-            // Rename the winner
-            let winner_path = clobber_name(path, &winner.1);
-            tracing::debug!("renaming {} to {}", winner_path.display(), path.display());
-            fs::rename(target_prefix.join(&winner_path), target_prefix.join(path)).map_err(
-                |e| {
-                    ClobberError::IoError(
-                        format!(
-                            "failed to rename {} to {}",
-                            winner_path.display(),
-                            path.display()
-                        ),
-                        e,
-                    )
-                },
-            )?;
-
-            rename_path_in_prefix_record(&mut prefix_records[winner.0], &winner_path, path, false);
-
-            prefix_records_to_rewrite.insert(winner.0);
-        }
-
-        for idx in prefix_records_to_rewrite {
-            let rec = &prefix_records[idx];
-            tracing::debug!(
-                "writing updated prefix record to: {:?}",
-                conda_meta.join(rec.file_name())
-            );
-            rec.write_to_path(conda_meta.join(rec.file_name()), true)
-                .map_err(|e| {
-                    ClobberError::IoError(
-                        format!("failed to write updated prefix record {}", rec.file_name()),
-                        e,
-                    )
-                })?;
-        }
-
+        // 8
         Ok(result)
+    }
+
+    /// Helper function to preserve compatability.
+    fn conflict_to_clobbered_path(&self, conflict: &Conflict) -> (PathBuf, ClobberedPath) {
+        let path = conflict.path.clone();
+
+        let package = self
+            .get_package_name_from_normalized(&conflict.winner.package_name)
+            .unwrap()
+            .clone();
+        let other_packages = conflict
+            .losers
+            .iter()
+            .map(|e| {
+                self.get_package_name_from_normalized(&e.package_name)
+                    .unwrap()
+                    .clone()
+            })
+            .collect();
+        let clobbered_path = ClobberedPath {
+            package,
+            other_packages,
+        };
+        (path, clobbered_path)
+    }
+
+    /// Update conda metadata on disk with new file tree obtained
+    /// after during unclobbering.
+    fn update_conda_meta(
+        &self,
+        target_prefix: &Path,
+        prefix_records_to_rewrite: &[&PrefixRecord], // Maybe impl IntoIterator?
+    ) -> Result<(), ClobberError> {
+        let conda_meta_path = target_prefix.join("conda-meta");
+
+        // for idx in prefix_records_to_rewrite {
+        //     let rec = &prefix_records[idx];
+        //     tracing::debug!(
+        //         "writing updated prefix record to: {:?}",
+        //         conda_meta.join(rec.file_name())
+        //     );
+        //     rec.write_to_path(conda_meta.join(rec.file_name()), true)
+        //         .map_err(|e| {
+        //             ClobberError::IoError(
+        //                 format!("failed to write updated prefix record {}", rec.file_name()),
+        //                 e,
+        //             )
+        //         })?;
+        // }
+
+        todo!()
     }
 }
 
@@ -430,9 +294,9 @@ fn clobber_name(path: &Path, package_name: &PackageName) -> PathBuf {
     let file_name = path.file_name().unwrap_or_default();
     let mut new_path = path.to_path_buf();
     new_path.set_file_name(format!(
-        "{}{}",
+        "{}{CLOBBER_TEMPLATE}{}",
         file_name.to_string_lossy(),
-        clobber_template(package_name),
+        package_name.as_normalized(),
     ));
     new_path
 }

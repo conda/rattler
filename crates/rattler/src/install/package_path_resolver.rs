@@ -29,7 +29,7 @@ pub enum ConflictType {
     BlockedByAncestor,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct TreeNode {
     entries: Vec<Entry>,
     children: HashMap<String, TreeNode>,
@@ -44,7 +44,7 @@ impl TreeNode {
             return;
         }
 
-        let (first, rest) = components.split_first().unwrap();
+        let (&first, rest) = components.split_first().unwrap();
         self.children
             .entry(first.to_string())
             .or_default()
@@ -126,20 +126,67 @@ impl TreeNode {
             child.collect_winners(layout);
         }
     }
+
+    fn priorities_aux(&self, priorities: &mut HashMap<String, usize>) {
+        for entry in &self.entries {
+            priorities
+                .entry(entry.package_name.as_str().to_owned())
+                .or_insert(entry.package_index);
+        }
+
+        for child in self.children.values() {
+            child.priorities_aux(priorities);
+        }
+    }
+
+    fn priorities(&self) -> HashMap<String, usize> {
+        let mut priorities = HashMap::new();
+        self.priorities_aux(&mut priorities);
+        priorities
+    }
+
+    fn reprioritize(&mut self, priorities: &HashMap<String, usize>) {
+        for entry in &mut self.entries {
+            if let Some(&new_priority) = priorities.get(entry.package_name.as_str()) {
+                entry.package_index = new_priority;
+            }
+        }
+
+        for child in self.children.values_mut() {
+            child.reprioritize(priorities);
+        }
+    }
+
+    fn remove_package(&mut self, package_name: &str) -> bool {
+        self.entries.retain(|e| e.package_name != package_name);
+        self.children
+            .retain(|_, child| child.remove_package(package_name));
+
+        // Now we reset conflict resolution state completely, but it
+        // should be possible to keep parts of it, excluding given
+        // `package_name`.
+        self.winner = None;
+        self.is_blocked = false;
+
+        !self.entries.is_empty() || !self.children.is_empty()
+    }
 }
 
-#[derive(Debug, Default)]
-pub struct PackageResolver {
+#[derive(Debug, Default, Clone)]
+pub struct PackagePathResolver {
     root: TreeNode,
     conflicts: Vec<Conflict>,
     final_layout: HashMap<PathBuf, Entry>,
 }
 
-impl PackageResolver {
+impl PackagePathResolver {
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Register package for conflict resolution.
+    ///
+    /// Package index denotes priority of a package.
     pub fn add_package(
         &mut self,
         package_name: &str,
@@ -180,19 +227,38 @@ impl PackageResolver {
         }
     }
 
+    /// Remove all paths of the packages in the consideration.
+    ///
+    /// If there was some conflict or layout calculated we recalculate
+    /// it after removal of a package.
     pub fn remove_package(&mut self, package_name: &str) {
-        fn remove_in_tree(node: &mut TreeNode, package_name: &str) {
-            node.entries = node
-                .entries
-                .iter()
-                .filter(|e| e.package_name != package_name)
-                .cloned()
-                .collect();
-            for (_key, tree) in node.children.iter_mut() {
-                remove_in_tree(tree, package_name)
-            }
+        let previously_resolved = !self.conflicts.is_empty() || !self.final_layout.is_empty();
+
+        let keep_root = self.root.remove_package(package_name);
+
+        // TODO: Just remove given package from consideration in conflicts and restructure .
+        self.conflicts = vec![];
+        self.final_layout = HashMap::new();
+
+        if !keep_root {
+            self.root = TreeNode::default();
+            return;
         }
-        remove_in_tree(&mut self.root, package_name)
+
+        if previously_resolved {
+            self.resolve_conflicts();
+        }
+    }
+
+    /// Returns unsorted iterator where each item is pair of package
+    /// name and it's priority index.
+    pub fn priorities(&self) -> HashMap<String, usize> {
+        self.root.priorities()
+    }
+
+    /// Changes indices (priorities) of given packages by their names.
+    pub fn reprioritize(&mut self, priorities: &HashMap<String, usize>) {
+        self.root.reprioritize(priorities);
     }
 
     fn collect_implicit_directories(
@@ -229,6 +295,7 @@ impl PackageResolver {
         }
     }
 
+    /// Run conflict resolution algorithm.
     pub fn resolve_conflicts(&mut self) {
         self.conflicts.clear();
         self.root.resolve_conflicts(false, &mut self.conflicts);
@@ -237,10 +304,12 @@ impl PackageResolver {
         self.root.collect_winners(&mut self.final_layout);
     }
 
+    /// Return final layout of a directory.
     pub fn get_final_layout(&self) -> &HashMap<PathBuf, Entry> {
         &self.final_layout
     }
 
+    /// Resolve conflicts must be called in order to receive non-empty slice.
     pub fn get_conflicts(&self) -> &[Conflict] {
         &self.conflicts
     }
@@ -280,7 +349,7 @@ mod tests {
 
     #[test]
     fn test_directories_dont_conflict() {
-        let mut resolver = PackageResolver::new();
+        let mut resolver = PackagePathResolver::new();
         resolver.add_package("pkg1", 0, &[(Path::new("share"), EntryType::Directory)]);
         resolver.add_package("pkg2", 1, &[(Path::new("share"), EntryType::Directory)]);
         resolver.resolve_conflicts();
@@ -294,7 +363,7 @@ mod tests {
 
     #[test]
     fn test_file_vs_file_conflicts() {
-        let mut resolver = PackageResolver::new();
+        let mut resolver = PackagePathResolver::new();
         resolver.add_package("pkg1", 0, &[(Path::new("config.txt"), EntryType::File)]);
         resolver.add_package("pkg2", 1, &[(Path::new("config.txt"), EntryType::File)]);
         resolver.resolve_conflicts();
@@ -306,7 +375,7 @@ mod tests {
 
     #[test]
     fn test_file_vs_directory_conflicts() {
-        let mut resolver = PackageResolver::new();
+        let mut resolver = PackagePathResolver::new();
         resolver.add_package("pkg1", 0, &[(Path::new("config"), EntryType::Directory)]);
         resolver.add_package("pkg2", 1, &[(Path::new("config"), EntryType::File)]);
         resolver.resolve_conflicts();
@@ -318,7 +387,7 @@ mod tests {
 
     #[test]
     fn test_file_blocks_directory_tree() {
-        let mut resolver = PackageResolver::new();
+        let mut resolver = PackagePathResolver::new();
 
         resolver.add_package(
             "pkg1",
@@ -357,11 +426,11 @@ mod tests {
 
     #[test]
     fn test_deep_blocking() {
-        let mut resolver = PackageResolver::new();
+        let mut resolver = PackagePathResolver::new();
 
         resolver.add_package(
             "pkg1",
-            0,
+            1,
             &[
                 (Path::new("a/b/c/d/file.txt"), EntryType::File),
                 (Path::new("a/b/other.txt"), EntryType::File),
@@ -370,7 +439,7 @@ mod tests {
 
         resolver.add_package(
             "pkg2",
-            1,
+            0,
             &[
                 (Path::new("a/b"), EntryType::File), // Blocks everything under a/b/
             ],
@@ -386,7 +455,7 @@ mod tests {
 
     #[test]
     fn test_no_blocking_with_directories() {
-        let mut resolver = PackageResolver::new();
+        let mut resolver = PackagePathResolver::new();
 
         resolver.add_package("pkg1", 0, &[(Path::new("share/"), EntryType::Directory)]);
 
@@ -411,7 +480,7 @@ mod tests {
     // ================================================================
     #[test]
     fn test_file_vs_file_conflicts_remove_package() {
-        let mut resolver = PackageResolver::new();
+        let mut resolver = PackagePathResolver::new();
         resolver.add_package("pkg1", 0, &[(Path::new("config.txt"), EntryType::File)]);
         resolver.add_package("pkg2", 1, &[(Path::new("config.txt"), EntryType::File)]);
         resolver.remove_package("pkg2");
@@ -423,7 +492,7 @@ mod tests {
 
     #[test]
     fn test_file_vs_directory_conflicts_remove_package() {
-        let mut resolver = PackageResolver::new();
+        let mut resolver = PackagePathResolver::new();
         resolver.add_package("pkg1", 0, &[(Path::new("config"), EntryType::Directory)]);
         resolver.add_package("pkg2", 1, &[(Path::new("config"), EntryType::File)]);
         resolver.remove_package("pkg2");
@@ -435,7 +504,7 @@ mod tests {
 
     #[test]
     fn test_file_blocks_directory_tree_remove_package() {
-        let mut resolver = PackageResolver::new();
+        let mut resolver = PackagePathResolver::new();
 
         resolver.add_package(
             "pkg1",
@@ -461,7 +530,7 @@ mod tests {
 
     #[test]
     fn test_deep_blocking_remove_package() {
-        let mut resolver = PackageResolver::new();
+        let mut resolver = PackagePathResolver::new();
 
         resolver.add_package(
             "pkg1",
@@ -513,7 +582,7 @@ mod tests {
             )
         ) {
             // Build the resolver and add all these entries under "pkg"
-            let mut resolver = PackageResolver::new();
+            let mut resolver = PackagePathResolver::new();
             let pkg_paths: Vec<(PathBuf, EntryType)> = entries
                 .iter()
                 .map(|(segs, et)| {
@@ -534,5 +603,64 @@ mod tests {
             let layout = resolver.get_final_layout();
             prop_assert!(layout.is_empty());
         }
+    }
+
+    fn add_simple_package(
+        resolver: &mut PackagePathResolver,
+        package_name: &str,
+        package_index: usize,
+    ) {
+        resolver.add_package(
+            package_name,
+            package_index,
+            &[(Path::new("a/"), EntryType::File)],
+        );
+    }
+
+    // TODO: Write more tests, as we know it won't work right if we have colliding package names.
+    // Probably we should move name management into structure itself to avoid that.
+    // Also, it won't work if list paths is empty, since in this case package won't be even stored in the TreeNode.
+    #[test]
+    fn test_priorities() {
+        let mut resolver = PackagePathResolver::new();
+
+        let initial_priorities = {
+            let mut inner = HashMap::new();
+            inner.insert("pkg1".to_string(), 0);
+            inner.insert("pkg2".to_string(), 1);
+            inner.insert("pkg3".to_string(), 2);
+            inner
+        };
+
+        for (key, &value) in initial_priorities.iter() {
+            add_simple_package(&mut resolver, key, value);
+        }
+
+        assert_eq!(initial_priorities, resolver.priorities());
+
+        let new_priorities = {
+            let mut inner = HashMap::new();
+            inner.insert("pkg1".to_string(), 2);
+            inner.insert("pkg2".to_string(), 1);
+            inner.insert("pkg3".to_string(), 0);
+            inner
+        };
+
+        resolver.reprioritize(&new_priorities);
+
+        assert_eq!(new_priorities, resolver.priorities());
+    }
+
+    #[test]
+    fn playing_around() {
+        let mut resolver = PackagePathResolver::new();
+        add_simple_package(&mut resolver, "pkg1", 0);
+        add_simple_package(&mut resolver, "pkg1", 1);
+
+        dbg!(&resolver);
+        dbg!(resolver.get_final_layout());
+        resolver.resolve_conflicts();
+        dbg!(resolver.get_conflicts());
+        dbg!(resolver.get_final_layout());
     }
 }
