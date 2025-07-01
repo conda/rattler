@@ -74,11 +74,11 @@ impl ChannelConfig {
 }
 
 #[cfg(feature = "rattler_config")]
-impl<T> From<&rattler_config::ConfigBase<T>> for ChannelConfig
+impl<T> From<&rattler_config::config::ConfigBase<T>> for ChannelConfig
 where
-    T: rattler_config::Config + Default,
+    T: rattler_config::config::Config + Default,
 {
-    fn from(config: &rattler_config::ConfigBase<T>) -> Self {
+    fn from(config: &rattler_config::config::ConfigBase<T>) -> Self {
         let repodata_config = &config.repodata_config;
         let default = repodata_config.default.clone().into();
 
