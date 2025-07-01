@@ -30,9 +30,9 @@ python = "3.9.*"
 ruff = ">=0.3.3,<0.4"
 mypy = "~=1.16.1"
 
-pytest = "~=7.4.0"
-pytest-asyncio = "0.21.1.*"
-pytest-xprocess = ">=0.23.0,<0.24"
+pytest = ">=8.4.1,<9"
+pytest-asyncio = ">=1.0.0,<2"
+pytest-xprocess = ">=1.0.2,<2"
 
 # used in examples
 typer = "*"
