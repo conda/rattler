@@ -72,3 +72,30 @@ impl ChannelConfig {
             .map_or(&self.default, |(_, config)| config)
     }
 }
+
+#[cfg(feature = "rattler_config")]
+impl<T> From<&rattler_config::ConfigBase<T>> for ChannelConfig
+where
+    T: rattler_config::Config + Default,
+{
+    fn from(config: &rattler_config::ConfigBase<T>) -> Self {
+        let repodata_config = &config.repodata_config;
+        let default = repodata_config.default.clone().into();
+
+        let per_channel = repodata_config
+            .per_channel
+            .iter()
+            .map(|(url, config)| {
+                (
+                    url.clone(),
+                    config.merge(repodata_config.default.clone()).into(),
+                )
+            })
+            .collect();
+
+        ChannelConfig {
+            default,
+            per_channel,
+        }
+    }
+}
