@@ -75,7 +75,8 @@ pub enum ParseMatchSpecError {
     InvalidVersionAndBuild(String),
 
     /// Invalid build string
-    #[error("the build string '{0}' is not valid, it can only contain alphanumeric characters and underscores"
+    #[error(
+        "the build string '{0}' is not valid, it can only contain alphanumeric characters and underscores"
     )]
     InvalidBuildString(String),
 
@@ -1360,7 +1361,10 @@ mod tests {
 
         let err = MatchSpec::from_str("bla/bla", Strict)
             .expect_err("Should try to parse as name not url");
-        assert_eq!(err.to_string(), "'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .");
+        assert_eq!(
+            err.to_string(),
+            "'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+        );
     }
 
     #[test]
@@ -1480,7 +1484,7 @@ mod tests {
         .unwrap();
         let version_spec = match_spec.version.unwrap();
         let version = Version::from_str("0.4.1").unwrap();
-        assert!(version_spec.matches(&version))
+        assert!(version_spec.matches(&version));
     }
 
     #[cfg(feature = "experimental_extras")]

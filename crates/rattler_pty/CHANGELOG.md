@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3](https://github.com/conda/rattler/compare/rattler_pty-v0.2.2...rattler_pty-v0.2.3) - 2025-06-26
+
+### Other
+
+- *(ci)* Update Rust crate nix to 0.30.0 ([#1439](https://github.com/conda/rattler/pull/1439))
+
 ## [0.2.2](https://github.com/conda/rattler/compare/rattler_pty-v0.2.1...rattler_pty-v0.2.2) - 2025-06-23
 
 ### Other

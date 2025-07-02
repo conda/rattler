@@ -4,6 +4,7 @@ pub mod edit;
 
 #[cfg(test)]
 mod tests {
+    use crate::config::build::PackageFormatAndCompression;
     use crate::config::{Config, ConfigBase, MergeError, ValidationError};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
@@ -790,5 +791,48 @@ mod tests {
         );
         assert_eq!(merged.extensions.numeric_field, Some(50));
         assert_eq!(merged.extensions.bool_field, Some(true));
+    }
+
+    // Load config file from `test-data` directory
+    fn load_test_config() -> TestConfig {
+        let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("test-data")
+            .join("config.toml");
+        TestConfig::load_from_files([&config_path]).expect("Failed to load test config")
+    }
+
+    #[test]
+    fn test_load_and_validate_test_config() {
+        let config = load_test_config();
+        assert_eq!(
+            config.default_channels,
+            Some(vec!["conda-forge".parse().unwrap()])
+        );
+        assert_eq!(config.tls_no_verify, Some(false));
+        assert_eq!(
+            config.authentication_override_file,
+            Some("/path/to/your/override.json".into())
+        );
+        assert_eq!(config.mirrors.len(), 2);
+        assert!(config.s3_options.0.contains_key("my-bucket"));
+
+        assert_eq!(
+            config.build.package_format,
+            Some(PackageFormatAndCompression {
+                archive_type: rattler_conda_types::package::ArchiveType::TarBz2,
+                compression_level:
+                    rattler_conda_types::compression_level::CompressionLevel::Numeric(3)
+            })
+        );
+
+        // The following config is _NOT LOADED_ from test data, so we are just checking if it has the default values
+        assert_ne!(
+            config.channel_config.root_dir,
+            PathBuf::from("/path/to/your/channels")
+        );
+        assert_ne!(
+            config.channel_config.channel_alias,
+            Url::parse("https://friendly.conda.server").unwrap()
+        );
     }
 }

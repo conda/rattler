@@ -2,15 +2,15 @@
 source: crates/rattler_config/src/lib.rs
 expression: toml_output
 ---
-default_channels = [
+default-channels = [
     "conda-forge",
     "bioconda",
     "nvidia",
     "pytorch",
 ]
-authentication_override_file = "/etc/conda/auth.json"
-tls_no_verify = false
-run_post_link_scripts = "insecure"
+authentication-override-file = "/etc/conda/auth.json"
+tls-no-verify = false
+run-post-link-scripts = "insecure"
 array_field = []
 
 [mirrors]
@@ -20,7 +20,7 @@ array_field = []
 ]
 "https://repo.continuum.io/" = ["https://fast-mirror.net/"]
 
-[repodata_config]
+[repodata-config]
 disable-jlap = false
 disable-zstd = false
 
@@ -28,7 +28,7 @@ disable-zstd = false
 solves = 16
 downloads = 32
 
-[proxy_config]
+[proxy-config]
 https = "https://secure-proxy.company.com/"
 non-proxy-hosts = [
     "localhost",
@@ -36,7 +36,7 @@ non-proxy-hosts = [
     "10.0.0.0/8",
 ]
 
-[s3_options.company-bucket]
+[s3-options.company-bucket]
 endpoint-url = "https://s3.company.com/"
 region = "company-region"
 force-path-style = true

@@ -286,7 +286,7 @@ impl Shell for Bash {
     fn run_script(&self, f: &mut impl Write, path: &Path) -> ShellResult {
         let lossy_path = path.to_string_lossy();
         let quoted_path = shlex::try_quote(&lossy_path).unwrap_or_default();
-        Ok(writeln!(f, ". {}", quoted_path)?)
+        Ok(writeln!(f, ". {quoted_path}")?)
     }
 
     fn set_path(
@@ -369,7 +369,7 @@ impl Shell for Bash {
             } else {
                 completions_dir.to_string_lossy().to_string()
             };
-            writeln!(f, "source {}/*", completions_dir_str)?;
+            writeln!(f, "source {completions_dir_str}/*")?;
         }
         Ok(())
     }
@@ -647,7 +647,10 @@ impl Default for PowerShell {
 impl Shell for PowerShell {
     fn force_utf8(&self, f: &mut impl Write) -> ShellResult {
         // Taken from https://stackoverflow.com/a/49481797
-        Ok(writeln!(f, "$OutputEncoding = [System.Console]::OutputEncoding = [System.Console]::InputEncoding = [System.Text.Encoding]::UTF8")?)
+        Ok(writeln!(
+            f,
+            "$OutputEncoding = [System.Console]::OutputEncoding = [System.Console]::InputEncoding = [System.Text.Encoding]::UTF8"
+        )?)
     }
 
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {

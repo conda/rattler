@@ -171,7 +171,7 @@ impl<'a> SerializablePackageSelector<'a> {
             .filter(|p| p.location() == package.location())
             .collect::<Vec<_>>();
 
-        // Iterate over other distinguising factors and reduce the set of possible
+        // Iterate over other distinguishing factors and reduce the set of possible
         // packages to a minimum with the least number of keys added.
         let mut name = None;
         let mut version = None;

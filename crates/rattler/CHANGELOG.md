@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.4](https://github.com/conda/rattler/compare/rattler-v0.34.3...rattler-v0.34.4) - 2025-06-26
+
+### Fixed
+
+- recursively remove empty directories after uninstall ([#1475](https://github.com/conda/rattler/pull/1475))
+
 ## [0.34.3](https://github.com/conda/rattler/compare/rattler-v0.34.2...rattler-v0.34.3) - 2025-06-25
 
 ### Other
@@ -473,4 +479,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - every crate should have its own version ([#557](https://github.com/conda/rattler/pull/557))
 
 ## [0.19.0](https://github.com/baszalmstra/rattler/compare/rattler-v0.18.0...rattler-v0.19.0) - 2024-02-26
-

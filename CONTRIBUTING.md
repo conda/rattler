@@ -5,7 +5,7 @@ For a good list of things you could help us with, take a look at our [*good firs
 If you want to go deeper though, any [open issue](https://github.com/conda/rattler/issues) is up for grabs.
 Just let us know what you start on something.
 
-For questions, requests or a casual chat, we are very active on our discord server. 
+For questions, requests or a casual chat, we are very active on our discord server.
 You can [join our discord server via this link][chat-url].
 
 ## Development
@@ -20,7 +20,7 @@ You can use [pixi](https://github.com/prefix-dev/pixi) for setting up the enviro
 ```
 
 ### Virtual env with conda/mamba
-The environment can also be managed with conda using the spec in `environments.yml` in the project root. 
+The environment can also be managed with conda using the spec in `environments.yml` in the project root.
 As below,
 ```sh
 ❱ git submodule update --init
@@ -28,6 +28,3 @@ As below,
 ❱ cargo build # uses cargo from your mamba venv
 ❱ mamba deactivate # don't forget you're in the venv
 ```
-
-
-

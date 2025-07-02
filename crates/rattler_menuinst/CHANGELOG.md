@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.14](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.13...rattler_menuinst-v0.2.14) - 2025-06-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
 ## [0.2.13](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.12...rattler_menuinst-v0.2.13) - 2025-06-25
 
 ### Other
@@ -118,7 +124,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - add `rattler_menuinst` crate (#840)
 - better readme (#118)
 - replace zulip with discord (#116)
-- move all conda types to seperate crate
+- move all conda types to separate crate
 
 ### Fixed
 

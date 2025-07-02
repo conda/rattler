@@ -90,6 +90,10 @@ pub async fn execute_operation(
         unlink_package(target_prefix, remove_record).await.unwrap();
     }
 
+    install_driver
+        .remove_empty_directories(&[op.clone()], &[], target_prefix)
+        .unwrap();
+
     let install_package = if let Some(install_record) = install_record {
         // Make sure the package is available in the package cache.
         package_cache

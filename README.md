@@ -32,7 +32,7 @@ Rattler is a library that provides common functionality used within the conda ec
 The goal of the library is to enable programs and other libraries to easily interact with the conda ecosystem without being dependent on Python.
 Its primary use case is as a library that you can use to provide conda related workflows in your own tools.
 
-Rattler is written in Rust and tries to provide a clean API to its functionalities (see: [Components](#components)). 
+Rattler is written in Rust and tries to provide a clean API to its functionalities (see: [Components](#components)).
 With the primary goal in mind we aim to provide bindings to different languages to make it easy to integrate Rattler in non-rust projects.
 
 Rattler is actively used by [pixi](https://github.com/prefix-dev/pixi), [rattler-build](https://github.com/prefix-dev/rattler-build), and the https://prefix.dev backend.
@@ -54,7 +54,7 @@ To install the Python bindings, you can use pip or conda:
 
 ```bash
 pip install py-rattler
-# or 
+# or
 conda install -c conda-forge py-rattler
 ```
 
@@ -142,24 +142,24 @@ Run the following command to start jupyterlab:
  ./.prefix/bin/jupyter-lab
 ```
 
-Voila! 
-You have a working installation of jupyterlab installed on your system! 
-You can of course install any package you want this way. 
+Voila!
+You have a working installation of jupyterlab installed on your system!
+You can of course install any package you want this way.
 Try it!
 
 ## Contributing 😍
 
-We would love to have you contribute! 
-See the CONTRIBUTION.md for more info. For questions, requests or a casual chat, we are very active on our discord server. 
+We would love to have you contribute!
+See the CONTRIBUTION.md for more info. For questions, requests or a casual chat, we are very active on our discord server.
 You can [join our discord server via this link][chat-url].
 
 
 ## Components
 
-Rattler consists of several crates that provide different functionalities. 
+Rattler consists of several crates that provide different functionalities.
 
 * **rattler_conda_types**: foundational types for all datastructures used within the conda eco-system.
-* **rattler_package_streaming**: provides functionality to download, extract and create conda package archives.  
+* **rattler_package_streaming**: provides functionality to download, extract and create conda package archives.
 * **rattler_repodata_gateway**: downloads, reads and processes information about existing conda packages from an index.
 * **rattler_shell**: code to activate an existing environment and run programs in it.
 * **rattler_solve**: a backend agnostic library to solve the package satisfiability problem.
