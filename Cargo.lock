@@ -842,6 +842,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "backtrace-ext"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "537beee3be4a18fb023b570f80e3ae28003db9167a751266b259926e25539d50"
+dependencies = [
+ "backtrace",
+]
+
+[[package]]
 name = "base16ct"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1263,7 +1272,7 @@ dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
- "unicode-width",
+ "unicode-width 0.2.1",
  "windows-sys 0.59.0",
 ]
 
@@ -1276,7 +1285,7 @@ dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
- "unicode-width",
+ "unicode-width 0.2.1",
  "windows-sys 0.60.2",
 ]
 
@@ -1394,11 +1403,11 @@ dependencies = [
  "clap",
  "itertools 0.14.0",
  "rattler_cache",
- "rattler_conda_types",
+ "rattler_conda_types 0.35.4",
  "rattler_repodata_gateway",
- "rattler_solve",
+ "rattler_solve 2.1.4",
  "reqwest",
- "resolvo",
+ "resolvo 0.9.1",
  "serde_json",
  "tokio",
 ]
@@ -1875,13 +1884,25 @@ dependencies = [
 
 [[package]]
 name = "file_url"
+version = "0.2.3"
+source = "git+https://github.com/wolfv/rattler?branch=pub-schema#61b2040c64a1e18ec475c447273dc9f368d9066c"
+dependencies = [
+ "itertools 0.14.0",
+ "percent-encoding",
+ "thiserror 2.0.12",
+ "typed-path 0.10.0",
+ "url",
+]
+
+[[package]]
+name = "file_url"
 version = "0.2.5"
 dependencies = [
  "itertools 0.14.0",
  "percent-encoding",
  "rstest",
  "thiserror 2.0.12",
- "typed-path",
+ "typed-path 0.11.0",
  "url",
 ]
 
@@ -2326,6 +2347,16 @@ dependencies = [
 
 [[package]]
 name = "halfbrown"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8588661a8607108a5ca69cab034063441a0413a0b041c13618a7dd348021ef6f"
+dependencies = [
+ "hashbrown 0.14.5",
+ "serde",
+]
+
+[[package]]
+name = "halfbrown"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa2c385c6df70fd180bbb673d93039dbd2cd34e41d782600bdf6e1ca7bce39aa"
@@ -2345,6 +2376,10 @@ name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
+dependencies = [
+ "ahash",
+ "allocator-api2",
+]
 
 [[package]]
 name = "hashbrown"
@@ -2817,7 +2852,7 @@ checksum = "4adb2ee6ad319a912210a36e56e3623555817bcc877a7e6e8802d1d69c4d8056"
 dependencies = [
  "console 0.16.0",
  "portable-atomic",
- "unicode-width",
+ "unicode-width 0.2.1",
  "unit-prefix",
  "web-time",
 ]
@@ -2877,6 +2912,12 @@ dependencies = [
  "memchr",
  "serde",
 ]
+
+[[package]]
+name = "is_ci"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7655c9839580ee829dfacba1d1278c2b7883e50a277ff7541299489d6bdfdc45"
 
 [[package]]
 name = "is_terminal_polyfill"
@@ -3050,7 +3091,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.53.2",
 ]
 
 [[package]]
@@ -3198,6 +3239,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "miette"
+version = "7.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f98efec8807c63c752b5bd61f862c165c115b0a35685bdcfd9238c7aeb592b7"
+dependencies = [
+ "backtrace",
+ "backtrace-ext",
+ "cfg-if",
+ "miette-derive",
+ "owo-colors",
+ "supports-color",
+ "supports-hyperlinks",
+ "supports-unicode",
+ "terminal_size",
+ "textwrap",
+ "unicode-width 0.1.14",
+]
+
+[[package]]
+name = "miette-derive"
+version = "7.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db5b29714e950dbb20d5e6f74f9dcec4edbcc1067bb7f8ed198c097b8c1a818b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -3593,6 +3664,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 
 [[package]]
+name = "owo-colors"
+version = "4.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48dd4f4a2c8405440fd0462561f0e5806bd0f77e86f51c761481bdd4018b545e"
+
+[[package]]
 name = "p256"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3677,7 +3754,7 @@ checksum = "31095ca1f396e3de32745f42b20deef7bc09077f918b085307e8eab6ddd8fb9c"
 dependencies = [
  "once_cell",
  "serde",
- "unicode-width",
+ "unicode-width 0.2.1",
  "unscanny",
  "version-ranges",
 ]
@@ -3698,7 +3775,7 @@ dependencies = [
  "serde",
  "smallvec",
  "thiserror 1.0.69",
- "unicode-width",
+ "unicode-width 0.2.1",
  "url",
  "urlencoding",
  "version-ranges",
@@ -4202,8 +4279,8 @@ dependencies = [
  "parking_lot 0.12.4",
  "rand 0.9.1",
  "rattler_cache",
- "rattler_conda_types",
- "rattler_digest",
+ "rattler_conda_types 0.35.4",
+ "rattler_digest 1.1.4",
  "rattler_lock",
  "rattler_menuinst",
  "rattler_networking",
@@ -4242,11 +4319,11 @@ dependencies = [
  "once_cell",
  "rattler",
  "rattler_cache",
- "rattler_conda_types",
+ "rattler_conda_types 0.35.4",
  "rattler_menuinst",
  "rattler_networking",
  "rattler_repodata_gateway",
- "rattler_solve",
+ "rattler_solve 2.1.4",
  "rattler_virtual_packages",
  "reqwest",
  "reqwest-middleware",
@@ -4271,8 +4348,8 @@ dependencies = [
  "fxhash",
  "itertools 0.14.0",
  "parking_lot 0.12.4",
- "rattler_conda_types",
- "rattler_digest",
+ "rattler_conda_types 0.35.4",
+ "rattler_digest 1.1.4",
  "rattler_networking",
  "rattler_package_streaming",
  "rayon",
@@ -4294,6 +4371,43 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
+version = "0.31.0"
+source = "git+https://github.com/wolfv/rattler?branch=pub-schema#61b2040c64a1e18ec475c447273dc9f368d9066c"
+dependencies = [
+ "chrono",
+ "dirs",
+ "file_url 0.2.3",
+ "fs-err",
+ "fxhash",
+ "glob",
+ "hex",
+ "indexmap 2.10.0",
+ "itertools 0.14.0",
+ "lazy-regex",
+ "nom 7.1.3",
+ "purl",
+ "rattler_digest 1.0.6",
+ "rattler_macros 1.0.6",
+ "rattler_redaction 0.1.6",
+ "regex",
+ "serde",
+ "serde-untagged",
+ "serde_json",
+ "serde_repr",
+ "serde_with",
+ "serde_yaml",
+ "simd-json 0.14.3",
+ "smallvec",
+ "strum",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tracing",
+ "typed-path 0.10.0",
+ "url",
+]
+
+[[package]]
+name = "rattler_conda_types"
 version = "0.35.4"
 dependencies = [
  "assert_matches",
@@ -4302,7 +4416,7 @@ dependencies = [
  "criterion",
  "dirs",
  "dunce",
- "file_url",
+ "file_url 0.2.5",
  "fs-err",
  "fxhash",
  "glob",
@@ -4317,10 +4431,10 @@ dependencies = [
  "pathdiff",
  "purl",
  "rand 0.9.1",
- "rattler_digest",
- "rattler_macros",
+ "rattler_digest 1.1.4",
+ "rattler_macros 1.0.11",
  "rattler_package_streaming",
- "rattler_redaction",
+ "rattler_redaction 0.1.12",
  "rayon",
  "regex",
  "rstest",
@@ -4330,14 +4444,14 @@ dependencies = [
  "serde_repr",
  "serde_with",
  "serde_yaml",
- "simd-json",
+ "simd-json 0.15.1",
  "smallvec",
  "strum",
  "tempfile",
  "thiserror 2.0.12",
  "tools",
  "tracing",
- "typed-path",
+ "typed-path 0.11.0",
  "url",
 ]
 
@@ -4349,7 +4463,7 @@ dependencies = [
  "fs-err",
  "indexmap 2.10.0",
  "insta",
- "rattler_conda_types",
+ "rattler_conda_types 0.35.4",
  "serde",
  "serde_json",
  "tempfile",
@@ -4357,6 +4471,21 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "rattler_digest"
+version = "1.0.6"
+source = "git+https://github.com/wolfv/rattler?branch=pub-schema#61b2040c64a1e18ec475c447273dc9f368d9066c"
+dependencies = [
+ "blake2",
+ "digest",
+ "generic-array",
+ "hex",
+ "md-5",
+ "serde",
+ "serde_with",
+ "sha2",
 ]
 
 [[package]]
@@ -4393,9 +4522,9 @@ dependencies = [
  "fxhash",
  "indicatif",
  "opendal",
- "rattler_conda_types",
+ "rattler_conda_types 0.35.4",
  "rattler_config",
- "rattler_digest",
+ "rattler_digest 1.1.4",
  "rattler_networking",
  "rattler_package_streaming",
  "reqwest",
@@ -4430,16 +4559,16 @@ name = "rattler_lock"
 version = "0.23.9"
 dependencies = [
  "chrono",
- "file_url",
+ "file_url 0.2.5",
  "fxhash",
  "indexmap 2.10.0",
  "insta",
  "itertools 0.14.0",
  "pep440_rs",
  "pep508_rs",
- "rattler_conda_types",
- "rattler_digest",
- "rattler_solve",
+ "rattler_conda_types 0.35.4",
+ "rattler_digest 1.1.4",
+ "rattler_solve 2.1.4",
  "rstest",
  "serde",
  "serde-value",
@@ -4449,8 +4578,17 @@ dependencies = [
  "serde_yaml",
  "similar-asserts",
  "thiserror 2.0.12",
- "typed-path",
+ "typed-path 0.11.0",
  "url",
+]
+
+[[package]]
+name = "rattler_macros"
+version = "1.0.6"
+source = "git+https://github.com/wolfv/rattler?branch=pub-schema#61b2040c64a1e18ec475c447273dc9f368d9066c"
+dependencies = [
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -4475,7 +4613,7 @@ dependencies = [
  "once_cell",
  "plist",
  "quick-xml 0.37.5",
- "rattler_conda_types",
+ "rattler_conda_types 0.35.4",
  "rattler_shell",
  "regex",
  "serde",
@@ -4538,10 +4676,10 @@ dependencies = [
  "futures-util",
  "insta",
  "num_cpus",
- "rattler_conda_types",
- "rattler_digest",
+ "rattler_conda_types 0.35.4",
+ "rattler_digest 1.1.4",
  "rattler_networking",
- "rattler_redaction",
+ "rattler_redaction 0.1.12",
  "reqwest",
  "reqwest-middleware",
  "rstest",
@@ -4572,6 +4710,14 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
+version = "0.1.6"
+source = "git+https://github.com/wolfv/rattler?branch=pub-schema#61b2040c64a1e18ec475c447273dc9f368d9066c"
+dependencies = [
+ "url",
+]
+
+[[package]]
+name = "rattler_redaction"
 version = "0.1.12"
 dependencies = [
  "reqwest",
@@ -4596,7 +4742,7 @@ dependencies = [
  "chrono",
  "dashmap",
  "dirs",
- "file_url",
+ "file_url 0.2.5",
  "fs-err",
  "fslock",
  "futures",
@@ -4614,11 +4760,11 @@ dependencies = [
  "parking_lot 0.12.4",
  "pin-project-lite",
  "rattler_cache",
- "rattler_conda_types",
+ "rattler_conda_types 0.35.4",
  "rattler_config",
- "rattler_digest",
+ "rattler_digest 1.1.4",
  "rattler_networking",
- "rattler_redaction",
+ "rattler_redaction 0.1.12",
  "reqwest",
  "reqwest-middleware",
  "retry-policies",
@@ -4666,7 +4812,7 @@ dependencies = [
  "indexmap 2.10.0",
  "insta",
  "itertools 0.14.0",
- "rattler_conda_types",
+ "rattler_conda_types 0.35.4",
  "rattler_pty",
  "serde_json",
  "shlex",
@@ -4680,6 +4826,24 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
+version = "1.3.9"
+source = "git+https://github.com/wolfv/rattler?branch=pub-schema#61b2040c64a1e18ec475c447273dc9f368d9066c"
+dependencies = [
+ "chrono",
+ "futures",
+ "indexmap 2.10.0",
+ "itertools 0.14.0",
+ "rattler_conda_types 0.31.0",
+ "rattler_digest 1.0.6",
+ "resolvo 0.8.6",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "rattler_solve"
 version = "2.1.4"
 dependencies = [
  "chrono",
@@ -4689,17 +4853,50 @@ dependencies = [
  "itertools 0.14.0",
  "libc",
  "once_cell",
- "rattler_conda_types",
- "rattler_digest",
+ "rattler_conda_types 0.35.4",
+ "rattler_digest 1.1.4",
  "rattler_libsolv_c",
  "rattler_repodata_gateway",
- "resolvo",
+ "resolvo 0.9.1",
  "rstest",
  "serde",
  "serde_json",
  "similar-asserts",
  "tempfile",
  "thiserror 2.0.12",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "rattler_upload"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "clap",
+ "fs-err",
+ "futures",
+ "indicatif",
+ "miette",
+ "opendal",
+ "rattler_conda_types 0.35.4",
+ "rattler_config",
+ "rattler_digest 1.1.4",
+ "rattler_networking",
+ "rattler_package_streaming",
+ "rattler_redaction 0.1.12",
+ "rattler_solve 1.3.9",
+ "reqwest",
+ "reqwest-middleware",
+ "reqwest-retry",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-util",
  "tracing",
  "url",
 ]
@@ -4713,7 +4910,7 @@ dependencies = [
  "nom 8.0.0",
  "once_cell",
  "plist",
- "rattler_conda_types",
+ "rattler_conda_types 0.35.4",
  "regex",
  "serde",
  "thiserror 2.0.12",
@@ -4929,6 +5126,7 @@ dependencies = [
  "js-sys",
  "log",
  "mime",
+ "mime_guess",
  "native-tls",
  "percent-encoding",
  "pin-project-lite",
@@ -4990,6 +5188,23 @@ dependencies = [
  "tokio",
  "tracing",
  "wasm-timer",
+]
+
+[[package]]
+name = "resolvo"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5314eb4b865d39acd1b3cd05eb91b87031bb49fd1278a1bdf8d6680f1389ec29"
+dependencies = [
+ "ahash",
+ "bitvec",
+ "elsa",
+ "event-listener",
+ "futures",
+ "indexmap 2.10.0",
+ "itertools 0.14.0",
+ "petgraph",
+ "tracing",
 ]
 
 [[package]]
@@ -5578,6 +5793,16 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest",
+ "sha2-asm",
+]
+
+[[package]]
+name = "sha2-asm"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b845214d6175804686b2bd482bcffe96651bb2d1200742b712003504a2dac1ab"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
@@ -5632,17 +5857,32 @@ checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
 
 [[package]]
 name = "simd-json"
+version = "0.14.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa2bcf6c6e164e81bc7a5d49fc6988b3d515d9e8c07457d7b74ffb9324b9cd40"
+dependencies = [
+ "getrandom 0.2.16",
+ "halfbrown 0.2.5",
+ "ref-cast",
+ "serde",
+ "serde_json",
+ "simdutf8",
+ "value-trait 0.10.1",
+]
+
+[[package]]
+name = "simd-json"
 version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c962f626b54771990066e5435ec8331d1462576cd2d1e62f24076ae014f92112"
 dependencies = [
  "getrandom 0.3.3",
- "halfbrown",
+ "halfbrown 0.3.0",
  "ref-cast",
  "serde",
  "serde_json",
  "simdutf8",
- "value-trait",
+ "value-trait 0.11.0",
 ]
 
 [[package]]
@@ -5783,6 +6023,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab16ced94dbd8a46c82fd81e3ed9a8727dac2977ea869d217bcc4ea1f122e81f"
 
 [[package]]
+name = "supports-color"
+version = "3.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c64fc7232dd8d2e4ac5ce4ef302b1d81e0b80d055b9d77c7c4f51f6aa4c867d6"
+dependencies = [
+ "is_ci",
+]
+
+[[package]]
+name = "supports-hyperlinks"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "804f44ed3c63152de6a9f90acbea1a110441de43006ea51bcce8f436196a288b"
+
+[[package]]
+name = "supports-unicode"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7401a30af6cb5818bb64852270bb722533397edcfc7344954a38f420819ece2"
+
+[[package]]
 name = "syn"
 version = "2.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5868,7 +6129,7 @@ version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fce91f2f0ec87dff7e6bcbbeb267439aa1188703003c6055193c821487400432"
 dependencies = [
- "unicode-width",
+ "unicode-width 0.2.1",
 ]
 
 [[package]]
@@ -5934,6 +6195,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "terminal_size"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45c6481c4829e4cc63825e62c49186a34538b7b2750b73b266581ffb612fb5ed"
+dependencies = [
+ "rustix 1.0.7",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "textwrap"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c13547615a44dc9c452a8a534638acdf07120d4b6847c8178705da06306a3057"
+dependencies = [
+ "unicode-linebreak",
+ "unicode-width 0.2.1",
 ]
 
 [[package]]
@@ -6138,6 +6419,7 @@ checksum = "66a539a9ad6d5d281510d5bd368c973d636c02dbf8a67300bfb6b950696ad7df"
 dependencies = [
  "bytes",
  "futures-core",
+ "futures-io",
  "futures-sink",
  "pin-project-lite",
  "tokio",
@@ -6203,7 +6485,7 @@ dependencies = [
  "difference",
  "dirs",
  "fslock",
- "rattler_digest",
+ "rattler_digest 1.1.4",
  "reqwest",
  "tempdir",
  "tempfile",
@@ -6380,6 +6662,12 @@ dependencies = [
 
 [[package]]
 name = "typed-path"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41713888c5ccfd99979fcd1afd47b71652e331b3d4a0e19d30769e80fec76cce"
+
+[[package]]
+name = "typed-path"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c462d18470a2857aa657d338af5fa67170bb48bcc80a296710ce3b0802a32566"
@@ -6426,6 +6714,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a5f39404a5da50712a4c1eecf25e90dd62b613502b7e925fd4e4d19b5c96512"
 
 [[package]]
+name = "unicode-linebreak"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b09c83c3c29d37506a3e260c08c03743a6bb66a9cd432c6934ab501a190571f"
+
+[[package]]
 name = "unicode-normalization"
 version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6439,6 +6733,12 @@ name = "unicode-segmentation"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6ccf251212114b54433ec949fd6a7841275f9ada20dddd2f29e9ceea4501493"
+
+[[package]]
+name = "unicode-width"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
 
 [[package]]
 name = "unicode-width"
@@ -6521,12 +6821,24 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "value-trait"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9170e001f458781e92711d2ad666110f153e4e50bfd5cbd02db6547625714187"
+dependencies = [
+ "float-cmp",
+ "halfbrown 0.2.5",
+ "itoa",
+ "ryu",
+]
+
+[[package]]
+name = "value-trait"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0508fce11ad19e0aab49ce20b6bec7f8f82902ded31df1c9fc61b90f0eb396b8"
 dependencies = [
  "float-cmp",
- "halfbrown",
+ "halfbrown 0.3.0",
  "itoa",
  "ryu",
 ]
