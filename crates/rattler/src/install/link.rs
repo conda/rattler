@@ -3,8 +3,8 @@
 use fs_err as fs;
 use memmap2::Mmap;
 use once_cell::sync::Lazy;
-use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::Platform;
+use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_digest::Sha256;
 use rattler_digest::{HashingWriter, Sha256Hash};
 use reflink_copy::reflink;
@@ -16,8 +16,8 @@ use std::fs::Permissions;
 use std::io::{BufWriter, ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
-use super::apple_codesign::{codesign, AppleCodeSignBehavior};
 use super::Prefix;
+use super::apple_codesign::{AppleCodeSignBehavior, codesign};
 
 /// Describes the method to "link" a file from the source directory (or the cache directory) to the
 /// destination directory.
@@ -107,6 +107,7 @@ pub enum LinkFileError {
 }
 
 /// The successful result of calling [`link_file`].
+#[derive(Debug)]
 pub struct LinkedFile {
     /// True if an existing file already existed and linking overwrote the original file.
     pub clobbered: bool,

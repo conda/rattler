@@ -4261,6 +4261,7 @@ dependencies = [
  "tracing-test",
  "url",
  "uuid",
+ "walkdir",
 ]
 
 [[package]]

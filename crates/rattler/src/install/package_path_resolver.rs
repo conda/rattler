@@ -1,18 +1,24 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EntryType {
     File,
     Directory,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Entry {
     pub path: PathBuf,
     pub entry_type: EntryType,
     pub package_index: usize,
     pub package_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConflictType {
+    DirectConflict,
+    BlockedByAncestor,
 }
 
 #[derive(Debug, Clone)]
@@ -23,10 +29,10 @@ pub struct Conflict {
     pub conflict_type: ConflictType,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum ConflictType {
-    DirectConflict,
-    BlockedByAncestor,
+impl Conflict {
+    pub fn is_direct_conflict(&self) -> bool {
+        matches!(self.conflict_type, ConflictType::DirectConflict)
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -380,7 +386,7 @@ mod tests {
         resolver.add_package("pkg2", 1, &[(Path::new("config"), EntryType::File)]);
         resolver.resolve_conflicts();
 
-        let conflicts = resolver.get_conflicts();
+        let conflicts = dbg!(resolver.get_conflicts());
         assert_eq!(conflicts.len(), 1); // Should have one conflict
         assert_eq!(conflicts[0].winner.entry_type, EntryType::File); // File wins
     }

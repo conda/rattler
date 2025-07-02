@@ -250,6 +250,7 @@ pub struct InstallOptions {
     pub apple_codesign_behavior: AppleCodeSignBehavior,
 }
 
+#[derive(Debug)]
 struct LinkPath {
     entry: PathsEntry,
     computed_path: PathBuf,
@@ -348,6 +349,19 @@ pub async fn link_package(
     let mut directories_to_construct = HashSet::new();
     for link_path in &final_paths {
         let mut current_path = link_path.computed_path.parent();
+        while let Some(path) = current_path {
+            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
+                current_path = path.parent();
+            } else {
+                break;
+            }
+        }
+
+        // Since we store clobbers in the separate directory
+        // (`__clobbers__`) now we have to create all necessary
+        // directories for it as well.
+        let clobber_path = link_path.clobber_path.as_ref();
+        let mut current_path = clobber_path.and_then(|p| p.parent());
         while let Some(path) = current_path {
             if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
                 current_path = path.parent();
