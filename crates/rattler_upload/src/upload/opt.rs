@@ -8,6 +8,9 @@ use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_networking::{mirror_middleware, s3_middleware};
 use tracing::warn;
 
+/// The configuration type for rattler-build - just extends rattler / pixi config and can load the same TOML files.
+pub type Config = rattler_config::config::ConfigBase<()>;
+
 /// Container for rattler_solver::ChannelPriority so that it can be parsed
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ChannelPriorityWrapper {
@@ -86,14 +89,14 @@ impl CommonData {
         output_dir: Option<PathBuf>,
         experimental: bool,
         auth_file: Option<PathBuf>,
-        config: pixi_config::Config,
+        config: Config,
         channel_priority: Option<ChannelPriority>,
         allow_insecure_host: Option<Vec<String>>,
     ) -> Self {
         // mirror config
         // todo: this is a duplicate in pixi and pixi-pack: do it like in `compute_s3_config`
         let mut mirror_config = HashMap::new();
-        tracing::debug!("Using mirrors: {:?}", config.mirror_map());
+        tracing::debug!("Using mirrors: {:?}", config.mirrors);
 
         fn ensure_trailing_slash(url: &url::Url) -> url::Url {
             if url.path().ends_with('/') {
@@ -106,7 +109,7 @@ impl CommonData {
             }
         }
 
-        for (key, value) in config.mirror_map() {
+        for (key, value) in &config.mirrors {
             let mut mirrors = Vec::new();
             for v in value {
                 mirrors.push(mirror_middleware::Mirror {
@@ -119,8 +122,7 @@ impl CommonData {
             }
             mirror_config.insert(ensure_trailing_slash(key), mirrors);
         }
-
-        let s3_config = config.compute_s3_config();
+        let s3_config = rattler_networking::s3_middleware::compute_s3_config(&config.s3_options.0);
         Self {
             output_dir: output_dir.unwrap_or_else(|| PathBuf::from("./output")),
             experimental,
@@ -132,7 +134,7 @@ impl CommonData {
         }
     }
 
-    fn from_opts_and_config(value: CommonOpts, config: pixi_config::Config) -> Self {
+    fn from_opts_and_config(value: CommonOpts, config: Config) -> Self {
         Self::new(
             value.output_dir,
             value.experimental,
@@ -143,7 +145,6 @@ impl CommonData {
         )
     }
 }
-
 
 
 /// Upload options.
@@ -634,7 +635,7 @@ pub struct DebugData {
 impl DebugData {
     /// Generate a new TestData struct from TestOpts and an optional pixi config.
     /// TestOpts have higher priority than the pixi config.
-    pub fn from_opts_and_config(opts: DebugOpts, config: Option<pixi_config::Config>) -> Self {
+    pub fn from_opts_and_config(opts: DebugOpts, config: Option<Config>) -> Self {
         Self {
             recipe_path: opts.recipe,
             output_dir: opts.output.unwrap_or_else(|| PathBuf::from("./output")),
