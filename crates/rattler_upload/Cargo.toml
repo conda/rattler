@@ -15,7 +15,7 @@ rattler_networking = { workspace = true, features = ["rattler_config"] }
 rattler_redaction = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
 rattler_config = { workspace = true, default-features = false }
-rattler_solve = { git = "https://github.com/wolfv/rattler", branch = "pub-schema" }
+rattler_solve = { workspace = true }
 miette = { version = "7.6.0", features = ["fancy"] }
 clap = { version = "4.5.37", features = ["derive", "env", "cargo"] }
 fs-err = "3.1.0"

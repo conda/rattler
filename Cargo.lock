@@ -1403,11 +1403,11 @@ dependencies = [
  "clap",
  "itertools 0.14.0",
  "rattler_cache",
- "rattler_conda_types 0.35.4",
+ "rattler_conda_types",
  "rattler_repodata_gateway",
- "rattler_solve 2.1.4",
+ "rattler_solve",
  "reqwest",
- "resolvo 0.9.1",
+ "resolvo",
  "serde_json",
  "tokio",
 ]
@@ -1884,25 +1884,13 @@ dependencies = [
 
 [[package]]
 name = "file_url"
-version = "0.2.3"
-source = "git+https://github.com/wolfv/rattler?branch=pub-schema#61b2040c64a1e18ec475c447273dc9f368d9066c"
-dependencies = [
- "itertools 0.14.0",
- "percent-encoding",
- "thiserror 2.0.12",
- "typed-path 0.10.0",
- "url",
-]
-
-[[package]]
-name = "file_url"
 version = "0.2.5"
 dependencies = [
  "itertools 0.14.0",
  "percent-encoding",
  "rstest",
  "thiserror 2.0.12",
- "typed-path 0.11.0",
+ "typed-path",
  "url",
 ]
 
@@ -2347,16 +2335,6 @@ dependencies = [
 
 [[package]]
 name = "halfbrown"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8588661a8607108a5ca69cab034063441a0413a0b041c13618a7dd348021ef6f"
-dependencies = [
- "hashbrown 0.14.5",
- "serde",
-]
-
-[[package]]
-name = "halfbrown"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa2c385c6df70fd180bbb673d93039dbd2cd34e41d782600bdf6e1ca7bce39aa"
@@ -2376,10 +2354,6 @@ name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
-dependencies = [
- "ahash",
- "allocator-api2",
-]
 
 [[package]]
 name = "hashbrown"
@@ -4279,8 +4253,8 @@ dependencies = [
  "parking_lot 0.12.4",
  "rand 0.9.1",
  "rattler_cache",
- "rattler_conda_types 0.35.4",
- "rattler_digest 1.1.4",
+ "rattler_conda_types",
+ "rattler_digest",
  "rattler_lock",
  "rattler_menuinst",
  "rattler_networking",
@@ -4319,11 +4293,11 @@ dependencies = [
  "once_cell",
  "rattler",
  "rattler_cache",
- "rattler_conda_types 0.35.4",
+ "rattler_conda_types",
  "rattler_menuinst",
  "rattler_networking",
  "rattler_repodata_gateway",
- "rattler_solve 2.1.4",
+ "rattler_solve",
  "rattler_virtual_packages",
  "reqwest",
  "reqwest-middleware",
@@ -4348,8 +4322,8 @@ dependencies = [
  "fxhash",
  "itertools 0.14.0",
  "parking_lot 0.12.4",
- "rattler_conda_types 0.35.4",
- "rattler_digest 1.1.4",
+ "rattler_conda_types",
+ "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
  "rayon",
@@ -4371,43 +4345,6 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.31.0"
-source = "git+https://github.com/wolfv/rattler?branch=pub-schema#61b2040c64a1e18ec475c447273dc9f368d9066c"
-dependencies = [
- "chrono",
- "dirs",
- "file_url 0.2.3",
- "fs-err",
- "fxhash",
- "glob",
- "hex",
- "indexmap 2.10.0",
- "itertools 0.14.0",
- "lazy-regex",
- "nom 7.1.3",
- "purl",
- "rattler_digest 1.0.6",
- "rattler_macros 1.0.6",
- "rattler_redaction 0.1.6",
- "regex",
- "serde",
- "serde-untagged",
- "serde_json",
- "serde_repr",
- "serde_with",
- "serde_yaml",
- "simd-json 0.14.3",
- "smallvec",
- "strum",
- "tempfile",
- "thiserror 2.0.12",
- "tracing",
- "typed-path 0.10.0",
- "url",
-]
-
-[[package]]
-name = "rattler_conda_types"
 version = "0.35.4"
 dependencies = [
  "assert_matches",
@@ -4416,7 +4353,7 @@ dependencies = [
  "criterion",
  "dirs",
  "dunce",
- "file_url 0.2.5",
+ "file_url",
  "fs-err",
  "fxhash",
  "glob",
@@ -4431,10 +4368,10 @@ dependencies = [
  "pathdiff",
  "purl",
  "rand 0.9.1",
- "rattler_digest 1.1.4",
- "rattler_macros 1.0.11",
+ "rattler_digest",
+ "rattler_macros",
  "rattler_package_streaming",
- "rattler_redaction 0.1.12",
+ "rattler_redaction",
  "rayon",
  "regex",
  "rstest",
@@ -4444,14 +4381,14 @@ dependencies = [
  "serde_repr",
  "serde_with",
  "serde_yaml",
- "simd-json 0.15.1",
+ "simd-json",
  "smallvec",
  "strum",
  "tempfile",
  "thiserror 2.0.12",
  "tools",
  "tracing",
- "typed-path 0.11.0",
+ "typed-path",
  "url",
 ]
 
@@ -4463,7 +4400,7 @@ dependencies = [
  "fs-err",
  "indexmap 2.10.0",
  "insta",
- "rattler_conda_types 0.35.4",
+ "rattler_conda_types",
  "serde",
  "serde_json",
  "tempfile",
@@ -4471,21 +4408,6 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "url",
-]
-
-[[package]]
-name = "rattler_digest"
-version = "1.0.6"
-source = "git+https://github.com/wolfv/rattler?branch=pub-schema#61b2040c64a1e18ec475c447273dc9f368d9066c"
-dependencies = [
- "blake2",
- "digest",
- "generic-array",
- "hex",
- "md-5",
- "serde",
- "serde_with",
- "sha2",
 ]
 
 [[package]]
@@ -4522,9 +4444,9 @@ dependencies = [
  "fxhash",
  "indicatif",
  "opendal",
- "rattler_conda_types 0.35.4",
+ "rattler_conda_types",
  "rattler_config",
- "rattler_digest 1.1.4",
+ "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
  "reqwest",
@@ -4559,16 +4481,16 @@ name = "rattler_lock"
 version = "0.23.9"
 dependencies = [
  "chrono",
- "file_url 0.2.5",
+ "file_url",
  "fxhash",
  "indexmap 2.10.0",
  "insta",
  "itertools 0.14.0",
  "pep440_rs",
  "pep508_rs",
- "rattler_conda_types 0.35.4",
- "rattler_digest 1.1.4",
- "rattler_solve 2.1.4",
+ "rattler_conda_types",
+ "rattler_digest",
+ "rattler_solve",
  "rstest",
  "serde",
  "serde-value",
@@ -4578,17 +4500,8 @@ dependencies = [
  "serde_yaml",
  "similar-asserts",
  "thiserror 2.0.12",
- "typed-path 0.11.0",
+ "typed-path",
  "url",
-]
-
-[[package]]
-name = "rattler_macros"
-version = "1.0.6"
-source = "git+https://github.com/wolfv/rattler?branch=pub-schema#61b2040c64a1e18ec475c447273dc9f368d9066c"
-dependencies = [
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -4613,7 +4526,7 @@ dependencies = [
  "once_cell",
  "plist",
  "quick-xml 0.37.5",
- "rattler_conda_types 0.35.4",
+ "rattler_conda_types",
  "rattler_shell",
  "regex",
  "serde",
@@ -4676,10 +4589,10 @@ dependencies = [
  "futures-util",
  "insta",
  "num_cpus",
- "rattler_conda_types 0.35.4",
- "rattler_digest 1.1.4",
+ "rattler_conda_types",
+ "rattler_digest",
  "rattler_networking",
- "rattler_redaction 0.1.12",
+ "rattler_redaction",
  "reqwest",
  "reqwest-middleware",
  "rstest",
@@ -4710,14 +4623,6 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
-version = "0.1.6"
-source = "git+https://github.com/wolfv/rattler?branch=pub-schema#61b2040c64a1e18ec475c447273dc9f368d9066c"
-dependencies = [
- "url",
-]
-
-[[package]]
-name = "rattler_redaction"
 version = "0.1.12"
 dependencies = [
  "reqwest",
@@ -4742,7 +4647,7 @@ dependencies = [
  "chrono",
  "dashmap",
  "dirs",
- "file_url 0.2.5",
+ "file_url",
  "fs-err",
  "fslock",
  "futures",
@@ -4760,11 +4665,11 @@ dependencies = [
  "parking_lot 0.12.4",
  "pin-project-lite",
  "rattler_cache",
- "rattler_conda_types 0.35.4",
+ "rattler_conda_types",
  "rattler_config",
- "rattler_digest 1.1.4",
+ "rattler_digest",
  "rattler_networking",
- "rattler_redaction 0.1.12",
+ "rattler_redaction",
  "reqwest",
  "reqwest-middleware",
  "retry-policies",
@@ -4812,7 +4717,7 @@ dependencies = [
  "indexmap 2.10.0",
  "insta",
  "itertools 0.14.0",
- "rattler_conda_types 0.35.4",
+ "rattler_conda_types",
  "rattler_pty",
  "serde_json",
  "shlex",
@@ -4826,24 +4731,6 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.3.9"
-source = "git+https://github.com/wolfv/rattler?branch=pub-schema#61b2040c64a1e18ec475c447273dc9f368d9066c"
-dependencies = [
- "chrono",
- "futures",
- "indexmap 2.10.0",
- "itertools 0.14.0",
- "rattler_conda_types 0.31.0",
- "rattler_digest 1.0.6",
- "resolvo 0.8.6",
- "tempfile",
- "thiserror 2.0.12",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "rattler_solve"
 version = "2.1.4"
 dependencies = [
  "chrono",
@@ -4853,11 +4740,11 @@ dependencies = [
  "itertools 0.14.0",
  "libc",
  "once_cell",
- "rattler_conda_types 0.35.4",
- "rattler_digest 1.1.4",
+ "rattler_conda_types",
+ "rattler_digest",
  "rattler_libsolv_c",
  "rattler_repodata_gateway",
- "resolvo 0.9.1",
+ "resolvo",
  "rstest",
  "serde",
  "serde_json",
@@ -4879,13 +4766,13 @@ dependencies = [
  "indicatif",
  "miette",
  "opendal",
- "rattler_conda_types 0.35.4",
+ "rattler_conda_types",
  "rattler_config",
- "rattler_digest 1.1.4",
+ "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
- "rattler_redaction 0.1.12",
- "rattler_solve 1.3.9",
+ "rattler_redaction",
+ "rattler_solve",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
@@ -4910,7 +4797,7 @@ dependencies = [
  "nom 8.0.0",
  "once_cell",
  "plist",
- "rattler_conda_types 0.35.4",
+ "rattler_conda_types",
  "regex",
  "serde",
  "thiserror 2.0.12",
@@ -5188,23 +5075,6 @@ dependencies = [
  "tokio",
  "tracing",
  "wasm-timer",
-]
-
-[[package]]
-name = "resolvo"
-version = "0.8.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5314eb4b865d39acd1b3cd05eb91b87031bb49fd1278a1bdf8d6680f1389ec29"
-dependencies = [
- "ahash",
- "bitvec",
- "elsa",
- "event-listener",
- "futures",
- "indexmap 2.10.0",
- "itertools 0.14.0",
- "petgraph",
- "tracing",
 ]
 
 [[package]]
@@ -5857,32 +5727,17 @@ checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
 
 [[package]]
 name = "simd-json"
-version = "0.14.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa2bcf6c6e164e81bc7a5d49fc6988b3d515d9e8c07457d7b74ffb9324b9cd40"
-dependencies = [
- "getrandom 0.2.16",
- "halfbrown 0.2.5",
- "ref-cast",
- "serde",
- "serde_json",
- "simdutf8",
- "value-trait 0.10.1",
-]
-
-[[package]]
-name = "simd-json"
 version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c962f626b54771990066e5435ec8331d1462576cd2d1e62f24076ae014f92112"
 dependencies = [
  "getrandom 0.3.3",
- "halfbrown 0.3.0",
+ "halfbrown",
  "ref-cast",
  "serde",
  "serde_json",
  "simdutf8",
- "value-trait 0.11.0",
+ "value-trait",
 ]
 
 [[package]]
@@ -6485,7 +6340,7 @@ dependencies = [
  "difference",
  "dirs",
  "fslock",
- "rattler_digest 1.1.4",
+ "rattler_digest",
  "reqwest",
  "tempdir",
  "tempfile",
@@ -6662,12 +6517,6 @@ dependencies = [
 
 [[package]]
 name = "typed-path"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41713888c5ccfd99979fcd1afd47b71652e331b3d4a0e19d30769e80fec76cce"
-
-[[package]]
-name = "typed-path"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c462d18470a2857aa657d338af5fa67170bb48bcc80a296710ce3b0802a32566"
@@ -6821,24 +6670,12 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "value-trait"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9170e001f458781e92711d2ad666110f153e4e50bfd5cbd02db6547625714187"
-dependencies = [
- "float-cmp",
- "halfbrown 0.2.5",
- "itoa",
- "ryu",
-]
-
-[[package]]
-name = "value-trait"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0508fce11ad19e0aab49ce20b6bec7f8f82902ded31df1c9fc61b90f0eb396b8"
 dependencies = [
  "float-cmp",
- "halfbrown 0.3.0",
+ "halfbrown",
  "itoa",
  "ryu",
 ]
