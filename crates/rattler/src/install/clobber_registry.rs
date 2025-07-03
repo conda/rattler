@@ -1,6 +1,7 @@
 //! Implements a registry for "clobbering" files (files that are appearing in
 //! multiple packages)
 
+use std::process::{Command, Stdio};
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
@@ -16,6 +17,16 @@ use rattler_conda_types::{
 };
 
 use super::package_path_resolver::*;
+
+fn tree(path: &Path) -> String {
+    let output = Command::new("tree")
+        .arg(path)
+        .stdout(Stdio::piped())
+        .output()
+        .unwrap();
+
+    String::from_utf8(output.stdout).unwrap()
+}
 
 const CLOBBERS_DIR_NAME: &str = "__clobbers__";
 
@@ -153,11 +164,11 @@ impl ClobberRegistry {
 
         // Map that will be used to link file to appropriate place to
         // avoid writing two different files to the same place.
-        let link_paths = dbg!(self.get_conflicts_link_paths());
+        let link_paths = self.get_conflicts_link_paths();
 
         self.sync_conflicts();
 
-        link_paths
+        dbg!(link_paths)
     }
 
     /// Returns a map that maps package paths to path in `__clobbers__`.
@@ -183,13 +194,14 @@ impl ClobberRegistry {
         // Note that we care mostly about direct conflicts, since if
         // conflict is happened because of parent, then this file will
         // anyway be linked.
-        for (old_conflict, new_conflict) in dbg!(updated_conflicts) {
+        for (old_conflict, new_conflict) in updated_conflicts {
             // We assume in here that priority order (package_index
             // values in path resolver) aren't changed.
             use ConflictType::*;
             match (&old_conflict.conflict_type, &new_conflict.conflict_type) {
                 (DirectConflict, DirectConflict) => {
-                    assert_eq!(old_conflict.winner, new_conflict.winner);
+                    // This doesn't hold for update
+                    // assert_eq!(old_conflict.winner, new_conflict.winner);
                     let desired_path = old_conflict.path.as_path();
 
                     let old_losers = old_conflict
@@ -203,31 +215,28 @@ impl ClobberRegistry {
                         .filter(|l| !old_losers.contains(l))
                         .collect::<Vec<_>>();
 
-                    assert!(only_new_losers.len() == 1);
+                    assert!(only_new_losers.len() <= 1);
 
-                    let new_loser = *only_new_losers.first().unwrap();
+                    if let Some(&new_loser) = only_new_losers.first() {
+                        assert!(
+                            !link_map.contains_key(desired_path),
+                            "We didn't expect reinsertion of the same path {}",
+                            desired_path.display()
+                        );
 
-                    assert!(
-                        !link_map.contains_key(desired_path),
-                        "We didn't expect reinsertion of the same path {}",
-                        desired_path.display()
-                    );
-
-                    link_map.insert(
-                        desired_path.to_path_buf(),
-                        get_clobber_relative_path(new_loser),
-                    );
-
-                    // dbg!((&old_conflict, &new_conflict));
-                    // todo!();
+                        link_map.insert(
+                            desired_path.to_path_buf(),
+                            get_clobber_relative_path(new_loser),
+                        );
+                    }
                 }
                 (DirectConflict, BlockedByAncestor) => {
                     dbg!((&old_conflict, &new_conflict));
-                    // todo!();
+                    todo!();
                 }
                 (BlockedByAncestor, DirectConflict) => {
                     dbg!((&old_conflict, &new_conflict));
-                    // todo!();
+                    todo!();
                 }
                 (BlockedByAncestor, BlockedByAncestor) => continue,
             }
@@ -294,31 +303,32 @@ impl ClobberRegistry {
         sorted_prefix_records: &[&PrefixRecord],
         target_prefix: &Path,
     ) -> Result<HashMap<PathBuf, ClobberedPath>, ClobberError> {
-        // dbg!(
-        //     std::fs::read_dir(target_prefix)
-        //         .map(|rd| { rd.map(|de| de.map(|de| de.path())).collect::<Vec<_>>() })
-        // );
         if self.did_unclobbering {
             return Err(ClobberError::AlreadyUnclobbered);
         }
         self.did_unclobbering = true;
 
+        eprintln!("----------Before\n{}", tree(target_prefix));
         // Needed for step 7.
-        let mut _prefix_records_to_rewrite = vec![]; // TODO
+        // We store copy of prefix records, so we can update them later on.
+        // They will be used to update metadata.
+        let mut prefix_records: Vec<PrefixRecord> =
+            sorted_prefix_records.iter().map(|&pr| pr.clone()).collect();
+        let mut prefix_records_to_rewrite: HashSet<usize> = HashSet::new(); // TODO
 
         // TODO: There are several steps that we have to do, and not all of them are currently implemented.
         //
-        // 1. [x] Save current priorities from path resolver in case unclobber will be called second time.
+        // 1. [-] Save current priorities from path resolver in case unclobber will be called second time.
         // 2. [x] Reprioritize based on the given sorted_prefix_records to get correct paths in the final layout.
         // 3. [x] Resolve paths based on the path resolver conflicts.
-        // 4. [x] Restore original priorities.
+        // 4. [-] Restore original priorities is no longer needed as we can't call unclobber twice.
         // 5. [x] Swap current owner (first one who took ownership) of path with winner.
         // 6. [x] Compute result of unclobbering.
-        // 7. [ ] Write conda-meta file.
+        // 7. [x] Write conda-meta file.
         // 8. [x] Return result of unclobbering.
 
         // 1
-        let original_priorities = self.path_resolver.priorities();
+        // let original_priorities = self.path_resolver.priorities();
 
         // 2
         let new_priorities = sorted_prefix_records
@@ -334,13 +344,18 @@ impl ClobberRegistry {
         // 3
         self.path_resolver.resolve_conflicts();
 
-        // 4
-        self.path_resolver.reprioritize(&original_priorities);
-        self.path_resolver.resolve_conflicts(); // Get previous conflict state back.
+        // // 4
+        // self.path_resolver.reprioritize(&original_priorities);
+        // self.path_resolver.resolve_conflicts(); // Get previous conflict state back.
 
         // 5
         let resolved_conflicts = self.path_resolver.get_conflicts();
-        self.swap_clobbered_files(target_prefix, resolved_conflicts)?;
+        self.swap_clobbered_files(
+            target_prefix,
+            resolved_conflicts,
+            &mut prefix_records,
+            &mut prefix_records_to_rewrite,
+        )?;
 
         // 6
         let result = self
@@ -351,7 +366,9 @@ impl ClobberRegistry {
             .collect();
 
         // 7
-        self.update_conda_meta(target_prefix, &_prefix_records_to_rewrite)?;
+        self.update_conda_meta(target_prefix, &prefix_records, &prefix_records_to_rewrite)?;
+
+        eprintln!("----------After\n{}", tree(target_prefix));
 
         // 8
         Ok(result)
@@ -360,10 +377,14 @@ impl ClobberRegistry {
     /// Swap files on-disk to match current winners. Basically
     /// syncronizes in-memory resolved conflict with what is on the
     /// file system.
+    ///
+    /// It not only moves files, but also updates in-memory prefix records.
     fn swap_clobbered_files(
         &self,
         target_prefix: &Path,
         new_conflicts: &[Conflict],
+        prefix_records: &mut [PrefixRecord],
+        prefix_records_to_rewrite: &mut HashSet<usize>,
     ) -> Result<(), ClobberError> {
         let old_conflicts = self.conflicts.as_slice();
 
@@ -376,12 +397,62 @@ impl ClobberRegistry {
 
         // Assume that we first have direct conflicts, and only then blocked
         for (old, new) in updated_conflicts {
-            let previous_winner = &old.winner;
-            let new_winner = &new.winner;
+            let previous_winner = dbg!(&old.winner);
+            let new_winner = dbg!(&new.winner);
 
-            if &previous_winner.package_index != &new_winner.package_index {
-                self.toggle_clobber_entry_on_disk(target_prefix, previous_winner)?;
-                self.toggle_clobber_entry_on_disk(target_prefix, new_winner)?;
+            let previous_winner_in_clobbers = target_prefix
+                .join(get_clobber_relative_path(previous_winner))
+                .exists();
+            let new_winner_in_clobbers = target_prefix
+                .join(get_clobber_relative_path(new_winner))
+                .exists();
+            let both_in_clobbers = previous_winner_in_clobbers && new_winner_in_clobbers;
+
+            if &previous_winner.package_name != &new_winner.package_name {
+                let previous_winner_idx = new
+                    .losers
+                    .iter()
+                    .find(|e| e.package_name == previous_winner.package_name)
+                    .unwrap()
+                    .package_index;
+
+                if !both_in_clobbers {
+                    let (from, to, new_path_is_clobbered) =
+                        self.toggle_clobber_entry_on_disk(target_prefix, previous_winner)?;
+                    rename_path_in_prefix_record(
+                        &mut prefix_records[previous_winner_idx],
+                        &from,
+                        &to,
+                        new_path_is_clobbered,
+                    );
+                    prefix_records_to_rewrite.insert(dbg!(previous_winner_idx));
+                }
+
+                let new_winner_idx = new_winner.package_index;
+                let (from, to, new_path_is_clobbered) =
+                    self.toggle_clobber_entry_on_disk(target_prefix, new_winner)?;
+                rename_path_in_prefix_record(
+                    &mut prefix_records[new_winner_idx],
+                    &from,
+                    &to,
+                    new_path_is_clobbered,
+                );
+
+                prefix_records_to_rewrite.insert(dbg!(new_winner_idx));
+            } else {
+                if both_in_clobbers {
+                    let new_winner_idx = new_winner.package_index;
+                    let (from, to, new_path_is_clobbered) =
+                        self.toggle_clobber_entry_on_disk(target_prefix, new_winner)?;
+                    rename_path_in_prefix_record(
+                        &mut prefix_records[new_winner_idx],
+                        &from,
+                        &to,
+                        new_path_is_clobbered,
+                    );
+
+                    prefix_records_to_rewrite.insert(dbg!(new_winner_idx));
+                }
             }
         }
 
@@ -395,21 +466,35 @@ impl ClobberRegistry {
         &self,
         target_prefix: &Path,
         entry: &Entry,
-    ) -> Result<(), ClobberError> {
+    ) -> Result<(PathBuf, PathBuf, bool), ClobberError> {
+        // eprintln!("Toggle\n{}", tree(target_prefix));
+
         // Assume that file is in target_prefix, if it is not in clobbers, and vice versa.
         let clobber_relative_path = get_clobber_relative_path(entry);
-        let clobber_path = target_prefix.join(clobber_relative_path.as_path());
-        let prefix_path = target_prefix.join(entry.path.as_path());
+        let clobber_path = clobber_relative_path.as_path();
+        let prefix_path = entry.path.as_path();
 
-        let (from, to) = if self.is_in_clobbers(target_prefix, entry) {
-            (clobber_path.as_path(), prefix_path.as_path())
+        let path_is_clobbered = self.is_in_clobbers(target_prefix, entry);
+
+        let (from, to) = if path_is_clobbered {
+            (clobber_path, prefix_path)
         } else {
-            (prefix_path.as_path(), clobber_path.as_path())
+            (prefix_path, clobber_path)
         };
 
-        println!("Moving from {} to {}", from.display(), to.display());
+        eprintln!("Moving from {} to {}", from.display(), to.display());
+        eprintln!("But before, let's ensure that all necessary directories are created.");
+        if let Some(parent) = target_prefix.join(to).parent() {
+            fs::create_dir_all(parent).map_err(|err| {
+                let error_message = format!(
+                    "Couldn't create parent directories for path {}",
+                    to.display()
+                );
+                ClobberError::IoError(error_message, err)
+            })?;
+        }
 
-        fs::rename(from, to).map_err(|err| {
+        fs::rename(target_prefix.join(from), target_prefix.join(to)).map_err(|err| {
             let error_message = format!(
                 "Can not move from {} to {}, probably because it is not in target prefix {}",
                 from.display(),
@@ -419,7 +504,7 @@ impl ClobberRegistry {
             ClobberError::IoError(error_message, err)
         })?;
 
-        Ok(())
+        Ok((from.to_path_buf(), to.to_path_buf(), !path_is_clobbered))
     }
 
     /// Helper function to preserve compatability.
@@ -452,26 +537,30 @@ impl ClobberRegistry {
     fn update_conda_meta(
         &self,
         target_prefix: &Path,
-        prefix_records_to_rewrite: &[&PrefixRecord], // Maybe impl IntoIterator?
+        prefix_records: &[PrefixRecord],
+        prefix_records_to_rewrite: &HashSet<usize>,
     ) -> Result<(), ClobberError> {
         let conda_meta_path = target_prefix.join("conda-meta");
 
-        // for idx in prefix_records_to_rewrite {
-        //     let rec = &prefix_records[idx];
-        //     tracing::debug!(
-        //         "writing updated prefix record to: {:?}",
-        //         conda_meta.join(rec.file_name())
-        //     );
-        //     rec.write_to_path(conda_meta.join(rec.file_name()), true)
-        //         .map_err(|e| {
-        //             ClobberError::IoError(
-        //                 format!("failed to write updated prefix record {}", rec.file_name()),
-        //                 e,
-        //             )
-        //         })?;
-        // }
+        for idx in dbg!(prefix_records_to_rewrite) {
+            let record = &prefix_records[*idx];
+            tracing::debug!(
+                "writing updated prefix record to: {:?}",
+                conda_meta_path.join(record.file_name())
+            );
+            record
+                .write_to_path(conda_meta_path.as_path().join(record.file_name()), true)
+                .map_err(|e| {
+                    ClobberError::IoError(
+                        format!(
+                            "failed to write updated prefix record {}",
+                            record.file_name()
+                        ),
+                        e,
+                    )
+                })?;
+        }
 
-        // todo!()
         Ok(())
     }
 
@@ -497,6 +586,12 @@ fn rename_path_in_prefix_record(
     new_path: &Path,
     new_path_is_clobber: bool,
 ) {
+    dbg!((
+        record.name().as_normalized(),
+        old_path,
+        new_path,
+        new_path_is_clobber
+    ));
     for path in record.files.iter_mut() {
         if path == old_path {
             *path = new_path.to_path_buf();
@@ -796,11 +891,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_random_clobber() {
-        for _ in 0..3 {
-            let mut operations = test_operations();
-            // randomize the order of the operations
-            operations.shuffle(&mut rand::rng());
+    async fn test_all_possible_order_clobber() {
+        let test_operations = test_operations();
+        let len = test_operations.len();
+        for operations in test_operations.into_iter().permutations(len) {
+            let operations = operations.clone();
+            // // randomize the order of the operations
+            // operations.shuffle(&mut rand::rng());
 
             let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
                 operations,
@@ -921,8 +1018,8 @@ mod tests {
                 &target_prefix.path(),
                 &[
                     "clobber/bobber/clobber.txt",
-                    "__clobbers__/nested-1/clobber/bobber/clobber.txt",
-                    "__clobbers__/nested-3/clobber/bobber/clobber.txt",
+                    "__clobbers__/clobber-nested-1/clobber/bobber/clobber.txt",
+                    "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
                 ],
             );
 
@@ -935,7 +1032,7 @@ mod tests {
             assert_eq!(
                 prefix_record_clobber_3.files,
                 vec![PathBuf::from(
-                    "__clobbers__/nested-3/clobber/bobber/clobber.txt"
+                    "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt"
                 )]
             );
 
@@ -964,10 +1061,10 @@ mod tests {
             .await;
 
             assert_check_files!(
-                &target_prefix.path().join("clobber/bobber"),
+                &target_prefix.path(),
                 &[
-                    "__clobbers__/nested-3/clobber/bobber/clobber.txt",
-                    "clobber.txt"
+                    "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
+                    "clobber/bobber/clobber.txt"
                 ],
             );
 
