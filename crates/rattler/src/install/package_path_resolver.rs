@@ -29,12 +29,6 @@ pub struct Conflict {
     pub conflict_type: ConflictType,
 }
 
-impl Conflict {
-    pub fn is_direct_conflict(&self) -> bool {
-        matches!(self.conflict_type, ConflictType::DirectConflict)
-    }
-}
-
 #[derive(Debug, Default, Clone)]
 struct TreeNode {
     entries: Vec<Entry>,
@@ -214,6 +208,7 @@ pub struct PackagePathResolver {
 }
 
 impl PackagePathResolver {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn new() -> Self {
         Self::default()
     }
@@ -229,12 +224,15 @@ impl PackagePathResolver {
         package_index: usize,
         paths: &[(&Path, EntryType)],
     ) -> HashSet<PathBuf> {
-        let mut entries_to_add = Vec::new();
+        let mut entries_to_add = HashSet::new();
 
         for (path_str, entry_type) in paths {
             let path = PathBuf::from(path_str);
 
             // Create implicit directories for files
+            //
+            // XXX: Shouldn't we create implicit directories for
+            // directories as well???
             if *entry_type == EntryType::File {
                 self.collect_implicit_directories(
                     &path,
@@ -244,7 +242,7 @@ impl PackagePathResolver {
                 );
             }
 
-            entries_to_add.push(Entry {
+            entries_to_add.insert(Entry {
                 path: path.clone(),
                 entry_type: entry_type.clone(),
                 package_index,
@@ -290,6 +288,7 @@ impl PackagePathResolver {
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     /// Returns unsorted iterator where each item is pair of package
     /// name and it's priority index.
     pub fn priorities(&self) -> HashMap<String, usize> {
@@ -306,10 +305,10 @@ impl PackagePathResolver {
         file_path: &Path,
         package_name: &str,
         package_index: usize,
-        entries: &mut Vec<Entry>,
+        entries: &mut HashSet<Entry>,
     ) {
         let mut current = file_path.parent();
-        let mut dirs_to_create = Vec::new();
+        let mut dirs_to_create = Vec::with_capacity(file_path.components().count());
 
         while let Some(parent) = current {
             if parent == Path::new("") {
@@ -321,17 +320,12 @@ impl PackagePathResolver {
 
         // Create directories from root to leaf
         for &dir_path in dirs_to_create.iter().rev() {
-            if !entries
-                .iter()
-                .any(|e| e.path == dir_path && e.package_name == package_name)
-            {
-                entries.push(Entry {
-                    path: dir_path.to_path_buf(),
-                    entry_type: EntryType::Directory,
-                    package_index,
-                    package_name: package_name.to_string(),
-                });
-            }
+            entries.insert(Entry {
+                path: dir_path.to_path_buf(),
+                entry_type: EntryType::Directory,
+                package_index,
+                package_name: package_name.to_string(),
+            });
         }
     }
 
@@ -354,10 +348,12 @@ impl PackagePathResolver {
         &self.conflicts
     }
 
+    #[allow(dead_code)]
     pub fn print_tree(&self) {
         self.print_node(&self.root, "", 0);
     }
 
+    #[allow(dead_code)]
     fn print_node(&self, node: &TreeNode, path: &str, depth: usize) {
         let indent = "  ".repeat(depth);
         let status = match (node.is_blocked, node.winner.is_some()) {
@@ -715,6 +711,9 @@ mod tests {
 
         assert_eq!(initial_priorities, resolver.priorities());
 
+        resolver.reprioritize(&initial_priorities);
+        assert_eq!(initial_priorities, resolver.priorities());
+
         let new_priorities = {
             let mut inner = HashMap::new();
             inner.insert("pkg1".to_string(), 2);
@@ -724,7 +723,6 @@ mod tests {
         };
 
         resolver.reprioritize(&new_priorities);
-
         assert_eq!(new_priorities, resolver.priorities());
     }
 

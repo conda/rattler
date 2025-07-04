@@ -207,114 +207,6 @@ impl ClobberRegistry {
         dbg!(link_paths)
     }
 
-    // /// Returns a map that maps package paths to path in `__clobbers__`.
-    // ///
-    // /// In other words, for ever new conflicting package we map it's path `path/to/file` to `__clobbers__/pkg_name/path/to/file`.
-    // ///
-    // /// This function is expected to be called only in register_paths, so it may not work correctly when there are few packages registered.
-    // fn get_conflicts_link_paths(&self) -> HashMap<PathBuf, PathBuf> {
-    //     // let clobbers_dir = Path::new(CLOBBERS_DIR_NAME);
-    //     let mut link_map = HashMap::new();
-
-    //     let old_conflicts = self.conflicts.as_slice();
-    //     let new_conflicts = self.path_resolver.get_conflicts();
-
-    //     let (updated_conflicts, only_old_conflicts, only_new_conflicts) =
-    //         join_and_partition_conflicts(old_conflicts, new_conflicts);
-
-    //     // If it is not empty, then somebody uses clobber registry not
-    //     // the way it was used before, so please add handling for this
-    //     // separately.
-    //     assert!(only_old_conflicts.is_empty());
-
-    //     // Note that we care mostly about direct conflicts, since if
-    //     // conflict is happened because of parent, then this file will
-    //     // anyway be linked.
-    //     for (old_conflict, new_conflict) in updated_conflicts {
-    //         // We assume in here that priority order (package_index
-    //         // values in path resolver) aren't changed.
-    //         use ConflictType::*;
-    //         match (&old_conflict.conflict_type, &new_conflict.conflict_type) {
-    //             (DirectConflict, DirectConflict) => {
-    //                 // dbg!((&old_conflict, &new_conflict));
-    //                 if old_conflict == new_conflict {
-    //                     continue;
-    //                 }
-
-    //                 if new_conflict.losers.contains(&old_conflict.winner) {
-    //                     continue;
-    //                 }
-
-    //                 // This doesn't hold for update
-    //                 // assert_eq!(old_conflict.winner, new_conflict.winner);
-    //                 let desired_path = old_conflict.path.as_path();
-
-    //                 let old_losers = old_conflict
-    //                     .losers
-    //                     .iter()
-    //                     .cloned()
-    //                     .collect::<HashSet<Entry>>();
-    //                 let only_new_losers = new_conflict
-    //                     .losers
-    //                     .iter()
-    //                     .filter(|l| !old_losers.contains(l))
-    //                     .collect::<Vec<_>>();
-
-    //                 assert!(only_new_losers.len() <= 1);
-
-    //                 if let Some(&new_loser) = only_new_losers.first() {
-    //                     assert!(
-    //                         !link_map.contains_key(desired_path),
-    //                         "We didn't expect reinsertion of the same path {}",
-    //                         desired_path.display()
-    //                     );
-
-    //                     link_map.insert(
-    //                         desired_path.to_path_buf(),
-    //                         get_clobber_relative_path(new_loser),
-    //                     );
-    //                 }
-    //             }
-    //             (DirectConflict, BlockedByAncestor) => {
-    //                 dbg!((&old_conflict, &new_conflict));
-    //                 todo!();
-    //             }
-    //             (BlockedByAncestor, DirectConflict) => {
-    //                 dbg!((&old_conflict, &new_conflict));
-    //                 todo!();
-    //             }
-    //             (BlockedByAncestor, BlockedByAncestor) => continue,
-    //         }
-    //     }
-
-    //     for &conflict in only_new_conflicts.iter().filter(|c| c.is_direct_conflict()) {
-    //         let desired_path = conflict.path.as_path();
-
-    //         // dbg!(conflict);
-
-    //         let losers = &conflict.losers;
-
-    //         // Since we are adding one package at the time and this
-    //         // conflict is new we should have only one loser.
-    //         assert!(losers.len() == 1);
-
-    //         let new_loser = losers.first().unwrap();
-
-    //         assert!(
-    //             !link_map.contains_key(desired_path),
-    //             "We didn't expect reinsertion of the same path {}",
-    //             desired_path.display()
-    //         );
-
-    //         link_map.insert(
-    //             desired_path.to_path_buf(),
-    //             get_clobber_relative_path(new_loser),
-    //         );
-    //     }
-
-    //     link_map
-    // }
-
     /// Syncronize conflicts state with `path_resolver`.
     fn sync_conflicts(&mut self) {
         self.conflicts = self.path_resolver.get_conflicts().into();
@@ -343,6 +235,14 @@ impl ClobberRegistry {
 
     /// Unclobber the paths after all installation steps have been completed.
     /// Returns an overview of all the clobbered files.
+    ///
+    /// There are several steps that we are doing:
+    /// 1. Reprioritize based on the given sorted_prefix_records to get correct paths in the final layout.
+    /// 2. Resolve paths based on the path resolver conflicts.
+    /// 3. Swap current owner (first one who took ownership) of path with winner.
+    /// 4. Compute result of unclobbering.
+    /// 5. Write conda-meta file.
+    /// 6. Return result of unclobbering.
     pub fn unclobber(
         &mut self,
         sorted_prefix_records: &[&PrefixRecord],
@@ -353,29 +253,15 @@ impl ClobberRegistry {
         }
         self.did_unclobbering = true;
 
-        eprintln!("\\\\\\\\\\Before\n{}", tree(target_prefix));
-        // Needed for step 7.
+        // eprintln!("\\\\\\\\\\Before\n{}", tree(target_prefix));
+        // Needed for step 5.
         // We store copy of prefix records, so we can update them later on.
         // They will be used to update metadata.
         let mut prefix_records: Vec<PrefixRecord> =
             sorted_prefix_records.iter().map(|&pr| pr.clone()).collect();
         let mut prefix_records_to_rewrite: HashSet<usize> = HashSet::new();
 
-        // TODO: There are several steps that we have to do, and not all of them are currently implemented.
-        //
-        // 1. [-] Save current priorities from path resolver in case unclobber will be called second time.
-        // 2. [x] Reprioritize based on the given sorted_prefix_records to get correct paths in the final layout.
-        // 3. [x] Resolve paths based on the path resolver conflicts.
-        // 4. [-] Restore original priorities is no longer needed as we can't call unclobber twice.
-        // 5. [x] Swap current owner (first one who took ownership) of path with winner.
-        // 6. [x] Compute result of unclobbering.
-        // 7. [x] Write conda-meta file.
-        // 8. [x] Return result of unclobbering.
-
         // 1
-        // let original_priorities = self.path_resolver.priorities();
-
-        // 2
         let new_priorities = sorted_prefix_records
             .iter()
             .enumerate()
@@ -386,14 +272,10 @@ impl ClobberRegistry {
             .collect();
         self.path_resolver.reprioritize(&new_priorities);
 
-        // 3
+        // 2
         self.path_resolver.resolve_conflicts();
 
-        // // 4
-        // self.path_resolver.reprioritize(&original_priorities);
-        // self.path_resolver.resolve_conflicts(); // Get previous conflict state back.
-
-        // 5
+        // 3
         let resolved_conflicts = self.path_resolver.get_conflicts();
         self.swap_clobbered_files(
             target_prefix,
@@ -402,18 +284,18 @@ impl ClobberRegistry {
             &mut prefix_records_to_rewrite,
         )?;
 
-        // 6
+        // 4
         let result = resolved_conflicts
             .iter()
             .map(|conflict| self.conflict_to_clobbered_path(conflict))
             .collect();
 
-        // 7
+        // 5
         self.update_conda_meta(target_prefix, &prefix_records, &prefix_records_to_rewrite)?;
 
         eprintln!("/////After\n{}", tree(target_prefix));
 
-        // 8
+        // 6
         Ok(result)
     }
 

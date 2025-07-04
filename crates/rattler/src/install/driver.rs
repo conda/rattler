@@ -227,10 +227,9 @@ impl InstallDriver {
                 tracing::warn!("Failed to remove empty directories: {} (ignored)", e);
             });
 
-        let clobbered_paths = dbg!(
-            self.clobber_registry()
-                .unclobber(&required_packages, target_prefix)
-        )?;
+        let clobbered_paths = self
+            .clobber_registry()
+            .unclobber(&required_packages, target_prefix)?;
 
         let post_link_result = if self.execute_link_scripts {
             Some(self.run_post_link_scripts(transaction, &required_packages, target_prefix))
