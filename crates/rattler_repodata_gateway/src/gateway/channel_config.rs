@@ -41,6 +41,19 @@ impl Default for SourceConfig {
     }
 }
 
+#[cfg(feature = "rattler_config")]
+impl From<rattler_config::config::repodata_config::RepodataChannelConfig> for SourceConfig {
+    fn from(value: rattler_config::config::repodata_config::RepodataChannelConfig) -> Self {
+        SourceConfig {
+            jlap_enabled: !value.disable_jlap.unwrap_or(false),
+            zstd_enabled: !value.disable_zstd.unwrap_or(false),
+            bz2_enabled: !value.disable_bzip2.unwrap_or(false),
+            sharded_enabled: !value.disable_sharded.unwrap_or(false),
+            cache_action: Default::default(),
+        }
+    }
+}
+
 /// Describes additional information for fetching channels.
 #[derive(Debug, Default)]
 pub struct ChannelConfig {
