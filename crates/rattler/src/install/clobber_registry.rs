@@ -93,12 +93,14 @@ impl ClobberRegistry {
         let package_name = prefix_paths.repodata_record.package_record.name.clone();
         // Assume that normalized name in different two different PackageName are unique.
         let normalized_name = package_name.as_normalized();
+        eprintln!("-----Unregistering {}", normalized_name);
+
         self.path_resolver.remove_package(normalized_name);
-        // Since we're need to report new conflicts only in
-        // `register_paths` we can simply copy current state of
-        // conflicts from the `path_resolver` as its `remove_package`
-        // method will recalculate conflicts in package removal if
-        // some conflict existed before.
+        // // Since we're need to report new conflicts only in
+        // // `register_paths` we can simply copy current state of
+        // // conflicts from the `path_resolver` as its `remove_package`
+        // // method will recalculate conflicts in package removal if
+        // // some conflict existed before.
         self.sync_conflicts();
     }
 
@@ -155,8 +157,9 @@ impl ClobberRegistry {
         // reverse indices.
         let inverted_package_idx = usize::MAX - package_idx.0;
 
-        self.path_resolver
-            .add_package(normalized_name, inverted_package_idx, &paths);
+        let intermediate_conflicts =
+            self.path_resolver
+                .add_package(normalized_name, inverted_package_idx, &paths);
 
         // We want to update conflicts in path resovler to obtain
         // difference for correct link paths.
@@ -164,111 +167,134 @@ impl ClobberRegistry {
 
         // Map that will be used to link file to appropriate place to
         // avoid writing two different files to the same place.
-        let link_paths = self.get_conflicts_link_paths();
+        let link_paths = intermediate_conflicts
+            .into_iter()
+            .map(|p| {
+                (
+                    p.clone(),
+                    get_clobber_relative_path(&Entry {
+                        path: p,
+                        entry_type: EntryType::File, // doesn't matter
+                        package_index: 0,
+                        package_name: normalized_name.to_string(),
+                    }),
+                )
+            })
+            .collect();
 
         self.sync_conflicts();
 
+        eprintln!("+++++Registering {}", normalized_name);
         dbg!(link_paths)
     }
 
-    /// Returns a map that maps package paths to path in `__clobbers__`.
-    ///
-    /// In other words, for ever new conflicting package we map it's path `path/to/file` to `__clobbers__/pkg_name/path/to/file`.
-    ///
-    /// This function is expected to be called only in register_paths, so it may not work correctly when there are few packages registered.
-    fn get_conflicts_link_paths(&self) -> HashMap<PathBuf, PathBuf> {
-        let clobbers_dir = Path::new(CLOBBERS_DIR_NAME);
-        let mut link_map = HashMap::new();
+    // /// Returns a map that maps package paths to path in `__clobbers__`.
+    // ///
+    // /// In other words, for ever new conflicting package we map it's path `path/to/file` to `__clobbers__/pkg_name/path/to/file`.
+    // ///
+    // /// This function is expected to be called only in register_paths, so it may not work correctly when there are few packages registered.
+    // fn get_conflicts_link_paths(&self) -> HashMap<PathBuf, PathBuf> {
+    //     // let clobbers_dir = Path::new(CLOBBERS_DIR_NAME);
+    //     let mut link_map = HashMap::new();
 
-        let old_conflicts = self.conflicts.as_slice();
-        let new_conflicts = self.path_resolver.get_conflicts();
+    //     let old_conflicts = self.conflicts.as_slice();
+    //     let new_conflicts = self.path_resolver.get_conflicts();
 
-        let (updated_conflicts, only_old_conflicts, only_new_conflicts) =
-            join_and_partition_conflicts(old_conflicts, new_conflicts);
+    //     let (updated_conflicts, only_old_conflicts, only_new_conflicts) =
+    //         join_and_partition_conflicts(old_conflicts, new_conflicts);
 
-        // If it is not empty, then somebody uses clobber registry not
-        // the way it was used before, so please add handling for this
-        // separately.
-        assert!(only_old_conflicts.is_empty());
+    //     // If it is not empty, then somebody uses clobber registry not
+    //     // the way it was used before, so please add handling for this
+    //     // separately.
+    //     assert!(only_old_conflicts.is_empty());
 
-        // Note that we care mostly about direct conflicts, since if
-        // conflict is happened because of parent, then this file will
-        // anyway be linked.
-        for (old_conflict, new_conflict) in updated_conflicts {
-            // We assume in here that priority order (package_index
-            // values in path resolver) aren't changed.
-            use ConflictType::*;
-            match (&old_conflict.conflict_type, &new_conflict.conflict_type) {
-                (DirectConflict, DirectConflict) => {
-                    // This doesn't hold for update
-                    // assert_eq!(old_conflict.winner, new_conflict.winner);
-                    let desired_path = old_conflict.path.as_path();
+    //     // Note that we care mostly about direct conflicts, since if
+    //     // conflict is happened because of parent, then this file will
+    //     // anyway be linked.
+    //     for (old_conflict, new_conflict) in updated_conflicts {
+    //         // We assume in here that priority order (package_index
+    //         // values in path resolver) aren't changed.
+    //         use ConflictType::*;
+    //         match (&old_conflict.conflict_type, &new_conflict.conflict_type) {
+    //             (DirectConflict, DirectConflict) => {
+    //                 // dbg!((&old_conflict, &new_conflict));
+    //                 if old_conflict == new_conflict {
+    //                     continue;
+    //                 }
 
-                    let old_losers = old_conflict
-                        .losers
-                        .iter()
-                        .cloned()
-                        .collect::<HashSet<Entry>>();
-                    let only_new_losers = new_conflict
-                        .losers
-                        .iter()
-                        .filter(|l| !old_losers.contains(l))
-                        .collect::<Vec<_>>();
+    //                 if new_conflict.losers.contains(&old_conflict.winner) {
+    //                     continue;
+    //                 }
 
-                    assert!(only_new_losers.len() <= 1);
+    //                 // This doesn't hold for update
+    //                 // assert_eq!(old_conflict.winner, new_conflict.winner);
+    //                 let desired_path = old_conflict.path.as_path();
 
-                    if let Some(&new_loser) = only_new_losers.first() {
-                        assert!(
-                            !link_map.contains_key(desired_path),
-                            "We didn't expect reinsertion of the same path {}",
-                            desired_path.display()
-                        );
+    //                 let old_losers = old_conflict
+    //                     .losers
+    //                     .iter()
+    //                     .cloned()
+    //                     .collect::<HashSet<Entry>>();
+    //                 let only_new_losers = new_conflict
+    //                     .losers
+    //                     .iter()
+    //                     .filter(|l| !old_losers.contains(l))
+    //                     .collect::<Vec<_>>();
 
-                        link_map.insert(
-                            desired_path.to_path_buf(),
-                            get_clobber_relative_path(new_loser),
-                        );
-                    }
-                }
-                (DirectConflict, BlockedByAncestor) => {
-                    dbg!((&old_conflict, &new_conflict));
-                    todo!();
-                }
-                (BlockedByAncestor, DirectConflict) => {
-                    dbg!((&old_conflict, &new_conflict));
-                    todo!();
-                }
-                (BlockedByAncestor, BlockedByAncestor) => continue,
-            }
-        }
+    //                 assert!(only_new_losers.len() <= 1);
 
-        for &conflict in only_new_conflicts.iter().filter(|c| c.is_direct_conflict()) {
-            let desired_path = conflict.path.as_path();
+    //                 if let Some(&new_loser) = only_new_losers.first() {
+    //                     assert!(
+    //                         !link_map.contains_key(desired_path),
+    //                         "We didn't expect reinsertion of the same path {}",
+    //                         desired_path.display()
+    //                     );
 
-            dbg!(conflict);
+    //                     link_map.insert(
+    //                         desired_path.to_path_buf(),
+    //                         get_clobber_relative_path(new_loser),
+    //                     );
+    //                 }
+    //             }
+    //             (DirectConflict, BlockedByAncestor) => {
+    //                 dbg!((&old_conflict, &new_conflict));
+    //                 todo!();
+    //             }
+    //             (BlockedByAncestor, DirectConflict) => {
+    //                 dbg!((&old_conflict, &new_conflict));
+    //                 todo!();
+    //             }
+    //             (BlockedByAncestor, BlockedByAncestor) => continue,
+    //         }
+    //     }
 
-            let losers = &conflict.losers;
+    //     for &conflict in only_new_conflicts.iter().filter(|c| c.is_direct_conflict()) {
+    //         let desired_path = conflict.path.as_path();
 
-            // Since we are adding one package at the time and this
-            // conflict is new we should have only one loser.
-            assert!(losers.len() == 1);
+    //         // dbg!(conflict);
 
-            let new_loser = losers.first().unwrap();
+    //         let losers = &conflict.losers;
 
-            assert!(
-                !link_map.contains_key(desired_path),
-                "We didn't expect reinsertion of the same path {}",
-                desired_path.display()
-            );
+    //         // Since we are adding one package at the time and this
+    //         // conflict is new we should have only one loser.
+    //         assert!(losers.len() == 1);
 
-            link_map.insert(
-                desired_path.to_path_buf(),
-                get_clobber_relative_path(new_loser),
-            );
-        }
+    //         let new_loser = losers.first().unwrap();
 
-        link_map
-    }
+    //         assert!(
+    //             !link_map.contains_key(desired_path),
+    //             "We didn't expect reinsertion of the same path {}",
+    //             desired_path.display()
+    //         );
+
+    //         link_map.insert(
+    //             desired_path.to_path_buf(),
+    //             get_clobber_relative_path(new_loser),
+    //         );
+    //     }
+
+    //     link_map
+    // }
 
     /// Syncronize conflicts state with `path_resolver`.
     fn sync_conflicts(&mut self) {
@@ -308,7 +334,7 @@ impl ClobberRegistry {
         }
         self.did_unclobbering = true;
 
-        eprintln!("----------Before\n{}", tree(target_prefix));
+        // eprintln!("----------Before\n{}", tree(target_prefix));
         // Needed for step 7.
         // We store copy of prefix records, so we can update them later on.
         // They will be used to update metadata.
@@ -358,9 +384,7 @@ impl ClobberRegistry {
         )?;
 
         // 6
-        let result = self
-            .path_resolver
-            .get_conflicts()
+        let result = resolved_conflicts
             .iter()
             .map(|conflict| self.conflict_to_clobbered_path(conflict))
             .collect();
@@ -368,7 +392,7 @@ impl ClobberRegistry {
         // 7
         self.update_conda_meta(target_prefix, &prefix_records, &prefix_records_to_rewrite)?;
 
-        eprintln!("----------After\n{}", tree(target_prefix));
+        // eprintln!("----------After\n{}", tree(target_prefix));
 
         // 8
         Ok(result)
@@ -397,8 +421,8 @@ impl ClobberRegistry {
 
         // Assume that we first have direct conflicts, and only then blocked
         for (old, new) in updated_conflicts {
-            let previous_winner = dbg!(&old.winner);
-            let new_winner = dbg!(&new.winner);
+            let previous_winner = &&old.winner;
+            let new_winner = &&new.winner;
 
             let previous_winner_in_clobbers = target_prefix
                 .join(get_clobber_relative_path(previous_winner))
@@ -425,7 +449,7 @@ impl ClobberRegistry {
                         &to,
                         new_path_is_clobbered,
                     );
-                    prefix_records_to_rewrite.insert(dbg!(previous_winner_idx));
+                    prefix_records_to_rewrite.insert(previous_winner_idx);
                 }
 
                 let new_winner_idx = new_winner.package_index;
@@ -438,21 +462,19 @@ impl ClobberRegistry {
                     new_path_is_clobbered,
                 );
 
-                prefix_records_to_rewrite.insert(dbg!(new_winner_idx));
-            } else {
-                if both_in_clobbers {
-                    let new_winner_idx = new_winner.package_index;
-                    let (from, to, new_path_is_clobbered) =
-                        self.toggle_clobber_entry_on_disk(target_prefix, new_winner)?;
-                    rename_path_in_prefix_record(
-                        &mut prefix_records[new_winner_idx],
-                        &from,
-                        &to,
-                        new_path_is_clobbered,
-                    );
+                prefix_records_to_rewrite.insert(new_winner_idx);
+            } else if new_winner_in_clobbers {
+                let new_winner_idx = new_winner.package_index;
+                let (from, to, new_path_is_clobbered) =
+                    self.toggle_clobber_entry_on_disk(target_prefix, new_winner)?;
+                rename_path_in_prefix_record(
+                    &mut prefix_records[new_winner_idx],
+                    &from,
+                    &to,
+                    new_path_is_clobbered,
+                );
 
-                    prefix_records_to_rewrite.insert(dbg!(new_winner_idx));
-                }
+                prefix_records_to_rewrite.insert(new_winner_idx);
             }
         }
 
@@ -467,7 +489,7 @@ impl ClobberRegistry {
         target_prefix: &Path,
         entry: &Entry,
     ) -> Result<(PathBuf, PathBuf, bool), ClobberError> {
-        // eprintln!("Toggle\n{}", tree(target_prefix));
+        // eprintln!("===================Toggle start\n{}", tree(target_prefix));
 
         // Assume that file is in target_prefix, if it is not in clobbers, and vice versa.
         let clobber_relative_path = get_clobber_relative_path(entry);
@@ -482,8 +504,8 @@ impl ClobberRegistry {
             (prefix_path, clobber_path)
         };
 
-        eprintln!("Moving from {} to {}", from.display(), to.display());
-        eprintln!("But before, let's ensure that all necessary directories are created.");
+        // eprintln!("Moving from {} to {}", from.display(), to.display());
+        // eprintln!("But before, let's ensure that all necessary directories are created.");
         if let Some(parent) = target_prefix.join(to).parent() {
             fs::create_dir_all(parent).map_err(|err| {
                 let error_message = format!(
@@ -503,6 +525,8 @@ impl ClobberRegistry {
             );
             ClobberError::IoError(error_message, err)
         })?;
+
+        eprintln!("===================Toggle end\n{}", tree(target_prefix));
 
         Ok((from.to_path_buf(), to.to_path_buf(), !path_is_clobbered))
     }
@@ -542,7 +566,7 @@ impl ClobberRegistry {
     ) -> Result<(), ClobberError> {
         let conda_meta_path = target_prefix.join("conda-meta");
 
-        for idx in dbg!(prefix_records_to_rewrite) {
+        for idx in prefix_records_to_rewrite {
             let record = &prefix_records[*idx];
             tracing::debug!(
                 "writing updated prefix record to: {:?}",
@@ -586,12 +610,12 @@ fn rename_path_in_prefix_record(
     new_path: &Path,
     new_path_is_clobber: bool,
 ) {
-    dbg!((
-        record.name().as_normalized(),
-        old_path,
-        new_path,
-        new_path_is_clobber
-    ));
+    // dbg!((
+    //     record.name().as_normalized(),
+    //     old_path,
+    //     new_path,
+    //     new_path_is_clobber
+    // ));
     for path in record.files.iter_mut() {
         if path == old_path {
             *path = new_path.to_path_buf();
@@ -891,13 +915,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_all_possible_order_clobber() {
+    async fn test_all_possible_orders_clobber() {
         let test_operations = test_operations();
         let len = test_operations.len();
         for operations in test_operations.into_iter().permutations(len) {
             let operations = operations.clone();
-            // // randomize the order of the operations
-            // operations.shuffle(&mut rand::rng());
 
             let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
                 operations,
@@ -977,11 +999,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_random_clobber_nested() {
-        for _ in 0..3 {
-            let mut operations = test_operations_nested();
+    async fn test_all_possible_orders_clobber_nested() {
+        let test_operations = test_operations_nested();
+        let len = test_operations.len();
+        for operations in test_operations.into_iter().permutations(len) {
+            let operations = operations.clone();
             // randomize the order of the operations
-            operations.shuffle(&mut rand::rng());
 
             let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
                 operations,
@@ -1329,6 +1352,9 @@ mod tests {
         });
 
         let update_ops = test_operations_update();
+
+        dbg!(prefix_records[2].name().as_normalized());
+        dbg!(update_ops[2].package_record.name.as_normalized());
 
         // remove one of the clobbering files
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -15,13 +15,13 @@ pub struct Entry {
     pub package_name: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConflictType {
     DirectConflict,
     BlockedByAncestor,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Conflict {
     pub path: PathBuf,
     pub winner: Entry,
@@ -44,8 +44,36 @@ struct TreeNode {
 }
 
 impl TreeNode {
-    fn insert_entry(&mut self, components: &[&str], entry: Entry) {
+    fn insert_entry(
+        &mut self,
+        components: &[&str],
+        entry: Entry,
+        conflicting_paths: &mut HashSet<PathBuf>,
+    ) {
         if components.is_empty() {
+            match entry.entry_type {
+                EntryType::File => {
+                    let is_conflicting_entry = self.entries.iter().next().is_some();
+
+                    if is_conflicting_entry {
+                        conflicting_paths.insert(entry.path.clone());
+                    }
+                }
+                EntryType::Directory => {
+                    let blocked_by_parent =
+                        conflicting_paths.iter().any(|p| entry.path.starts_with(p));
+                    if !blocked_by_parent {
+                        let conflicting_entry = self
+                            .entries
+                            .iter()
+                            .find(|e| e.entry_type == EntryType::File);
+
+                        if conflicting_entry.is_some() {
+                            conflicting_paths.insert(entry.path.clone());
+                        }
+                    }
+                }
+            }
             self.entries.push(entry);
             return;
         }
@@ -54,7 +82,7 @@ impl TreeNode {
         self.children
             .entry(first.to_string())
             .or_default()
-            .insert_entry(rest, entry);
+            .insert_entry(rest, entry, conflicting_paths);
     }
 
     fn resolve_conflicts(&mut self, parent_blocked: bool, conflicts: &mut Vec<Conflict>) -> bool {
@@ -193,12 +221,14 @@ impl PackagePathResolver {
     /// Register package for conflict resolution.
     ///
     /// Package index denotes priority of a package.
+    ///
+    /// Returns conflicting files.
     pub fn add_package(
         &mut self,
         package_name: &str,
         package_index: usize,
         paths: &[(&Path, EntryType)],
-    ) {
+    ) -> HashSet<PathBuf> {
         let mut entries_to_add = Vec::new();
 
         for (path_str, entry_type) in paths {
@@ -222,6 +252,7 @@ impl PackagePathResolver {
             });
         }
 
+        let mut conflicting_paths = HashSet::new();
         // Insert all entries
         for entry in entries_to_add {
             let components: Vec<&str> = entry
@@ -229,8 +260,11 @@ impl PackagePathResolver {
                 .components()
                 .map(|c| c.as_os_str().to_str().unwrap())
                 .collect();
-            self.root.insert_entry(&components, entry.clone());
+            self.root
+                .insert_entry(&components, entry.clone(), &mut conflicting_paths);
         }
+
+        conflicting_paths
     }
 
     /// Remove all paths of the packages in the consideration.
@@ -356,8 +390,12 @@ mod tests {
     #[test]
     fn test_directories_dont_conflict() {
         let mut resolver = PackagePathResolver::new();
-        resolver.add_package("pkg1", 0, &[(Path::new("share"), EntryType::Directory)]);
-        resolver.add_package("pkg2", 1, &[(Path::new("share"), EntryType::Directory)]);
+        let intermediate_conflicts =
+            resolver.add_package("pkg1", 0, &[(Path::new("share"), EntryType::Directory)]);
+        assert!(intermediate_conflicts.is_empty());
+        let intermediate_conflicts =
+            resolver.add_package("pkg2", 1, &[(Path::new("share"), EntryType::Directory)]);
+        assert!(intermediate_conflicts.is_empty());
         resolver.resolve_conflicts();
 
         let conflicts = resolver.get_conflicts();
@@ -370,8 +408,15 @@ mod tests {
     #[test]
     fn test_file_vs_file_conflicts() {
         let mut resolver = PackagePathResolver::new();
-        resolver.add_package("pkg1", 0, &[(Path::new("config.txt"), EntryType::File)]);
-        resolver.add_package("pkg2", 1, &[(Path::new("config.txt"), EntryType::File)]);
+        let intermediate_conflicts =
+            resolver.add_package("pkg1", 0, &[(Path::new("config.txt"), EntryType::File)]);
+        assert!(intermediate_conflicts.is_empty());
+        let intermediate_conflicts =
+            resolver.add_package("pkg2", 1, &[(Path::new("config.txt"), EntryType::File)]);
+        assert_eq!(
+            intermediate_conflicts,
+            HashSet::from([PathBuf::from("config.txt")])
+        );
         resolver.resolve_conflicts();
 
         let conflicts = resolver.get_conflicts();
@@ -383,7 +428,11 @@ mod tests {
     fn test_file_vs_directory_conflicts() {
         let mut resolver = PackagePathResolver::new();
         resolver.add_package("pkg1", 0, &[(Path::new("config"), EntryType::Directory)]);
-        resolver.add_package("pkg2", 1, &[(Path::new("config"), EntryType::File)]);
+
+        let intermediate_conflicts =
+            resolver.add_package("pkg2", 1, &[(Path::new("config"), EntryType::File)]);
+        assert!(!intermediate_conflicts.is_empty());
+
         resolver.resolve_conflicts();
 
         let conflicts = dbg!(resolver.get_conflicts());
@@ -395,7 +444,7 @@ mod tests {
     fn test_file_blocks_directory_tree() {
         let mut resolver = PackagePathResolver::new();
 
-        resolver.add_package(
+        let intermediate_conflicts = resolver.add_package(
             "pkg1",
             0,
             &[
@@ -406,7 +455,15 @@ mod tests {
             ],
         );
 
-        resolver.add_package("pkg2", 1, &[(Path::new("config"), EntryType::File)]);
+        assert!(intermediate_conflicts.is_empty());
+
+        let intermediate_conflicts =
+            resolver.add_package("pkg2", 1, &[(Path::new("config"), EntryType::File)]);
+
+        assert_eq!(
+            intermediate_conflicts,
+            HashSet::from([PathBuf::from("config")])
+        );
 
         resolver.resolve_conflicts();
 
@@ -434,26 +491,35 @@ mod tests {
     fn test_deep_blocking() {
         let mut resolver = PackagePathResolver::new();
 
-        resolver.add_package(
+        let intermediate_conflicts = resolver.add_package(
             "pkg1",
-            1,
+            0,
             &[
                 (Path::new("a/b/c/d/file.txt"), EntryType::File),
                 (Path::new("a/b/other.txt"), EntryType::File),
             ],
         );
 
-        resolver.add_package(
+        assert!(intermediate_conflicts.is_empty());
+
+        let intermediate_conflicts = resolver.add_package(
             "pkg2",
-            0,
+            1,
             &[
                 (Path::new("a/b"), EntryType::File), // Blocks everything under a/b/
             ],
         );
 
+        assert_eq!(
+            intermediate_conflicts,
+            HashSet::from([PathBuf::from("a/b")])
+        );
+
         resolver.resolve_conflicts();
 
-        let layout = resolver.get_final_layout();
+        dbg!(&resolver);
+
+        let layout = dbg!(resolver.get_final_layout());
         assert!(layout.contains_key(&PathBuf::from("a/b")));
         assert!(!layout.contains_key(&PathBuf::from("a/b/c/d/file.txt")));
         assert!(!layout.contains_key(&PathBuf::from("a/b/other.txt")));
@@ -463,9 +529,12 @@ mod tests {
     fn test_no_blocking_with_directories() {
         let mut resolver = PackagePathResolver::new();
 
-        resolver.add_package("pkg1", 0, &[(Path::new("share/"), EntryType::Directory)]);
+        let intermediate_conflicts =
+            resolver.add_package("pkg1", 0, &[(Path::new("share/"), EntryType::Directory)]);
 
-        resolver.add_package(
+        assert!(intermediate_conflicts.is_empty());
+
+        let intermediate_conflicts = resolver.add_package(
             "pkg2",
             1,
             &[
@@ -473,6 +542,8 @@ mod tests {
                 (Path::new("share/docs/readme.txt"), EntryType::File),
             ],
         );
+
+        assert!(intermediate_conflicts.is_empty());
 
         resolver.resolve_conflicts();
 
