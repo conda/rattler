@@ -78,6 +78,25 @@ impl ClobberRegistry {
     pub fn new<'i>(prefix_records: impl IntoIterator<Item = &'i PrefixRecord>) -> Self {
         let mut registry = ClobberRegistry::default();
 
+        let mut prefix_records = prefix_records.into_iter().collect::<Vec<_>>();
+        let previous_winner_idx = prefix_records.iter().position(|&pr| {
+            pr.paths_data
+                .paths
+                .iter()
+                .all(|pe| pe.original_path.is_none())
+        });
+
+        // I think we assume here that every conflict will occur
+        // independently of order in which we register prefix records
+        // if first record is previous winner or smth.
+        //
+        // We should test that
+        if let Some(previous_winner_idx) = previous_winner_idx {
+            if prefix_records.len() > 1 && previous_winner_idx != 0 {
+                prefix_records.swap(0, previous_winner_idx);
+            }
+        }
+
         for prefix_record in prefix_records {
             let name = prefix_record.name();
             let paths = prefix_record.paths_data.paths.iter().map(|pe| pe.path());
@@ -334,13 +353,13 @@ impl ClobberRegistry {
         }
         self.did_unclobbering = true;
 
-        // eprintln!("----------Before\n{}", tree(target_prefix));
+        eprintln!("\\\\\\\\\\Before\n{}", tree(target_prefix));
         // Needed for step 7.
         // We store copy of prefix records, so we can update them later on.
         // They will be used to update metadata.
         let mut prefix_records: Vec<PrefixRecord> =
             sorted_prefix_records.iter().map(|&pr| pr.clone()).collect();
-        let mut prefix_records_to_rewrite: HashSet<usize> = HashSet::new(); // TODO
+        let mut prefix_records_to_rewrite: HashSet<usize> = HashSet::new();
 
         // TODO: There are several steps that we have to do, and not all of them are currently implemented.
         //
@@ -392,7 +411,7 @@ impl ClobberRegistry {
         // 7
         self.update_conda_meta(target_prefix, &prefix_records, &prefix_records_to_rewrite)?;
 
-        // eprintln!("----------After\n{}", tree(target_prefix));
+        eprintln!("/////After\n{}", tree(target_prefix));
 
         // 8
         Ok(result)
@@ -419,10 +438,31 @@ impl ClobberRegistry {
         assert!(only_old_conflicts.is_empty());
         assert!(only_new_conflicts.is_empty());
 
+        // This one particular edge case mean that we have to copy all clobbered package files to prefix as there is no conflicts.
+        if updated_conflicts.is_empty() {
+            let final_layout = self.path_resolver.get_final_layout();
+            for entry in final_layout.values() {
+                let new_winner = entry;
+                let new_winner_idx = new_winner.package_index;
+                if self.is_in_clobbers(target_prefix, new_winner) {
+                    let (from, to, new_path_is_clobbered) =
+                        self.toggle_clobber_entry_on_disk(target_prefix, new_winner)?;
+                    rename_path_in_prefix_record(
+                        &mut prefix_records[new_winner_idx],
+                        &from,
+                        &to,
+                        new_path_is_clobbered,
+                    );
+
+                    prefix_records_to_rewrite.insert(new_winner_idx);
+                }
+            }
+        }
+
         // Assume that we first have direct conflicts, and only then blocked
         for (old, new) in updated_conflicts {
-            let previous_winner = &&old.winner;
-            let new_winner = &&new.winner;
+            let previous_winner = &dbg!(&old.winner);
+            let new_winner = &dbg!(&new.winner);
 
             let previous_winner_in_clobbers = target_prefix
                 .join(get_clobber_relative_path(previous_winner))
@@ -433,14 +473,14 @@ impl ClobberRegistry {
             let both_in_clobbers = previous_winner_in_clobbers && new_winner_in_clobbers;
 
             if &previous_winner.package_name != &new_winner.package_name {
-                let previous_winner_idx = new
-                    .losers
-                    .iter()
-                    .find(|e| e.package_name == previous_winner.package_name)
-                    .unwrap()
-                    .package_index;
-
                 if !both_in_clobbers {
+                    let previous_winner_idx = new
+                        .losers
+                        .iter()
+                        .find(|e| e.package_name == previous_winner.package_name)
+                        .unwrap()
+                        .package_index;
+
                     let (from, to, new_path_is_clobbered) =
                         self.toggle_clobber_entry_on_disk(target_prefix, previous_winner)?;
                     rename_path_in_prefix_record(
@@ -1353,8 +1393,8 @@ mod tests {
 
         let update_ops = test_operations_update();
 
-        dbg!(prefix_records[2].name().as_normalized());
-        dbg!(update_ops[2].package_record.name.as_normalized());
+        // dbg!(prefix_records[2].name().as_normalized());
+        // dbg!(update_ops[2].package_record.name.as_normalized());
 
         // remove one of the clobbering files
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
@@ -1627,10 +1667,12 @@ mod tests {
             .await;
         }
 
-        // check that `bin/python` was installed as a single clobber file
+        // Before it check that `bin/python` was installed as a single
+        // clobber file, but now we can resolve this beforehand, so we
+        // just check if file is installed.
         assert_check_files!(
             &target_prefix.path(),
-            &["bin/python__clobber-from-clobber-pypy"],
+            &["bin/python"], // "__clobbers__/clobber-pypy/bin/python"
         );
 
         install_driver
