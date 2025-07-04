@@ -56,6 +56,7 @@ zstd = { workspace = true }
 retry-policies = { workspace = true }
 rattler_cache = { workspace = true }
 rattler_redaction = { workspace = true, features = ["reqwest", "reqwest-middleware"] }
+rattler_config = { workspace = true, optional = true, default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

@@ -4606,6 +4606,7 @@ dependencies = [
  "pin-project-lite",
  "rattler_cache",
  "rattler_conda_types",
+ "rattler_config",
  "rattler_digest",
  "rattler_networking",
  "rattler_redaction",
