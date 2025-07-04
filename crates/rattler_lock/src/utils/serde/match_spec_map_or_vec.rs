@@ -1,6 +1,6 @@
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
-use rattler_conda_types::{MatchSpec, NamelessMatchSpec, PackageName};
+use rattler_conda_types::{match_spec::package_name_matcher::PackageNameMatcher, MatchSpec, NamelessMatchSpec, PackageName};
 use serde::{Deserialize, Deserializer};
 use serde_with::{serde_as, DeserializeAs, DisplayFromStr};
 
@@ -26,7 +26,7 @@ impl<'de> DeserializeAs<'de, Vec<String>> for MatchSpecMapOrVec {
             MapOrVec::Vec(v) => v,
             MapOrVec::Map(m) => m
                 .into_iter()
-                .map(|(name, spec)| MatchSpec::from_nameless(spec, Some(name)).to_string())
+                .map(|(name, spec)| MatchSpec::from_nameless(spec, Some(PackageNameMatcher::Exact(name))).to_string())
                 .collect(),
         })
     }
