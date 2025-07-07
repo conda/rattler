@@ -41,6 +41,19 @@ impl Default for SourceConfig {
     }
 }
 
+#[cfg(feature = "rattler_config")]
+impl From<rattler_config::config::repodata_config::RepodataChannelConfig> for SourceConfig {
+    fn from(value: rattler_config::config::repodata_config::RepodataChannelConfig) -> Self {
+        SourceConfig {
+            jlap_enabled: !value.disable_jlap.unwrap_or(false),
+            zstd_enabled: !value.disable_zstd.unwrap_or(false),
+            bz2_enabled: !value.disable_bzip2.unwrap_or(false),
+            sharded_enabled: !value.disable_sharded.unwrap_or(false),
+            cache_action: Default::default(),
+        }
+    }
+}
+
 /// Describes additional information for fetching channels.
 #[derive(Debug, Default)]
 pub struct ChannelConfig {
@@ -70,5 +83,32 @@ impl ChannelConfig {
             })
             .max_by_key(|(len, _)| *len)
             .map_or(&self.default, |(_, config)| config)
+    }
+}
+
+#[cfg(feature = "rattler_config")]
+impl<T> From<&rattler_config::config::ConfigBase<T>> for ChannelConfig
+where
+    T: rattler_config::config::Config + Default,
+{
+    fn from(config: &rattler_config::config::ConfigBase<T>) -> Self {
+        let repodata_config = &config.repodata_config;
+        let default = repodata_config.default.clone().into();
+
+        let per_channel = repodata_config
+            .per_channel
+            .iter()
+            .map(|(url, config)| {
+                (
+                    url.clone(),
+                    config.merge(repodata_config.default.clone()).into(),
+                )
+            })
+            .collect();
+
+        ChannelConfig {
+            default,
+            per_channel,
+        }
     }
 }
