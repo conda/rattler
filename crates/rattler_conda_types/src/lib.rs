@@ -11,7 +11,7 @@ mod match_spec;
 pub mod menuinst;
 mod no_arch_type;
 mod parse_mode;
-mod platform;
+pub mod platform;
 mod repo_data;
 mod repo_data_record;
 mod run_export;

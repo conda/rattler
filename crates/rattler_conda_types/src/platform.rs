@@ -1,3 +1,4 @@
+//! Platform-specific code.
 use itertools::Itertools;
 use serde::{Deserializer, Serializer};
 use std::cmp::Ordering;
