@@ -1,8 +1,8 @@
-use std::{path::PathBuf, sync::Arc};
 use rattler_networking::{
+    authentication_storage::{self, AuthenticationStorageError},
     AuthenticationStorage,
-    authentication_storage::{self, AuthenticationStorageError}
 };
+use std::{path::PathBuf, sync::Arc};
 
 /// Get the authentication storage from the given file
 pub fn get_auth_store(

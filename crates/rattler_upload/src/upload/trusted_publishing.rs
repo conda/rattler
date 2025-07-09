@@ -3,7 +3,7 @@
 
 //! Trusted publishing (via OIDC) with GitHub actions.
 
-use reqwest::{StatusCode, header};
+use reqwest::{header, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use std::env;

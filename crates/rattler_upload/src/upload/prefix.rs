@@ -3,10 +3,10 @@ use futures::TryStreamExt as _;
 use miette::IntoDiagnostic as _;
 use rattler_networking::{Authentication, AuthenticationStorage};
 use reqwest::{
-    StatusCode,
     header::{self, HeaderMap, HeaderValue},
+    StatusCode,
 };
-use reqwest_retry::{RetryDecision, RetryPolicy, policies::ExponentialBackoff};
+use reqwest_retry::{policies::ExponentialBackoff, RetryDecision, RetryPolicy};
 use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
@@ -15,15 +15,14 @@ use tokio_util::io::ReaderStream;
 use tracing::{info, warn};
 use url::Url;
 
-use super::opt::{                               // ← Import from sibling module
-    PrefixData
+use super::opt::{
+    // ← Import from sibling module
+    PrefixData,
 };
 
-use crate::{
-    upload::{
-        default_bytes_style, get_client_with_retry, get_default_client,
-        trusted_publishing::{TrustedPublishResult, check_trusted_publishing},
-    },
+use crate::upload::{
+    default_bytes_style, get_client_with_retry, get_default_client,
+    trusted_publishing::{check_trusted_publishing, TrustedPublishResult},
 };
 
 use super::package::sha256_sum;

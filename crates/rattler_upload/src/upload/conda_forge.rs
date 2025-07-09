@@ -5,9 +5,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{CondaForgeData, upload::get_default_client};
+use crate::{upload::get_default_client, CondaForgeData};
 use fs_err::tokio as fs;
-use miette::{IntoDiagnostic, miette};
+use miette::{miette, IntoDiagnostic};
 use tracing::{debug, info};
 
 use super::{
@@ -82,7 +82,7 @@ pub async fn upload_packages_to_conda_forge(
                 channel
             );
         } else {
-             anaconda
+            anaconda
                 .create_or_update_package(&conda_forge_data.staging_channel, &package)
                 .await?;
 

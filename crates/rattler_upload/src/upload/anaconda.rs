@@ -1,20 +1,20 @@
 use std::borrow::Cow;
 
 use fs_err::tokio as fs;
-use miette::{IntoDiagnostic, miette};
-use rattler_conda_types::PackageName;
+use miette::{miette, IntoDiagnostic};
 use rattler_conda_types::package::AboutJson;
-use reqwest::Client;
+use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
+use rattler_conda_types::PackageName;
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 use tracing::info;
 use url::Url;
-use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 
-use super::VERSION;
 use super::package::ExtractedPackage;
+use super::VERSION;
 
 pub struct Anaconda {
     client: Client,

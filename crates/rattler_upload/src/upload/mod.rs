@@ -1,11 +1,11 @@
 //! The upload module provides the package upload functionality.
 
-use crate::{AnacondaData, ArtifactoryData, QuetzData, tool_configuration::APP_USER_AGENT};
+use crate::{tool_configuration::APP_USER_AGENT, AnacondaData, ArtifactoryData, QuetzData};
 use fs_err::tokio as fs;
 use futures::TryStreamExt;
-use indicatif::{HumanBytes, ProgressState, style::TemplateError};
-use opendal::{Configurator, Operator, services::S3Config};
-use reqwest_retry::{RetryDecision, RetryPolicy, policies::ExponentialBackoff};
+use indicatif::{style::TemplateError, HumanBytes, ProgressState};
+use opendal::{services::S3Config, Configurator, Operator};
+use reqwest_retry::{policies::ExponentialBackoff, RetryDecision, RetryPolicy};
 use std::{
     fmt::Write,
     net::Ipv4Addr,
@@ -21,14 +21,14 @@ use reqwest::{Method, StatusCode};
 use tracing::{info, warn};
 use url::Url;
 
-use crate::upload::package::{ExtractedPackage, sha256_sum};
+use crate::upload::package::{sha256_sum, ExtractedPackage};
 
 mod anaconda;
 pub mod conda_forge;
+pub mod opt;
 mod package;
 mod prefix;
 mod trusted_publishing;
-pub mod opt;
 
 pub use prefix::upload_package_to_prefix;
 

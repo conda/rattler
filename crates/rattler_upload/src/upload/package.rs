@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use base64::{Engine, engine::general_purpose};
+use base64::{engine::general_purpose, Engine};
 use miette::IntoDiagnostic;
 use rattler_conda_types::{
-    PackageName, VersionWithSource as PackageVersion,
     package::{AboutJson, IndexJson, PackageFile},
+    PackageName, VersionWithSource as PackageVersion,
 };
-use rattler_digest::{Md5, compute_file_digest};
+use rattler_digest::{compute_file_digest, Md5};
 use sha2::Sha256;
 
 pub fn sha256_sum(package_file: &Path) -> Result<String, std::io::Error> {

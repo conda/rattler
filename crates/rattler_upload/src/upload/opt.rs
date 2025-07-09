@@ -1,12 +1,12 @@
 //! Command-line options.
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
-use clap::{Parser, arg };
-use rattler_solve::ChannelPriority;
-use url::Url;
-use rattler_conda_types::{NamedChannelOrUrl, Platform };
+use clap::{arg, Parser};
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
+use rattler_conda_types::{NamedChannelOrUrl, Platform};
 use rattler_networking::{mirror_middleware, s3_middleware};
+use rattler_solve::ChannelPriority;
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tracing::warn;
+use url::Url;
 
 /// The configuration type for rattler-build - just extends rattler / pixi config and can load the same TOML files.
 pub type Config = rattler_config::config::ConfigBase<()>;
@@ -32,7 +32,6 @@ impl FromStr for ChannelPriorityWrapper {
         }
     }
 }
-
 
 /// Common opts that are shared between `Rebuild` and `Build` subcommands
 #[derive(Parser, Clone, Debug)]
@@ -146,7 +145,6 @@ impl CommonData {
         )
     }
 }
-
 
 /// Upload options.
 #[derive(Parser, Debug)]
@@ -392,13 +390,14 @@ pub struct AnacondaOpts {
 }
 
 fn parse_s3_url(value: &str) -> Result<Url, String> {
-    let url: Url = Url::parse(value).map_err(|err| format!("`{value}` isn't a valid URL: {err}"))?;
+    let url: Url =
+        Url::parse(value).map_err(|err| format!("`{value}` isn't a valid URL: {err}"))?;
     if url.scheme() == "s3" && url.host_str().is_some() {
         Ok(url)
     } else {
-       Err(format!(
-    "Only S3 URLs of format s3://bucket/... can be used, not `{value}`"
-))
+        Err(format!(
+            "Only S3 URLs of format s3://bucket/... can be used, not `{value}`"
+        ))
     }
 }
 
