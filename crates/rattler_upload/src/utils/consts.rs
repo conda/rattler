@@ -1,5 +1,4 @@
 /// A `recipe.yaml` file might be accompanied by a `variants.yaml` file from
-
 /// This env var is set to "true" when run inside a github actions runner
 pub const GITHUB_ACTIONS: &str = "GITHUB_ACTIONS";
 

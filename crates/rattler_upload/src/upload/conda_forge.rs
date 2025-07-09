@@ -74,8 +74,15 @@ pub async fn upload_packages_to_conda_forge(
                 )
             })?;
 
-        if !conda_forge_data.dry_run {
-            anaconda
+        if conda_forge_data.dry_run {
+            debug!(
+                "Would have uploaded {} to anaconda.org {}/{}",
+                package.path().display(),
+                conda_forge_data.staging_channel,
+                channel
+            );
+        } else {
+             anaconda
                 .create_or_update_package(&conda_forge_data.staging_channel, &package)
                 .await?;
 
@@ -91,13 +98,6 @@ pub async fn upload_packages_to_conda_forge(
                     &package,
                 )
                 .await?;
-        } else {
-            debug!(
-                "Would have uploaded {} to anaconda.org {}/{}",
-                package.path().display(),
-                conda_forge_data.staging_channel,
-                channel
-            );
         };
 
         let dist_name = format!(
@@ -134,7 +134,7 @@ pub async fn upload_packages_to_conda_forge(
             "Sending payload to validation endpoint: {}",
             serde_json::to_string_pretty(&payload).into_diagnostic()?
         );
-
+        #[allow(clippy::if_not_else)]
         if conda_forge_data.dry_run {
             debug!(
                 "Would have sent payload to validation endpoint {}",

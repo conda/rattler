@@ -55,7 +55,7 @@ impl Anaconda {
         );
         default_headers.append(
             "Authorization",
-            format!("token {}", token).parse().expect("failed to parse"),
+            format!("token {token}").parse().expect("failed to parse"),
         );
 
         default_headers.append(
@@ -65,7 +65,7 @@ impl Anaconda {
 
         let client = Client::builder()
             .no_gzip()
-            .user_agent(format!("rattler-build/{}", VERSION))
+            .user_agent(format!("rattler-build/{VERSION}"))
             .default_headers(default_headers)
             .build()
             .expect("failed to create client");
@@ -419,7 +419,7 @@ impl Anaconda {
         let content = fs::read(package.path()).await.into_diagnostic()?;
 
         form_data = form_data.text("Content-Length", file_size.to_string());
-        form_data = form_data.text("Content-MD5", base64_md5.to_string());
+        form_data = form_data.text("Content-MD5", base64_md5);
         form_data = form_data.part("file", Part::bytes(content));
 
         reqwest::Client::new()

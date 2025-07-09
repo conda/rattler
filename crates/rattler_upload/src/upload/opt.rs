@@ -11,10 +11,10 @@ use tracing::warn;
 /// The configuration type for rattler-build - just extends rattler / pixi config and can load the same TOML files.
 pub type Config = rattler_config::config::ConfigBase<()>;
 
-/// Container for rattler_solver::ChannelPriority so that it can be parsed
+/// Container for `rattler_solver::ChannelPriority` so that it can be parsed
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ChannelPriorityWrapper {
-    /// The ChannelPriority value to be used when building the Configuration
+    /// The `ChannelPriority` value to be used when building the Configuration
     pub value: ChannelPriority,
 }
 impl FromStr for ChannelPriorityWrapper {
@@ -34,7 +34,7 @@ impl FromStr for ChannelPriorityWrapper {
 }
 
 
-/// Common opts that are shared between [`Rebuild`] and [`Build`]` subcommands
+/// Common opts that are shared between `Rebuild` and `Build` subcommands
 #[derive(Parser, Clone, Debug)]
 pub struct CommonOpts {
     /// Output directory for build artifacts.
@@ -98,12 +98,13 @@ impl CommonData {
         let mut mirror_config = HashMap::new();
         tracing::debug!("Using mirrors: {:?}", config.mirrors);
 
+        #[allow(clippy::items_after_statements)]
         fn ensure_trailing_slash(url: &url::Url) -> url::Url {
             if url.path().ends_with('/') {
                 url.clone()
             } else {
                 // Do not use `join` because it removes the last element
-                format!("{}/", url)
+                format!("{url}/")
                     .parse()
                     .expect("Failed to add trailing slash to URL")
             }
@@ -391,21 +392,20 @@ pub struct AnacondaOpts {
 }
 
 fn parse_s3_url(value: &str) -> Result<Url, String> {
-    let url: Url = Url::parse(value).map_err(|_| format!("`{}` isn't a valid URL", value))?;
+    let url: Url = Url::parse(value).map_err(|err| format!("`{value}` isn't a valid URL: {err}"))?;
     if url.scheme() == "s3" && url.host_str().is_some() {
         Ok(url)
     } else {
-        Err(format!(
-            "Only S3 URLs of format s3://bucket/... can be used, not `{}`",
-            value
-        ))
+       Err(format!(
+    "Only S3 URLs of format s3://bucket/... can be used, not `{value}`"
+))
     }
 }
 
 /// Options for uploading to S3
 #[derive(Clone, Debug, PartialEq, Parser)]
 pub struct S3Opts {
-    /// The channel URL in the S3 bucket to upload the package to, e.g., s3://my-bucket/my-channel
+    /// The channel URL in the S3 bucket to upload the package to, e.g., `s3://my-bucket/my-channel`
     #[arg(short, long, env = "S3_CHANNEL", value_parser = parse_s3_url)]
     pub channel: Url,
 
@@ -590,7 +590,7 @@ pub struct DebugOpts {
     #[arg(long)]
     pub target_platform: Option<Platform>,
 
-    /// The host platform to build for (defaults to target_platform)
+    /// The host platform to build for (defaults to `target_platform`)
     #[arg(long)]
     pub host_platform: Option<Platform>,
 
@@ -633,8 +633,8 @@ pub struct DebugData {
 }
 
 impl DebugData {
-    /// Generate a new TestData struct from TestOpts and an optional pixi config.
-    /// TestOpts have higher priority than the pixi config.
+    /// Generate a new `TestData` struct from `TestOpts` and an optional pixi config.
+    /// `TestOpts` have higher priority than the pixi config.
     pub fn from_opts_and_config(opts: DebugOpts, config: Option<Config>) -> Self {
         Self {
             recipe_path: opts.recipe,

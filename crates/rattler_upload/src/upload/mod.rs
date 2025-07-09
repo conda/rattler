@@ -334,7 +334,7 @@ pub async fn upload_package_to_s3(
         let filename = package
             .filename()
             .ok_or_else(|| miette::miette!("Failed to get filename"))?;
-        let key = format!("{}/{}", subdir, filename);
+        let key = format!("{subdir}/{filename}");
         let body = fs::read(package_file).await.into_diagnostic()?;
         op.write_with(&key, body)
             .if_not_exists(true)
@@ -418,7 +418,7 @@ async fn send_request_with_retry(
     }
 }
 
-/// Note that we need to use a regular request. reqwest_retry does not support streaming requests.
+/// Note that we need to use a regular request. `reqwest_retry` does not support streaming requests.
 async fn send_request(
     prepared_request: reqwest::RequestBuilder,
     package_file: &Path,
@@ -444,7 +444,7 @@ async fn send_request(
             progress_bar_clone.inc(bytes.len() as u64);
         })
         .inspect_err(|e| {
-            println!("Error while uploading: {}", e);
+            println!("Error while uploading: {e}");
         });
 
     let body = reqwest::Body::wrap_stream(reader_stream);
@@ -453,12 +453,12 @@ async fn send_request(
         .body(body)
         .send()
         .await
-        .map_err(|e| e.redact())
+        .map_err(Redact::redact)
         .into_diagnostic()?;
 
     response
         .error_for_status_ref()
-        .map_err(|e| e.redact())
+        .map_err(Redact::redact)
         .into_diagnostic()
         .wrap_err("Server responded with error")?;
 
