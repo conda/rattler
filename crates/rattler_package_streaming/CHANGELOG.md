@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.43](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.42...rattler_package_streaming-v0.22.43) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
 ## [0.22.42](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.41...rattler_package_streaming-v0.22.42) - 2025-06-26
 
 ### Other
