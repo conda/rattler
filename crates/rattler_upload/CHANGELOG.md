@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - better readme ([#118](https://github.com/conda/rattler/pull/118))
 - replace zulip with discord ([#116](https://github.com/conda/rattler/pull/116))
-- move all conda types to seperate crate
+- move all conda types to separate crate
 
 ### Fixed
 
