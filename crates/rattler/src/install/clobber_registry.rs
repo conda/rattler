@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use path_trie::{FromClobbers, PathTrie};
+use path_resolver::{FromClobbers, PathResolver};
 use rattler_conda_types::{
     package::{IndexJson, PathsEntry},
     PackageName, PrefixRecord,
@@ -34,11 +34,14 @@ pub enum ClobberError {
 /// can be used to rename files that are already installed by another package.
 #[derive(Debug, Default, Clone)]
 pub struct ClobberRegistry {
-    package_name_map: HashMap<path_trie::PackageName, rattler_conda_types::PackageName>,
+    /// Map that used to map normalized names to their original
+    /// `rattler_conda_types::PackageName` values. This is needed to
+    /// keep API compatible.
+    package_name_map: HashMap<path_resolver::PackageName, rattler_conda_types::PackageName>,
 
     /// Trie responsible for storing conflicting paths and resolving
     /// them.
-    path_trie: PathTrie,
+    path_trie: PathResolver,
 
     /// Path to clobbered package files that we want to move from the
     /// next winner in clobbers after previous was removed.
@@ -163,12 +166,12 @@ impl ClobberRegistry {
             .map(|&pr| pr.name().as_normalized().to_string())
             .collect::<Vec<String>>();
 
-        let (mut removals, additions) = self.path_trie.reprioritize_packages(&new_priorities);
+        let (mut removals, additions) = self.path_trie.reprioritize_packages(new_priorities);
 
         let more_additions = self
             .to_add
             .iter()
-            .filter(|&p| new_priorities.contains(&p.1) && !additions.contains(p));
+            .filter(|&p| self.path_trie.packages().contains(&p.1) && !additions.contains(p));
 
         let mut all_additions = more_additions
             .chain(additions.iter())
@@ -190,7 +193,7 @@ impl ClobberRegistry {
         all_additions.retain(|a| !duplicates.contains(a));
 
         // 2
-        PathTrie::sync_clobbers(
+        PathResolver::sync_clobbers(
             target_prefix,
             &target_prefix.join(CLOBBERS_DIR_NAME),
             &removals,
@@ -633,614 +636,109 @@ mod tests {
     async fn test_all_possible_orders_clobber_nested() {
         let test_operations = test_operations_nested();
         let len = test_operations.len();
-        let mut operations_permutations = test_operations.into_iter().permutations(len);
-        let operations1 = operations_permutations.next().unwrap();
-        let operations2 = operations_permutations.next().unwrap();
-        let operations3 = operations_permutations.next().unwrap();
-        let operations4 = operations_permutations.next().unwrap();
-        let operations5 = operations_permutations.next().unwrap();
-        let operations6 = operations_permutations.next().unwrap();
-        assert!(operations_permutations.next().is_none());
-
-        // 1
-        let operations = operations1;
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations,
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
-
-        // execute transaction
-        let target_prefix = tempfile::tempdir().unwrap();
-        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
-
-        let packages_dir = tempfile::tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
-
-        execute_transaction(
-            transaction,
-            &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &InstallDriver::default(),
-            &InstallOptions::default(),
-        )
-        .await;
-
-        assert_eq!(
-            fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
-            "clobber-2\n"
-        );
-
-        // make sure that clobbers are resolved deterministically
-        assert_check_files!(
-            &target_prefix.path(),
-            &[
-                "clobber/bobber/clobber.txt",
-                "__clobbers__/clobber-nested-1/clobber/bobber/clobber.txt",
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
-            ],
-        );
-
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let prefix_record_clobber_2 =
-            find_prefix_record(&prefix_records, "clobber-nested-2").unwrap();
-        let prefix_record_clobber_3 =
-            find_prefix_record(&prefix_records, "clobber-nested-3").unwrap();
-
-        assert_eq!(
-            prefix_record_clobber_3.files,
-            vec![PathBuf::from(
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt"
-            )]
-        );
-
-        // remove one of the clobbering files
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations: vec![TransactionOperation::Remove(
-                prefix_record_clobber_2.clone(),
-            )],
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
-
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
-
-        execute_transaction(
-            transaction,
-            &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &install_driver,
-            &InstallOptions::default(),
-        )
-        .await;
-
-        assert_check_files!(
-            &target_prefix.path(),
-            &[
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
-                "clobber/bobber/clobber.txt"
-            ],
-        );
-
-        assert_eq!(
-            fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
-            "clobber-1\n"
-        );
-
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let prefix_record_clobber_1 =
-            find_prefix_record(&prefix_records, "clobber-nested-1").unwrap();
-
-        assert_eq!(
-            prefix_record_clobber_1.files,
-            vec![PathBuf::from("clobber/bobber/clobber.txt")]
-        );
-
-        // 2
-        let operations = operations2;
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations,
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
-
-        // execute transaction
-        let target_prefix = tempfile::tempdir().unwrap();
-        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
-
-        let packages_dir = tempfile::tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
-
-        execute_transaction(
-            transaction,
-            &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &InstallDriver::default(),
-            &InstallOptions::default(),
-        )
-        .await;
-
-        assert_eq!(
-            fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
-            "clobber-2\n"
-        );
-
-        // make sure that clobbers are resolved deterministically
-        assert_check_files!(
-            &target_prefix.path(),
-            &[
-                "clobber/bobber/clobber.txt",
-                "__clobbers__/clobber-nested-1/clobber/bobber/clobber.txt",
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
-            ],
-        );
-
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let prefix_record_clobber_2 =
-            find_prefix_record(&prefix_records, "clobber-nested-2").unwrap();
-        let prefix_record_clobber_3 =
-            find_prefix_record(&prefix_records, "clobber-nested-3").unwrap();
-
-        assert_eq!(
-            prefix_record_clobber_3.files,
-            vec![PathBuf::from(
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt"
-            )]
-        );
-
-        // remove one of the clobbering files
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations: vec![TransactionOperation::Remove(
-                prefix_record_clobber_2.clone(),
-            )],
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
-
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
-
-        execute_transaction(
-            transaction,
-            &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &install_driver,
-            &InstallOptions::default(),
-        )
-        .await;
-
-        assert_check_files!(
-            &target_prefix.path(),
-            &[
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
-                "clobber/bobber/clobber.txt"
-            ],
-        );
-
-        assert_eq!(
-            fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
-            "clobber-1\n"
-        );
-
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let prefix_record_clobber_1 =
-            find_prefix_record(&prefix_records, "clobber-nested-1").unwrap();
-
-        assert_eq!(
-            prefix_record_clobber_1.files,
-            vec![PathBuf::from("clobber/bobber/clobber.txt")]
-        );
-
-        // 3
-        let operations = operations3;
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations,
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
-
-        // execute transaction
-        let target_prefix = tempfile::tempdir().unwrap();
-        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
-
-        let packages_dir = tempfile::tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
-
-        execute_transaction(
-            transaction,
-            &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &InstallDriver::default(),
-            &InstallOptions::default(),
-        )
-        .await;
-
-        assert_eq!(
-            fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
-            "clobber-2\n"
-        );
-
-        // make sure that clobbers are resolved deterministically
-        assert_check_files!(
-            &target_prefix.path(),
-            &[
-                "clobber/bobber/clobber.txt",
-                "__clobbers__/clobber-nested-1/clobber/bobber/clobber.txt",
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
-            ],
-        );
-
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let prefix_record_clobber_2 =
-            find_prefix_record(&prefix_records, "clobber-nested-2").unwrap();
-        let prefix_record_clobber_3 =
-            find_prefix_record(&prefix_records, "clobber-nested-3").unwrap();
-
-        assert_eq!(
-            prefix_record_clobber_3.files,
-            vec![PathBuf::from(
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt"
-            )]
-        );
-
-        // remove one of the clobbering files
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations: vec![TransactionOperation::Remove(
-                prefix_record_clobber_2.clone(),
-            )],
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
-
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
-
-        execute_transaction(
-            transaction,
-            &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &install_driver,
-            &InstallOptions::default(),
-        )
-        .await;
-
-        assert_check_files!(
-            &target_prefix.path(),
-            &[
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
-                "clobber/bobber/clobber.txt"
-            ],
-        );
-
-        assert_eq!(
-            fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
-            "clobber-1\n"
-        );
-
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let prefix_record_clobber_1 =
-            find_prefix_record(&prefix_records, "clobber-nested-1").unwrap();
-
-        assert_eq!(
-            prefix_record_clobber_1.files,
-            vec![PathBuf::from("clobber/bobber/clobber.txt")]
-        );
-
-        // 4
-        let operations = operations4;
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations,
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
-
-        // execute transaction
-        let target_prefix = tempfile::tempdir().unwrap();
-        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
-
-        let packages_dir = tempfile::tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
-
-        execute_transaction(
-            transaction,
-            &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &InstallDriver::default(),
-            &InstallOptions::default(),
-        )
-        .await;
-
-        assert_eq!(
-            fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
-            "clobber-2\n"
-        );
-
-        // make sure that clobbers are resolved deterministically
-        assert_check_files!(
-            &target_prefix.path(),
-            &[
-                "clobber/bobber/clobber.txt",
-                "__clobbers__/clobber-nested-1/clobber/bobber/clobber.txt",
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
-            ],
-        );
-
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let prefix_record_clobber_2 =
-            find_prefix_record(&prefix_records, "clobber-nested-2").unwrap();
-        let prefix_record_clobber_3 =
-            find_prefix_record(&prefix_records, "clobber-nested-3").unwrap();
-
-        assert_eq!(
-            prefix_record_clobber_3.files,
-            vec![PathBuf::from(
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt"
-            )]
-        );
-
-        // remove one of the clobbering files
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations: vec![TransactionOperation::Remove(
-                prefix_record_clobber_2.clone(),
-            )],
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
-
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
-
-        execute_transaction(
-            transaction,
-            &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &install_driver,
-            &InstallOptions::default(),
-        )
-        .await;
-
-        assert_check_files!(
-            &target_prefix.path(),
-            &[
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
-                "clobber/bobber/clobber.txt"
-            ],
-        );
-
-        assert_eq!(
-            fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
-            "clobber-1\n"
-        );
-
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let prefix_record_clobber_1 =
-            find_prefix_record(&prefix_records, "clobber-nested-1").unwrap();
-
-        assert_eq!(
-            prefix_record_clobber_1.files,
-            vec![PathBuf::from("clobber/bobber/clobber.txt")]
-        );
-
-        // 5
-        let operations = operations5;
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations,
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
-
-        // execute transaction
-        let target_prefix = tempfile::tempdir().unwrap();
-        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
-
-        let packages_dir = tempfile::tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
-
-        execute_transaction(
-            transaction,
-            &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &InstallDriver::default(),
-            &InstallOptions::default(),
-        )
-        .await;
-
-        assert_eq!(
-            fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
-            "clobber-2\n"
-        );
-
-        // make sure that clobbers are resolved deterministically
-        assert_check_files!(
-            &target_prefix.path(),
-            &[
-                "clobber/bobber/clobber.txt",
-                "__clobbers__/clobber-nested-1/clobber/bobber/clobber.txt",
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
-            ],
-        );
-
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let prefix_record_clobber_2 =
-            find_prefix_record(&prefix_records, "clobber-nested-2").unwrap();
-        let prefix_record_clobber_3 =
-            find_prefix_record(&prefix_records, "clobber-nested-3").unwrap();
-
-        assert_eq!(
-            prefix_record_clobber_3.files,
-            vec![PathBuf::from(
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt"
-            )]
-        );
-
-        // remove one of the clobbering files
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations: vec![TransactionOperation::Remove(
-                prefix_record_clobber_2.clone(),
-            )],
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
-
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
-
-        execute_transaction(
-            transaction,
-            &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &install_driver,
-            &InstallOptions::default(),
-        )
-        .await;
-
-        assert_check_files!(
-            &target_prefix.path(),
-            &[
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
-                "clobber/bobber/clobber.txt"
-            ],
-        );
-
-        assert_eq!(
-            fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
-            "clobber-1\n"
-        );
-
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let prefix_record_clobber_1 =
-            find_prefix_record(&prefix_records, "clobber-nested-1").unwrap();
-
-        assert_eq!(
-            prefix_record_clobber_1.files,
-            vec![PathBuf::from("clobber/bobber/clobber.txt")]
-        );
-
-        // 6
-        let operations = operations6;
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations,
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
-
-        // execute transaction
-        let target_prefix = tempfile::tempdir().unwrap();
-        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
-
-        let packages_dir = tempfile::tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
-
-        execute_transaction(
-            transaction,
-            &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &InstallDriver::default(),
-            &InstallOptions::default(),
-        )
-        .await;
-
-        assert_eq!(
-            fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
-            "clobber-2\n"
-        );
-
-        // make sure that clobbers are resolved deterministically
-        assert_check_files!(
-            &target_prefix.path(),
-            &[
-                "clobber/bobber/clobber.txt",
-                "__clobbers__/clobber-nested-1/clobber/bobber/clobber.txt",
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
-            ],
-        );
-
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let prefix_record_clobber_2 =
-            find_prefix_record(&prefix_records, "clobber-nested-2").unwrap();
-        let prefix_record_clobber_3 =
-            find_prefix_record(&prefix_records, "clobber-nested-3").unwrap();
-
-        assert_eq!(
-            prefix_record_clobber_3.files,
-            vec![PathBuf::from(
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt"
-            )]
-        );
-
-        // remove one of the clobbering files
-        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations: vec![TransactionOperation::Remove(
-                prefix_record_clobber_2.clone(),
-            )],
-            python_info: None,
-            current_python_info: None,
-            platform: Platform::current(),
-        };
-
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&prefix_records)
-            .finish();
-
-        execute_transaction(
-            transaction,
-            &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &install_driver,
-            &InstallOptions::default(),
-        )
-        .await;
-
-        assert_check_files!(
-            &target_prefix.path(),
-            &[
-                "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
-                "clobber/bobber/clobber.txt"
-            ],
-        );
-
-        assert_eq!(
-            fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
-            "clobber-1\n"
-        );
-
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let prefix_record_clobber_1 =
-            find_prefix_record(&prefix_records, "clobber-nested-1").unwrap();
-
-        assert_eq!(
-            prefix_record_clobber_1.files,
-            vec![PathBuf::from("clobber/bobber/clobber.txt")]
-        );
+        let operations_permutations = test_operations.into_iter().permutations(len);
+
+        for operations in operations_permutations {
+            let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+                operations,
+                python_info: None,
+                current_python_info: None,
+                platform: Platform::current(),
+            };
+
+            // execute transaction
+            let target_prefix = tempfile::tempdir().unwrap();
+            let prefix_path = Prefix::create(target_prefix.path()).unwrap();
+
+            let packages_dir = tempfile::tempdir().unwrap();
+            let cache = PackageCache::new(packages_dir.path());
+
+            execute_transaction(
+                transaction,
+                &prefix_path,
+                &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+                &cache,
+                &InstallDriver::default(),
+                &InstallOptions::default(),
+            )
+            .await;
+
+            assert_eq!(
+                fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt"))
+                    .unwrap(),
+                "clobber-2\n"
+            );
+
+            // make sure that clobbers are resolved deterministically
+            assert_check_files!(
+                &target_prefix.path(),
+                &[
+                    "clobber/bobber/clobber.txt",
+                    "__clobbers__/clobber-nested-1/clobber/bobber/clobber.txt",
+                    "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
+                ],
+            );
+
+            let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+            let prefix_record_clobber_2 =
+                find_prefix_record(&prefix_records, "clobber-nested-2").unwrap();
+            let prefix_record_clobber_3 =
+                find_prefix_record(&prefix_records, "clobber-nested-3").unwrap();
+
+            assert_eq!(
+                prefix_record_clobber_3.files,
+                vec![PathBuf::from(
+                    "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt"
+                )]
+            );
+
+            // remove one of the clobbering files
+            let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+                operations: vec![TransactionOperation::Remove(
+                    prefix_record_clobber_2.clone(),
+                )],
+                python_info: None,
+                current_python_info: None,
+                platform: Platform::current(),
+            };
+
+            let install_driver = InstallDriver::builder()
+                .with_prefix_records(&prefix_records)
+                .finish();
+
+            execute_transaction(
+                transaction,
+                &prefix_path,
+                &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+                &cache,
+                &install_driver,
+                &InstallOptions::default(),
+            )
+            .await;
+
+            assert_check_files!(
+                &target_prefix.path(),
+                &[
+                    "__clobbers__/clobber-nested-3/clobber/bobber/clobber.txt",
+                    "clobber/bobber/clobber.txt"
+                ],
+            );
+
+            assert_eq!(
+                fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt"))
+                    .unwrap(),
+                "clobber-1\n"
+            );
+
+            let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+            let prefix_record_clobber_1 =
+                find_prefix_record(&prefix_records, "clobber-nested-1").unwrap();
+
+            assert_eq!(
+                prefix_record_clobber_1.files,
+                vec![PathBuf::from("clobber/bobber/clobber.txt")]
+            );
+        }
     }
 
     #[tokio::test]
@@ -1328,14 +826,6 @@ mod tests {
 
         assert_check_files!(
             target_prefix.path(),
-            // // We do things a little bit suboptimally, so we have different clobbers. This should be resolved eventually by better handling of updates.
-            // &[
-            //     "clobber.txt",
-            //     "another-clobber.txt",
-            //     "__clobbers__/clobber-1/clobber.txt",
-            //     "__clobbers__/clobber-3/clobber.txt",
-            //     "__clobbers__/clobber-3/another-clobber.txt",
-            // ],
             &[
                 "clobber.txt",
                 "another-clobber.txt",
@@ -1345,7 +835,7 @@ mod tests {
             ],
         );
 
-        // content of  clobber.txt
+        // content of clobber.txt
         assert_eq!(
             fs::read_to_string(target_prefix.path().join("clobber.txt")).unwrap(),
             "clobber-1 v2\n"

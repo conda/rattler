@@ -1,5 +1,5 @@
 [package]
-name = "path_trie"
+name = "path_resolver"
 version = "0.1.0"
 categories.workspace = true
 homepage.workspace = true
@@ -7,6 +7,7 @@ repository.workspace = true
 license.workspace = true
 edition.workspace = true
 readme.workspace = true
+description = "Provides a trie-based data structure to track and resolve relative path ownership across multiple packages"
 
 [dependencies]
 fs-err.workspace = true

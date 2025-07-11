@@ -39,7 +39,7 @@ rattler_networking = { workspace = true }
 rattler_shell = { workspace = true }
 rattler_package_streaming = { workspace = true, features = ["reqwest"] }
 rattler_menuinst = { workspace = true, default-features = false }
-path_trie = { workspace = true, default-features = false }
+path_resolver = { workspace = true, default-features = false }
 rayon = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
@@ -68,5 +68,4 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 axum = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 tower = { workspace = true, features = ["util"] }
-proptest = "1.7.0"
 walkdir.workspace = true
