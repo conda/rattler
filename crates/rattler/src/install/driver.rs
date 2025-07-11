@@ -216,7 +216,7 @@ impl InstallDriver {
         transaction: &Transaction<Old, New>,
         target_prefix: &Prefix,
     ) -> Result<PostProcessResult, PostProcessingError> {
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix)
+        let prefix_records: Vec<PrefixRecord> = PrefixRecord::collect_from_prefix(target_prefix)
             .map_err(PostProcessingError::FailedToDetectInstalledPackages)?;
 
         let required_packages =

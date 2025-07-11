@@ -3719,6 +3719,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
+name = "path_resolver"
+version = "0.1.0"
+dependencies = [
+ "fs-err",
+ "indexmap 2.10.0",
+ "itertools 0.14.0",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "pathdiff"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4255,6 +4266,7 @@ dependencies = [
  "memmap2",
  "once_cell",
  "parking_lot 0.12.4",
+ "path_resolver",
  "rand 0.9.1",
  "rattler_cache",
  "rattler_conda_types",
@@ -4283,6 +4295,7 @@ dependencies = [
  "tracing-test",
  "url",
  "uuid",
+ "walkdir",
 ]
 
 [[package]]

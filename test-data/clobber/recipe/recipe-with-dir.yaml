@@ -1,0 +1,23 @@
+recipe:
+  name: clobber-with-dir
+  version: 0.1.0
+
+outputs:
+  - package:
+      name: clobber-with-dir
+      version: 0.1.0
+
+    build:
+      noarch: generic
+      script:
+        - mkdir $PREFIX/dir
+        - echo "clobber-1" > $PREFIX/dir/clobber.txt
+
+  - package:
+      name: clobber-without-dir
+      version: 0.1.0
+
+    build:
+      noarch: generic
+      script:
+        - echo "clobber-1" > $PREFIX/dir

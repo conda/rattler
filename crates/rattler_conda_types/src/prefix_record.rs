@@ -3,7 +3,7 @@
 use crate::package::FileMode;
 use crate::repo_data::RecordFromPath;
 use crate::repo_data_record::RepoDataRecord;
-use crate::{menuinst, PackageRecord};
+use crate::{menuinst, PackageName, PackageRecord};
 use rattler_digest::serde::SerializableHash;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -98,6 +98,13 @@ pub struct PathsEntry {
     /// The original sentinel value used for prefix-replacement from the package
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prefix_placeholder: Option<String>,
+}
+
+impl PathsEntry {
+    /// Returns either `original_path` or `relative_path`.
+    pub fn path(&self) -> &PathBuf {
+        self.original_path.as_ref().unwrap_or(&self.relative_path)
+    }
 }
 
 /// Information about a single file installed for a package.
@@ -328,6 +335,11 @@ impl PrefixRecord {
                 .map(|path| RecordFromPath::from_path(path))
                 .collect()
         }
+    }
+
+    /// Returns package name of a prefix record.
+    pub fn name(&self) -> &PackageName {
+        &self.repodata_record.package_record.name
     }
 }
 
