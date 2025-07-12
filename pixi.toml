@@ -41,7 +41,7 @@ scripts = ["scripts/activate_linux.sh"]
 [feature.lint.dependencies]
 pre-commit = ">=4.2,<5"
 pre-commit-hooks = ">=5,<6"
-ruff = ">=0.4.8,<0.5"
+ruff = ">=0.12.3,<0.13"
 typos = ">=1.23.1,<2"
 
 [feature.lint.tasks]
