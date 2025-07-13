@@ -9,7 +9,7 @@ use std::{
 use path_resolver::{FromClobbers, PathResolver};
 use rattler_conda_types::{
     package::{IndexJson, PathsEntry},
-    PackageName, PrefixRecord,
+    PackageName, PackageRecord, PrefixRecord,
 };
 
 const CLOBBERS_DIR_NAME: &str = "__clobbers__";
@@ -32,7 +32,7 @@ pub enum ClobberError {
 /// A registry for clobbering files
 /// The registry keeps track of all files that are installed by a package and
 /// can be used to rename files that are already installed by another package.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ClobberRegistry {
     /// Map that used to map normalized names to their original
     /// `rattler_conda_types::PackageName` values. This is needed to
@@ -56,26 +56,10 @@ impl ClobberRegistry {
 
         let mut registry = ClobberRegistry::default();
 
-        let mut prefix_records = prefix_records.into_iter().collect::<Vec<_>>();
-        let previous_winner_idx = prefix_records.iter().position(|&pr| {
-            pr.paths_data
-                .paths
-                .iter()
-                .all(|pe| pe.original_path.is_none())
-        });
+        let prefix_records =
+            PackageRecord::sort_topologically(prefix_records.into_iter().collect::<Vec<_>>());
 
-        // I think we assume here that every conflict will occur
-        // independently of order in which we register prefix records
-        // if first record is previous winner or smth.
-        //
-        // We should test that
-        if let Some(previous_winner_idx) = previous_winner_idx {
-            if prefix_records.len() > 1 && previous_winner_idx != 0 {
-                prefix_records.swap(0, previous_winner_idx);
-            }
-        }
-
-        for prefix_record in prefix_records {
+        for prefix_record in prefix_records.into_iter().rev() {
             let name = prefix_record.name();
             let paths = prefix_record.paths_data.paths.iter().map(PathsEntry::path);
 
