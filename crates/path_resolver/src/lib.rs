@@ -241,7 +241,7 @@ impl PathResolver {
                 candidates,
                 &self.root,
                 &mut from_clobbers,
-                &mut PathBuf::from(""),
+                &mut PathBuf::new(),
                 false,
             );
         }
@@ -539,7 +539,7 @@ New:
         let mut results = HashMap::new();
         dfs(
             &self.root,
-            &mut PathBuf::from(""),
+            &mut PathBuf::new(),
             &self.packages,
             &mut results,
         );
@@ -974,5 +974,124 @@ mod tests {
                 losers: vec!["pkg2".into()]
             }
         );
+    }
+}
+
+#[cfg(test)]
+mod props {
+    use super::*;
+
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+
+    use proptest::prelude::*;
+    use proptest::sample::subsequence;
+    use proptest::string::string_regex;
+
+    /// Filesystem path trie.
+    #[derive(Clone, Debug)]
+    enum Node {
+        File,
+        Dir(BTreeMap<String, Node>),
+    }
+
+    fn collect_paths(node: &Node, cur: &Path, out: &mut Vec<PathBuf>) {
+        match node {
+            Node::File => out.push(cur.to_path_buf()),
+            Node::Dir(children) => {
+                for (seg, child) in children {
+                    let mut next = cur.to_path_buf();
+                    next.push(seg);
+                    collect_paths(child, &next, out);
+                }
+            }
+        }
+    }
+
+    // TODO: Add trie with non-empty paths for more property-based tests.
+    /// Strategy to build random path trie.
+    fn path_trie() -> impl Strategy<Value = Node> {
+        // atomic leaf
+        let leaf = Just(Node::File).boxed();
+        // directory nodes built from smaller tries
+        let dir = |inner: BoxedStrategy<Node>| {
+            prop::collection::btree_map(
+                // unique segment names
+                string_regex("[a-z]{1,1}").unwrap(),
+                inner,
+                1..=5,
+            )
+            .prop_map(Node::Dir)
+            .boxed()
+        };
+
+        leaf.prop_recursive(5, 64, 5, dir)
+    }
+
+    /// Strategy yielding a vector of `(PackageName, Vec<PathBuf>)`,
+    fn arb_package_set() -> impl Strategy<Value = Vec<(String, Vec<PathBuf>)>> {
+        // 1) pick 1–5 distinct package names
+        let names = subsequence(&["pkg1", "pkg2", "pkg3", "pkg4", "pkg5", "pkg6"], 1..=5)
+            .prop_map(|v| v.into_iter().map(str::to_string).collect::<Vec<_>>());
+
+        names.prop_flat_map(move |pkgs| {
+            // draw one independent non_empty_trie per package
+            let tries = prop::collection::vec(path_trie(), pkgs.len());
+
+            (Just(pkgs.clone()), tries).prop_map(move |(pkgs, trees)| {
+                pkgs.into_iter()
+                    .zip(trees)
+                    .map(|(pkg, tree)| {
+                        let mut paths = Vec::new();
+                        collect_paths(&tree, &PathBuf::new(), &mut paths);
+                        (pkg, paths)
+                    })
+                    .collect()
+            })
+        })
+    }
+
+    /// Strategy yielding a `PathResolver` with some packages already inserted,
+    /// together with the `Vec<PackageName>` in the order they were inserted.
+    fn arb_resolver() -> impl Strategy<Value = (PathResolver, Vec<PackageName>)> {
+        arb_package_set().prop_map(|pkg_set| {
+            let mut resolver = PathResolver::new();
+            // keep track of the order in which we insert packages
+            let mut initial_order = Vec::with_capacity(pkg_set.len());
+
+            for (pkg, paths) in pkg_set {
+                // Insert each package (ignoring any spurious conflicts)
+                let _ = resolver.insert_package(pkg.clone(), &paths);
+                initial_order.push(pkg);
+            }
+
+            (resolver, initial_order)
+        })
+    }
+
+    proptest! {
+        #[test]
+        fn identity_no_changes((mut resolver, packages) in arb_resolver()) {
+            let (removed, added) = resolver.reprioritize_packages(packages.into_iter().rev().collect());
+            prop_assert!(removed.is_empty());
+            prop_assert!(added.is_empty());
+        }
+
+        #[test]
+        fn reprioritize_updates_order((mut resolver, packages) in arb_resolver()) {
+            let new_order: Vec<_> = packages.iter().rev().cloned().collect();
+            let (_removed, _added) = resolver.reprioritize_packages(new_order.clone());
+            let current_order: Vec<_> = resolver.packages.iter().rev().cloned().collect();
+            prop_assert_eq!(current_order, new_order);
+        }
+
+        #[test]
+        fn idempotent_after_reprioritize((mut resolver, packages) in arb_resolver()) {
+            let new_order: Vec<_> = packages.clone();
+            let _first = resolver.reprioritize_packages(new_order.clone());
+            let (removed2, added2) = resolver.reprioritize_packages(new_order);
+            prop_assert!(removed2.is_empty());
+            prop_assert!(added2.is_empty());
+        }
     }
 }

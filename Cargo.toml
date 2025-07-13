@@ -116,6 +116,7 @@ pep508_rs = { version = "0.9.2" }
 percent-encoding = "2.3.1"
 pin-project-lite = "0.2.16"
 plist = "1"
+proptest = "1.7.0"
 purl = { version = "0.1.6", features = ["serde"] }
 quote = "1.0.40"
 rand = "0.9.1"
