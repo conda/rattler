@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.6](https://github.com/conda/rattler/compare/rattler_conda_types-v0.35.5...rattler_conda_types-v0.35.6) - 2025-07-14
+
+### Fixed
+
+- *(clobber registry)* directory and file clobbering ([#1497](https://github.com/conda/rattler/pull/1497))
+
 ## [0.35.5](https://github.com/conda/rattler/compare/rattler_conda_types-v0.35.4...rattler_conda_types-v0.35.5) - 2025-07-09
 
 ### Other
