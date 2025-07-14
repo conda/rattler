@@ -248,6 +248,7 @@ pub struct InstallOptions {
     pub apple_codesign_behavior: AppleCodeSignBehavior,
 }
 
+#[derive(Debug)]
 struct LinkPath {
     entry: PathsEntry,
     computed_path: PathBuf,
@@ -353,6 +354,19 @@ pub async fn link_package(
                 break;
             }
         }
+
+        // Since we store clobbers in the separate directory
+        // (`__clobbers__`) now we have to create all necessary
+        // directories for it as well.
+        let clobber_path = link_path.clobber_path.as_ref();
+        let mut current_path = clobber_path.and_then(|p| p.parent());
+        while let Some(path) = current_path {
+            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
+                current_path = path.parent();
+            } else {
+                break;
+            }
+        }
     }
 
     let directories_target_dir = target_dir.path().to_path_buf();
@@ -410,7 +424,7 @@ pub async fn link_package(
             {
                 Ok(Ok(linked_file)) => linked_file,
                 Ok(Err(e)) => {
-                    return Err(InstallError::FailedToLink(entry.relative_path.clone(), e))
+                    return Err(InstallError::FailedToLink(entry.relative_path.clone(), e));
                 }
                 Err(Ok(payload)) => std::panic::resume_unwind(payload),
                 Err(Err(_err)) => return Err(InstallError::Cancelled),
@@ -682,6 +696,19 @@ pub fn link_package_sync(
             }
         }
 
+        // Since we store clobbers in the separate directory
+        // (`__clobbers__`) now we have to create all necessary
+        // directories for it as well.
+        let clobber_path = link_path.clobber_path.as_ref();
+        let mut current_path = clobber_path.and_then(|p| p.parent());
+        while let Some(path) = current_path {
+            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
+                current_path = path.parent();
+            } else {
+                break;
+            }
+        }
+
         // Store the path by directory so we can create them in parallel
         paths_by_directory
             .entry(entry_parent.to_path_buf())
@@ -811,7 +838,7 @@ pub fn link_package_sync(
                         return vec![Err(InstallError::FailedToLink(
                             entry.relative_path.clone(),
                             e,
-                        ))]
+                        ))];
                     }
                 };
 
@@ -1167,7 +1194,11 @@ mod test {
             get_test_data_dir().join(format!("python/explicit-env-{current_platform}.txt"));
         let env = ExplicitEnvironmentSpec::from_path(&explicit_env_path).unwrap();
 
-        assert_eq!(env.platform, Some(current_platform), "the platform for which the explicit lock file was created does not match the current platform");
+        assert_eq!(
+            env.platform,
+            Some(current_platform),
+            "the platform for which the explicit lock file was created does not match the current platform"
+        );
 
         test_install_python(
             env.packages.into_iter().map(|p| p.url),
@@ -1190,7 +1221,9 @@ mod test {
             .expect("no default environment in lock file");
 
         let Some(packages) = lock_env.packages(current_platform) else {
-            panic!("the platform for which the explicit lock file was created does not match the current platform")
+            panic!(
+                "the platform for which the explicit lock file was created does not match the current platform"
+            )
         };
 
         test_install_python(
