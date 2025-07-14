@@ -24,8 +24,7 @@ class Version:
             self._version = PyVersion(version)
         else:
             raise TypeError(
-                "Version constructor received unsupported type "
-                f" {type(version).__name__!r} for the `version` parameter"
+                f"Version constructor received unsupported type  {type(version).__name__!r} for the `version` parameter"
             )
 
     @classmethod
