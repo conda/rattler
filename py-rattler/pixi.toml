@@ -28,7 +28,7 @@ patchelf = "~=0.17.2"
 python = "3.9.*"
 
 ruff = ">=0.12.3,<0.13"
-mypy = "~=1.16.1"
+mypy = "~=1.17.0"
 
 pytest = ">=8.4.1,<9"
 pytest-asyncio = ">=1.0.0,<2"
