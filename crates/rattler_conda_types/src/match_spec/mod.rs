@@ -157,6 +157,8 @@ pub struct MatchSpec {
     pub url: Option<Url>,
     /// The license of the package
     pub license: Option<String>,
+    /// The condition under which this dependency applies (e.g., "python >=3.12", "__unix")
+    pub condition: Option<String>,
 }
 
 impl Display for MatchSpec {
@@ -223,6 +225,10 @@ impl Display for MatchSpec {
             write!(f, "[{}]", keys.join(", "))?;
         }
 
+        if let Some(condition) = &self.condition {
+            write!(f, "; if {condition}")?;
+        }
+
         Ok(())
     }
 }
@@ -245,6 +251,7 @@ impl MatchSpec {
                 sha256: self.sha256,
                 url: self.url,
                 license: self.license,
+                condition: self.condition,
             },
         )
     }
@@ -302,6 +309,8 @@ pub struct NamelessMatchSpec {
     pub url: Option<Url>,
     /// The license of the package
     pub license: Option<String>,
+    /// The condition under which this dependency applies (e.g., "python >=3.12", "__unix")
+    pub condition: Option<String>,
 }
 
 impl Display for NamelessMatchSpec {
@@ -329,6 +338,10 @@ impl Display for NamelessMatchSpec {
             write!(f, "[{}]", keys.join(", "))?;
         }
 
+        if let Some(condition) = &self.condition {
+            write!(f, "; if {condition}")?;
+        }
+
         Ok(())
     }
 }
@@ -348,6 +361,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            condition: spec.condition,
         }
     }
 }
@@ -369,6 +383,7 @@ impl MatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            condition: spec.condition,
         }
     }
 }
