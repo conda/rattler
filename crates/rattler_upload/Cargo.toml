@@ -11,7 +11,7 @@ readme.workspace = true
 [dependencies]
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
-rattler_networking = { workspace = true, features = ["rattler_config"] }
+rattler_networking = { workspace = true, features = ["rattler_config", "s3" ]}
 rattler_redaction = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
 rattler_config = { workspace = true, default-features = false }
