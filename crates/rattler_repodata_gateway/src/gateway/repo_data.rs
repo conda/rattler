@@ -35,6 +35,20 @@ impl RepoData {
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
+
+    /// Returns true if there is at least one `RepoDataRecord` with
+    /// `RunExportsJson` missing.
+    pub fn is_run_exports_missing(&self) -> bool {
+        self.iter().any(|r| r.package_record.run_exports.is_none())
+    }
+
+    /// Returns true if there is at least one `RepoDataRecord` with
+    /// `RunExportsJson` missing.
+    pub fn run_exports_missing(&self) -> usize {
+        self.iter()
+            .filter(|r| r.package_record.run_exports.is_none())
+            .count()
+    }
 }
 
 impl<'r> IntoIterator for &'r RepoData {
