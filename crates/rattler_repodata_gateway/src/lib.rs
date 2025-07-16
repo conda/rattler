@@ -73,6 +73,7 @@ mod gateway;
 
 #[cfg(feature = "gateway")]
 pub use gateway::{
-    ChannelConfig, Gateway, GatewayBuilder, GatewayError, MaxConcurrency, RepoData, SourceConfig,
-    SubdirSelection,
+    ChannelConfig, DumpCacheReporter, DumpPackageCacheReporter, Gateway, GatewayBuilder,
+    GatewayError, MaxConcurrency, RepoData, RunExportExtractorError, RunExportsReporter,
+    SourceConfig, SubdirSelection,
 };

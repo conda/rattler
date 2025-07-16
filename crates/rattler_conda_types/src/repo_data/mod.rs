@@ -6,7 +6,7 @@ pub mod sharded;
 mod topological_sort;
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt::{Display, Formatter},
     path::Path,
 };
@@ -237,6 +237,13 @@ impl RecordFromPath for PackageRecord {
     }
 }
 
+impl PackageRecord {
+    /// Returns true if package `run_exports` is some.
+    pub fn has_run_exports(&self) -> bool {
+        self.run_exports.is_some()
+    }
+}
+
 impl RepoData {
     /// Parses [`RepoData`] from a file.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
@@ -402,6 +409,33 @@ impl PackageRecord {
     }
 }
 
+#[derive(Debug, Default, Deserialize, Serialize, Eq, PartialEq, Clone)]
+struct PackageRunExports {
+    run_exports: RunExportsJson,
+}
+
+/// Represents [`Channel`] global map from package file names to [`RunExportsJson`].
+///
+/// See [CEP 12](https://github.com/conda/ceps/blob/main/cep-0012.md) for more info.
+#[derive(Debug, Default, Deserialize, Serialize, Eq, PartialEq, Clone)]
+pub struct GlobalRunExportsJson {
+    info: Option<ChannelInfo>,
+    packages: HashMap<String, PackageRunExports>,
+}
+
+impl GlobalRunExportsJson {
+    /// Get package [`RunExportsJson`] based on the package file name.
+    pub fn get(&self, record: &RepoDataRecord) -> Option<&RunExportsJson> {
+        let file_name = &record.file_name;
+        self.packages.get(file_name).map(|pre| &pre.run_exports)
+    }
+
+    /// Returns optional [`ChannelInfo`].
+    pub fn info(&self) -> Option<&ChannelInfo> {
+        self.info.as_ref()
+    }
+}
+
 /// An error when validating package records.
 #[derive(Debug, Error)]
 #[allow(clippy::large_enum_variant)]
@@ -415,7 +449,9 @@ pub enum ValidatePackageRecordsError {
         dependency: String,
     },
     /// A package constraint is not met in the environment.
-    #[error("package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment")]
+    #[error(
+        "package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment"
+    )]
     PackageConstraintNotSatisfied {
         /// The package containing the unmet constraint.
         package: PackageRecord,
