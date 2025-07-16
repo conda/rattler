@@ -7,7 +7,8 @@ mod build_spec;
 mod channel;
 mod channel_data;
 mod explicit_environment_spec;
-mod match_spec;
+/// todo
+pub mod match_spec;
 pub mod menuinst;
 mod no_arch_type;
 mod parse_mode;
