@@ -1287,7 +1287,6 @@ dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
- "unicode-width 0.2.1",
  "windows-sys 0.59.0",
 ]
 
@@ -4310,7 +4309,7 @@ dependencies = [
  "assert_matches",
  "axum",
  "clap",
- "console 0.15.11",
+ "console 0.16.0",
  "digest",
  "dirs",
  "fs-err",
@@ -4362,7 +4361,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "console 0.15.11",
+ "console 0.16.0",
  "indicatif",
  "itertools 0.14.0",
  "once_cell",
@@ -4471,7 +4470,7 @@ dependencies = [
 name = "rattler_config"
 version = "0.2.3"
 dependencies = [
- "console 0.15.11",
+ "console 0.16.0",
  "fs-err",
  "indexmap 2.10.0",
  "insta",
@@ -4513,7 +4512,7 @@ dependencies = [
  "chrono",
  "clap",
  "clap-verbosity-flag",
- "console 0.15.11",
+ "console 0.16.0",
  "fs-err",
  "futures",
  "fxhash",

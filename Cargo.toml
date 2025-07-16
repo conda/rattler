@@ -54,7 +54,7 @@ chrono = { version = "0.4.41", default-features = false, features = [
 clap = { version = "4.5.38", features = ["derive"] }
 clap-verbosity-flag = "3.0.3"
 cmake = "0.1.54"
-console = { version = "0.15.11", features = ["windows-console-colors"] }
+console = { version = "0.16.0", features = ["windows-console-colors"] }
 criterion = "0.6"
 dashmap = "6.1.0"
 difference = "2.0.0"
