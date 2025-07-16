@@ -19,7 +19,7 @@ use rattler_conda_types::{
 };
 use resolvo::{
     utils::{Pool, VersionSet},
-    Candidates, Dependencies, DependencyProvider, HintDependenciesAvailable, Interner,
+    Candidates, Condition, ConditionId, ConditionalRequirement, Dependencies, DependencyProvider, HintDependenciesAvailable, Interner,
     KnownDependencies, NameId, Problem, Requirement, SolvableId, Solver as LibSolvRsSolver,
     SolverCache, StringId, UnsolvableOrCancelled, VersionSetId, VersionSetUnionId,
 };
@@ -242,6 +242,13 @@ impl From<&str> for NameType {
     }
 }
 
+/// Represents a conda condition that can be used in conditional dependencies.
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub enum CondaCondition {
+    /// A condition that matches against a specific match spec (e.g., "python >=3.12")
+    MatchSpec(String),
+}
+
 /// An implement of [`resolvo::DependencyProvider`] that implements the
 /// ecosystem behavior for conda. This allows resolvo to solve for conda
 /// packages.
@@ -262,6 +269,10 @@ pub struct CondaDependencyProvider<'a> {
     strategy: SolveStrategy,
 
     direct_dependencies: HashSet<NameId>,
+
+    /// Storage for conditions used in conditional dependencies
+    id_to_condition: RefCell<Vec<CondaCondition>>,
+    conditions: RefCell<HashMap<CondaCondition, ConditionId>>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -528,12 +539,28 @@ impl<'a> CondaDependencyProvider<'a> {
             stop_time,
             strategy,
             direct_dependencies,
+            id_to_condition: RefCell::new(Vec::new()),
+            conditions: RefCell::new(HashMap::new()),
         })
     }
 
     /// Returns all package names
     pub fn package_names(&self) -> impl Iterator<Item = NameId> + '_ {
         self.records.keys().copied()
+    }
+
+    /// Interns a condition and returns its ID
+    pub fn intern_condition(&self, condition: CondaCondition) -> ConditionId {
+        let mut conditions = self.conditions.borrow_mut();
+        if let Some(id) = conditions.get(&condition) {
+            return *id;
+        }
+
+        let mut id_to_condition = self.id_to_condition.borrow_mut();
+        let id = ConditionId::new(id_to_condition.len() as u32);
+        id_to_condition.push(condition.clone());
+        conditions.insert(condition, id);
+        id
     }
 }
 
@@ -588,6 +615,25 @@ impl Interner for CondaDependencyProvider<'_> {
 
     fn solvable_name(&self, solvable: SolvableId) -> NameId {
         self.pool.resolve_solvable(solvable).name
+    }
+
+    fn resolve_condition(&self, condition: ConditionId) -> Condition {
+        let id_to_condition = self.id_to_condition.borrow();
+        let conda_condition = &id_to_condition[condition.as_u32() as usize];
+        
+        match conda_condition {
+            CondaCondition::MatchSpec(spec_str) => {
+                // Parse the matchspec string and create a version set
+                let match_spec = MatchSpec::from_str(&spec_str, ParseStrictness::Lenient)
+                    .expect("Failed to parse condition matchspec");
+                let (name, spec) = match_spec.into_nameless();
+                let name = name.expect("Condition matchspec must have a name");
+                let name_id = self.pool.intern_package_name(name.as_normalized());
+                let version_set_id = self.pool.intern_version_set(name_id, spec.into());
+                
+                Condition::Requirement(version_set_id)
+            }
+        }
     }
 }
 
@@ -647,12 +693,12 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
             if let Some(deps) = record.package_record.extra_depends.get(feature_name) {
                 // Add each dependency for this feature
                 for req in deps {
-                    let version_set_id = match parse_match_spec(
-                        &self.pool,
+                    let conditional_requirements = match parse_match_spec_with_condition(
+                        &self,
                         req,
                         &mut parse_match_spec_cache,
                     ) {
-                        Ok(version_set_id) => version_set_id,
+                        Ok(reqs) => reqs,
                         Err(e) => {
                             let reason = self.pool.intern_string(format!(
                                 "the optional dependency '{req}' for feature '{feature_name}' failed to parse: {e}"
@@ -663,7 +709,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
                     dependencies
                         .requirements
-                        .extend(version_set_id.into_iter().map(Requirement::from));
+                        .extend(conditional_requirements);
                 }
 
                 // Add a dependency back to the base package with exact version
@@ -691,14 +737,14 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                         .as_normalized(),
                 );
                 let version_set_id = self.pool.intern_version_set(name_id, nameless_spec.into());
-                dependencies.requirements.push(version_set_id.into());
+                dependencies.requirements.push(ConditionalRequirement::from(version_set_id));
             }
         } else {
             // Add regular dependencies
             for depends in record.package_record.depends.iter() {
-                let version_set_id =
-                    match parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache) {
-                        Ok(version_set_id) => version_set_id,
+                let conditional_requirements =
+                    match parse_match_spec_with_condition(&self, depends, &mut parse_match_spec_cache) {
+                        Ok(reqs) => reqs,
                         Err(e) => {
                             let reason = self.pool.intern_string(format!(
                                 "the dependency '{depends}' failed to parse: {e}",
@@ -710,7 +756,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
                 dependencies
                     .requirements
-                    .extend(version_set_id.into_iter().map(Requirement::from));
+                    .extend(conditional_requirements);
             }
 
             for constrains in record.package_record.constrains.iter() {
@@ -873,9 +919,9 @@ impl super::SolverImpl for Solver {
             reqs
         });
 
-        let all_requirements: Vec<Requirement> = virtual_package_requirements
+        let all_requirements: Vec<ConditionalRequirement> = virtual_package_requirements
             .chain(root_requirements)
-            .map(Requirement::from)
+            .map(ConditionalRequirement::from)
             .collect();
 
         let root_constraints = task
@@ -973,4 +1019,235 @@ fn parse_match_spec(
     parse_match_spec_cache.insert(spec_str.to_string(), version_set_ids.clone());
 
     Ok(version_set_ids)
+}
+
+fn parse_match_spec_with_condition(
+    provider: &CondaDependencyProvider<'_>,
+    spec_str: &str,
+    _parse_match_spec_cache: &mut HashMap<String, Vec<VersionSetId>>,
+) -> Result<Vec<ConditionalRequirement>, ParseMatchSpecError> {
+    let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient)?;
+    let condition = match_spec.condition.clone();
+    let (name, spec) = match_spec.into_nameless();
+
+    let mut version_set_ids = vec![];
+    if let Some(ref features) = spec.extras {
+        let spec_with_feature: SolverMatchSpec<'_> = spec.clone().into();
+
+        for feature in features {
+            let name_with_feature = NameType::BaseWithFeature(
+                name.as_ref()
+                    .expect("Packages with no name are not supported")
+                    .as_normalized()
+                    .to_owned(),
+                feature.to_string(),
+            );
+            let dependency_name = provider.pool.intern_package_name(name_with_feature);
+
+            let version_set_id = provider.pool.intern_version_set(
+                dependency_name,
+                spec_with_feature.with_feature(feature.to_string()),
+            );
+            version_set_ids.push(version_set_id);
+        }
+    } else {
+        let dependency_name = provider.pool.intern_package_name(
+            name.as_ref()
+                .expect("Packages with no name are not supported")
+                .as_normalized(),
+        );
+        let version_set_id = provider.pool.intern_version_set(dependency_name, spec.into());
+        version_set_ids.push(version_set_id);
+    }
+
+    let mut conditional_requirements = Vec::new();
+    
+    // If there's a condition, create a condition ID and use it
+    let condition_id = if let Some(condition_str) = condition {
+        Some(provider.intern_condition(CondaCondition::MatchSpec(condition_str)))
+    } else {
+        None
+    };
+
+    for version_set_id in version_set_ids {
+        conditional_requirements.push(ConditionalRequirement {
+            condition: condition_id,
+            requirement: Requirement::Single(version_set_id),
+        });
+    }
+
+    Ok(conditional_requirements)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rattler_conda_types::MatchSpec;
+
+    #[test]
+    fn test_parse_conditional_dependency() {
+        // Test parsing a dependency with a condition
+        let spec_str = "foobar >=1.0; if python >=3.12";
+        let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient).unwrap();
+        
+        assert_eq!(match_spec.name.as_ref().unwrap().as_source(), "foobar");
+        assert_eq!(match_spec.version.as_ref().unwrap().to_string(), ">=1.0");
+        assert_eq!(match_spec.condition, Some("python >=3.12".to_string()));
+    }
+
+    #[test]
+    fn test_parse_dependency_without_condition() {
+        // Test parsing a dependency without a condition
+        let spec_str = "foobar >=1.0";
+        let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient).unwrap();
+        
+        assert_eq!(match_spec.name.as_ref().unwrap().as_source(), "foobar");
+        assert_eq!(match_spec.version.as_ref().unwrap().to_string(), ">=1.0");
+        assert_eq!(match_spec.condition, None);
+    }
+
+    #[test]
+    fn test_parse_match_spec_with_condition_function() {
+        use std::collections::HashMap;
+        
+        // Create a mock dependency provider
+        let provider = CondaDependencyProvider::new(
+            vec![],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            crate::ChannelPriority::Strict,
+            None,
+            crate::SolveStrategy::Highest,
+        ).unwrap();
+        
+        let mut cache = HashMap::new();
+        
+        // Test parsing conditional dependency
+        let conditional_reqs = parse_match_spec_with_condition(
+            &provider,
+            "foobar >=1.0; if python >=3.12",
+            &mut cache,
+        ).unwrap();
+        
+        assert_eq!(conditional_reqs.len(), 1);
+        assert!(conditional_reqs[0].condition.is_some());
+        
+        // Test parsing non-conditional dependency  
+        let non_conditional_reqs = parse_match_spec_with_condition(
+            &provider,
+            "foobar >=1.0",
+            &mut cache,
+        ).unwrap();
+        
+        assert_eq!(non_conditional_reqs.len(), 1);
+        assert!(non_conditional_reqs[0].condition.is_none());
+    }
+
+    #[test]
+    fn test_condition_internment() {
+        let provider = CondaDependencyProvider::new(
+            vec![],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            crate::ChannelPriority::Strict,
+            None,
+            crate::SolveStrategy::Highest,
+        ).unwrap();
+        
+        let condition1 = CondaCondition::MatchSpec("python >=3.12".to_string());
+        let condition2 = CondaCondition::MatchSpec("python >=3.12".to_string());
+        let condition3 = CondaCondition::MatchSpec("__unix".to_string());
+        
+        let id1 = provider.intern_condition(condition1);
+        let id2 = provider.intern_condition(condition2); 
+        let id3 = provider.intern_condition(condition3);
+        
+        // Same condition should get same ID
+        assert_eq!(id1, id2);
+        // Different condition should get different ID
+        assert_ne!(id1, id3);
+    }
+
+    #[test]
+    fn test_resolve_condition() {
+        let provider = CondaDependencyProvider::new(
+            vec![],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            crate::ChannelPriority::Strict,
+            None,
+            crate::SolveStrategy::Highest,
+        ).unwrap();
+        
+        let condition = CondaCondition::MatchSpec("python >=3.12".to_string());
+        let condition_id = provider.intern_condition(condition);
+        
+        // Test resolving the condition
+        let resolved = provider.resolve_condition(condition_id);
+        
+        match resolved {
+            Condition::Requirement(version_set_id) => {
+                // Verify the version set was created correctly
+                let version_set = provider.pool.resolve_version_set(version_set_id);
+                let name_id = provider.pool.resolve_version_set_package_name(version_set_id);
+                let name = provider.pool.resolve_package_name(name_id);
+                
+                assert_eq!(name, &NameType::Base("python".to_string()));
+                // The version set should contain the >=3.12 constraint
+                assert!(version_set.version.is_some());
+            }
+            _ => panic!("Expected Condition::Requirement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_match_spec_with_virtual_package_condition() {
+        use std::collections::HashMap;
+        
+        let provider = CondaDependencyProvider::new(
+            vec![],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            crate::ChannelPriority::Strict,
+            None,
+            crate::SolveStrategy::Highest,
+        ).unwrap();
+        
+        let mut cache = HashMap::new();
+        
+        // Test parsing dependency with virtual package condition
+        let conditional_reqs = parse_match_spec_with_condition(
+            &provider,
+            "foobar >=1.0; if __unix",
+            &mut cache,
+        ).unwrap();
+        
+        assert_eq!(conditional_reqs.len(), 1);
+        assert!(conditional_reqs[0].condition.is_some());
+        
+        // Test parsing dependency with complex condition
+        let conditional_reqs2 = parse_match_spec_with_condition(
+            &provider,
+            "bizbar 3.12.*; if python >=3.12",
+            &mut cache,
+        ).unwrap();
+        
+        assert_eq!(conditional_reqs2.len(), 1);
+        assert!(conditional_reqs2[0].condition.is_some());
+        
+        // Verify the conditions are different
+        assert_ne!(conditional_reqs[0].condition, conditional_reqs2[0].condition);
+    }
 }
