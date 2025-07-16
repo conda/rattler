@@ -1,8 +1,8 @@
 //! Defines the `[RepoDataRecord]` struct.
 
-use std::{collections::HashMap, vec::Vec};
+use std::{collections::HashMap, str::FromStr, vec::Vec};
 
-use crate::{PackageName, PackageRecord};
+use crate::{PackageName, PackageRecord, Platform};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -26,6 +26,32 @@ pub struct RepoDataRecord {
     /// explicit about where the package came from.
     /// TODO: Refactor this into `Source` which can be a "name", "channelurl", or "direct url".
     pub channel: Option<String>,
+}
+
+impl RepoDataRecord {
+    /// Returns true if `run_exports` is some.
+    pub fn has_run_exports(&self) -> bool {
+        self.package_record.has_run_exports()
+    }
+
+    /// Returns URL of package channel subdir.
+    pub fn platform_url(&self) -> Url {
+        let mut url = self.url.clone();
+        if let Some(segments) = url.path_segments() {
+            let mut out = Vec::new();
+            for segment in segments {
+                if Platform::from_str(segment).is_ok() {
+                    out.push(segment);
+                    break;
+                }
+                out.push(segment);
+            }
+
+            let path = out.join("/");
+            url.set_path(&path);
+        }
+        url
+    }
 }
 
 impl AsRef<PackageRecord> for RepoDataRecord {
