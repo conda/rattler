@@ -37,10 +37,12 @@ async fn create_upload_form(
     let mut form = reqwest::multipart::Form::new();
 
     let progress_bar_clone = progress_bar.clone();
-    let reader_stream = ReaderStream::new(tokio_fs::File::open(package_file).await.into_diagnostic()?)
-        .inspect_ok(move |bytes| {
-            progress_bar_clone.inc(bytes.len() as u64);
-        });
+    let reader_stream = ReaderStream::new(
+        tokio_fs::File::open(package_file).await.into_diagnostic()?,
+    )
+    .inspect_ok(move |bytes| {
+        progress_bar_clone.inc(bytes.len() as u64);
+    });
 
     let hash = sha256_sum(package_file).into_diagnostic()?;
 
@@ -66,7 +68,9 @@ async fn create_upload_form(
     form = form.part("file", file_part);
 
     if let Some(attestation) = attestation {
-        let text = tokio_fs::read_to_string(attestation).await.into_diagnostic()?;
+        let text = tokio_fs::read_to_string(attestation)
+            .await
+            .into_diagnostic()?;
         form = form.part("attestation", reqwest::multipart::Part::text(text));
     }
 
