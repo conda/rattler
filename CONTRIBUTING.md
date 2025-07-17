@@ -28,3 +28,8 @@ As below,
 ❱ cargo build # uses cargo from your mamba venv
 ❱ mamba deactivate # don't forget you're in the venv
 ```
+### Format bindings
+```sh
+cd py-rattler
+pixi run fmt
+```

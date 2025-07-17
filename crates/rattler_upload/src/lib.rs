@@ -48,6 +48,7 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
             let anaconda_data = AnacondaData::from(anaconda_opts);
             upload::upload_package_to_anaconda(&store, &args.package_files, anaconda_data).await
         }
+        #[cfg(feature = "s3")]
         ServerType::S3(s3_opts) => {
             upload::upload_package_to_s3(
                 &store,
