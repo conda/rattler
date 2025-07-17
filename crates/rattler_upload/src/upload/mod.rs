@@ -31,7 +31,7 @@ mod trusted_publishing;
 #[cfg(feature = "s3")]
 use opendal::{services::S3Config, Configurator, Operator};
 #[cfg(feature = "s3")]
-use std::{net::Ipv4Addr};
+use std::net::Ipv4Addr;
 
 pub use prefix::upload_package_to_prefix;
 
