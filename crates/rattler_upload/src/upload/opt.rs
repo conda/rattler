@@ -170,6 +170,7 @@ pub enum ServerType {
     Artifactory(ArtifactoryOpts),
     Prefix(PrefixOpts),
     Anaconda(AnacondaOpts),
+    #[cfg(feature = "s3")]
     S3(S3Opts),
     #[clap(hide = true)]
     CondaForge(CondaForgeOpts),

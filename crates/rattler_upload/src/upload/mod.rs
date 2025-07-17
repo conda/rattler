@@ -4,11 +4,9 @@ use crate::{tool_configuration::APP_USER_AGENT, AnacondaData, ArtifactoryData, Q
 use fs_err::tokio as fs;
 use futures::TryStreamExt;
 use indicatif::{style::TemplateError, HumanBytes, ProgressState};
-use opendal::{services::S3Config, Configurator, Operator};
 use reqwest_retry::{policies::ExponentialBackoff, RetryDecision, RetryPolicy};
 use std::{
     fmt::Write,
-    net::Ipv4Addr,
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
@@ -29,6 +27,11 @@ pub mod opt;
 mod package;
 mod prefix;
 mod trusted_publishing;
+
+#[cfg(feature = "s3")]
+use opendal::{services::S3Config, Configurator, Operator};
+#[cfg(feature = "s3")]
+use std::{net::Ipv4Addr};
 
 pub use prefix::upload_package_to_prefix;
 
@@ -267,7 +270,7 @@ pub async fn upload_package_to_anaconda(
     }
     Ok(())
 }
-
+#[cfg(feature = "s3")]
 /// Uploads a package to a channel in an S3 bucket.
 #[allow(clippy::too_many_arguments)]
 pub async fn upload_package_to_s3(
