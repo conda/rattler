@@ -1,24 +1,29 @@
 [package]
 name = "rattler_upload"
 version = "0.1.0"
+edition.workspace = true
+authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>", "Magenta Qin <magenta2127@gmail.com>"]
+description = "A crate to Upload conda packages to various channels."
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-edition.workspace = true
 readme.workspace = true
+
+[features]
+s3 = ["rattler_networking/s3"]
 
 [dependencies]
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
-rattler_networking = { workspace = true, features = ["rattler_config"] }
+rattler_networking = { workspace = true, features = ["rattler_config" ]}
 rattler_redaction = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
 rattler_config = { workspace = true, default-features = false }
 rattler_solve = { workspace = true }
 miette = { version = "7.6.0", features = ["fancy"] }
 clap = { version = "4.5.37", features = ["derive", "env", "cargo"] }
-fs-err = "3.1.0"
+fs-err = { workspace = true, features = ["tokio"] }
 futures = "0.3.31"
 indicatif = "0.18.0"
 opendal = { version = "0.53.1", default-features = false, features = [

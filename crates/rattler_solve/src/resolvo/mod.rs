@@ -486,7 +486,6 @@ impl<'a> CondaDependencyProvider<'a> {
                                     pool.intern_string("due to strict channel priority not using from an unknown channel".to_string()),
                                 ));
                             }
-                            continue;
                         }
                     } else {
                         package_name_found_in_channel.insert(
@@ -854,15 +853,13 @@ impl super::SolverImpl for Solver {
             if let Some(features) = features {
                 for feature in features {
                     // Create a version set that matches the feature-enabled package
-                    let package_name_with_feature = NameType::BaseWithFeature(
-                        name.as_normalized().to_owned(),
-                        feature.to_string(),
-                    );
+                    let package_name_with_feature =
+                        NameType::BaseWithFeature(name.as_normalized().to_owned(), feature.clone());
                     let feature_name_id =
                         provider.pool.intern_package_name(package_name_with_feature);
 
                     let mut solver_match_spec: SolverMatchSpec<'_> = nameless_spec.clone().into();
-                    let _ = solver_match_spec.set_feature(feature.to_string());
+                    let _ = solver_match_spec.set_feature(feature.clone());
 
                     let feature_version_set = provider
                         .pool
@@ -951,13 +948,13 @@ fn parse_match_spec(
                     .expect("Packages with no name are not supported")
                     .as_normalized()
                     .to_owned(),
-                feature.to_string(),
+                feature.clone(),
             );
             let dependency_name = pool.intern_package_name(name_with_feature);
 
             let version_set_id = pool.intern_version_set(
                 dependency_name,
-                spec_with_feature.with_feature(feature.to_string()),
+                spec_with_feature.with_feature(feature.clone()),
             );
             version_set_ids.push(version_set_id);
         }

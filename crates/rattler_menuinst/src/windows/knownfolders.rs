@@ -120,7 +120,7 @@ mod tests {
             match folders.get_folder_path(folder, handle) {
                 Ok(path) => {
                     println!("{folder:?} path for {handle:?}: {path:?}");
-                    assert!(path.exists())
+                    assert!(path.exists());
                 }
                 Err(e) => println!("Error getting {folder:?} path for {handle:?}: {e:?}"),
             }
