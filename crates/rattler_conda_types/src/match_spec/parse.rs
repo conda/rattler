@@ -135,11 +135,18 @@ fn strip_comment(input: &str) -> (&str, Option<&str>) {
 /// Strips any if statements from the matchspec. `if` statements in matchspec
 /// are "anticipating future compatibility issues".
 fn strip_if(input: &str) -> (&str, Option<&str>) {
-    // input
-    //     .split_once("if")
-    //     .map(|(spec, if_statement)| (spec, Some(if_statement)))
-    //     .unwrap_or_else(|| (input, None))
-    (input, None)
+    // Look for "; if" or ";if" pattern
+    if let Some(idx) = input.find("; if ") {
+        let (spec, condition) = input.split_at(idx);
+        // Skip the "; if " part (5 characters)
+        (spec.trim(), Some(condition[5..].trim()))
+    } else if let Some(idx) = input.find(";if ") {
+        let (spec, condition) = input.split_at(idx);
+        // Skip the ";if " part (4 characters)
+        (spec.trim(), Some(condition[4..].trim()))
+    } else {
+        (input, None)
+    }
 }
 
 /// An optimized data structure to store key value pairs in between a bracket
@@ -614,7 +621,7 @@ fn matchspec_parser(
 ) -> Result<MatchSpec, ParseMatchSpecError> {
     // Step 1. Strip '#' and `if` statement
     let (input, _comment) = strip_comment(input);
-    let (input, _if_clause) = strip_if(input);
+    let (input, if_clause) = strip_if(input);
 
     // 2. Strip off brackets portion
     let (input, brackets) = strip_brackets(input.trim())?;
@@ -687,6 +694,11 @@ fn matchspec_parser(
         }
         match_spec.version = match_spec.version.or(version);
         match_spec.build = match_spec.build.or(build);
+    }
+    
+    // Step 8. Add the condition if present
+    if let Some(condition) = if_clause {
+        match_spec.condition = Some(condition.to_owned());
     }
 
     Ok(match_spec)
@@ -1450,6 +1462,7 @@ mod tests {
                 .unwrap(),
             ),
             license: Some("MIT".into()),
+            condition: None,
         });
 
         // insta check all the strings
@@ -1540,5 +1553,58 @@ mod tests {
 
         // Missing opening bracket
         assert!(MatchSpec::from_str("foo[extras=bar,baz]]", Strict).is_err());
+    }
+
+    #[test]
+    fn test_conditional_dependencies() {
+        // Test basic condition parsing
+        let spec = MatchSpec::from_str("foobar; if python >=3.12", Lenient).unwrap();
+        assert_eq!(spec.name.as_ref().unwrap().as_source(), "foobar");
+        assert_eq!(spec.condition, Some("python >=3.12".to_string()));
+
+        // Test with version and condition
+        let spec = MatchSpec::from_str("foobar >=1.0; if python >=3.12", Lenient).unwrap();
+        assert_eq!(spec.name.as_ref().unwrap().as_source(), "foobar");
+        assert_eq!(spec.version.as_ref().unwrap().to_string(), ">=1.0");
+        assert_eq!(spec.condition, Some("python >=3.12".to_string()));
+
+        // Test with virtual package condition
+        let spec = MatchSpec::from_str("bizbar 3.12.*; if __unix", Lenient).unwrap();
+        assert_eq!(spec.name.as_ref().unwrap().as_source(), "bizbar");
+        assert_eq!(spec.version.as_ref().unwrap().to_string(), "3.12.*");
+        assert_eq!(spec.condition, Some("__unix".to_string()));
+
+        // Test without space after semicolon
+        let spec = MatchSpec::from_str("package;if __linux", Lenient).unwrap();
+        assert_eq!(spec.name.as_ref().unwrap().as_source(), "package");
+        assert_eq!(spec.condition, Some("__linux".to_string()));
+
+        // Test with build string and condition
+        let spec = MatchSpec::from_str("numpy 1.21.* *py39*; if python ==3.9", Lenient).unwrap();
+        assert_eq!(spec.name.as_ref().unwrap().as_source(), "numpy");
+        assert_eq!(spec.version.as_ref().unwrap().to_string(), "1.21.*");
+        assert_eq!(spec.build.as_ref().unwrap().to_string(), "*py39*");
+        assert_eq!(spec.condition, Some("python ==3.9".to_string()));
+
+        // Test no condition
+        let spec = MatchSpec::from_str("foobar >=1.0", Lenient).unwrap();
+        assert_eq!(spec.name.as_ref().unwrap().as_source(), "foobar");
+        assert_eq!(spec.version.as_ref().unwrap().to_string(), ">=1.0");
+        assert_eq!(spec.condition, None);
+    }
+
+    #[test]
+    fn test_conditional_dependencies_display() {
+        // Test that display includes condition
+        let spec = MatchSpec::from_str("foobar >=1.0; if python >=3.12", Lenient).unwrap();
+        assert_eq!(spec.to_string(), "foobar >=1.0; if python >=3.12");
+
+        // Test display without condition
+        let spec = MatchSpec::from_str("foobar >=1.0", Lenient).unwrap();
+        assert_eq!(spec.to_string(), "foobar >=1.0");
+
+        // Test display with build and condition
+        let spec = MatchSpec::from_str("numpy 1.21.* *py39*; if python ==3.9", Lenient).unwrap();
+        assert_eq!(spec.to_string(), "numpy 1.21.* *py39*; if python ==3.9");
     }
 }
