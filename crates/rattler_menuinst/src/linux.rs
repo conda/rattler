@@ -199,8 +199,7 @@ fn xdg_mime(
         );
         log_output("xdg-mime", output);
 
-        return Err(XdgMimeError::IoError(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(XdgMimeError::IoError(std::io::Error::other(
             "xdg-mime failed",
         )));
     }
