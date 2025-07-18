@@ -295,8 +295,8 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 // Compare the versions
                 match a_version.compare_with_strategy(&b_version, self.dependency_strategy) {
                     Ordering::Equal => {
-                        // If this version is equal, we continue with the next dependency
-                        continue;
+                        // If this version is equal, we continue with the next
+                        // dependency
                     }
                     ordering => return ordering,
                 }

@@ -54,11 +54,11 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<Cow<'a, VersionWithSource>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub build: Option<Cow<'a, String>>,
+    pub build: Option<Cow<'a, str>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub build_number: Option<BuildNumber>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subdir: Option<Cow<'a, String>>,
+    pub subdir: Option<Cow<'a, str>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub noarch: Option<Cow<'a, NoArchType>>,
 
@@ -74,10 +74,10 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub legacy_bz2_md5: Option<Md5Hash>,
 
     // Dependencies
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub depends: Cow<'a, Vec<String>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub constrains: Cow<'a, Vec<String>>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub depends: Cow<'a, [String]>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub constrains: Cow<'a, [String]>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
 
@@ -87,8 +87,8 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub features: Cow<'a, Option<String>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub track_features: Cow<'a, Vec<String>>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub track_features: Cow<'a, [String]>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_name: Option<Cow<'a, Option<String>>>,
@@ -125,7 +125,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
 pub(crate) struct InputHash<'a> {
     #[serde_as(as = "SerializableHash::<rattler_digest::Sha256>")]
     pub hash: Sha256Hash,
-    pub globs: Cow<'a, Vec<String>>,
+    pub globs: Cow<'a, [String]>,
 }
 
 impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {

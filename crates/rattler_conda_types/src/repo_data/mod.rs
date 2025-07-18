@@ -156,8 +156,8 @@ pub struct PackageRecord {
     pub noarch: NoArchType,
 
     /// Optionally the platform the package supports.
-    /// Note that this does not match the [`Platform`] enum, but is only the first
-    /// part of the platform (e.g. `linux`, `osx`, `win`, ...).
+    /// Note that this does not match the [`Platform`] enum, but is only the
+    /// first part of the platform (e.g. `linux`, `osx`, `win`, ...).
     /// The `subdir` field contains the `Platform` enum.
     pub platform: Option<String>,
 
@@ -365,7 +365,7 @@ impl PackageRecord {
     /// dependency that is not satisfied, this function will return an error.
     pub fn validate<T: AsRef<PackageRecord>>(
         records: Vec<T>,
-    ) -> Result<(), ValidatePackageRecordsError> {
+    ) -> Result<(), Box<ValidatePackageRecordsError>> {
         for package in records.iter() {
             let package = package.as_ref();
             // First we check if all dependencies are in the environment.
@@ -374,27 +374,33 @@ impl PackageRecord {
                 if dep.starts_with("__") {
                     continue;
                 }
-                let dep_spec = MatchSpec::from_str(dep, ParseStrictness::Lenient)?;
+                let dep_spec = MatchSpec::from_str(dep, ParseStrictness::Lenient)
+                    .map_err(ValidatePackageRecordsError::ParseMatchSpec)?;
                 if !records.iter().any(|p| dep_spec.matches(p.as_ref())) {
-                    return Err(ValidatePackageRecordsError::DependencyNotInEnvironment {
-                        package: package.to_owned(),
-                        dependency: dep.to_string(),
-                    });
+                    return Err(Box::new(
+                        ValidatePackageRecordsError::DependencyNotInEnvironment {
+                            package: package.to_owned(),
+                            dependency: dep.clone(),
+                        },
+                    ));
                 }
             }
 
             // Then we check if all constraints are satisfied.
             for constraint in package.constrains.iter() {
-                let constraint_spec = MatchSpec::from_str(constraint, ParseStrictness::Lenient)?;
+                let constraint_spec = MatchSpec::from_str(constraint, ParseStrictness::Lenient)
+                    .map_err(ValidatePackageRecordsError::ParseMatchSpec)?;
                 let matching_package = records
                     .iter()
                     .find(|record| Some(record.as_ref().name.clone()) == constraint_spec.name);
                 if matching_package.is_some_and(|p| !constraint_spec.matches(p.as_ref())) {
-                    return Err(ValidatePackageRecordsError::PackageConstraintNotSatisfied {
-                        package: package.to_owned(),
-                        constraint: constraint.to_owned(),
-                        violating_package: matching_package.unwrap().as_ref().to_owned(),
-                    });
+                    return Err(Box::new(
+                        ValidatePackageRecordsError::PackageConstraintNotSatisfied {
+                            package: package.to_owned(),
+                            constraint: constraint.to_owned(),
+                            violating_package: matching_package.unwrap().as_ref().to_owned(),
+                        },
+                    ));
                 }
             }
         }
@@ -415,7 +421,8 @@ pub enum ValidatePackageRecordsError {
         dependency: String,
     },
     /// A package constraint is not met in the environment.
-    #[error("package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment")]
+    #[error("package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment"
+    )]
     PackageConstraintNotSatisfied {
         /// The package containing the unmet constraint.
         package: PackageRecord,
