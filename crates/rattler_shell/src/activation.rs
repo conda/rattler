@@ -241,7 +241,7 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
 
             for (key, value) in env_var_json {
                 if let Some(value) = value.as_str() {
-                    env_vars.insert(key.to_string(), value.to_string());
+                    env_vars.insert(key.clone(), value.to_string());
                 } else {
                     tracing::warn!(
                         "WARNING: environment variable {key} has no string value (path: {env_var_file:?})"

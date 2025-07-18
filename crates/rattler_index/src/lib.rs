@@ -21,6 +21,7 @@ use rattler_package_streaming::{
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::io::{BufRead, BufReader};
 use std::{
     collections::{HashMap, HashSet},
     io::{Cursor, Read, Seek},
@@ -129,13 +130,13 @@ fn repodata_patch_from_conda_package_stream<'a>(
 /// and extract the package record from it.
 pub fn package_record_from_tar_bz2(file: &Path) -> std::io::Result<PackageRecord> {
     let reader = fs::File::open(file)?;
-    package_record_from_tar_bz2_reader(reader)
+    package_record_from_tar_bz2_reader(BufReader::new(reader))
 }
 
 /// Extract the package record from a `.tar.bz2` package file.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
-pub fn package_record_from_tar_bz2_reader(reader: impl Read) -> std::io::Result<PackageRecord> {
+pub fn package_record_from_tar_bz2_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
     let reader = Cursor::new(&bytes);
     let mut archive = read::stream_tar_bz2(reader);
@@ -146,10 +147,7 @@ pub fn package_record_from_tar_bz2_reader(reader: impl Read) -> std::io::Result<
             return package_record_from_index_json(&bytes, &mut entry);
         }
     }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        "No index.json found",
-    ))
+    Err(std::io::Error::other("No index.json found"))
 }
 
 /// Extract the package record from a `.conda` package file.
@@ -157,7 +155,7 @@ pub fn package_record_from_tar_bz2_reader(reader: impl Read) -> std::io::Result<
 /// and extract the package record from it.
 pub fn package_record_from_conda(file: &Path) -> std::io::Result<PackageRecord> {
     let reader = fs::File::open(file)?;
-    package_record_from_conda_reader(reader)
+    package_record_from_conda_reader(BufReader::new(reader))
 }
 
 fn read_index_json_from_archive(
@@ -181,16 +179,13 @@ fn read_index_json_from_archive(
         return Ok(index_json);
     }
 
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        "No index.json found",
-    ))
+    Err(std::io::Error::other("No index.json found"))
 }
 
 /// Extract the package record from a `.conda` package file content.
 /// This function will look for the `info/index.json` file in the conda package
 /// and extract the package record from it.
-pub fn package_record_from_conda_reader(reader: impl Read) -> std::io::Result<PackageRecord> {
+pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result<PackageRecord> {
     let bytes = reader.bytes().collect::<Result<Vec<u8>, _>>()?;
     let reader = Cursor::new(&bytes);
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");

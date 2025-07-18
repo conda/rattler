@@ -1,11 +1,12 @@
 //! Functionality for writing conda packages
-use std::fs::{self, File};
-use std::io::{self, Read, Seek, Write};
-use std::path::{Path, PathBuf};
+use std::{
+    fs::{self, File},
+    io::{self, Read, Seek, Write},
+    path::{Path, PathBuf},
+};
 
 use chrono::{Datelike, Timelike};
-use rattler_conda_types::compression_level::CompressionLevel;
-use rattler_conda_types::package::PackageMetadata;
+use rattler_conda_types::{compression_level::CompressionLevel, package::PackageMetadata};
 use zip::DateTime;
 
 /// Trait for progress bars
@@ -66,8 +67,9 @@ impl Read for ProgressBarReader {
     }
 }
 
-/// a function that sorts paths into two iterators, one that starts with `info/` and one that does not
-/// both iterators are sorted alphabetically for reproducibility
+/// a function that sorts paths into two iterators, one that starts with `info/`
+/// and one that does not both iterators are sorted alphabetically for
+/// reproducibility
 fn sort_paths<'a>(paths: &'a [PathBuf], base_path: &'a Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let info = Path::new("info/");
     let (mut info_paths, mut other_paths): (Vec<_>, Vec<_>) = paths
@@ -90,20 +92,24 @@ fn total_size(base_path: &Path, paths: &[PathBuf]) -> u64 {
 }
 
 /// Write the contents of a list of paths to a tar.bz2 package
-/// The paths are sorted alphabetically, and paths beginning with `info/` come first.
+/// The paths are sorted alphabetically, and paths beginning with `info/` come
+/// first.
 ///
 /// # Arguments
 ///
 /// * `writer` - the writer to write the package to
-/// * `base_path` - the base path of the package. All paths in `paths` are relative to this path
+/// * `base_path` - the base path of the package. All paths in `paths` are
+///   relative to this path
 /// * `paths` - a list of paths to include in the package
-/// * `compression_level` - the compression level to use for the inner bzip2 encoded files
-/// * `timestamp` - optional a timestamp to use for all archive files (useful for reproducible builds)
+/// * `compression_level` - the compression level to use for the inner bzip2
+///   encoded files
+/// * `timestamp` - optional a timestamp to use for all archive files (useful
+///   for reproducible builds)
 ///
 /// # Errors
 ///
-/// This function will return an error if the writer returns an error, or if the paths are not
-/// relative to the base path.
+/// This function will return an error if the writer returns an error, or if the
+/// paths are not relative to the base path.
 ///
 /// # Examples
 ///
@@ -211,25 +217,29 @@ fn write_zst_archive<W: Write>(
 }
 
 /// Write a `.conda` package to a writer
-/// A `.conda` package is an outer uncompressed zip archive that contains a `metadata.json` file, a
-/// `pkg-archive.tar.zst` file, and a `info-archive.tar.zst` file.
-/// The inner zstd encoded files are sorted alphabetically. The `info-archive.tar.zst` file comes last in
-/// the outer zip archive.
+/// A `.conda` package is an outer uncompressed zip archive that contains a
+/// `metadata.json` file, a `pkg-archive.tar.zst` file, and a
+/// `info-archive.tar.zst` file. The inner zstd encoded files are sorted
+/// alphabetically. The `info-archive.tar.zst` file comes last in the outer zip
+/// archive.
 ///
 /// # Arguments
 ///
 /// * `writer` - the writer to write the package to
-/// * `base_path` - the base path of the package. All paths in `paths` are relative to this path
+/// * `base_path` - the base path of the package. All paths in `paths` are
+///   relative to this path
 /// * `paths` - a list of paths to include in the package
-/// * `compression_level` - the compression level to use for the inner zstd encoded files
-/// * `compression_num_threads` - the number of threads to use for zstd compression (defaults to
-///    the number of CPU cores if `None`)
-/// * `timestamp` - optional a timestamp to use for all archive files (useful for reproducible builds)
+/// * `compression_level` - the compression level to use for the inner zstd
+///   encoded files
+/// * `compression_num_threads` - the number of threads to use for zstd
+///   compression (defaults to the number of CPU cores if `None`)
+/// * `timestamp` - optional a timestamp to use for all archive files (useful
+///   for reproducible builds)
 ///
 /// # Errors
 ///
-/// This function will return an error if the writer returns an error, or if the paths are not
-/// relative to the base path.
+/// This function will return an error if the writer returns an error, or if the
+/// paths are not relative to the base path.
 #[allow(clippy::too_many_arguments)]
 pub fn write_conda_package<W: Write + Seek>(
     writer: W,

@@ -14,7 +14,7 @@ license = "BSD-3-Clause"
 [feature.build.dependencies]
 maturin = "~=1.9.0"
 pip = "~=23.2.1"
-rust = "~=1.85.0"
+rust = "~=1.88.0"
 
 [feature.build.tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
@@ -37,7 +37,7 @@ pytest-xprocess = ">=1.0.2,<2"
 # used in examples
 typer = "*"
 # for rust-analyzer
-rust-src = "~=1.85.0"
+rust-src = "~=1.88.0"
 
 [feature.test.pypi-dependencies]
 types-networkx = "*"

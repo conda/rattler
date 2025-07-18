@@ -284,7 +284,7 @@ impl RepoDataQuery {
                     }
 
                     // Add the records to the result
-                    if records.len() > 0 {
+                    if !records.is_empty() {
                         let result = &mut result[result_idx];
 
                         for record in records.iter() {
