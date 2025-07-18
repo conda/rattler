@@ -76,7 +76,7 @@ pub enum PyRattlerError {
         #[from] rattler_conda_types::ParseExplicitEnvironmentSpecError,
     ),
     #[error(transparent)]
-    ValidatePackageRecordsError(#[from] ValidatePackageRecordsError),
+    ValidatePackageRecordsError(#[from] Box<ValidatePackageRecordsError>),
     #[error(transparent)]
     AuthenticationStorageError(#[from] AuthenticationStorageError),
     #[error(transparent)]
