@@ -66,7 +66,7 @@ pub fn package_record_from_index_json<T: Read>(
         arch: index.arch,
         platform: index.platform,
         depends: index.depends,
-        extra_depends: std::collections::BTreeMap::new(),
+        extra_depends: index.extras,
         constrains: index.constrains,
         track_features: index.track_features,
         features: index.features,
