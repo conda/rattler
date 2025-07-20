@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, path::Path};
+use std::{collections::{BTreeMap, BTreeSet}, path::Path};
 
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
@@ -34,6 +34,10 @@ pub struct IndexJson {
     /// The dependencies of the package
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub depends: Vec<String>,
+
+    /// Extra dependency groups that can be selected using `foobar[extras=["scientific"]]`
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extras: BTreeMap<String, Vec<String>>,
 
     /// Features are a deprecated way to specify different feature sets for the
     /// conda solver. This is not supported anymore and should not be used.
