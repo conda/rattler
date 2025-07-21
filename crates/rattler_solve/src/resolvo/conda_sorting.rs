@@ -192,7 +192,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             };
 
             for requirement in &known.requirements {
-                let version_set_id = match requirement {
+                let version_set_id = match requirement.requirement {
                     // Ignore union requirements, these do not occur in the conda ecosystem
                     // currently
                     Requirement::Union(_) => {
@@ -206,7 +206,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 // single package multiple times.
                 let dependency_name = self
                     .pool()
-                    .resolve_version_set_package_name(*version_set_id);
+                    .resolve_version_set_package_name(version_set_id);
 
                 // Check how often we have seen this dependency name
                 let name_count = match name_count.entry(dependency_name) {
@@ -221,9 +221,9 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 };
 
                 match id_and_deps.entry((solvable_id, dependency_name)) {
-                    Entry::Occupied(mut entry) => entry.get_mut().push(*version_set_id),
+                    Entry::Occupied(mut entry) => entry.get_mut().push(version_set_id),
                     Entry::Vacant(entry) => {
-                        entry.insert(vec![*version_set_id]);
+                        entry.insert(vec![version_set_id]);
                         *name_count += 1;
                     }
                 }

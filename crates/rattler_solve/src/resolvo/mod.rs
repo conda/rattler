@@ -18,10 +18,7 @@ use rattler_conda_types::{
     ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult, StringMatcher, VersionSpec,
 };
 use resolvo::{
-    utils::{Pool, VersionSet},
-    Candidates, Dependencies, DependencyProvider, HintDependenciesAvailable, Interner,
-    KnownDependencies, NameId, Problem, Requirement, SolvableId, Solver as LibSolvRsSolver,
-    SolverCache, StringId, UnsolvableOrCancelled, VersionSetId, VersionSetUnionId,
+    utils::{Pool, VersionSet}, Candidates, ConditionalRequirement, Dependencies, DependencyProvider, HintDependenciesAvailable, Interner, KnownDependencies, NameId, Problem, Requirement, SolvableId, Solver as LibSolvRsSolver, SolverCache, StringId, UnsolvableOrCancelled, VersionSetId, VersionSetUnionId
 };
 
 use crate::{
@@ -588,6 +585,10 @@ impl Interner for CondaDependencyProvider<'_> {
     fn solvable_name(&self, solvable: SolvableId) -> NameId {
         self.pool.resolve_solvable(solvable).name
     }
+
+    fn resolve_condition(&self, _condition: resolvo::ConditionId) -> resolvo::Condition {
+        panic!("CondaDependencyProvider does not support conditions, use `rattler_solve::resolvo::Solver` instead.");
+    }
 }
 
 impl DependencyProvider for CondaDependencyProvider<'_> {
@@ -662,7 +663,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
                     dependencies
                         .requirements
-                        .extend(version_set_id.into_iter().map(Requirement::from));
+                        .extend(version_set_id.into_iter().map(Requirement::from).map(ConditionalRequirement::from));
                 }
 
                 // Add a dependency back to the base package with exact version
@@ -709,7 +710,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
                 dependencies
                     .requirements
-                    .extend(version_set_id.into_iter().map(Requirement::from));
+                    .extend(version_set_id.into_iter().map(Requirement::from).map(ConditionalRequirement::from));
             }
 
             for constrains in record.package_record.constrains.iter() {
@@ -870,9 +871,10 @@ impl super::SolverImpl for Solver {
             reqs
         });
 
-        let all_requirements: Vec<Requirement> = virtual_package_requirements
+        let all_requirements: Vec<ConditionalRequirement> = virtual_package_requirements
             .chain(root_requirements)
             .map(Requirement::from)
+            .map(ConditionalRequirement::from)
             .collect();
 
         let root_constraints = task
