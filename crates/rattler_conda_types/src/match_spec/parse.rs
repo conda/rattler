@@ -695,7 +695,7 @@ fn matchspec_parser(
         match_spec.version = match_spec.version.or(version);
         match_spec.build = match_spec.build.or(build);
     }
-    
+
     // Step 8. Add the condition if present
     if let Some(condition) = if_clause {
         match_spec.condition = Some(condition.to_owned());

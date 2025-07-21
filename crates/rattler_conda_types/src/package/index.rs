@@ -1,4 +1,7 @@
-use std::{collections::{BTreeMap, BTreeSet}, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+};
 
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};

@@ -1335,7 +1335,9 @@ mod resolvo {
 
     #[test]
     fn test_solve_conditional_dependencies() {
-        use rattler_conda_types::{MatchSpec, PackageRecord, RepoData, RepoDataRecord, Version, VersionWithSource};
+        use rattler_conda_types::{
+            MatchSpec, PackageRecord, RepoData, RepoDataRecord, Version, VersionWithSource,
+        };
         use rattler_solve::{SolverImpl, SolverTask};
         use std::collections::BTreeMap;
 
@@ -1348,49 +1350,22 @@ mod resolvo {
             "h123456_0",
             0,
         );
-        
-        let python39_pkg = installed_package(
-            "test",
-            "linux-64",
-            "python",
-            "3.9.0",
-            "h123456_0",
-            0,
-        );
-        
-        let python38_pkg = installed_package(
-            "test",
-            "linux-64",
-            "python",
-            "3.8.0",
-            "h123456_0",
-            0,
-        );
 
-        let numpy_pkg = installed_package(
-            "test",
-            "linux-64",
-            "numpy",
-            "1.21.0",
-            "py39h123456_0",
-            0,
-        );
+        let python39_pkg = installed_package("test", "linux-64", "python", "3.9.0", "h123456_0", 0);
 
-        let scipy_pkg = installed_package(
-            "test",
-            "linux-64",
-            "scipy",
-            "1.7.0",
-            "py39h123456_0",
-            0,
-        );
+        let python38_pkg = installed_package("test", "linux-64", "python", "3.8.0", "h123456_0", 0);
+
+        let numpy_pkg =
+            installed_package("test", "linux-64", "numpy", "1.21.0", "py39h123456_0", 0);
+
+        let scipy_pkg = installed_package("test", "linux-64", "scipy", "1.7.0", "py39h123456_0", 0);
 
         // Modify the conditional package to have conditional dependencies
         let mut conditional_pkg_modified = conditional_pkg.clone();
         conditional_pkg_modified.package_record.depends = vec![
             "python >=3.8".to_string(),
-            "numpy; if python >=3.9".to_string(),  // Conditional dependency
-            "scipy; if __unix".to_string(),         // Virtual package condition
+            "numpy; if python >=3.9".to_string(), // Conditional dependency
+            "scipy; if __unix".to_string(),       // Virtual package condition
         ];
 
         // Test 1: Solve with Python 3.9 - should include numpy due to condition
@@ -1421,21 +1396,23 @@ mod resolvo {
         // Check if our conditional dependency parsing worked
         match result {
             Ok(solution) => {
-                let package_names: Vec<_> = solution.records.iter()
+                let package_names: Vec<_> = solution
+                    .records
+                    .iter()
                     .map(|r| r.package_record.name.as_normalized())
                     .collect();
-                
+
                 // At minimum, should include conditional-pkg and python
                 assert!(package_names.contains(&"conditional-pkg"));
                 assert!(package_names.contains(&"python"));
-                
+
                 // If conditional dependencies are working, numpy should be included due to python>=3.9 condition
                 if package_names.contains(&"numpy") {
                     println!("✓ numpy was included due to python>=3.9 condition");
                 } else {
                     println!("✗ numpy was NOT included - conditional dependencies may not be working yet");
                 }
-                
+
                 // If conditional dependencies are working, scipy should be included due to __unix condition
                 if package_names.contains(&"scipy") {
                     println!("✓ scipy was included due to __unix condition");
@@ -1446,7 +1423,9 @@ mod resolvo {
             Err(e) => {
                 // If solving fails, it might be because the conditional dependency implementation is not complete
                 println!("Solving failed: {:?}", e);
-                println!("This is expected if conditional dependencies are not fully implemented yet");
+                println!(
+                    "This is expected if conditional dependencies are not fully implemented yet"
+                );
             }
         }
 
@@ -1477,21 +1456,25 @@ mod resolvo {
 
         match result {
             Ok(solution) => {
-                let package_names: Vec<_> = solution.records.iter()
+                let package_names: Vec<_> = solution
+                    .records
+                    .iter()
                     .map(|r| r.package_record.name.as_normalized())
                     .collect();
-                
+
                 // Should include conditional-pkg and python
                 assert!(package_names.contains(&"conditional-pkg"));
                 assert!(package_names.contains(&"python"));
-                
+
                 // If conditional dependencies are working, numpy should NOT be included due to python<3.9 condition
                 if !package_names.contains(&"numpy") {
                     println!("✓ numpy was NOT included due to python<3.9 condition");
                 } else {
-                    println!("✗ numpy was included - conditional dependencies may not be working yet");
+                    println!(
+                        "✗ numpy was included - conditional dependencies may not be working yet"
+                    );
                 }
-                
+
                 // If conditional dependencies are working, scipy should be included due to __unix condition
                 if package_names.contains(&"scipy") {
                     println!("✓ scipy was included due to __unix condition");
@@ -1501,7 +1484,9 @@ mod resolvo {
             }
             Err(e) => {
                 println!("Solving failed: {:?}", e);
-                println!("This is expected if conditional dependencies are not fully implemented yet");
+                println!(
+                    "This is expected if conditional dependencies are not fully implemented yet"
+                );
             }
         }
     }
