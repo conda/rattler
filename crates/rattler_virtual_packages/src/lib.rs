@@ -607,7 +607,7 @@ impl Archspec {
             Platform::OsxArm64 => "m1",
 
             // Otherwise, we assume that the architecture is unknown.
-            _ => return None
+            _ => return None,
         };
 
         Some(Self::from_name(archspec_name))
