@@ -606,6 +606,9 @@ impl Archspec {
 
             // The first every Apple Silicon Macs are based on m1.
             Platform::OsxArm64 => "m1",
+
+            // Otherwise, we assume that the architecture is unknown.
+            _ => return None,
         };
 
         Some(Self::from_name(archspec_name))
