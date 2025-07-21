@@ -1,14 +1,19 @@
 //! Platform-specific code.
+use std::{
+    cmp::Ordering,
+    fmt,
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
+
 use itertools::Itertools;
 use serde::{Deserializer, Serializer};
-use std::cmp::Ordering;
-use std::fmt::Display;
-use std::{fmt, fmt::Formatter, str::FromStr};
 use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
 
 /// A platform supported by Conda.
 #[allow(missing_docs)]
+#[non_exhaustive] // The `Platform` enum is non-exhaustive to allow for future extensions without breaking changes.
 #[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Platform {
     NoArch,
@@ -53,6 +58,7 @@ impl Ord for Platform {
 
 /// Known architectures supported by Conda.
 #[allow(missing_docs)]
+#[non_exhaustive] // The `Arch` enum is non-exhaustive to allow for future extensions without breaking changes.
 #[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Arch {
     X86,
@@ -324,7 +330,8 @@ impl From<Platform> for &'static str {
 impl Platform {
     /// Return the arch string for the platform
     /// The arch is usually the part after the `-` of the platform string.
-    /// Only for 32 and 64 bit platforms the arch is `x86` and `x86_64` respectively.
+    /// Only for 32 and 64 bit platforms the arch is `x86` and `x86_64`
+    /// respectively.
     pub fn arch(&self) -> Option<Arch> {
         match self {
             Platform::Unknown | Platform::NoArch => None,
