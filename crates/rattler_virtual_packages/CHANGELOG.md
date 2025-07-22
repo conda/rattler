@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.19...rattler_virtual_packages-v2.1.0) - 2025-07-21
+
+### Added
+
+- make `Platform` `non_exhaustive` ([#1539](https://github.com/conda/rattler/pull/1539))
+- add support for loong64 platform to rattler ([#1534](https://github.com/conda/rattler/pull/1534))
+
 ## [2.0.19](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.18...rattler_virtual_packages-v2.0.19) - 2025-07-14
 
 ### Other

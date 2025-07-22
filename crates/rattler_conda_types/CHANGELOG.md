@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.35.6...rattler_conda_types-v0.36.0) - 2025-07-21
+
+### Added
+
+- make `Platform` `non_exhaustive` ([#1539](https://github.com/conda/rattler/pull/1539))
+- add support for loong64 platform to rattler ([#1534](https://github.com/conda/rattler/pull/1534))
+
+### Other
+
+- bump rust 1.88.0 ([#1536](https://github.com/conda/rattler/pull/1536))
+
 ## [0.35.6](https://github.com/conda/rattler/compare/rattler_conda_types-v0.35.5...rattler_conda_types-v0.35.6) - 2025-07-14
 
 ### Fixed

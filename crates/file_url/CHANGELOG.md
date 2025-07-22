@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6](https://github.com/conda/rattler/compare/file_url-v0.2.5...file_url-v0.2.6) - 2025-07-21
+
+### Other
+
+- bump rust 1.88.0 ([#1536](https://github.com/conda/rattler/pull/1536))
+
 ## [0.2.5](https://github.com/conda/rattler/compare/file_url-v0.2.4...file_url-v0.2.5) - 2025-05-16
 
 ### Other
