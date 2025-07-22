@@ -553,7 +553,7 @@ fn parse_record_raw<'i>(
             &channel
                 .base_url
                 .url()
-                .join(&format!("{}/", &package_record.subdir))
+                .join(&format!("{subdir}/"))
                 .expect("failed determine repo_base_url"),
             base_url,
             filename.filename,
