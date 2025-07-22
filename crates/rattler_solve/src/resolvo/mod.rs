@@ -14,14 +14,16 @@ use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::{
     package::ArchiveType, version_spec::EqualityOperator, BuildNumberSpec, GenericVirtualPackage,
-    MatchSpec, Matches, NamelessMatchSpec, OrdOperator, PackageName, PackageRecord,
-    ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult, StringMatcher, VersionSpec,
+    MatchSpec, MatchSpecCondition, Matches, NamelessMatchSpec, OrdOperator, PackageName,
+    PackageRecord, ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult,
+    StringMatcher, VersionSpec,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
-    Candidates, Dependencies, DependencyProvider, HintDependenciesAvailable, Interner,
-    KnownDependencies, NameId, Problem, Requirement, SolvableId, Solver as LibSolvRsSolver,
-    SolverCache, StringId, UnsolvableOrCancelled, VersionSetId, VersionSetUnionId,
+    Candidates, Condition, ConditionId, ConditionalRequirement, Dependencies, DependencyProvider,
+    HintDependenciesAvailable, Interner, KnownDependencies, NameId, Problem, Requirement,
+    SolvableId, Solver as LibSolvRsSolver, SolverCache, StringId, UnsolvableOrCancelled,
+    VersionSetId, VersionSetUnionId,
 };
 
 use crate::{
@@ -255,7 +257,7 @@ pub struct CondaDependencyProvider<'a> {
     matchspec_to_highest_version:
         RefCell<HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>>,
 
-    parse_match_spec_cache: RefCell<HashMap<String, Vec<VersionSetId>>>,
+    parse_match_spec_cache: RefCell<HashMap<String, (Vec<VersionSetId>, Option<ConditionId>)>>,
 
     stop_time: Option<std::time::SystemTime>,
 
@@ -588,6 +590,10 @@ impl Interner for CondaDependencyProvider<'_> {
     fn solvable_name(&self, solvable: SolvableId) -> NameId {
         self.pool.resolve_solvable(solvable).name
     }
+
+    fn resolve_condition(&self, condition: ConditionId) -> Condition {
+        self.pool.resolve_condition(condition).clone()
+    }
 }
 
 impl DependencyProvider for CondaDependencyProvider<'_> {
@@ -664,9 +670,13 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                         }
                     };
 
-                    dependencies
-                        .requirements
-                        .extend(version_set_id.into_iter().map(Requirement::from));
+                    let (version_set_id, condition) = version_set_id;
+                    for id in version_set_id {
+                        dependencies.requirements.push(ConditionalRequirement {
+                            requirement: Requirement::Single(id),
+                            condition,
+                        });
+                    }
                 }
 
                 // Add a dependency back to the base package with exact version
@@ -711,9 +721,13 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                         }
                     };
 
-                dependencies
-                    .requirements
-                    .extend(version_set_id.into_iter().map(Requirement::from));
+                let (version_set_id, condition) = version_set_id;
+                for id in version_set_id {
+                    dependencies.requirements.push(ConditionalRequirement {
+                        requirement: Requirement::Single(id),
+                        condition,
+                    });
+                }
             }
 
             for constrains in record.package_record.constrains.iter() {
@@ -728,7 +742,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                             return Dependencies::Unknown(reason);
                         }
                     };
-                for version_set_id in version_set_id {
+                for version_set_id in version_set_id.0 {
                     dependencies.constrains.push(version_set_id);
                 }
             }
@@ -874,9 +888,9 @@ impl super::SolverImpl for Solver {
             reqs
         });
 
-        let all_requirements: Vec<Requirement> = virtual_package_requirements
+        let all_requirements: Vec<ConditionalRequirement> = virtual_package_requirements
             .chain(root_requirements)
-            .map(Requirement::from)
+            .map(ConditionalRequirement::from)
             .collect();
 
         let root_constraints = task
@@ -930,16 +944,69 @@ impl super::SolverImpl for Solver {
     }
 }
 
+fn parse_condition(
+    condition: MatchSpecCondition,
+    pool: &Pool<SolverMatchSpec<'_>, NameType>,
+    parse_match_spec_cache: &mut HashMap<String, (Vec<VersionSetId>, Option<ConditionId>)>,
+) -> ConditionId {
+    println!("Parsing condition: {condition:?}");
+    match condition {
+        MatchSpecCondition::MatchSpec(match_spec) => {
+            println!("Parsing match spec for condition: {match_spec:?}");
+            // Parse the match spec and intern it
+            let version_set_id =
+                parse_match_spec(pool, &match_spec.to_string(), parse_match_spec_cache).unwrap();
+
+            // Intern the match spec condition
+            // TODO what do we do if it is more than one?
+            let condition = resolvo::Condition::Requirement(version_set_id.0[0]);
+            pool.intern_condition(condition)
+        }
+        MatchSpecCondition::And(left, right) => {
+            let condition_id_lhs = parse_condition(*left, pool, parse_match_spec_cache);
+            let condition_id_rhs = parse_condition(*right, pool, parse_match_spec_cache);
+            // Intern the AND condition
+            let condition = resolvo::Condition::Binary(
+                resolvo::LogicalOperator::And,
+                condition_id_lhs,
+                condition_id_rhs,
+            );
+            pool.intern_condition(condition)
+        }
+        MatchSpecCondition::Or(left, right) => {
+            let condition_id_lhs = parse_condition(*left, pool, parse_match_spec_cache);
+            let condition_id_rhs = parse_condition(*right, pool, parse_match_spec_cache);
+            // Intern the OR condition
+            let condition = resolvo::Condition::Binary(
+                resolvo::LogicalOperator::Or,
+                condition_id_lhs,
+                condition_id_rhs,
+            );
+            pool.intern_condition(condition)
+        }
+    }
+}
+
 fn parse_match_spec(
     pool: &Pool<SolverMatchSpec<'_>, NameType>,
     spec_str: &str,
-    parse_match_spec_cache: &mut HashMap<String, Vec<VersionSetId>>,
-) -> Result<Vec<VersionSetId>, ParseMatchSpecError> {
-    if let Some(spec_id) = parse_match_spec_cache.get(spec_str) {
-        return Ok(spec_id.clone());
+    parse_match_spec_cache: &mut HashMap<String, (Vec<VersionSetId>, Option<ConditionId>)>,
+) -> Result<(Vec<VersionSetId>, Option<ConditionId>), ParseMatchSpecError> {
+    println!("Checking in cache for match spec: {spec_str}");
+    if let Some(cached) = parse_match_spec_cache.get(spec_str) {
+        return Ok(cached.clone());
     }
 
     let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient)?;
+    let condition = match_spec.condition.clone();
+
+    let condition_id = if let Some(condition) = condition {
+        let condition_id = parse_condition(condition, pool, parse_match_spec_cache);
+        Some(condition_id)
+    } else {
+        None
+    };
+
     let (name, spec) = match_spec.into_nameless();
 
     let mut version_set_ids = vec![];
@@ -971,7 +1038,10 @@ fn parse_match_spec(
         let version_set_id = pool.intern_version_set(dependency_name, spec.into());
         version_set_ids.push(version_set_id);
     }
-    parse_match_spec_cache.insert(spec_str.to_string(), version_set_ids.clone());
+    parse_match_spec_cache.insert(
+        spec_str.to_string(),
+        (version_set_ids.clone(), condition_id),
+    );
 
-    Ok(version_set_ids)
+    Ok((version_set_ids, condition_id))
 }

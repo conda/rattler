@@ -1,3 +1,4 @@
+use crate::match_spec::condition::MatchSpecCondition;
 use crate::package::ArchiveIdentifier;
 use crate::{
     build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
@@ -17,6 +18,7 @@ use url::Url;
 use crate::Channel;
 use crate::ChannelConfig;
 
+pub mod condition;
 pub mod matcher;
 pub mod parse;
 
@@ -157,6 +159,8 @@ pub struct MatchSpec {
     pub url: Option<Url>,
     /// The license of the package
     pub license: Option<String>,
+    /// The condition under which this match spec applies.
+    pub condition: Option<MatchSpecCondition>,
 }
 
 impl Display for MatchSpec {
@@ -223,6 +227,10 @@ impl Display for MatchSpec {
             write!(f, "[{}]", keys.join(", "))?;
         }
 
+        if let Some(condition) = &self.condition {
+            write!(f, "; if {condition}")?;
+        }
+
         Ok(())
     }
 }
@@ -273,7 +281,7 @@ impl From<PackageName> for MatchSpec {
 /// where the package name is already known (e.g. `foo = "3.4.1 *cuda"`)
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Default, Clone, Serialize, Eq, PartialEq, Hash)]
 pub struct NamelessMatchSpec {
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
     pub version: Option<VersionSpec>,
@@ -329,6 +337,10 @@ impl Display for NamelessMatchSpec {
             write!(f, "[{}]", keys.join(", "))?;
         }
 
+        // if let Some(condition) = &self.condition {
+        //     write!(f, "; if {condition}")?;
+        // }
+
         Ok(())
     }
 }
@@ -348,6 +360,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            // condition: spec.condition,
         }
     }
 }
@@ -369,6 +382,7 @@ impl MatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            condition: None,
         }
     }
 }
