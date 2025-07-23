@@ -1,6 +1,6 @@
 # Rattler (monorepo) Architecture
 
-Rattler is a suite of Rust crates providing Conda functionality (indexing, solving, installing, etc.) without Python.
+Rattler is a suite of Rust crates providing Conda functionality (indexing, solving, installing, etc.).
 Its design reflects clear separation of concerns: each crate has a focused responsibility with well-defined interfaces.
 This modularity enables reuse (e.g. Python/JS bindings reuse core crates), and isolates dependencies (e.g. a solve engine crate doesn’t depend on networking).
 High-level tools (like the `rattler` CLI or *pixi*) orchestrate these crates: for example, solving and then installing an environment uses the `rattler_solve`, `rattler_index`, and `rattler` crates together.
