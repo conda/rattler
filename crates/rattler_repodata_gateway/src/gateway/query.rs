@@ -272,7 +272,7 @@ impl RepoDataQuery {
                                 }
                             }
 
-                            for (_, dependencies) in record.package_record.extra_depends.iter() {
+                            for (_, dependencies) in record.package_record.experimental_extra_depends.iter() {
                                 for dependency in dependencies {
                                     let dependency_name = package_name_from_match_spec_str(dependency);
                                     if seen.insert(dependency_name.clone()) {

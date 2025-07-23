@@ -85,7 +85,7 @@ pub async fn simple_solve(
                 platform: None,
                 depends: pkg.depends.unwrap_or_default(),
                 subdir: pkg.subdir.unwrap_or_else(|| "unknown".to_string()),
-                extra_depends: BTreeMap::new(),
+                experimental_extra_depends: BTreeMap::new(),
                 constrains: vec![],
                 track_features: vec![],
                 features: None,

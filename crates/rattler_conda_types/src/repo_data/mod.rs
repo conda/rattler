@@ -121,7 +121,8 @@ pub struct PackageRecord {
     /// are only required if certain features are enabled or if certain
     /// conditions are met.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub extra_depends: BTreeMap<String, Vec<String>>,
+    #[serde(rename = "extra_depends")]
+    pub experimental_extra_depends: BTreeMap<String, Vec<String>>,
 
     /// Features are a deprecated way to specify different feature sets for the
     /// conda solver. This is not supported anymore and should not be used.
@@ -335,7 +336,7 @@ impl PackageRecord {
             noarch: NoArchType::default(),
             platform: None,
             python_site_packages_path: None,
-            extra_depends: BTreeMap::new(),
+            experimental_extra_depends: BTreeMap::new(),
             sha256: None,
             size: None,
             subdir: Platform::current().to_string(),
@@ -516,7 +517,7 @@ impl PackageRecord {
             noarch: index.noarch,
             platform: index.platform,
             python_site_packages_path: index.python_site_packages_path,
-            extra_depends: index.experimental_extra_depends,
+            experimental_extra_depends: index.experimental_extra_depends,
             sha256,
             size,
             subdir,
