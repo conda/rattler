@@ -273,8 +273,18 @@ pub struct Bash;
 impl Shell for Bash {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
         validate_env_var_name(env_var)?;
-        let quoted_value = shlex::try_quote(value).unwrap_or_default();
-        Ok(writeln!(f, "export {env_var}={quoted_value}")?)
+
+        // Check if the value contains variable references ($)
+        // If so, use double quotes to allow variable expansion, otherwise use shlex quoting
+        if value.contains('$') {
+            // Use double quotes to allow variable expansion, but escape any existing double quotes
+            let escaped_value = value.replace('"', "\\\"");
+            Ok(writeln!(f, "export {env_var}=\"{escaped_value}\"")?)
+        } else {
+            // Use shlex quoting for values that don't need variable expansion
+            let quoted_value = shlex::try_quote(value).unwrap_or_default();
+            Ok(writeln!(f, "export {env_var}={quoted_value}")?)
+        }
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult {
