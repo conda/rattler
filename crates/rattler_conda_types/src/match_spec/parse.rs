@@ -726,8 +726,10 @@ pub(crate) fn matchspec_parser(
     }
 
     if let Some(condition) = condition {
-        let (remainder, condition) = parse_condition(condition)
-            .map_err(|_| ParseMatchSpecError::InvalidBracketKey("condition".to_string()))?;
+        // TODO fix error types!
+        let (remainder, condition) = parse_condition(condition).map_err(|e| {
+            ParseMatchSpecError::InvalidBracketKey(format!("invalid condition: {e}"))
+        })?;
         if remainder.trim().is_empty().not() {
             return Err(ParseMatchSpecError::InvalidBracketKey(
                 "condition".to_string(),

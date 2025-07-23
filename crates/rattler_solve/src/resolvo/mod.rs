@@ -244,6 +244,7 @@ impl From<&str> for NameType {
     }
 }
 
+type MatchSpecParseCache = HashMap<String, (Vec<VersionSetId>, Option<ConditionId>)>;
 /// An implement of [`resolvo::DependencyProvider`] that implements the
 /// ecosystem behavior for conda. This allows resolvo to solve for conda
 /// packages.
@@ -257,7 +258,7 @@ pub struct CondaDependencyProvider<'a> {
     matchspec_to_highest_version:
         RefCell<HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>>,
 
-    parse_match_spec_cache: RefCell<HashMap<String, (Vec<VersionSetId>, Option<ConditionId>)>>,
+    parse_match_spec_cache: RefCell<MatchSpecParseCache>,
 
     stop_time: Option<std::time::SystemTime>,
 
@@ -947,7 +948,7 @@ impl super::SolverImpl for Solver {
 fn parse_condition(
     condition: MatchSpecCondition,
     pool: &Pool<SolverMatchSpec<'_>, NameType>,
-    parse_match_spec_cache: &mut HashMap<String, (Vec<VersionSetId>, Option<ConditionId>)>,
+    parse_match_spec_cache: &mut MatchSpecParseCache,
 ) -> ConditionId {
     println!("Parsing condition: {condition:?}");
     match condition {
@@ -990,7 +991,7 @@ fn parse_condition(
 fn parse_match_spec(
     pool: &Pool<SolverMatchSpec<'_>, NameType>,
     spec_str: &str,
-    parse_match_spec_cache: &mut HashMap<String, (Vec<VersionSetId>, Option<ConditionId>)>,
+    parse_match_spec_cache: &mut MatchSpecParseCache,
 ) -> Result<(Vec<VersionSetId>, Option<ConditionId>), ParseMatchSpecError> {
     println!("Checking in cache for match spec: {spec_str}");
     if let Some(cached) = parse_match_spec_cache.get(spec_str) {

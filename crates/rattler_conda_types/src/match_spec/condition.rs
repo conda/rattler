@@ -31,9 +31,9 @@ pub enum MatchSpecCondition {
 impl Display for MatchSpecCondition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MatchSpecCondition::MatchSpec(ms) => write!(f, "{}", ms),
-            MatchSpecCondition::And(lhs, rhs) => write!(f, "({} and {})", lhs, rhs),
-            MatchSpecCondition::Or(lhs, rhs) => write!(f, "({} or {})", lhs, rhs),
+            MatchSpecCondition::MatchSpec(ms) => write!(f, "{ms}"),
+            MatchSpecCondition::And(lhs, rhs) => write!(f, "({lhs} and {rhs})"),
+            MatchSpecCondition::Or(lhs, rhs) => write!(f, "({lhs} or {rhs})"),
         }
     }
 }
