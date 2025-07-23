@@ -7,7 +7,7 @@ High-level tools (like the `rattler` CLI or *pixi*) orchestrate these crates: fo
 The **“Components”** section of the README lists all crates and their roles, guiding new contributors through the architecture.
 Overall, Rattler’s architecture emphasizes **simplicity and orthogonality**: each crate does one job (e.g. *“download/stream packages”* or *“activate environments”*) so that the system is easier to understand, test, and extend.
 
-* **Core idea:** Provide Conda-like workflows from Rust (and other languages) with a clean API.
+* **Core idea:** Provide strong types, memory efficient data-structures and performant algorithms to interact with the conda package ecosystem from Rust (and other languages) with a clean API.
   Rattler is *not* a monolithic tool but a library, so it splits functionality into crates that can be independently used or replaced.
 * **High-level flow:** An end-to-end action (e.g. “solve and install Python 3.12”) involves several crates: network fetch (`rattler_networking`), read channel index (`rattler_repodata_gateway`), solve constraints (`rattler_solve`), download packages (`rattler_package_streaming`), cache files (`rattler_cache`), and finally set up the environment (`rattler_shell`, `rattler_pty`, etc.) under the orchestration of the main `rattler` crate.
 * **Modularity:** By isolating things like **networking**, **solving**, and **package handling**, Rattler allows alternative implementations (e.g. one could plug in a different solver backend or a mock network layer) and limits the scope of each crate.
