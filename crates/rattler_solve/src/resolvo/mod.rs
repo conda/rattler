@@ -250,7 +250,6 @@ impl From<&PackageName> for NameType {
 pub struct CondaDependencyProvider<'a> {
     /// The pool that deduplicates data used by the provider.
     pub pool: Pool<SolverMatchSpec<'a>, NameType>,
-    conditions: RefCell<Vec<Condition>>,
     name_to_condition: RefCell<HashMap<NameId, ConditionId>>,
 
     /// Holds all the cached candidates for each package name.
@@ -470,7 +469,6 @@ impl<'a> CondaDependencyProvider<'a> {
                                 pool.intern_string("due to strict channel priority not using from an unknown channel".to_string()),
                             ));
                         }
-                        continue;
                     }
                 } else {
                     package_name_found_in_channel.insert(
@@ -515,7 +513,6 @@ impl<'a> CondaDependencyProvider<'a> {
 
         Ok(Self {
             pool,
-            conditions: RefCell::default(),
             name_to_condition: RefCell::default(),
             records,
             matchspec_to_highest_version: RefCell::default(),
@@ -533,13 +530,6 @@ impl<'a> CondaDependencyProvider<'a> {
             .map(|n| self.pool.intern_package_name(NameType::Base(n.to_owned())))
     }
 
-    fn alloc_condition(&self, condition: Condition) -> ConditionId {
-        let mut conditions = self.conditions.borrow_mut();
-        let id = conditions.len();
-        conditions.push(condition);
-        ConditionId::new(id as u32)
-    }
-
     fn extra_condition(&self, package: &PackageName, extra: &str) -> ConditionId {
         let name_id = self.pool.intern_package_name(NameType::Extra {
             package: package.as_normalized().to_owned(),
@@ -548,7 +538,8 @@ impl<'a> CondaDependencyProvider<'a> {
         let mut name_to_condition = self.name_to_condition.borrow_mut();
         *name_to_condition.entry(name_id).or_insert_with(|| {
             let version_set = extra_version_set(&self.pool, package.clone(), extra.to_owned());
-            self.alloc_condition(Condition::Requirement(version_set))
+            self.pool
+                .intern_condition(Condition::Requirement(version_set))
         })
     }
 }
@@ -607,7 +598,7 @@ impl Interner for CondaDependencyProvider<'_> {
     }
 
     fn resolve_condition(&self, condition: ConditionId) -> Condition {
-        self.conditions.borrow()[condition.as_u32() as usize].clone()
+        self.pool.resolve_condition(condition).clone()
     }
 }
 
@@ -717,7 +708,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
         // Add extras
         for (extra, matchspec) in record
             .package_record
-            .extra_depends
+            .experimental_extra_depends
             .iter()
             .flat_map(|(extra, deps)| deps.iter().map(move |dep| (extra, dep)))
         {

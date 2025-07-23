@@ -561,7 +561,7 @@ async fn stream_and_decode_to_file(
         .inspect_ok(|bytes| {
             total_bytes += bytes.len();
         })
-        .map_err(|e| std::io::Error::new(ErrorKind::Other, e));
+        .map_err(std::io::Error::other);
 
     // Create a new stream from the byte stream that decodes the bytes using the
     // transfer encoding on the fly.
@@ -1510,10 +1510,7 @@ mod test {
                 // Create a stream that ends prematurely
                 let stream = stream::iter(vec![
                     Ok(bytes.into_iter().collect::<Bytes>()),
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "premature close",
-                    )),
+                    Err(std::io::Error::other("premature close")),
                     // The stream ends after sending partial data, simulating a premature close
                 ]);
                 let body = Body::from_stream(stream);

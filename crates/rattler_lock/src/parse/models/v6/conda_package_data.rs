@@ -54,11 +54,11 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<Cow<'a, VersionWithSource>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub build: Option<Cow<'a, String>>,
+    pub build: Option<Cow<'a, str>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub build_number: Option<BuildNumber>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subdir: Option<Cow<'a, String>>,
+    pub subdir: Option<Cow<'a, str>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub noarch: Option<Cow<'a, NoArchType>>,
 
@@ -74,12 +74,13 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub legacy_bz2_md5: Option<Md5Hash>,
 
     // Dependencies
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub depends: Cow<'a, Vec<String>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub constrains: Cow<'a, Vec<String>>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub depends: Cow<'a, [String]>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub constrains: Cow<'a, [String]>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
+    #[serde(rename = "extra_depends")]
+    pub experimental_extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
 
     // Additional properties (in semi alphabetic order but grouped by commonality)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -87,8 +88,8 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub features: Cow<'a, Option<String>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub track_features: Cow<'a, Vec<String>>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub track_features: Cow<'a, [String]>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_name: Option<Cow<'a, Option<String>>>,
@@ -125,7 +126,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
 pub(crate) struct InputHash<'a> {
     #[serde_as(as = "SerializableHash::<rattler_digest::Sha256>")]
     pub hash: Sha256Hash,
-    pub globs: Cow<'a, Vec<String>>,
+    pub globs: Cow<'a, [String]>,
 }
 
 impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
@@ -163,7 +164,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             build_number,
             constrains: value.constrains.into_owned(),
             depends: value.depends.into_owned(),
-            extra_depends: value.extra_depends.into_owned(),
+            experimental_extra_depends: value.experimental_extra_depends.into_owned(),
             features: value.features.into_owned(),
             legacy_bz2_md5: value.legacy_bz2_md5,
             legacy_bz2_size: value.legacy_bz2_size.into_owned(),
@@ -279,7 +280,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             purls: Cow::Borrowed(&package_record.purls),
             depends: Cow::Borrowed(&package_record.depends),
             constrains: Cow::Borrowed(&package_record.constrains),
-            extra_depends: Cow::Borrowed(&package_record.extra_depends),
+            experimental_extra_depends: Cow::Borrowed(&package_record.experimental_extra_depends),
             md5: package_record.md5,
             legacy_bz2_md5: package_record.legacy_bz2_md5,
             sha256: package_record.sha256,

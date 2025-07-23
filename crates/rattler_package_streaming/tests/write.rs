@@ -4,7 +4,7 @@ use rattler_package_streaming::read::{extract_conda_via_streaming, extract_tar_b
 use rattler_package_streaming::write::{write_conda_package, write_tar_bz2_package};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
@@ -130,9 +130,15 @@ fn compare_two_conda_archives(p1: &Path, p2: &Path) {
     let metadata2 = zip2.by_name("metadata.json").unwrap();
 
     // read metadata.json file
-    let metadata_bytes1 = metadata1.bytes().collect::<Result<Vec<u8>, _>>().unwrap();
+    let metadata_bytes1 = BufReader::new(metadata1)
+        .bytes()
+        .collect::<Result<Vec<u8>, _>>()
+        .unwrap();
     let _mstr1 = std::str::from_utf8(&metadata_bytes1).unwrap();
-    let metadata_bytes2 = metadata2.bytes().collect::<Result<Vec<u8>, _>>().unwrap();
+    let metadata_bytes2 = BufReader::new(metadata2)
+        .bytes()
+        .collect::<Result<Vec<u8>, _>>()
+        .unwrap();
     let _mstr2 = std::str::from_utf8(&metadata_bytes2).unwrap();
 
     // compare metadata.json files

@@ -23,13 +23,13 @@ struct SourceLocationData<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub git: Option<Cow<'a, Url>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rev: Option<Cow<'a, String>>,
+    pub rev: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub branch: Option<Cow<'a, String>>,
+    pub branch: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tag: Option<Cow<'a, String>>,
+    pub tag: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub subdirectory: Option<Cow<'a, String>>,
+    pub subdirectory: Option<Cow<'a, str>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<Cow<'a, str>>,
@@ -83,7 +83,7 @@ impl<'a> From<&'a GitSourceLocation> for SourceLocationData<'a> {
             } else {
                 None
             },
-            subdirectory: value.subdirectory.as_ref().map(Cow::Borrowed),
+            subdirectory: value.subdirectory.as_deref().map(Cow::Borrowed),
             path: None,
         }
     }
