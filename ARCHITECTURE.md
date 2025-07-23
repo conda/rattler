@@ -50,7 +50,6 @@ Design-wise, it knows about Conda’s activation scripts and directory layout, a
 By extracting this logic into its own crate, Rattler ensures that creating an activated environment (e.g. “run Python from this env”) is a self-contained concern.
 Other crates (like `rattler_menuinst`) also rely on `rattler_shell` to find prefixes or Python executables.
 In practice, when the main `rattler` tool installs an environment, it will finally call into `rattler_shell` to set up the environment variables and launch the requested application.
-This clear separation reflects Conda’s concept of an “activated shell” and keeps OS-specific details (Windows vs Unix paths, etc.) contained.
 
 ## rattler\_solve
 
