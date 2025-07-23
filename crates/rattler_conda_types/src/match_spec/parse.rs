@@ -104,6 +104,14 @@ pub enum ParseMatchSpecError {
     /// Multiple values for a key in the matchspec
     #[error("found multiple values for: {0}")]
     MultipleValueForKey(String),
+
+    /// More than one semicolon in match spec
+    #[error("more than one semicolon in match spec")]
+    MoreThanOneSemicolon,
+
+    /// Invalid condition in match spec
+    #[error("could not parse condition {0}: {1}")]
+    InvalidCondition(String, String),
 }
 
 impl FromStr for MatchSpec {
@@ -133,28 +141,20 @@ fn strip_comment(input: &str) -> (&str, Option<&str>) {
         .map_or_else(|| (input, None), |(spec, comment)| (spec, Some(comment)))
 }
 
-// /// Strips any if statements from the matchspec. `if` statements in matchspec
-// /// are "anticipating future compatibility issues".
-// fn strip_if(input: &str) -> (&str, Option<&str>) {
-//     // Use `nom` to split at `; if `
-//     if let Some((matchspec_str, condition)) = input.split_once("; if ") {
-//         // Trim the matchspec string and return the condition
-//         (matchspec_str.trim(), Some(condition.trim()))
-//     } else {
-//         // No condition found, return the input as is
-//         (input, None)
-//     }
-// }
-
 /// Strips any if statements from the matchspec. `if` statements in matchspec
 /// are "anticipating future compatibility issues".
-fn strip_if(input: &str) -> (&str, Option<&str>) {
+fn strip_if(input: &str) -> Result<(&str, Option<&str>), ParseMatchSpecError> {
+    // Check that we only have a single `if` statement (semicolon separated)
+    if input.matches(';').count() > 1 {
+        return Err(ParseMatchSpecError::MoreThanOneSemicolon);
+    }
+
     // Try to parse with nom for better whitespace handling
     if let Ok((matchspec_str, condition)) = parse_if_statement(input) {
-        (matchspec_str.trim(), Some(condition.trim()))
+        Ok((matchspec_str.trim(), Some(condition.trim())))
     } else {
         // No condition found, return the input as is
-        (input.trim(), None)
+        Ok((input.trim(), None))
     }
 }
 
@@ -650,7 +650,7 @@ pub(crate) fn matchspec_parser(
 ) -> Result<MatchSpec, ParseMatchSpecError> {
     // Step 1. Strip '#' and `if` statement
     let (input, _comment) = strip_comment(input);
-    let (input, condition) = strip_if(input);
+    let (input, condition) = strip_if(input)?;
 
     // 2. Strip off brackets portion
     let (input, brackets) = strip_brackets(input.trim())?;
@@ -726,13 +726,14 @@ pub(crate) fn matchspec_parser(
     }
 
     if let Some(condition) = condition {
-        // TODO fix error types!
         let (remainder, condition) = parse_condition(condition).map_err(|e| {
-            ParseMatchSpecError::InvalidBracketKey(format!("invalid condition: {e}"))
+            ParseMatchSpecError::InvalidCondition(condition.to_string(), e.to_string())
         })?;
+
         if remainder.trim().is_empty().not() {
-            return Err(ParseMatchSpecError::InvalidBracketKey(
-                "condition".to_string(),
+            return Err(ParseMatchSpecError::InvalidCondition(
+                condition.to_string(),
+                "remainder not empty".to_string(),
             ));
         }
 

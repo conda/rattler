@@ -957,7 +957,10 @@ fn parse_condition(
                 parse_match_spec(pool, &match_spec.to_string(), parse_match_spec_cache).unwrap();
 
             // Intern the match spec condition
-            // TODO what do we do if it is more than one?
+            // TODO: change this once we merged the new extras implementation
+            if version_set_id.0.len() != 1 {
+                panic!("MatchSpec in Condition should have no extras");
+            }
             let condition = resolvo::Condition::Requirement(version_set_id.0[0]);
             pool.intern_condition(condition)
         }
