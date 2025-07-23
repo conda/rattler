@@ -30,7 +30,7 @@ In summary, `rattler_conda_types` is the foundation of the codebase, capturing �
 This crate handles downloading and unpacking Conda package archives.
 It provides functionality to fetch a `.tar.bz2` or `.conda` file (from a URL or local cache), stream it through decompression, and expose its contents (files, metadata).
 Key design points: it abstracts I/O so that higher layers just ask “download this package” without worrying about compression details.
-By separating package streaming, Rattler allows other parts (like `rattler_index` or `rattler_solve`) to use it without pulling in network or compression code.
+By separating package streaming, other parts (like `rattler_index` or `rattler_solve`) can deal with packages without having to worry about the internal workings of different package formats.
 In practice, `rattler_package_streaming` is used by the install routines in the main `rattler` crate to fetch packages after solving.
 This crate does not perform any dependency solving itself—it simply **handles package archives** (hence its name) and can be used independently wherever package files need processing.
 
