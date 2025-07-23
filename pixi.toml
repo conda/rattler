@@ -30,6 +30,8 @@ pkg-config = "~=0.29.2"
 rust = "~=1.88.0"
 cmake = "~=3.26.4"
 cargo-nextest = ">=0.9.91,<0.10"
+# for rust-analyzer
+rust-src = "~=1.88.0"
 
 [target.linux-64.dependencies]
 clang = ">=18.1.8,<19.0"

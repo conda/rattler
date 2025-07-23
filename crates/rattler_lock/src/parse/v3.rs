@@ -202,7 +202,7 @@ pub fn parse_v3_or_lower(
                             build_number,
                             constrains: value.constrains,
                             depends: value.dependencies,
-                            extra_depends: std::collections::BTreeMap::new(),
+                            experimental_extra_depends: std::collections::BTreeMap::new(),
                             features: value.features,
                             legacy_bz2_md5: None,
                             legacy_bz2_size: None,
