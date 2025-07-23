@@ -30,11 +30,13 @@ pkg-config = "~=0.29.2"
 rust = "~=1.88.0"
 cmake = "~=3.26.4"
 cargo-nextest = ">=0.9.91,<0.10"
+rust-src = ">=1.84.0,<2"
 
 [target.linux-64.dependencies]
 clang = ">=18.1.8,<19.0"
 compilers = ">=1.6.0"
 mold = ">=2.33.0,<3.0"
+libfuse = ">=3.10.0,<4.0"
 [target.linux-64.activation]
 scripts = ["scripts/activate_linux.sh"]
 

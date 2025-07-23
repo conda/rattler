@@ -406,7 +406,7 @@ impl MacOSMenu {
     }
 
     fn write_pkg_info(&self) -> Result<(), MenuInstError> {
-        let create_pkg_info = |path: &PathBuf, short_name: &str| -> Result<(), MenuInstError> {
+        let create_pkg_info = |path: &Path, short_name: &str| -> Result<(), MenuInstError> {
             let path = path.join("Contents/PkgInfo");
             tracing::debug!("Writing pkg info to {}", path.display());
             let mut f = fs::File::create(&path)?;

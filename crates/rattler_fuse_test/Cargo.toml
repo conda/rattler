@@ -1,0 +1,28 @@
+[package]
+name = "rattler_fuse_test"
+version = "0.1.0"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+readme.workspace = true
+
+[dependencies]
+fuser = "0.15.1"
+rattler_lock = { path = "../rattler_lock" }
+rattler_conda_types = { path = "../rattler_conda_types" }
+rattler_cache = { path = "../rattler_cache" }
+rattler = { path = "../rattler" }
+rattler_digest = { path = "../rattler_digest" }
+reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+regex = { workspace = true }
+once_cell = { workspace = true }
+memchr = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+clap = { workspace = true }
+libc = { workspace = true }

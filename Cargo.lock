@@ -2061,6 +2061,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
+name = "fuser"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53274f494609e77794b627b1a3cddfe45d675a6b2e9ba9c0fdc8d8eee2184369"
+dependencies = [
+ "libc",
+ "log",
+ "memchr",
+ "nix",
+ "page_size",
+ "pkg-config",
+ "smallvec",
+ "zerocopy 0.8.23",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3714,6 +3730,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "page_size"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30d5b2194ed13191c1999ae0704b7839fb18384fa22e49b57eeaa97d79ce40da"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4534,6 +4560,34 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "rattler_fuse"
+version = "0.1.0"
+dependencies = [
+ "fuser",
+]
+
+[[package]]
+name = "rattler_fuse_test"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "fuser",
+ "libc",
+ "memchr",
+ "once_cell",
+ "rattler",
+ "rattler_cache",
+ "rattler_conda_types",
+ "rattler_digest",
+ "rattler_lock",
+ "regex",
+ "reqwest",
+ "reqwest-middleware",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

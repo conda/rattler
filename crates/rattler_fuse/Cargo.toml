@@ -1,0 +1,13 @@
+[package]
+name = "rattler_fuse"
+version = "0.1.0"
+description = "A create for mounting conda environments as a FUSE filesystem"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+readme.workspace = true
+
+[dependencies]
+fuser = "0.15.1"

@@ -941,7 +941,10 @@ pub fn link_package_sync(
     Ok(paths)
 }
 
-fn compute_paths(
+/// A helper function that generates the paths for the package files based on
+/// the [PathsJson] and [IndexJson] with any required modifications for noarch
+/// python packages.
+pub fn compute_paths(
     index_json: &IndexJson,
     paths_json: &PathsJson,
     python_info: Option<&PythonInfo>,
