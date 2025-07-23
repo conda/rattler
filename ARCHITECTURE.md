@@ -60,7 +60,6 @@ The API separates model (adding packages and constraints) from the solving step.
 Other crates (and the `rattler` crate) call into `rattler_solve` when they need to figure out which packages satisfy a user’s request.
 Its design is influenced by libsolv’s structures, but encapsulates them so that `rattler_solve` acts as a pure Rust library.
 Because solving can be computationally intensive, it is a separate crate to avoid imposing solver dependencies on unrelated code.
-Documentation notes it is “backend agnostic”, reflecting this pluggable design.
 
 ## rattler\_virtual\_packages
 
