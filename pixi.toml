@@ -13,8 +13,6 @@ license = "BSD-3-Clause"
 
 [tasks]
 build = "cargo build"
-fmt = "cargo fmt --all"
-lint = "cargo clippy --all-targets -- -D warnings -Dclippy::dbg_macro"
 check = "cargo check"
 # libsolv compilation cannot find pixi's clang for some reason
 # so we skip that test for now
@@ -41,16 +39,30 @@ mold = ">=2.33.0,<3.0"
 scripts = ["scripts/activate_linux.sh"]
 
 [feature.lint.dependencies]
-pre-commit = ">=4.2,<5"
-pre-commit-hooks = ">=5,<6"
 ruff = ">=0.12.3,<0.13"
 typos = ">=1.23.1,<2"
+dprint = ">=0.50.0,<0.51"
+lefthook = ">=1.12.2,<2"
+actionlint = ">=1.7.7,<2"
 
 [feature.lint.tasks]
-pre-commit-install = "pre-commit install"
-pre-commit-run = "pre-commit run --all-files --hook-stage manual"
+actionlint = { cmd = "actionlint", env = { SHELLCHECK_OPTS = "-e SC2086 -e SC2046 -e SC2028" } }
+dprint-check = { cmd = "dprint check --log-level=silent", description = "Check formatting with dprint" }
+dprint-fmt = { cmd = "dprint fmt --incremental=false", description = "Format with dprint" }
+lefthook = { cmd = "lefthook", description = "Run lefthook" }
+lint = { depends-on = [
+  "lint-fast",
+  "lint-slow",
+], description = "Run all linters and formatters on all code" }
+lint-fast = { cmd = "lefthook run pre-commit --all-files --force", description = "Run all fast linters and formatters on all code (no clippy)" }
+lint-slow = { cmd = "lefthook run pre-push --all-files --force", description = "Run all slow linters and formatters on all code" }
+pre-commit-install = "lefthook install"
+pre-commit-install-minimal = "lefthook install pre-commit"
+typos = "typos --write-changes --force-exclude"
+ruff-format = "ruff format --force-exclude"
+ruff-lint = "ruff check --fix --exit-non-zero-on-fix --force-exclude"
+cargo-fmt = "cargo fmt --all"
+cargo-clippy = "cargo clippy --all-targets --workspace -- -D warnings -Dclippy::dbg_macro"
 
 [environments]
-lint = { features = [
-    "lint",
-], no-default-feature = true, solve-group = "default" }
+lint = { features = [ "lint" ], solve-group = "default" }
