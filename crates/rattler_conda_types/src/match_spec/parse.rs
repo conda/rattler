@@ -780,7 +780,7 @@ mod tests {
     #[cfg(feature = "experimental_extras")]
     use crate::match_spec::parse::parse_extras;
     use crate::{
-        match_spec::{flags::FlagMatcher, parse::parse_bracket_list},
+        match_spec::parse::parse_bracket_list,
         BuildNumberSpec, Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError,
         ParseStrictness::{self, *},
         Version, VersionSpec,
