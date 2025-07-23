@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while1},
+    bytes::complete::tag,
     character::complete::{char, multispace0, multispace1},
     sequence::{delimited, preceded},
     IResult, Parser,
@@ -36,11 +36,6 @@ impl Display for MatchSpecCondition {
             MatchSpecCondition::Or(lhs, rhs) => write!(f, "({} or {})", lhs, rhs),
         }
     }
-}
-
-// Parse identifier (alphanumeric + underscore)
-fn identifier(input: &str) -> IResult<&str, &str> {
-    take_while1(|c: char| c.is_alphanumeric() || c == '_')(input)
 }
 
 // Parse whitespace

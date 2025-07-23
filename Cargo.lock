@@ -5187,6 +5187,7 @@ dependencies = [
 [[package]]
 name = "resolvo"
 version = "0.9.1"
+source = "git+https://github.com/baszalmstra/resolvo?branch=condition-dependencies#073c85a02805edfc2a67330e9f6080e7567a40b7"
 dependencies = [
  "ahash",
  "bitvec",
