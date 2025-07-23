@@ -530,7 +530,7 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "file_url"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "itertools",
  "percent-encoding",
@@ -1790,7 +1790,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.26"
+version = "0.3.27"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -1820,7 +1820,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.35.6"
+version = "0.36.0"
 dependencies = [
  "chrono",
  "core-foundation",
@@ -1859,7 +1859,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.1.4"
+version = "1.1.5"
 dependencies = [
  "blake2",
  "digest",
@@ -1883,7 +1883,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.6"
+version = "0.25.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1905,7 +1905,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.45"
+version = "0.22.46"
 dependencies = [
  "bzip2",
  "chrono",
@@ -1942,7 +1942,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.23.7"
+version = "0.23.8"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -1998,7 +1998,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "2.1.6"
+version = "2.1.7"
 dependencies = [
  "chrono",
  "futures",

@@ -9,8 +9,8 @@ use rattler_conda_types::{
 use rattler_repodata_gateway::{Gateway, SourceConfig};
 use rattler_solve::{SolverImpl, SolverTask};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet};
 use url::Url;
 use wasm_bindgen::prelude::*;
 
@@ -86,6 +86,7 @@ pub async fn simple_solve(
                 depends: pkg.depends.unwrap_or_default(),
                 subdir: pkg.subdir.unwrap_or_else(|| "unknown".to_string()),
                 experimental_extra_depends: BTreeMap::new(),
+                flags: BTreeSet::new(),
                 constrains: vec![],
                 track_features: vec![],
                 features: None,

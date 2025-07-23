@@ -339,8 +339,8 @@ fn parse_bracket_vec_into_components(
                         .into_iter()
                         .map(|s| FlagMatcher::from_str(&s))
                         .collect::<Result<Vec<_>, _>>()
-                        .map_err(|_| ParseMatchSpecError::InvalidFlag(value.to_string()))?,
-                )
+                        .map_err(|_e| ParseMatchSpecError::InvalidFlag(value.to_string()))?,
+                );
             }
             // TODO: Still need to add `track_features`, `features`, and `license_family`
             // to the match spec.

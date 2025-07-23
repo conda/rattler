@@ -40,10 +40,10 @@ impl FromStr for FlagMatcher {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with('~') {
-            Ok(FlagMatcher::Negated(s[1..].to_string()))
-        } else if s.starts_with('?') {
-            Ok(FlagMatcher::Optional(s[1..].to_string()))
+        if let Some(stripped) = s.strip_prefix('~') {
+            Ok(FlagMatcher::Negated(stripped.to_string()))
+        } else if let Some(stripped) = s.strip_prefix('?') {
+            Ok(FlagMatcher::Optional(stripped.to_string()))
         } else {
             Ok(FlagMatcher::Required(s.to_string()))
         }
@@ -57,8 +57,8 @@ impl Serialize for FlagMatcher {
     {
         match self {
             FlagMatcher::Required(flag) => serializer.serialize_str(flag),
-            FlagMatcher::Negated(flag) => serializer.serialize_str(&format!("~{}", flag)),
-            FlagMatcher::Optional(flag) => serializer.serialize_str(&format!("?{}", flag)),
+            FlagMatcher::Negated(flag) => serializer.serialize_str(&format!("~{flag}")),
+            FlagMatcher::Optional(flag) => serializer.serialize_str(&format!("?{flag}")),
         }
     }
 }
@@ -72,8 +72,8 @@ impl<'de> Deserialize<'de> for FlagMatcher {
         let s = String::deserialize(deserializer)?;
         if s.starts_with('~') || s.starts_with('!') {
             Ok(FlagMatcher::Negated(s[1..].to_string()))
-        } else if s.starts_with('?') {
-            Ok(FlagMatcher::Optional(s[1..].to_string()))
+        } else if let Some(stripped) = s.strip_prefix('?') {
+            Ok(FlagMatcher::Optional(stripped.to_string()))
         } else {
             Ok(FlagMatcher::Required(s))
         }
