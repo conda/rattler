@@ -69,7 +69,7 @@ pub use unlink::{empty_trash, unlink_package};
 
 pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 use crate::install::{
-    clobber_registry::ClobberRegistry,
+    clobber_registry::{ClobberRegistry, CLOBBERS_DIR_NAME},
     entry_point::{create_unix_python_entry_point, create_windows_python_entry_point},
 };
 
@@ -738,8 +738,8 @@ pub fn link_package_sync(
         }
 
         if allow_ref_links
-            && !directory.starts_with("__clobbers__")
             && cfg!(target_os = "macos")
+            && !directory.starts_with(CLOBBERS_DIR_NAME)
             && !index_json.noarch.is_python()
         {
             // reflink the whole directory if possible
