@@ -993,7 +993,6 @@ fn parse_match_spec(
     spec_str: &str,
     parse_match_spec_cache: &mut MatchSpecParseCache,
 ) -> Result<(Vec<VersionSetId>, Option<ConditionId>), ParseMatchSpecError> {
-    println!("Checking in cache for match spec: {spec_str}");
     if let Some(cached) = parse_match_spec_cache.get(spec_str) {
         return Ok(cached.clone());
     }
