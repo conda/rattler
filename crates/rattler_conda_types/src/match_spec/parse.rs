@@ -234,8 +234,15 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
     }
 }
 
+/// Parses extras (optional features) from a bracket value
+#[cfg(feature = "experimental_extras")]
+fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
+    parse_string_list(input)
+}
+
 /// Parses a list of optional dependencies from a string `feat1, feat2, feat3]`
 /// -> `vec![feat1, feat2, feat3]`.
+#[cfg(feature = "experimental_extras")]
 pub fn parse_string_list(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     use nom::{
         combinator::{all_consuming, map},
@@ -258,6 +265,41 @@ pub fn parse_string_list(input: &str) -> Result<Vec<String>, ParseMatchSpecError
     match all_consuming(parse_features).parse(input).finish() {
         Ok((_remaining, features)) => Ok(features),
         Err(_e) => Err(ParseMatchSpecError::InvalidBracket),
+    }
+}
+
+
+/// Parses a list of flag matchers from a bracket value
+fn parse_flags(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
+    use nom::{
+        combinator::{all_consuming, map},
+        multi::separated_list1,
+    };
+
+    // Strip outer brackets if present
+    let input = input.trim();
+    let input = if input.starts_with('[') && input.ends_with(']') {
+        &input[1..input.len() - 1]
+    } else {
+        input
+    };
+
+    fn parse_flag(i: &str) -> IResult<&str, &str> {
+        delimited(
+            multispace0,
+            take_while1(|c: char| !c.is_whitespace() && c != ','),
+            multispace0,
+        )
+        .parse(i)
+    }
+
+    fn parse_flags_list(i: &str) -> IResult<&str, Vec<String>> {
+        separated_list1(char(','), map(parse_flag, |s: &str| s.to_string())).parse(i)
+    }
+
+    match all_consuming(parse_flags_list).parse(input).finish() {
+        Ok((_remaining, flags)) => Ok(flags),
+        Err(nom::error::Error { .. }) => Err(ParseMatchSpecError::InvalidBracket),
     }
 }
 
@@ -335,7 +377,7 @@ fn parse_bracket_vec_into_components(
             "license" => match_spec.license = Some(value.to_string()),
             "flags" => {
                 match_spec.flags = Some(
-                    parse_string_list(value)?
+                    parse_flags(value)?
                         .into_iter()
                         .map(|s| FlagMatcher::from_str(&s))
                         .collect::<Result<Vec<_>, _>>()
@@ -1465,7 +1507,7 @@ mod tests {
             ),
             license: Some("MIT".into()),
             flags: Some(
-                ["~flag1", "!flag2", "?flag3", "foobar:amd"]
+                ["~flag1", "~flag2", "?flag3", "foobar:amd"]
                     .iter()
                     .map(|s| s.parse().unwrap())
                     .collect(),
@@ -1479,7 +1521,10 @@ mod tests {
         // parse back the strings and check if they are the same
         let parsed_specs = vec_strings
             .iter()
-            .map(|s| MatchSpec::from_str(s, Strict).unwrap())
+            .map(|s| match MatchSpec::from_str(s, Strict) {
+                Ok(spec) => spec,
+                Err(e) => panic!("Failed to parse back: '{}' with error: {:?}", s, e),
+            })
             .collect::<Vec<_>>();
         assert_eq!(specs, parsed_specs);
     }
