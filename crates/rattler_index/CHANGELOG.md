@@ -6,6 +6,100 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.5](https://github.com/conda/rattler/compare/rattler_index-v0.24.4...rattler_index-v0.24.5) - 2025-07-21
+
+### Other
+
+- bump rust 1.88.0 ([#1536](https://github.com/conda/rattler/pull/1536))
+
+## [0.24.4](https://github.com/conda/rattler/compare/rattler_index-v0.24.3...rattler_index-v0.24.4) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming
+
+## [0.24.3](https://github.com/conda/rattler/compare/rattler_index-v0.24.2...rattler_index-v0.24.3) - 2025-07-09
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.24.2](https://github.com/conda/rattler/compare/rattler_index-v0.24.1...rattler_index-v0.24.2) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [0.24.1](https://github.com/conda/rattler/compare/rattler_index-v0.24.0...rattler_index-v0.24.1) - 2025-06-26
+
+### Other
+
+- Fix typo ([#1479](https://github.com/conda/rattler/pull/1479))
+
+## [0.23.3](https://github.com/conda/rattler/compare/rattler_index-v0.23.2...rattler_index-v0.23.3) - 2025-06-25
+
+### Added
+
+- *(rattler_index)* Use rattler_config ([#1466](https://github.com/conda/rattler/pull/1466))
+
+## [0.23.2](https://github.com/conda/rattler/compare/rattler_index-v0.23.1...rattler_index-v0.23.2) - 2025-06-24
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.23.1](https://github.com/conda/rattler/compare/rattler_index-v0.23.0...rattler_index-v0.23.1) - 2025-06-23
+
+### Added
+
+- make rattler_networking system integration optional ([#1381](https://github.com/conda/rattler/pull/1381))
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [0.23.0](https://github.com/conda/rattler/compare/rattler_index-v0.22.7...rattler_index-v0.23.0) - 2025-05-23
+
+### Added
+
+- Sharded repodata, zst, add purls and run_exports support ([#1312](https://github.com/conda/rattler/pull/1312))
+
+## [0.22.7](https://github.com/conda/rattler/compare/rattler_index-v0.22.6...rattler_index-v0.22.7) - 2025-05-16
+
+### Added
+
+- add purls to `IndexJson` ([#1303](https://github.com/conda/rattler/pull/1303))
+
+## [0.22.6](https://github.com/conda/rattler/compare/rattler_index-v0.22.5...rattler_index-v0.22.6) - 2025-05-03
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.22.5](https://github.com/conda/rattler/compare/rattler_index-v0.22.4...rattler_index-v0.22.5) - 2025-04-17
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.22.4](https://github.com/conda/rattler/compare/rattler_index-v0.22.3...rattler_index-v0.22.4) - 2025-04-10
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.22.3](https://github.com/conda/rattler/compare/rattler_index-v0.22.2...rattler_index-v0.22.3) - 2025-04-04
+
+### Added
+
+- add retry middleware to opendal operator ([#1207](https://github.com/conda/rattler/pull/1207))
+
+### Fixed
+
+- allow empty info key in repodata.json ([#1181](https://github.com/conda/rattler/pull/1181))
+- don't clone package bytes in rattler-index ([#1175](https://github.com/conda/rattler/pull/1175))
+
 ## [0.22.2](https://github.com/conda/rattler/compare/rattler_index-v0.22.1...rattler_index-v0.22.2) - 2025-03-18
 
 ### Other

@@ -8,9 +8,8 @@ use nom::{
     error::{context, ContextError, ParseError},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, preceded, separated_pair, terminated},
-    Finish, IResult,
+    Finish, IResult, Parser,
 };
-
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use smallvec::SmallVec;
 use thiserror::Error;
@@ -76,7 +75,8 @@ pub enum ParseMatchSpecError {
     InvalidVersionAndBuild(String),
 
     /// Invalid build string
-    #[error("the build string '{0}' is not valid, it can only contain alphanumeric characters and underscores"
+    #[error(
+        "the build string '{0}' is not valid, it can only contain alphanumeric characters and underscores"
     )]
     InvalidBuildString(String),
 
@@ -151,13 +151,13 @@ type BracketVec<'a> = SmallVec<[(&'a str, &'a str); 2]>;
 /// A parse combinator to filter whitespace if front and after another parser.
 fn whitespace_enclosed<'a, F, O, E: ParseError<&'a str>>(
     mut inner: F,
-) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
+) -> impl Parser<&'a str, Output = O, Error = E>
 where
-    F: FnMut(&'a str) -> IResult<&'a str, O, E>,
+    F: Parser<&'a str, Output = O, Error = E>,
 {
     move |input: &'a str| {
         let (input, _) = multispace0(input)?;
-        let (input, o2) = inner(input)?;
+        let (input, o2) = inner.parse(input)?;
         multispace0(input).map(|(i, _)| (i, o2))
     }
 }
@@ -169,7 +169,8 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
         whitespace_enclosed(context(
             "key",
             take_while(|c: char| c.is_alphanumeric() || c == '_' || c == '-'),
-        ))(input)
+        ))
+        .parse(input)
     }
 
     /// Parses a value in a bracket string.
@@ -182,22 +183,23 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
                 delimited(char('['), take_until("]"), char(']')),
                 take_till1(|c| c == ',' || c == ']' || c == '\'' || c == '"'),
             )),
-        ))(input)
+        ))
+        .parse(input)
     }
 
     /// Parses a `key=value` pair
     fn parse_key_value(input: &str) -> IResult<&str, (&str, &str)> {
-        separated_pair(parse_key, char('='), parse_value)(input)
+        separated_pair(parse_key, char('='), parse_value).parse(input)
     }
 
     /// Parses a list of `key=value` pairs separated by commas
     fn parse_key_value_list(input: &str) -> IResult<&str, Vec<(&str, &str)>> {
-        separated_list0(whitespace_enclosed(char(',')), parse_key_value)(input)
+        separated_list0(whitespace_enclosed(char(',')), parse_key_value).parse(input)
     }
 
     /// Parses an entire bracket string
     fn parse_bracket_list(input: &str) -> IResult<&str, Vec<(&str, &str)>> {
-        delimited(char('['), parse_key_value_list, char(']'))(input)
+        delimited(char('['), parse_key_value_list, char(']')).parse(input)
     }
 
     match parse_bracket_list(input).finish() {
@@ -228,7 +230,8 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
 }
 
 #[cfg(feature = "experimental_extras")]
-/// Parses a list of optional dependencies from a string `feat1, feat2, feat3]` -> `vec![feat1, feat2, feat3]`.
+/// Parses a list of optional dependencies from a string `feat1, feat2, feat3]`
+/// -> `vec![feat1, feat2, feat3]`.
 pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     use nom::{
         combinator::{all_consuming, map},
@@ -240,14 +243,15 @@ pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
             multispace0,
             take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-'),
             multispace0,
-        )(i)
+        )
+        .parse(i)
     }
 
     fn parse_features(i: &str) -> IResult<&str, Vec<String>> {
-        separated_list1(char(','), map(parse_feature_name, |s: &str| s.to_string()))(i)
+        separated_list1(char(','), map(parse_feature_name, |s: &str| s.to_string())).parse(i)
     }
 
-    match all_consuming(parse_features)(input).finish() {
+    match all_consuming(parse_features).parse(input).finish() {
         Ok((_remaining, features)) => Ok(features),
         Err(_e) => Err(ParseMatchSpecError::InvalidBracket),
     }
@@ -324,7 +328,8 @@ fn parse_bracket_vec_into_components(
                 match_spec.channel = match_spec.channel.or(channel.map(Arc::new));
                 match_spec.subdir = match_spec.subdir.or(subdir);
             }
-            // TODO: Still need to add `track_features`, `features`, `license` and `license_family`
+            "license" => match_spec.license = Some(value.to_string()),
+            // TODO: Still need to add `track_features`, `features`, and `license_family`
             // to the match spec.
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
         }
@@ -357,7 +362,7 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
 }
 
 /// Strip the package name from the input.
-fn strip_package_name(input: &str) -> Result<(PackageName, &str), ParseMatchSpecError> {
+fn strip_package_name(input: &str) -> Result<(Option<PackageName>, &str), ParseMatchSpecError> {
     let (rest, package_name) =
         take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(
             input.trim(),
@@ -370,7 +375,15 @@ fn strip_package_name(input: &str) -> Result<(PackageName, &str), ParseMatchSpec
         return Err(ParseMatchSpecError::MissingPackageName);
     }
 
-    Ok((PackageName::from_str(trimmed_package_name)?, rest.trim()))
+    // Handle asterisk as a wildcard (no package name)
+    if trimmed_package_name == "*" {
+        return Ok((None, rest.trim()));
+    }
+
+    Ok((
+        Some(PackageName::from_str(trimmed_package_name)?),
+        rest.trim(),
+    ))
 }
 
 /// Splits a string into version and build constraints.
@@ -378,22 +391,40 @@ fn split_version_and_build(
     input: &str,
     strictness: ParseStrictness,
 ) -> Result<(&str, Option<&str>), ParseMatchSpecError> {
+    fn maybe_recognize_lenient_constraint<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        strictness: ParseStrictness,
+    ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
+        move |input: &'a str| {
+            if strictness == Lenient {
+                alt((parse_special_equality, recognize_constraint)).parse(input)
+            } else {
+                recognize_constraint(input)
+            }
+        }
+    }
+
     fn parse_version_constraint_or_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-        input: &'a str,
-    ) -> IResult<&'a str, &'a str, E> {
-        alt((
-            delimited(tag("("), parse_version_group, tag(")")),
-            recognize_constraint,
-        ))(input)
+        strictness: ParseStrictness,
+    ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
+        move |input: &'a str| {
+            alt((
+                delimited(tag("("), parse_version_group(strictness), tag(")")),
+                maybe_recognize_lenient_constraint(strictness),
+            ))
+            .parse(input)
+        }
     }
 
     fn parse_version_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-        input: &'a str,
-    ) -> IResult<&'a str, &'a str, E> {
-        recognize(separated_list1(
-            whitespace_enclosed(one_of(",|")),
-            parse_version_constraint_or_group,
-        ))(input)
+        strictness: ParseStrictness,
+    ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
+        move |input: &'a str| {
+            recognize(separated_list1(
+                whitespace_enclosed(one_of(",|")),
+                parse_version_constraint_or_group(strictness),
+            ))
+            .parse(input)
+        }
     }
 
     // Special case handling of `=*`, `=1.2.3`, or `=1*`
@@ -412,7 +443,8 @@ fn split_version_and_build(
         recognize(preceded(
             tag("="),
             alt((version_followed_by_glob, just_star)),
-        ))(input)
+        ))
+        .parse(input)
     }
 
     fn parse_version_and_build_separator<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
@@ -420,12 +452,9 @@ fn split_version_and_build(
     ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
         move |input: &'a str| {
             if strictness == Lenient {
-                terminated(
-                    alt((parse_special_equality, parse_version_group)),
-                    opt(one_of(" =")),
-                )(input)
+                terminated(parse_version_group(strictness), opt(one_of(" ="))).parse(input)
             } else {
-                terminated(parse_version_group, space0)(input)
+                terminated(parse_version_group(strictness), space0).parse(input)
             }
         }
     }
@@ -448,9 +477,9 @@ fn split_version_and_build(
                 build_string.is_empty().not().then_some(build_string),
             ))
         }
-        Err(nom::error::VerboseError { .. }) => Err(ParseMatchSpecError::InvalidVersionAndBuild(
-            input.to_string(),
-        )),
+        Err(nom_language::error::VerboseError { .. }) => Err(
+            ParseMatchSpecError::InvalidVersionAndBuild(input.to_string()),
+        ),
     }
 }
 /// Parse version and build string.
@@ -639,7 +668,7 @@ fn matchspec_parser(
 
     // Step 6. Strip off the package name from the input
     let (name, input) = strip_package_name(input)?;
-    let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, Some(name));
+    let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, name);
 
     // Step 7. Otherwise, sort our version + build
     let input = input.trim();
@@ -735,13 +764,13 @@ mod tests {
         parse_channel_and_subdir, split_version_and_build, strip_brackets, strip_package_name,
         BracketVec, MatchSpec, ParseMatchSpecError,
     };
-    use crate::{
-        match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
-        NamelessMatchSpec, ParseChannelError, ParseStrictness, ParseStrictness::*, VersionSpec,
-    };
-
     #[cfg(feature = "experimental_extras")]
     use crate::match_spec::parse::parse_extras;
+    use crate::{
+        match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
+        NamelessMatchSpec, ParseChannelError, ParseStrictness, ParseStrictness::*, Version,
+        VersionSpec,
+    };
 
     fn channel_config() -> ChannelConfig {
         ChannelConfig::default_with_root_dir(
@@ -1104,6 +1133,8 @@ mod tests {
             "channel/win-64::foobar[channel=conda-forge, subdir=linux-64]",
             // Issue #1004
             "numpy>=2.*.*",
+            // Pixi issue 3922
+            "bird_tool_utils_python =0.*,>=0.4.1",
         ];
 
         let evaluated: IndexMap<_, _> = specs
@@ -1319,7 +1350,18 @@ mod tests {
 
         let err = MatchSpec::from_str("bla/bla", Strict)
             .expect_err("Should try to parse as name not url");
-        assert_eq!(err.to_string(), "'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .");
+        assert_eq!(
+            err.to_string(),
+            "'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+        );
+    }
+
+    #[test]
+    fn test_parsing_license() {
+        let spec = MatchSpec::from_str("python[license=MIT]", Strict).unwrap();
+
+        assert_eq!(spec.name, Some("python".parse().unwrap()));
+        assert_eq!(spec.license, Some("MIT".into()));
     }
 
     #[test]
@@ -1407,6 +1449,7 @@ mod tests {
                 )
                 .unwrap(),
             ),
+            license: Some("MIT".into()),
         });
 
         // insta check all the strings
@@ -1419,6 +1462,18 @@ mod tests {
             .map(|s| MatchSpec::from_str(s, Strict).unwrap())
             .collect::<Vec<_>>();
         assert_eq!(specs, parsed_specs);
+    }
+
+    #[test]
+    fn test_pixi_issue_3922() {
+        let match_spec = MatchSpec::from_str(
+            "bird_tool_utils_python =0.*,>=0.4.1",
+            ParseStrictness::Lenient,
+        )
+        .unwrap();
+        let version_spec = match_spec.version.unwrap();
+        let version = Version::from_str("0.4.1").unwrap();
+        assert!(version_spec.matches(&version));
     }
 
     #[cfg(feature = "experimental_extras")]

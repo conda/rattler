@@ -1,7 +1,10 @@
 use rattler_conda_types::package::ArchiveIdentifier;
 use rattler_conda_types::PackageRecord;
-use rattler_digest::Sha256Hash;
-use std::fmt::{Display, Formatter};
+use rattler_digest::{compute_bytes_digest, compute_url_digest, Md5Hash, Sha256, Sha256Hash};
+use std::{
+    fmt::{Display, Formatter},
+    path::Path,
+};
 
 /// Provides a unique identifier for packages in the cache.
 /// TODO: This could not be unique over multiple subdir. How to handle?
@@ -11,6 +14,8 @@ pub struct CacheKey {
     pub(crate) version: String,
     pub(crate) build_string: String,
     pub(crate) sha256: Option<Sha256Hash>,
+    pub(crate) md5: Option<Md5Hash>,
+    pub(crate) origin_hash: Option<String>,
 }
 
 impl CacheKey {
@@ -25,12 +30,43 @@ impl CacheKey {
         self.sha256 = sha256;
         self
     }
+
+    /// Adds a md5 hash of the archive.
+    pub fn with_md5(mut self, md5: Md5Hash) -> Self {
+        self.md5 = Some(md5);
+        self
+    }
+
+    /// Potentially adds a md5 hash of the archive.
+    pub fn with_opt_md5(mut self, md5: Option<Md5Hash>) -> Self {
+        self.md5 = md5;
+        self
+    }
+
+    /// Adds a hash of the Url to the cache key
+    pub fn with_url(mut self, url: url::Url) -> Self {
+        let url_hash = compute_url_digest::<Sha256>(url);
+        self.origin_hash = Some(format!("{url_hash:x}"));
+        self
+    }
+
+    /// Adds a hash of the Path to the cache key
+    pub fn with_path(mut self, path: &Path) -> Self {
+        let path_hash = compute_bytes_digest::<Sha256>(path.as_os_str().as_encoded_bytes());
+        self.origin_hash = Some(format!("{path_hash:x}"));
+        self
+    }
 }
 
 impl CacheKey {
     /// Return the sha256 hash of the package if it is known.
     pub fn sha256(&self) -> Option<Sha256Hash> {
         self.sha256
+    }
+
+    /// Return the md5 hash of the package if it is known.
+    pub fn md5(&self) -> Option<Md5Hash> {
+        self.md5
     }
 }
 
@@ -41,6 +77,8 @@ impl From<ArchiveIdentifier> for CacheKey {
             version: pkg.version,
             build_string: pkg.build_string,
             sha256: None,
+            md5: None,
+            origin_hash: None,
         }
     }
 }
@@ -52,12 +90,21 @@ impl From<&PackageRecord> for CacheKey {
             version: record.version.to_string(),
             build_string: record.build.clone(),
             sha256: record.sha256,
+            md5: record.md5,
+            origin_hash: None,
         }
     }
 }
 
 impl Display for CacheKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}-{}-{}", &self.name, &self.version, &self.build_string)
+        match &self.origin_hash {
+            Some(url_hash) => write!(
+                f,
+                "{}-{}-{}-{}",
+                &self.name, &self.version, &self.build_string, url_hash
+            ),
+            None => write!(f, "{}-{}-{}", &self.name, &self.version, &self.build_string),
+        }
     }
 }

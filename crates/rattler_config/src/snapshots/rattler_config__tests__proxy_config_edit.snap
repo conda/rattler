@@ -1,0 +1,17 @@
+---
+source: crates/rattler_config/src/lib.rs
+expression: toml_output
+---
+tls-no-verify = false
+array_field = []
+
+[proxy-config]
+https = "https://corporate-proxy.example.com:8080/"
+http = "http://corporate-proxy.example.com:8080/"
+non-proxy-hosts = [
+    "localhost",
+    "127.0.0.1",
+    "*.internal.com",
+]
+
+[nested]

@@ -6,6 +6,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.8](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.7...rattler_repodata_gateway-v0.23.8) - 2025-07-21
+
+### Other
+
+- bump rust 1.88.0 ([#1536](https://github.com/conda/rattler/pull/1536))
+
+## [0.23.7](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.6...rattler_repodata_gateway-v0.23.7) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_cache
+
+## [0.23.6](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.5...rattler_repodata_gateway-v0.23.6) - 2025-07-09
+
+### Added
+
+- implement config conversion for repodata_gateway ([#1498](https://github.com/conda/rattler/pull/1498))
+
+## [0.23.5](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.4...rattler_repodata_gateway-v0.23.5) - 2025-07-01
+
+### Added
+
+- set default User-Agent if not provided ([#1468](https://github.com/conda/rattler/pull/1468))
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [0.23.4](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.3...rattler_repodata_gateway-v0.23.4) - 2025-06-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_cache
+
+## [0.23.3](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.2...rattler_repodata_gateway-v0.23.3) - 2025-06-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_cache
+
+## [0.23.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.1...rattler_repodata_gateway-v0.23.2) - 2025-06-24
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.23.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.0...rattler_repodata_gateway-v0.23.1) - 2025-06-23
+
+### Fixed
+
+- end progress sharded repodata ([#1375](https://github.com/conda/rattler/pull/1375))
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [0.23.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.7...rattler_repodata_gateway-v0.23.0) - 2025-05-23
+
+### Added
+
+- *(py)* query based on matchspec and package count ([#1347](https://github.com/conda/rattler/pull/1347))
+- control over selection of .conda and .tar.bz2 ([#1344](https://github.com/conda/rattler/pull/1344))
+
+### Fixed
+
+- *(py)* package count was incorrect for prefer-conda ([#1350](https://github.com/conda/rattler/pull/1350))
+- properly dedup package names ([#1342](https://github.com/conda/rattler/pull/1342))
+- consistent usage of rustls-tls / native-tls feature ([#1324](https://github.com/conda/rattler/pull/1324))
+
+## [0.22.7](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.6...rattler_repodata_gateway-v0.22.7) - 2025-05-16
+
+### Other
+
+- make sure that md5 also works as `CacheKey` ([#1293](https://github.com/conda/rattler/pull/1293))
+- Bump zip to 3.0.0 ([#1310](https://github.com/conda/rattler/pull/1310))
+
+## [0.22.6](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.5...rattler_repodata_gateway-v0.22.6) - 2025-05-03
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.22.5](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.4...rattler_repodata_gateway-v0.22.5) - 2025-04-10
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.22.4](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.3...rattler_repodata_gateway-v0.22.4) - 2025-04-04
+
+### Added
+
+- more helpful error when failing to persist repodata ([#1220](https://github.com/conda/rattler/pull/1220))
+
 ## [0.22.3](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.22.2...rattler_repodata_gateway-v0.22.3) - 2025-03-18
 
 ### Added

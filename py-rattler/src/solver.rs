@@ -6,7 +6,6 @@ use pyo3::{
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{resolvo::Solver, RepoDataIter, SolveStrategy, SolverImpl, SolverTask};
-use std::sync::Arc;
 use tokio::task::JoinError;
 
 use crate::{
@@ -17,7 +16,7 @@ use crate::{
     platform::PyPlatform,
     record::PyRecord,
     repo_data::gateway::PyGateway,
-    PySparseRepoData, Wrap,
+    PyPackageFormatSelection, PySparseRepoData, Wrap,
 };
 
 impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
@@ -121,39 +120,55 @@ pub fn py_solve(
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, strategy=None)
+#[pyo3(signature = (specs, sparse_repodata, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, package_format_selection, timeout=None, exclude_newer_timestamp_ms=None, strategy=None)
 )]
-pub fn py_solve_with_sparse_repodata(
-    py: Python<'_>,
+pub fn py_solve_with_sparse_repodata<'py>(
+    py: Python<'py>,
     specs: Vec<PyMatchSpec>,
-    sparse_repodata: Vec<PySparseRepoData>,
+    sparse_repodata: Vec<Bound<'py, PySparseRepoData>>,
     constraints: Vec<PyMatchSpec>,
     locked_packages: Vec<PyRecord>,
     pinned_packages: Vec<PyRecord>,
     virtual_packages: Vec<PyGenericVirtualPackage>,
     channel_priority: PyChannelPriority,
+    package_format_selection: PyPackageFormatSelection,
     timeout: Option<u64>,
     exclude_newer_timestamp_ms: Option<i64>,
     strategy: Option<Wrap<SolveStrategy>>,
-) -> PyResult<Bound<'_, PyAny>> {
+) -> PyResult<Bound<'py, PyAny>> {
+    // Acquire read locks on the SparseRepoData instances. This allows us to safely access the
+    // object in another thread.
+    let repo_data_locks = sparse_repodata
+        .into_iter()
+        .map(|s| s.borrow().inner.read_arc())
+        .collect::<Vec<_>>();
+
     future_into_py(py, async move {
         let exclude_newer = exclude_newer_timestamp_ms.and_then(DateTime::from_timestamp_millis);
 
-        let sparse_repodata = sparse_repodata
-            .into_iter()
-            .map(|s| s.inner.clone())
-            .collect::<Vec<_>>();
-
         let solve_result = tokio::task::spawn_blocking(move || {
+            // Ensure that all the SparseRepoData instances are still valid, e.g. not closed.
+            let repo_data_refs = repo_data_locks
+                .iter()
+                .map(|s| {
+                    s.as_ref()
+                        .ok_or_else(|| PyValueError::new_err("I/O operation on closed file."))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
             let package_names = specs
                 .iter()
                 .filter_map(|match_spec| match_spec.inner.name.clone());
 
             let available_packages = SparseRepoData::load_records_recursive(
-                sparse_repodata.iter().map(Arc::as_ref),
+                repo_data_refs,
                 package_names,
                 None,
+                package_format_selection.into(),
             )?;
+
+            // Force drop the locks to avoid holding them longer than necessary.
+            drop(repo_data_locks);
 
             let task = SolverTask {
                 available_packages: available_packages

@@ -1,4 +1,7 @@
-exclude: (^.pixi/|.snap)
+# Reason of exclusion:
+# js-rattler/src/PackageName.test.ts: complains about valid test names in strings
+# py-rattler/mkdocs.yml: complain about invalid constructor for the tag, although it is valid in mkdocs.yaml
+exclude: (^.pixi/|.snap|js-rattler/src/PackageName.test.ts|py-rattler/mkdocs.yml)
 repos:
   - repo: local
     hooks:
@@ -9,24 +12,26 @@ repos:
         always_run: true
         require_serial: true
         pass_filenames: false
+        stages: [pre-commit, manual]
       # pre-commit-hooks
       - id: check-yaml
         name: check-yaml
         entry: pixi run -e lint check-yaml
         language: system
         types: [yaml]
+        stages: [pre-commit, manual]
       - id: end-of-file
         name: end-of-file
         entry: pixi run -e lint end-of-file-fixer
         language: system
         types: [text]
-        stages: [commit, push, manual]
+        stages: [pre-commit, manual]
       - id: trailing-whitespace
         name: trailing-whitespace
         entry: pixi run -e lint trailing-whitespace-fixer
         language: system
         types: [text]
-        stages: [commit, push, manual]
+        stages: [pre-commit, manual]
       # Use ruff for python examples
       - id: ruff
         name: ruff
@@ -34,18 +39,21 @@ repos:
         language: system
         types_or: [python, pyi]
         require_serial: true
+        stages: [pre-commit, manual]
       - id: ruff-format
         name: ruff-format
         entry: pixi run -e lint ruff format --force-exclude
         language: system
         types_or: [python, pyi]
         require_serial: true
+        stages: [pre-commit, manual]
       # typos
       - id: typos
         name: typos
         entry: pixi run -e lint typos --write-changes --force-exclude
         language: system
         types: [text]
+        stages: [pre-commit, manual]
   # Copied from Mozilla https://github.com/mozilla/grcov/blob/master/.pre-commit-config.yaml
   - repo: https://github.com/DevinR528/cargo-sort
     rev: v1.0.9
@@ -57,18 +65,20 @@ repos:
         name: fmt
         language: system
         types: [file, rust]
-        entry: cargo fmt
+        entry: pixi run fmt
         pass_filenames: false
+        stages: [pre-commit, manual]
       - id: clippy
         name: clippy
         language: system
         types: [file, rust]
         entry: cargo clippy --all-targets -- -D warnings -Dclippy::dbg_macro # Use -D warnings option to ensure the job fails when encountering warnings
         pass_filenames: false
+        stages: [pre-commit, manual]
       - id: test
         name: test
         language: system
-        stages: [push]
+        stages: [pre-push]
         types: [file, rust]
         entry: cargo test
         pass_filenames: false

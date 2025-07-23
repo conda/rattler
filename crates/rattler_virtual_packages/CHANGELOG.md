@@ -6,6 +6,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.19...rattler_virtual_packages-v2.1.0) - 2025-07-21
+
+### Added
+
+- make `Platform` `non_exhaustive` ([#1539](https://github.com/conda/rattler/pull/1539))
+- add support for loong64 platform to rattler ([#1534](https://github.com/conda/rattler/pull/1534))
+
+## [2.0.19](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.18...rattler_virtual_packages-v2.0.19) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.18](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.17...rattler_virtual_packages-v2.0.18) - 2025-07-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.17](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.16...rattler_virtual_packages-v2.0.17) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [2.0.16](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.15...rattler_virtual_packages-v2.0.16) - 2025-06-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.15](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.14...rattler_virtual_packages-v2.0.15) - 2025-06-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.14](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.13...rattler_virtual_packages-v2.0.14) - 2025-06-23
+
+### Fixed
+
+- fix code to use nom 8
+
+### Other
+
+- *(ci)* Update Rust crate nom to v8 ([#1404](https://github.com/conda/rattler/pull/1404))
+- Revert "fix code to use nom 8"
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [2.0.13](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.12...rattler_virtual_packages-v2.0.13) - 2025-05-23
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.12](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.11...rattler_virtual_packages-v2.0.12) - 2025-05-16
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [2.0.11](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.10...rattler_virtual_packages-v2.0.11) - 2025-05-03
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [2.0.10](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.9...rattler_virtual_packages-v2.0.10) - 2025-04-10
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [2.0.9](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.8...rattler_virtual_packages-v2.0.9) - 2025-04-04
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [2.0.8](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.7...rattler_virtual_packages-v2.0.8) - 2025-03-14
 
 ### Other

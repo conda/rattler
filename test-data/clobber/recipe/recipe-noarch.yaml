@@ -6,8 +6,8 @@ outputs:
   - package:
       name: clobber-pynoarch-1
       version: 0.1.0
-    
-    build:  
+
+    build:
       noarch: python
       script:
         - mkdir -p $PREFIX/site-packages/clobber
@@ -16,8 +16,8 @@ outputs:
   - package:
       name: clobber-pynoarch-2
       version: 0.1.0
-    
-    build:  
+
+    build:
       noarch: python
       script:
         - mkdir -p $PREFIX/site-packages/clobber

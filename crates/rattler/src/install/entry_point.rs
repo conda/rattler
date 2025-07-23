@@ -9,6 +9,8 @@ use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
 use std::{fs::File, io, io::Write, path::Path};
 
+use super::Prefix;
+
 /// Get the bytes of the windows launcher executable.
 pub fn get_windows_launcher(platform: &Platform) -> &'static [u8] {
     match platform {
@@ -34,7 +36,7 @@ pub fn get_windows_launcher(platform: &Platform) -> &'static [u8] {
 ///
 /// See [`create_unix_python_entry_point`] for the unix variant of this function.
 pub fn create_windows_python_entry_point(
-    target_dir: &Path,
+    target_dir: &Prefix,
     target_prefix: &str,
     entry_point: &EntryPoint,
     python_info: &PythonInfo,
@@ -46,7 +48,7 @@ pub fn create_windows_python_entry_point(
         .join(format!("{}-script.py", &entry_point.command));
 
     // Write the contents of the launcher script to disk
-    let script_path = target_dir.join(&relative_path_script_py);
+    let script_path = target_dir.path().join(&relative_path_script_py);
     std::fs::create_dir_all(
         script_path
             .parent()
@@ -63,7 +65,10 @@ pub fn create_windows_python_entry_point(
 
     // Include the bytes of the launcher directly in the binary so we can write it to disk.
     let launcher_bytes = get_windows_launcher(target_platform);
-    std::fs::write(target_dir.join(&relative_path_script_exe), launcher_bytes)?;
+    std::fs::write(
+        target_dir.path().join(&relative_path_script_exe),
+        launcher_bytes,
+    )?;
 
     let fixed_launcher_digest = rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
         "28b001bb9a72ae7a24242bfab248d767a1ac5dec981c672a3944f7a072375e9a",
@@ -105,7 +110,7 @@ pub fn create_windows_python_entry_point(
 ///
 /// On windows things are a bit more complicated. See [`create_windows_python_entry_point`].
 pub fn create_unix_python_entry_point(
-    target_dir: &Path,
+    target_dir: &Prefix,
     target_prefix: &str,
     entry_point: &EntryPoint,
     python_info: &PythonInfo,
@@ -114,7 +119,7 @@ pub fn create_unix_python_entry_point(
     let relative_path = python_info.bin_dir.join(&entry_point.command);
 
     // Write the contents of the launcher script to disk
-    let script_path = target_dir.join(&relative_path);
+    let script_path = target_dir.path().join(&relative_path);
     std::fs::create_dir_all(
         script_path
             .parent()

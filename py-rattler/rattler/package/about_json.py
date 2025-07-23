@@ -75,7 +75,7 @@ class AboutJson:
         return AboutJson._from_py_about_json(PyAboutJson.from_str(string))
 
     @staticmethod
-    def package_path() -> str:
+    def package_path() -> Path:
         """
         Returns the path to the file within the Conda archive.
 
@@ -85,7 +85,7 @@ class AboutJson:
         Examples
         --------
         ```python
-        >>> AboutJson.package_path()
+        >>> str(AboutJson.package_path())
         'info/about.json'
         >>>
         ```

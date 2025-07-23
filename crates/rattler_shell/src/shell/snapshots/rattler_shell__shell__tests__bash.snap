@@ -2,6 +2,13 @@
 source: crates/rattler_shell/src/shell/mod.rs
 expression: script.to_string()
 ---
-export FOO="bar"
+export FOO=bar
+export FOO2='a b'
+export FOO3="a\\b"
+export FOO4='${UNEXPANDED_VAR}'
 unset FOO
-. "foo.sh"
+export PATH="${PATH}:bar:a/b"
+export PATH="bar:a/b:${PATH}"
+export PATH="bar:a/b"
+. foo.sh
+. "a\\foo.sh"

@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::sync::Arc;
 
 use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
@@ -24,6 +25,12 @@ impl From<MatchSpec> for PyMatchSpec {
 impl From<PyMatchSpec> for MatchSpec {
     fn from(value: PyMatchSpec) -> Self {
         value.inner
+    }
+}
+
+impl Borrow<MatchSpec> for PyMatchSpec {
+    fn borrow(&self) -> &MatchSpec {
+        &self.inner
     }
 }
 
@@ -131,5 +138,16 @@ impl PyMatchSpec {
                 Some(PackageName::try_from(name).map_err(PyRattlerError::from)?),
             ),
         })
+    }
+
+    #[staticmethod]
+    pub fn from_url(url: &str) -> PyResult<Self> {
+        let url = url
+            .parse::<url::Url>()
+            .map_err(PyRattlerError::InvalidUrl)?;
+
+        Ok(MatchSpec::try_from(url)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
     }
 }

@@ -32,7 +32,7 @@ pub enum NetRcStorageError {
 }
 
 impl NetRcStorage {
-    /// Create a new fallback storage by retrieving the netrc file from the user environment.  
+    /// Create a new fallback storage by retrieving the netrc file from the user environment.
     /// This uses the same environment variable as curl and will read the file from $NETRC
     /// falling back to `~/.netrc`.
     ///

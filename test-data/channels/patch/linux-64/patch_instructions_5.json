@@ -1,0 +1,7 @@
+{
+    "packages.conda": {
+        "pytorch-cpu-2.6.0-cpu_mkl_h8b52ce0_104.conda": {
+            "track_features": null
+        }
+    }
+}

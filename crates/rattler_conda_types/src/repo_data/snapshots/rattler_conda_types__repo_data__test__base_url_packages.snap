@@ -26,3 +26,8 @@ expression: file_urls
 - channels/dummy/linux-64/track-features-1-xxx.tar.bz2
 - channels/dummy/linux-64/track-features-2-xxx.tar.bz2
 - channels/dummy/linux-64/track-features-4-xxx.tar.bz2
+- channels/dummy/linux-64/foobar-2.0-bla_1.conda
+- channels/dummy/linux-64/bors-2.1-bla_1.conda
+- channels/dummy/linux-64/issue_717-2.1-bla_1.conda
+- channels/dummy/linux-64/bors-1.1-bla_1.conda
+- channels/dummy/linux-64/conda-only-0.1.0-foobar_0.conda

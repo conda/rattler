@@ -3,5 +3,5 @@ source: crates/rattler_shell/src/activation.rs
 expression: script
 ---
 set -gx PATH "$PATH:__PREFIX__/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin"
+set -gx CONDA_SHLVL "1"
 set -gx CONDA_PREFIX "__PREFIX__"
-

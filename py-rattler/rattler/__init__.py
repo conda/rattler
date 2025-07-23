@@ -8,6 +8,7 @@ from rattler.repo_data import (
     SparseRepoData,
     Gateway,
     SourceConfig,
+    PackageFormatSelection,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.networking import Client, fetch_repo_data
@@ -22,9 +23,10 @@ from rattler.package import (
     PrefixPlaceholder,
     FileMode,
     IndexJson,
+    NoArchType,
+    NoArchLiteral,
 )
-from rattler.package.no_arch_type import NoArchType
-from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType
+from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, Link, LinkType
 from rattler.platform import Platform
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
 from rattler.install import install
@@ -69,6 +71,7 @@ __all__ = [
     "PrefixPathsEntry",
     "PrefixPathType",
     "SparseRepoData",
+    "PackageFormatSelection",
     "LockFile",
     "Environment",
     "LockChannel",
@@ -94,4 +97,7 @@ __all__ = [
     "Gateway",
     "SourceConfig",
     "NoArchType",
+    "NoArchLiteral",
+    "Link",
+    "LinkType",
 ]

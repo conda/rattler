@@ -11,8 +11,10 @@ async def index_fs(
     channel_directory: os.PathLike[str],
     target_platform: Optional[Platform] = None,
     repodata_patch: Optional[str] = None,
+    write_zst: bool = True,
+    write_shards: bool = True,
     force: bool = False,
-    max_parallel: int = 128,
+    max_parallel: int | None = None,
 ) -> None:
     """
     Indexes dependencies in the `channel_directory` for one or more subdirectories within said directory.
@@ -26,6 +28,8 @@ async def index_fs(
                            of dependencies to index.
         target_platform: A `Platform` to index dependencies for.
         repodata_patch: The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
+        write_zst: Whether to write repodata.json.zst.
+        write_shards: Whether to write sharded repodata.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
     """
@@ -33,6 +37,8 @@ async def index_fs(
         channel_directory,
         target_platform._inner if target_platform else target_platform,
         repodata_patch,
+        write_zst,
+        write_shards,
         force,
         max_parallel,
     )
@@ -48,8 +54,10 @@ async def index_s3(
     session_token: Optional[str] = None,
     target_platform: Optional[Platform] = None,
     repodata_patch: Optional[str] = None,
+    write_zst: bool = True,
+    write_shards: bool = True,
     force: bool = False,
-    max_parallel: int = 128,
+    max_parallel: int | None = None,
 ) -> None:
     """
     Indexes dependencies in the `channel_url` for one or more subdirectories in the S3 directory.
@@ -69,6 +77,8 @@ async def index_s3(
         session_token: The session token to use for authentication.
         target_platform: A `Platform` to index dependencies for.
         repodata_patch: The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
+        write_zst: Whether to write repodata.json.zst.
+        write_shards: Whether to write sharded repodata.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
     """
@@ -82,6 +92,8 @@ async def index_s3(
         session_token,
         target_platform._inner if target_platform else target_platform,
         repodata_patch,
+        write_zst,
+        write_shards,
         force,
         max_parallel,
     )

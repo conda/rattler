@@ -51,7 +51,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         &solvable.record
     }
 
-    /// Referece to the pool
+    /// Reference to the pool
     fn pool(&self) -> &Pool<SolverMatchSpec<'repo>, NameType> {
         &self.solver.provider().pool
     }
@@ -295,8 +295,8 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 // Compare the versions
                 match a_version.compare_with_strategy(&b_version, self.dependency_strategy) {
                     Ordering::Equal => {
-                        // If this version is equal, we continue with the next dependency
-                        continue;
+                        // If this version is equal, we continue with the next
+                        // dependency
                     }
                     ordering => return ordering,
                 }

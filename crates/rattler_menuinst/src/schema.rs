@@ -427,12 +427,12 @@ pub struct MacOS {
 
     /// Build version number for the bundle. In the context of 'menuinst'
     /// this can be used to signal a new version of the menu item for the same
-    /// application version.    
+    /// application version.
     #[serde(rename = "CFBundleVersion")]
     pub cf_bundle_version: Option<PlaceholderString>,
 
     /// URL types supported by this app. Requires setting `event_handler` too.
-    /// Note this feature requires macOS 10.15+.    
+    /// Note this feature requires macOS 10.15+.
     #[serde(rename = "CFBundleURLTypes")]
     pub cf_bundle_url_types: Option<Vec<CFBundleURLTypesModel>>,
 

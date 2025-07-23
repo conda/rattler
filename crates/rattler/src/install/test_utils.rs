@@ -1,10 +1,7 @@
-use std::{
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::{path::PathBuf, str::FromStr};
 
 use futures::TryFutureExt;
-use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord, Version};
+use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
 use rattler_networking::retry_policies::default_retry_policy;
 use transaction::{Transaction, TransactionOperation};
 use url::Url;
@@ -20,7 +17,7 @@ use super::{driver::PostProcessResult, link_package, PythonInfo};
 /// Install a package into the environment and write a `conda-meta` file that
 /// contains information about how the file was linked.
 pub async fn install_package_to_environment(
-    target_prefix: &Path,
+    target_prefix: &Prefix,
     package_dir: PathBuf,
     repodata_record: RepoDataRecord,
     install_driver: &InstallDriver,
@@ -52,7 +49,7 @@ pub async fn install_package_to_environment(
     };
 
     // Create the conda-meta directory if it doesnt exist yet.
-    let target_prefix = target_prefix.to_path_buf();
+    let target_prefix = target_prefix.path().to_path_buf();
     let result = tokio::task::spawn_blocking(move || {
         let conda_meta_path = target_prefix.join("conda-meta");
         std::fs::create_dir_all(&conda_meta_path)?;
@@ -75,7 +72,7 @@ pub async fn install_package_to_environment(
 }
 
 pub async fn execute_operation(
-    target_prefix: &Path,
+    target_prefix: &Prefix,
     download_client: &reqwest_middleware::ClientWithMiddleware,
     package_cache: &PackageCache,
     install_driver: &InstallDriver,
@@ -92,6 +89,10 @@ pub async fn execute_operation(
             .unregister_paths(remove_record);
         unlink_package(target_prefix, remove_record).await.unwrap();
     }
+
+    install_driver
+        .remove_empty_directories(&[op.clone()], &[], target_prefix)
+        .unwrap();
 
     let install_package = if let Some(install_record) = install_record {
         // Make sure the package is available in the package cache.
@@ -127,14 +128,14 @@ pub async fn execute_operation(
 
 pub async fn execute_transaction(
     transaction: Transaction<PrefixRecord, RepoDataRecord>,
-    target_prefix: &Path,
+    target_prefix: &Prefix,
     download_client: &reqwest_middleware::ClientWithMiddleware,
     package_cache: &PackageCache,
     install_driver: &InstallDriver,
     install_options: &InstallOptions,
 ) -> PostProcessResult {
     install_driver
-        .pre_process(&transaction, target_prefix)
+        .pre_process(&transaction, target_prefix.path())
         .unwrap();
 
     for op in &transaction.operations {
@@ -164,7 +165,7 @@ pub fn find_prefix_record<'a>(
 }
 
 pub async fn download_and_get_prefix_record(
-    target_prefix: &Path,
+    target_prefix: &Prefix,
     package_url: Url,
     sha256_hash: &str,
 ) -> PrefixRecord {

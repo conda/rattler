@@ -319,7 +319,7 @@ impl<R: Read> Read for FlakyReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let remaining = self.cutoff.saturating_sub(self.total_read);
         if remaining == 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "flaky"));
+            return Err(std::io::Error::other("flaky"));
         }
         let max_read = buf.len().min(remaining);
         let bytes_read = self.reader.read(&mut buf[..max_read])?;

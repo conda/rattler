@@ -46,7 +46,7 @@ use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 ///
 /// The gateway is thread-safe and can be shared between multiple threads. The
 /// gateway struct itself uses internal reference counting and is cheaply
-/// clonable. There is no need to wrap the gateway in an `Arc`.
+/// cloneable. There is no need to wrap the gateway in an `Arc`.
 #[derive(Clone)]
 pub struct Gateway {
     inner: Arc<GatewayInner>,

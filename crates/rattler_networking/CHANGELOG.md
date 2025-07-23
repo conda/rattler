@@ -6,6 +6,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.7](https://github.com/conda/rattler/compare/rattler_networking-v0.25.6...rattler_networking-v0.25.7) - 2025-07-21
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.6](https://github.com/conda/rattler/compare/rattler_networking-v0.25.5...rattler_networking-v0.25.6) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.5](https://github.com/conda/rattler/compare/rattler_networking-v0.25.4...rattler_networking-v0.25.5) - 2025-07-09
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.4](https://github.com/conda/rattler/compare/rattler_networking-v0.25.3...rattler_networking-v0.25.4) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+### Other
+
+- *(ci)* Update Rust crate google-cloud-auth to 0.21.0 ([#1461](https://github.com/conda/rattler/pull/1461))
+
+## [0.25.3](https://github.com/conda/rattler/compare/rattler_networking-v0.25.2...rattler_networking-v0.25.3) - 2025-06-26
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.2](https://github.com/conda/rattler/compare/rattler_networking-v0.25.1...rattler_networking-v0.25.2) - 2025-06-25
+
+### Added
+
+- *(rattler_index)* Use rattler_config ([#1466](https://github.com/conda/rattler/pull/1466))
+
+## [0.25.1](https://github.com/conda/rattler/compare/rattler_networking-v0.25.0...rattler_networking-v0.25.1) - 2025-06-23
+
+### Added
+
+- add `rattler_config` crate (derived from `pixi_config`) ([#1389](https://github.com/conda/rattler/pull/1389))
+- make rattler_networking system integration optional ([#1381](https://github.com/conda/rattler/pull/1381))
+
+### Fixed
+
+- reduce s3 into to trace ([#1395](https://github.com/conda/rattler/pull/1395))
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [0.25.0](https://github.com/conda/rattler/compare/rattler_networking-v0.24.0...rattler_networking-v0.25.0) - 2025-05-23
+
+### Fixed
+
+- consistent usage of rustls-tls / native-tls feature ([#1324](https://github.com/conda/rattler/pull/1324))
+
+## [0.24.0](https://github.com/conda/rattler/compare/rattler_networking-v0.23.0...rattler_networking-v0.24.0) - 2025-05-16
+
+### Other
+
+- update dependencies of js-rattler and py-rattler as well ([#1317](https://github.com/conda/rattler/pull/1317))
+- update GCS authentication ([#1314](https://github.com/conda/rattler/pull/1314))
+
+## [0.23.0](https://github.com/conda/rattler/compare/rattler_networking-v0.22.12...rattler_networking-v0.23.0) - 2025-05-03
+
+### Added
+
+- Add MemoryStorage as authentication backend ([#1265](https://github.com/conda/rattler/pull/1265))
+
+## [0.22.12](https://github.com/conda/rattler/compare/rattler_networking-v0.22.11...rattler_networking-v0.22.12) - 2025-04-10
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.22.11](https://github.com/conda/rattler/compare/rattler_networking-v0.22.10...rattler_networking-v0.22.11) - 2025-04-04
+
+### Other
+
+- add the remove_from_backup function and update the prefix ([#1155](https://github.com/conda/rattler/pull/1155))
+- fix js bindings ([#1203](https://github.com/conda/rattler/pull/1203))
+
 ## [0.22.10](https://github.com/conda/rattler/compare/rattler_networking-v0.22.9...rattler_networking-v0.22.10) - 2025-03-14
 
 ### Other

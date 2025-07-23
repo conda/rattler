@@ -11,7 +11,7 @@ use tempfile::TempDir;
 mod mime_config;
 
 use rattler_conda_types::Platform;
-use rattler_shell::activation::{ActivationVariables, Activator};
+use rattler_shell::activation::{ActivationVariables, Activator, PathModificationBehavior};
 use rattler_shell::shell;
 
 use crate::render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString};
@@ -199,8 +199,7 @@ fn xdg_mime(
         );
         log_output("xdg-mime", output);
 
-        return Err(XdgMimeError::IoError(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(XdgMimeError::IoError(std::io::Error::other(
             "xdg-mime failed",
         )));
     }
@@ -300,7 +299,11 @@ impl LinuxMenu {
         if self.command.activate.unwrap_or(false) {
             // create a bash activation script and emit it into the script
             let activator = Activator::from_path(&self.prefix, shell::Bash, Platform::current())?;
-            let activation_env = activator.run_activation(ActivationVariables::default(), None)?;
+            let activation_variables = ActivationVariables {
+                path_modification_behavior: PathModificationBehavior::Prepend,
+                ..Default::default()
+            };
+            let activation_env = activator.run_activation(activation_variables, None)?;
 
             for (k, v) in activation_env {
                 envs.push(format!(r#"{k}="{v}""#));
@@ -572,7 +575,7 @@ impl LinuxMenu {
         if xdg_mime(&file_path, self.mode, XdgMimeOperation::Install).is_ok() {
             // keep temp dir in prefix around and the temp file
             // because we re-use it when unregistering the mime type.
-            let _ = temp_dir.into_path();
+            let _ = temp_dir.keep();
             tracker.registered_mime_files.push(file_path);
         } else {
             if let Some(parent) = xml_path.parent() {

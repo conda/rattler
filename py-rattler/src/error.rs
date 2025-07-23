@@ -66,7 +66,7 @@ pub enum PyRattlerError {
     #[error(transparent)]
     ExtractError(#[from] ExtractError),
     #[error(transparent)]
-    ActivationScriptFormatError(std::fmt::Error),
+    ShellError(#[from] rattler_shell::shell::ShellError),
     #[error(transparent)]
     GatewayError(#[from] GatewayError),
     #[error(transparent)]
@@ -76,9 +76,15 @@ pub enum PyRattlerError {
         #[from] rattler_conda_types::ParseExplicitEnvironmentSpecError,
     ),
     #[error(transparent)]
-    ValidatePackageRecordsError(#[from] ValidatePackageRecordsError),
+    ValidatePackageRecordsError(#[from] Box<ValidatePackageRecordsError>),
     #[error(transparent)]
     AuthenticationStorageError(#[from] AuthenticationStorageError),
+    #[error(transparent)]
+    MatchSpecUrlError(#[from] rattler_conda_types::MatchSpecUrlError),
+    #[error(transparent)]
+    InvalidHeaderNameError(#[from] reqwest::header::InvalidHeaderName),
+    #[error(transparent)]
+    InvalidHeaderValueError(#[from] reqwest::header::InvalidHeaderValue),
 }
 
 fn pretty_print_error(mut err: &dyn Error) -> String {
@@ -154,9 +160,6 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::ExtractError(err) => {
                 ExtractException::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::ActivationScriptFormatError(err) => {
-                ActivationScriptFormatException::new_err(pretty_print_error(&err))
-            }
             PyRattlerError::GatewayError(err) => {
                 GatewayException::new_err(pretty_print_error(&err))
             }
@@ -171,6 +174,16 @@ impl From<PyRattlerError> for PyErr {
             }
             PyRattlerError::AuthenticationStorageError(err) => {
                 AuthenticationStorageException::new_err(pretty_print_error(&err))
+            }
+            PyRattlerError::ShellError(err) => ShellException::new_err(pretty_print_error(&err)),
+            PyRattlerError::MatchSpecUrlError(err) => {
+                InvalidMatchSpecException::new_err(pretty_print_error(&err))
+            }
+            PyRattlerError::InvalidHeaderNameError(err) => {
+                InvalidHeaderNameException::new_err(pretty_print_error(&err))
+            }
+            PyRattlerError::InvalidHeaderValueError(err) => {
+                InvalidHeaderValueError::new_err(pretty_print_error(&err))
             }
         }
     }
@@ -209,3 +222,6 @@ create_exception!(
 );
 create_exception!(exceptions, ValidatePackageRecordsException, PyException);
 create_exception!(exceptions, AuthenticationStorageException, PyException);
+create_exception!(exceptions, ShellException, PyException);
+create_exception!(exceptions, InvalidHeaderNameException, PyException);
+create_exception!(exceptions, InvalidHeaderValueError, PyException);

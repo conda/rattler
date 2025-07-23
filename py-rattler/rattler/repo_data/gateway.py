@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, List
+from typing import Optional, List, Iterable
 from dataclasses import dataclass
 
 from rattler.rattler import PyGateway, PySourceConfig, PyMatchSpec
@@ -37,7 +37,7 @@ class SourceConfig:
 
     cache_action: CacheAction = "cache-or-fetch"
     """How to interact with the cache.
-    
+
     * `'cache-or-fetch'` (default): Use the cache if its up to date or fetch from the URL if there is no valid cached value.
     * `'use-cache-only'`: Only use the cache, but error out if the cache is not up to date
     * `'force-cache-only'`: Only use the cache, ignore whether or not it is up to date.
@@ -116,19 +116,16 @@ class Gateway:
         self._gateway = PyGateway(
             cache_dir=cache_dir,
             default_config=default_config._into_py(),
-            per_channel_config={
-                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel: config._into_py()
-                for channel, config in (per_channel_config or {}).items()
-            },
+            per_channel_config={channel: config._into_py() for channel, config in (per_channel_config or {}).items()},
             max_concurrent_requests=max_concurrent_requests,
             client=client._client if client is not None else None,
         )
 
     async def query(
         self,
-        channels: List[Channel | str],
-        platforms: List[Platform | PlatformLiteral],
-        specs: List[MatchSpec | PackageName | str],
+        channels: Iterable[Channel | str],
+        platforms: Iterable[Platform | PlatformLiteral],
+        specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
     ) -> List[List[RepoDataRecord]]:
         """Queries the gateway for repodata.
@@ -183,7 +180,7 @@ class Gateway:
         return [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records]
 
     async def names(
-        self, channels: List[Channel | str], platforms: List[Platform | PlatformLiteral]
+        self, channels: List[Channel | str], platforms: Iterable[Platform | PlatformLiteral]
     ) -> List[PackageName]:
         """Queries all the names of packages in a channel.
 
@@ -220,7 +217,7 @@ class Gateway:
         return [PackageName._from_py_package_name(package_name) for package_name in py_package_names]
 
     def clear_repodata_cache(
-        self, channel: Channel | str, subdirs: Optional[List[Platform | PlatformLiteral]] = None
+        self, channel: Channel | str, subdirs: Optional[Iterable[Platform | PlatformLiteral]] = None
     ) -> None:
         """
         Clears any in-memory cache for the given channel.

@@ -27,11 +27,11 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub name: Cow<'a, PackageName>,
     pub version: Cow<'a, VersionWithSource>,
     #[serde(default, skip_serializing_if = "is_default")]
-    pub build: Cow<'a, String>,
+    pub build: Cow<'a, str>,
     #[serde(default, skip_serializing_if = "is_default")]
     pub build_number: BuildNumber,
     #[serde(default)]
-    pub subdir: Cow<'a, String>,
+    pub subdir: Cow<'a, str>,
     #[serde(skip_serializing_if = "NoArchType::is_none")]
     pub noarch: Cow<'a, NoArchType>,
 
@@ -50,10 +50,10 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub legacy_bz2_md5: Option<Md5Hash>,
 
     // Dependencies
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub depends: Cow<'a, Vec<String>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub constrains: Cow<'a, Vec<String>>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub depends: Cow<'a, [String]>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub constrains: Cow<'a, [String]>,
 
     // Additional properties (in semi alphabetic order but grouped by commonality)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -66,8 +66,8 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub features: Cow<'a, Option<String>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub track_features: Cow<'a, Vec<String>>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub track_features: Cow<'a, [String]>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_name: Cow<'a, Option<String>>,
@@ -117,7 +117,7 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
                 build_number: value.build_number,
                 constrains: value.constrains.into_owned(),
                 depends: value.depends.into_owned(),
-                extra_depends: std::collections::BTreeMap::new(),
+                experimental_extra_depends: std::collections::BTreeMap::new(),
                 features: value.features.into_owned(),
                 legacy_bz2_md5: value.legacy_bz2_md5,
                 legacy_bz2_size: value.legacy_bz2_size.into_owned(),

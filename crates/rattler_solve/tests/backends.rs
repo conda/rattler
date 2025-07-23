@@ -6,7 +6,7 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
     ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
 };
-use rattler_repodata_gateway::sparse::SparseRepoData;
+use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
 use url::Url;
 
@@ -105,7 +105,7 @@ fn installed_package(
             sha256: Some(dummy_sha256_hash()),
             size: None,
             arch: None,
-            extra_depends: BTreeMap::new(),
+            experimental_extra_depends: BTreeMap::new(),
             platform: None,
             depends: Vec::new(),
             constrains: Vec::new(),
@@ -133,8 +133,13 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
     let sparse_repo_data = read_real_world_repo_data();
 
     let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
-    let available_packages =
-        SparseRepoData::load_records_recursive(sparse_repo_data, names, None).unwrap();
+    let available_packages = SparseRepoData::load_records_recursive(
+        sparse_repo_data,
+        names,
+        None,
+        PackageFormatSelection::default(),
+    )
+    .unwrap();
 
     let solver_task = SolverTask {
         specs: specs.clone(),
@@ -1064,7 +1069,7 @@ mod resolvo {
 
     #[cfg(feature = "experimental_extras")]
     /// Attempts to enable two optional features that conflict: `[with-oldbors,with-latest-bors]`.
-    /// This should fail because one requests `bors <2.0` and the other requests `bors >=2.0`.  
+    /// This should fail because one requests `bors <2.0` and the other requests `bors >=2.0`.
     #[test]
     fn test_solve_dummy_repo_extra_depends_conflict_resolvo() {
         let result = solve::<rattler_solve::resolvo::Solver>(
@@ -1397,8 +1402,13 @@ fn compare_solve(task: CompareTask<'_>) {
     let sparse_repo_data = read_real_world_repo_data();
 
     let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
-    let available_packages =
-        SparseRepoData::load_records_recursive(sparse_repo_data, names, None).unwrap();
+    let available_packages = SparseRepoData::load_records_recursive(
+        sparse_repo_data,
+        names,
+        None,
+        PackageFormatSelection::default(),
+    )
+    .unwrap();
 
     let extract_pkgs = |records: Vec<RepoDataRecord>| {
         let mut pkgs = records
@@ -1529,8 +1539,13 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
     let specs = vec![spec.clone()];
     let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
 
-    let available_packages =
-        SparseRepoData::load_records_recursive(repo_data, names, None).unwrap();
+    let available_packages = SparseRepoData::load_records_recursive(
+        repo_data,
+        names,
+        None,
+        PackageFormatSelection::default(),
+    )
+    .unwrap();
 
     let task = SolverTask {
         specs: specs.clone(),

@@ -32,7 +32,7 @@ Rattler is a library that provides common functionality used within the conda ec
 The goal of the library is to enable programs and other libraries to easily interact with the conda ecosystem without being dependent on Python.
 Its primary use case is as a library that you can use to provide conda related workflows in your own tools.
 
-Rattler is written in Rust and tries to provide a clean API to its functionalities (see: [Components](#components)). 
+Rattler is written in Rust and tries to provide a clean API to its functionalities (see: [Components](#components)).
 With the primary goal in mind we aim to provide bindings to different languages to make it easy to integrate Rattler in non-rust projects.
 
 Rattler is actively used by [pixi](https://github.com/prefix-dev/pixi), [rattler-build](https://github.com/prefix-dev/rattler-build), and the https://prefix.dev backend.
@@ -43,6 +43,75 @@ This repository also contains a binary (use `cargo run` to try) that shows some 
 This is an example of installing an environment containing `cowpy` and all its dependencies _from scratch_ (including Python!):
 
 ![Installing an environment](https://github.com/conda/rattler/assets/4995967/c7946f6e-28a9-41ef-8836-ef4b4c94d273)
+
+## Python and Javascript bindings
+
+You can invoke `rattler` from Python or Javascript via our powerful bindings to solve, install and run commands in conda environments. Rattler offers you the fastest and cleanest Python bindings to the conda ecosystem.
+
+### Python
+
+To install the Python bindings, you can use pip or conda:
+
+```bash
+pip install py-rattler
+# or
+conda install -c conda-forge py-rattler
+```
+
+You can find the extensive documentation for the Python bindings [here](https://conda.github.io/rattler/py-rattler/).
+
+<details>
+  <summary>Example usage of rattler from Python</summary>
+The Python bindings to rattler are designed to be used with `asyncio`. You can access the raw power of the rattler library to solve environments, install packages, and run commands in the installed environments.
+
+```python
+import asyncio
+import tempfile
+
+from rattler import solve, install, VirtualPackage
+
+async def main() -> None:
+    # Start by solving the environment.
+    #
+    # Solving is the process of going from specifications of package and their
+    # version requirements to a list of concrete packages.
+    print("started solving the environment")
+    solved_records = await solve(
+        # Channels to use for solving
+        channels=["conda-forge"],
+        # The specs to solve for
+        specs=["python ~=3.12.0", "pip", "requests 2.31.0"],
+        # Virtual packages define the specifications of the environment
+        virtual_packages=VirtualPackage.detect(),
+    )
+    print("solved required dependencies")
+
+    # Install the packages into a new environment (or updates it if it already
+    # existed).
+    env_path = tempfile.mkdtemp()
+    await install(
+        records=solved_records,
+        target_prefix=env_path,
+    )
+
+    print(f"created environment: {env_path}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+</details>
+
+### Javascript
+
+To use the Javascript bindings, you can install the `@conda-org/rattler` package via npm. rattler is compiled to WebAssembly and can be used in the browser or in Node.js.
+
+```bash
+npm install @conda-org/rattler
+```
+
+Using rattler from Javascript is useful to get access to the same version comparison functions as used throughout the conda ecosystem. It is also used as part of [`mambajs`](https://github.com/emscripten-forge/mambajs) which uses the rattler library to solve and install packages from the emscripten-forge channel _in the browser_.
+
 
 ## Give it a try!
 
@@ -73,24 +142,24 @@ Run the following command to start jupyterlab:
  ./.prefix/bin/jupyter-lab
 ```
 
-Voila! 
-You have a working installation of jupyterlab installed on your system! 
-You can of course install any package you want this way. 
+Voila!
+You have a working installation of jupyterlab installed on your system!
+You can of course install any package you want this way.
 Try it!
 
 ## Contributing 😍
 
-We would love to have you contribute! 
-See the CONTRIBUTION.md for more info. For questions, requests or a casual chat, we are very active on our discord server. 
+We would love to have you contribute!
+See the CONTRIBUTION.md for more info. For questions, requests or a casual chat, we are very active on our discord server.
 You can [join our discord server via this link][chat-url].
 
 
 ## Components
 
-Rattler consists of several crates that provide different functionalities. 
+Rattler consists of several crates that provide different functionalities.
 
 * **rattler_conda_types**: foundational types for all datastructures used within the conda eco-system.
-* **rattler_package_streaming**: provides functionality to download, extract and create conda package archives.  
+* **rattler_package_streaming**: provides functionality to download, extract and create conda package archives.
 * **rattler_repodata_gateway**: downloads, reads and processes information about existing conda packages from an index.
 * **rattler_shell**: code to activate an existing environment and run programs in it.
 * **rattler_solve**: a backend agnostic library to solve the package satisfiability problem.

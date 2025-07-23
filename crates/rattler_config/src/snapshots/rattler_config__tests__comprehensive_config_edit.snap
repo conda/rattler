@@ -1,0 +1,44 @@
+---
+source: crates/rattler_config/src/lib.rs
+expression: toml_output
+---
+default-channels = [
+    "conda-forge",
+    "bioconda",
+    "nvidia",
+    "pytorch",
+]
+authentication-override-file = "/etc/conda/auth.json"
+tls-no-verify = false
+run-post-link-scripts = "insecure"
+array_field = []
+
+[mirrors]
+"https://conda.anaconda.org/" = [
+    "https://mirror.example.com/",
+    "https://backup.example.com/",
+]
+"https://repo.continuum.io/" = ["https://fast-mirror.net/"]
+
+[repodata-config]
+disable-jlap = false
+disable-zstd = false
+
+[concurrency]
+solves = 16
+downloads = 32
+
+[proxy-config]
+https = "https://secure-proxy.company.com/"
+non-proxy-hosts = [
+    "localhost",
+    "*.company.com",
+    "10.0.0.0/8",
+]
+
+[s3-options.company-bucket]
+endpoint-url = "https://s3.company.com/"
+region = "company-region"
+force-path-style = true
+
+[nested]
