@@ -151,9 +151,8 @@ impl PtySession {
 
             let res = select::select(None, &mut select_set, None, None, &mut select_timeout);
             if let Err(error) = res {
-                if error == Errno::EINTR {
-                    // EINTR is not an error, it just means that we got interrupted by a signal (e.g. SIGWINCH)
-                } else {
+                // EINTR is not an error, it just means that we got interrupted by a signal (e.g. SIGWINCH)
+                if error != Errno::EINTR {
                     self.process.set_mode(original_mode)?;
                     return Err(std::io::Error::from(error));
                 }
