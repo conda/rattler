@@ -384,7 +384,7 @@ impl<'a> CondaDependencyProvider<'a> {
                 let mut all_entries = vec![(package_name, solvable_id)];
 
                 // Add feature-enabled solvables
-                for feature in record.package_record.extra_depends.keys() {
+                for feature in record.package_record.experimental_extra_depends.keys() {
                     let package_name_with_feature =
                         pool.intern_package_name(NameType::BaseWithFeature(
                             record.package_record.name.as_normalized().to_owned(),
@@ -643,7 +643,11 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
         // If this is a feature-enabled package, add its feature dependencies
         if let Some(feature_name) = feature {
             // Find the feature's dependencies
-            if let Some(deps) = record.package_record.extra_depends.get(feature_name) {
+            if let Some(deps) = record
+                .package_record
+                .experimental_extra_depends
+                .get(feature_name)
+            {
                 // Add each dependency for this feature
                 for req in deps {
                     let version_set_id = match parse_match_spec(
