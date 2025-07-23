@@ -66,7 +66,6 @@ Because solving can be computationally intensive, it is a separate crate to avoi
 This crate detects system “virtual” packages (like `__unix`, `__linux`, `__glibc`, etc.) and represents them as packages for the solver.
 Its job is to query the OS (CPU architecture, OS, glibc version, CPU features, etc.) and produce metadata so the solver knows what the system provides.
 For example, if glibc 2.31 is present, it might add a virtual package `__glibc=2.31`.
-The design is a simple mapping of system queries to `rattler_conda_types::PackageRecord`s; it has no external dependencies beyond syscalls.
 By isolating this into `rattler_virtual_packages`, Rattler cleanly separates platform-detection from solving logic.
 During solving (e.g. in `rattler_solve`), these virtual packages are simply additional “available” packages that represent host constraints.
 This avoids hardcoding any OS logic in the solver or other crates.
