@@ -1285,7 +1285,6 @@ dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
- "unicode-width 0.2.1",
  "windows-sys 0.59.0",
 ]
 
@@ -4342,7 +4341,7 @@ dependencies = [
  "assert_matches",
  "axum",
  "clap",
- "console 0.15.11",
+ "console 0.16.0",
  "digest",
  "dirs",
  "fs-err",
@@ -4394,7 +4393,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "console 0.15.11",
+ "console 0.16.0",
  "indicatif",
  "itertools 0.14.0",
  "once_cell",
@@ -4503,7 +4502,7 @@ dependencies = [
 name = "rattler_config"
 version = "0.2.4"
 dependencies = [
- "console 0.15.11",
+ "console 0.16.0",
  "fs-err",
  "indexmap 2.10.0",
  "insta",
@@ -4545,7 +4544,7 @@ dependencies = [
  "chrono",
  "clap",
  "clap-verbosity-flag",
- "console 0.15.11",
+ "console 0.16.0",
  "fs-err",
  "futures",
  "fxhash",
@@ -6062,9 +6061,9 @@ dependencies = [
 
 [[package]]
 name = "sysinfo"
-version = "0.35.2"
+version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c3ffa3e4ff2b324a57f7aeb3c349656c7b127c3c189520251a648102a92496e"
+checksum = "252800745060e7b9ffb7b2badbd8b31cfa4aa2e61af879d0a3bf2a317c20217d"
 dependencies = [
  "libc",
  "memchr",
