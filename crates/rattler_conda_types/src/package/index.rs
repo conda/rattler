@@ -39,6 +39,7 @@ pub struct IndexJson {
     pub depends: Vec<String>,
 
     /// Extra dependency groups that can be selected using `foobar[extras=["scientific"]]`
+    /// The implementation is specified in this CEP: <https://github.com/conda/ceps/pull/111>
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extra_depends: BTreeMap<String, Vec<String>>,
 
