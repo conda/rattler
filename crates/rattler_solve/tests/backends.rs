@@ -1335,11 +1335,8 @@ mod resolvo {
 
     #[test]
     fn test_solve_conditional_dependencies() {
-        use rattler_conda_types::{
-            MatchSpec, PackageRecord, RepoData, RepoDataRecord, Version, VersionWithSource,
-        };
+        use rattler_conda_types::{MatchSpec, Version};
         use rattler_solve::{SolverImpl, SolverTask};
-        use std::collections::BTreeMap;
 
         // Create test packages with conditional dependencies
         let conditional_pkg = installed_package(
@@ -1391,12 +1388,11 @@ mod resolvo {
             ..SolverTask::from_iter([&repo_data_records])
         };
 
-        let result = rattler_solve::resolvo::Solver::default().solve(task);
+        let result = rattler_solve::resolvo::Solver.solve(task);
 
         // Check if our conditional dependency parsing worked
         match result {
             Ok(solution) => {
-                println!("Solution : {:?}", solution);
                 let package_names: Vec<_> = solution
                     .records
                     .iter()
@@ -1408,22 +1404,14 @@ mod resolvo {
                 assert!(package_names.contains(&"python"));
 
                 // If conditional dependencies are working, numpy should be included due to python>=3.9 condition
-                if package_names.contains(&"numpy") {
-                    println!("✓ numpy was included due to python>=3.9 condition");
-                } else {
-                    println!("✗ numpy was NOT included - conditional dependencies may not be working yet");
-                }
+                assert!(package_names.contains(&"numpy"));
 
                 // If conditional dependencies are working, scipy should be included due to __unix condition
-                if package_names.contains(&"scipy") {
-                    println!("✓ scipy was included due to __unix condition");
-                } else {
-                    println!("✗ scipy was NOT included - conditional dependencies may not be working yet");
-                }
+                assert!(package_names.contains(&"scipy"));
             }
             Err(e) => {
                 // If solving fails, it might be because the conditional dependency implementation is not complete
-                println!("Solving failed: {:?}", e);
+                println!("Solving failed: {e:?}");
                 println!(
                     "This is expected if conditional dependencies are not fully implemented yet"
                 );
@@ -1453,7 +1441,7 @@ mod resolvo {
             ..SolverTask::from_iter([&repo_data_records])
         };
 
-        let result = rattler_solve::resolvo::Solver::default().solve(task);
+        let result = rattler_solve::resolvo::Solver.solve(task);
 
         match result {
             Ok(solution) => {
@@ -1468,23 +1456,13 @@ mod resolvo {
                 assert!(package_names.contains(&"python"));
 
                 // If conditional dependencies are working, numpy should NOT be included due to python<3.9 condition
-                if !package_names.contains(&"numpy") {
-                    println!("✓ numpy was NOT included due to python<3.9 condition");
-                } else {
-                    println!(
-                        "✗ numpy was included - conditional dependencies may not be working yet"
-                    );
-                }
+                assert!(!package_names.contains(&"numpy"));
 
                 // If conditional dependencies are working, scipy should be included due to __unix condition
-                if package_names.contains(&"scipy") {
-                    println!("✓ scipy was included due to __unix condition");
-                } else {
-                    println!("✗ scipy was NOT included - conditional dependencies may not be working yet");
-                }
+                assert!(package_names.contains(&"scipy"));
             }
             Err(e) => {
-                println!("Solving failed: {:?}", e);
+                println!("Solving failed: {e:?}");
                 println!(
                     "This is expected if conditional dependencies are not fully implemented yet"
                 );

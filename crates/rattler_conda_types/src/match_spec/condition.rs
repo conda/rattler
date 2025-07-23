@@ -158,12 +158,17 @@ pub(crate) fn parse_condition(input: &str) -> IResult<&str, MatchSpecCondition> 
 mod tests {
     use super::*;
     use insta::assert_yaml_snapshot;
-    use nom::combinator::opt;
+    use nom::{bytes::complete::take_while1, combinator::opt};
 
     fn parse_and_extract(input: &str) -> Statement {
         let result = parse_statement(input).unwrap();
         assert_eq!(result.0.trim(), ""); // Ensure no remaining input
         result.1
+    }
+
+    // Parse identifier (alphanumeric + underscore)
+    fn identifier(input: &str) -> IResult<&str, &str> {
+        take_while1(|c: char| c.is_alphanumeric() || c == '_')(input)
     }
 
     // Parse the entire statement
@@ -244,8 +249,7 @@ mod tests {
             if let Ok((remaining, _)) = result {
                 assert!(
                     !remaining.is_empty(),
-                    "Case '{}' should have failed or left remaining input",
-                    case
+                    "Case '{case}' should have failed or left remaining input",
                 );
             }
         }
