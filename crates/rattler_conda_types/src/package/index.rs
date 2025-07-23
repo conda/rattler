@@ -41,7 +41,8 @@ pub struct IndexJson {
     /// Extra dependency groups that can be selected using `foobar[extras=["scientific"]]`
     /// The implementation is specified in this CEP: <https://github.com/conda/ceps/pull/111>
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub extra_depends: BTreeMap<String, Vec<String>>,
+    #[serde(rename = "extra_depends")]
+    pub experimental_extra_depends: BTreeMap<String, Vec<String>>,
 
     /// Features are a deprecated way to specify different feature sets for the
     /// conda solver. This is not supported anymore and should not be used.
