@@ -516,7 +516,7 @@ impl PackageRecord {
             noarch: index.noarch,
             platform: index.platform,
             python_site_packages_path: index.python_site_packages_path,
-            extra_depends: index.extras,
+            extra_depends: index.extra_depends,
             sha256,
             size,
             subdir,
