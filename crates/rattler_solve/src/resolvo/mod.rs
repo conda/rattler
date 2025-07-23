@@ -950,10 +950,8 @@ fn parse_condition(
     pool: &Pool<SolverMatchSpec<'_>, NameType>,
     parse_match_spec_cache: &mut MatchSpecParseCache,
 ) -> ConditionId {
-    println!("Parsing condition: {condition:?}");
     match condition {
         MatchSpecCondition::MatchSpec(match_spec) => {
-            println!("Parsing match spec for condition: {match_spec:?}");
             // Parse the match spec and intern it
             let version_set_id =
                 parse_match_spec(pool, &match_spec.to_string(), parse_match_spec_cache).unwrap();
