@@ -68,6 +68,7 @@ pub fn package_record_from_index_json<T: Read>(
         platform: index.platform,
         depends: index.depends,
         experimental_extra_depends: index.experimental_extra_depends,
+        flags: index.flags,
         constrains: index.constrains,
         track_features: index.track_features,
         features: index.features,

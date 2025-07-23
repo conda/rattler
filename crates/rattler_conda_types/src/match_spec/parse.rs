@@ -22,6 +22,7 @@ use super::{
 };
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
+    match_spec::flags::FlagMatcher,
     package::ArchiveIdentifier,
     utils::{path::is_absolute_path, url::parse_scheme},
     version_spec::{
@@ -30,8 +31,8 @@ use crate::{
         ParseVersionSpecError,
     },
     Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
-    ParseChannelError, ParseStrictness,
-    ParseStrictness::{Lenient, Strict},
+    ParseChannelError,
+    ParseStrictness::{self, Lenient, Strict},
     ParseVersionError, Platform, VersionSpec,
 };
 
@@ -103,6 +104,10 @@ pub enum ParseMatchSpecError {
     /// Multiple values for a key in the matchspec
     #[error("found multiple values for: {0}")]
     MultipleValueForKey(String),
+
+    /// An error occured when parsing the flag
+    #[error("unable to parse flag: {0}")]
+    InvalidFlag(String),
 }
 
 impl FromStr for MatchSpec {
@@ -229,10 +234,9 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
     }
 }
 
-#[cfg(feature = "experimental_extras")]
 /// Parses a list of optional dependencies from a string `feat1, feat2, feat3]`
 /// -> `vec![feat1, feat2, feat3]`.
-pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
+pub fn parse_string_list(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     use nom::{
         combinator::{all_consuming, map},
         multi::separated_list1,
@@ -329,6 +333,15 @@ fn parse_bracket_vec_into_components(
                 match_spec.subdir = match_spec.subdir.or(subdir);
             }
             "license" => match_spec.license = Some(value.to_string()),
+            "flags" => {
+                match_spec.flags = Some(
+                    parse_string_list(value)?
+                        .into_iter()
+                        .map(|s| FlagMatcher::from_str(&s))
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|_| ParseMatchSpecError::InvalidFlag(value.to_string()))?,
+                )
+            }
             // TODO: Still need to add `track_features`, `features`, and `license_family`
             // to the match spec.
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
@@ -767,9 +780,10 @@ mod tests {
     #[cfg(feature = "experimental_extras")]
     use crate::match_spec::parse::parse_extras;
     use crate::{
-        match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
-        NamelessMatchSpec, ParseChannelError, ParseStrictness, ParseStrictness::*, Version,
-        VersionSpec,
+        match_spec::{flags::FlagMatcher, parse::parse_bracket_list},
+        BuildNumberSpec, Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError,
+        ParseStrictness::{self, *},
+        Version, VersionSpec,
     };
 
     fn channel_config() -> ChannelConfig {
@@ -1428,7 +1442,7 @@ mod tests {
             build: "py27_0*".parse().ok(),
             build_number: Some(BuildNumberSpec::from_str(">=6").unwrap()),
             file_name: Some("foo-1.0-py27_0.tar.bz2".to_string()),
-            extras: None,
+            extras: Some(vec!["bar".to_string(), "baz".to_string()]),
             channel: Some(
                 Channel::from_str("conda-forge", &channel_config())
                     .map(Arc::new)
@@ -1450,6 +1464,12 @@ mod tests {
                 .unwrap(),
             ),
             license: Some("MIT".into()),
+            flags: Some(
+                ["~flag1", "!flag2", "?flag3", "foobar:amd"]
+                    .iter()
+                    .map(|s| s.parse().unwrap())
+                    .collect(),
+            ),
         });
 
         // insta check all the strings
