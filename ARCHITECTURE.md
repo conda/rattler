@@ -40,7 +40,6 @@ This crate is responsible for fetching and processing repodata (the *index* of a
 It provides an API to acquire so called repodata while hiding the complex details from the user like index formats, which channels supports which format, exhaustive recursive search for package metadata, compression, deduplication and caching.
 Separating this crate lets the solver and install logic assume they already have the index loaded.
 For example, during environment creation, Rattler will use `rattler_repodata_gateway` to load the channel indexes before solving.
-Historically, this reflects Conda’s own design: Repodata is distinct from package archives, so Rattler cleanly mirrors that by having a dedicated “gateway” for the repodata layer.
 
 ## rattler\_shell
 
