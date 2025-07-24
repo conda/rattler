@@ -1143,8 +1143,10 @@ mod test {
             .chain(writable_dirs.into_iter())
             .collect();
 
-        let cache =
-            PackageCache::new_layered(all_layers_paths.iter().map(|dir| dir.path().to_path_buf()), false);
+        let cache = PackageCache::new_layered(
+            all_layers_paths.iter().map(|dir| dir.path().to_path_buf()),
+            false,
+        );
 
         let (readonly_layers, writable_layers) = cache.inner.layers.split_at(readonly_layer_count);
 
