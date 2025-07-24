@@ -282,7 +282,7 @@ impl Shell for Bash {
             Ok(writeln!(f, "export {env_var}=\"{escaped_value}\"")?)
         } else {
             // Use shlex quoting for values that don't need variable expansion
-            let quoted_value = shlex::try_quote(value).unwrap_or_default();
+            let quoted_value = shlex::try_quote(value).unwrap_or_else(|_| value.into());
             Ok(writeln!(f, "export {env_var}={quoted_value}")?)
         }
     }
