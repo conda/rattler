@@ -4075,9 +4075,9 @@ dependencies = [
 
 [[package]]
 name = "prettyplease"
-version = "0.2.35"
+version = "0.2.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "061c1221631e079b26479d25bbf2275bfe5917ae8419cd7e34f13bfc2aa7539a"
+checksum = "ff24dfcda44452b9816fff4cd4227e1bb73ff5a2f1bc1105aa92fb8565ce44d2"
 dependencies = [
  "proc-macro2",
  "syn",
@@ -4335,7 +4335,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.34.9"
+version = "0.34.10"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4621,7 +4621,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "chrono",
  "configparser",
@@ -4815,7 +4815,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.24.6"
+version = "0.24.7"
 dependencies = [
  "anyhow",
  "enum_dispatch",
