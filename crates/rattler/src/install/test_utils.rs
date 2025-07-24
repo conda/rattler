@@ -25,13 +25,12 @@ pub async fn install_package_to_environment(
 ) -> anyhow::Result<()> {
     // Link the contents of the package into our environment. This returns all the
     // paths that were linked.
-    let paths = crate::install::link_package(
+    let paths = crate::install::link_package_sync(
         &package_dir,
         target_prefix,
-        install_driver,
+        install_driver.clobber_registry.clone(),
         install_options.clone(),
-    )
-    .await?;
+    )?;
 
     // Construct a PrefixRecord for the package
     let prefix_record = PrefixRecord {
