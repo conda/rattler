@@ -677,9 +677,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-runtime"
-version = "1.8.4"
+version = "1.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3aaec682eb189e43c8a19c3dab2fe54590ad5f2cc2d26ab27608a20f2acf81c"
+checksum = "660f70d9d8af6876b4c9aa8dcb0dbaf0f89b04ee9a4455bea1b4ba03b15f26f6"
 dependencies = [
  "aws-smithy-async",
  "aws-smithy-http 0.62.2",
@@ -701,9 +701,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-runtime-api"
-version = "1.8.3"
+version = "1.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9852b9226cb60b78ce9369022c0df678af1cac231c882d5da97a0c4e03be6e67"
+checksum = "38280ac228bc479f347fcfccf4bf4d22d68f3bb4629685cb591cabd856567bbc"
 dependencies = [
  "aws-smithy-async",
  "aws-smithy-types",
@@ -1285,7 +1285,6 @@ dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
- "unicode-width 0.2.1",
  "windows-sys 0.59.0",
 ]
 
@@ -2603,7 +2602,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -2683,9 +2682,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-util"
-version = "0.1.15"
+version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f66d5bd4c6f02bf0542fad85d626775bab9258cf795a4256dcaf3161114d1df"
+checksum = "8d9b05277c7e8da2c93a568989bb6207bef0112e8d17df7a6eda4a3cf143bc5e"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2699,7 +2698,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2",
+ "socket2 0.6.0",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -2921,9 +2920,9 @@ dependencies = [
 
 [[package]]
 name = "io-uring"
-version = "0.7.8"
+version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b86e202f00093dcba4275d4636b93ef9dd75d025ae560d2521b45ea28ab49013"
+checksum = "d93587f37623a1a17d94ef2bc9ada592f5465fe7732084ab7beefabe5c77c0c4"
 dependencies = [
  "bitflags 2.9.1",
  "cfg-if",
@@ -3775,7 +3774,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "path_resolver"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "fs-err",
  "indexmap 2.10.0",
@@ -4175,7 +4174,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls 0.23.29",
- "socket2",
+ "socket2 0.5.10",
  "thiserror 2.0.12",
  "tokio",
  "tracing",
@@ -4212,7 +4211,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.59.0",
 ]
@@ -4336,13 +4335,13 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.34.8"
+version = "0.34.9"
 dependencies = [
  "anyhow",
  "assert_matches",
  "axum",
  "clap",
- "console 0.15.11",
+ "console 0.16.0",
  "digest",
  "dirs",
  "fs-err",
@@ -4394,7 +4393,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "console 0.15.11",
+ "console 0.16.0",
  "indicatif",
  "itertools 0.14.0",
  "once_cell",
@@ -4414,7 +4413,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.27"
+version = "0.3.28"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4452,7 +4451,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.36.0"
+version = "0.37.0"
 dependencies = [
  "assert_matches",
  "chrono",
@@ -4501,9 +4500,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
- "console 0.15.11",
+ "console 0.16.0",
  "fs-err",
  "indexmap 2.10.0",
  "insta",
@@ -4538,14 +4537,14 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.24.5"
+version = "0.24.6"
 dependencies = [
  "anyhow",
  "bytes",
  "chrono",
  "clap",
  "clap-verbosity-flag",
- "console 0.15.11",
+ "console 0.16.0",
  "fs-err",
  "futures",
  "fxhash",
@@ -4585,7 +4584,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.23.12"
+version = "0.23.13"
 dependencies = [
  "chrono",
  "file_url",
@@ -4622,7 +4621,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "chrono",
  "configparser",
@@ -4651,7 +4650,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.7"
+version = "0.25.8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4687,7 +4686,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.46"
+version = "0.22.47"
 dependencies = [
  "assert_matches",
  "bzip2",
@@ -4721,7 +4720,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_pty"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "libc",
  "nix 0.30.1",
@@ -4739,7 +4738,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.23.8"
+version = "0.23.9"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4816,7 +4815,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.24.5"
+version = "0.24.6"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4838,7 +4837,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "2.1.7"
+version = "2.1.8"
 dependencies = [
  "chrono",
  "criterion",
@@ -4864,7 +4863,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -4897,7 +4896,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "archspec",
  "libloading",
@@ -5934,6 +5933,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "socket2"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "233504af464074f9d066d7b5416c5f9b894a5862a6506e306f7b816cdd6f1807"
+dependencies = [
+ "libc",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "spki"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6062,9 +6071,9 @@ dependencies = [
 
 [[package]]
 name = "sysinfo"
-version = "0.35.2"
+version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c3ffa3e4ff2b324a57f7aeb3c349656c7b127c3c189520251a648102a92496e"
+checksum = "252800745060e7b9ffb7b2badbd8b31cfa4aa2e61af879d0a3bf2a317c20217d"
 dependencies = [
  "libc",
  "memchr",
@@ -6328,7 +6337,7 @@ dependencies = [
  "pin-project-lite",
  "signal-hook-registry",
  "slab",
- "socket2",
+ "socket2 0.5.10",
  "tokio-macros",
  "windows-sys 0.52.0",
 ]

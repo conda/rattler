@@ -69,7 +69,7 @@ pub use unlink::{empty_trash, unlink_package};
 
 pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 use crate::install::{
-    clobber_registry::ClobberRegistry,
+    clobber_registry::{ClobberRegistry, CLOBBERS_DIR_NAME},
     entry_point::{create_unix_python_entry_point, create_windows_python_entry_point},
 };
 
@@ -97,7 +97,7 @@ pub enum InstallError {
     FailedToLink(PathBuf, #[source] LinkFileError),
 
     /// A directory could not be created.
-    #[error("failed to create directory '{0}")]
+    #[error("failed to create directory '{0}'")]
     FailedToCreateDirectory(PathBuf, #[source] std::io::Error),
 
     /// The target prefix is not UTF-8.
@@ -359,10 +359,10 @@ pub async fn link_package(
         // (`__clobbers__`) now we have to create all necessary
         // directories for it as well.
         let clobber_path = link_path.clobber_path.as_ref();
-        let mut current_path = clobber_path.and_then(|p| p.parent());
-        while let Some(path) = current_path {
+        let mut current_clobber_path = clobber_path.and_then(|p| p.parent());
+        while let Some(path) = current_clobber_path {
             if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
-                current_path = path.parent();
+                current_clobber_path = path.parent();
             } else {
                 break;
             }
@@ -737,7 +737,11 @@ pub fn link_package_sync(
             continue;
         }
 
-        if allow_ref_links && cfg!(target_os = "macos") && !index_json.noarch.is_python() {
+        if allow_ref_links
+            && cfg!(target_os = "macos")
+            && !directory.starts_with(CLOBBERS_DIR_NAME)
+            && !index_json.noarch.is_python()
+        {
             // reflink the whole directory if possible
             // currently this does not handle noarch packages
             match reflink_copy::reflink(package_dir.join(&directory), &full_path) {

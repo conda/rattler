@@ -12,7 +12,7 @@ use rattler_conda_types::{
     PackageName, PackageRecord, PrefixRecord,
 };
 
-const CLOBBERS_DIR_NAME: &str = "__clobbers__";
+pub const CLOBBERS_DIR_NAME: &str = "__clobbers__";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClobberedPath {
