@@ -1,0 +1,60 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended"],
+  enabledManagers: ["github-actions", "pixi", "cargo", "npm"],
+  commitMessagePrefix: "chore(ci):",
+  separateMajorMinor: false,
+  ignorePaths: ["**/test-data/**"],
+  labels: ["dependencies"],
+  schedule: ["before 4am on Tuesday"],
+  prHourlyLimit: 10,
+  cargo: {
+    // See https://docs.renovatebot.com/configuration-options/#rangestrategy
+    rangeStrategy: "update-lockfile",
+  },
+  packageRules: [
+    {
+      description: "Pin GitHub Actions to immutable SHAs.",
+      matchDepTypes: ["action"],
+      pinDigests: true,
+    },
+    {
+      description: "Annotate GitHub Actions SHAs with a SemVer version.",
+      extends: ["helpers:pinGitHubActionDigests"],
+      extractVersion: "^(?<version>v?\\d+\\.\\d+\\.\\d+)$",
+      versioning: "regex:^v?(?<major>\\d+)(\\.(?<minor>\\d+)\\.(?<patch>\\d+))?$",
+    },
+    {
+      description: "We run multiple macOS runner versions on purpose since 13 runs on x86_64",
+      matchPackageNames: "macos",
+      matchManagers: ["github-actions"],
+      enabled: false,
+    },
+    {
+      "groupName": "Pixi-Lock",
+      "matchManagers": ["pixi"],
+      "matchUpdateTypes": ["lockFileMaintenance"]
+    },
+    {
+      description: "We want to update Rust manually and keep it in sync with rust-toolchain",
+      matchPackageNames: "rust",
+      matchManagers: ["pixi"],
+      enabled: false,
+    },
+    {
+      groupName: "Rust dev-dependencies",
+      matchManagers: ["cargo"],
+      matchDepTypes: ["devDependencies"],
+      description: "Weekly update of Rust development dependencies",
+    },
+    {
+      "groupName": "Npm-Lock",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["lockFileMaintenance"]
+    },
+  ],
+  vulnerabilityAlerts: {
+    commitMessageSuffix: "",
+    labels: ["security"],
+  },
+}

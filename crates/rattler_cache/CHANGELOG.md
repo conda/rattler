@@ -6,6 +6,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.27](https://github.com/conda/rattler/compare/rattler_cache-v0.3.26...rattler_cache-v0.3.27) - 2025-07-21
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_package_streaming, rattler_networking
+
+## [0.3.26](https://github.com/conda/rattler/compare/rattler_cache-v0.3.25...rattler_cache-v0.3.26) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.3.25](https://github.com/conda/rattler/compare/rattler_cache-v0.3.24...rattler_cache-v0.3.25) - 2025-07-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.3.24](https://github.com/conda/rattler/compare/rattler_cache-v0.3.23...rattler_cache-v0.3.24) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [0.3.23](https://github.com/conda/rattler/compare/rattler_cache-v0.3.22...rattler_cache-v0.3.23) - 2025-06-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.3.22](https://github.com/conda/rattler/compare/rattler_cache-v0.3.21...rattler_cache-v0.3.22) - 2025-06-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.3.21](https://github.com/conda/rattler/compare/rattler_cache-v0.3.20...rattler_cache-v0.3.21) - 2025-06-23
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [0.3.20](https://github.com/conda/rattler/compare/rattler_cache-v0.3.19...rattler_cache-v0.3.20) - 2025-05-23
+
+### Fixed
+
+- consistent usage of rustls-tls / native-tls feature ([#1324](https://github.com/conda/rattler/pull/1324))
+
+## [0.3.19](https://github.com/conda/rattler/compare/rattler_cache-v0.3.18...rattler_cache-v0.3.19) - 2025-05-16
+
+### Other
+
+- make sure that md5 also works as `CacheKey` ([#1293](https://github.com/conda/rattler/pull/1293))
+- Bump zip to 3.0.0 ([#1310](https://github.com/conda/rattler/pull/1310))
+
+## [0.3.18](https://github.com/conda/rattler/compare/rattler_cache-v0.3.17...rattler_cache-v0.3.18) - 2025-05-03
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.3.17](https://github.com/conda/rattler/compare/rattler_cache-v0.3.16...rattler_cache-v0.3.17) - 2025-04-10
+
+### Fixed
+
+- Add location to the cache key ([#1143](https://github.com/conda/rattler/pull/1143))
+
+## [0.3.16](https://github.com/conda/rattler/compare/rattler_cache-v0.3.15...rattler_cache-v0.3.16) - 2025-04-04
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.3.15](https://github.com/conda/rattler/compare/rattler_cache-v0.3.14...rattler_cache-v0.3.15) - 2025-03-14
 
 ### Other

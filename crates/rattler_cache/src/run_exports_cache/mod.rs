@@ -336,11 +336,11 @@ pub enum RunExportsCacheError {
     #[error("{0}")]
     Persist(#[from] PersistError),
 
-    /// An error occured when extracting `run_exports` from archive
+    /// An error occurred when extracting `run_exports` from archive
     #[error(transparent)]
     Extract(#[from] ExtractError),
 
-    /// An error occured when serializing `run_exports`
+    /// An error occurred when serializing `run_exports`
     #[error(transparent)]
     Serialize(#[from] serde_json::Error),
 
@@ -416,7 +416,7 @@ mod test {
         // so we expect the cache to return None
         let package_url = Url::parse("https://conda.anaconda.org/robostack/linux-64/ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2").unwrap();
 
-        let cache_dir = tempdir().unwrap().into_path();
+        let cache_dir = tempdir().unwrap().keep();
 
         let cache = RunExportsCache::new(&cache_dir);
 
@@ -460,7 +460,7 @@ mod test {
             Url::parse("https://repo.prefix.dev/conda-forge/linux-64/zlib-1.3.1-hb9d3cd8_2.conda")
                 .unwrap();
 
-        let cache_dir = tempdir().unwrap().into_path();
+        let cache_dir = tempdir().unwrap().keep();
 
         let cache = RunExportsCache::new(&cache_dir);
 
@@ -702,7 +702,7 @@ mod test {
         .await
         .unwrap();
 
-        let cache_dir = tempdir().unwrap().into_path();
+        let cache_dir = tempdir().unwrap().keep();
 
         let cache = RunExportsCache::new(&cache_dir);
 

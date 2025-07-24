@@ -199,6 +199,9 @@ pub async fn fetch_index(
                                 match read_shard_index_from_reader(&mut cache_reader).await {
                                     Ok(shard_index) => {
                                         tracing::debug!("shard index cache was not modified");
+                                        if let Some((reporter, index)) = download_reporter {
+                                            reporter.on_download_complete(response.url(), index);
+                                        }
                                         // If reading the file failed for some reason we'll just
                                         // fetch it again.
                                         return Ok(shard_index);

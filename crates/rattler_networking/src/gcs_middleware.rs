@@ -1,7 +1,6 @@
 //! Middleware to handle `gcs://` URLs to pull artifacts from an GCS
 use async_trait::async_trait;
-use google_cloud_auth::{project::Config, token::DefaultTokenSourceProvider};
-use google_cloud_token::TokenSourceProvider;
+use google_cloud_auth::credentials::{Builder as AccessTokenCredentialBuilder, CacheableResource};
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 use url::Url;
@@ -38,31 +37,34 @@ impl Middleware for GCSMiddleware {
 async fn authenticate_with_google_cloud(mut req: Request) -> MiddlewareResult<Request> {
     let scopes = ["https://www.googleapis.com/auth/devstorage.read_only"];
 
-    let config = Config::default().with_scopes(&scopes);
-
-    match DefaultTokenSourceProvider::new(config).await {
-        Ok(provider) => match provider.token_source().token().await {
-            Ok(token) => {
-                let header_value = reqwest::header::HeaderValue::from_str(&token)
-                    .map_err(reqwest_middleware::Error::middleware)?;
-                req.headers_mut()
-                    .insert(reqwest::header::AUTHORIZATION, header_value);
-                Ok(req)
-            }
-            Err(e) => Err(reqwest_middleware::Error::Middleware(anyhow::anyhow!(
-                "Failed to get GCS token: {:?}",
-                e
-            ))),
-        },
+    match AccessTokenCredentialBuilder::default()
+        .with_scopes(scopes)
+        .build()
+    {
+        Ok(token_source) => {
+            let extensions = http::Extensions::new();
+            let headers = match token_source.headers(extensions).await {
+                Ok(CacheableResource::New { data, .. }) => data,
+                Ok(CacheableResource::NotModified) => unreachable!(
+                    "we are not passing in any extensions so they should never be cached"
+                ),
+                Err(e) => {
+                    return Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e)));
+                }
+            };
+            req.headers_mut().extend(headers);
+            Ok(req)
+        }
         Err(e) => Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e))),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use reqwest::Client;
     use tempfile;
+
+    use super::*;
 
     #[tokio::test]
     async fn test_gcs_middleware() {
@@ -75,7 +77,8 @@ mod tests {
         };
         println!("Running GCS Test");
 
-        // We have to set GOOGLE_APPLICATION_CREDENTIALS to the path of the JSON key file
+        // We have to set GOOGLE_APPLICATION_CREDENTIALS to the path of the JSON key
+        // file
         let key_file = tempfile::NamedTempFile::with_suffix(".json").unwrap();
         std::fs::write(&key_file, credentials).unwrap();
 

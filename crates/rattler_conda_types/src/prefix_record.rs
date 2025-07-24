@@ -3,7 +3,7 @@
 use crate::package::FileMode;
 use crate::repo_data::RecordFromPath;
 use crate::repo_data_record::RepoDataRecord;
-use crate::{menuinst, PackageRecord};
+use crate::{menuinst, PackageName, PackageRecord};
 use rattler_digest::serde::SerializableHash;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -98,6 +98,13 @@ pub struct PathsEntry {
     /// The original sentinel value used for prefix-replacement from the package
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prefix_placeholder: Option<String>,
+}
+
+impl PathsEntry {
+    /// Returns either `original_path` or `relative_path`.
+    pub fn path(&self) -> &PathBuf {
+        self.original_path.as_ref().unwrap_or(&self.relative_path)
+    }
 }
 
 /// Information about a single file installed for a package.
@@ -242,25 +249,19 @@ impl PrefixRecord {
     ) -> Result<(), std::io::Error> {
         let path = path.as_ref();
         let parent = path.parent().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to get parent directory of path '{}'",
-                    path.display()
-                ),
-            )
+            std::io::Error::other(format!(
+                "Failed to get parent directory of path '{}'",
+                path.display()
+            ))
         })?;
 
         // Use a temporary file in the same directory for atomic writes
         let temp_file = NamedTempFile::with_prefix_in("prefix_record_", parent).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to create temporary file in '{}': {}",
-                    parent.display(),
-                    e
-                ),
-            )
+            std::io::Error::other(format!(
+                "Failed to create temporary file in '{}': {}",
+                parent.display(),
+                e
+            ))
         })?;
 
         // Write to temp file with buffered writer
@@ -272,10 +273,7 @@ impl PrefixRecord {
 
         // Atomically rename the temp file to the target path
         temp_file.persist(path).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to persist file {}: {}", path.display(), e),
-            )
+            std::io::Error::other(format!("Failed to persist file {}: {}", path.display(), e))
         })?;
 
         Ok(())
@@ -337,6 +335,11 @@ impl PrefixRecord {
                 .map(|path| RecordFromPath::from_path(path))
                 .collect()
         }
+    }
+
+    /// Returns package name of a prefix record.
+    pub fn name(&self) -> &PackageName {
+        &self.repodata_record.package_record.name
     }
 }
 

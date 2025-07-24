@@ -7,6 +7,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.18](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.17...rattler_menuinst-v0.2.18) - 2025-07-21
+
+### Other
+
+- bump rust 1.88.0 ([#1536](https://github.com/conda/rattler/pull/1536))
+
+## [0.2.17](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.16...rattler_menuinst-v0.2.17) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.16](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.15...rattler_menuinst-v0.2.16) - 2025-07-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.15](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.14...rattler_menuinst-v0.2.15) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [0.2.14](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.13...rattler_menuinst-v0.2.14) - 2025-06-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.13](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.12...rattler_menuinst-v0.2.13) - 2025-06-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.12](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.11...rattler_menuinst-v0.2.12) - 2025-06-24
+
+### Other
+
+- *(ci)* Update Rust crate windows to 0.61.0 ([#1462](https://github.com/conda/rattler/pull/1462))
+
+## [0.2.11](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.10...rattler_menuinst-v0.2.11) - 2025-06-23
+
+### Fixed
+
+- use $PATH prepend behavior in `menuinst` activation ([#1376](https://github.com/conda/rattler/pull/1376))
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [0.2.10](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.9...rattler_menuinst-v0.2.10) - 2025-05-23
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.9](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.8...rattler_menuinst-v0.2.9) - 2025-05-16
+
+### Other
+
+- update dependencies ([#1126](https://github.com/conda/rattler/pull/1126))
+- Bump zip to 3.0.0 ([#1310](https://github.com/conda/rattler/pull/1310))
+
+## [0.2.8](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.7...rattler_menuinst-v0.2.8) - 2025-05-03
+
+### Fixed
+
+- menuinst windows shortcut path ([#1273](https://github.com/conda/rattler/pull/1273))
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.2.7](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.6...rattler_menuinst-v0.2.7) - 2025-04-10
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.2.6](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.5...rattler_menuinst-v0.2.6) - 2025-04-04
+
+### Fixed
+
+- install windows start menu shortcut ([#1198](https://github.com/conda/rattler/pull/1198))
+
+### Other
+
+- change default value of  menuinst windows `quicklaunch` to `false` ([#1196](https://github.com/conda/rattler/pull/1196))
+
 ## [0.2.5](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.4...rattler_menuinst-v0.2.5) - 2025-03-18
 
 ### Added
@@ -56,7 +148,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - add `rattler_menuinst` crate (#840)
 - better readme (#118)
 - replace zulip with discord (#116)
-- move all conda types to seperate crate
+- move all conda types to separate crate
 
 ### Fixed
 

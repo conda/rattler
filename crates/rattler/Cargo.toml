@@ -1,6 +1,6 @@
 [package]
 name = "rattler"
-version = "0.33.3"
+version = "0.34.8"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust library to install conda environments"
@@ -11,9 +11,9 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ['native-tls']
-native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls']
-rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls']
+default = ['rustls-tls']
+native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
+rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_networking/rustls-tls']
 cli-tools = ['dep:clap']
 indicatif = ['dep:indicatif', 'dep:console']
 
@@ -32,20 +32,21 @@ memchr = { workspace = true }
 memmap2 = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
-rattler_cache = { path = "../rattler_cache", version = "0.3.15", default-features = false }
-rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.5", default-features = false }
-rattler_digest = { path = "../rattler_digest", version = "1.0.8", default-features = false }
-rattler_networking = { path = "../rattler_networking", version = "0.22.10", default-features = false }
-rattler_shell = { path = "../rattler_shell", version = "0.22.24", default-features = false }
-rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.34", default-features = false, features = ["reqwest"] }
-rattler_menuinst = { path = "../rattler_menuinst", version = "0.2.5", default-features = false }
+rattler_cache = { workspace = true }
+rattler_conda_types = { workspace = true }
+rattler_digest = { workspace = true }
+rattler_networking = { workspace = true }
+rattler_shell = { workspace = true }
+rattler_package_streaming = { workspace = true, features = ["reqwest"] }
+rattler_menuinst = { workspace = true, default-features = false }
+path_resolver = { workspace = true, default-features = false }
 rayon = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["stream", "json", "gzip"] }
 reqwest-middleware = { workspace = true }
 smallvec = { workspace = true }
-simple_spawn_blocking = { path = "../simple_spawn_blocking", version = "1.1", default-features = false, features = ["tokio"] }
+simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "io-util", "macros"] }
@@ -67,3 +68,4 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 axum = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 tower = { workspace = true, features = ["util"] }
+walkdir.workspace = true

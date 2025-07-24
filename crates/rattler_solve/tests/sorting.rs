@@ -7,7 +7,7 @@ use itertools::Itertools;
 use rattler_conda_types::{
     Channel, MatchSpec, PackageName, ParseStrictness::Lenient, RepoDataRecord,
 };
-use rattler_repodata_gateway::sparse::SparseRepoData;
+use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{resolvo::CondaDependencyProvider, ChannelPriority, SolveStrategy};
 use resolvo::{Interner, SolverCache};
 use rstest::*;
@@ -24,8 +24,13 @@ fn load_repodata(package_name: &PackageName) -> Vec<Vec<RepoDataRecord>> {
     let sparse_repo_data = SparseRepoData::from_file(channel, "linux-64", repodata_json_path, None)
         .expect("failed to load sparse repodata");
 
-    SparseRepoData::load_records_recursive(&[sparse_repo_data], [package_name.clone()], None)
-        .expect("failed to load records")
+    SparseRepoData::load_records_recursive(
+        &[sparse_repo_data],
+        [package_name.clone()],
+        None,
+        PackageFormatSelection::default(),
+    )
+    .expect("failed to load records")
 }
 
 fn create_sorting_snapshot(package_name: &str, strategy: SolveStrategy) -> String {

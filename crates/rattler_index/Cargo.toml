@@ -1,6 +1,6 @@
 [package]
 name = "rattler_index"
-version = "0.22.2"
+version = "0.24.5"
 edition.workspace = true
 authors = []
 description = "A crate to index conda channels and create a repodata.json file."
@@ -12,7 +12,7 @@ readme.workspace = true
 default-run = "rattler-index"
 
 [features]
-default = ["rustls-tls"]
+default = ["rustls-tls", "rattler_config"]
 native-tls = [
   "reqwest/native-tls",
   "reqwest/native-tls-alpn",
@@ -33,6 +33,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 bytes = { workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 clap-verbosity-flag = { workspace = true, features = ["tracing"] }
 console = { workspace = true }
@@ -44,20 +45,28 @@ opendal = { workspace = true, features = [
   "services-s3",
   "services-fs",
 ], default-features = false }
-rattler_networking = { path = "../rattler_networking", version = "0.22.10", default-features = false }
-rattler_conda_types = { path = "../rattler_conda_types", version = "0.31.5" }
-rattler_digest = { path = "../rattler_digest", version = "1.0.8", default-features = false }
-rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.22.34", default-features = false }
+rattler_config = { workspace = true, optional = true }
+rattler_networking = { workspace = true, default-features = false, features = [
+  "system-integration",
+] }
+rattler_conda_types = { workspace = true, default-features = false }
+rattler_digest = { workspace = true, default-features = false }
+rattler_package_streaming = { workspace = true, default-features = false }
 reqwest = { workspace = true, default-features = false, features = [
   "http2",
   "macos-system-configuration",
   "charset",
 ] }
+rmp-serde = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
+tar = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 url = { workspace = true }
+zstd = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

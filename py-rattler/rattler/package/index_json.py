@@ -68,7 +68,7 @@ class IndexJson:
         return IndexJson._from_py_index_json(PyIndexJson.from_str(string))
 
     @staticmethod
-    def package_path() -> str:
+    def package_path() -> Path:
         """
         Returns the path to the file within the Conda archive.
 

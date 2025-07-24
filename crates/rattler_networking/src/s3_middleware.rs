@@ -7,7 +7,6 @@ use aws_config::BehaviorVersion;
 use aws_sdk_s3::presigning::PresigningConfig;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
-use tracing::info;
 use url::Url;
 
 use crate::{Authentication, AuthenticationStorage};
@@ -28,6 +27,28 @@ pub enum S3Config {
     },
 }
 
+#[cfg(feature = "rattler_config")]
+/// Compute the S3 configuration from the given S3 options.
+pub fn compute_s3_config<M>(s3_options: &M) -> HashMap<String, S3Config>
+where
+    M: IntoIterator<Item = (String, rattler_config::config::s3::S3Options)> + Clone,
+{
+    s3_options
+        .clone()
+        .into_iter()
+        .map(|(k, v)| {
+            (
+                k,
+                S3Config::Custom {
+                    endpoint_url: v.endpoint_url,
+                    region: v.region,
+                    force_path_style: v.force_path_style,
+                },
+            )
+        })
+        .collect()
+}
+
 /// Wrapper around S3 client.
 #[derive(Clone, Debug)]
 pub struct S3 {
@@ -45,7 +66,7 @@ pub struct S3Middleware {
 impl S3Middleware {
     /// Create a new S3 middleware.
     pub fn new(config: HashMap<String, S3Config>, auth_storage: AuthenticationStorage) -> Self {
-        info!("Creating S3 middleware using {:?}", config);
+        tracing::trace!("Creating S3 middleware using {:?}", config);
         Self {
             s3: S3::new(config, auth_storage),
         }
@@ -61,13 +82,12 @@ impl S3 {
             expiration: std::time::Duration::from_secs(300),
         }
     }
-
     /// Create an S3 client.
     ///
     /// # Arguments
     ///
     /// * `url` - The S3 URL to obtain authentication information from the authentication storage.
-    ///     Only respected for custom (non-AWS-based) configuration.
+    ///   Only respected for custom (non-AWS-based) configuration.
     pub async fn create_s3_client(&self, url: Url) -> Result<aws_sdk_s3::Client, Error> {
         let bucket_name = url
             .host_str()

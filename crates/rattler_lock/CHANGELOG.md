@@ -6,6 +6,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.12](https://github.com/conda/rattler/compare/rattler_lock-v0.23.11...rattler_lock-v0.23.12) - 2025-07-21
+
+### Other
+
+- bump rust 1.88.0 ([#1536](https://github.com/conda/rattler/pull/1536))
+
+## [0.23.11](https://github.com/conda/rattler/compare/rattler_lock-v0.23.10...rattler_lock-v0.23.11) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.23.10](https://github.com/conda/rattler/compare/rattler_lock-v0.23.9...rattler_lock-v0.23.10) - 2025-07-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.23.9](https://github.com/conda/rattler/compare/rattler_lock-v0.23.8...rattler_lock-v0.23.9) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [0.23.8](https://github.com/conda/rattler/compare/rattler_lock-v0.23.7...rattler_lock-v0.23.8) - 2025-06-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.23.7](https://github.com/conda/rattler/compare/rattler_lock-v0.23.6...rattler_lock-v0.23.7) - 2025-06-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.23.6](https://github.com/conda/rattler/compare/rattler_lock-v0.23.5...rattler_lock-v0.23.6) - 2025-06-23
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [0.23.5](https://github.com/conda/rattler/compare/rattler_lock-v0.23.4...rattler_lock-v0.23.5) - 2025-05-23
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.23.4](https://github.com/conda/rattler/compare/rattler_lock-v0.23.3...rattler_lock-v0.23.4) - 2025-05-16
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.23.3](https://github.com/conda/rattler/compare/rattler_lock-v0.23.2...rattler_lock-v0.23.3) - 2025-05-03
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.23.2](https://github.com/conda/rattler/compare/rattler_lock-v0.23.1...rattler_lock-v0.23.2) - 2025-04-17
+
+### Fixed
+
+- rename struct and reexport ([#1262](https://github.com/conda/rattler/pull/1262))
+
+## [0.23.1](https://github.com/conda/rattler/compare/rattler_lock-v0.23.0...rattler_lock-v0.23.1) - 2025-04-15
+
+### Added
+
+- add resolver options to lock-file ([#1255](https://github.com/conda/rattler/pull/1255))
+
+## [0.23.0](https://github.com/conda/rattler/compare/rattler_lock-v0.22.49...rattler_lock-v0.23.0) - 2025-04-10
+
+### Added
+
+- add source location ([#1216](https://github.com/conda/rattler/pull/1216))
+
+## [0.22.49](https://github.com/conda/rattler/compare/rattler_lock-v0.22.48...rattler_lock-v0.22.49) - 2025-04-04
+
+### Other
+
+- add the remove_from_backup function and update the prefix ([#1155](https://github.com/conda/rattler/pull/1155))
+
 ## [0.22.48](https://github.com/conda/rattler/compare/rattler_lock-v0.22.47...rattler_lock-v0.22.48) - 2025-03-14
 
 ### Other

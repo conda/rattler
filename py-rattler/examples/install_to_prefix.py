@@ -55,7 +55,7 @@ def install(
         _install(
             lock_file_path=lock_file_path,
             environment_name=environment_name,
-            platform=Platform(platform),  # type: ignore[arg-type]
+            platform=Platform(platform),
             target_prefix=target_prefix,
         )
     )

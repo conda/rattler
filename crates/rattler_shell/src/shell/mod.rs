@@ -32,30 +32,30 @@ use crate::activation::PathModificationBehavior;
 /// let shell = Bash;
 /// shell.set_env_var(&mut script, "FOO", "bar").unwrap();
 ///
-/// assert_eq!(script, "export FOO=\"bar\"\n");
+/// assert_eq!(script, "export FOO=bar\n");
 /// ```
 #[enum_dispatch(ShellEnum)]
 pub trait Shell {
     /// Write a command to the script that forces the usage of UTF8-encoding for
     /// the shell script.
-    fn force_utf8(&self, _f: &mut impl Write) -> std::fmt::Result {
+    fn force_utf8(&self, _f: &mut impl Write) -> ShellResult {
         Ok(())
     }
 
     /// Set an env var by `export`-ing it.
-    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result;
+    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult;
 
     /// Unset an env var by `unset`-ing it.
-    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result;
+    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult;
 
     /// Run a script in the current shell.
-    fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result;
+    fn run_script(&self, f: &mut impl Write, path: &Path) -> ShellResult;
 
     /// Source completion scripts for the shell from a given prefix path.
-    /// Note: the `completions_dir` is the directory where the completions are stored.
-    /// You can use [`Self::completion_script_location`] to get the correct location for a given
-    /// shell type.
-    fn source_completions(&self, _f: &mut impl Write, _completions_dir: &Path) -> std::fmt::Result {
+    /// Note: the `completions_dir` is the directory where the completions are
+    /// stored. You can use [`Self::completion_script_location`] to get the
+    /// correct location for a given shell type.
+    fn source_completions(&self, _f: &mut impl Write, _completions_dir: &Path) -> ShellResult {
         Ok(())
     }
 
@@ -86,7 +86,7 @@ pub trait Shell {
         paths: &[PathBuf],
         modification_behavior: PathModificationBehavior,
         platform: &Platform,
-    ) -> std::fmt::Result {
+    ) -> ShellResult {
         let mut paths_vec = paths
             .iter()
             .map(|path| path.to_string_lossy().into_owned())
@@ -171,20 +171,34 @@ pub trait Shell {
         "\n"
     }
 
-    /// Return the location where completion scripts are found in a Conda environment.
+    /// Return the location where completion scripts are found in a Conda
+    /// environment.
     ///
     /// - bash: `share/bash-completion/completions`
     /// - zsh: `share/zsh/site-functions`
     /// - fish: `share/fish/vendor_completions.d`
     ///
-    /// The return value must be joined with `prefix.join(completion_script_location())`.
+    /// The return value must be joined with
+    /// `prefix.join(completion_script_location())`.
     fn completion_script_location(&self) -> Option<&'static Path> {
         None
+    }
+
+    /// Restores an environment variable from its backup if it exists, otherwise
+    /// unsets it.
+    ///
+    /// # Arguments
+    /// * `key` - The name of the environment variable to restore
+    /// * `backup_key` - The name of the backup environment variable
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
+        // Default implementation that just unsets both variables
+        self.unset_env_var(f, backup_key)?;
+        self.unset_env_var(f, key)
     }
 }
 
 /// Convert a native PATH on Windows to a Unix style path using cygpath.
-fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
+pub(crate) fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
     // call cygpath on Windows to convert paths to Unix style
     let output = Command::new("cygpath")
         .arg("--unix")
@@ -194,41 +208,81 @@ fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
 
     match output {
         Ok(output) if output.status.success() => Ok(String::from_utf8(output.stdout)
-            .map_err(|_err| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "failed to convert path to Unix style",
-                )
-            })?
+            .map_err(|_err| std::io::Error::other("failed to convert path to Unix style"))?
             .trim()
             .to_string()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(e),
-        Err(e) => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("failed to convert path to Unix style: {e}"),
-        )),
-        _ => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(e) => Err(std::io::Error::other(format!(
+            "failed to convert path to Unix style: {e}"
+        ))),
+        _ => Err(std::io::Error::other(
             "failed to convert path to Unix style: cygpath failed",
         )),
     }
 }
+
+/// An error that can occur when working with shell scripts.
+#[derive(Debug, Error)]
+pub enum ShellError {
+    /// An invalid environment variable name or value was provided.
+    #[error("Invalid environment variable name '{0}': {1}")]
+    InvalidName(String, &'static str),
+
+    /// An invalid environment variable value was provided.
+    #[error("Invalid environment variable value for '{0}': {1}")]
+    InvalidValue(String, &'static str),
+
+    /// An error occurred while writing to the shell script.
+    #[error("Could not format with std::fmt::Error")]
+    FmtError(#[from] std::fmt::Error),
+}
+
+/// Validates an environment variable name according to POSIX standards
+/// and common security practices
+fn validate_env_var_name(name: &str) -> Result<(), ShellError> {
+    if name.is_empty() {
+        return Err(ShellError::InvalidName(
+            name.to_string(),
+            "name cannot be empty",
+        ));
+    }
+
+    // Check for control characters (0-31 and 127) and equals sign
+    for ch in name.chars() {
+        if ch.is_control() || ch == '=' {
+            return Err(ShellError::InvalidName(
+                name.to_string(),
+                "name cannot contain control characters or '='",
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+type ShellResult = Result<(), ShellError>;
 
 /// A [`Shell`] implementation for the Bash shell.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Bash;
 
 impl Shell for Bash {
-    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "export {env_var}=\"{value}\"")
+    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        let quoted_value = shlex::try_quote(value).unwrap_or_default();
+        Ok(writeln!(f, "export {env_var}={quoted_value}")?)
     }
 
-    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "unset {env_var}")
+    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        writeln!(f, "unset {env_var}")?;
+        Ok(())
     }
 
-    fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, ". \"{}\"", path.to_string_lossy())
+    fn run_script(&self, f: &mut impl Write, path: &Path) -> ShellResult {
+        let lossy_path = path.to_string_lossy();
+        let quoted_path = shlex::try_quote(&lossy_path).unwrap_or_default();
+        Ok(writeln!(f, ". {quoted_path}")?)
     }
 
     fn set_path(
@@ -237,7 +291,7 @@ impl Shell for Bash {
         paths: &[PathBuf],
         modification_behavior: PathModificationBehavior,
         platform: &Platform,
-    ) -> std::fmt::Result {
+    ) -> ShellResult {
         // Put paths in a vector of the correct format.
         let mut paths_vec = paths
             .iter()
@@ -248,8 +302,9 @@ impl Shell for Bash {
                     match native_path_to_unix(path.to_string_lossy().as_ref()) {
                         Ok(path) => path,
                         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                            // This indicates that the cypath executable could not be found. In that
-                            // case we just ignore any conversion and use the windows path directly.
+                            // This indicates that the cygpath executable could not be found. In
+                            // that case we just ignore any conversion
+                            // and use the windows path directly.
                             path.to_string_lossy().to_string()
                         }
                         Err(e) => panic!("{e}"),
@@ -270,7 +325,22 @@ impl Shell for Bash {
         // Create the shell specific list of paths.
         let paths_string = paths_vec.join(self.path_separator(platform));
 
-        self.set_env_var(f, self.path_var(platform), paths_string.as_str())
+        let path_var = self.path_var(platform);
+        let paths_str = paths_string.as_str();
+        // Use double quotes "" so that ${PATH} is substituted. Calling set_env_var
+        // would correctly escape ${PATH} so that it literally is in the result.
+        Ok(writeln!(f, "export {path_var}=\"{paths_str}\"")?)
+    }
+
+    /// For Bash, the separator in the path variable is always ":", even on
+    /// Windows
+    fn path_separator(&self, _platform: &Platform) -> &str {
+        ":"
+    }
+
+    /// For Bash, the path variable is always all capital PATH, even on Windows.
+    fn path_var(&self, _platform: &Platform) -> &str {
+        "PATH"
     }
 
     fn extension(&self) -> &str {
@@ -281,10 +351,24 @@ impl Shell for Bash {
         Some(Path::new("share/bash-completion/completions"))
     }
 
-    fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> std::fmt::Result {
+    fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> ShellResult {
         if completions_dir.exists() {
-            let completions_glob = completions_dir.join("*");
-            writeln!(f, "source {}", completions_glob.to_string_lossy())?;
+            // check if we are on Windows, and if yes, convert native path to unix for (Git)
+            // Bash
+            let completions_dir_str = if cfg!(windows) {
+                match native_path_to_unix(completions_dir.to_string_lossy().as_ref()) {
+                    Ok(path) => path,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                        // This indicates that the cygpath executable could not be found. In that
+                        // case we just ignore any conversion and use the windows path directly.
+                        completions_dir.to_string_lossy().to_string()
+                    }
+                    Err(e) => panic!("{e}"),
+                }
+            } else {
+                completions_dir.to_string_lossy().to_string()
+            };
+            writeln!(f, "source {completions_dir_str}/*")?;
         }
         Ok(())
     }
@@ -306,6 +390,20 @@ impl Shell for Bash {
 
         cmd
     }
+
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if [ -n "${{{backup_key}:-}}" ]; then
+                {key}="${{{backup_key}}}"
+                unset {backup_key}
+            else
+                unset {key}
+            fi"#
+        )?)
+    }
 }
 
 /// A [`Shell`] implementation for the Zsh shell.
@@ -313,16 +411,18 @@ impl Shell for Bash {
 pub struct Zsh;
 
 impl Shell for Zsh {
-    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "export {env_var}=\"{value}\"")
+    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        Ok(writeln!(f, "export {env_var}=\"{value}\"")?)
     }
 
-    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "unset {env_var}")
+    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        Ok(writeln!(f, "unset {env_var}")?)
     }
 
-    fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, ". \"{}\"", path.to_string_lossy())
+    fn run_script(&self, f: &mut impl Write, path: &Path) -> ShellResult {
+        Ok(writeln!(f, ". \"{}\"", path.to_string_lossy())?)
     }
 
     fn extension(&self) -> &str {
@@ -343,13 +443,27 @@ impl Shell for Zsh {
         Some(Path::new("share/zsh/site-functions"))
     }
 
-    fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> std::fmt::Result {
+    fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> ShellResult {
         if completions_dir.exists() {
             writeln!(f, "fpath+=({})", completions_dir.to_string_lossy())?;
             writeln!(f, "autoload -Uz compinit")?;
             writeln!(f, "compinit")?;
         }
         Ok(())
+    }
+
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if [ -n "${{{backup_key}:-}}" ]; then
+                {key}="${{{backup_key}}}"
+                unset {backup_key}
+            else
+                unset {key}
+            fi"#
+        )?)
     }
 }
 
@@ -358,21 +472,23 @@ impl Shell for Zsh {
 pub struct Xonsh;
 
 impl Shell for Xonsh {
-    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "${env_var} = \"{value}\"")
+    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        Ok(writeln!(f, "${env_var} = \"{value}\"")?)
     }
 
-    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "del ${env_var}")
+    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        Ok(writeln!(f, "del ${env_var}")?)
     }
 
-    fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
+    fn run_script(&self, f: &mut impl Write, path: &Path) -> ShellResult {
         let ext = path.extension().and_then(OsStr::to_str);
         let cmd = match ext {
             Some("sh") => "source-bash",
             _ => "source",
         };
-        writeln!(f, "{} \"{}\"", cmd, path.to_string_lossy())
+        Ok(writeln!(f, "{} \"{}\"", cmd, path.to_string_lossy())?)
     }
 
     fn can_run_script(&self, path: &Path) -> bool {
@@ -400,6 +516,19 @@ impl Shell for Xonsh {
     fn completion_script_location(&self) -> Option<&'static Path> {
         None
     }
+
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if {backup_key} in $env:
+                $env[{key}] = $env[{backup_key}]
+                del $env[{backup_key}]
+            else:
+                del $env[{key}]"#
+        )?)
+    }
 }
 
 /// A [`Shell`] implementation for the cmd.exe shell.
@@ -407,20 +536,22 @@ impl Shell for Xonsh {
 pub struct CmdExe;
 
 impl Shell for CmdExe {
-    fn force_utf8(&self, f: &mut impl Write) -> std::fmt::Result {
-        writeln!(f, "@chcp 65001 > nul")
+    fn force_utf8(&self, f: &mut impl Write) -> ShellResult {
+        Ok(writeln!(f, "@chcp 65001 > nul")?)
     }
 
-    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "@SET \"{env_var}={value}\"")
+    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        Ok(writeln!(f, "@SET \"{env_var}={value}\"")?)
     }
 
-    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "@SET {env_var}=")
+    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        Ok(writeln!(f, "@SET {env_var}=")?)
     }
 
-    fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, "@CALL \"{}\"", path.to_string_lossy())
+    fn run_script(&self, f: &mut impl Write, path: &Path) -> ShellResult {
+        Ok(writeln!(f, "@CALL \"{}\"", path.to_string_lossy())?)
     }
 
     fn run_command<'a>(
@@ -473,6 +604,20 @@ impl Shell for CmdExe {
     fn line_ending(&self) -> &str {
         "\r\n"
     }
+
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if defined {backup_key} (
+                set "{key}=%{backup_key}%"
+                set "{backup_key}="
+            ) else (
+                set "{key}="
+            )"#
+        )?)
+    }
 }
 
 /// A [`Shell`] implementation for `PowerShell`.
@@ -499,21 +644,26 @@ impl Default for PowerShell {
 }
 
 impl Shell for PowerShell {
-    fn force_utf8(&self, f: &mut impl Write) -> std::fmt::Result {
+    fn force_utf8(&self, f: &mut impl Write) -> ShellResult {
         // Taken from https://stackoverflow.com/a/49481797
-        writeln!(f, "$OutputEncoding = [System.Console]::OutputEncoding = [System.Console]::InputEncoding = [System.Text.Encoding]::UTF8")
+        Ok(writeln!(
+            f,
+            "$OutputEncoding = [System.Console]::OutputEncoding = [System.Console]::InputEncoding = [System.Text.Encoding]::UTF8"
+        )?)
     }
 
-    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "${{Env:{env_var}}} = \"{value}\"")
+    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        Ok(writeln!(f, "${{Env:{env_var}}} = \"{value}\"")?)
     }
 
-    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "${{Env:{env_var}}}=\"\"")
+    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        Ok(writeln!(f, "${{Env:{env_var}}}=\"\"")?)
     }
 
-    fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, ". \"{}\"", path.to_string_lossy())
+    fn run_script(&self, f: &mut impl Write, path: &Path) -> ShellResult {
+        Ok(writeln!(f, ". \"{}\"", path.to_string_lossy())?)
     }
 
     fn extension(&self) -> &str {
@@ -538,6 +688,20 @@ impl Shell for PowerShell {
     fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
         writeln!(f, r##"dir env: | %{{"{{0}}={{1}}" -f $_.Name,$_.Value}}"##)
     }
+
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if (Test-Path env:{backup_key}) {{
+                $env:{key} = $env:{backup_key}
+                Remove-Item env:{backup_key}
+            }} else {{
+                Remove-Item env:{key} -ErrorAction SilentlyContinue
+            }}"#
+        )?)
+    }
 }
 
 /// A [`Shell`] implementation for the Fish shell.
@@ -545,8 +709,9 @@ impl Shell for PowerShell {
 pub struct Fish;
 
 impl Shell for Fish {
-    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "set -gx {env_var} \"{value}\"")
+    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        Ok(writeln!(f, "set -gx {env_var} \"{value}\"")?)
     }
 
     fn format_env_var(&self, var_name: &str) -> String {
@@ -554,12 +719,13 @@ impl Shell for Fish {
         format!("${var_name}")
     }
 
-    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "set -e {env_var}")
+    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        Ok(writeln!(f, "set -e {env_var}")?)
     }
 
-    fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, "source \"{}\"", path.to_string_lossy())
+    fn run_script(&self, f: &mut impl Write, path: &Path) -> ShellResult {
+        Ok(writeln!(f, "source \"{}\"", path.to_string_lossy())?)
     }
 
     fn extension(&self) -> &str {
@@ -580,7 +746,7 @@ impl Shell for Fish {
         Some(Path::new("share/fish/vendor_completions.d"))
     }
 
-    fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> std::fmt::Result {
+    fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> ShellResult {
         if completions_dir.exists() {
             // glob all files in the completions directory using fish
             let completions_glob = completions_dir.join("*");
@@ -589,6 +755,20 @@ impl Shell for Fish {
             writeln!(f, "end")?;
         }
         Ok(())
+    }
+
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if set -q {backup_key}
+                set -gx {key} ${backup_key}
+                set -e {backup_key}
+            else
+                set -e {key}
+            end"#
+        )?)
     }
 }
 
@@ -608,22 +788,24 @@ fn quote_if_required(s: &str) -> Cow<'_, str> {
 pub struct NuShell;
 
 impl Shell for NuShell {
-    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
+    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
         // escape backslashes for Windows (make them double backslashes)
-        writeln!(
+        validate_env_var_name(env_var)?;
+        Ok(writeln!(
             f,
             "$env.{} = \"{}\"",
             quote_if_required(env_var),
             escape_backslashes(value)
-        )
+        )?)
     }
 
-    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "hide-env {}", quote_if_required(env_var))
+    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        Ok(writeln!(f, "hide-env {}", quote_if_required(env_var))?)
     }
 
-    fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, "source-env \"{}\"", path.to_string_lossy())
+    fn run_script(&self, f: &mut impl Write, path: &Path) -> ShellResult {
+        Ok(writeln!(f, "source-env \"{}\"", path.to_string_lossy())?)
     }
 
     fn set_path(
@@ -632,7 +814,7 @@ impl Shell for NuShell {
         paths: &[PathBuf],
         modification_behavior: PathModificationBehavior,
         platform: &Platform,
-    ) -> std::fmt::Result {
+    ) -> ShellResult {
         let path = paths
             .iter()
             .map(|path| escape_backslashes(&format!("\"{}\"", path.to_string_lossy().into_owned())))
@@ -641,15 +823,15 @@ impl Shell for NuShell {
         // Replace, Append, or Prepend the path variable to the paths.
         let path_var = self.path_var(platform);
         match modification_behavior {
-            PathModificationBehavior::Replace => {
-                writeln!(f, "$env.{path_var} = [{path}]",)
-            }
-            PathModificationBehavior::Prepend => {
-                writeln!(f, "$env.{path_var} = ($env.{path_var} | prepend [{path}])")
-            }
-            PathModificationBehavior::Append => {
-                writeln!(f, "$env.{path_var} = ($env.{path_var} | append [{path}])")
-            }
+            PathModificationBehavior::Replace => Ok(writeln!(f, "$env.{path_var} = [{path}]",)?),
+            PathModificationBehavior::Prepend => Ok(writeln!(
+                f,
+                "$env.{path_var} = ($env.{path_var} | prepend [{path}])"
+            )?),
+            PathModificationBehavior::Append => Ok(writeln!(
+                f,
+                "$env.{path_var} = ($env.{path_var} | append [{path}])"
+            )?),
         }
     }
 
@@ -669,6 +851,20 @@ impl Shell for NuShell {
 
     fn completion_script_location(&self) -> Option<&'static Path> {
         None
+    }
+
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if ($env | get {backup_key}?) {{
+                $env.{key} = $env.{backup_key}
+                $env = $env | reject {backup_key}
+            }} else {{
+                $env = $env | reject {key}
+            }}"#
+        )?)
     }
 }
 
@@ -841,17 +1037,13 @@ impl<T: Shell + 'static> ShellScript<T> {
     }
 
     /// Export an environment variable.
-    pub fn set_env_var(
-        &mut self,
-        env_var: &str,
-        value: &str,
-    ) -> Result<&mut Self, std::fmt::Error> {
+    pub fn set_env_var(&mut self, env_var: &str, value: &str) -> Result<&mut Self, ShellError> {
         self.shell.set_env_var(&mut self.contents, env_var, value)?;
         Ok(self)
     }
 
     /// Unset an environment variable.
-    pub fn unset_env_var(&mut self, env_var: &str) -> Result<&mut Self, std::fmt::Error> {
+    pub fn unset_env_var(&mut self, env_var: &str) -> Result<&mut Self, ShellError> {
         self.shell.unset_env_var(&mut self.contents, env_var)?;
         Ok(self)
     }
@@ -861,7 +1053,7 @@ impl<T: Shell + 'static> ShellScript<T> {
         &mut self,
         paths: &[PathBuf],
         path_modification_behavior: PathModificationBehavior,
-    ) -> Result<&mut Self, std::fmt::Error> {
+    ) -> Result<&mut Self, ShellError> {
         self.shell.set_path(
             &mut self.contents,
             paths,
@@ -872,16 +1064,14 @@ impl<T: Shell + 'static> ShellScript<T> {
     }
 
     /// Run a script in the generated shell script.
-    pub fn run_script(&mut self, path: &Path) -> Result<&mut Self, std::fmt::Error> {
+    pub fn run_script(&mut self, path: &Path) -> Result<&mut Self, ShellError> {
         self.shell.run_script(&mut self.contents, path)?;
         Ok(self)
     }
 
-    /// Source completion scripts for the shell from a given directory with completion scripts.
-    pub fn source_completions(
-        &mut self,
-        completions_dir: &Path,
-    ) -> Result<&mut Self, std::fmt::Error> {
+    /// Source completion scripts for the shell from a given directory with
+    /// completion scripts.
+    pub fn source_completions(&mut self, completions_dir: &Path) -> Result<&mut Self, ShellError> {
         self.shell
             .source_completions(&mut self.contents, completions_dir)?;
         Ok(self)
@@ -896,7 +1086,7 @@ impl<T: Shell + 'static> ShellScript<T> {
     }
 
     /// Return the contents of the script.
-    pub fn contents(&self) -> Result<String, std::fmt::Error> {
+    pub fn contents(&self) -> Result<String, ShellError> {
         let mut final_contents = String::new();
         self.shell.force_utf8(&mut final_contents)?;
         final_contents.push_str(&self.contents);
@@ -919,6 +1109,18 @@ impl<T: Shell + 'static> ShellScript<T> {
         self.shell.echo(&mut self.contents, text)?;
         Ok(self)
     }
+
+    /// Restores an environment variable from its backup if it exists, otherwise
+    /// unsets it.
+    pub fn restore_env_var(
+        &mut self,
+        key: &str,
+        backup_key: &str,
+    ) -> Result<&mut Self, ShellError> {
+        self.shell
+            .restore_env_var(&mut self.contents, key, backup_key)?;
+        Ok(self)
+    }
 }
 
 #[cfg(test)]
@@ -931,12 +1133,28 @@ mod tests {
     fn test_bash() {
         let mut script = ShellScript::new(Bash, Platform::Linux64);
 
+        let paths = vec![PathBuf::from("bar"), PathBuf::from("a/b")];
+
         script
             .set_env_var("FOO", "bar")
             .unwrap()
+            .set_env_var("FOO2", "a b")
+            .unwrap()
+            .set_env_var("FOO3", "a\\b")
+            .unwrap()
+            .set_env_var("FOO4", "${UNEXPANDED_VAR}")
+            .unwrap()
             .unset_env_var("FOO")
             .unwrap()
+            .set_path(&paths, PathModificationBehavior::Append)
+            .unwrap()
+            .set_path(&paths, PathModificationBehavior::Prepend)
+            .unwrap()
+            .set_path(&paths, PathModificationBehavior::Replace)
+            .unwrap()
             .run_script(&PathBuf::from_str("foo.sh").unwrap())
+            .unwrap()
+            .run_script(&PathBuf::from_str("a\\foo.sh").unwrap())
             .unwrap();
 
         insta::assert_snapshot!(script.contents);
@@ -984,7 +1202,7 @@ mod tests {
 
     #[cfg(feature = "sysinfo")]
     #[test]
-    fn test_from_parent_process_doenst_crash() {
+    fn test_from_parent_process_doesnt_crash() {
         let shell = ShellEnum::from_parent_process();
         println!("Detected shell: {shell:?}");
     }
@@ -1013,7 +1231,23 @@ mod tests {
                 PathModificationBehavior::Prepend,
             )
             .unwrap();
-        assert!(script.contents.contains("/foo;/bar"));
+        assert!(script.contents.contains("/foo:/bar"));
+    }
+
+    #[test]
+    fn test_env_var_name_validation() {
+        // Valid cases
+        assert!(validate_env_var_name("PATH").is_ok());
+        assert!(validate_env_var_name("_PATH").is_ok());
+        assert!(validate_env_var_name("MY_VAR_123").is_ok());
+        assert!(validate_env_var_name("ProgramFiles(x86)").is_ok());
+
+        // Invalid cases
+        assert!(validate_env_var_name("").is_err());
+        assert!(validate_env_var_name("VAR=1").is_err());
+        assert!(validate_env_var_name("VAR\n").is_err());
+        assert!(validate_env_var_name("VAR\x00123").is_err());
+        assert!(validate_env_var_name("VAR\r123").is_err());
     }
 
     #[test]

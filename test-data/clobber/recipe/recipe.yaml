@@ -6,8 +6,8 @@ outputs:
   - package:
       name: clobber-1
       version: 0.1.0
-    
-    build:  
+
+    build:
       noarch: generic
       script:
         - echo "clobber-1" > $PREFIX/clobber.txt
@@ -16,8 +16,8 @@ outputs:
   - package:
       name: clobber-2
       version: 0.1.0
-    
-    build:  
+
+    build:
       noarch: generic
       script:
         - echo "clobber-2" > $PREFIX/clobber.txt
@@ -26,8 +26,8 @@ outputs:
   - package:
       name: clobber-3
       version: 0.1.0
-    
-    build:  
+
+    build:
       noarch: generic
       script:
         - echo "clobber-3" > $PREFIX/clobber.txt

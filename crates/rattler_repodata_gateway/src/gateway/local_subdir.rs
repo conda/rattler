@@ -4,7 +4,7 @@ use rattler_conda_types::{Channel, PackageName, RepoDataRecord};
 
 use crate::{
     gateway::{error::SubdirNotFoundError, subdir::SubdirClient, GatewayError},
-    sparse::SparseRepoData,
+    sparse::{PackageFormatSelection, SparseRepoData},
     Reporter,
 };
 
@@ -73,7 +73,9 @@ impl SubdirClient for LocalSubdirClient {
         let sparse_repodata = self.sparse.clone();
         let name = name.clone();
 
-        let load_records = move || match sparse_repodata.load_records(&name) {
+        let load_records = move || match sparse_repodata
+            .load_records(&name, PackageFormatSelection::PreferConda)
+        {
             Ok(records) => Ok(records.into()),
             Err(err) => Err(GatewayError::IoError(
                 "failed to extract repodata records from sparse repodata".to_string(),
@@ -90,7 +92,7 @@ impl SubdirClient for LocalSubdirClient {
     fn package_names(&self) -> Vec<String> {
         let sparse_repodata: Arc<SparseRepoData> = self.sparse.clone();
         sparse_repodata
-            .package_names()
+            .package_names(PackageFormatSelection::PreferConda)
             .map(std::convert::Into::into)
             .collect()
     }

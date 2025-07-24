@@ -5,7 +5,7 @@ use rattler_conda_types::{
     Platform,
 };
 use rattler_shell::{
-    activation::{ActivationVariables, Activator},
+    activation::{ActivationVariables, Activator, PathModificationBehavior},
     shell,
 };
 use registry::{notify_shell_changes, FileExtension, UrlProtocol};
@@ -105,6 +105,7 @@ impl Directories {
 }
 
 pub struct WindowsMenu {
+    menu_name: String,
     prefix: PathBuf,
     name: String,
     item: Windows,
@@ -118,6 +119,7 @@ const SHORTCUT_EXTENSION: &str = "lnk";
 
 impl WindowsMenu {
     pub fn new(
+        menu_name: &str,
         prefix: &Path,
         item: Windows,
         command: MenuItemCommand,
@@ -135,6 +137,7 @@ impl WindowsMenu {
             .with_extension(SHORTCUT_EXTENSION);
 
         Self {
+            menu_name: menu_name.to_string(),
             prefix: prefix.to_path_buf(),
             name,
             item,
@@ -159,7 +162,11 @@ impl WindowsMenu {
             // create a bash activation script and emit it into the script
             let activator =
                 Activator::from_path(&self.prefix, shell::CmdExe, Platform::current()).unwrap();
-            let activation_env = activator.run_activation(ActivationVariables::default(), None)?;
+            let activation_variables = ActivationVariables {
+                path_modification_behavior: PathModificationBehavior::Prepend,
+                ..Default::default()
+            };
+            let activation_env = activator.run_activation(activation_variables, None)?;
 
             for (k, v) in activation_env {
                 lines.push(format!(r#"set "{k}={v}""#));
@@ -334,9 +341,15 @@ impl WindowsMenu {
         let link_name = format!("{}.lnk", self.name);
 
         // install start menu shortcut
-        let start_menu_link_path = self.directories.start_menu.join(&link_name);
+        let start_menu_subdir_path = self.directories.start_menu.join(&self.menu_name);
+        if !start_menu_subdir_path.exists() {
+            fs::create_dir_all(&start_menu_subdir_path)?;
+            tracker.start_menu_subdir_path = Some(start_menu_subdir_path.clone());
+        }
+
+        let start_menu_link_path = start_menu_subdir_path.join(&link_name);
         let shortcut = Shortcut {
-            path: &self.name,
+            path: command,
             description: &self.command.description.resolve(&self.placeholders),
             filename: &start_menu_link_path,
             arguments: Some(&args),
@@ -345,7 +358,6 @@ impl WindowsMenu {
             iconindex: Some(0),
             app_id: Some(&app_id),
         };
-
         create_shortcut::create_shortcut(shortcut)?;
         tracker.shortcuts.push(start_menu_link_path.clone());
 
@@ -372,7 +384,7 @@ impl WindowsMenu {
             if self.item.quicklaunch.unwrap_or(false) {
                 let quicklaunch_link_path = quick_launch_dir.join(link_name);
                 let shortcut = Shortcut {
-                    path: &self.name,
+                    path: command,
                     description: &self.command.description.resolve(&self.placeholders),
                     filename: &quicklaunch_link_path,
                     arguments: Some(&args),
@@ -506,6 +518,7 @@ impl WindowsMenu {
 }
 
 pub(crate) fn install_menu_item(
+    menu_name: &str,
     prefix: &Path,
     windows_item: Windows,
     command: MenuItemCommand,
@@ -520,6 +533,7 @@ pub(crate) fn install_menu_item(
     };
 
     let menu = WindowsMenu::new(
+        menu_name,
         prefix,
         windows_item,
         command,
@@ -537,6 +551,22 @@ pub(crate) fn remove_menu_item(tracker: &WindowsTracker) -> Result<(), MenuInstE
             Ok(_) => {}
             Err(e) => {
                 tracing::warn!("Failed to remove shortcut {}: {}", file.display(), e);
+            }
+        }
+    }
+
+    if let Some(subdir) = &tracker.start_menu_subdir_path {
+        // Check if subdir exists and is empty.
+        if subdir.exists() && subdir.read_dir()?.next().is_none() {
+            match fs::remove_dir(subdir) {
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to remove start menu sub-directory {}: {}",
+                        subdir.display(),
+                        e
+                    );
+                }
             }
         }
     }

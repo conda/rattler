@@ -1,10 +1,26 @@
 from __future__ import annotations
 import os
+from enum import Enum
 from typing import List, Optional
 
-from rattler.rattler import PyRecord
+from rattler.rattler import PyRecord, PyLink
 from rattler.prefix.prefix_paths import PrefixPaths
 from rattler.repo_data.record import RepoDataRecord
+from pathlib import Path
+
+
+class LinkType(Enum):
+    HARDLINK = ("hardlink",)
+    COPY = ("copy",)
+    SOFTLINK = ("softlink",)
+    DIRECTORY = ("directory",)
+
+
+class Link:
+    _inner: PyLink
+
+    def __init__(self, path: os.PathLike[str], type: Optional[LinkType]) -> None:
+        self._inner = PyLink(path, type.value if type else None)
 
 
 class PrefixRecord(RepoDataRecord):
@@ -22,6 +38,7 @@ class PrefixRecord(RepoDataRecord):
         self,
         repodata_record: RepoDataRecord,
         paths_data: PrefixPaths,
+        link: Optional[Link] = None,
         package_tarball_full_path: Optional[os.PathLike[str]] = None,
         extracted_package_dir: Optional[os.PathLike[str]] = None,
         requested_spec: Optional[str] = None,
@@ -30,6 +47,7 @@ class PrefixRecord(RepoDataRecord):
         record = PyRecord.create_prefix_record(
             repodata_record._record,
             paths_data._paths,
+            link._inner if link else None,
             package_tarball_full_path,
             extracted_package_dir,
             requested_spec,
@@ -61,7 +79,7 @@ class PrefixRecord(RepoDataRecord):
         self._record.write_to_path(path, pretty)
 
     @property
-    def package_tarball_full_path(self) -> Optional[os.PathLike[str]]:
+    def package_tarball_full_path(self) -> Optional[Path]:
         """
         The path to where the archive of the package was stored on disk.
 
@@ -71,7 +89,7 @@ class PrefixRecord(RepoDataRecord):
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
-        >>> r.package_tarball_full_path
+        >>> str(r.package_tarball_full_path)
         'C:\\\\Users\\\\bas\\\\micromamba\\\\pkgs\\\\requests-2.28.2-pyhd8ed1ab_0.tar.bz2'
         >>>
         ```
@@ -83,7 +101,7 @@ class PrefixRecord(RepoDataRecord):
         self._record.package_tarball_full_path = value
 
     @property
-    def extracted_package_dir(self) -> Optional[os.PathLike[str]]:
+    def extracted_package_dir(self) -> Optional[Path]:
         """
         The path that contains the extracted package content.
 
@@ -93,7 +111,7 @@ class PrefixRecord(RepoDataRecord):
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
-        >>> r.extracted_package_dir
+        >>> str(r.extracted_package_dir)
         'C:\\\\Users\\\\bas\\\\micromamba\\\\pkgs\\\\requests-2.28.2-pyhd8ed1ab_0'
         >>>
         ```
@@ -105,7 +123,7 @@ class PrefixRecord(RepoDataRecord):
         self._record.extracted_package_dir = value
 
     @property
-    def files(self) -> List[os.PathLike[str]]:
+    def files(self) -> List[Path]:
         """
         A sorted list of all files included in this package
 

@@ -1,13 +1,16 @@
+use crate::package::ArchiveIdentifier;
 use crate::{
     build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
     VersionSpec,
 };
 use itertools::Itertools;
+use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
+use std::str::FromStr;
 use std::sync::Arc;
 use url::Url;
 
@@ -152,6 +155,8 @@ pub struct MatchSpec {
     pub sha256: Option<Sha256Hash>,
     /// The url of the package
     pub url: Option<Url>,
+    /// The license of the package
+    pub license: Option<String>,
 }
 
 impl Display for MatchSpec {
@@ -210,6 +215,10 @@ impl Display for MatchSpec {
             keys.push(format!("url=\"{url}\""));
         }
 
+        if let Some(license) = &self.license {
+            keys.push(format!("license=\"{license}\""));
+        }
+
         if !keys.is_empty() {
             write!(f, "[{}]", keys.join(", "))?;
         }
@@ -235,6 +244,7 @@ impl MatchSpec {
                 md5: self.md5,
                 sha256: self.sha256,
                 url: self.url,
+                license: self.license,
             },
         )
     }
@@ -290,6 +300,8 @@ pub struct NamelessMatchSpec {
     pub sha256: Option<Sha256Hash>,
     /// The url of the package
     pub url: Option<Url>,
+    /// The license of the package
+    pub license: Option<String>,
 }
 
 impl Display for NamelessMatchSpec {
@@ -335,6 +347,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             md5: spec.md5,
             sha256: spec.sha256,
             url: spec.url,
+            license: spec.license,
         }
     }
 }
@@ -355,6 +368,7 @@ impl MatchSpec {
             md5: spec.md5,
             sha256: spec.sha256,
             url: spec.url,
+            license: spec.license,
         }
     }
 }
@@ -422,6 +436,12 @@ impl Matches<PackageRecord> for NamelessMatchSpec {
             }
         }
 
+        if let Some(license) = self.license.as_ref() {
+            if Some(license) != other.license.as_ref() {
+                return false;
+            }
+        }
+
         true
     }
 }
@@ -461,6 +481,12 @@ impl Matches<PackageRecord> for MatchSpec {
 
         if let Some(sha256_spec) = self.sha256.as_ref() {
             if Some(sha256_spec) != other.sha256.as_ref() {
+                return false;
+            }
+        }
+
+        if let Some(license) = self.license.as_ref() {
+            if Some(license) != other.license.as_ref() {
                 return false;
             }
         }
@@ -527,6 +553,75 @@ impl Matches<GenericVirtualPackage> for MatchSpec {
     }
 }
 
+/// Convert a URL to a [`MatchSpec`]. This parses the URL and adds a `#sha256:...` or `md5=...`
+/// from the fragment of the URL if it exists.
+impl TryFrom<Url> for MatchSpec {
+    type Error = MatchSpecUrlError;
+
+    fn try_from(value: Url) -> Result<Self, Self::Error> {
+        let mut spec = MatchSpec::default();
+        let mut url_without_fragment = value.clone();
+        url_without_fragment.set_fragment(None);
+        spec.url = Some(url_without_fragment);
+
+        // Handle URL fragment for checksums
+        if let Some(fragment) = value.fragment() {
+            if fragment.starts_with("sha256:") {
+                let sha256 = fragment.trim_start_matches("sha256:");
+                spec.sha256 = Some(
+                    parse_digest_from_hex::<Sha256>(sha256)
+                        .ok_or(MatchSpecUrlError::InvalidSha256(fragment.to_string()))?,
+                );
+            } else if !fragment.is_empty() {
+                spec.md5 = Some(
+                    parse_digest_from_hex::<Md5>(fragment)
+                        .ok_or(MatchSpecUrlError::InvalidMd5(fragment.to_string()))?,
+                );
+            }
+        }
+
+        // Parse the filename from the URL and extract package information
+        let filename = value
+            .path_segments()
+            .and_then(Iterator::last)
+            .ok_or(MatchSpecUrlError::MissingFilename)?;
+
+        let archive_identifier = ArchiveIdentifier::try_from_filename(filename)
+            .ok_or(MatchSpecUrlError::InvalidFilename(filename.to_string()))?;
+
+        spec.name = Some(
+            PackageName::from_str(&archive_identifier.name)
+                .map_err(|_err| MatchSpecUrlError::InvalidPackageName(archive_identifier.name))?,
+        );
+
+        Ok(spec)
+    }
+}
+
+/// Errors that can occur when converting a URL to a `MatchSpec`
+#[derive(Debug, thiserror::Error)]
+pub enum MatchSpecUrlError {
+    /// The URL is missing a conda package filename
+    #[error("Missing filename in URL")]
+    MissingFilename,
+
+    /// The URL fragment is not a valid SHA256 digest
+    #[error("Invalid SHA256 digest: {0}")]
+    InvalidSha256(String),
+
+    /// The URL fragment is not a valid MD5 digest
+    #[error("Invalid MD5 digest: {0}")]
+    InvalidMd5(String),
+
+    /// The filename is not a valid conda package filename
+    #[error("Invalid filename: {0}")]
+    InvalidFilename(String),
+
+    /// The package name is not a valid conda package name
+    #[error("Invalid package name: {0}")]
+    InvalidPackageName(String),
+}
+
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
@@ -537,7 +632,7 @@ mod tests {
 
     use crate::{
         match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
-        ParseStrictness::*, RepoDataRecord, StringMatcher, Version,
+        ParseStrictness::*, RepoDataRecord, StringMatcher, Version, VersionSpec,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -549,6 +644,22 @@ mod tests {
         let rebuild_spec = MatchSpec::from_str(&spec_as_string, Strict).unwrap();
 
         assert_eq!(spec, rebuild_spec);
+    }
+
+    #[test]
+    fn test_name_asterisk() {
+        // Test that MatchSpec can be created with an asterisk as the package name
+        let spec = MatchSpec::from_str("*[license=MIT]", Lenient).unwrap();
+        assert_eq!(spec.name, None);
+        assert_eq!(spec.license, Some("MIT".to_string()));
+
+        // Test with a version
+        let spec = MatchSpec::from_str("* >=1.0", Lenient).unwrap();
+        assert_eq!(spec.name, None);
+        assert_eq!(
+            spec.version,
+            Some(VersionSpec::from_str(">=1.0", Lenient).unwrap())
+        );
     }
 
     #[test]
@@ -749,12 +860,58 @@ mod tests {
     }
 
     #[test]
+    fn test_field_matches() {
+        let mut repodata_record = RepoDataRecord {
+            package_record: PackageRecord::new(
+                PackageName::new_unchecked("mamba"),
+                Version::from_str("1.0").unwrap(),
+                String::from(""),
+            ),
+            file_name: String::from("mamba-1.0-py37_0"),
+            url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
+            channel: Some(String::from("mamba")),
+        };
+        repodata_record.package_record.license = Some("BSD-3-Clause".into());
+        let package_record = repodata_record.clone().package_record;
+
+        let match_spec = MatchSpec::from_str("mamba[license=BSD-3-Clause]", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+        assert!(match_spec.matches(&repodata_record));
+        assert!(match_spec.matches(&package_record));
+        assert!(nameless_spec.matches(&repodata_record));
+        assert!(nameless_spec.matches(&package_record));
+
+        let match_spec = MatchSpec::from_str("mamba[license=MIT]", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+        assert!(!match_spec.matches(&repodata_record));
+        assert!(!match_spec.matches(&package_record));
+        assert!(!nameless_spec.matches(&repodata_record));
+        assert!(!nameless_spec.matches(&package_record));
+
+        let repodata_record_no_license = RepoDataRecord {
+            package_record: PackageRecord::new(
+                PackageName::new_unchecked("mamba"),
+                Version::from_str("1.0").unwrap(),
+                String::from(""),
+            ),
+            file_name: String::from("mamba-1.0-py37_0"),
+            url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
+            channel: Some(String::from("mamba")),
+        };
+        let package_record_no_license = repodata_record_no_license.clone().package_record;
+        assert!(!match_spec.matches(&repodata_record_no_license));
+        assert!(!match_spec.matches(&package_record_no_license));
+        assert!(!nameless_spec.matches(&repodata_record_no_license));
+        assert!(!nameless_spec.matches(&package_record_no_license));
+    }
+
+    #[test]
     fn test_serialize_matchspec() {
         let specs = ["mamba 1.0.* py37_0",
             "conda-forge::pytest[version='==1.0', sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]",
             "conda-forge/linux-64::pytest",
             "conda-forge/linux-64::pytest[version=1.0.*]",
-            "conda-forge/linux-64::pytest[version=1.0.*, build=py37_0]",
+            "conda-forge/linux-64::pytest[version=1.0.*, build=py37_0, license=MIT]",
             "conda-forge/linux-64::pytest ==1.2.3"];
 
         assert_snapshot!(specs

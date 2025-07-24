@@ -591,6 +591,7 @@ impl Archspec {
             Platform::Win32 | Platform::Linux32 => "x86",
             Platform::Win64 | Platform::Osx64 | Platform::Linux64 => "x86_64",
             Platform::LinuxAarch64 | Platform::LinuxArmV6l | Platform::LinuxArmV7l => "aarch64",
+            Platform::LinuxLoong64 => "loong64",
             Platform::LinuxPpc64le => "ppc64le",
             Platform::LinuxPpc64 => "ppc64",
             Platform::LinuxPpc => "ppc",
@@ -605,6 +606,9 @@ impl Archspec {
 
             // The first every Apple Silicon Macs are based on m1.
             Platform::OsxArm64 => "m1",
+
+            // Otherwise, we assume that the architecture is unknown.
+            _ => return None,
         };
 
         Some(Self::from_name(archspec_name))

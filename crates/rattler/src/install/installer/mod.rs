@@ -28,7 +28,9 @@ use reqwest::Client;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
 
-use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
+use super::{
+    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
+};
 use crate::{
     default_cache_dir,
     install::{
@@ -322,14 +324,18 @@ impl Installer {
             )
         });
 
+        let prefix = Prefix::create(prefix.as_ref().to_path_buf()).map_err(|err| {
+            InstallerError::FailedToCreatePrefix(prefix.as_ref().to_path_buf(), err)
+        })?;
+
         // Create a future to determine the currently installed packages. We
         // can start this in parallel with the other operations and resolve it
         // when we need it.
-        let installed = if let Some(installed) = self.installed {
+        let installed: Vec<PrefixRecord> = if let Some(installed) = self.installed {
             installed
         } else {
+            let prefix = prefix.clone();
             // TODO: Should we add progress reporting here?
-            let prefix = prefix.as_ref().to_path_buf();
             run_blocking_task(move || {
                 PrefixRecord::collect_from_prefix(&prefix)
                     .map_err(InstallerError::FailedToDetectInstalledPackages)
@@ -349,11 +355,16 @@ impl Installer {
         // Construct a transaction from the current and desired situation.
         let target_platform = self.target_platform.unwrap_or_else(Platform::current);
         let transaction = Transaction::from_current_and_desired(
-            installed,
+            installed.clone(),
             records.into_iter().collect::<Vec<_>>(),
             self.reinstall_packages,
             target_platform,
         )?;
+
+        let remaining = installed
+            .into_iter()
+            .filter(|pr| !transaction.removed_packages().contains(pr))
+            .collect::<Vec<_>>();
 
         // If the transaction is empty we can short-circuit the installation
         if transaction.operations.is_empty() {
@@ -377,18 +388,51 @@ impl Installer {
             ..InstallOptions::default()
         };
 
+        // Preprocess the transaction
+        let pre_process_result = driver
+            .pre_process(&transaction, &prefix)
+            .map_err(InstallerError::PreProcessingFailed)?;
+
         if let Some(reporter) = &self.reporter {
             reporter.on_transaction_start(&transaction);
         }
 
-        // Preprocess the transaction
-        let pre_process_result = driver
-            .pre_process(&transaction, prefix.as_ref())
-            .map_err(InstallerError::PreProcessingFailed)?;
+        let mut pending_unlink_futures = FuturesUnordered::new();
+        // Execute the operations (remove) in the transaction.
+        for (operation_idx, operation) in transaction.operations.iter().enumerate() {
+            let reporter = self.reporter.clone();
+            let driver = &driver;
+            let prefix = &prefix;
 
-        // Execute the operations in the transaction.
-        let mut pending_futures = FuturesUnordered::new();
-        for (idx, operation) in transaction
+            let op = async move {
+                // Uninstall the package if it was removed.
+                if let Some(record) = operation.record_to_remove() {
+                    if let Some(reporter) = &reporter {
+                        reporter.on_transaction_operation_start(operation_idx);
+                    }
+
+                    let reporter = reporter
+                        .as_deref()
+                        .map(move |r| (r, r.on_unlink_start(operation_idx, record)));
+                    driver.clobber_registry().unregister_paths(record);
+                    unlink_package(prefix, record).await.map_err(|e| {
+                        InstallerError::UnlinkError(record.repodata_record.file_name.clone(), e)
+                    })?;
+                    if let Some((reporter, index)) = reporter {
+                        reporter.on_unlink_complete(index);
+                        if operation.record_to_install().is_none() {
+                            reporter.on_transaction_operation_complete(operation_idx);
+                        }
+                    }
+                }
+                Ok::<(), InstallerError>(())
+            };
+            pending_unlink_futures.push(op);
+        }
+
+        let mut pending_link_futures = FuturesUnordered::new();
+        // Execute the operations (install) in the transaction.
+        for (operation_idx, operation) in transaction
             .operations
             .iter()
             .enumerate()
@@ -407,7 +451,9 @@ impl Installer {
             let prefix = &prefix;
             let operation_future = async move {
                 if let Some(reporter) = &reporter {
-                    reporter.on_transaction_operation_start(idx);
+                    if operation.record_to_remove().is_none() {
+                        reporter.on_transaction_operation_start(operation_idx);
+                    }
                 }
 
                 // Start populating the cache with the package if it's not already there.
@@ -418,7 +464,7 @@ impl Installer {
                     let package_cache = package_cache.clone();
                     tokio::spawn(async move {
                         let populate_cache_report = reporter.clone().map(|r| {
-                            let cache_index = r.on_populate_cache_start(idx, &record);
+                            let cache_index = r.on_populate_cache_start(operation_idx, &record);
                             (r, cache_index)
                         });
                         let cache_lock = populate_cache(
@@ -445,28 +491,14 @@ impl Installer {
                     ready(Ok(None)).right_future()
                 };
 
-                // Uninstall the package if it was removed.
-                if let Some(record) = operation.record_to_remove() {
-                    let reporter = reporter
-                        .as_deref()
-                        .map(move |r| (r, r.on_unlink_start(idx, record)));
-                    driver.clobber_registry().unregister_paths(record);
-                    unlink_package(prefix.as_ref(), record).await.map_err(|e| {
-                        InstallerError::UnlinkError(record.repodata_record.file_name.clone(), e)
-                    })?;
-                    if let Some((reporter, index)) = reporter {
-                        reporter.on_unlink_complete(index);
-                    }
-                }
-
                 // Install the package if it was fetched.
                 if let Some((cache_lock, record)) = package_to_install.await? {
                     let reporter = reporter
                         .as_deref()
-                        .map(|r| (r, r.on_link_start(idx, &record)));
+                        .map(|r| (r, r.on_link_start(operation_idx, &record)));
                     link_package(
                         &record,
-                        prefix.as_ref(),
+                        prefix,
                         cache_lock.path(),
                         base_install_options.clone(),
                         driver,
@@ -476,25 +508,36 @@ impl Installer {
                         reporter.on_link_complete(index);
                     }
                 }
-
                 if let Some(reporter) = &reporter {
-                    reporter.on_transaction_operation_complete(idx);
+                    if operation.record_to_install().is_some() {
+                        reporter.on_transaction_operation_complete(operation_idx);
+                    }
                 }
 
                 Ok::<_, InstallerError>(())
             };
 
-            pending_futures.push(operation_future);
+            pending_link_futures.push(operation_future);
         }
 
         // Wait for all transaction operations to finish
-        while let Some(result) = pending_futures.next().await {
+        while let Some(result) = pending_unlink_futures.next().await {
             result?;
         }
-        drop(pending_futures);
+        drop(pending_unlink_futures);
+
+        driver
+            .remove_empty_directories(&transaction.operations, remaining.as_slice(), &prefix)
+            .unwrap();
+
+        // Wait for all transaction operations to finish
+        while let Some(result) = pending_link_futures.next().await {
+            result?;
+        }
+        drop(pending_link_futures);
 
         // Post process the transaction
-        let post_process_result = driver.post_process(&transaction, prefix.as_ref())?;
+        let post_process_result = driver.post_process(&transaction, &prefix)?;
 
         if let Some(reporter) = &self.reporter {
             reporter.on_transaction_complete();
@@ -511,13 +554,13 @@ impl Installer {
 
 async fn link_package(
     record: &RepoDataRecord,
-    target_prefix: &Path,
+    target_prefix: &Prefix,
     cached_package_dir: &Path,
     install_options: InstallOptions,
     driver: &InstallDriver,
 ) -> Result<(), InstallerError> {
     let record = record.clone();
-    let target_prefix = target_prefix.to_path_buf();
+    let target_prefix = target_prefix.clone();
     let cached_package_dir = cached_package_dir.to_path_buf();
     let clobber_registry = driver.clobber_registry.clone();
 
@@ -556,7 +599,7 @@ async fn link_package(
                 installed_system_menus: Vec::new(),
             };
 
-            let conda_meta_path = target_prefix.join("conda-meta");
+            let conda_meta_path = target_prefix.path().join("conda-meta");
             std::fs::create_dir_all(&conda_meta_path).map_err(|e| {
                 InstallerError::IoError("failed to create conda-meta directory".to_string(), e)
             })?;

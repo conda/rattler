@@ -29,14 +29,14 @@ jobs:
     name: Format, Lint and Test the Python bindings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           submodules: recursive
-      - uses: prefix-dev/setup-pixi@92815284c57faa15cd896c4d5cfb2d59f32dc43d # v0.8.3
+      - uses: prefix-dev/setup-pixi@273e4808c831936a3ce1a3080c829d9e153143d3 # v0.8.11
         with:
           manifest-path: py-rattler/pixi.toml
           environments: test
-      - uses: actions-rust-lang/setup-rust-toolchain@9399c7bb15d4c7d47b27263d024f0a4978346ba4 # v1
+      - uses: actions-rust-lang/setup-rust-toolchain@fb51252c7ba57d633bc668f941da052e410add48 # v1.13.0
         with:
           components: clippy, rustfmt
       - name: Format and Lint

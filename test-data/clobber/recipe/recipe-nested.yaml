@@ -6,8 +6,8 @@ outputs:
   - package:
       name: clobber-nested-1
       version: 0.1.0
-    
-    build:  
+
+    build:
       noarch: generic
       script:
         - mkdir -p $PREFIX/clobber/bobber
@@ -20,8 +20,8 @@ outputs:
   - package:
       name: clobber-nested-2
       version: 0.1.0
-    
-    build:  
+
+    build:
       noarch: generic
       script:
         - mkdir -p $PREFIX/clobber/bobber
@@ -34,7 +34,7 @@ outputs:
   - package:
       name: clobber-nested-3
       version: 0.1.0
-    
+
     build:
       noarch: generic
       script:

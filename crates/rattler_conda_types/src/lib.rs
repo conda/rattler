@@ -11,18 +11,20 @@ mod match_spec;
 pub mod menuinst;
 mod no_arch_type;
 mod parse_mode;
-mod platform;
+pub mod platform;
 mod repo_data;
 mod repo_data_record;
 mod run_export;
-mod utils;
+pub mod utils;
 mod version;
 pub mod version_spec;
 
+pub mod compression_level;
 mod environment_yaml;
 mod generic_virtual_package;
 pub mod package;
 mod package_name;
+pub mod prefix;
 pub mod prefix_record;
 
 #[cfg(test)]
@@ -40,7 +42,7 @@ pub use generic_virtual_package::GenericVirtualPackage;
 pub use match_spec::{
     matcher::{StringMatcher, StringMatcherParseError},
     parse::ParseMatchSpecError,
-    MatchSpec, Matches, NamelessMatchSpec,
+    MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
 };
 pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
 pub use package_name::{InvalidPackageNameError, PackageName};

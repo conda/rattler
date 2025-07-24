@@ -1,49 +1,54 @@
 [package]
 name = "rattler_cache"
-version = "0.3.15"
+version = "0.3.27"
 description = "A crate to manage the caching of data in rattler"
-categories.workspace = true
-homepage.workspace = true
-repository.workspace = true
-license.workspace = true
-edition.workspace = true
+categories = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
 readme.workspace = true
+
+[features]
+default = ["rustls-tls"]
+rustls-tls = ["reqwest/rustls-tls", "reqwest-middleware/rustls-tls", "rattler_networking/rustls-tls", "rattler_package_streaming/rustls-tls"]
+native-tls = ["reqwest/native-tls", "rattler_networking/native-tls", "rattler_package_streaming/native-tls"]
 
 [dependencies]
 
 [target.'cfg(not( target_arch = "wasm32" ))'.dependencies]
-anyhow.workspace = true
-dashmap.workspace = true
-dirs.workspace = true
-futures.workspace = true
-fs-err.workspace = true
+anyhow = { workspace = true }
+dashmap = { workspace = true }
+dirs = { workspace = true }
+futures = { workspace = true }
+fs-err = { workspace = true }
 fs4 = { workspace = true, features = ["fs-err3-tokio", "tokio"] }
-fxhash.workspace = true
-itertools.workspace = true
-parking_lot.workspace = true
-rattler_conda_types = { version = "0.31.5", path = "../rattler_conda_types", default-features = false }
-rattler_digest = { version = "1.0.8", path = "../rattler_digest", default-features = false }
-rattler_networking = { version = "0.22.10", path = "../rattler_networking", default-features = false }
-rattler_package_streaming = { version = "0.22.34", path = "../rattler_package_streaming", default-features = false, features = ["reqwest"] }
-reqwest.workspace = true
-tempfile.workspace = true
+fxhash = { workspace = true }
+itertools = { workspace = true }
+parking_lot = { workspace = true }
+rattler_conda_types = { workspace = true, default-features = false }
+rattler_digest = { workspace = true, default-features = false }
+rattler_networking = { workspace = true, default-features = false }
+rattler_package_streaming = { workspace = true, default-features = false, features = ["reqwest"] }
+reqwest = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
-tracing.workspace = true
-url.workspace = true
-thiserror.workspace = true
-reqwest-middleware.workspace = true
-digest.workspace = true
-simple_spawn_blocking = { version = "1.1.0", path = "../simple_spawn_blocking", features = ["tokio"] }
+tracing = { workspace = true }
+url = { workspace = true }
+thiserror = { workspace = true }
+reqwest-middleware = { workspace = true }
+digest = { workspace = true }
+simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 rayon = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
-assert_matches.workspace = true
-axum.workspace = true
-bytes.workspace = true
-futures.workspace = true
-rstest.workspace = true
-tokio-stream.workspace = true
+assert_matches = { workspace = true }
+axum = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+rstest = { workspace = true }
+tokio-stream = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 tools = { path = "../tools" }
 reqwest-retry = { workspace = true }

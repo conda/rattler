@@ -8,6 +8,8 @@ use reqwest_middleware::ClientWithMiddleware;
 
 use crate::{gateway::GatewayInner, ChannelConfig, Gateway};
 
+static USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
+
 /// Defines the maximum concurrency for the gateway.
 #[derive(Default)]
 pub enum MaxConcurrency {
@@ -132,9 +134,9 @@ impl GatewayBuilder {
 
     /// Finish the construction of the gateway returning a constructed gateway.
     pub fn finish(self) -> Gateway {
-        let client = self
-            .client
-            .unwrap_or_else(|| ClientWithMiddleware::from(Client::new()));
+        let client = self.client.unwrap_or_else(|| {
+            ClientWithMiddleware::from(Client::builder().user_agent(USER_AGENT).build().unwrap())
+        });
 
         #[cfg(not(target_arch = "wasm32"))]
         let cache = self.cache.unwrap_or_else(|| {

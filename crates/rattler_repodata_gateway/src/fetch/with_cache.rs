@@ -490,8 +490,10 @@ pub async fn fetch_repo_data(
     let repo_data_destination_path = repo_data_json_path.clone();
     let repo_data_json_metadata = tokio::task::spawn_blocking(move || {
         let file = temp_file
-            .persist(repo_data_destination_path)
-            .map_err(FetchRepoDataError::FailedToPersistTemporaryFile)?;
+            .persist(repo_data_destination_path.clone())
+            .map_err(|e| {
+                FetchRepoDataError::FailedToPersistTemporaryFile(e, repo_data_destination_path)
+            })?;
 
         // Determine the last modified date and size of the repodata.json file. We store
         // these values in the cache to link the cache to the corresponding
@@ -559,7 +561,7 @@ async fn stream_and_decode_to_file(
         .inspect_ok(|bytes| {
             total_bytes += bytes.len();
         })
-        .map_err(|e| std::io::Error::new(ErrorKind::Other, e));
+        .map_err(std::io::Error::other);
 
     // Create a new stream from the byte stream that decodes the bytes using the
     // transfer encoding on the fly.
@@ -1101,7 +1103,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1168,7 +1170,7 @@ mod test {
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1197,7 +1199,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1239,7 +1241,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1288,7 +1290,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1343,7 +1345,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             authenticated_client,
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1391,7 +1393,7 @@ mod test {
         let _result = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             Some(reporter.clone()),
         )
@@ -1414,7 +1416,7 @@ mod test {
             Url::parse(format!("file://{}", subdir_path.path().to_str().unwrap()).as_str())
                 .unwrap(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1436,7 +1438,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1508,10 +1510,7 @@ mod test {
                 // Create a stream that ends prematurely
                 let stream = stream::iter(vec![
                     Ok(bytes.into_iter().collect::<Bytes>()),
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "premature close",
-                    )),
+                    Err(std::io::Error::other("premature close")),
                     // The stream ends after sending partial data, simulating a premature close
                 ]);
                 let body = Body::from_stream(stream);

@@ -19,9 +19,9 @@ use rattler_conda_types::{
 };
 use resolvo::{
     utils::{Pool, VersionSet},
-    Candidates, Dependencies, DependencyProvider, Interner, KnownDependencies, NameId, Problem,
-    Requirement, SolvableId, Solver as LibSolvRsSolver, SolverCache, StringId,
-    UnsolvableOrCancelled, VersionSetId, VersionSetUnionId,
+    Candidates, Dependencies, DependencyProvider, HintDependenciesAvailable, Interner,
+    KnownDependencies, NameId, Problem, Requirement, SolvableId, Solver as LibSolvRsSolver,
+    SolverCache, StringId, UnsolvableOrCancelled, VersionSetId, VersionSetUnionId,
 };
 
 use crate::{
@@ -67,7 +67,8 @@ impl<'a> SolverMatchSpec<'a> {
         }
     }
 
-    /// Returns a mutable reference to this match spec after enabling the given feature
+    /// Returns a mutable reference to this match spec after enabling the given
+    /// feature
     pub fn set_feature(&mut self, feature: String) -> &SolverMatchSpec<'a> {
         self.feature = Some(feature);
         self
@@ -383,7 +384,7 @@ impl<'a> CondaDependencyProvider<'a> {
                 let mut all_entries = vec![(package_name, solvable_id)];
 
                 // Add feature-enabled solvables
-                for feature in record.package_record.extra_depends.keys() {
+                for feature in record.package_record.experimental_extra_depends.keys() {
                     let package_name_with_feature =
                         pool.intern_package_name(NameType::BaseWithFeature(
                             record.package_record.name.as_normalized().to_owned(),
@@ -429,7 +430,8 @@ impl<'a> CondaDependencyProvider<'a> {
                                 .as_normalized()
                                 == record.package_record.name.as_normalized()
                         }) {
-                            // Check if the spec has a channel, and compare it to the repodata channel
+                            // Check if the spec has a channel, and compare it to the repodata
+                            // channel
                             if let Some(spec_channel) = &spec.channel {
                                 if record.channel.as_ref() != Some(&spec_channel.canonical_name()) {
                                     tracing::debug!("Ignoring {} {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), match &record.channel {
@@ -484,7 +486,6 @@ impl<'a> CondaDependencyProvider<'a> {
                                     pool.intern_string("due to strict channel priority not using from an unknown channel".to_string()),
                                 ));
                             }
-                            continue;
                         }
                     } else {
                         package_name_found_in_channel.insert(
@@ -515,7 +516,7 @@ impl<'a> CondaDependencyProvider<'a> {
 
         // The dependencies for all candidates are always available.
         for candidates in records.values_mut() {
-            candidates.hint_dependencies_available = candidates.candidates.clone();
+            candidates.hint_dependencies_available = HintDependenciesAvailable::All;
         }
 
         Ok(Self {
@@ -642,7 +643,11 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
         // If this is a feature-enabled package, add its feature dependencies
         if let Some(feature_name) = feature {
             // Find the feature's dependencies
-            if let Some(deps) = record.package_record.extra_depends.get(feature_name) {
+            if let Some(deps) = record
+                .package_record
+                .experimental_extra_depends
+                .get(feature_name)
+            {
                 // Add each dependency for this feature
                 for req in deps {
                     let version_set_id = match parse_match_spec(
@@ -852,15 +857,13 @@ impl super::SolverImpl for Solver {
             if let Some(features) = features {
                 for feature in features {
                     // Create a version set that matches the feature-enabled package
-                    let package_name_with_feature = NameType::BaseWithFeature(
-                        name.as_normalized().to_owned(),
-                        feature.to_string(),
-                    );
+                    let package_name_with_feature =
+                        NameType::BaseWithFeature(name.as_normalized().to_owned(), feature.clone());
                     let feature_name_id =
                         provider.pool.intern_package_name(package_name_with_feature);
 
                     let mut solver_match_spec: SolverMatchSpec<'_> = nameless_spec.clone().into();
-                    let _ = solver_match_spec.set_feature(feature.to_string());
+                    let _ = solver_match_spec.set_feature(feature.clone());
 
                     let feature_version_set = provider
                         .pool
@@ -949,13 +952,13 @@ fn parse_match_spec(
                     .expect("Packages with no name are not supported")
                     .as_normalized()
                     .to_owned(),
-                feature.to_string(),
+                feature.clone(),
             );
             let dependency_name = pool.intern_package_name(name_with_feature);
 
             let version_set_id = pool.intern_version_set(
                 dependency_name,
-                spec_with_feature.with_feature(feature.to_string()),
+                spec_with_feature.with_feature(feature.clone()),
             );
             version_set_ids.push(version_set_id);
         }

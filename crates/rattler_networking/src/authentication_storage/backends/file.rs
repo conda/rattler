@@ -68,6 +68,7 @@ impl FileStorage {
     }
 
     /// Create a new file storage with the default path
+    #[cfg(feature = "dirs")]
     pub fn new() -> Result<Self, FileStorageError> {
         let path = dirs::home_dir()
             .unwrap()
