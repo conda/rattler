@@ -91,7 +91,7 @@ pub enum PackageCacheError {
     #[error("the operation was cancelled")]
     Cancelled,
 
-    /// An error occured in a cache layer
+    /// An error occurred in a cache layer
     #[error("failed to interact with the package cache layer.")]
     LayerError(#[source] Box<dyn std::error::Error + Send + Sync>), // Wraps layer-specific errors
 
