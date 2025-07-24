@@ -264,7 +264,7 @@ impl PackageCache {
 
         Self {
             inner: Arc::new(PackageCacheInner { layers }),
-            cache_origin: cache_origin,
+            cache_origin,
         }
     }
 
@@ -318,7 +318,6 @@ impl PackageCache {
                             "Invalid package in layer at path {:?}, trying next layer.",
                             layer.path
                         );
-                        continue;
                     }
                     Err(PackageCacheLayerError::PackageNotFound) => {
                         // Log and continue to the next layer
@@ -326,7 +325,6 @@ impl PackageCache {
                             "Package not found in layer at path {:?}, trying next layer.",
                             layer.path
                         );
-                        continue;
                     }
                     Err(err) => return Err(err.into()),
                 }
