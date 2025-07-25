@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.8](https://github.com/conda/rattler/compare/rattler_solve-v2.1.7...rattler_solve-v2.1.8) - 2025-07-23
+
+### Fixed
+
+- indexing `extra-depends` ([#1546](https://github.com/conda/rattler/pull/1546))
+
 ## [2.1.7](https://github.com/conda/rattler/compare/rattler_solve-v2.1.6...rattler_solve-v2.1.7) - 2025-07-21
 
 ### Other
