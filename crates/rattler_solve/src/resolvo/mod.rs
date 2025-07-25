@@ -85,7 +85,8 @@ impl<'a> VersionSet for SolverMatchSpec<'a> {
     type V = SolverPackageRecord<'a>;
 }
 
-/// Wrapper around [`PackageRecord`] so that we can use it in resolvo pool
+/// Wrapper around [`RepoDataRecord`] so that we can use it in resolvo pool.
+/// Also represents a virtual package or an extra of a package.
 #[derive(Eq, PartialEq)]
 pub enum SolverPackageRecord<'a> {
     /// Represents a record from the repodata
