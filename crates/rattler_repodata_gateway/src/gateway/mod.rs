@@ -14,7 +14,7 @@ mod subdir;
 mod subdir_builder;
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::{Arc, Weak},
 };
 
@@ -26,15 +26,15 @@ pub use error::GatewayError;
 pub use query::{NamesQuery, RepoDataQuery};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
-use rattler_conda_types::{Channel, MatchSpec, Platform, RepoDataRecord};
+use rattler_conda_types::{Channel, GlobalRunExportsJson, MatchSpec, Platform, RepoDataRecord};
 pub use repo_data::RepoData;
 use reqwest_middleware::ClientWithMiddleware;
 pub use run_exports_extractor::{
-    DumpCacheReporter, DumpPackageCacheReporter, RunExportExtractorError, RunExportsReporter,
+    RunExportExtractorError, RunExportsReporter,
 };
-use run_exports_extractor::{RetrieveMethod, RunExportExtractor};
+use run_exports_extractor::RunExportExtractor;
 use subdir::Subdir;
-use tokio::sync::{Semaphore, broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, Mutex, Semaphore};
 use tracing::{Level, instrument};
 use url::Url;
 
@@ -145,12 +145,12 @@ impl Gateway {
     pub async fn ensure_run_exports(
         &self,
         records: &mut [RepoDataRecord],
-        progress_reporter: &mut Box<dyn RunExportsReporter>,
+        progress_reporter: Option<Arc<(dyn RunExportsReporter + Send)>>,
     ) -> Result<(), RunExportExtractorError> {
         let max_concurrent_requests = Arc::new(Semaphore::new(50));
         let (tx, mut rx) = mpsc::channel(50);
 
-        let global_run_exports_cache: Arc<DashMap<Url, RetrieveMethod>> = Arc::new(DashMap::new());
+        let global_run_exports_cache: Arc<Mutex<HashMap<Url, Option<GlobalRunExportsJson>>>> = Arc::new(Mutex::new(HashMap::new()));
 
         for (pkg_idx, pkg) in records.iter().enumerate() {
             if pkg.package_record.run_exports.is_some() {
@@ -158,13 +158,13 @@ impl Gateway {
                 continue;
             }
 
-            let reporter = progress_reporter.add(pkg);
+            let reporter = progress_reporter.clone().map(|r| r.add(pkg));
 
             let extractor = RunExportExtractor::default()
                 .with_max_concurrent_requests(max_concurrent_requests.clone())
                 .with_client(self.inner.client.clone())
                 .with_package_cache(self.inner.package_cache.clone())
-                .with_retrieve_method_cache(global_run_exports_cache.clone());
+                .with_global_run_exports_cache(global_run_exports_cache.clone());
 
             let tx = tx.clone();
             let record = pkg.clone();
@@ -365,8 +365,6 @@ mod test {
         gateway::Gateway,
         utils::{simple_channel_server::SimpleChannelServer, test::fetch_repo_data},
     };
-
-    use super::DumpPackageCacheReporter;
 
     async fn local_conda_forge() -> Channel {
         tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
@@ -798,7 +796,7 @@ mod test {
             .unwrap();
 
         let total_records: usize = records.iter().map(RepoData::len).sum();
-        assert!(total_records == 3);
+        assert_eq!(total_records, 3);
 
         let mut repodata_records = records
             .iter()
@@ -808,47 +806,45 @@ mod test {
         assert!(run_exports_missing(&repodata_records));
 
         gateway
-            .ensure_run_exports(&mut repodata_records, DumpPackageCacheReporter)
+            .ensure_run_exports(&mut repodata_records, None)
             .await
             .unwrap();
 
         assert!(run_exports_in_place(&repodata_records));
     }
 
-    //     #[tokio::test]
-    //     async fn test_ensure_run_exports_remote_conda_forge() {
-    //         let gateway = Gateway::new();
+    #[ignore]
+    #[tokio::test]
+    async fn test_ensure_run_exports_remote_conda_forge() {
+        let gateway = Gateway::new();
 
-    //         let index = remote_conda_forge().await;
+        let records = gateway
+            .query(
+                vec![Channel::from_url(
+                    Url::parse("https://repo.prefix.dev/conda-forge/").unwrap(),
+                )],
+                vec![Platform::Linux64, Platform::NoArch],
+                vec![MatchSpec::from_str("openssl=3.*=*_1", Lenient).unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
 
-    //         // Try a complex spec
-    //         let matchspec = MatchSpec::from_str("openssl=3.*=*_1", Lenient).unwrap();
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+        assert_eq!(total_records, 15);
 
-    //         let records = gateway
-    //             .query(
-    //                 vec![index],
-    //                 vec![Platform::Linux64],
-    //                 vec![matchspec].into_iter(),
-    //             )
-    //             .recursive(false)
-    //             .await
-    //             .unwrap();
+        let mut repodata_records = records
+            .iter()
+            .flat_map(|r| r.iter().cloned())
+            .collect::<Vec<_>>();
 
-    //         let total_records: usize = records.iter().map(RepoData::len).sum();
-    //         assert!(total_records == 3);
+        assert!(run_exports_missing(&repodata_records));
 
-    //         let mut repodata_records = records
-    //             .iter()
-    //             .flat_map(|r| r.iter().cloned())
-    //             .collect::<Vec<_>>();
+        gateway
+            .ensure_run_exports(&mut repodata_records, None)
+            .await
+            .unwrap();
 
-    //         assert!(run_exports_missing(&repodata_records));
-
-    //         gateway
-    //             .ensure_run_exports(&mut repodata_records)
-    //             .await
-    //             .unwrap();
-
-    //         assert!(run_exports_in_place(&repodata_records));
-    //     }
+        assert!(run_exports_in_place(&repodata_records));
+    }
 }
