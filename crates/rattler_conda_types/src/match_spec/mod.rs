@@ -1,3 +1,4 @@
+use crate::match_spec::flags::FlagMatcher;
 use crate::package::ArchiveIdentifier;
 use crate::{
     build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
@@ -17,6 +18,7 @@ use url::Url;
 use crate::Channel;
 use crate::ChannelConfig;
 
+pub mod flags;
 pub mod matcher;
 pub mod parse;
 
@@ -157,6 +159,8 @@ pub struct MatchSpec {
     pub url: Option<Url>,
     /// The license of the package
     pub license: Option<String>,
+    /// The flags selector that this match spec is looking for.
+    pub flags: Option<Vec<FlagMatcher>>,
 }
 
 impl Display for MatchSpec {
@@ -219,6 +223,10 @@ impl Display for MatchSpec {
             keys.push(format!("license=\"{license}\""));
         }
 
+        if let Some(flags) = &self.flags {
+            keys.push(format!("flags=[{}]", flags.iter().format(", ")));
+        }
+
         if !keys.is_empty() {
             write!(f, "[{}]", keys.join(", "))?;
         }
@@ -245,6 +253,7 @@ impl MatchSpec {
                 sha256: self.sha256,
                 url: self.url,
                 license: self.license,
+                flags: self.flags,
             },
         )
     }
@@ -302,6 +311,8 @@ pub struct NamelessMatchSpec {
     pub url: Option<Url>,
     /// The license of the package
     pub license: Option<String>,
+    /// The flags selector that this match spec is looking for.
+    pub flags: Option<Vec<FlagMatcher>>,
 }
 
 impl Display for NamelessMatchSpec {
@@ -348,6 +359,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            flags: spec.flags,
         }
     }
 }
@@ -369,6 +381,7 @@ impl MatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            flags: spec.flags,
         }
     }
 }
@@ -488,6 +501,14 @@ impl Matches<PackageRecord> for MatchSpec {
         if let Some(license) = self.license.as_ref() {
             if Some(license) != other.license.as_ref() {
                 return false;
+            }
+        }
+
+        if let Some(flags) = &self.flags {
+            for flag in flags {
+                if !flag.matches(&other.flags) {
+                    return false;
+                }
             }
         }
 
