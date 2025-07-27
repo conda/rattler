@@ -40,9 +40,7 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
                 )
                 .expect("failed to create dependency provider");
 
-                let name = dependency_provider
-                    .pool
-                    .intern_package_name(package_name.as_normalized());
+                let name = dependency_provider.pool.intern_package_name(&package_name);
                 let version_set = dependency_provider
                     .pool
                     .intern_version_set(name, match_spec.into_nameless().1.into());
