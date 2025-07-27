@@ -995,7 +995,7 @@ mod resolvo {
             .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
 
         // Collect the extras into a vector
-        let extras = result.features.into_iter().collect_vec();
+        let extras = result.extras.into_iter().collect_vec();
 
         // Make sure we have two packages `foo` and `bar`
         assert_eq!(result.records.len(), 2);
