@@ -40,6 +40,7 @@ pub use explicit_environment_spec::{
 };
 pub use generic_virtual_package::GenericVirtualPackage;
 pub use match_spec::{
+    condition::MatchSpecCondition,
     matcher::{StringMatcher, StringMatcherParseError},
     parse::ParseMatchSpecError,
     MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
