@@ -87,7 +87,7 @@ impl RunExportExtractor {
     /// Extracts the run exports from a package. Returns `None` if no run
     /// exports are found.
     pub async fn extract(
-        mut self,
+        self,
         record: &RepoDataRecord,
         progress_reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
@@ -137,7 +137,7 @@ impl RunExportExtractor {
     /// Extract the run exports from a package by downloading it to the cache
     /// and then reading the `run_exports.json` file.
     async fn extract_into_package_cache(
-        &mut self,
+        mut self,
         record: &RepoDataRecord,
         progress_reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {

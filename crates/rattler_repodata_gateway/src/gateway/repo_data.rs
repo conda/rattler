@@ -36,14 +36,14 @@ impl RepoData {
         self.len == 0
     }
 
-    /// Returns true if there is at least one `RepoDataRecord` with
-    /// `RunExportsJson` missing.
+    /// Returns true if there is at least one [`RepoDataRecord`] with
+    /// [`RunExportsJson`] missing.
     pub fn is_run_exports_missing(&self) -> bool {
         self.iter().any(|r| r.package_record.run_exports.is_none())
     }
 
-    /// Returns true if there is at least one `RepoDataRecord` with
-    /// `RunExportsJson` missing.
+    /// Returns number of missing run exports from the underlying
+    /// [`RepoDataRecord`]s.
     pub fn run_exports_missing(&self) -> usize {
         self.iter()
             .filter(|r| r.package_record.run_exports.is_none())

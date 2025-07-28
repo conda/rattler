@@ -44,7 +44,7 @@ pub use run_exports_extractor::{
 use subdir::Subdir;
 use tokio::sync::broadcast;
 #[cfg(not(target_arch = "wasm32"))]
-use tokio::sync::{mpsc, Mutex, Semaphore};
+use tokio::sync::{Mutex, Semaphore};
 use tracing::{instrument, Level};
 use url::Url;
 
@@ -155,41 +155,38 @@ impl Gateway {
     /// Ensure that given repodata records contain `RunExportsJson`.
     pub async fn ensure_run_exports(
         &self,
-        records: &mut [RepoDataRecord],
-        progress_reporter: Option<Arc<(dyn RunExportsReporter + Send)>>,
+        records: impl Iterator<Item = &mut RepoDataRecord>,
+        // We can avoid Arc by cloning, but this requires helper method in the trait definition.
+        progress_reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<(), RunExportExtractorError> {
         let max_concurrent_requests = Arc::new(Semaphore::new(50));
-        let (tx, mut rx) = mpsc::channel(50);
-
         let global_run_exports_cache: GlobalRunExportsCache = Arc::new(Mutex::new(HashMap::new()));
 
-        for (pkg_idx, pkg) in records.iter().enumerate() {
-            if pkg.package_record.run_exports.is_some() {
-                // If the package already boasts run exports, we don't need to do anything.
-                continue;
-            }
+        let futures = records
+            .filter_map(|record| {
+                if record.package_record.run_exports.is_some() {
+                    // If the package already has run exports, we don't need to do anything.
+                    return None;
+                }
 
-            let reporter = progress_reporter.clone().map(|r| r.add(pkg));
+                let reporter = progress_reporter.clone().map(|r| r.add(record));
+                let extractor = RunExportExtractor::default()
+                    .with_max_concurrent_requests(max_concurrent_requests.clone())
+                    .with_client(self.inner.client.clone())
+                    .with_package_cache(self.inner.package_cache.clone())
+                    .with_global_run_exports_cache(global_run_exports_cache.clone());
 
-            let extractor = RunExportExtractor::default()
-                .with_max_concurrent_requests(max_concurrent_requests.clone())
-                .with_client(self.inner.client.clone())
-                .with_package_cache(self.inner.package_cache.clone())
-                .with_global_run_exports_cache(global_run_exports_cache.clone());
+                Some(async move {
+                    let result = extractor.extract(record, reporter).await;
+                    (record, result)
+                })
+            })
+            .collect::<Vec<_>>();
 
-            let tx = tx.clone();
-            let record = pkg.clone();
-            // let reporter = reporter.clone();
-            tokio::spawn(async move {
-                let result = extractor.extract(&record, reporter).await;
-                let _ = tx.send((pkg_idx, result)).await;
-            });
-        }
+        let results = futures::future::join_all(futures).await;
 
-        drop(tx);
-
-        while let Some((pkg_idx, run_exports)) = rx.recv().await {
-            records[pkg_idx].package_record.run_exports = run_exports?;
+        for (record, result) in results {
+            record.package_record.run_exports = result?;
         }
 
         Ok(())
@@ -817,7 +814,7 @@ mod test {
         assert!(run_exports_missing(&repodata_records));
 
         gateway
-            .ensure_run_exports(&mut repodata_records, None)
+            .ensure_run_exports(repodata_records.iter_mut(), None)
             .await
             .unwrap();
 
@@ -852,7 +849,7 @@ mod test {
         assert!(run_exports_missing(&repodata_records));
 
         gateway
-            .ensure_run_exports(&mut repodata_records, None)
+            .ensure_run_exports(repodata_records.iter_mut(), None)
             .await
             .unwrap();
 
