@@ -13,7 +13,7 @@ readme.workspace = true
 [dependencies]
 bzip2 = { workspace = true }
 chrono = { workspace = true }
-fs-err = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
 futures-util = { workspace = true }
 num_cpus = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }

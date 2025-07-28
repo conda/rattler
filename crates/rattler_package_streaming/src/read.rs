@@ -39,6 +39,9 @@ pub fn extract_tar_bz2(
     // Unpack the archive
     stream_tar_bz2(&mut md5_reader).unpack(destination)?;
 
+    // Read the file to the end to make sure the hash is properly computed.
+    std::io::copy(&mut md5_reader, &mut std::io::sink())?;
+
     // Get the hashes
     let (sha256_reader, md5) = md5_reader.finalize();
     let (_, sha256) = sha256_reader.finalize();
