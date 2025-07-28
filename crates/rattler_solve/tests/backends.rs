@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, str::FromStr, time::Instant};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    str::FromStr,
+    time::Instant,
+};
 
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
@@ -106,6 +110,7 @@ fn installed_package(
             size: None,
             arch: None,
             experimental_extra_depends: BTreeMap::new(),
+            flags: BTreeSet::new(),
             platform: None,
             depends: Vec::new(),
             constrains: Vec::new(),
