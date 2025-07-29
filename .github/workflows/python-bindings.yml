@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           submodules: recursive
-      - uses: prefix-dev/setup-pixi@273e4808c831936a3ce1a3080c829d9e153143d3 # v0.8.11
+      - uses: prefix-dev/setup-pixi@8ca4608ef7f4daeb54f5205b20d0b7cb42f11143 # v0.8.14
         with:
           manifest-path: py-rattler/pixi.toml
           environments: test

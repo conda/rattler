@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.48](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.47...rattler_package_streaming-v0.22.48) - 2025-07-28
+
+### Fixed
+
+- tar.bz2 archives not read to end resulting in wrong hash ([#1557](https://github.com/conda/rattler/pull/1557))
+
 ## [0.22.47](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.46...rattler_package_streaming-v0.22.47) - 2025-07-23
 
 ### Other
