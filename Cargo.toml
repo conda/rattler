@@ -55,7 +55,7 @@ clap = { version = "4.5.38", features = ["derive"] }
 clap-verbosity-flag = "3.0.3"
 cmake = "0.1.54"
 console = { version = "0.16.0", features = ["windows-console-colors"] }
-criterion = "0.6"
+criterion = "0.7"
 dashmap = "6.1.0"
 difference = "2.0.0"
 digest = "0.10.7"
