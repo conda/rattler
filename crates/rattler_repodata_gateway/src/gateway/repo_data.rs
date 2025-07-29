@@ -1,6 +1,7 @@
-use rattler_conda_types::RepoDataRecord;
 use std::iter::FusedIterator;
 use std::sync::Arc;
+
+use rattler_conda_types::RepoDataRecord;
 
 /// A container for [`RepoDataRecord`]s that are returned from the [`super::Gateway`].
 ///
@@ -37,7 +38,7 @@ impl RepoData {
     }
 
     /// Returns true if there is at least one [`RepoDataRecord`] with
-    /// [`RunExportsJson`] missing.
+    /// [`rattler_conda_types::package::RunExportsJson`] missing.
     pub fn is_run_exports_missing(&self) -> bool {
         self.iter().any(|r| r.package_record.run_exports.is_none())
     }
