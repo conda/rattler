@@ -7,14 +7,11 @@ use std::{path::PathBuf, sync::Arc};
 /// Get the authentication storage from the given file
 pub fn get_auth_store(
     auth_file: Option<PathBuf>,
-    auth_store: Option<Result<AuthenticationStorage, AuthenticationStorageError>>
+    auth_store: Option<Result<AuthenticationStorage, AuthenticationStorageError>>,
 ) -> Result<AuthenticationStorage, AuthenticationStorageError> {
     match auth_store {
-        Some(auth_store) => {
-            auth_store
-        }
-        None => {
-            match auth_file {
+        Some(auth_store) => auth_store,
+        None => match auth_file {
             Some(auth_file) => {
                 let mut store = AuthenticationStorage::empty();
                 store.add_backend(Arc::from(
@@ -22,11 +19,8 @@ pub fn get_auth_store(
                 ));
                 Ok(store)
             }
-            None => {
-                rattler_networking::AuthenticationStorage::from_env_and_defaults()
-            },
-        }
-        }
+            None => rattler_networking::AuthenticationStorage::from_env_and_defaults(),
+        },
     }
 }
 

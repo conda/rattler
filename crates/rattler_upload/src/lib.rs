@@ -26,7 +26,8 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
     }
 
     // Initialize authentication store
-    let store = tool_configuration::get_auth_store(args.common.auth_file, args.auth_store).into_diagnostic()?;
+    let store = tool_configuration::get_auth_store(args.common.auth_file, args.auth_store)
+        .into_diagnostic()?;
 
     // Upload handler based on server type
     match args.server_type {
