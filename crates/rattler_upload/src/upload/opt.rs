@@ -7,6 +7,9 @@ use rattler_solve::ChannelPriority;
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tracing::warn;
 use url::Url;
+use rattler_networking::{
+    authentication_storage::AuthenticationStorageError, AuthenticationStorage,
+};
 
 #[cfg(feature = "s3")]
 use rattler_networking::s3_middleware;
@@ -166,6 +169,16 @@ pub struct UploadOpts {
     /// Common options.
     #[clap(flatten)]
     pub common: CommonOpts,
+
+    #[clap(skip)]
+    pub auth_store: Option<Result<AuthenticationStorage, AuthenticationStorageError>>,
+}
+
+impl UploadOpts {
+    pub fn with_auth_store(mut self, auth_store: Result<AuthenticationStorage, AuthenticationStorageError>) -> Self {
+        self.auth_store = Some(auth_store);
+        self
+    }
 }
 
 /// Server type.
