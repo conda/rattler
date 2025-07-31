@@ -448,7 +448,8 @@ where
             tracing::debug!("cache directory does not exist, fetching package");
         } else if hash_mismatch {
             tracing::warn!(
-                "hash mismatch, wanted a package with hash {} but the cached package has hash {}, fetching package",
+                "hash mismatch, wanted a package at location {} with hash {} but the cached package has hash {}, fetching package",
+                path.display(),
                 given_sha.map_or(String::from("<unknown>"), |s| format!("{s:x}")),
                 locked_sha256.map_or(String::from("<unknown>"), |s| format!("{s:x}"))
             );
