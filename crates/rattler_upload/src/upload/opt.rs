@@ -3,6 +3,9 @@ use clap::{arg, Parser};
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_conda_types::{NamedChannelOrUrl, Platform};
 use rattler_networking::mirror_middleware;
+use rattler_networking::{
+    authentication_storage::AuthenticationStorageError, AuthenticationStorage,
+};
 use rattler_solve::ChannelPriority;
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tracing::warn;
@@ -166,6 +169,19 @@ pub struct UploadOpts {
     /// Common options.
     #[clap(flatten)]
     pub common: CommonOpts,
+
+    #[clap(skip)]
+    pub auth_store: Option<Result<AuthenticationStorage, AuthenticationStorageError>>,
+}
+
+impl UploadOpts {
+    pub fn with_auth_store(
+        mut self,
+        auth_store: Result<AuthenticationStorage, AuthenticationStorageError>,
+    ) -> Self {
+        self.auth_store = Some(auth_store);
+        self
+    }
 }
 
 /// Server type.
