@@ -1,5 +1,5 @@
 # https://github.com/buxiangzhiren/Asymmetric_VQGAN/blob/406c5cd2e86b3e9565795cc5cd1e3aab304b1a44/environment.yaml
-#name: ldm
+# name: ldm
 channels:
   - pytorch
   - defaults
