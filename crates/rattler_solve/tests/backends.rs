@@ -1049,9 +1049,9 @@ mod resolvo {
 
         insta::assert_snapshot!(result.unwrap_err(), @r###"
         Cannot solve the request because of: The following packages are incompatible
-        ├─ conflicting-extras[extra1]  can be installed with any of the following options:
+        ├─ conflicting-extras[extra1] can be installed with any of the following options:
         │  └─ conflicting-extras[extra1]
-        ├─ conflicting-extras[extra2]  can be installed with any of the following options:
+        ├─ conflicting-extras[extra2] can be installed with any of the following options:
         │  └─ conflicting-extras[extra2]
         └─ conflicting-extras * cannot be installed because there are no viable options:
            └─ conflicting-extras 1 would require
@@ -1077,7 +1077,7 @@ mod resolvo {
 
         insta::assert_snapshot!(result.unwrap_err(), @r###"
         Cannot solve the request because of: The following packages are incompatible
-        ├─ conflicting-extras[extra1]  can be installed with any of the following options:
+        ├─ conflicting-extras[extra1] can be installed with any of the following options:
         │  └─ conflicting-extras[extra1]
         ├─ bar >=2 can be installed with any of the following options:
         │  └─ bar 2

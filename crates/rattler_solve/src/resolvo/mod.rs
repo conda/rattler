@@ -575,7 +575,8 @@ impl Interner for CondaDependencyProvider<'_> {
             .format(" | ");
 
         let name = self.display_solvable_name(solvables[0]);
-        format!("{name} {versions}")
+        let result = format!("{name} {versions}");
+        result.trim_end().to_string()
     }
 
     fn display_name(&self, name: NameId) -> impl Display + '_ {
