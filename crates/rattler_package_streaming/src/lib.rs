@@ -87,6 +87,9 @@ pub struct ExtractResult {
 
     /// The Md5 hash of the extracted archive.
     pub md5: Md5Hash,
+    
+    /// The total size of the extracted archive in bytes.
+    pub total_size: u64,
 }
 
 /// A trait that can be implemented to report download progress.
