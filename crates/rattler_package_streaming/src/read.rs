@@ -2,7 +2,6 @@
 //! [`std::io::Read`] trait.
 
 use super::{ExtractError, ExtractResult};
-use rattler_digest::HashingReader;
 use std::io::{copy, Seek, SeekFrom};
 use std::mem::ManuallyDrop;
 use std::{ffi::OsStr, io::Read, path::Path};

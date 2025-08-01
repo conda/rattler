@@ -284,6 +284,8 @@ impl PackageCache {
                                     // Delete the package if the hash does not match
                                     tokio_fs::remove_dir_all(&destination).await.unwrap();
                                     return Err(ExtractError::HashMismatch {
+                                        url: url.as_ref().to_string(),
+                                        destination: destination.display().to_string(),
                                         expected: format!("{md5:x}"),
                                         actual: format!("{:x}", result.md5),
                                     });
@@ -295,6 +297,8 @@ impl PackageCache {
                                     // Delete the package if the hash does not match
                                     tokio_fs::remove_dir_all(&destination).await.unwrap();
                                     return Err(ExtractError::HashMismatch {
+                                        url: url.as_ref().to_string(),
+                                        destination: destination.display().to_string(),
                                         expected: format!("{sha256:x}"),
                                         actual: format!("{:x}", result.sha256),
                                     });
