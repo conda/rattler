@@ -3869,12 +3869,14 @@ dependencies = [
 
 [[package]]
 name = "petgraph"
-version = "0.7.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772"
+checksum = "54acf3a685220b533e437e264e4d932cfbdc4cc7ec0cd232ed73c08d03b8a7ca"
 dependencies = [
  "fixedbitset",
+ "hashbrown 0.15.4",
  "indexmap 2.10.0",
+ "serde",
 ]
 
 [[package]]
@@ -5177,9 +5179,9 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.9.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dba027c8e5dd4b5e5a690cfcfb3900d5ffe6985adb048cbd111d5aa596a6c0c8"
+checksum = "037a5f3f35329f29885132d030c628f3142d2a098d0abb30513c572b900692fd"
 dependencies = [
  "ahash",
  "bitvec",
