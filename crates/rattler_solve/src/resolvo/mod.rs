@@ -19,9 +19,10 @@ use rattler_conda_types::{
 };
 use resolvo::{
     utils::{Pool, VersionSet},
-    Candidates, Dependencies, DependencyProvider, HintDependenciesAvailable, Interner,
-    KnownDependencies, NameId, Problem, Requirement, SolvableId, Solver as LibSolvRsSolver,
-    SolverCache, StringId, UnsolvableOrCancelled, VersionSetId, VersionSetUnionId,
+    Candidates, Condition, ConditionId, ConditionalRequirement, Dependencies, DependencyProvider,
+    HintDependenciesAvailable, Interner, KnownDependencies, NameId, Problem, SolvableId,
+    Solver as LibSolvRsSolver, SolverCache, StringId, UnsolvableOrCancelled, VersionSetId,
+    VersionSetUnionId,
 };
 
 use crate::{
@@ -547,6 +548,10 @@ impl Interner for CondaDependencyProvider<'_> {
         &self.pool.resolve_solvable(solvable).record
     }
 
+    fn resolve_condition(&self, condition: ConditionId) -> Condition {
+        self.pool.resolve_condition(condition).clone()
+    }
+
     fn version_sets_in_union(
         &self,
         version_set_union: VersionSetUnionId,
@@ -666,7 +671,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
                     dependencies
                         .requirements
-                        .extend(version_set_id.into_iter().map(Requirement::from));
+                        .extend(version_set_id.into_iter().map(ConditionalRequirement::from));
                 }
 
                 // Add a dependency back to the base package with exact version
@@ -713,7 +718,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
                 dependencies
                     .requirements
-                    .extend(version_set_id.into_iter().map(Requirement::from));
+                    .extend(version_set_id.into_iter().map(ConditionalRequirement::from));
             }
 
             for constrains in record.package_record.constrains.iter() {
@@ -874,9 +879,9 @@ impl super::SolverImpl for Solver {
             reqs
         });
 
-        let all_requirements: Vec<Requirement> = virtual_package_requirements
+        let all_requirements: Vec<ConditionalRequirement> = virtual_package_requirements
             .chain(root_requirements)
-            .map(Requirement::from)
+            .map(ConditionalRequirement::from)
             .collect();
 
         let root_constraints = task
