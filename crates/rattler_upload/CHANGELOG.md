@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4](https://github.com/conda/rattler/compare/rattler_upload-v0.1.3...rattler_upload-v0.1.4) - 2025-08-01
+
+### Other
+
+- *(ci)* Update Rust crate opendal to 0.54.0 ([#1566](https://github.com/conda/rattler/pull/1566))
+
 ## [0.1.3](https://github.com/conda/rattler/compare/rattler_upload-v0.1.2...rattler_upload-v0.1.3) - 2025-07-28
 
 ### Other
