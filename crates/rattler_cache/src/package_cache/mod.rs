@@ -288,6 +288,7 @@ impl PackageCache {
                                         destination: destination.display().to_string(),
                                         expected: format!("{md5:x}"),
                                         actual: format!("{:x}", result.md5),
+                                        total_size: result.total_size,
                                     });
                                 }
                             }
@@ -301,6 +302,7 @@ impl PackageCache {
                                         destination: destination.display().to_string(),
                                         expected: format!("{sha256:x}"),
                                         actual: format!("{:x}", result.sha256),
+                                        total_size: result.total_size,
                                     });
                                 }
                             }

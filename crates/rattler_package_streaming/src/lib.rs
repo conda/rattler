@@ -29,13 +29,14 @@ pub enum ExtractError {
     IoError(#[from] std::io::Error),
 
     #[error(
-        "hash mismatch when extracting {url} to {destination}: expected {expected}, got {actual}"
+        "hash mismatch when extracting {url} to {destination}: expected {expected}, got {actual}, total size {total_size} bytes"
     )]
     HashMismatch {
         url: String,
         destination: String,
         expected: String,
         actual: String,
+        total_size: u64,
     },
 
     #[error("could not create the destination path: {0}")]
