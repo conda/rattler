@@ -2,7 +2,6 @@
 //! [`std::io::Read`] trait.
 
 use super::{ExtractError, ExtractResult};
-use rattler_digest::HashingReader;
 use std::io::{copy, Seek, SeekFrom};
 use std::mem::ManuallyDrop;
 use std::{ffi::OsStr, io::Read, path::Path};
@@ -30,23 +29,10 @@ pub fn extract_tar_bz2(
 ) -> Result<ExtractResult, ExtractError> {
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
 
-    // Wrap the reading in additional readers that will compute the hashes of the file while its
-    // being read.
-    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
-    let mut md5_reader =
-        rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
-
-    // Unpack the archive
-    stream_tar_bz2(&mut md5_reader).unpack(destination)?;
-
-    // Read the file to the end to make sure the hash is properly computed.
-    std::io::copy(&mut md5_reader, &mut std::io::sink())?;
-
-    // Get the hashes
-    let (sha256_reader, md5) = md5_reader.finalize();
-    let (_, sha256) = sha256_reader.finalize();
-
-    Ok(ExtractResult { sha256, md5 })
+    process_with_hashing(reader, |reader| {
+        stream_tar_bz2(reader).unpack(destination)?;
+        Ok(())
+    })
 }
 
 /// Extracts the contents of a `.conda` package archive.
@@ -57,17 +43,12 @@ pub fn extract_conda_via_streaming(
     // Construct the destination path if it doesnt exist yet
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
 
-    // Wrap the reading in additional readers that will compute the hashes of the file while its
-    // being read.
-    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
-    let mut md5_reader =
-        rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
-
-    // Iterate over all entries in the zip-file and extract them one-by-one
-    while let Some(file) = read_zipfile_from_stream(&mut md5_reader)? {
-        extract_zipfile(file, destination)?;
-    }
-    compute_hashes(md5_reader)
+    process_with_hashing(reader, |reader| {
+        while let Some(file) = read_zipfile_from_stream(reader)? {
+            extract_zipfile(file, destination)?;
+        }
+        Ok(())
+    })
 }
 
 /// Extracts the contents of a .conda package archive by fully reading the stream and then decompressing
@@ -81,24 +62,19 @@ pub fn extract_conda_via_buffering(
     }
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
 
-    // Create a SpooledTempFile with a 5MB limit
-    let mut temp_file = SpooledTempFile::new(5 * 1024 * 1024);
-    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
-    let mut md5_reader =
-        rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
+    process_with_hashing(reader, |reader| {
+        // Create a SpooledTempFile with a 5MB limit
+        let mut temp_file = SpooledTempFile::new(5 * 1024 * 1024);
+        copy(reader, &mut temp_file)?;
+        temp_file.seek(SeekFrom::Start(0))?;
+        let mut archive = ZipArchive::new(temp_file)?;
 
-    copy(&mut md5_reader, &mut temp_file)?;
-    temp_file.seek(SeekFrom::Start(0))?;
-    let mut archive = ZipArchive::new(temp_file)?;
-
-    for i in 0..archive.len() {
-        let file = archive.by_index(i)?;
-        extract_zipfile(file, destination)?;
-    }
-    // Read the file to the end to make sure the hash is properly computed.
-    std::io::copy(&mut md5_reader, &mut std::io::sink())?;
-
-    compute_hashes(md5_reader)
+        for i in 0..archive.len() {
+            let file = archive.by_index(i)?;
+            extract_zipfile(file, destination)?;
+        }
+        Ok(())
+    })
 }
 
 fn extract_zipfile<R: std::io::Read>(
@@ -128,15 +104,64 @@ fn extract_zipfile<R: std::io::Read>(
     Ok(())
 }
 
-fn compute_hashes<R: Read>(
-    mut md5_reader: HashingReader<HashingReader<R, rattler_digest::Sha256>, rattler_digest::Md5>,
-) -> Result<ExtractResult, ExtractError> {
-    // Read the file to the end to make sure the hash is properly computed.
-    std::io::copy(&mut md5_reader, &mut std::io::sink())?;
+// Define a custom reader to track file size
+struct SizeCountingReader<R: Read> {
+    inner: R,
+    size: u64,
+}
 
-    // Get the hashes
+impl<R: Read> SizeCountingReader<R> {
+    fn new(inner: R) -> Self {
+        Self { inner, size: 0 }
+    }
+
+    fn finalize(self) -> (R, u64) {
+        (self.inner, self.size)
+    }
+}
+
+impl<R: Read> Read for SizeCountingReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let bytes_read = self.inner.read(buf)?;
+        self.size += bytes_read as u64;
+        Ok(bytes_read)
+    }
+}
+
+/// Helper function to compute hashes and size while processing a tar archive
+fn process_with_hashing<E, R, F>(reader: R, processor: F) -> Result<ExtractResult, E>
+where
+    R: Read,
+    E: From<std::io::Error>,
+    F: FnOnce(
+        &mut SizeCountingReader<
+            &mut rattler_digest::HashingReader<
+                rattler_digest::HashingReader<R, rattler_digest::Sha256>,
+                rattler_digest::Md5,
+            >,
+        >,
+    ) -> Result<(), E>,
+{
+    // Wrap the reading in additional readers that will compute the hashes of the file while its
+    // being read, and count the total size.
+    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
+    let mut md5_reader =
+        rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
+    let mut size_reader = SizeCountingReader::new(&mut md5_reader);
+
+    processor(&mut size_reader)?;
+
+    // Read the file to the end to make sure the hash is properly computed
+    std::io::copy(&mut size_reader, &mut std::io::sink())?;
+
+    // Get the size and hashes
+    let (_, total_size) = size_reader.finalize();
     let (sha256_reader, md5) = md5_reader.finalize();
     let (_, sha256) = sha256_reader.finalize();
 
-    Ok(ExtractResult { sha256, md5 })
+    Ok(ExtractResult {
+        sha256,
+        md5,
+        total_size,
+    })
 }
