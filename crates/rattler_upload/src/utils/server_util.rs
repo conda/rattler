@@ -66,8 +66,9 @@ fn get_server_patterns() -> &'static ServerPatterns {
 /// * `SimpleServerType` - The detected server type or Unknown
 /// 
 /// ```
-pub fn check_server_type(host: &str) -> SimpleServerType {
+pub fn check_server_type(host_url: &Url) -> SimpleServerType {
     let patterns = get_server_patterns();
+    let host = host_url.as_str();
     
     // 1. Check Prefix.dev (most specific)
     if patterns.prefix.is_match(host) {
@@ -102,4 +103,44 @@ pub fn check_server_type(host: &str) -> SimpleServerType {
 
     // 7. Unknown server type
     SimpleServerType::Unknown
+}
+
+// Extract Quetz base_url and channel from the host
+pub fn extract_quetz_info(url: &Url) -> Result<(Url, String), Box<dyn std::error::Error>> {
+    let url_str = url.as_str();
+    let quetz_pattern = Regex::new(r"^(https?://[^/]+)(?:/api/channels/([^/]+))?").unwrap();
+    
+    if let Some(captures) = quetz_pattern.captures(url_str) {
+        // 1. Extract base URL
+        let base_url = captures.get(1).unwrap().as_str();
+        let base_url = Url::parse(base_url)?;
+        
+        // 2. Extract channel, default to "main" if not found
+        let channel = captures.get(2)
+            .map(|m| m.as_str().to_string())
+            .unwrap_or_else(|| "main".to_string());
+        
+        Ok((base_url, channel))
+    } else {
+        Err("Invalid Quetz URL format".into())
+    }
+}
+
+// Extract Artifactory base_url and channel from host
+pub fn extract_artifactory_info(url: &Url) -> Result<(Url, String), Box<dyn std::error::Error>> {
+    let url_str = url.as_str();
+    let artifactory_pattern = Regex::new(r"^(https?://[^/]+)/artifactory/([^/]+)(?:/(.+)/([^/]+))?").unwrap();
+    
+    if let Some(captures) = artifactory_pattern.captures(url_str) {
+        // 1. Extract base URL - e.g., "https://artifactory.company.com"
+        let base_url = captures.get(1).unwrap().as_str();
+        let base_url = Url::parse(base_url)?;
+        
+        // 2. Extract repository/channel - e.g., "libs-release-local"
+        let channel = captures.get(2).unwrap().as_str().to_string();
+        
+        Ok((base_url, channel))
+    } else {
+        Err("Invalid Artifactory URL format".into())
+    }
 }
