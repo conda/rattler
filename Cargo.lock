@@ -4871,6 +4871,7 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_redaction",
  "rattler_solve",
+ "regex",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
