@@ -43,29 +43,11 @@ pub fn extract_conda_via_streaming(
     // Construct the destination path if it doesnt exist yet
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
 
-    // Wrap the reading in additional readers that will compute the hashes of the file while its
-    // being read, and count the total size.
-    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
-    let mut md5_reader =
-        rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
-    let mut size_reader = SizeCountingReader::new(&mut md5_reader);
-
-    // Iterate over all entries in the zip-file and extract them one-by-one
-    while let Some(file) = read_zipfile_from_stream(&mut size_reader)? {
-        extract_zipfile(file, destination)?;
-    }
-    // Read the file to the end to make sure the hash is properly computed
-    std::io::copy(&mut size_reader, &mut std::io::sink())?;
-
-    // Get the size and hashes
-    let (_, total_size) = size_reader.finalize();
-    let (sha256_reader, md5) = md5_reader.finalize();
-    let (_, sha256) = sha256_reader.finalize();
-
-    Ok(ExtractResult {
-        sha256,
-        md5,
-        total_size,
+    process_with_hashing(reader, |reader| {
+        while let Some(file) = read_zipfile_from_stream(reader)? {
+            extract_zipfile(file, destination)?;
+        }
+        Ok(())
     })
 }
 
@@ -147,10 +129,18 @@ impl<R: Read> Read for SizeCountingReader<R> {
 }
 
 /// Helper function to compute hashes and size while processing a tar archive
-fn process_with_hashing<E, F>(reader: impl Read, processor: F) -> Result<ExtractResult, E>
+fn process_with_hashing<E, R, F>(reader: R, processor: F) -> Result<ExtractResult, E>
 where
+    R: Read,
     E: From<std::io::Error>,
-    F: FnOnce(&mut dyn Read) -> Result<(), E>,
+    F: FnOnce(
+        &mut SizeCountingReader<
+            &mut rattler_digest::HashingReader<
+                rattler_digest::HashingReader<R, rattler_digest::Sha256>,
+                rattler_digest::Md5,
+            >,
+        >,
+    ) -> Result<(), E>,
 {
     // Wrap the reading in additional readers that will compute the hashes of the file while its
     // being read, and count the total size.
