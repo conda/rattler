@@ -4426,6 +4426,7 @@ dependencies = [
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_redaction",
  "rayon",
  "reqwest",
  "reqwest-middleware",
