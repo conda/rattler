@@ -1,6 +1,6 @@
 [package]
 name = "rattler_solve"
-version = "2.1.8"
+version = "2.1.9"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to solve conda environments"
