@@ -136,7 +136,7 @@ pub fn extract_artifactory_info(url: &Url) -> Result<(Url, String), Box<dyn std:
         let base_url = captures.get(1).unwrap().as_str();
         let base_url = Url::parse(base_url)?;
         
-        // 2. Extract repository/channel 
+        // 2. Extract channel 
         let channel = captures.get(2).unwrap().as_str().to_string();
         
         Ok((base_url, channel))
@@ -164,4 +164,60 @@ pub fn extract_prefix_info(url: &Url) -> Result<(Url, String), Box<dyn std::erro
     } else {
         Err("Invalid Prefix.dev URL format".into())
     }
+}
+
+// Extract Anaconda base_url and channel from host
+pub fn extract_anaconda_info(url: &Url) -> Result<(Url, String), Box<dyn std::error::Error>> {
+    let url_str = url.as_str();
+    let anaconda_pattern = Regex::new(r"^(https?://(?:upload\.)?anaconda\.org)(?:/([^/]+))?").unwrap();
+    
+    if let Some(captures) = anaconda_pattern.captures(url_str) {
+        // 1. Extract base_url
+        let base_url = Url::parse(&url.origin().ascii_serialization())?;
+        
+        // 2. Extract channel - defaults to "main"
+        let channel = captures.get(2)
+            .map(|m| m.as_str().to_string())
+            .unwrap_or_else(|| "main".to_string());
+        
+        Ok((base_url, channel))
+    } else {
+        Err("Invalid Anaconda.org URL format".into())
+    }
+}
+
+// Extract S3 base_url and channel from host
+pub fn extract_s3_info(url: &Url) -> Result<(Url, String, String), Box<dyn std::error::Error>> {
+    let url_str = url.as_str();
+    
+    // Handle both HTTP(S) and S3:// protocols
+    if url_str.starts_with("s3://") {
+        // S3 URI format: s3://bucket-name/channel-name
+        let s3_pattern = Regex::new(r"^s3://([^/]+)(?:/([^/]+))?").unwrap();
+        if let Some(captures) = s3_pattern.captures(url_str) {
+            let channel = captures.get(2)
+                .map(|m| m.as_str().to_string())
+                .unwrap_or_else(|| "main".to_string()); // Default channel
+            let base_url = Url::parse("https://s3.amazonaws.com")?; // Default S3 endpoint
+            let region = "eu-central-1".to_string(); // Default region for s3:// URLs
+            return Ok((base_url, channel, region));
+        }
+    } else {
+        // HTTP(S) format: https://bucket.s3.region.amazonaws.com/channel
+        let s3_pattern = Regex::new(r"^(https?://([^.]+)\.s3(?:\.([^.]+))?\.amazonaws\.com)(?:/([^/]+))?").unwrap();
+        if let Some(captures) = s3_pattern.captures(url_str) {
+            let base_url_str = captures.get(1).unwrap().as_str();
+            let region = captures.get(3)
+                .map(|m| m.as_str().to_string())
+                .unwrap_or_else(|| "eu-central-1".to_string());
+            let channel = captures.get(4)
+                .map(|m| m.as_str().to_string())
+                .unwrap_or_else(|| "main".to_string());
+            
+            let base_url = Url::parse(base_url_str)?;
+            return Ok((base_url, channel, region));
+        }
+    }
+    
+    Err("Invalid S3 URL format".into())
 }
