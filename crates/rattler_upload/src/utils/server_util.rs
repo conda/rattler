@@ -35,10 +35,10 @@ impl ServerPatterns {
             // Anaconda patterns
             anaconda: Regex::new(r"^https?://(?:upload\.)?anaconda\.org/").unwrap(),
             
-            // Quetz patterns (generic quetz server with /api/channels/)
+            // Quetz patterns
             quetz: Regex::new(r"^https?://[^/]+/api/channels/").unwrap(),
             
-            // Artifactory patterns (contains /artifactory/ in path)
+            // Artifactory patterns
             artifactory: Regex::new(r"^https?://[^/]+/artifactory/").unwrap(),
             
             #[cfg(feature = "s3")]
@@ -136,11 +136,32 @@ pub fn extract_artifactory_info(url: &Url) -> Result<(Url, String), Box<dyn std:
         let base_url = captures.get(1).unwrap().as_str();
         let base_url = Url::parse(base_url)?;
         
-        // 2. Extract repository/channel - e.g., "libs-release-local"
+        // 2. Extract repository/channel 
         let channel = captures.get(2).unwrap().as_str().to_string();
         
         Ok((base_url, channel))
     } else {
         Err("Invalid Artifactory URL format".into())
+    }
+}
+
+// Extract Prefix base_url and channel from host
+pub fn extract_prefix_info(url: &Url) -> Result<(Url, String), Box<dyn std::error::Error>> {
+    let url_str = url.as_str();
+    let prefix_pattern: Regex = Regex::new(r"^https?://(?:www\.)?prefix\.dev(?:/api/v1/upload/([^/]+)|/([^/]+))?$").unwrap();
+    
+    if let Some(captures) = prefix_pattern.captures(url_str) {
+        // 1. Extract base_url
+        let base_url = Url::parse(&format!("{}://{}", url.scheme(), url.host_str().unwrap()))?;
+        
+        // 2. Extract channel - defaults to "conda-forge" 
+        let channel: String = captures.get(1)
+            .or(captures.get(2))
+            .map(|m| m.as_str().to_string()) 
+            .unwrap_or_else(|| "conda-forge".to_string());
+        
+        Ok((base_url, channel))
+    } else {
+        Err("Invalid Prefix.dev URL format".into())
     }
 }
