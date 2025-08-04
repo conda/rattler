@@ -1,12 +1,14 @@
 [package]
-authors.workspace = true
-edition.workspace = true
-homepage.workspace = true
-license.workspace = true
 name = "rattler_progress"
-readme.workspace = true
+version = "0.1.3"
+edition.workspace = true
+authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>", "Magenta Qin <magenta2127@gmail.com>"]
+description = "A crate to show progress bar"
+categories.workspace = true
+homepage.workspace = true
 repository.workspace = true
-version = "0.1.0"
+license.workspace = true
+readme.workspace = true
 
 
 [dependencies]
