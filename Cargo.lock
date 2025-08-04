@@ -4711,6 +4711,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_progress"
+version = "0.1.0"
+dependencies = [
+ "indicatif",
+ "parking_lot 0.12.4",
+]
+
+[[package]]
 name = "rattler_pty"
 version = "0.2.6"
 dependencies = [
@@ -4869,6 +4877,7 @@ dependencies = [
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_progress",
  "rattler_redaction",
  "rattler_solve",
  "regex",

@@ -1,8 +1,8 @@
 [package]
 name = "rattler_progress"
-version = "0.1.3"
+version = "0.1.0"
 edition.workspace = true
-authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>", "Magenta Qin <magenta2127@gmail.com>"]
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>", "Magenta Qin <magenta2127@gmail.com>"]
 description = "A crate to show progress bar"
 categories.workspace = true
 homepage.workspace = true
