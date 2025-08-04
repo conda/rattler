@@ -158,13 +158,16 @@ impl CommonData {
 /// Upload options.
 #[derive(Parser, Debug)]
 pub struct UploadOpts {
+    /// The host + channel (optional if the server type is provided)
+    pub host: Option<Url>,
+
     /// The package file to upload
     #[arg(global = true, required = false)]
     pub package_files: Vec<PathBuf>,
 
-    /// The server type
+    //// The server type (optional if host is provided)
     #[clap(subcommand)]
-    pub server_type: ServerType,
+    pub server_type: Option<ServerType>,
 
     /// Common options.
     #[clap(flatten)]
