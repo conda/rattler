@@ -167,7 +167,7 @@ pub fn extract_prefix_info(url: &Url) -> Result<(Url, String), Box<dyn std::erro
 }
 
 // Extract Anaconda base_url and channel from host
-pub fn extract_anaconda_info(url: &Url) -> Result<(Url, String), Box<dyn std::error::Error>> {
+pub fn extract_anaconda_info(url: &Url) -> Result<(Url, Vec<String>), Box<dyn std::error::Error>> {
     let url_str = url.as_str();
     let anaconda_pattern = Regex::new(r"^(https?://(?:upload\.)?anaconda\.org)(?:/([^/]+))?").unwrap();
     
@@ -176,9 +176,9 @@ pub fn extract_anaconda_info(url: &Url) -> Result<(Url, String), Box<dyn std::er
         let base_url = Url::parse(&url.origin().ascii_serialization())?;
         
         // 2. Extract channel - defaults to "main"
-        let channel = captures.get(2)
-            .map(|m| m.as_str().to_string())
-            .unwrap_or_else(|| "main".to_string());
+        let channel: Vec<String> = captures.get(2)
+            .map(|m| vec![m.as_str().to_string()])  
+            .unwrap_or_else(|| vec!["main".to_string()]);  
         
         Ok((base_url, channel))
     } else {
@@ -186,8 +186,9 @@ pub fn extract_anaconda_info(url: &Url) -> Result<(Url, String), Box<dyn std::er
     }
 }
 
+#[cfg(feature = "s3")]
 // Extract S3 base_url and channel from host
-pub fn extract_s3_info(url: &Url) -> Result<(Url, String, String), Box<dyn std::error::Error>> {
+pub fn extract_s3_info(url: &Url) -> Result<(Url, Url, String), Box<dyn std::error::Error>> {
     let url_str = url.as_str();
     
     // Handle both HTTP(S) and S3:// protocols
@@ -195,10 +196,12 @@ pub fn extract_s3_info(url: &Url) -> Result<(Url, String, String), Box<dyn std::
         // S3 URI format: s3://bucket-name/channel-name
         let s3_pattern = Regex::new(r"^s3://([^/]+)(?:/([^/]+))?").unwrap();
         if let Some(captures) = s3_pattern.captures(url_str) {
-            let channel = captures.get(2)
+            let bucket = captures.get(1).unwrap().as_str();
+            let channel_name = captures.get(2)
                 .map(|m| m.as_str().to_string())
                 .unwrap_or_else(|| "main".to_string()); // Default channel
             let base_url = Url::parse("https://s3.amazonaws.com")?; // Default S3 endpoint
+            let channel: Url = Url::parse(&format!("s3://{}/{}", bucket, channel_name))?;
             let region = "eu-central-1".to_string(); // Default region for s3:// URLs
             return Ok((base_url, channel, region));
         }
@@ -207,14 +210,17 @@ pub fn extract_s3_info(url: &Url) -> Result<(Url, String, String), Box<dyn std::
         let s3_pattern = Regex::new(r"^(https?://([^.]+)\.s3(?:\.([^.]+))?\.amazonaws\.com)(?:/([^/]+))?").unwrap();
         if let Some(captures) = s3_pattern.captures(url_str) {
             let base_url_str = captures.get(1).unwrap().as_str();
+            let bucket = captures.get(2).unwrap().as_str();
             let region = captures.get(3)
                 .map(|m| m.as_str().to_string())
                 .unwrap_or_else(|| "eu-central-1".to_string());
-            let channel = captures.get(4)
+            let channel_name = captures.get(4)
                 .map(|m| m.as_str().to_string())
                 .unwrap_or_else(|| "main".to_string());
             
             let base_url = Url::parse(base_url_str)?;
+            let channel: Url = Url::parse(&format!("s3://{}/{}", bucket, channel_name))?;
+
             return Ok((base_url, channel, region));
         }
     }

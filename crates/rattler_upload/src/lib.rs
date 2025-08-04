@@ -3,12 +3,19 @@ pub(crate) mod utils;
 
 use crate::upload::opt::{AnacondaOpts, ArtifactoryOpts, CondaForgeOpts, PrefixOpts};
 use crate::utils::{tool_configuration};
-use crate::utils::server_util::{check_server_type, extract_artifactory_info, extract_prefix_info, extract_quetz_info, extract_s3_info, SimpleServerType };
+use crate::utils::server_util::{check_server_type, extract_artifactory_info, extract_prefix_info, extract_quetz_info, extract_anaconda_info, extract_conda_forge_info, SimpleServerType };
 use miette::IntoDiagnostic;
 use rattler_conda_types::package::ArchiveType;
 use upload::opt::{
     AnacondaData, ArtifactoryData, CondaForgeData, PrefixData, QuetzData, ServerType, UploadOpts, QuetzOpts
 };
+
+#[cfg(feature = "s3")]
+use crate::utils::server_util::{
+    extract_s3_info
+};
+#[cfg(feature = "s3")]
+use crate::upload::opt::{S3Opts};
 
 /// Upload package to different channels
 pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
@@ -80,14 +87,14 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
                 skip_existing: false
             })
         },
-        SimpleServerType:: Anaconda => {
+        SimpleServerType::Anaconda => {
             let host_url = args.host.as_ref().unwrap(); 
             let (base_url, channel) = extract_anaconda_info(host_url).expect("Failed to parse Anaconda URL");
-            ServerType::Prefix(AnacondaOpts {
-                url: base_url,
-                channels: channel,
+            ServerType::Anaconda(AnacondaOpts {
+                url: Some(base_url),
+                channels: Some(channel),
                 api_key: None,
-                owner: None,
+                owner: "".to_string(),
                 force: false
             })
         },
@@ -95,27 +102,28 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
         SimpleServerType::S3 => {
             let host_url = args.host.as_ref().unwrap();
             let (base_url, channel, region) = extract_s3_info(host_url).expect("Failed to parse S3 URL");
-            ServerType::Prefix(S3Opts {
+            ServerType::S3(S3Opts {
                 endpoint_url: base_url,
                 channel,
                 region,
-                force_path_style: None,
+                force_path_style: false,
                 secret_access_key: None,
                 session_token: None,
+                access_key_id: None,
             })
         },
         SimpleServerType::CondaForge => {
             let host_url = args.host.as_ref().unwrap();
             let (base_url, channel) = extract_conda_forge_info(host_url).expect("Failed to parse Conda Forge URL");
-            ServerType::Prefix(CondaForgeOpts {
-                anaconda_url: base_url,
-                staging_channel: channel,
-                staging_token: None,
-                feedstock: None,
-                feedstock_token: None,
+            ServerType::CondaForge(CondaForgeOpts {
+                anaconda_url: Some(base_url),
+                staging_channel: Some(channel),
+                staging_token: "".to_string(),
+                feedstock: "".to_string(),
+                feedstock_token: "".to_string(),
                 validation_endpoint: None,
                 provider: None,
-                dry_run: None,
+                dry_run: false,
             })
         }
     };
