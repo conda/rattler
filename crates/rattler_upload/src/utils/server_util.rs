@@ -46,7 +46,7 @@ impl ServerPatterns {
             s3: Regex::new(r"^(?:https?://[^.]+\.s3(?:\.[^.]+)?\.amazonaws\.com|s3://)").unwrap(),
             
             // Conda-forge patterns
-            conda_forge: Regex::new(r"^https?://(?:www\.)?github\.com/conda-forge/").unwrap(),
+            conda_forge: Regex::new(r"^https?://[^/]*conda-forge").unwrap(),
         }
     }
 }
@@ -220,4 +220,19 @@ pub fn extract_s3_info(url: &Url) -> Result<(Url, String, String), Box<dyn std::
     }
     
     Err("Invalid S3 URL format".into())
+}
+
+// Extract S3 base_url and channel from host
+pub fn extract_conda_forge_info(url: &Url) -> Result<(Url, String), Box<dyn std::error::Error>> {
+    let base_url = Url::parse(&url.origin().ascii_serialization())
+        .map_err(|e| format!("Failed to parse base URL: {}", e))?;
+    
+    // Extract channel from path - first path segment or "main" as default
+    let channel = url.path_segments()
+        .and_then(|mut segments| segments.next())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("main")
+        .to_string();
+    
+    Ok((base_url, channel))
 }

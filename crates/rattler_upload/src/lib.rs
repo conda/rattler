@@ -1,11 +1,13 @@
 pub mod upload;
 pub(crate) mod utils;
 
-use crate::utils::tool_configuration;
+use crate::upload::opt::{AnacondaOpts, ArtifactoryOpts, CondaForgeOpts, PrefixOpts};
+use crate::utils::{tool_configuration};
+use crate::utils::server_util::{check_server_type, extract_artifactory_info, extract_prefix_info, extract_quetz_info, extract_s3_info, SimpleServerType };
 use miette::IntoDiagnostic;
 use rattler_conda_types::package::ArchiveType;
 use upload::opt::{
-    AnacondaData, ArtifactoryData, CondaForgeData, PrefixData, QuetzData, ServerType, UploadOpts,
+    AnacondaData, ArtifactoryData, CondaForgeData, PrefixData, QuetzData, ServerType, UploadOpts, QuetzOpts
 };
 
 /// Upload package to different channels
@@ -29,8 +31,96 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
     let store = tool_configuration::get_auth_store(args.common.auth_file, args.auth_store)
         .into_diagnostic()?;
 
+    // Check server type from host (if provided)
+    let detected_type: SimpleServerType = match &args.host {
+        Some(host_url) => check_server_type(host_url),
+        None => SimpleServerType::Unknown,
+    };
+
+    // Use detected type if available, otherwise fall back to provided server_type
+    let server_type = match detected_type {
+        SimpleServerType::Unknown => {
+            // If detection failed, use provided subcommand server_type or return error
+            match args.server_type {
+                Some(server_type) => server_type,
+                None => return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Cannot determine server type from host and no server type provided"
+                )).into_diagnostic()
+            }
+        },
+        SimpleServerType::Quetz => {
+            let host_url = args.host.as_ref().unwrap(); 
+            let (base_url, channel) = extract_quetz_info(host_url).expect("Failed to parse Quetz URL");
+            ServerType::Quetz(QuetzOpts {
+              url: base_url,
+              channels: channel,
+              api_key: None,
+          })
+        },
+        SimpleServerType::Artifactory => {
+            let host_url = args.host.as_ref().unwrap(); 
+            let (base_url, channel) = extract_artifactory_info(host_url).expect("Failed to parse Artifactory URL");
+            ServerType::Artifactory(ArtifactoryOpts {
+                url: base_url,
+                channels: channel,
+                username: None,
+                password: None,
+                token: None,
+            })
+        },
+        SimpleServerType::Prefix => {
+            let host_url = args.host.as_ref().unwrap(); 
+            let (base_url, channel) = extract_prefix_info(host_url).expect("Failed to parse Prefix URL");
+            ServerType::Prefix(PrefixOpts {
+                url: base_url,
+                channel,
+                api_key: None,
+                attestation: None,
+                skip_existing: false
+            })
+        },
+        SimpleServerType:: Anaconda => {
+            let host_url = args.host.as_ref().unwrap(); 
+            let (base_url, channel) = extract_anaconda_info(host_url).expect("Failed to parse Anaconda URL");
+            ServerType::Prefix(AnacondaOpts {
+                url: base_url,
+                channels: channel,
+                api_key: None,
+                owner: None,
+                force: false
+            })
+        },
+        #[cfg(feature = "s3")]
+        SimpleServerType::S3 => {
+            let host_url = args.host.as_ref().unwrap();
+            let (base_url, channel, region) = extract_s3_info(host_url).expect("Failed to parse S3 URL");
+            ServerType::Prefix(S3Opts {
+                endpoint_url: base_url,
+                channel,
+                region,
+                force_path_style: None,
+                secret_access_key: None,
+                session_token: None,
+            })
+        },
+        SimpleServerType::CondaForge => {
+            let host_url = args.host.as_ref().unwrap();
+            let (base_url, channel) = extract_conda_forge_info(host_url).expect("Failed to parse Conda Forge URL");
+            ServerType::Prefix(CondaForgeOpts {
+                anaconda_url: base_url,
+                staging_channel: channel,
+                staging_token: None,
+                feedstock: None,
+                feedstock_token: None,
+                validation_endpoint: None,
+                provider: None,
+                dry_run: None,
+            })
+        }
+    };
     // Upload handler based on server type
-    match args.server_type {
+    match server_type {
         ServerType::Quetz(quetz_opts) => {
             let quetz_data = QuetzData::from(quetz_opts);
             upload::upload_package_to_quetz(&store, &args.package_files, quetz_data).await
