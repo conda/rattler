@@ -21,7 +21,7 @@ use super::opt::{
 };
 
 use crate::upload::{
-    default_bytes_style, get_client_with_retry, get_default_client,
+    get_client_with_retry, get_default_client,
     trusted_publishing::{check_trusted_publishing, TrustedPublishResult},
 };
 use rattler_progress;
@@ -147,7 +147,7 @@ pub async fn upload_package_to_prefix(
 
         let progress_bar = indicatif::ProgressBar::new(file_size)
             .with_prefix("Uploading")
-            .with_style(pixi_progress::default_bytes_style());
+            .with_style(rattler_progress::default_bytes_style());
 
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
         let mut current_try = 0;
