@@ -2253,9 +2253,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-auth"
-version = "0.22.1"
+version = "0.22.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1c68b38bb7fa9161988cd28b5973457c6ee111b04a3e64db287c3ebc1c386eb"
+checksum = "290a18c1cc7c02934c1b88920af8b55ff588ff2ef47f35dae5fc1f10f2056538"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -3116,7 +3116,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.53.2",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
