@@ -113,8 +113,7 @@ pub fn extract_quetz_info(url: &Url) -> Result<(Url, String), Box<dyn std::error
         // 2. Extract channel, default to "main" if not found
         let channel = captures
             .get(2)
-            .map(|m| m.as_str().to_string())
-            .unwrap_or_else(|| "main".to_string());
+            .map_or_else(|| "main".to_string(), |m| m.as_str().to_string());
 
         Ok((base_url, channel))
     } else {
@@ -157,8 +156,7 @@ pub fn extract_prefix_info(url: &Url) -> Result<(Url, String), Box<dyn std::erro
         let channel: String = captures
             .get(1)
             .or(captures.get(2))
-            .map(|m| m.as_str().to_string())
-            .unwrap_or_else(|| "conda-forge".to_string());
+            .map_or_else(|| "conda-forge".to_string(), |m| m.as_str().to_string());
 
         Ok((base_url, channel))
     } else {
@@ -177,10 +175,10 @@ pub fn extract_anaconda_info(url: &Url) -> Result<(Url, Vec<String>), Box<dyn st
         let base_url = Url::parse(&url.origin().ascii_serialization())?;
 
         // 2. Extract channel - defaults to "main"
-        let channel: Vec<String> = captures
-            .get(2)
-            .map(|m| vec![m.as_str().to_string()])
-            .unwrap_or_else(|| vec!["main".to_string()]);
+        let channel: Vec<String> = captures.get(2).map_or_else(
+            || vec!["main".to_string()],
+            |m| vec![m.as_str().to_string()],
+        );
 
         Ok((base_url, channel))
     } else {
@@ -238,7 +236,7 @@ pub fn extract_s3_info(url: &Url) -> Result<(Url, Url, String), Box<dyn std::err
 // Extract S3 base_url and channel from host
 pub fn extract_conda_forge_info(url: &Url) -> Result<(Url, String), Box<dyn std::error::Error>> {
     let base_url = Url::parse(&url.origin().ascii_serialization())
-        .map_err(|e| format!("Failed to parse base URL: {}", e))?;
+        .map_err(|e| format!("Failed to parse base URL: {e}"))?;
 
     // Extract channel from path - first path segment or "main" as default
     let channel = url

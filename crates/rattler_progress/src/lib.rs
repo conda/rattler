@@ -66,7 +66,7 @@ pub fn default_bytes_style() -> indicatif::ProgressStyle {
             "smoothed_bytes_per_sec",
             |s: &ProgressState, w: &mut dyn Write| match (s.pos(), s.elapsed().as_millis()) {
                 (pos, elapsed_ms) if elapsed_ms > 0 => {
-                    write!(w, "{}/s", HumanBytes((pos as f64 * 1000_f64 / elapsed_ms as f64) as u64)).unwrap()
+                    write!(w, "{}/s", HumanBytes((pos as f64 * 1000_f64 / elapsed_ms as f64) as u64)).unwrap();
                 }
                 _ => write!(w, "-").unwrap(),
             },
@@ -203,7 +203,7 @@ impl ScopedTask {
 
     /// Finishes the execution of the task.
     pub fn finish(self) {
-        drop(self)
+        drop(self);
     }
 }
 
