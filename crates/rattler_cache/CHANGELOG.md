@@ -1,4 +1,23 @@
 # Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.3.30](https://github.com/conda/rattler/compare/rattler_cache-v0.3.29...rattler_cache-v0.3.30) - 2025-08-05
+
+### Added
+
+- Redact token in url when reporting a HashMismatch error ([#1579](https://github.com/conda/rattler/pull/1579))
+- Provide more details when hash mismatch occurs ([#1577](https://github.com/conda/rattler/pull/1577))
+
+### Fixed
+
+- improve hash mismatch warning to include package path ([#1573](https://github.com/conda/rattler/pull/1573))
+# Changelog
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

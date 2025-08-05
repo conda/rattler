@@ -1,4 +1,18 @@
 # Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.24.8](https://github.com/conda/rattler/compare/rattler_shell-v0.24.7...rattler_shell-v0.24.8) - 2025-08-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+# Changelog
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
