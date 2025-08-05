@@ -1,4 +1,18 @@
 # Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.23.0](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.22.48...rattler_package_streaming-v0.23.0) - 2025-08-05
+
+### Added
+
+- Provide more details when hash mismatch occurs ([#1577](https://github.com/conda/rattler/pull/1577))
+# Changelog
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
