@@ -4,7 +4,7 @@ use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_conda_types::{NamedChannelOrUrl, Platform};
 use rattler_networking::mirror_middleware;
 use rattler_networking::{
-    authentication_storage::AuthenticationStorageError, AuthenticationStorage,
+  AuthenticationStorage,
 };
 use rattler_solve::ChannelPriority;
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
@@ -171,15 +171,15 @@ pub struct UploadOpts {
     pub common: CommonOpts,
 
     #[clap(skip)]
-    pub auth_store: Option<Result<AuthenticationStorage, AuthenticationStorageError>>,
+    pub auth_store: Option<AuthenticationStorage>,
 }
 
 impl UploadOpts {
     pub fn with_auth_store(
         mut self,
-        auth_store: Result<AuthenticationStorage, AuthenticationStorageError>,
+        auth_store: Option<AuthenticationStorage>,
     ) -> Self {
-        self.auth_store = Some(auth_store);
+        self.auth_store = auth_store;
         self
     }
 }
