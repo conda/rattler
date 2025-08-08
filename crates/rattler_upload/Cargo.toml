@@ -20,7 +20,8 @@ rattler_networking = { workspace = true, features = ["rattler_config" ]}
 rattler_redaction = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
 rattler_config = { workspace = true, default-features = false }
-rattler_solve = { workspace = true }
+rattler_solve = { workspace = true, default-features = false }
+rattler_progress = { workspace = true, default-features = false }
 miette = { version = "7.6.0", features = ["fancy"] }
 clap = { version = "4.5.37", features = ["derive", "env", "cargo"] }
 fs-err = { workspace = true, features = ["tokio"] }
@@ -49,6 +50,7 @@ tokio = { version = "1.44.2", features = [
   "rt-multi-thread",
   "process",
 ] }
+regex = "1.10"
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 sha2 = { version = "0.10.8", features = ["asm"] }

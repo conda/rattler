@@ -3,6 +3,7 @@ use clap::{arg, Parser};
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_conda_types::{NamedChannelOrUrl, Platform};
 use rattler_networking::mirror_middleware;
+use rattler_networking::AuthenticationStorage;
 use rattler_solve::ChannelPriority;
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tracing::warn;
@@ -155,17 +156,30 @@ impl CommonData {
 /// Upload options.
 #[derive(Parser, Debug)]
 pub struct UploadOpts {
+    /// The host + channel (optional if the server type is provided)
+    pub host: Option<Url>,
+
     /// The package file to upload
     #[arg(global = true, required = false)]
     pub package_files: Vec<PathBuf>,
 
-    /// The server type
+    //// The server type (optional if host is provided)
     #[clap(subcommand)]
-    pub server_type: ServerType,
+    pub server_type: Option<ServerType>,
 
     /// Common options.
     #[clap(flatten)]
     pub common: CommonOpts,
+
+    #[clap(skip)]
+    pub auth_store: Option<AuthenticationStorage>,
+}
+
+impl UploadOpts {
+    pub fn with_auth_store(mut self, auth_store: Option<AuthenticationStorage>) -> Self {
+        self.auth_store = auth_store;
+        self
+    }
 }
 
 /// Server type.
