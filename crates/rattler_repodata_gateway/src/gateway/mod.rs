@@ -831,7 +831,7 @@ mod test {
         let records = gateway
             .query(
                 vec![Channel::from_url(
-                    Url::parse("https://repo.prefix.dev/conda-forge/").unwrap(),
+                    Url::parse("https://conda.anaconda.org/conda-forge/").unwrap(),
                 )],
                 vec![Platform::Linux64, Platform::NoArch],
                 vec![MatchSpec::from_str("openssl=3.*=*_1", Lenient).unwrap()].into_iter(),
