@@ -192,7 +192,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             };
 
             for requirement in &known.requirements {
-                let version_set_id = match requirement {
+                let version_set_id = match &requirement.requirement {
                     // Ignore union requirements, these do not occur in the conda ecosystem
                     // currently
                     Requirement::Union(_) => {
