@@ -385,19 +385,17 @@ impl Installer {
             .collect::<Vec<_>>();
 
         // Create a mapping from package names to requested specs
-        let spec_mapping = Arc::new(
-            self.requested_specs
-                .as_ref()
-                .map(|specs| create_spec_mapping(specs))
-                .unwrap_or_default(),
-        );
+        let spec_mapping = self
+            .requested_specs
+            .as_ref()
+            .map(|specs| create_spec_mapping(specs))
+            .map(Arc::new);
 
         // Update existing records that weren't modified but have matching requested specs
         // This needs to happen even if the transaction is empty
-        if self.requested_specs.is_some() {
+        if let Some(spec_mapping) = &spec_mapping {
             // We have requested_specs (even if empty), so update/clear as needed
-            let clear_missing = true;
-            update_existing_records(&remaining, &spec_mapping, &prefix, clear_missing)?;
+            update_existing_records(&remaining, spec_mapping, &prefix)?;
         }
 
         // If the transaction is empty we can short-circuit the installation
@@ -483,7 +481,7 @@ impl Installer {
             let base_install_options = &base_install_options;
             let driver = &driver;
             let prefix = &prefix;
-            let spec_mapping_ref = Arc::clone(&spec_mapping);
+            let spec_mapping_ref = spec_mapping.clone();
             let operation_future = async move {
                 if let Some(reporter) = &reporter {
                     if operation.record_to_remove().is_none() {
@@ -531,7 +529,8 @@ impl Installer {
                     let reporter = reporter
                         .as_deref()
                         .map(|r| (r, r.on_link_start(operation_idx, &record)));
-                    let requested_spec = spec_mapping_ref.get(&record.package_record.name).cloned();
+                    let requested_spec = spec_mapping_ref
+                        .and_then(|mapping| mapping.get(&record.package_record.name).cloned());
                     link_package(
                         &record,
                         prefix,
@@ -748,9 +747,8 @@ fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<Package
 /// The updated records are then written back to disk.
 fn update_existing_records(
     existing_records: &[PrefixRecord],
-    spec_mapping: &std::collections::HashMap<PackageName, Vec<String>>,
+    spec_mapping: &HashMap<PackageName, Vec<String>>,
     prefix: &Prefix,
-    clear_missing_specs: bool,
 ) -> Result<(), InstallerError> {
     for record in existing_records {
         let package_name = &record.repodata_record.package_record.name;
@@ -765,10 +763,10 @@ fn update_existing_records(
                 new_record.requested_spec = Some(requested_specs.clone());
                 updated_record = Some(new_record);
             }
-        } else if clear_missing_specs && record.requested_spec.is_some() {
+        } else if record.requested_spec.is_some() {
             // Clear the requested_spec if it's not in the mapping and we're asked to clear
             let mut new_record = record.clone();
-            new_record.requested_spec = None;
+            new_record.requested_spec = Some(Vec::new());
             updated_record = Some(new_record);
         }
 
