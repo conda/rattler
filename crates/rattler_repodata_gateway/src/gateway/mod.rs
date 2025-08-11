@@ -19,9 +19,6 @@ use std::{
     sync::{Arc, Weak},
 };
 
-#[cfg(not(target_arch = "wasm32"))]
-use std::collections::HashMap;
-
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
@@ -36,15 +33,11 @@ use rattler_conda_types::{Channel, MatchSpec, Platform};
 pub use repo_data::RepoData;
 use reqwest_middleware::ClientWithMiddleware;
 #[cfg(not(target_arch = "wasm32"))]
-use run_exports_extractor::RunExportExtractor;
+use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 #[cfg(not(target_arch = "wasm32"))]
-pub use run_exports_extractor::{
-    GlobalRunExportsCache, RunExportExtractorError, RunExportsReporter,
-};
+pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 use subdir::Subdir;
 use tokio::sync::broadcast;
-#[cfg(not(target_arch = "wasm32"))]
-use tokio::sync::{Mutex, Semaphore};
 use tracing::{instrument, Level};
 use url::Url;
 
@@ -159,8 +152,7 @@ impl Gateway {
         // We can avoid Arc by cloning, but this requires helper method in the trait definition.
         progress_reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<(), RunExportExtractorError> {
-        let max_concurrent_requests = Arc::new(Semaphore::new(50));
-        let global_run_exports_cache: GlobalRunExportsCache = Arc::new(Mutex::new(HashMap::new()));
+        let global_run_exports_cache = Arc::new(SubdirRunExportsCache::new());
 
         let futures = records
             .filter_map(|record| {
@@ -169,16 +161,20 @@ impl Gateway {
                     return None;
                 }
 
-                let reporter = progress_reporter.clone().map(|r| r.add(record));
+                eprintln!("Fetching run exports for {}", record.file_name);
+
                 let extractor = RunExportExtractor::default()
-                    .with_max_concurrent_requests(max_concurrent_requests.clone())
+                    .with_opt_max_concurrent_requests(
+                        self.inner.concurrent_requests_semaphore.clone(),
+                    )
                     .with_client(self.inner.client.clone())
                     .with_package_cache(self.inner.package_cache.clone())
                     .with_global_run_exports_cache(global_run_exports_cache.clone());
 
+                let progress_reporter = progress_reporter.clone();
                 Some(async move {
                     extractor
-                        .extract(record, reporter)
+                        .extract(record, progress_reporter)
                         .await
                         .map(|rexp| (record, rexp))
                 })
@@ -369,8 +365,8 @@ mod test {
     use rstest::rstest;
     use url::Url;
 
-    use crate::fetch::CacheAction;
     use crate::{
+        fetch::CacheAction,
         gateway::Gateway,
         utils::{simple_channel_server::SimpleChannelServer, test::fetch_repo_data},
         GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
@@ -781,9 +777,12 @@ mod test {
     }
 
     fn run_exports_in_place(records: &[RepoDataRecord]) -> bool {
-        records
-            .iter()
-            .all(|rr| rr.package_record.run_exports.is_some())
+        records.iter().all(|rr| {
+            let Some(run_exports) = &rr.package_record.run_exports else {
+                return false;
+            };
+            !run_exports.is_empty()
+        })
     }
 
     #[tokio::test]
@@ -823,7 +822,6 @@ mod test {
         assert!(run_exports_in_place(&repodata_records));
     }
 
-    #[ignore]
     #[tokio::test]
     async fn test_ensure_run_exports_remote_conda_forge() {
         let gateway = Gateway::new();

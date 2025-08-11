@@ -1,27 +1,59 @@
-use std::{collections::HashMap, io::BufReader, sync::Arc};
+use std::{io::BufReader, sync::Arc};
 
 use bytes::Buf;
+use dashmap::{DashMap, Entry};
 use futures::future::OptionFuture;
 use rattler_cache::package_cache::{CacheKey, CacheReporter, PackageCache, PackageCacheError};
 use rattler_conda_types::{
     package::{PackageFile, RunExportsJson},
-    GlobalRunExportsJson, RepoDataRecord,
+    RepoDataRecord, SubdirRunExportsJson,
 };
 use rattler_networking::retry_policies::default_retry_policy;
 use reqwest_middleware::ClientWithMiddleware;
 use thiserror::Error;
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::{broadcast, Semaphore};
 use url::Url;
 
-/// Type used for in-memory caching of `GlobalRunExportsJson`.
-pub type GlobalRunExportsCache = Arc<Mutex<HashMap<Url, Option<GlobalRunExportsJson>>>>;
+use super::PendingOrFetched;
 
-/// Reporter for multiple `RunExportsJson` retrievals.
+/// Type used for in-memory caching of `SubdirRunExportsJson`.
+pub(crate) type SubdirRunExportsCache =
+    DashMap<Url, PendingOrFetched<Option<Arc<SubdirRunExportsJson>>>>;
+
 pub trait RunExportsReporter: Send + Sync {
-    /// Adds a new package to the reporter. Returns a
-    /// `PackageCacheReporterEntry` which can be passed to any of the
-    /// cache function of a package cache to track progress.
-    fn add(&self, record: &RepoDataRecord) -> Arc<dyn CacheReporter>;
+    /// Called when a download of a file started.
+    ///
+    /// Returns an index that can be used to identify the download in subsequent
+    /// calls.
+    fn on_download_start(&self, _url: &Url) -> usize {
+        0
+    }
+
+    /// Called when the download of a file makes any progress.
+    ///
+    /// The `total_bytes` parameter is `None` if the total size of the file is
+    /// unknown.
+    ///
+    /// The `index` parameter is the index returned by `on_download_start`.
+    fn on_download_progress(
+        &self,
+        _url: &Url,
+        _index: usize,
+        _bytes_downloaded: usize,
+        _total_bytes: Option<usize>,
+    ) {
+    }
+
+    /// Called when the download of a file finished.
+    ///
+    /// The `index` parameter is the index returned by `on_download_start`.
+    fn on_download_complete(&self, _url: &Url, _index: usize) {}
+
+    /// Called to create a new reporter than can be used to report progress of a
+    /// package download.
+    fn create_package_download_reporter(&self) -> Option<Box<dyn CacheReporter>> {
+        None
+    }
 }
 
 /// An object that can help extract run export information from a package.
@@ -33,7 +65,7 @@ pub struct RunExportExtractor {
     max_concurrent_requests: Option<Arc<Semaphore>>,
     package_cache: Option<PackageCache>,
     client: Option<ClientWithMiddleware>,
-    global_run_exports_cache: Option<GlobalRunExportsCache>,
+    subdir_run_exports_cache: Arc<SubdirRunExportsCache>,
 }
 
 #[allow(missing_docs)]
@@ -49,9 +81,12 @@ pub enum RunExportExtractorError {
 impl RunExportExtractor {
     /// Sets the maximum number of concurrent requests that the extractor can
     /// make.
-    pub fn with_max_concurrent_requests(self, max_concurrent_requests: Arc<Semaphore>) -> Self {
+    pub fn with_opt_max_concurrent_requests(
+        self,
+        max_concurrent_requests: Option<Arc<Semaphore>>,
+    ) -> Self {
         Self {
-            max_concurrent_requests: Some(max_concurrent_requests),
+            max_concurrent_requests,
             ..self
         }
     }
@@ -76,142 +111,179 @@ impl RunExportExtractor {
     /// Sets the download client that the extractor can use.
     pub fn with_global_run_exports_cache(
         self,
-        global_run_exports_cache: GlobalRunExportsCache,
+        global_run_exports_cache: Arc<SubdirRunExportsCache>,
     ) -> Self {
         Self {
-            global_run_exports_cache: Some(global_run_exports_cache),
+            subdir_run_exports_cache: global_run_exports_cache,
             ..self
         }
     }
 
-    /// Extracts the run exports from a package. Returns `None` if no run
-    /// exports are found.
-    pub async fn extract(
-        self,
-        record: &RepoDataRecord,
-        progress_reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
-        self.extract_into_package_cache(record, progress_reporter)
-            .await
-    }
+    async fn fetch_subdir_run_exports(
+        &mut self,
+        subdir_url: &Url,
+        reporter: Option<Arc<dyn RunExportsReporter>>,
+    ) -> Option<Arc<SubdirRunExportsJson>> {
+        let sender = match self.subdir_run_exports_cache.entry(subdir_url.clone()) {
+            Entry::Vacant(entry) => {
+                // Construct a sender so other tasks can subscribe
+                let (sender, _) = broadcast::channel(1);
+                let sender = Arc::new(sender);
 
-    pub(crate) async fn probe_global_run_exports(
-        &self,
-        platform_url: &Url,
-    ) -> Option<GlobalRunExportsJson> {
+                // Modify the current entry to the pending entry, this is an atomic operation
+                // because who holds the entry holds mutable access.
+                entry.insert(PendingOrFetched::Pending(Arc::downgrade(&sender)));
+
+                sender
+            }
+            Entry::Occupied(mut entry) => {
+                let records = entry.get();
+                match records {
+                    PendingOrFetched::Pending(sender) => {
+                        let sender = sender.upgrade();
+
+                        if let Some(sender) = sender {
+                            // Create a receiver before we drop the entry. While we hold on to
+                            // the entry we have exclusive access to it, this means the task
+                            // currently fetching the package will not be able to store a value
+                            // until we drop the entry.
+                            // By creating the receiver here we ensure that we are subscribed
+                            // before the other tasks sends a value over the channel.
+                            let mut receiver = sender.subscribe();
+
+                            // Explicitly drop the entry, so we don't block any other tasks.
+                            drop(entry);
+
+                            // The sender is still active, so we can wait for the records to be
+                            // fetched.
+                            return receiver.recv().await.unwrap_or_else(|_| None);
+                        } else {
+                            // Construct a sender so other tasks can subscribe
+                            let (sender, _) = broadcast::channel(1);
+                            let sender = Arc::new(sender);
+
+                            // Modify the current entry to the pending entry, this is an atomic
+                            // operation because who holds the entry holds mutable access.
+                            entry.insert(PendingOrFetched::Pending(Arc::downgrade(&sender)));
+
+                            sender
+                        }
+                    }
+                    PendingOrFetched::Fetched(records) => return records.clone(),
+                }
+            }
+        };
+
+        // At this point we have exclusive write access to this specific entry. All
+        // other tasks will find a pending entry and will wait for the records
+        // to become available.
+        //
+        // We need to fetch the run exports from the network.
         let middleware = self.client.as_ref()?;
-        let run_exports_json_zst_url = platform_url.join("run_exports.json.zst").ok()?;
+        let run_exports_json_zst_url = subdir_url.join("run_exports.json.zst").ok()?;
         let request = middleware.get(run_exports_json_zst_url);
-        if let Ok(response) = request.send().await {
+        let run_exports = if let Ok(response) = request.send().await {
+            eprintln!("Downloading run exports from {}", response.url());
             let bytes_stream = response.bytes().await.ok()?;
             let buf = BufReader::new(bytes_stream.reader());
             let decoded = zstd::decode_all(buf).ok()?;
-            serde_json::from_slice(&decoded).ok()
-        } else {
-            let run_exports_json_url = platform_url.join("run_exports.json").ok()?;
-            let request = middleware.get(run_exports_json_url);
-            let response = request.send().await.ok()?;
-            response.json::<GlobalRunExportsJson>().await.ok()
-        }
-    }
-
-    async fn insert_global_run_exports(
-        &mut self,
-        channel: &Url,
-        reporter: Option<Arc<dyn CacheReporter>>,
-    ) {
-        if let Some(cache) = &self.global_run_exports_cache {
-            let mut cache_lock = cache.lock().await;
-            if !cache_lock.contains_key(channel) {
-                let download_idx = reporter.as_ref().map(|r| r.on_download_start());
-                let method = self.probe_global_run_exports(channel).await;
-                cache_lock.insert(channel.clone(), method);
-
-                if let Some(idx) = download_idx {
-                    reporter.as_ref().unwrap().on_download_completed(idx);
+            match serde_json::from_slice(&decoded) {
+                Ok(run_exports) => Some(run_exports),
+                Err(e) => {
+                    eprintln!("Failed to parse run exports: {}", e);
+                    None
                 }
             }
+        } else {
+            let run_exports_json_url = subdir_url.join("run_exports.json").ok()?;
+            let request = middleware.get(run_exports_json_url);
+            let response = request.send().await.ok()?;
+            eprintln!("Downloading run exports from {}", response.url());
+            response.json::<SubdirRunExportsJson>().await.ok()
+        };
+
+        // Package it up in an `Arc` so that it can be shared.
+        let run_exports = run_exports.map(Arc::new);
+
+        // Store the value in the cache.
+        self.subdir_run_exports_cache.insert(
+            subdir_url.clone(),
+            PendingOrFetched::Fetched(run_exports.clone()),
+        );
+
+        // Notify any pending listeners.
+        let _ = sender.send(run_exports.clone());
+
+        run_exports
+    }
+
+    /// Extract the run exports from a package by first checking the
+    /// `run_exports.json` file in the channel subdirectory, and if that fails,
+    /// it will download the package to the cache and read the
+    /// `run_exports.json` file from there.
+    pub async fn extract(
+        mut self,
+        record: &RepoDataRecord,
+        progress_reporter: Option<Arc<dyn RunExportsReporter>>,
+    ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
+        let platform_url = record.platform_url();
+
+        // Try to fetch the `run_exports.json` from channel
+        if let Some(subdir_run_exports) = self
+            .fetch_subdir_run_exports(&platform_url, progress_reporter.clone())
+            .await
+        {
+            return Ok(subdir_run_exports.get(record).cloned());
         }
+
+        // Otherwise, fall back to extracting from the package cache.
+        self.extract_into_package_cache(record, progress_reporter)
+            .await
     }
 
     /// Extract the run exports from a package by downloading it to the cache
     /// and then reading the `run_exports.json` file.
     async fn extract_into_package_cache(
-        mut self,
+        self,
         record: &RepoDataRecord,
-        progress_reporter: Option<Arc<dyn CacheReporter>>,
+        progress_reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
-        let platform_url = record.platform_url();
-
-        self.insert_global_run_exports(&platform_url, progress_reporter.clone())
-            .await;
-
-        if let Some(global_run_exports_cache) = self.global_run_exports_cache.clone() {
-            let lock = global_run_exports_cache.lock().await;
-
-            if let Some(Some(global_run_exports)) = lock.get(&platform_url) {
-                return Ok(global_run_exports.get(record).cloned());
-            }
-        }
-
-        let Some(package_cache) = self.package_cache.clone() else {
+        let (Some(package_cache), Some(client)) =
+            (self.package_cache.as_ref(), self.client.as_ref())
+        else {
             return Ok(None);
         };
 
-        let Some(client) = self.client.as_ref() else {
-            return Ok(None);
-        };
         let cache_key = CacheKey::from(&record.package_record);
-        let url = record.url.clone();
-        let max_concurrent_requests = self.max_concurrent_requests.clone();
 
-        let _permit = OptionFuture::from(max_concurrent_requests.map(Semaphore::acquire_owned))
-            .await
-            .transpose()
-            .expect("semaphore error");
+        // Construct a reporter specifically for the run export download
+        let reporter = progress_reporter
+            .as_deref()
+            .and_then(RunExportsReporter::create_package_download_reporter)
+            .map(Arc::from);
+
+        // Wait for a permit from the semaphore to limit concurrent requests.
+        let _permit = OptionFuture::from(
+            self.max_concurrent_requests
+                .clone()
+                .map(Semaphore::acquire_owned),
+        )
+        .await
+        .transpose()
+        .expect("semaphore error");
 
         match package_cache
             .get_or_fetch_from_url_with_retry(
                 cache_key,
-                url,
+                record.url.clone(),
                 client.clone(),
                 default_retry_policy(),
-                progress_reporter,
+                reporter,
             )
             .await
         {
             Ok(package_dir) => Ok(RunExportsJson::from_package_directory(package_dir.path()).ok()),
             Err(e) => Err(e.into()),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
-    use tokio::sync::Semaphore;
-
-    use super::*;
-    use crate::Gateway;
-
-    #[tokio::test]
-    async fn test_probe_prefix() {
-        let url = url::Url::parse("https://repo.prefix.dev/conda-forge/").unwrap();
-        let platform_url = UrlWithTrailingSlash::from(url.join("linux-64/").unwrap());
-
-        let gateway = Gateway::new();
-
-        let cache = Arc::new(Mutex::new(HashMap::new()));
-
-        let max_concurrent_requests = Arc::new(Semaphore::new(1));
-        let extractor = RunExportExtractor::default()
-            .with_max_concurrent_requests(max_concurrent_requests.clone())
-            .with_client(gateway.inner.client.clone())
-            .with_package_cache(gateway.inner.package_cache.clone())
-            .with_global_run_exports_cache(cache);
-
-        assert!((extractor.probe_global_run_exports(&platform_url).await).is_some());
     }
 }

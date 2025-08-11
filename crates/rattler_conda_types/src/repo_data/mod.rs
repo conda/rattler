@@ -6,7 +6,7 @@ pub mod sharded;
 mod topological_sort;
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
     path::Path,
 };
@@ -421,20 +421,33 @@ struct PackageRunExports {
     run_exports: RunExportsJson,
 }
 
-/// Represents [`Channel`] global map from package file names to [`RunExportsJson`].
+/// Represents [`Channel`] global map from package file names to
+/// [`RunExportsJson`].
 ///
 /// See [CEP 12](https://github.com/conda/ceps/blob/main/cep-0012.md) for more info.
 #[derive(Debug, Default, Deserialize, Serialize, Eq, PartialEq, Clone)]
-pub struct GlobalRunExportsJson {
+pub struct SubdirRunExportsJson {
     info: Option<ChannelInfo>,
-    packages: HashMap<String, PackageRunExports>,
+
+    #[serde(default, serialize_with = "sort_map_alphabetically")]
+    packages: FxHashMap<String, PackageRunExports>,
+
+    #[serde(
+        default,
+        rename = "packages.conda",
+        serialize_with = "sort_map_alphabetically"
+    )]
+    conda_packages: FxHashMap<String, PackageRunExports>,
 }
 
-impl GlobalRunExportsJson {
+impl SubdirRunExportsJson {
     /// Get package [`RunExportsJson`] based on the package file name.
     pub fn get(&self, record: &RepoDataRecord) -> Option<&RunExportsJson> {
         let file_name = &record.file_name;
-        self.packages.get(file_name).map(|pre| &pre.run_exports)
+        self.packages
+            .get(file_name)
+            .or_else(|| self.conda_packages.get(file_name))
+            .map(|pre| &pre.run_exports)
     }
 
     /// Returns optional [`ChannelInfo`].

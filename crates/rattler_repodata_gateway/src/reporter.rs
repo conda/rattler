@@ -1,21 +1,25 @@
-use crate::utils::BodyStreamExt;
+use std::future::Future;
+
 use bytes::Bytes;
 use futures::{Stream, TryStreamExt};
-use std::future::Future;
 use url::Url;
+
+use crate::utils::BodyStreamExt;
 
 /// A trait that enables being notified of download progress.
 pub trait Reporter: Send + Sync {
     /// Called when a download of a file started.
     ///
-    /// Returns an index that can be used to identify the download in subsequent calls.
+    /// Returns an index that can be used to identify the download in subsequent
+    /// calls.
     fn on_download_start(&self, _url: &Url) -> usize {
         0
     }
 
     /// Called when the download of a file makes any progress.
     ///
-    /// The `total_bytes` parameter is `None` if the total size of the file is unknown.
+    /// The `total_bytes` parameter is `None` if the total size of the file is
+    /// unknown.
     ///
     /// The `index` parameter is the index returned by `on_download_start`.
     fn on_download_progress(
@@ -64,19 +68,22 @@ pub trait Reporter: Send + Sync {
 
 #[allow(dead_code)]
 pub(crate) trait ResponseReporterExt {
-    /// Converts a response into a stream of bytes, notifying a reporter of the progress.
+    /// Converts a response into a stream of bytes, notifying a reporter of the
+    /// progress.
     fn byte_stream_with_progress(
         self,
         reporter: Option<(&dyn Reporter, usize)>,
     ) -> impl Stream<Item = reqwest::Result<Bytes>>;
 
-    /// Reads all the bytes from a stream and notifies a reporter of the progress.
+    /// Reads all the bytes from a stream and notifies a reporter of the
+    /// progress.
     fn bytes_with_progress(
         self,
         reporter: Option<(&dyn Reporter, usize)>,
     ) -> impl Future<Output = reqwest::Result<Vec<u8>>>;
 
-    /// Reads all the bytes from a stream and convert it to text and notifies a reporter of the progress.
+    /// Reads all the bytes from a stream and convert it to text and notifies a
+    /// reporter of the progress.
     fn text_with_progress(
         self,
         reporter: Option<(&dyn Reporter, usize)>,
