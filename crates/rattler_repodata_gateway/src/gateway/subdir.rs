@@ -3,7 +3,7 @@ use std::sync::Arc;
 use rattler_conda_types::{PackageName, RepoDataRecord};
 
 use super::GatewayError;
-use crate::{Reporter};
+use crate::Reporter;
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 
 pub enum Subdir {

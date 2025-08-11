@@ -21,7 +21,14 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
+//!     // Create with default hasher (RandomState)
 //!     let cache: CoalescedMap<String, Arc<String>> = CoalescedMap::new();
+//!
+//!     // Or create with custom hasher
+//!     use std::collections::hash_map::RandomState;
+//!     let hasher = RandomState::new();
+//!     let cache_with_hasher: CoalescedMap<String, Arc<String>, RandomState> =
+//!         CoalescedMap::with_hasher(hasher);
 //!
 //!     // Simulate multiple concurrent requests for the same expensive resource
 //!     let key = "expensive_computation".to_string();
@@ -62,7 +69,7 @@
 
 use std::{
     fmt,
-    hash::Hash,
+    hash::{BuildHasher, Hash, RandomState},
     sync::{Arc, Weak},
 };
 
@@ -111,15 +118,16 @@ impl<E: fmt::Debug + fmt::Display> std::error::Error for CoalescedGetError<E> {}
 /// - **Fetched**: The value has been computed and cached for immediate
 ///   retrieval
 #[derive(Clone)]
-pub struct CoalescedMap<K, V>
+pub struct CoalescedMap<K, V, S = RandomState>
 where
     K: Eq + Hash,
     V: Clone,
+    S: BuildHasher + Clone,
 {
-    map: DashMap<K, PendingOrFetched<V>>,
+    map: DashMap<K, PendingOrFetched<V>, S>,
 }
 
-impl<K, V> Default for CoalescedMap<K, V>
+impl<K, V> Default for CoalescedMap<K, V, RandomState>
 where
     K: Eq + Hash,
     V: Clone,
@@ -129,15 +137,43 @@ where
     }
 }
 
-impl<K, V> CoalescedMap<K, V>
+impl<K, V> CoalescedMap<K, V, RandomState>
 where
     K: Eq + Hash,
     V: Clone,
 {
-    /// Creates an empty `CoalescedMap`.
+    /// Creates an empty `CoalescedMap` with the default hasher.
     pub fn new() -> Self {
         Self {
             map: DashMap::new(),
+        }
+    }
+
+    /// Creates a new `CoalescedMap` with a specified capacity.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            map: DashMap::with_capacity(capacity),
+        }
+    }
+}
+
+impl<K, V, S> CoalescedMap<K, V, S>
+where
+    K: Eq + Hash,
+    V: Clone,
+    S: BuildHasher + Clone,
+{
+    /// Creates an empty `CoalescedMap` with the given hasher.
+    pub fn with_hasher(hasher: S) -> Self {
+        Self {
+            map: DashMap::with_hasher(hasher),
+        }
+    }
+
+    /// Creates a new `CoalescedMap` with a specified capacity and hasher.
+    pub fn with_capacity_and_hasher(capacity: usize, hasher: S) -> Self {
+        Self {
+            map: DashMap::with_capacity_and_hasher(capacity, hasher),
         }
     }
 
@@ -152,10 +188,11 @@ where
     }
 }
 
-impl<K, V> CoalescedMap<K, V>
+impl<K, V, S> CoalescedMap<K, V, S>
 where
     K: Eq + Hash + Clone,
     V: Clone + Send + Sync + 'static,
+    S: BuildHasher + Clone,
 {
     /// Returns the value for `key`, initializing it at most once using the
     /// provided async `init` function. Concurrent calls for the same key are
@@ -570,5 +607,37 @@ mod tests {
 
         assert_eq!(map.len(), 1);
         assert!(!map.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_custom_hasher() {
+        use std::collections::hash_map::RandomState;
+
+        // Test with custom RandomState hasher
+        let hasher = RandomState::new();
+        let map: CoalescedMap<String, String, RandomState> = CoalescedMap::with_hasher(hasher);
+
+        let result = map
+            .get_or_try_init("key1".to_string(), || async {
+                Ok::<_, &str>("value1".to_string())
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(result, "value1");
+
+        // Test with capacity and hasher
+        let hasher2 = RandomState::new();
+        let map2: CoalescedMap<String, String, RandomState> =
+            CoalescedMap::with_capacity_and_hasher(10, hasher2);
+
+        let result2 = map2
+            .get_or_try_init("key2".to_string(), || async {
+                Ok::<_, &str>("value2".to_string())
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(result2, "value2");
     }
 }

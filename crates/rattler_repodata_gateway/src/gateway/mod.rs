@@ -16,10 +16,10 @@ mod subdir_builder;
 
 use std::{collections::HashSet, sync::Arc};
 
-use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
+use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
 pub use query::{NamesQuery, RepoDataQuery};
 #[cfg(not(target_arch = "wasm32"))]

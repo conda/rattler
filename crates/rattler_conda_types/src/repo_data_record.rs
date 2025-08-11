@@ -77,5 +77,5 @@ pub struct SolverResult {
     pub records: Vec<RepoDataRecord>,
     /// The features of the records that are part of the solution to the solver
     /// task.
-    pub features: HashMap<PackageName, Vec<String>>,
+    pub extras: HashMap<PackageName, Vec<String>>,
 }
