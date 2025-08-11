@@ -593,7 +593,7 @@ async fn link_package(
     cached_package_dir: &Path,
     install_options: InstallOptions,
     driver: &InstallDriver,
-    requested_spec: Option<String>,
+    requested_spec: Option<Vec<String>>,
 ) -> Result<(), InstallerError> {
     let record = record.clone();
     let target_prefix = target_prefix.clone();
@@ -720,22 +720,18 @@ async fn populate_cache(
 /// 
 /// This function takes a list of MatchSpecs and creates a mapping where:
 /// - The key is the PackageName from the MatchSpec
-/// - The value is the string representation of the MatchSpec
+/// - The value is a vector of string representations of all matching MatchSpecs
 /// 
-/// MatchSpecs without names are skipped with a TODO for future enhancement.
-/// For multiple MatchSpecs with the same package name, only the first one is used
-/// with a TODO to extend the logic to combine them.
-fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<PackageName, String> {
+/// MatchSpecs without names are skipped.
+/// For multiple MatchSpecs with the same package name, all are collected.
+fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<PackageName, Vec<String>> {
     let mut mapping = std::collections::HashMap::new();
     
     for spec in specs {
         if let Some(name) = &spec.name {
-            // TODO: Handle nameless MatchSpec objects
-            if mapping.contains_key(name) {
-                // TODO: Extend logic to combine multiple MatchSpecs for the same package instead of using first match
-                continue;
-            }
-            mapping.insert(name.clone(), spec.to_string());
+            mapping.entry(name.clone())
+                .or_insert_with(Vec::new)
+                .push(spec.to_string());
         }
     }
     
@@ -749,7 +745,7 @@ fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<Package
 /// The updated records are then written back to disk.
 fn update_existing_records(
     existing_records: &[PrefixRecord],
-    spec_mapping: &std::collections::HashMap<PackageName, String>,
+    spec_mapping: &std::collections::HashMap<PackageName, Vec<String>>,
     prefix: &Prefix,
     clear_missing_specs: bool,
 ) -> Result<(), InstallerError> {
@@ -757,13 +753,13 @@ fn update_existing_records(
         let package_name = &record.repodata_record.package_record.name;
         let mut updated_record = None;
         
-        // Check if we have a requested spec for this package
-        if let Some(requested_spec) = spec_mapping.get(package_name) {
-            // Check if the requested spec is different from what's currently stored
-            if record.requested_spec.as_ref() != Some(requested_spec) {
-                // Create an updated record with the new requested spec
+        // Check if we have requested specs for this package
+        if let Some(requested_specs) = spec_mapping.get(package_name) {
+            // Check if the requested specs are different from what's currently stored
+            if record.requested_spec.as_ref() != Some(requested_specs) {
+                // Create an updated record with the new requested specs
                 let mut new_record = record.clone();
-                new_record.requested_spec = Some(requested_spec.clone());
+                new_record.requested_spec = Some(requested_specs.clone());
                 updated_record = Some(new_record);
             }
         } else if clear_missing_specs && record.requested_spec.is_some() {
@@ -881,8 +877,8 @@ mod tests {
         assert!(mapping.contains_key(&numpy_name));
         
         // Should convert match specs to string format
-        assert_eq!(mapping[&python_name], "python ~=3.11.0");
-        assert_eq!(mapping[&numpy_name], "numpy >=1.20");
+        assert_eq!(mapping[&python_name], vec!["python ~=3.11.0"]);
+        assert_eq!(mapping[&numpy_name], vec!["numpy >=1.20"]);
     }
 
     #[test]
@@ -912,25 +908,48 @@ mod tests {
         use std::collections::HashMap;
         
         // Mock spec mapping
-        let mut spec_mapping: HashMap<PackageName, String> = HashMap::new();
+        let mut spec_mapping: HashMap<PackageName, Vec<String>> = HashMap::new();
         spec_mapping.insert(
             "python".parse().unwrap(),
-            "python ~=3.11.0".to_string()
+            vec!["python ~=3.11.0".to_string()]
         );
         
         // Test that the mapping is created correctly
         assert_eq!(spec_mapping.len(), 1);
-        assert_eq!(spec_mapping[&"python".parse::<PackageName>().unwrap()], "python ~=3.11.0");
+        assert_eq!(spec_mapping[&"python".parse::<PackageName>().unwrap()], vec!["python ~=3.11.0"]);
         
         // Test that we can check if a package needs updating
         let package_name: PackageName = "python".parse().unwrap();
         let requested_spec_from_mapping = spec_mapping.get(&package_name);
         assert!(requested_spec_from_mapping.is_some());
-        assert_eq!(requested_spec_from_mapping.unwrap(), "python ~=3.11.0");
+        assert_eq!(requested_spec_from_mapping.unwrap(), &vec!["python ~=3.11.0"]);
         
         // Test missing package
         let missing_package: PackageName = "missing".parse().unwrap();
         assert!(spec_mapping.get(&missing_package).is_none());
+    }
+
+    #[test]
+    fn test_spec_mapping_with_multiple_specs_same_package() {
+        // Test handling of multiple specs for the same package
+        let specs = vec![
+            MatchSpec::from_str("python >=3.8", Strict).unwrap(),
+            MatchSpec::from_str("python <3.12", Strict).unwrap(),
+            MatchSpec::from_str("numpy >=1.20", Strict).unwrap(),
+        ];
+        
+        let mapping = create_spec_mapping(&specs);
+        
+        // Should map package names to their match specs
+        assert_eq!(mapping.len(), 2);
+        let python_name: PackageName = "python".parse().unwrap();
+        let numpy_name: PackageName = "numpy".parse().unwrap();
+        assert!(mapping.contains_key(&python_name));
+        assert!(mapping.contains_key(&numpy_name));
+        
+        // Should collect all specs for python, but single spec for numpy
+        assert_eq!(mapping[&python_name], vec!["python >=3.8", "python <3.12"]);
+        assert_eq!(mapping[&numpy_name], vec!["numpy >=1.20"]);
     }
 
     #[tokio::test]
@@ -955,7 +974,7 @@ mod tests {
             
         // Verify that requested_spec is properly set
         assert!(updated_record.requested_spec.is_some(), "requested_spec should be populated");
-        assert_eq!(updated_record.requested_spec.unwrap(), "empty >=0.1.0", 
+        assert_eq!(updated_record.requested_spec.as_ref().unwrap().first().unwrap(), "empty >=0.1.0", 
             "requested_spec should match the original spec");
     }
 
@@ -1006,7 +1025,7 @@ mod tests {
             
         // The package should now have the requested_spec populated
         assert!(updated_record.requested_spec.is_some(), "Updated installation should have requested_spec");
-        assert_eq!(updated_record.requested_spec.unwrap(), "empty >=0.1.0", 
+        assert_eq!(updated_record.requested_spec.as_ref().unwrap().first().unwrap(), "empty >=0.1.0", 
             "requested_spec should match the newly provided spec");
     }
 
@@ -1026,7 +1045,7 @@ mod tests {
         let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
         let initial_record = read_prefix_record(&meta_file_path);
         assert!(initial_record.requested_spec.is_some(), "Initial installation should have requested_spec");
-        assert_eq!(initial_record.requested_spec.as_ref().unwrap(), "empty >=0.1.0");
+        assert_eq!(initial_record.requested_spec.as_ref().unwrap().first().unwrap(), "empty >=0.1.0");
         
         // Step 2: "Install" the same package again, but this time with EMPTY requested specs
         // This simulates a user running install with empty specs to clear existing ones
