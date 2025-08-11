@@ -20,7 +20,7 @@ use itertools::Itertools;
 use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
-    PackageName, Platform, PrefixRecord, RepoDataRecord,
+    MatchSpec, PackageName, Platform, PrefixRecord, RepoDataRecord,
 };
 use rattler_networking::retry_policies::default_retry_policy;
 pub use reporter::Reporter;
@@ -60,6 +60,7 @@ pub struct Installer {
     apple_code_sign_behavior: AppleCodeSignBehavior,
     alternative_target_prefix: Option<PathBuf>,
     reinstall_packages: Option<HashSet<PackageName>>,
+    requested_specs: Option<Vec<MatchSpec>>,
     // TODO: Determine upfront if these are possible.
     link_options: LinkOptions,
 }
@@ -307,6 +308,23 @@ impl Installer {
         self
     }
 
+    /// Sets the requested specs for the installer. These will be used to
+    /// populate the requested_spec field in generated PrefixRecord instances.
+    #[must_use]
+    pub fn with_requested_specs(self, specs: Vec<MatchSpec>) -> Self {
+        Self {
+            requested_specs: Some(specs),
+            ..self
+        }
+    }
+
+    /// Sets the requested specs for the installer. These will be used to
+    /// populate the requested_spec field in generated PrefixRecord instances.
+    pub fn set_requested_specs(&mut self, specs: Vec<MatchSpec>) -> &mut Self {
+        self.requested_specs = Some(specs);
+        self
+    }
+
     /// Install the packages in the given prefix.
     pub async fn install(
         self,
@@ -365,6 +383,20 @@ impl Installer {
             .into_iter()
             .filter(|pr| !transaction.removed_packages().contains(pr))
             .collect::<Vec<_>>();
+
+        // Create a mapping from package names to requested specs
+        let spec_mapping = Arc::new(self.requested_specs
+            .as_ref()
+            .map(|specs| create_spec_mapping(specs))
+            .unwrap_or_default());
+
+        // Update existing records that weren't modified but have matching requested specs
+        // This needs to happen even if the transaction is empty
+        if self.requested_specs.is_some() {
+            // We have requested_specs (even if empty), so update/clear as needed
+            let clear_missing = true;
+            update_existing_records(&remaining, &spec_mapping, &prefix, clear_missing)?;
+        }
 
         // If the transaction is empty we can short-circuit the installation
         if transaction.operations.is_empty() {
@@ -449,6 +481,7 @@ impl Installer {
             let base_install_options = &base_install_options;
             let driver = &driver;
             let prefix = &prefix;
+            let spec_mapping_ref = Arc::clone(&spec_mapping);
             let operation_future = async move {
                 if let Some(reporter) = &reporter {
                     if operation.record_to_remove().is_none() {
@@ -496,12 +529,14 @@ impl Installer {
                     let reporter = reporter
                         .as_deref()
                         .map(|r| (r, r.on_link_start(operation_idx, &record)));
+                    let requested_spec = spec_mapping_ref.get(&record.package_record.name).cloned();
                     link_package(
                         &record,
                         prefix,
                         cache_lock.path(),
                         base_install_options.clone(),
                         driver,
+                        requested_spec,
                     )
                     .await?;
                     if let Some((reporter, index)) = reporter {
@@ -558,6 +593,7 @@ async fn link_package(
     cached_package_dir: &Path,
     install_options: InstallOptions,
     driver: &InstallDriver,
+    requested_spec: Option<String>,
 ) -> Result<(), InstallerError> {
     let record = record.clone();
     let target_prefix = target_prefix.clone();
@@ -587,8 +623,7 @@ async fn link_package(
                     .map(|entry| entry.relative_path.clone())
                     .collect(),
                 paths_data: paths.into(),
-                // TODO: Retrieve the requested spec for this package from the request
-                requested_spec: None,
+                requested_spec,
 
                 link: Some(Link {
                     source: cached_package_dir,
@@ -679,4 +714,330 @@ async fn populate_cache(
         )
         .await
         .map_err(|e| InstallerError::FailedToFetch(record.file_name.clone(), e))
+}
+
+/// Creates a mapping from package names to their requested spec strings.
+/// 
+/// This function takes a list of MatchSpecs and creates a mapping where:
+/// - The key is the PackageName from the MatchSpec
+/// - The value is the string representation of the MatchSpec
+/// 
+/// MatchSpecs without names are skipped with a TODO for future enhancement.
+/// For multiple MatchSpecs with the same package name, only the first one is used
+/// with a TODO to extend the logic to combine them.
+fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<PackageName, String> {
+    let mut mapping = std::collections::HashMap::new();
+    
+    for spec in specs {
+        if let Some(name) = &spec.name {
+            // TODO: Handle nameless MatchSpec objects
+            if mapping.contains_key(name) {
+                // TODO: Extend logic to combine multiple MatchSpecs for the same package instead of using first match
+                continue;
+            }
+            mapping.insert(name.clone(), spec.to_string());
+        }
+    }
+    
+    mapping
+}
+
+/// Updates existing PrefixRecord files with their requested specs.
+/// 
+/// This function takes existing records that weren't modified by the transaction
+/// and updates their `requested_spec` field based on the spec mapping or clears it if requested.
+/// The updated records are then written back to disk.
+fn update_existing_records(
+    existing_records: &[PrefixRecord],
+    spec_mapping: &std::collections::HashMap<PackageName, String>,
+    prefix: &Prefix,
+    clear_missing_specs: bool,
+) -> Result<(), InstallerError> {
+    for record in existing_records {
+        let package_name = &record.repodata_record.package_record.name;
+        let mut updated_record = None;
+        
+        // Check if we have a requested spec for this package
+        if let Some(requested_spec) = spec_mapping.get(package_name) {
+            // Check if the requested spec is different from what's currently stored
+            if record.requested_spec.as_ref() != Some(requested_spec) {
+                // Create an updated record with the new requested spec
+                let mut new_record = record.clone();
+                new_record.requested_spec = Some(requested_spec.clone());
+                updated_record = Some(new_record);
+            }
+        } else if clear_missing_specs && record.requested_spec.is_some() {
+            // Clear the requested_spec if it's not in the mapping and we're asked to clear
+            let mut new_record = record.clone();
+            new_record.requested_spec = None;
+            updated_record = Some(new_record);
+        }
+        
+        // Write the updated record back to disk if needed
+        if let Some(new_record) = updated_record {
+            let conda_meta_path = prefix.path().join("conda-meta");
+            let pkg_meta_path = format!(
+                "{}-{}-{}.json",
+                new_record.repodata_record.package_record.name.as_normalized(),
+                new_record.repodata_record.package_record.version,
+                new_record.repodata_record.package_record.build
+            );
+            
+            new_record
+                .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
+                .map_err(|e| {
+                    InstallerError::IoError(
+                        format!("failed to update requested_spec for {pkg_meta_path}"),
+                        e,
+                    )
+                })?;
+        }
+    }
+    
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rattler_conda_types::{MatchSpec, PackageName, ParseStrictness::Strict, package::IndexJson, prefix::Prefix};
+    use rattler_package_streaming::seek::read_package_file;
+    use std::path::Path;
+    use tempfile::TempDir;
+    use url::Url;
+
+    /// Creates a test environment with a temporary directory and prefix
+    fn create_test_environment() -> (TempDir, Prefix) {
+        let temp_dir = TempDir::new().unwrap();
+        let target_prefix = Prefix::create(temp_dir.path()).unwrap();
+        (temp_dir, target_prefix)
+    }
+
+    /// Creates a RepoDataRecord from the dummy package for testing
+    fn create_dummy_repo_record() -> rattler_conda_types::RepoDataRecord {
+        let package_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/packages/empty-0.1.0-h4616a5c_0.conda")
+            .canonicalize()
+            .unwrap();
+        
+        let index_json: IndexJson = read_package_file(&package_path).expect("Failed to read package");
+        RepoDataRecord {
+            package_record: rattler_conda_types::PackageRecord::from_index_json(
+                index_json,
+                None, // size unknown 
+                None, // sha256 unknown
+                None, // md5 unknown
+            ).unwrap(),
+            file_name: "empty-0.1.0-h4616a5c_0.conda".to_string(),
+            url: Url::from_file_path(package_path).unwrap(),
+            channel: Some("local".to_string()),
+        }
+    }
+
+    /// Gets the conda-meta file path for a given RepoDataRecord
+    fn get_meta_file_path(prefix: &Prefix, repo_record: &rattler_conda_types::RepoDataRecord) -> std::path::PathBuf {
+        let conda_meta_path = prefix.path().join("conda-meta");
+        let expected_filename = format!("{}-{}-{}.json", 
+            repo_record.package_record.name.as_normalized(),
+            repo_record.package_record.version,
+            repo_record.package_record.build
+        );
+        conda_meta_path.join(&expected_filename)
+    }
+
+    /// Reads a PrefixRecord from its conda-meta file
+    fn read_prefix_record(meta_file_path: &std::path::Path) -> rattler_conda_types::PrefixRecord {
+        rattler_conda_types::PrefixRecord::from_path(meta_file_path)
+            .expect("Should be able to read the prefix record")
+    }
+
+    /// Installs a package using the given installer and verifies success
+    async fn install_and_verify_success(
+        installer: Installer, 
+        prefix: &Prefix, 
+        repo_record: rattler_conda_types::RepoDataRecord
+    ) {
+        let result = installer
+            .install(prefix, vec![repo_record])
+            .await;
+        assert!(result.is_ok(), "Installation should succeed");
+    }
+
+    #[test] 
+    fn test_spec_mapping_helper() {
+        // Test the spec mapping functionality
+        let specs = vec![
+            MatchSpec::from_str("python ~=3.11.0", Strict).unwrap(),
+            MatchSpec::from_str("numpy >=1.20", Strict).unwrap(),
+        ];
+        
+        let mapping = create_spec_mapping(&specs);
+        
+        // Should map package names to their match specs
+        assert_eq!(mapping.len(), 2);
+        let python_name: PackageName = "python".parse().unwrap();
+        let numpy_name: PackageName = "numpy".parse().unwrap();
+        assert!(mapping.contains_key(&python_name));
+        assert!(mapping.contains_key(&numpy_name));
+        
+        // Should convert match specs to string format
+        assert_eq!(mapping[&python_name], "python ~=3.11.0");
+        assert_eq!(mapping[&numpy_name], "numpy >=1.20");
+    }
+
+    #[test]
+    fn test_spec_mapping_with_nameless_specs() {
+        // Test handling of nameless specs (should be skipped)
+        let specs = vec![
+            MatchSpec::from_str("python ~=3.11.0", Strict).unwrap(),
+            // Create a nameless spec by removing the name
+            MatchSpec {
+                name: None,
+                version: Some(">=1.0".parse().unwrap()),
+                ..Default::default()
+            },
+        ];
+        
+        let mapping = create_spec_mapping(&specs);
+        
+        // Should only include the named spec
+        assert_eq!(mapping.len(), 1);
+        let python_name: PackageName = "python".parse().unwrap();
+        assert!(mapping.contains_key(&python_name));
+    }
+
+    #[test]
+    fn test_update_existing_records_logic() {
+        // Test the logic for determining if records should be updated
+        use std::collections::HashMap;
+        
+        // Mock spec mapping
+        let mut spec_mapping: HashMap<PackageName, String> = HashMap::new();
+        spec_mapping.insert(
+            "python".parse().unwrap(),
+            "python ~=3.11.0".to_string()
+        );
+        
+        // Test that the mapping is created correctly
+        assert_eq!(spec_mapping.len(), 1);
+        assert_eq!(spec_mapping[&"python".parse::<PackageName>().unwrap()], "python ~=3.11.0");
+        
+        // Test that we can check if a package needs updating
+        let package_name: PackageName = "python".parse().unwrap();
+        let requested_spec_from_mapping = spec_mapping.get(&package_name);
+        assert!(requested_spec_from_mapping.is_some());
+        assert_eq!(requested_spec_from_mapping.unwrap(), "python ~=3.11.0");
+        
+        // Test missing package
+        let missing_package: PackageName = "missing".parse().unwrap();
+        assert!(spec_mapping.get(&missing_package).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_install_with_requested_specs_e2e() {
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+        
+        // Create a requested spec for the empty package
+        let requested_spec = MatchSpec::from_str("empty >=0.1.0", Strict).unwrap();
+        let requested_specs = vec![requested_spec];
+        
+        // Install using the installer with requested specs
+        let installer = Installer::new().with_requested_specs(requested_specs);
+        install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
+        
+        // Verify that the conda-meta file was created with the correct requested_spec
+        let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
+        assert!(meta_file_path.exists(), "conda-meta file should exist");
+        
+        // Read and verify the PrefixRecord
+        let updated_record = read_prefix_record(&meta_file_path);
+            
+        // Verify that requested_spec is properly set
+        assert!(updated_record.requested_spec.is_some(), "requested_spec should be populated");
+        assert_eq!(updated_record.requested_spec.unwrap(), "empty >=0.1.0", 
+            "requested_spec should match the original spec");
+    }
+
+    #[tokio::test]
+    async fn test_install_without_requested_specs_e2e() {
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+        
+        // Install using the installer WITHOUT requested specs
+        let installer = Installer::new();
+        install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
+        
+        // Verify that the conda-meta file was created without requested_spec
+        let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
+        assert!(meta_file_path.exists(), "conda-meta file should exist");
+        
+        // Read and verify the PrefixRecord
+        let updated_record = read_prefix_record(&meta_file_path);
+            
+        // Verify that requested_spec is None (original behavior)
+        assert!(updated_record.requested_spec.is_none(), "requested_spec should be None when not provided");
+    }
+
+    #[tokio::test]
+    async fn test_update_existing_package_requested_spec() {
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+        
+        // Step 1: Install the package WITHOUT requested specs (simulating existing installation)
+        let installer = Installer::new();
+        install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
+        
+        // Verify that initially there's no requested_spec
+        let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
+        let initial_record = read_prefix_record(&meta_file_path);
+        assert!(initial_record.requested_spec.is_none(), "Initial installation should have no requested_spec");
+        
+        // Step 2: "Install" the same package again, but this time WITH requested specs
+        // This simulates a user running install with specs on an existing environment
+        let requested_spec = MatchSpec::from_str("empty >=0.1.0", Strict).unwrap();
+        let requested_specs = vec![requested_spec];
+        
+        let installer_with_specs = Installer::new().with_requested_specs(requested_specs);
+        install_and_verify_success(installer_with_specs, &target_prefix, repo_record.clone()).await;
+        
+        // Step 3: Verify that the existing package now has the requested_spec updated
+        let updated_record = read_prefix_record(&meta_file_path);
+            
+        // The package should now have the requested_spec populated
+        assert!(updated_record.requested_spec.is_some(), "Updated installation should have requested_spec");
+        assert_eq!(updated_record.requested_spec.unwrap(), "empty >=0.1.0", 
+            "requested_spec should match the newly provided spec");
+    }
+
+    #[tokio::test]
+    async fn test_clear_requested_spec_when_empty() {
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+        
+        // Step 1: Install the package WITH requested specs
+        let requested_spec = MatchSpec::from_str("empty >=0.1.0", Strict).unwrap();
+        let requested_specs = vec![requested_spec];
+        
+        let installer_with_specs = Installer::new().with_requested_specs(requested_specs);
+        install_and_verify_success(installer_with_specs, &target_prefix, repo_record.clone()).await;
+        
+        // Verify that the package has requested_spec populated
+        let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
+        let initial_record = read_prefix_record(&meta_file_path);
+        assert!(initial_record.requested_spec.is_some(), "Initial installation should have requested_spec");
+        assert_eq!(initial_record.requested_spec.as_ref().unwrap(), "empty >=0.1.0");
+        
+        // Step 2: "Install" the same package again, but this time with EMPTY requested specs
+        // This simulates a user running install with empty specs to clear existing ones
+        let installer_without_specs = Installer::new().with_requested_specs(vec![]); // Explicitly empty requested_specs
+        install_and_verify_success(installer_without_specs, &target_prefix, repo_record.clone()).await;
+        
+        // Step 3: Verify that the existing package now has the requested_spec cleared
+        let updated_record = read_prefix_record(&meta_file_path);
+            
+        // The package should now have the requested_spec cleared (set to None)
+        assert!(updated_record.requested_spec.is_none(), 
+            "Updated installation without specs should clear requested_spec");
+    }
 }

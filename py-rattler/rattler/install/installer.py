@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 from typing import List, Optional
 
+from rattler.match_spec import MatchSpec
 from rattler.networking.client import Client
 from rattler.platform.platform import Platform
 from rattler.prefix.prefix_record import PrefixRecord
@@ -20,6 +21,7 @@ async def install(
     execute_link_scripts: bool = False,
     show_progress: bool = True,
     client: Optional[Client] = None,
+    requested_specs: Optional[List[MatchSpec]] = None,
 ) -> None:
     """
     Create an environment by downloading and linking the `dependencies` in
@@ -71,6 +73,9 @@ async def install(
         show_progress: If set to `True` a progress bar will be shown on the CLI.
         client: An authenticated client to use for downloading packages. If not specified a default
                 client will be used.
+        requested_specs: A list of `MatchSpec`s that were originally requested. These will be used
+                to populate the `requested_spec` field in the generated `conda-meta/*.json` files.
+                If `None`, the `requested_spec` field will remain `None`.
     """
 
     await py_install(
@@ -83,4 +88,5 @@ async def install(
         client=client._client if client is not None else None,
         execute_link_scripts=execute_link_scripts,
         show_progress=show_progress,
+        requested_specs=requested_specs,
     )
