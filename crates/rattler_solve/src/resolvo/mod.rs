@@ -254,7 +254,7 @@ pub struct CondaDependencyProvider<'a> {
     name_to_condition: RefCell<HashMap<NameId, ConditionId>>,
 
     /// Holds all the cached candidates for each package name.
-    records: HashMap<String, Candidates>,
+    records: HashMap<NameId, Candidates>,
 
     matchspec_to_highest_version:
         RefCell<HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>>,
@@ -283,7 +283,7 @@ impl<'a> CondaDependencyProvider<'a> {
         strategy: SolveStrategy,
     ) -> Result<Self, SolveError> {
         let pool = Pool::default();
-        let mut records: HashMap<String, Candidates> = HashMap::default();
+        let mut records: HashMap<NameId, Candidates> = HashMap::default();
 
         // Add virtual packages to the records
         for virtual_package in virtual_packages {
@@ -291,7 +291,7 @@ impl<'a> CondaDependencyProvider<'a> {
             let solvable =
                 pool.intern_solvable(name, SolverPackageRecord::VirtualPackage(virtual_package));
             records
-                .entry(virtual_package.name.as_normalized().to_owned())
+                .entry(name)
                 .or_default()
                 .candidates
                 .push(solvable);
@@ -389,7 +389,7 @@ impl<'a> CondaDependencyProvider<'a> {
 
                 // Update records with all entries in a single mutable borrow
                 let candidates = records
-                    .entry(record.package_record.name.as_normalized().to_owned())
+                    .entry(package_name)
                     .or_default();
                 candidates.candidates.push(solvable_id);
 
@@ -486,11 +486,7 @@ impl<'a> CondaDependencyProvider<'a> {
             let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(favored_record));
             let candidates = records
                 .entry(
-                    favored_record
-                        .package_record
-                        .name
-                        .as_normalized()
-                        .to_owned(),
+                    name
                 )
                 .or_default();
             candidates.candidates.push(solvable);
@@ -501,7 +497,7 @@ impl<'a> CondaDependencyProvider<'a> {
             let name = pool.intern_package_name(&locked_record.package_record.name);
             let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(locked_record));
             let candidates = records
-                .entry(locked_record.package_record.name.as_normalized().to_owned())
+                .entry(name)
                 .or_default();
             candidates.candidates.push(solvable);
             candidates.locked = Some(solvable);
@@ -528,7 +524,7 @@ impl<'a> CondaDependencyProvider<'a> {
     pub fn package_names(&self) -> impl Iterator<Item = NameId> + use<'_, 'a> {
         self.records
             .keys()
-            .map(|n| self.pool.intern_package_name(NameType::Base(n.to_owned())))
+            .copied()
     }
 
     fn extra_condition(&self, package: &PackageName, extra: &str) -> ConditionId {
@@ -640,7 +636,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
     async fn get_candidates(&self, name: NameId) -> Option<Candidates> {
         match self.pool.resolve_package_name(name) {
-            NameType::Base(name) => self.records.get(name).cloned(),
+            NameType::Base(_) => self.records.get(&name).cloned(),
             NameType::Extra { package, extra } => {
                 // For extras, we need to create a new candidates object
                 // that contains only the extra solvable.
