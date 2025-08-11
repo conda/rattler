@@ -1,8 +1,8 @@
 use std::{io::BufReader, sync::Arc};
 
 use bytes::Buf;
-use dashmap::{DashMap, Entry};
 use futures::future::OptionFuture;
+use http::StatusCode;
 use rattler_cache::package_cache::{CacheKey, CacheReporter, PackageCache, PackageCacheError};
 use rattler_conda_types::{
     package::{PackageFile, RunExportsJson},
@@ -11,14 +11,13 @@ use rattler_conda_types::{
 use rattler_networking::retry_policies::default_retry_policy;
 use reqwest_middleware::ClientWithMiddleware;
 use thiserror::Error;
-use tokio::sync::{broadcast, Semaphore};
+use tokio::sync::Semaphore;
 use url::Url;
 
-use super::PendingOrFetched;
+use crate::utils::coalesced_map::CoalescedMap;
 
 /// Type used for in-memory caching of `SubdirRunExportsJson`.
-pub(crate) type SubdirRunExportsCache =
-    DashMap<Url, PendingOrFetched<Option<Arc<SubdirRunExportsJson>>>>;
+pub(crate) type SubdirRunExportsCache = CoalescedMap<Url, Option<Arc<SubdirRunExportsJson>>>;
 
 pub trait RunExportsReporter: Send + Sync {
     /// Called when a download of a file started.
@@ -74,6 +73,15 @@ pub enum RunExportExtractorError {
     #[error(transparent)]
     PackageCache(#[from] PackageCacheError),
 
+    #[error("failed to request run exports from {0}")]
+    Request(Url, #[source] reqwest_middleware::Error),
+
+    #[error("failed to decode run exports from {0}")]
+    DecodeRunExports(Url, #[source] std::io::Error),
+
+    #[error("failed download bytes from {0}")]
+    TransportError(Url, #[source] reqwest::Error),
+
     #[error("the operation was cancelled")]
     Cancelled,
 }
@@ -119,102 +127,125 @@ impl RunExportExtractor {
         }
     }
 
+    async fn fetch_subdir_run_exports_zst_json(
+        subdir_url: &Url,
+        client: &ClientWithMiddleware,
+    ) -> Result<Option<SubdirRunExportsJson>, RunExportExtractorError> {
+        let run_exports_json_zst_url = subdir_url
+            .join("run_exports.json.zst")
+            .expect("is a valid url segment");
+
+        let request = client.get(run_exports_json_zst_url.clone());
+        let response = request.send().await.and_then(|resp| {
+            resp.error_for_status()
+                .map_err(reqwest_middleware::Error::Reqwest)
+        });
+        match response {
+            Ok(response) => {
+                let bytes_stream = match response.bytes().await {
+                    Ok(bytes) => bytes,
+                    Err(err) => {
+                        return Err(RunExportExtractorError::TransportError(
+                            run_exports_json_zst_url,
+                            err,
+                        ))
+                    }
+                };
+                let buf = BufReader::new(bytes_stream.reader());
+                let decoded = match zstd::decode_all(buf) {
+                    Ok(decoded) => decoded,
+                    Err(err) => {
+                        return Err(RunExportExtractorError::DecodeRunExports(
+                            run_exports_json_zst_url,
+                            err,
+                        ))
+                    }
+                };
+                let run_exports = match serde_json::from_slice(&decoded) {
+                    Ok(run_exports) => Some(run_exports),
+                    Err(e) => {
+                        return Err(RunExportExtractorError::DecodeRunExports(
+                            run_exports_json_zst_url,
+                            e.into(),
+                        ))
+                    }
+                };
+                Ok(run_exports)
+            }
+            Err(err) if err.status() != Some(StatusCode::NOT_FOUND) => Err(
+                RunExportExtractorError::Request(run_exports_json_zst_url, err),
+            ),
+            _ => Ok(None),
+        }
+    }
+
+    async fn fetch_subdir_run_exports_json(
+        subdir_url: &Url,
+        client: &ClientWithMiddleware,
+    ) -> Result<Option<SubdirRunExportsJson>, RunExportExtractorError> {
+        let run_exports_json_url = subdir_url
+            .join("run_exports.json")
+            .expect("is a valid url segment");
+
+        let request = client.get(run_exports_json_url.clone());
+        let response = request.send().await.and_then(|resp| {
+            resp.error_for_status()
+                .map_err(reqwest_middleware::Error::Reqwest)
+        });
+        match response {
+            Ok(response) => {
+                let bytes_stream = match response.bytes().await {
+                    Ok(bytes) => bytes,
+                    Err(err) => {
+                        return Err(RunExportExtractorError::TransportError(
+                            run_exports_json_url,
+                            err,
+                        ))
+                    }
+                };
+                let run_exports = match serde_json::from_slice(&bytes_stream) {
+                    Ok(run_exports) => Some(run_exports),
+                    Err(e) => {
+                        return Err(RunExportExtractorError::DecodeRunExports(
+                            run_exports_json_url,
+                            e.into(),
+                        ))
+                    }
+                };
+                Ok(run_exports)
+            }
+            Err(err) if err.status() != Some(StatusCode::NOT_FOUND) => {
+                Err(RunExportExtractorError::Request(run_exports_json_url, err))
+            }
+            _ => Ok(None),
+        }
+    }
+
     async fn fetch_subdir_run_exports(
         &mut self,
         subdir_url: &Url,
-        reporter: Option<Arc<dyn RunExportsReporter>>,
+        _reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Option<Arc<SubdirRunExportsJson>> {
-        let sender = match self.subdir_run_exports_cache.entry(subdir_url.clone()) {
-            Entry::Vacant(entry) => {
-                // Construct a sender so other tasks can subscribe
-                let (sender, _) = broadcast::channel(1);
-                let sender = Arc::new(sender);
+        let url = subdir_url.clone();
+        let client = self.client.clone()?;
 
-                // Modify the current entry to the pending entry, this is an atomic operation
-                // because who holds the entry holds mutable access.
-                entry.insert(PendingOrFetched::Pending(Arc::downgrade(&sender)));
-
-                sender
-            }
-            Entry::Occupied(mut entry) => {
-                let records = entry.get();
-                match records {
-                    PendingOrFetched::Pending(sender) => {
-                        let sender = sender.upgrade();
-
-                        if let Some(sender) = sender {
-                            // Create a receiver before we drop the entry. While we hold on to
-                            // the entry we have exclusive access to it, this means the task
-                            // currently fetching the package will not be able to store a value
-                            // until we drop the entry.
-                            // By creating the receiver here we ensure that we are subscribed
-                            // before the other tasks sends a value over the channel.
-                            let mut receiver = sender.subscribe();
-
-                            // Explicitly drop the entry, so we don't block any other tasks.
-                            drop(entry);
-
-                            // The sender is still active, so we can wait for the records to be
-                            // fetched.
-                            return receiver.recv().await.unwrap_or_else(|_| None);
-                        } else {
-                            // Construct a sender so other tasks can subscribe
-                            let (sender, _) = broadcast::channel(1);
-                            let sender = Arc::new(sender);
-
-                            // Modify the current entry to the pending entry, this is an atomic
-                            // operation because who holds the entry holds mutable access.
-                            entry.insert(PendingOrFetched::Pending(Arc::downgrade(&sender)));
-
-                            sender
-                        }
-                    }
-                    PendingOrFetched::Fetched(records) => return records.clone(),
+        self.subdir_run_exports_cache
+            .get_or_try_init(url, || async move {
+                // Try to fetch the `run_exports.json.zst` file first, and if that
+                // fails, fall back to the `run_exports.json` file.
+                let mut run_exports =
+                    Self::fetch_subdir_run_exports_zst_json(subdir_url, &client).await?;
+                if run_exports.is_none() {
+                    run_exports = Self::fetch_subdir_run_exports_json(subdir_url, &client).await?;
                 }
-            }
-        };
 
-        // At this point we have exclusive write access to this specific entry. All
-        // other tasks will find a pending entry and will wait for the records
-        // to become available.
-        //
-        // We need to fetch the run exports from the network.
-        let middleware = self.client.as_ref()?;
-        let run_exports_json_zst_url = subdir_url.join("run_exports.json.zst").ok()?;
-        let request = middleware.get(run_exports_json_zst_url);
-        let run_exports = if let Ok(response) = request.send().await {
-            eprintln!("Downloading run exports from {}", response.url());
-            let bytes_stream = response.bytes().await.ok()?;
-            let buf = BufReader::new(bytes_stream.reader());
-            let decoded = zstd::decode_all(buf).ok()?;
-            match serde_json::from_slice(&decoded) {
-                Ok(run_exports) => Some(run_exports),
-                Err(e) => {
-                    eprintln!("Failed to parse run exports: {}", e);
-                    None
-                }
-            }
-        } else {
-            let run_exports_json_url = subdir_url.join("run_exports.json").ok()?;
-            let request = middleware.get(run_exports_json_url);
-            let response = request.send().await.ok()?;
-            eprintln!("Downloading run exports from {}", response.url());
-            response.json::<SubdirRunExportsJson>().await.ok()
-        };
+                // Package it up in an `Arc` so that it can be shared.
+                let run_exports = run_exports.map(Arc::new);
 
-        // Package it up in an `Arc` so that it can be shared.
-        let run_exports = run_exports.map(Arc::new);
-
-        // Store the value in the cache.
-        self.subdir_run_exports_cache.insert(
-            subdir_url.clone(),
-            PendingOrFetched::Fetched(run_exports.clone()),
-        );
-
-        // Notify any pending listeners.
-        let _ = sender.send(run_exports.clone());
-
-        run_exports
+                Ok::<_, RunExportExtractorError>(run_exports)
+            })
+            .await
+            .unwrap_or(None)
     }
 
     /// Extract the run exports from a package by first checking the

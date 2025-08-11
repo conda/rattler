@@ -14,15 +14,12 @@ mod sharded_subdir;
 mod subdir;
 mod subdir_builder;
 
-use std::{
-    collections::HashSet,
-    sync::{Arc, Weak},
-};
+use std::{collections::HashSet, sync::Arc};
 
+use crate::utils::coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
-use dashmap::{mapref::entry::Entry, DashMap};
 pub use error::GatewayError;
 pub use query::{NamesQuery, RepoDataQuery};
 #[cfg(not(target_arch = "wasm32"))]
@@ -33,11 +30,10 @@ use rattler_conda_types::{Channel, MatchSpec, Platform};
 pub use repo_data::RepoData;
 use reqwest_middleware::ClientWithMiddleware;
 #[cfg(not(target_arch = "wasm32"))]
-use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
+use run_exports_extractor::RunExportExtractor;
 #[cfg(not(target_arch = "wasm32"))]
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 use subdir::Subdir;
-use tokio::sync::broadcast;
 use tracing::{instrument, Level};
 use url::Url;
 
@@ -152,7 +148,7 @@ impl Gateway {
         // We can avoid Arc by cloning, but this requires helper method in the trait definition.
         progress_reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<(), RunExportExtractorError> {
-        let global_run_exports_cache = Arc::new(SubdirRunExportsCache::new());
+        let global_run_exports_cache = Arc::new(CoalescedMap::new());
 
         let futures = records
             .filter_map(|record| {
@@ -204,7 +200,7 @@ impl Gateway {
 
 struct GatewayInner {
     /// A map of subdirectories for each channel and platform.
-    subdirs: DashMap<(Channel, Platform), PendingOrFetched<Arc<Subdir>>>,
+    subdirs: CoalescedMap<(Channel, Platform), Arc<Subdir>>,
 
     /// The client to use to fetch repodata.
     client: ClientWithMiddleware,
@@ -240,85 +236,22 @@ impl GatewayInner {
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Arc<Subdir>, GatewayError> {
-        let sender = match self.subdirs.entry((channel.clone(), platform)) {
-            Entry::Vacant(entry) => {
-                // Construct a sender so other tasks can subscribe
-                let (sender, _) = broadcast::channel(1);
-                let sender = Arc::new(sender);
+        let key = (channel.clone(), platform);
+        let channel = channel.clone();
 
-                // Modify the current entry to the pending entry, this is an atomic operation
-                // because who holds the entry holds mutable access.
-                entry.insert(PendingOrFetched::Pending(Arc::downgrade(&sender)));
-
-                sender
-            }
-            Entry::Occupied(mut entry) => {
-                let subdir = entry.get();
-                match subdir {
-                    PendingOrFetched::Pending(sender) => {
-                        let sender = sender.upgrade();
-
-                        if let Some(sender) = sender {
-                            // Create a receiver before we drop the entry. While we hold on to
-                            // the entry we have exclusive access to it, this means the task
-                            // currently fetching the subdir will not be able to store a value
-                            // until we drop the entry.
-                            // By creating the receiver here we ensure that we are subscribed
-                            // before the other tasks sends a value over the channel.
-                            let mut receiver = sender.subscribe();
-
-                            // Explicitly drop the entry, so we don't block any other tasks.
-                            drop(entry);
-
-                            // The sender is still active, so we can wait for the subdir to be
-                            // created.
-                            return match receiver.recv().await {
-                                Ok(subdir) => Ok(subdir),
-                                Err(_) => {
-                                    // If this happens the sender was dropped.
-                                    Err(GatewayError::IoError(
-                                        "a coalesced request failed".to_string(),
-                                        std::io::ErrorKind::Other.into(),
-                                    ))
-                                }
-                            };
-                        } else {
-                            // Construct a sender so other tasks can subscribe
-                            let (sender, _) = broadcast::channel(1);
-                            let sender = Arc::new(sender);
-
-                            // Modify the current entry to the pending entry, this is an atomic
-                            // operation because who holds the entry holds mutable access.
-                            entry.insert(PendingOrFetched::Pending(Arc::downgrade(&sender)));
-
-                            sender
-                        }
-                    }
-                    PendingOrFetched::Fetched(records) => return Ok(records.clone()),
-                }
-            }
-        };
-
-        // At this point we have exclusive write access to this specific entry. All
-        // other tasks will find a pending entry and will wait for the records
-        // to become available.
-        //
-        // Let's start by creating the subdir. If an error occurs we immediately return
-        // the error. This will drop the sender and all other waiting tasks will
-        // receive an error.
-        let subdir = Arc::new(self.create_subdir(channel, platform, reporter).await?);
-
-        // Store the fetched files in the entry.
-        self.subdirs.insert(
-            (channel.clone(), platform),
-            PendingOrFetched::Fetched(subdir.clone()),
-        );
-
-        // Send the records to all waiting tasks. We don't care if there are no
-        // receivers, so we drop the error.
-        let _ = sender.send(subdir.clone());
-
-        Ok(subdir)
+        self.subdirs
+            .get_or_try_init(key, || async move {
+                let subdir = self.create_subdir(&channel, platform, reporter).await?;
+                Ok(Arc::new(subdir))
+            })
+            .await
+            .map_err(|e| match e {
+                CoalescedGetError::Init(gateway_err) => gateway_err,
+                CoalescedGetError::CoalescedRequestFailed => GatewayError::IoError(
+                    "a coalesced request failed".to_string(),
+                    std::io::ErrorKind::Other.into(),
+                ),
+            })
     }
 
     async fn create_subdir(
@@ -331,13 +264,6 @@ impl GatewayInner {
             .build()
             .await
     }
-}
-
-/// A record that is either pending or has been fetched.
-#[derive(Clone)]
-enum PendingOrFetched<T> {
-    Pending(Weak<broadcast::Sender<T>>),
-    Fetched(T),
 }
 
 fn force_sharded_repodata(url: &Url) -> bool {

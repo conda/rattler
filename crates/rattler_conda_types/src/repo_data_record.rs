@@ -56,7 +56,7 @@ impl RepoDataRecord {
             if path.ends_with("/") {
                 url.set_path(&path);
             } else {
-                url.set_path(&format!("{}/", path));
+                url.set_path(&format!("{path}/"));
             }
         }
 
