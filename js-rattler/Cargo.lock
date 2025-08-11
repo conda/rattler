@@ -530,7 +530,7 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "file_url"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "itertools",
  "percent-encoding",
@@ -786,7 +786,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -1137,9 +1137,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.9.0"
+version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cea70ddb795996207ad57735b50c5982d8844f38ba9ee5f1aedcfb708a2aa11e"
+checksum = "fe4cd85333e22411419a0bcae1297d25e58c9443848b11dc6a86fefe8c78a661"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.4",
@@ -1515,12 +1515,14 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "petgraph"
-version = "0.7.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772"
+checksum = "54acf3a685220b533e437e264e4d932cfbdc4cc7ec0cd232ed73c08d03b8a7ca"
 dependencies = [
  "fixedbitset",
- "indexmap 2.9.0",
+ "hashbrown 0.15.4",
+ "indexmap 2.10.0",
+ "serde",
 ]
 
 [[package]]
@@ -1790,7 +1792,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.26"
+version = "0.3.29"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -1806,6 +1808,7 @@ dependencies = [
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_redaction",
  "rayon",
  "reqwest",
  "reqwest-middleware",
@@ -1820,7 +1823,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.35.6"
+version = "0.37.0"
 dependencies = [
  "chrono",
  "core-foundation",
@@ -1830,7 +1833,7 @@ dependencies = [
  "fxhash",
  "glob",
  "hex",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "itertools",
  "lazy-regex",
  "nom",
@@ -1859,7 +1862,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.1.4"
+version = "1.1.5"
 dependencies = [
  "blake2",
  "digest",
@@ -1883,7 +1886,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.6"
+version = "0.25.8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1905,7 +1908,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.45"
+version = "0.22.48"
 dependencies = [
  "bzip2",
  "chrono",
@@ -1942,7 +1945,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.23.7"
+version = "0.23.10"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -1998,7 +2001,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "2.1.6"
+version = "2.1.8"
 dependencies = [
  "chrono",
  "futures",
@@ -2160,16 +2163,16 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.9.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dba027c8e5dd4b5e5a690cfcfb3900d5ffe6985adb048cbd111d5aa596a6c0c8"
+checksum = "037a5f3f35329f29885132d030c628f3142d2a098d0abb30513c572b900692fd"
 dependencies = [
  "ahash",
  "bitvec",
  "elsa",
  "event-listener",
  "futures",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "itertools",
  "petgraph",
  "tracing",
@@ -2469,7 +2472,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "schemars",
  "serde",
  "serde_derive",
@@ -2496,7 +2499,7 @@ version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "itoa",
  "ryu",
  "serde",
@@ -3604,7 +3607,7 @@ dependencies = [
  "arbitrary",
  "crc32fast",
  "flate2",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "memchr",
  "time",
  "zopfli",

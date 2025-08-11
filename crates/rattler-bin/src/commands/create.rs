@@ -295,7 +295,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         if transaction.operations.is_empty() {
             println!("No operations necessary");
         } else {
-            print_transaction(&transaction, solver_result.features);
+            print_transaction(&transaction, solver_result.extras);
         }
 
         return Ok(());
@@ -326,7 +326,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
             console::style(console::Emoji("✔", "")).green(),
             install_start.elapsed()
         );
-        print_transaction(&result.transaction, solver_result.features);
+        print_transaction(&result.transaction, solver_result.extras);
     }
 
     Ok(())
