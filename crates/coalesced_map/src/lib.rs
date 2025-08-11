@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![deny(missing_docs)]
 
 //! A thread-safe, deduplicating map that ensures expensive computations are
 //! executed only once per key, even when multiple concurrent requests are made.
