@@ -28,8 +28,16 @@ pub enum ExtractError {
     #[error("an io error occurred: {0}")]
     IoError(#[from] std::io::Error),
 
-    #[error("hash mismatch: expected {expected}, got {actual}")]
-    HashMismatch { expected: String, actual: String },
+    #[error(
+        "hash mismatch when extracting {url} to {destination}: expected {expected}, got {actual}, total size {total_size} bytes"
+    )]
+    HashMismatch {
+        url: String,
+        destination: String,
+        expected: String,
+        actual: String,
+        total_size: u64,
+    },
 
     #[error("could not create the destination path: {0}")]
     CouldNotCreateDestination(#[source] std::io::Error),
@@ -87,6 +95,9 @@ pub struct ExtractResult {
 
     /// The Md5 hash of the extracted archive.
     pub md5: Md5Hash,
+
+    /// The total size of the extracted archive in bytes.
+    pub total_size: u64,
 }
 
 /// A trait that can be implemented to report download progress.

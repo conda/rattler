@@ -552,6 +552,10 @@ impl Interner for CondaDependencyProvider<'_> {
         &self.pool.resolve_solvable(solvable).record
     }
 
+    fn resolve_condition(&self, condition: ConditionId) -> Condition {
+        self.pool.resolve_condition(condition).clone()
+    }
+
     fn version_sets_in_union(
         &self,
         version_set_union: VersionSetUnionId,
@@ -593,10 +597,6 @@ impl Interner for CondaDependencyProvider<'_> {
 
     fn solvable_name(&self, solvable: SolvableId) -> NameId {
         self.pool.resolve_solvable(solvable).name
-    }
-
-    fn resolve_condition(&self, condition: ConditionId) -> Condition {
-        self.pool.resolve_condition(condition).clone()
     }
 }
 
