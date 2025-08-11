@@ -290,11 +290,7 @@ impl<'a> CondaDependencyProvider<'a> {
             let name = pool.intern_package_name(&virtual_package.name);
             let solvable =
                 pool.intern_solvable(name, SolverPackageRecord::VirtualPackage(virtual_package));
-            records
-                .entry(name)
-                .or_default()
-                .candidates
-                .push(solvable);
+            records.entry(name).or_default().candidates.push(solvable);
         }
 
         // Compute the direct dependencies
@@ -388,9 +384,7 @@ impl<'a> CondaDependencyProvider<'a> {
                     pool.intern_solvable(package_name, SolverPackageRecord::Record(record));
 
                 // Update records with all entries in a single mutable borrow
-                let candidates = records
-                    .entry(package_name)
-                    .or_default();
+                let candidates = records.entry(package_name).or_default();
                 candidates.candidates.push(solvable_id);
 
                 // Filter out any records that are newer than a specific date.
@@ -484,11 +478,7 @@ impl<'a> CondaDependencyProvider<'a> {
         for favored_record in favored_records {
             let name = pool.intern_package_name(&favored_record.package_record.name);
             let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(favored_record));
-            let candidates = records
-                .entry(
-                    name
-                )
-                .or_default();
+            let candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
             candidates.favored = Some(solvable);
         }
@@ -496,9 +486,7 @@ impl<'a> CondaDependencyProvider<'a> {
         for locked_record in locked_records {
             let name = pool.intern_package_name(&locked_record.package_record.name);
             let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(locked_record));
-            let candidates = records
-                .entry(name)
-                .or_default();
+            let candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
             candidates.locked = Some(solvable);
         }
@@ -522,9 +510,7 @@ impl<'a> CondaDependencyProvider<'a> {
 
     /// Returns all package names
     pub fn package_names(&self) -> impl Iterator<Item = NameId> + use<'_, 'a> {
-        self.records
-            .keys()
-            .copied()
+        self.records.keys().copied()
     }
 
     fn extra_condition(&self, package: &PackageName, extra: &str) -> ConditionId {
