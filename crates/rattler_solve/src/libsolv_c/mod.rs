@@ -287,7 +287,7 @@ impl super::SolverImpl for Solver {
 
         Ok(SolverResult {
             records: required_records,
-            features: HashMap::new(),
+            extras: HashMap::new(),
         })
     }
 }
