@@ -32,7 +32,7 @@
 //!
 //!     // Simulate multiple concurrent requests for the same expensive resource
 //!     let key = "expensive_computation".to_string();
-//!     
+//!
 //!     let handle1 = {
 //!         let cache = cache.clone();
 //!         let key = key.clone();
@@ -45,7 +45,7 @@
 //!             }).await
 //!         })
 //!     };
-//!     
+//!
 //!     let handle2 = {
 //!         let cache = cache.clone();
 //!         let key = key.clone();
@@ -60,7 +60,7 @@
 //!
 //!     let result1 = handle1.await.unwrap().unwrap();
 //!     let result2 = handle2.await.unwrap().unwrap();
-//!     
+//!
 //!     // Both results are identical (same Arc instance)
 //!     assert!(Arc::ptr_eq(&result1, &result2));
 //!     assert_eq!(*result1, "computed_result");
