@@ -16,7 +16,7 @@ mod subdir_builder;
 
 use std::{collections::HashSet, sync::Arc};
 
-use crate::utils::coalesced_map::{CoalescedGetError, CoalescedMap};
+use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};

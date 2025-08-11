@@ -3,10 +3,8 @@ use std::sync::Arc;
 use rattler_conda_types::{PackageName, RepoDataRecord};
 
 use super::GatewayError;
-use crate::{
-    utils::coalesced_map::{CoalescedGetError, CoalescedMap},
-    Reporter,
-};
+use crate::{Reporter};
+use coalesced_map::{CoalescedGetError, CoalescedMap};
 
 pub enum Subdir {
     /// The subdirectory is missing from the channel, it is considered empty.

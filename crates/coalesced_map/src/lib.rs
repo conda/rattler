@@ -16,7 +16,7 @@
 //! ## Example
 //!
 //! ```rust,ignore
-//! use crate::utils::coalesced_map::{CoalescedMap, CoalescedGetError};
+//! use coalesced_map::{CoalescedMap, CoalescedGetError};
 //! use std::{sync::Arc, time::Duration};
 //!
 //! #[tokio::main]

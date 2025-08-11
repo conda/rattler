@@ -6,7 +6,6 @@
 pub use body::BodyStreamExt;
 pub use encoding::{AsyncEncoding, Encoding};
 
-pub mod coalesced_map;
 mod encoding;
 
 #[cfg(test)]

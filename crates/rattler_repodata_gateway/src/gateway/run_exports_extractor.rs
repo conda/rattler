@@ -14,7 +14,7 @@ use thiserror::Error;
 use tokio::sync::Semaphore;
 use url::Url;
 
-use crate::utils::coalesced_map::CoalescedMap;
+use coalesced_map::CoalescedMap;
 
 /// Type used for in-memory caching of `SubdirRunExportsJson`.
 pub(crate) type SubdirRunExportsCache = CoalescedMap<Url, Option<Arc<SubdirRunExportsJson>>>;

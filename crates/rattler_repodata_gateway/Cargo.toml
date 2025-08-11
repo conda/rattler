@@ -12,6 +12,7 @@ readme.workspace = true
 
 [dependencies]
 cfg-if = { workspace = true }
+coalesced_map = { workspace = true }
 fs-err = { workspace = true }
 anyhow = { workspace = true }
 async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }

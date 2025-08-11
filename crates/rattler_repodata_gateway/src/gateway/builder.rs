@@ -5,7 +5,8 @@ use rattler_cache::package_cache::PackageCache;
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 
-use crate::{gateway::GatewayInner, utils::coalesced_map::CoalescedMap, ChannelConfig, Gateway};
+use crate::{gateway::GatewayInner, ChannelConfig, Gateway};
+use coalesced_map::CoalescedMap;
 
 static USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
