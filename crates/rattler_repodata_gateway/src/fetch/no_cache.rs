@@ -22,13 +22,13 @@ use wasmtimer::std::SystemTime;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::SystemTime;
 
+use crate::reporter::DownloadReporter;
 use crate::{
     fetch::{FetchRepoDataError, RepoDataNotFoundError, Variant},
     reporter::ResponseReporterExt,
     utils::{AsyncEncoding, Encoding},
     Reporter,
 };
-use crate::reporter::DownloadReporter;
 
 /// Additional knobs that allow you to tweak the behavior of
 /// [`fetch_repo_data`].

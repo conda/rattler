@@ -37,8 +37,8 @@ use subdir::Subdir;
 use tracing::{instrument, Level};
 use url::Url;
 
-use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 use crate::gateway::run_exports_extractor::SubdirRunExportsCache;
+use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 
 /// Central access point for high level queries about
 /// [`rattler_conda_types::RepoDataRecord`]s from different channels.
