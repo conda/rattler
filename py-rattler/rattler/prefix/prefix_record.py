@@ -35,23 +35,23 @@ class PrefixRecord(RepoDataRecord):
         return record
 
     def __init__(
-            self,
-            repodata_record: RepoDataRecord,
-            paths_data: PrefixPaths,
-            link: Optional[Link] = None,
-            package_tarball_full_path: Optional[os.PathLike[str]] = None,
-            extracted_package_dir: Optional[os.PathLike[str]] = None,
-            requested_spec: Optional[List[str]|str] = None,
-            files: Optional[List[os.PathLike[str]]] = None,
+        self,
+        repodata_record: RepoDataRecord,
+        paths_data: PrefixPaths,
+        link: Optional[Link] = None,
+        package_tarball_full_path: Optional[os.PathLike[str]] = None,
+        extracted_package_dir: Optional[os.PathLike[str]] = None,
+        requested_spec: Optional[List[str] | str] = None,
+        files: Optional[List[os.PathLike[str]]] = None,
     ) -> None:
         record = PyRecord.create_prefix_record(
-            repodata_record._record,
-            paths_data._paths,
-            link._inner if link else None,
-            package_tarball_full_path,
-            extracted_package_dir,
-            requested_spec: [requested_spec] if isinstance(requested_spec, str) else requested_spec,
-            files,
+            repodata_record=repodata_record._record,
+            paths_data=paths_data._paths,
+            link=link._inner if link else None,
+            package_tarball_full_path=package_tarball_full_path,
+            extracted_package_dir=extracted_package_dir,
+            files=files,
+            requested_spec=[requested_spec] if isinstance(requested_spec, str) else requested_spec,
         )
         self._record = record
 

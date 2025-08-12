@@ -213,9 +213,9 @@ impl PyRecord {
     }
 
     #[staticmethod]
-    #[pyo3(signature = (package_record, paths_data, link=None, package_tarball_full_path=None, extracted_package_dir=None, requested_spec=None, files=None))]
+    #[pyo3(signature = (repodata_record, paths_data, link=None, package_tarball_full_path=None, extracted_package_dir=None, requested_spec=None, files=None))]
     pub fn create_prefix_record(
-        package_record: PyRecord,
+        repodata_record: PyRecord,
         paths_data: PyPrefixPaths,
         link: Option<PyLink>,
         package_tarball_full_path: Option<PathBuf>,
@@ -223,7 +223,7 @@ impl PyRecord {
         requested_spec: Option<Vec<String>>,
         files: Option<Vec<PathBuf>>,
     ) -> PyResult<Self> {
-        if !package_record.is_repodata_record() {
+        if !repodata_record.is_repodata_record() {
             return Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
             ));
@@ -231,7 +231,7 @@ impl PyRecord {
 
         Ok(Self {
             inner: RecordInner::Prefix(PrefixRecord {
-                repodata_record: package_record.try_as_repodata_record().unwrap().clone(),
+                repodata_record: repodata_record.try_as_repodata_record().unwrap().clone(),
                 package_tarball_full_path,
                 extracted_package_dir,
                 files: files.unwrap_or_default(),
