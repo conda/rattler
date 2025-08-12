@@ -295,7 +295,8 @@ mod test {
         fetch::CacheAction,
         gateway::Gateway,
         utils::{simple_channel_server::SimpleChannelServer, test::fetch_repo_data},
-        GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
+        DownloadReporter, GatewayError, JLAPReporter, RepoData, Reporter, SourceConfig,
+        SubdirSelection,
     };
 
     async fn local_conda_forge() -> Channel {
@@ -645,9 +646,17 @@ mod test {
         struct Downloads {
             urls: DashSet<Url>,
         }
-        impl Reporter for Arc<Downloads> {
+        impl DownloadReporter for Arc<Downloads> {
             fn on_download_complete(&self, url: &Url, _index: usize) {
                 self.urls.insert(url.clone());
+            }
+        }
+        impl Reporter for Arc<Downloads> {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                Some(self)
+            }
+            fn jlap_reporter(&self) -> Option<&dyn JLAPReporter> {
+                None
             }
         }
 
