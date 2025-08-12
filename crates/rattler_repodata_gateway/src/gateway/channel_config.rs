@@ -49,7 +49,7 @@ impl From<rattler_config::config::repodata_config::RepodataChannelConfig> for So
             zstd_enabled: !value.disable_zstd.unwrap_or(false),
             bz2_enabled: !value.disable_bzip2.unwrap_or(false),
             sharded_enabled: !value.disable_sharded.unwrap_or(false),
-            cache_action: Default::default(),
+            cache_action: CacheAction::default(),
         }
     }
 }
