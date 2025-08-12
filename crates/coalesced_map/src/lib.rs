@@ -591,6 +591,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_coalesced_request_failed_panic() {
+        let map = Arc::new(CoalescedMap::new());
+        // Use a 3-party barrier so the test task can coordinate
+        // that both spawned tasks reached the rendezvous before aborting.
+        let barrier = Arc::new(tokio::sync::Barrier::new(3));
+
+        let map1 = map.clone();
+        let barrier1 = barrier.clone();
+        let handle1 = tokio::spawn(async move {
+            map1.get_or_try_init("test_key".to_string(), || async move {
+                barrier1.wait().await;
+                panic!();
+                Ok::<_, &str>("value".to_string())
+            })
+            .await
+        });
+
+        let map2 = map.clone();
+        let barrier2 = barrier.clone();
+        let handle2 = tokio::spawn(async move {
+            // Wait a bit to ensure the first task starts first
+            barrier2.wait().await;
+
+            // This should subscribe to the first task's broadcast
+            map2.get_or_try_init("test_key".to_string(), || async move {
+                Ok::<_, &str>("should_not_be_called".to_string())
+            })
+            .await
+        });
+
+        // Wait till both tasks reach the barrier
+        barrier.wait().await;
+
+        // Cancel the first task to simulate a coalesced request failure
+        handle1.abort();
+
+        // The second task should receive a CoalescedRequestFailed error
+        let result = handle2.await.unwrap();
+        match result {
+            Err(CoalescedGetError::CoalescedRequestFailed) => {
+                // This is expected
+            }
+            _ => panic!("Expected CoalescedRequestFailed error, got {result:?}"),
+        }
+    }
+
+    #[tokio::test]
     async fn test_empty_map() {
         let map: CoalescedMap<String, String> = CoalescedMap::new();
 

@@ -8,7 +8,6 @@ mod local_subdir;
 mod query;
 mod remote_subdir;
 mod repo_data;
-#[cfg(not(target_arch = "wasm32"))]
 mod run_exports_extractor;
 mod sharded_subdir;
 mod subdir;
@@ -24,14 +23,10 @@ pub use error::GatewayError;
 pub use query::{NamesQuery, RepoDataQuery};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
-#[cfg(not(target_arch = "wasm32"))]
-use rattler_conda_types::RepoDataRecord;
-use rattler_conda_types::{Channel, MatchSpec, Platform};
+use rattler_conda_types::{Channel, MatchSpec, Platform, RepoDataRecord};
 pub use repo_data::RepoData;
 use reqwest_middleware::ClientWithMiddleware;
-#[cfg(not(target_arch = "wasm32"))]
 use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
-#[cfg(not(target_arch = "wasm32"))]
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 use subdir::Subdir;
 use tracing::{instrument, Level};
@@ -140,7 +135,6 @@ impl Gateway {
         )
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     /// Ensure that given repodata records contain `RunExportsJson`.
     pub async fn ensure_run_exports(
         &self,
@@ -160,8 +154,10 @@ impl Gateway {
                         self.inner.concurrent_requests_semaphore.clone(),
                     )
                     .with_client(self.inner.client.clone())
-                    .with_package_cache(self.inner.package_cache.clone())
                     .with_global_run_exports_cache(self.inner.subdir_run_exports_cache.clone());
+
+                #[cfg(not(target_arch = "wasm32"))]
+                let extractor = extractor.with_package_cache(self.inner.package_cache.clone());
 
                 let progress_reporter = progress_reporter.clone();
                 Some(async move {
@@ -213,7 +209,6 @@ struct GatewayInner {
     package_cache: PackageCache,
 
     /// A cache for global run exports.
-    #[cfg(not(target_arch = "wasm32"))]
     subdir_run_exports_cache: Arc<SubdirRunExportsCache>,
 
     /// A semaphore to limit the number of concurrent requests.

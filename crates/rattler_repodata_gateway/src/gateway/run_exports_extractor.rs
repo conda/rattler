@@ -1,16 +1,13 @@
-use std::{io::BufReader, path::Path, sync::Arc};
+use std::{
+    io::BufReader,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use bytes::Buf;
 use coalesced_map::CoalescedMap;
-use futures::future::OptionFuture;
 use http::StatusCode;
-use rattler_cache::package_cache::{CacheKey, CacheReporter, PackageCache, PackageCacheError};
-use rattler_conda_types::{
-    package::{PackageFile, RunExportsJson},
-    RepoDataRecord, SubdirRunExportsJson,
-};
-use rattler_networking::retry_policies::default_retry_policy;
-use rattler_package_streaming::ExtractError;
+use rattler_conda_types::{package::RunExportsJson, RepoDataRecord, SubdirRunExportsJson};
 use reqwest_middleware::ClientWithMiddleware;
 use thiserror::Error;
 use tokio::sync::Semaphore;
@@ -29,10 +26,11 @@ pub trait RunExportsReporter: Send + Sync {
 
     /// Called to create a new reporter than can be used to report progress of a
     /// package download.
+    #[cfg(not(target_arch = "wasm32"))]
     fn create_package_download_reporter(
         &self,
         _repo_data_record: &RepoDataRecord,
-    ) -> Option<Box<dyn CacheReporter>> {
+    ) -> Option<Box<dyn rattler_cache::package_cache::CacheReporter>> {
         None
     }
 }
@@ -44,16 +42,19 @@ pub trait RunExportsReporter: Send + Sync {
 #[derive(Default)]
 pub struct RunExportExtractor {
     max_concurrent_requests: Option<Arc<Semaphore>>,
-    package_cache: Option<PackageCache>,
     client: Option<ClientWithMiddleware>,
     subdir_run_exports_cache: Arc<SubdirRunExportsCache>,
+
+    #[cfg(not(target_arch = "wasm32"))]
+    package_cache: Option<rattler_cache::package_cache::PackageCache>,
 }
 
 #[allow(missing_docs)]
 #[derive(Debug, Error)]
 pub enum RunExportExtractorError {
+    #[cfg(not(target_arch = "wasm32"))]
     #[error(transparent)]
-    PackageCache(#[from] PackageCacheError),
+    PackageCache(#[from] rattler_cache::package_cache::PackageCacheError),
 
     #[error("failed to request run exports from {0}")]
     Request(Url, #[source] reqwest_middleware::Error),
@@ -83,7 +84,11 @@ impl RunExportExtractor {
 
     /// Set the package cache that the extractor can use as well as a reporter
     /// to allow progress reporting.
-    pub fn with_package_cache(self, package_cache: PackageCache) -> Self {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_package_cache(
+        self,
+        package_cache: rattler_cache::package_cache::PackageCache,
+    ) -> Self {
         Self {
             package_cache: Some(package_cache),
             ..self
@@ -121,7 +126,7 @@ impl RunExportExtractor {
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
         // If this is local package, try to read it directly from the package file
         // itself.
-        if let Ok(package_file) = record.url.to_file_path() {
+        if let Some(package_file) = Self::path_to_package(record) {
             return self.read_from_package_file(&package_file).await;
         }
 
@@ -134,12 +139,27 @@ impl RunExportExtractor {
         }
 
         // Otherwise, fall back to extracting from the package cache.
-        self.extract_into_package_cache(record, progress_reporter)
-            .await
+        if let Some(package_cache_run_exports) = self
+            .extract_into_package_cache(record, progress_reporter)
+            .await?
+        {
+            return Ok(Some(package_cache_run_exports));
+        }
+
+        Ok(None)
+    }
+
+    /// Returns the path to the package file if the URL is a file URL.
+    fn path_to_package(_record: &RepoDataRecord) -> Option<PathBuf> {
+        #[cfg(not(target_arch = "wasm32"))]
+        return _record.url.to_file_path().ok();
+        #[cfg(target_arch = "wasm32")]
+        None
     }
 
     /// Fetch the `run_exports.json.zst` file from the subdirectory URL.
     async fn fetch_subdir_run_exports_zst_json(
+        &self,
         subdir_url: &Url,
         client: &ClientWithMiddleware,
         reporter: Option<Arc<dyn RunExportsReporter>>,
@@ -147,6 +167,8 @@ impl RunExportExtractor {
         let url = subdir_url
             .join("run_exports.json.zst")
             .expect("is a valid url segment");
+
+        let _permit = self.acquire_request_permit().await;
 
         let reporter = reporter
             .as_deref()
@@ -196,6 +218,7 @@ impl RunExportExtractor {
 
     /// Fetch the `run_exports.json` file from the subdirectory URL.
     async fn fetch_subdir_run_exports_json(
+        &self,
         subdir_url: &Url,
         client: &ClientWithMiddleware,
         reporter: Option<Arc<dyn RunExportsReporter>>,
@@ -203,6 +226,8 @@ impl RunExportExtractor {
         let url = subdir_url
             .join("run_exports.json")
             .expect("is a valid url segment");
+
+        let _permit = self.acquire_request_permit().await;
 
         let request = client.get(url.clone());
         let reporter = reporter
@@ -250,16 +275,16 @@ impl RunExportExtractor {
         let client = self.client.clone()?;
 
         self.subdir_run_exports_cache
-            .get_or_try_init(url, || async move {
+            .get_or_try_init(url, || async {
                 // Try to fetch the `run_exports.json.zst` file first, and if that
                 // fails, fall back to the `run_exports.json` file.
-                let mut run_exports =
-                    Self::fetch_subdir_run_exports_zst_json(subdir_url, &client, reporter.clone())
-                        .await?;
+                let mut run_exports = self
+                    .fetch_subdir_run_exports_zst_json(subdir_url, &client, reporter.clone())
+                    .await?;
                 if run_exports.is_none() {
-                    run_exports =
-                        Self::fetch_subdir_run_exports_json(subdir_url, &client, reporter.clone())
-                            .await?;
+                    run_exports = self
+                        .fetch_subdir_run_exports_json(subdir_url, &client, reporter.clone())
+                        .await?;
                 }
 
                 // Package it up in an `Arc` so that it can be shared.
@@ -273,11 +298,14 @@ impl RunExportExtractor {
 
     /// Extract the run exports from a package by downloading it to the cache
     /// and then reading the `run_exports.json` file.
+    #[cfg(not(target_arch = "wasm32"))]
     async fn extract_into_package_cache(
         self,
         record: &RepoDataRecord,
         progress_reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
+        use rattler_cache::package_cache::CacheKey;
+
         let (Some(package_cache), Some(client)) =
             (self.package_cache.as_ref(), self.client.as_ref())
         else {
@@ -293,47 +321,69 @@ impl RunExportExtractor {
             .map(Arc::from);
 
         // Wait for a permit from the semaphore to limit concurrent requests.
-        let _permit = OptionFuture::from(
-            self.max_concurrent_requests
-                .clone()
-                .map(Semaphore::acquire_owned),
-        )
-        .await
-        .transpose()
-        .expect("semaphore error");
+        let _permit = self.acquire_request_permit().await;
 
         match package_cache
             .get_or_fetch_from_url_with_retry(
                 cache_key,
                 record.url.clone(),
                 client.clone(),
-                default_retry_policy(),
+                rattler_networking::retry_policies::default_retry_policy(),
                 reporter,
             )
             .await
         {
-            Ok(package_dir) => Ok(RunExportsJson::from_package_directory(package_dir.path()).ok()),
+            Ok(package_dir) => Ok(<RunExportsJson as rattler_conda_types::package::PackageFile>::from_package_directory(package_dir.path()).ok()),
             Err(e) => Err(e.into()),
         }
     }
 
+    /// Acquire a permit to limit the number of concurrent requests.
+    pub async fn acquire_request_permit(&self) -> Option<tokio::sync::OwnedSemaphorePermit> {
+        futures::future::OptionFuture::from(
+            self.max_concurrent_requests
+                .clone()
+                .map(Semaphore::acquire_owned),
+        )
+        .await
+        .transpose()
+        .expect("semaphore error")
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    async fn extract_into_package_cache(
+        self,
+        _record: &RepoDataRecord,
+        _progress_reporter: Option<Arc<dyn RunExportsReporter>>,
+    ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
+        Ok(None)
+    }
+
     /// Read the `run_exports.json` file from a package file directly.
+    #[cfg(not(target_arch = "wasm32"))]
     async fn read_from_package_file(
         &self,
         path: &Path,
     ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
         match rattler_package_streaming::seek::read_package_file(path) {
             Ok(run_exports_json) => Ok(Some(run_exports_json)),
-            Err(ExtractError::MissingComponent) => Ok(None),
-            Err(ExtractError::IoError(err)) => Err(RunExportExtractorError::DecodeRunExports(
-                path.display().to_string(),
-                err,
-            )),
+            Err(rattler_package_streaming::ExtractError::MissingComponent) => Ok(None),
+            Err(rattler_package_streaming::ExtractError::IoError(err)) => Err(
+                RunExportExtractorError::DecodeRunExports(path.display().to_string(), err),
+            ),
             Err(err) => Err(RunExportExtractorError::DecodeRunExports(
                 path.display().to_string(),
                 std::io::Error::other(err),
             )),
         }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    async fn read_from_package_file(
+        &self,
+        _path: &Path,
+    ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
+        Ok(None)
     }
 }
 

@@ -165,7 +165,6 @@ impl GatewayBuilder {
                 cache,
                 #[cfg(not(target_arch = "wasm32"))]
                 package_cache,
-                #[cfg(not(target_arch = "wasm32"))]
                 subdir_run_exports_cache: Arc::default(),
                 concurrent_requests_semaphore,
             }),
