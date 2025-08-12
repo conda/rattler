@@ -290,6 +290,7 @@ pub enum PendingOrFetched<T> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::{
         future::pending,
         sync::{
@@ -297,8 +298,7 @@ mod tests {
             Arc,
         },
     };
-
-    use super::*;
+    use tokio::task::JoinHandle;
 
     #[tokio::test]
     async fn test_basic_get_or_try_init() {
@@ -599,14 +599,14 @@ mod tests {
 
         let map1 = map.clone();
         let barrier1 = barrier.clone();
-        let handle1 = tokio::spawn(async move {
-            map1.get_or_try_init("test_key".to_string(), || async move {
-                barrier1.wait().await;
-                panic!();
-                Ok::<_, &str>("value".to_string())
-            })
-            .await
-        });
+        let handle1: JoinHandle<Result<String, CoalescedGetError<&'static str>>> =
+            tokio::spawn(async move {
+                map1.get_or_try_init("test_key".to_string(), || async move {
+                    barrier1.wait().await;
+                    panic!();
+                })
+                .await
+            });
 
         let map2 = map.clone();
         let barrier2 = barrier.clone();
