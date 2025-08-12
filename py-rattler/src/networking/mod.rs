@@ -14,7 +14,7 @@ use crate::{
     repo_data::gateway::PyFetchRepoDataOptions, repo_data::sparse::PySparseRepoData,
 };
 use client::PyClientWithMiddleware;
-use rattler_repodata_gateway::{DownloadReporter, JLapReporter, Reporter};
+use rattler_repodata_gateway::{DownloadReporter, JLAPReporter, Reporter};
 
 pub mod cached_repo_data;
 pub mod client;
