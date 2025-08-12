@@ -30,14 +30,13 @@ use rattler_conda_types::{Channel, MatchSpec, Platform};
 pub use repo_data::RepoData;
 use reqwest_middleware::ClientWithMiddleware;
 #[cfg(not(target_arch = "wasm32"))]
-use run_exports_extractor::RunExportExtractor;
+use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 #[cfg(not(target_arch = "wasm32"))]
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 use subdir::Subdir;
 use tracing::{instrument, Level};
 use url::Url;
 
-use crate::gateway::run_exports_extractor::SubdirRunExportsCache;
 use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 
 /// Central access point for high level queries about

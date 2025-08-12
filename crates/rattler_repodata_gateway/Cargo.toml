@@ -38,7 +38,6 @@ pin-project-lite = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false, optional = true }
 rattler_digest = { workspace = true, default-features = false, features = ["tokio", "serde"] }
 rattler_networking = { workspace = true, default-features = false }
-rattler_package_streaming = { workspace = true, default-features = false, optional = true }
 reqwest = { workspace = true, features = ["stream", "http2"] }
 reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
@@ -70,6 +69,7 @@ windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem", "Win32
 async-fd-lock = { workspace = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 tokio = { workspace = true, features = ["rt", "io-util"] }
+rattler_package_streaming = { workspace = true, default-features = false, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasmtimer = { workspace = true }
