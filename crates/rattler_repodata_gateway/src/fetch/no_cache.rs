@@ -28,6 +28,7 @@ use crate::{
     utils::{AsyncEncoding, Encoding},
     Reporter,
 };
+use crate::reporter::DownloadReporter;
 
 /// Additional knobs that allow you to tweak the behavior of
 /// [`fetch_repo_data`].
@@ -212,6 +213,7 @@ pub async fn fetch_repo_data(
     let repo_data_url = request.url().clone();
     let download_reporter = reporter
         .as_deref()
+        .and_then(|reporter| reporter.download_reporter())
         .map(|r| (r, r.on_download_start(&repo_data_url)));
 
     // Construct a retry behavior
@@ -291,7 +293,7 @@ pub async fn fetch_repo_data(
 async fn stream_response_body(
     response: Response,
     compression: Compression,
-    reporter: Option<(&dyn Reporter, usize)>,
+    reporter: Option<(&dyn DownloadReporter, usize)>,
 ) -> Result<Bytes, FetchRepoDataError> {
     let response_url = response.url().clone().redact();
     let encoding = Encoding::from(&response);

@@ -422,6 +422,7 @@ pub async fn patch_repo_data(
 
     let download_report = reporter
         .as_deref()
+        .and_then(Reporter::download_reporter)
         .map(|reporter| (reporter, reporter.on_download_start(&jlap_url)));
     let (response, position) =
         fetch_jlap_with_retry(&jlap_url, client, jlap_state.position).await?;
@@ -527,6 +528,7 @@ fn apply_jlap_patches(
 ) -> Result<Blake2b256Hash, JLAPError> {
     let report = reporter
         .as_deref()
+        .and_then(|reporter| reporter.jlap_reporter())
         .map(|reporter| (reporter, reporter.on_jlap_start()));
 
     if let Some((reporter, index)) = report {

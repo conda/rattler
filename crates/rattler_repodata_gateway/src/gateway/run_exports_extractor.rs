@@ -1,6 +1,7 @@
 use std::{io::BufReader, path::Path, sync::Arc};
 
 use bytes::Buf;
+use coalesced_map::CoalescedMap;
 use futures::future::OptionFuture;
 use http::StatusCode;
 use rattler_cache::package_cache::{CacheKey, CacheReporter, PackageCache, PackageCacheError};
@@ -16,40 +17,15 @@ use tokio::sync::Semaphore;
 use tracing::instrument;
 use url::Url;
 
-use coalesced_map::CoalescedMap;
+use crate::reporter::{DownloadReporter, ResponseReporterExt};
 
 /// Type used for in-memory caching of `SubdirRunExportsJson`.
 pub(crate) type SubdirRunExportsCache = CoalescedMap<Url, Option<Arc<SubdirRunExportsJson>>>;
 
 /// A trait that enables being notified of download progress for run exports.
 pub trait RunExportsReporter: Send + Sync {
-    /// Called when a download of a file started.
-    ///
-    /// Returns an index that can be used to identify the download in subsequent
-    /// calls.
-    fn on_download_start(&self, _url: &Url) -> usize {
-        0
-    }
-
-    /// Called when the download of a file makes any progress.
-    ///
-    /// The `total_bytes` parameter is `None` if the total size of the file is
-    /// unknown.
-    ///
-    /// The `index` parameter is the index returned by `on_download_start`.
-    fn on_download_progress(
-        &self,
-        _url: &Url,
-        _index: usize,
-        _bytes_downloaded: usize,
-        _total_bytes: Option<usize>,
-    ) {
-    }
-
-    /// Called when the download of a file finished.
-    ///
-    /// The `index` parameter is the index returned by `on_download_start`.
-    fn on_download_complete(&self, _url: &Url, _index: usize) {}
+    /// Returns a reporter that can be used to report download progress.
+    fn download_reporter(&self) -> Option<&dyn DownloadReporter>;
 
     /// Called to create a new reporter than can be used to report progress of a
     /// package download.
@@ -166,33 +142,35 @@ impl RunExportExtractor {
     async fn fetch_subdir_run_exports_zst_json(
         subdir_url: &Url,
         client: &ClientWithMiddleware,
+        reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<Option<SubdirRunExportsJson>, RunExportExtractorError> {
-        let run_exports_json_zst_url = subdir_url
+        let url = subdir_url
             .join("run_exports.json.zst")
             .expect("is a valid url segment");
 
-        let request = client.get(run_exports_json_zst_url.clone());
+        let reporter = reporter
+            .as_deref()
+            .and_then(RunExportsReporter::download_reporter)
+            .map(|reporter| (reporter, reporter.on_download_start(&url)));
+        let _progress_guard = DownloadProgressGuard::new(reporter, url.clone());
+
+        let request = client.get(url.clone());
         let response = request.send().await.and_then(|resp| {
             resp.error_for_status()
                 .map_err(reqwest_middleware::Error::Reqwest)
         });
         match response {
             Ok(response) => {
-                let bytes_stream = match response.bytes().await {
+                let bytes_stream = match response.bytes_with_progress(reporter).await {
                     Ok(bytes) => bytes,
-                    Err(err) => {
-                        return Err(RunExportExtractorError::TransportError(
-                            run_exports_json_zst_url,
-                            err,
-                        ))
-                    }
+                    Err(err) => return Err(RunExportExtractorError::TransportError(url, err)),
                 };
                 let buf = BufReader::new(bytes_stream.reader());
                 let decoded = match zstd::decode_all(buf) {
                     Ok(decoded) => decoded,
                     Err(err) => {
                         return Err(RunExportExtractorError::DecodeRunExports(
-                            run_exports_json_zst_url.to_string(),
+                            url.to_string(),
                             err,
                         ))
                     }
@@ -201,16 +179,17 @@ impl RunExportExtractor {
                     Ok(run_exports) => Some(run_exports),
                     Err(e) => {
                         return Err(RunExportExtractorError::DecodeRunExports(
-                            run_exports_json_zst_url.to_string(),
+                            url.to_string(),
                             e.into(),
                         ))
                     }
                 };
+
                 Ok(run_exports)
             }
-            Err(err) if err.status() != Some(StatusCode::NOT_FOUND) => Err(
-                RunExportExtractorError::Request(run_exports_json_zst_url, err),
-            ),
+            Err(err) if err.status() != Some(StatusCode::NOT_FOUND) => {
+                Err(RunExportExtractorError::Request(url, err))
+            }
             _ => Ok(None),
         }
     }
@@ -219,32 +198,34 @@ impl RunExportExtractor {
     async fn fetch_subdir_run_exports_json(
         subdir_url: &Url,
         client: &ClientWithMiddleware,
+        reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<Option<SubdirRunExportsJson>, RunExportExtractorError> {
-        let run_exports_json_url = subdir_url
+        let url = subdir_url
             .join("run_exports.json")
             .expect("is a valid url segment");
 
-        let request = client.get(run_exports_json_url.clone());
+        let request = client.get(url.clone());
+        let reporter = reporter
+            .as_deref()
+            .and_then(RunExportsReporter::download_reporter)
+            .map(|reporter| (reporter, reporter.on_download_start(&url)));
+        let _progress_guard = DownloadProgressGuard::new(reporter, url.clone());
+
         let response = request.send().await.and_then(|resp| {
             resp.error_for_status()
                 .map_err(reqwest_middleware::Error::Reqwest)
         });
         match response {
             Ok(response) => {
-                let bytes_stream = match response.bytes().await {
+                let bytes_stream = match response.bytes_with_progress(reporter).await {
                     Ok(bytes) => bytes,
-                    Err(err) => {
-                        return Err(RunExportExtractorError::TransportError(
-                            run_exports_json_url,
-                            err,
-                        ))
-                    }
+                    Err(err) => return Err(RunExportExtractorError::TransportError(url, err)),
                 };
                 let run_exports = match serde_json::from_slice(&bytes_stream) {
                     Ok(run_exports) => Some(run_exports),
                     Err(e) => {
                         return Err(RunExportExtractorError::DecodeRunExports(
-                            run_exports_json_url.to_string(),
+                            url.to_string(),
                             e.into(),
                         ))
                     }
@@ -252,7 +233,7 @@ impl RunExportExtractor {
                 Ok(run_exports)
             }
             Err(err) if err.status() != Some(StatusCode::NOT_FOUND) => {
-                Err(RunExportExtractorError::Request(run_exports_json_url, err))
+                Err(RunExportExtractorError::Request(url, err))
             }
             _ => Ok(None),
         }
@@ -263,7 +244,7 @@ impl RunExportExtractor {
     async fn fetch_subdir_run_exports(
         &mut self,
         subdir_url: &Url,
-        _reporter: Option<Arc<dyn RunExportsReporter>>,
+        reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Option<Arc<SubdirRunExportsJson>> {
         let url = subdir_url.clone();
         let client = self.client.clone()?;
@@ -273,9 +254,12 @@ impl RunExportExtractor {
                 // Try to fetch the `run_exports.json.zst` file first, and if that
                 // fails, fall back to the `run_exports.json` file.
                 let mut run_exports =
-                    Self::fetch_subdir_run_exports_zst_json(subdir_url, &client).await?;
+                    Self::fetch_subdir_run_exports_zst_json(subdir_url, &client, reporter.clone())
+                        .await?;
                 if run_exports.is_none() {
-                    run_exports = Self::fetch_subdir_run_exports_json(subdir_url, &client).await?;
+                    run_exports =
+                        Self::fetch_subdir_run_exports_json(subdir_url, &client, reporter.clone())
+                            .await?;
                 }
 
                 // Package it up in an `Arc` so that it can be shared.
@@ -349,6 +333,27 @@ impl RunExportExtractor {
                 path.display().to_string(),
                 std::io::Error::other(err),
             )),
+        }
+    }
+}
+
+/// RAII guard to automatically complete download progress reporting when
+/// dropped.
+struct DownloadProgressGuard<'a> {
+    reporter: Option<(&'a dyn DownloadReporter, usize)>,
+    url: Url,
+}
+
+impl<'a> DownloadProgressGuard<'a> {
+    fn new(reporter: Option<(&'a dyn DownloadReporter, usize)>, url: Url) -> Self {
+        Self { reporter, url }
+    }
+}
+
+impl<'a> Drop for DownloadProgressGuard<'a> {
+    fn drop(&mut self) {
+        if let Some((reporter, index)) = self.reporter {
+            reporter.on_download_complete(&self.url, index);
         }
     }
 }

@@ -1985,6 +1985,7 @@ dependencies = [
  "rattler_conda_types",
  "rattler_digest",
  "rattler_networking",
+ "rattler_package_streaming",
  "rattler_redaction",
  "reqwest",
  "reqwest-middleware",
