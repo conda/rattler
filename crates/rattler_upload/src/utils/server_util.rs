@@ -185,7 +185,7 @@ pub fn extract_s3_info(url: &Url) -> Result<(Url, Url, String), Box<dyn std::err
             let region = if host_parts.len() > 4 { 
                 host_parts[2].to_string() 
             } else { 
-                "us-east-1".to_string() 
+                "eu-central-1".to_string() 
             };
 
             let path_segments: Vec<&str> = url.path_segments()
