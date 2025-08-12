@@ -530,7 +530,8 @@ impl Installer {
                         .as_deref()
                         .map(|r| (r, r.on_link_start(operation_idx, &record)));
                     let requested_spec = spec_mapping_ref
-                        .and_then(|mapping| mapping.get(&record.package_record.name).cloned());
+                        .and_then(|mapping| mapping.get(&record.package_record.name).cloned())
+                        .unwrap_or_default();
                     link_package(
                         &record,
                         prefix,
@@ -594,7 +595,7 @@ async fn link_package(
     cached_package_dir: &Path,
     install_options: InstallOptions,
     driver: &InstallDriver,
-    requested_spec: Option<Vec<String>>,
+    requested_spec: Vec<String>,
 ) -> Result<(), InstallerError> {
     let record = record.clone();
     let target_prefix = target_prefix.clone();
@@ -757,16 +758,16 @@ fn update_existing_records(
         // Check if we have requested specs for this package
         if let Some(requested_specs) = spec_mapping.get(package_name) {
             // Check if the requested specs are different from what's currently stored
-            if record.requested_spec.as_ref() != Some(requested_specs) {
+            if &record.requested_spec != requested_specs {
                 // Create an updated record with the new requested specs
                 let mut new_record = record.clone();
-                new_record.requested_spec = Some(requested_specs.clone());
+                new_record.requested_spec = requested_specs.clone();
                 updated_record = Some(new_record);
             }
-        } else if record.requested_spec.is_some() {
-            // Clear the requested_spec if it's not in the mapping and we're asked to clear
+        } else if !record.requested_spec.is_empty() {
+            // Clear the requested_spec if it's not in the mapping
             let mut new_record = record.clone();
-            new_record.requested_spec = Some(Vec::new());
+            new_record.requested_spec = Vec::new();
             updated_record = Some(new_record);
         }
 
@@ -990,16 +991,11 @@ mod tests {
 
         // Verify that requested_spec is properly set
         assert!(
-            updated_record.requested_spec.is_some(),
+            !updated_record.requested_spec.is_empty(),
             "requested_spec should be populated"
         );
         assert_eq!(
-            updated_record
-                .requested_spec
-                .as_ref()
-                .unwrap()
-                .first()
-                .unwrap(),
+            updated_record.requested_spec.first().unwrap(),
             "empty >=0.1.0",
             "requested_spec should match the original spec"
         );
@@ -1021,10 +1017,10 @@ mod tests {
         // Read and verify the PrefixRecord
         let updated_record = read_prefix_record(&meta_file_path);
 
-        // Verify that requested_spec is None (original behavior)
+        // Verify that requested_spec is empty (original behavior)
         assert!(
-            updated_record.requested_spec.is_none(),
-            "requested_spec should be None when not provided"
+            updated_record.requested_spec.is_empty(),
+            "requested_spec should be empty when not provided"
         );
     }
 
@@ -1041,7 +1037,7 @@ mod tests {
         let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
         let initial_record = read_prefix_record(&meta_file_path);
         assert!(
-            initial_record.requested_spec.is_none(),
+            initial_record.requested_spec.is_empty(),
             "Initial installation should have no requested_spec"
         );
 
@@ -1058,16 +1054,11 @@ mod tests {
 
         // The package should now have the requested_spec populated
         assert!(
-            updated_record.requested_spec.is_some(),
+            !updated_record.requested_spec.is_empty(),
             "Updated installation should have requested_spec"
         );
         assert_eq!(
-            updated_record
-                .requested_spec
-                .as_ref()
-                .unwrap()
-                .first()
-                .unwrap(),
+            updated_record.requested_spec.first().unwrap(),
             "empty >=0.1.0",
             "requested_spec should match the newly provided spec"
         );
@@ -1089,16 +1080,11 @@ mod tests {
         let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
         let initial_record = read_prefix_record(&meta_file_path);
         assert!(
-            initial_record.requested_spec.is_some(),
+            !initial_record.requested_spec.is_empty(),
             "Initial installation should have requested_spec"
         );
         assert_eq!(
-            initial_record
-                .requested_spec
-                .as_ref()
-                .unwrap()
-                .first()
-                .unwrap(),
+            initial_record.requested_spec.first().unwrap(),
             "empty >=0.1.0"
         );
 
@@ -1111,9 +1097,9 @@ mod tests {
         // Step 3: Verify that the existing package now has the requested_spec cleared
         let updated_record = read_prefix_record(&meta_file_path);
 
-        // The package should now have the requested_spec cleared (set to None)
+        // The package should now have the requested_spec cleared (set to empty)
         assert!(
-            updated_record.requested_spec.is_none(),
+            updated_record.requested_spec.is_empty(),
             "Updated installation without specs should clear requested_spec"
         );
     }

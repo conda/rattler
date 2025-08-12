@@ -185,9 +185,9 @@ pub struct PrefixRecord {
     /// The spec that was used when this package was installed. Note that this field is not updated if the
     /// currently another spec was used. Note: conda seems to serialize a "None" string value instead of `null`.
     /// Multiple specs can be stored, but for backward compatibility, a single spec is serialized as a string.
-    #[serde_as(as = "Option<OneOrMany<_>>")]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub requested_spec: Option<Vec<String>>,
+    #[serde_as(as = "OneOrMany<_>")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requested_spec: Vec<String>,
 
     /// If menuinst is enabled and added menu items, this field contains the menuinst tracker data.
     /// This data is used to remove the menu items when the package is uninstalled.
@@ -209,7 +209,7 @@ impl PrefixRecord {
         package_tarball_full_path: Option<PathBuf>,
         extracted_package_dir: Option<PathBuf>,
         paths: Vec<PathsEntry>,
-        requested_spec: Option<Vec<String>>,
+        requested_spec: Vec<String>,
         link: Option<Link>,
     ) -> Self {
         Self {

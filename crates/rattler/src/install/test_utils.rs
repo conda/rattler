@@ -42,7 +42,7 @@ pub async fn install_package_to_environment(
             .map(|entry| entry.relative_path.clone())
             .collect(),
         paths_data: paths.into(),
-        requested_spec: None,
+        requested_spec: Vec::new(),
         link: None,
         installed_system_menus: Vec::new(),
     };
@@ -199,5 +199,5 @@ pub async fn download_and_get_prefix_record(
     let repodata_record = get_repodata_record(&package_path);
     // Construct a PrefixRecord for the package
 
-    PrefixRecord::from_repodata_record(repodata_record, None, None, paths, None, None)
+    PrefixRecord::from_repodata_record(repodata_record, None, None, paths, Vec::new(), None)
 }
