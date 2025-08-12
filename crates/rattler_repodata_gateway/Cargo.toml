@@ -38,6 +38,7 @@ pin-project-lite = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false, optional = true }
 rattler_digest = { workspace = true, default-features = false, features = ["tokio", "serde"] }
 rattler_networking = { workspace = true, default-features = false }
+rattler_package_streaming = { workspace = true, default-features = false, optional = true }
 reqwest = { workspace = true, features = ["stream", "http2"] }
 reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
@@ -94,7 +95,7 @@ default = ['rustls-tls']
 native-tls = ['reqwest/native-tls', 'reqwest/native-tls-alpn', 'rattler_networking/native-tls', 'rattler_cache/native-tls', 'rattler_redaction/native-tls']
 rustls-tls = ['reqwest/rustls-tls', 'rattler_networking/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_redaction/rustls-tls']
 sparse = ["rattler_conda_types", "memmap2", "self_cell", "superslice", "itertools", "serde_json/raw_value"]
-gateway = ["sparse", "http", "http-cache-semantics", "parking_lot", "async-trait"]
+gateway = ["sparse", "http", "http-cache-semantics", "parking_lot", "async-trait", "rattler_package_streaming"]
 
 [package.metadata.docs.rs]
 features = ["sparse", "gateway"]

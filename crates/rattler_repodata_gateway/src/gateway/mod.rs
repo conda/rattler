@@ -38,6 +38,7 @@ use tracing::{instrument, Level};
 use url::Url;
 
 use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
+use crate::gateway::run_exports_extractor::SubdirRunExportsCache;
 
 /// Central access point for high level queries about
 /// [`rattler_conda_types::RepoDataRecord`]s from different channels.
@@ -148,8 +149,6 @@ impl Gateway {
         // We can avoid Arc by cloning, but this requires helper method in the trait definition.
         progress_reporter: Option<Arc<dyn RunExportsReporter>>,
     ) -> Result<(), RunExportExtractorError> {
-        let global_run_exports_cache = Arc::new(CoalescedMap::new());
-
         let futures = records
             .filter_map(|record| {
                 if record.package_record.run_exports.is_some() {
@@ -157,15 +156,13 @@ impl Gateway {
                     return None;
                 }
 
-                eprintln!("Fetching run exports for {}", record.file_name);
-
                 let extractor = RunExportExtractor::default()
                     .with_opt_max_concurrent_requests(
                         self.inner.concurrent_requests_semaphore.clone(),
                     )
                     .with_client(self.inner.client.clone())
                     .with_package_cache(self.inner.package_cache.clone())
-                    .with_global_run_exports_cache(global_run_exports_cache.clone());
+                    .with_global_run_exports_cache(self.inner.subdir_run_exports_cache.clone());
 
                 let progress_reporter = progress_reporter.clone();
                 Some(async move {
@@ -215,6 +212,10 @@ struct GatewayInner {
     /// The package cache, stored to reuse memory cache
     #[cfg(not(target_arch = "wasm32"))]
     package_cache: PackageCache,
+
+    /// A cache for global run exports.
+    #[cfg(not(target_arch = "wasm32"))]
+    subdir_run_exports_cache: Arc<SubdirRunExportsCache>,
 
     /// A semaphore to limit the number of concurrent requests.
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,

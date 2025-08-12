@@ -72,9 +72,9 @@ pub use reporter::Reporter;
 mod gateway;
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "gateway"))]
-pub use gateway::RunExportExtractorError;
+pub use gateway::{RunExportExtractorError, RunExportsReporter};
 #[cfg(feature = "gateway")]
 pub use gateway::{
     ChannelConfig, Gateway, GatewayBuilder, GatewayError, MaxConcurrency, RepoData, SourceConfig,
-    SubdirSelection,
+    SubdirSelection
 };

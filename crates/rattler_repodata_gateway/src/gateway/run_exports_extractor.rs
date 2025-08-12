@@ -1,4 +1,4 @@
-use std::{io::BufReader, sync::Arc};
+use std::{io::BufReader, path::Path, sync::Arc};
 
 use bytes::Buf;
 use futures::future::OptionFuture;
@@ -9,9 +9,11 @@ use rattler_conda_types::{
     RepoDataRecord, SubdirRunExportsJson,
 };
 use rattler_networking::retry_policies::default_retry_policy;
+use rattler_package_streaming::ExtractError;
 use reqwest_middleware::ClientWithMiddleware;
 use thiserror::Error;
 use tokio::sync::Semaphore;
+use tracing::instrument;
 use url::Url;
 
 use coalesced_map::CoalescedMap;
@@ -19,6 +21,7 @@ use coalesced_map::CoalescedMap;
 /// Type used for in-memory caching of `SubdirRunExportsJson`.
 pub(crate) type SubdirRunExportsCache = CoalescedMap<Url, Option<Arc<SubdirRunExportsJson>>>;
 
+/// A trait that enables being notified of download progress for run exports.
 pub trait RunExportsReporter: Send + Sync {
     /// Called when a download of a file started.
     ///
@@ -50,7 +53,10 @@ pub trait RunExportsReporter: Send + Sync {
 
     /// Called to create a new reporter than can be used to report progress of a
     /// package download.
-    fn create_package_download_reporter(&self) -> Option<Box<dyn CacheReporter>> {
+    fn create_package_download_reporter(
+        &self,
+        _repo_data_record: &RepoDataRecord,
+    ) -> Option<Box<dyn CacheReporter>> {
         None
     }
 }
@@ -77,7 +83,7 @@ pub enum RunExportExtractorError {
     Request(Url, #[source] reqwest_middleware::Error),
 
     #[error("failed to decode run exports from {0}")]
-    DecodeRunExports(Url, #[source] std::io::Error),
+    DecodeRunExports(String, #[source] std::io::Error),
 
     #[error("failed download bytes from {0}")]
     TransportError(Url, #[source] reqwest::Error),
@@ -127,6 +133,36 @@ impl RunExportExtractor {
         }
     }
 
+    /// Extract the run exports from a package by first checking the
+    /// `run_exports.json` file in the channel subdirectory, and if that fails,
+    /// it will download the package to the cache and read the
+    /// `run_exports.json` file from there.
+    #[instrument(skip_all, fields(record = %record.url.as_str()))]
+    pub async fn extract(
+        mut self,
+        record: &RepoDataRecord,
+        progress_reporter: Option<Arc<dyn RunExportsReporter>>,
+    ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
+        // If this is local package, try to read it directly from the package file
+        // itself.
+        if let Ok(package_file) = record.url.to_file_path() {
+            return self.read_from_package_file(&package_file).await;
+        }
+
+        // Try to fetch the `run_exports.json` from channel
+        if let Some(subdir_run_exports) = self
+            .fetch_subdir_run_exports(&record.platform_url(), progress_reporter.clone())
+            .await
+        {
+            return Ok(subdir_run_exports.get(record).cloned());
+        }
+
+        // Otherwise, fall back to extracting from the package cache.
+        self.extract_into_package_cache(record, progress_reporter)
+            .await
+    }
+
+    /// Fetch the `run_exports.json.zst` file from the subdirectory URL.
     async fn fetch_subdir_run_exports_zst_json(
         subdir_url: &Url,
         client: &ClientWithMiddleware,
@@ -156,7 +192,7 @@ impl RunExportExtractor {
                     Ok(decoded) => decoded,
                     Err(err) => {
                         return Err(RunExportExtractorError::DecodeRunExports(
-                            run_exports_json_zst_url,
+                            run_exports_json_zst_url.to_string(),
                             err,
                         ))
                     }
@@ -165,7 +201,7 @@ impl RunExportExtractor {
                     Ok(run_exports) => Some(run_exports),
                     Err(e) => {
                         return Err(RunExportExtractorError::DecodeRunExports(
-                            run_exports_json_zst_url,
+                            run_exports_json_zst_url.to_string(),
                             e.into(),
                         ))
                     }
@@ -179,6 +215,7 @@ impl RunExportExtractor {
         }
     }
 
+    /// Fetch the `run_exports.json` file from the subdirectory URL.
     async fn fetch_subdir_run_exports_json(
         subdir_url: &Url,
         client: &ClientWithMiddleware,
@@ -207,7 +244,7 @@ impl RunExportExtractor {
                     Ok(run_exports) => Some(run_exports),
                     Err(e) => {
                         return Err(RunExportExtractorError::DecodeRunExports(
-                            run_exports_json_url,
+                            run_exports_json_url.to_string(),
                             e.into(),
                         ))
                     }
@@ -221,6 +258,8 @@ impl RunExportExtractor {
         }
     }
 
+    /// Fetch the `run_exports.json` file from the subdirectory URL, either from
+    /// the `run_exports.json.zst` file or the `run_exports.json` file.
     async fn fetch_subdir_run_exports(
         &mut self,
         subdir_url: &Url,
@@ -248,30 +287,6 @@ impl RunExportExtractor {
             .unwrap_or(None)
     }
 
-    /// Extract the run exports from a package by first checking the
-    /// `run_exports.json` file in the channel subdirectory, and if that fails,
-    /// it will download the package to the cache and read the
-    /// `run_exports.json` file from there.
-    pub async fn extract(
-        mut self,
-        record: &RepoDataRecord,
-        progress_reporter: Option<Arc<dyn RunExportsReporter>>,
-    ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
-        let platform_url = record.platform_url();
-
-        // Try to fetch the `run_exports.json` from channel
-        if let Some(subdir_run_exports) = self
-            .fetch_subdir_run_exports(&platform_url, progress_reporter.clone())
-            .await
-        {
-            return Ok(subdir_run_exports.get(record).cloned());
-        }
-
-        // Otherwise, fall back to extracting from the package cache.
-        self.extract_into_package_cache(record, progress_reporter)
-            .await
-    }
-
     /// Extract the run exports from a package by downloading it to the cache
     /// and then reading the `run_exports.json` file.
     async fn extract_into_package_cache(
@@ -290,7 +305,7 @@ impl RunExportExtractor {
         // Construct a reporter specifically for the run export download
         let reporter = progress_reporter
             .as_deref()
-            .and_then(RunExportsReporter::create_package_download_reporter)
+            .and_then(|reporter| reporter.create_package_download_reporter(record))
             .map(Arc::from);
 
         // Wait for a permit from the semaphore to limit concurrent requests.
@@ -315,6 +330,25 @@ impl RunExportExtractor {
         {
             Ok(package_dir) => Ok(RunExportsJson::from_package_directory(package_dir.path()).ok()),
             Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Read the `run_exports.json` file from a package file directly.
+    async fn read_from_package_file(
+        &self,
+        path: &Path,
+    ) -> Result<Option<RunExportsJson>, RunExportExtractorError> {
+        match rattler_package_streaming::seek::read_package_file(path) {
+            Ok(run_exports_json) => Ok(Some(run_exports_json)),
+            Err(ExtractError::MissingComponent) => Ok(None),
+            Err(ExtractError::IoError(err)) => Err(RunExportExtractorError::DecodeRunExports(
+                path.display().to_string(),
+                err,
+            )),
+            Err(err) => Err(RunExportExtractorError::DecodeRunExports(
+                path.display().to_string(),
+                std::io::Error::other(err),
+            )),
         }
     }
 }
