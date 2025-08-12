@@ -97,7 +97,7 @@ def test_create_prefix_record() -> None:
     )
 
     r.requested_spec = "foo"
-    assert r.requested_spec == "foo"
+    assert r.requested_spec == ["foo"]
 
     print(r.to_json())
 

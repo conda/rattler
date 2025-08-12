@@ -220,7 +220,7 @@ impl PyRecord {
         link: Option<PyLink>,
         package_tarball_full_path: Option<PathBuf>,
         extracted_package_dir: Option<PathBuf>,
-        requested_spec: Option<String>,
+        requested_spec: Option<Vec<String>>,
         files: Option<Vec<PathBuf>>,
     ) -> PyResult<Self> {
         if !package_record.is_repodata_record() {
@@ -237,7 +237,7 @@ impl PyRecord {
                 files: files.unwrap_or_default(),
                 paths_data: paths_data.into(),
                 link: link.map(Into::into),
-                requested_spec,
+                requested_spec: requested_spec.unwrap_or_default(),
                 // TODO wire up support
                 installed_system_menus: Vec::new(),
             }),
@@ -636,12 +636,12 @@ impl PyRecord {
     /// The spec that was used when this package was installed. Note that this
     /// field is not updated if the currently another spec was used.
     #[getter]
-    pub fn requested_spec(&self) -> PyResult<Option<String>> {
+    pub fn requested_spec(&self) -> PyResult<Vec<String>> {
         Ok(self.try_as_prefix_record()?.requested_spec.clone())
     }
 
     #[setter]
-    pub fn set_requested_spec(&mut self, spec: Option<String>) -> PyResult<()> {
+    pub fn set_requested_spec(&mut self, spec: Vec<String>) -> PyResult<()> {
         self.try_as_prefix_record_mut()?.requested_spec = spec;
         Ok(())
     }

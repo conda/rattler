@@ -35,14 +35,14 @@ class PrefixRecord(RepoDataRecord):
         return record
 
     def __init__(
-        self,
-        repodata_record: RepoDataRecord,
-        paths_data: PrefixPaths,
-        link: Optional[Link] = None,
-        package_tarball_full_path: Optional[os.PathLike[str]] = None,
-        extracted_package_dir: Optional[os.PathLike[str]] = None,
-        requested_spec: Optional[str] = None,
-        files: Optional[List[os.PathLike[str]]] = None,
+            self,
+            repodata_record: RepoDataRecord,
+            paths_data: PrefixPaths,
+            link: Optional[Link] = None,
+            package_tarball_full_path: Optional[os.PathLike[str]] = None,
+            extracted_package_dir: Optional[os.PathLike[str]] = None,
+            requested_spec: Optional[List[str]|str] = None,
+            files: Optional[List[os.PathLike[str]]] = None,
     ) -> None:
         record = PyRecord.create_prefix_record(
             repodata_record._record,
@@ -50,7 +50,7 @@ class PrefixRecord(RepoDataRecord):
             link._inner if link else None,
             package_tarball_full_path,
             extracted_package_dir,
-            requested_spec,
+            requested_spec: [requested_spec] if isinstance(requested_spec, str) else requested_spec,
             files,
         )
         self._record = record
@@ -167,13 +167,12 @@ class PrefixRecord(RepoDataRecord):
         self._record.paths_data = value._paths
 
     @property
-    def requested_spec(self) -> Optional[str]:
+    def requested_spec(self) -> List[str]:
         """
         The spec that was used when this package was installed.
-        Note that this field is not currently updated if another
-        spec was used. If this package was not directly requested by the
-        user but was instead installed as a dependency of another package
-        `None` will be returned.
+        If this package was not directly requested by the user but was instead
+        installed as a dependency of another package an empty list will be
+        returned.
 
         Examples
         --------
@@ -182,15 +181,15 @@ class PrefixRecord(RepoDataRecord):
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> r.requested_spec
-        ''
+        []
         >>>
         ```
         """
         return self._record.requested_spec
 
     @requested_spec.setter
-    def requested_spec(self, value: Optional[str]) -> None:
-        self._record.requested_spec = value
+    def requested_spec(self, value: List[str] | str) -> None:
+        self._record.requested_spec = [value] if isinstance(value, str) else value
 
     def __repr__(self) -> str:
         """

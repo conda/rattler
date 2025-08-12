@@ -9,6 +9,7 @@ use rattler::{
 use rattler_conda_types::{PackageName, PrefixRecord, RepoDataRecord};
 use std::collections::HashSet;
 
+use crate::match_spec::PyMatchSpec;
 use crate::{
     error::PyRattlerError, networking::client::PyClientWithMiddleware, platform::PyPlatform,
     record::PyRecord,
@@ -29,7 +30,7 @@ pub fn py_install<'a>(
     cache_dir: Option<PathBuf>,
     installed_packages: Option<Vec<Bound<'a, PyAny>>>,
     reinstall_packages: Option<HashSet<String>>,
-    requested_specs: Option<Vec<Bound<'a, PyAny>>>,
+    requested_specs: Option<Vec<PyMatchSpec>>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let dependencies = records
         .into_iter()
@@ -83,22 +84,9 @@ pub fn py_install<'a>(
             installer.set_reinstall_packages(reinstall_packages);
         }
 
-        // Convert requested specs from Python MatchSpec objects to Rust MatchSpec objects
-        let requested_specs = requested_specs
-            .map(|specs| {
-                specs
-                    .into_iter()
-                    .map(|spec| {
-                        // Try to convert from PyMatchSpec to MatchSpec
-                        crate::match_spec::PyMatchSpec::try_from(spec)
-                            .map(|py_spec| py_spec.inner)
-                    })
-                    .collect::<PyResult<Vec<_>>>()
-            })
-            .transpose()?;
-
-        if let Some(specs) = requested_specs {
-            installer.set_requested_specs(specs);
+        if let Some(requested_specs) = requested_specs {
+            installer
+                .set_requested_specs(requested_specs.into_iter().map(|spec| spec.inner).collect());
         }
 
         // TODO: Return the installation result to python
