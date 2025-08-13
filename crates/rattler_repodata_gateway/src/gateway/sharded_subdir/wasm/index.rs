@@ -38,7 +38,9 @@ pub async fn fetch_index(
     .await;
 
     // Do a fresh requests
-    let reporter = reporter.map(|r| (r, r.on_download_start(&shards_url)));
+    let reporter = reporter
+        .and_then(Reporter::download_reporter)
+        .map(|r| (r, r.on_download_start(&shards_url)));
     let response = client
         .execute(
             request

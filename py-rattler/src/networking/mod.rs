@@ -14,7 +14,7 @@ use crate::{
     repo_data::gateway::PyFetchRepoDataOptions, repo_data::sparse::PySparseRepoData,
 };
 use client::PyClientWithMiddleware;
-use rattler_repodata_gateway::Reporter;
+use rattler_repodata_gateway::{DownloadReporter, JLAPReporter, Reporter};
 
 pub mod cached_repo_data;
 pub mod client;
@@ -83,7 +83,7 @@ struct ProgressReporter {
     callback: Py<PyAny>,
 }
 
-impl Reporter for ProgressReporter {
+impl DownloadReporter for ProgressReporter {
     fn on_download_progress(
         &self,
         _url: &Url,
@@ -96,6 +96,15 @@ impl Reporter for ProgressReporter {
                 .expect("Failed to create tuple");
             self.callback.call1(py, args).expect("Callback failed!");
         });
+    }
+}
+
+impl Reporter for ProgressReporter {
+    fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+        Some(self)
+    }
+    fn jlap_reporter(&self) -> Option<&dyn JLAPReporter> {
+        None
     }
 }
 
