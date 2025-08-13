@@ -17,6 +17,7 @@ pub use indicatif::{
     ProgressFormatter,
 };
 use itertools::Itertools;
+use rayon::prelude::*;
 use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
@@ -751,50 +752,55 @@ fn update_existing_records(
     spec_mapping: &HashMap<PackageName, Vec<String>>,
     prefix: &Prefix,
 ) -> Result<(), InstallerError> {
-    for record in existing_records {
-        let package_name = &record.repodata_record.package_record.name;
-        let mut updated_record = None;
+    existing_records
+        .par_iter()
+        .map(|record| -> Result<(), InstallerError> {
+            let package_name = &record.repodata_record.package_record.name;
+            let mut updated_record = None;
 
-        // Check if we have requested specs for this package
-        if let Some(requested_specs) = spec_mapping.get(package_name) {
-            // Check if the requested specs are different from what's currently stored
-            if &record.requested_spec != requested_specs {
-                // Create an updated record with the new requested specs
+            // Check if we have requested specs for this package
+            if let Some(requested_specs) = spec_mapping.get(package_name) {
+                // Check if the requested specs are different from what's currently stored
+                if &record.requested_spec != requested_specs {
+                    // Create an updated record with the new requested specs
+                    let mut new_record = record.clone();
+                    new_record.requested_spec = requested_specs.clone();
+                    updated_record = Some(new_record);
+                }
+            } else if !record.requested_spec.is_empty() {
+                // Clear the requested_spec if it's not in the mapping
                 let mut new_record = record.clone();
-                new_record.requested_spec = requested_specs.clone();
+                new_record.requested_spec = Vec::new();
                 updated_record = Some(new_record);
             }
-        } else if !record.requested_spec.is_empty() {
-            // Clear the requested_spec if it's not in the mapping
-            let mut new_record = record.clone();
-            new_record.requested_spec = Vec::new();
-            updated_record = Some(new_record);
-        }
 
-        // Write the updated record back to disk if needed
-        if let Some(new_record) = updated_record {
-            let conda_meta_path = prefix.path().join("conda-meta");
-            let pkg_meta_path = format!(
-                "{}-{}-{}.json",
+            // Write the updated record back to disk if needed
+            if let Some(new_record) = updated_record {
+                let conda_meta_path = prefix.path().join("conda-meta");
+                let pkg_meta_path = format!(
+                    "{}-{}-{}.json",
+                    new_record
+                        .repodata_record
+                        .package_record
+                        .name
+                        .as_normalized(),
+                    new_record.repodata_record.package_record.version,
+                    new_record.repodata_record.package_record.build
+                );
+
                 new_record
-                    .repodata_record
-                    .package_record
-                    .name
-                    .as_normalized(),
-                new_record.repodata_record.package_record.version,
-                new_record.repodata_record.package_record.build
-            );
+                    .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
+                    .map_err(|e| {
+                        InstallerError::IoError(
+                            format!("failed to update requested_spec for {pkg_meta_path}"),
+                            e,
+                        )
+                    })?;
+            }
 
-            new_record
-                .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
-                .map_err(|e| {
-                    InstallerError::IoError(
-                        format!("failed to update requested_spec for {pkg_meta_path}"),
-                        e,
-                    )
-                })?;
-        }
-    }
+            Ok(())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(())
 }
