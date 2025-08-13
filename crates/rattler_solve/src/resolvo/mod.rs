@@ -1012,16 +1012,35 @@ fn parse_condition(
     match condition {
         MatchSpecCondition::MatchSpec(match_spec) => {
             // Parse the match spec and intern it
-            let version_set_id =
+            let (spec, condition) =
                 parse_match_spec(pool, &match_spec.to_string(), parse_match_spec_cache).unwrap();
-
-            // Intern the match spec condition
-            // TODO: change this once we merged the new extras implementation
-            if version_set_id.0.len() != 1 {
-                panic!("MatchSpec in Condition should have no extras");
+            if let Some(_condition) = condition {
+                panic!("conditions cannot be nested");
             }
-            let condition = resolvo::Condition::Requirement(version_set_id.0[0]);
-            pool.intern_condition(condition)
+            let conditions = spec.into_iter().map(resolvo::Condition::Requirement);
+            // Intern the conditions
+            let condition_ids = conditions
+                .into_iter()
+                .map(|c| pool.intern_condition(c))
+                .collect_vec();
+            // Create a union of the conditions
+            if condition_ids.len() == 0 {
+                panic!("match spec condition must have at least one version set");
+            } else if condition_ids.len() == 1 {
+                return condition_ids[0];
+            } else {
+                // Otherwise, create a union of the conditions
+                let mut result = condition_ids[0];
+                for &condition_id in &condition_ids[1..] {
+                    let union_condition = resolvo::Condition::Binary(
+                        resolvo::LogicalOperator::And,
+                        result,
+                        condition_id,
+                    );
+                    result = pool.intern_condition(union_condition);
+                }
+                result
+            }
         }
         MatchSpecCondition::And(left, right) => {
             let condition_id_lhs = parse_condition(*left, pool, parse_match_spec_cache);
