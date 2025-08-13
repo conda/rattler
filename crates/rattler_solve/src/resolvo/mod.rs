@@ -1024,7 +1024,7 @@ fn parse_condition(
                 .map(|c| pool.intern_condition(c))
                 .collect_vec();
             // Create a union of the conditions
-            if condition_ids.len() == 0 {
+            if condition_ids.is_empty() {
                 panic!("match spec condition must have at least one version set");
             } else if condition_ids.len() == 1 {
                 return condition_ids[0];
