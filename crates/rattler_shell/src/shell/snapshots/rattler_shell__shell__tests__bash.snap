@@ -5,7 +5,7 @@ expression: script.to_string()
 export FOO=bar
 export FOO2='a b'
 export FOO3="a\\b"
-export FOO4='${UNEXPANDED_VAR}'
+export FOO4="${UNEXPANDED_VAR}"
 unset FOO
 export PATH="${PATH}:bar:a/b"
 export PATH="bar:a/b:${PATH}"

@@ -104,6 +104,11 @@ fn tar_bz2_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str)
     "20d1f1b5dc620b745c325844545fd5c0cdbfdb2385a0e27ef1507399844c8c6d",
     "13ee3577afc291dabd2d9edc59736688"
 )]
+#[case::openmp(
+    "https://conda.anaconda.org/conda-forge/linux-64/openmp-8.0.1-0.tar.bz2",
+    "a3332e80c633be1ee20a41c7dd8810260a2132cf7d03f363d83752cad907bcfd",
+    "b35241079152e5cc891c99368395b2c6"
+)]
 fn url_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {}
 
 #[apply(conda_archives)]

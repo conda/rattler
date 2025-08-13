@@ -1,6 +1,6 @@
 [package]
 name = "rattler_cache"
-version = "0.3.27"
+version = "0.3.29"
 description = "A crate to manage the caching of data in rattler"
 categories = { workspace = true }
 homepage = { workspace = true }
@@ -28,6 +28,7 @@ itertools = { workspace = true }
 parking_lot = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
+rattler_redaction = { workspace = true, default-features = false }
 rattler_networking = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false, features = ["reqwest"] }
 reqwest = { workspace = true }
