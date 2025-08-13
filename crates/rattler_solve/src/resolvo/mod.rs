@@ -12,8 +12,9 @@ use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::{
-    package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
-    PackageName, ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult,
+    package::ArchiveType, GenericVirtualPackage, MatchSpec, MatchSpecCondition, Matches,
+    NamelessMatchSpec, PackageName, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
+    SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -29,6 +30,8 @@ use crate::{
 };
 
 mod conda_sorting;
+
+type MatchSpecParseCache = HashMap<String, (Vec<VersionSetId>, Option<ConditionId>)>;
 
 /// Represents the information required to load available packages into libsolv
 /// for a single channel and platform combination
@@ -259,7 +262,7 @@ pub struct CondaDependencyProvider<'a> {
     matchspec_to_highest_version:
         RefCell<HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>>,
 
-    parse_match_spec_cache: RefCell<HashMap<String, Vec<VersionSetId>>>,
+    parse_match_spec_cache: RefCell<MatchSpecParseCache>,
 
     stop_time: Option<std::time::SystemTime>,
 
@@ -656,26 +659,33 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
         // Add regular dependencies
         for depends in record.package_record.depends.iter() {
-            let version_set_id =
-                match parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache) {
-                    Ok(version_set_id) => version_set_id,
-                    Err(e) => {
-                        let reason = self.pool.intern_string(format!(
-                            "the dependency '{depends}' failed to parse: {e}",
-                        ));
+            let specs = match parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache) {
+                Ok(version_set_id) => version_set_id,
+                Err(e) => {
+                    let reason = self
+                        .pool
+                        .intern_string(format!("the dependency '{depends}' failed to parse: {e}",));
 
-                        return Dependencies::Unknown(reason);
-                    }
-                };
+                    return Dependencies::Unknown(reason);
+                }
+            };
 
+            let (version_set_ids, condition_id) = specs;
             dependencies
                 .requirements
-                .extend(version_set_id.into_iter().map(ConditionalRequirement::from));
+                .extend(
+                    version_set_ids
+                        .into_iter()
+                        .map(|id| ConditionalRequirement {
+                            requirement: id.into(),
+                            condition: condition_id,
+                        }),
+                );
         }
 
         // Add constraints from the record
         for constrains in record.package_record.constrains.iter() {
-            let version_set_ids =
+            let (version_set_ids, condition_id) =
                 match parse_match_spec(&self.pool, constrains, &mut parse_match_spec_cache) {
                     Ok(version_set_id) => version_set_id,
                     Err(e) => {
@@ -686,6 +696,9 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                         return Dependencies::Unknown(reason);
                     }
                 };
+            if condition_id.is_some() {
+                tracing::warn!("The package '{name}' has a constraint with a condition '{constrains}'. This is not supported by the solver and will be ignored.", name = record.package_record.name.as_normalized(), constrains = constrains);
+            }
             dependencies.constrains.extend(version_set_ids);
         }
 
@@ -696,7 +709,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
             .iter()
             .flat_map(|(extra, deps)| deps.iter().map(move |dep| (extra, dep)))
         {
-            let version_set_ids =
+            let (version_set_ids, spec_condition) =
                 match parse_match_spec(&self.pool, matchspec, &mut parse_match_spec_cache) {
                     Ok(version_set_id) => version_set_id,
                     Err(e) => {
@@ -709,11 +722,20 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                 };
 
             // Add them as conditional requirements (e.g. `numpy; if extra`).
-            let condition_id = self.extra_condition(&record.package_record.name, extra);
+            let extra_condition = self.extra_condition(&record.package_record.name, extra);
             for version_set_id in version_set_ids {
                 dependencies.requirements.push(ConditionalRequirement {
                     requirement: version_set_id.into(),
-                    condition: Some(condition_id),
+                    condition: if let Some(condition) = spec_condition {
+                        let condition = resolvo::Condition::Binary(
+                            resolvo::LogicalOperator::And,
+                            extra_condition,
+                            condition,
+                        );
+                        Some(self.pool.intern_condition(condition))
+                    } else {
+                        Some(extra_condition)
+                    },
                 });
             }
         }
@@ -894,22 +916,33 @@ impl super::SolverImpl for Solver {
 fn parse_match_spec(
     pool: &Pool<SolverMatchSpec<'_>, NameType>,
     spec_str: &str,
-    parse_match_spec_cache: &mut HashMap<String, Vec<VersionSetId>>,
-) -> Result<Vec<VersionSetId>, ParseMatchSpecError> {
-    if let Some(spec_id) = parse_match_spec_cache.get(spec_str) {
-        return Ok(spec_id.clone());
+    parse_match_spec_cache: &mut MatchSpecParseCache,
+) -> Result<(Vec<VersionSetId>, Option<ConditionId>), ParseMatchSpecError> {
+    if let Some(cached) = parse_match_spec_cache.get(spec_str) {
+        return Ok(cached.clone());
     }
 
     // Parse the match spec and extract the name of the package it depends on.
     let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient)?;
+    let condition = match_spec.condition.clone();
+
+    let condition_id = if let Some(condition) = condition {
+        let condition_id = parse_condition(condition, pool, parse_match_spec_cache);
+        Some(condition_id)
+    } else {
+        None
+    };
 
     // Get the version sets for the match spec.
     let version_set_ids = version_sets_for_match_spec(pool, match_spec);
 
     // Store in the match spec cache
-    parse_match_spec_cache.insert(spec_str.to_string(), version_set_ids.clone());
+    parse_match_spec_cache.insert(
+        spec_str.to_string(),
+        (version_set_ids.clone(), condition_id),
+    );
 
-    Ok(version_set_ids)
+    Ok((version_set_ids, condition_id))
 }
 
 fn version_sets_for_match_spec(
@@ -968,4 +1001,49 @@ pub fn extra_version_set(
     };
     let name_id = pool.intern_package_name(name);
     pool.intern_version_set(name_id, SolverMatchSpec::Extra)
+}
+
+/// Parses a condition from a `MatchSpecCondition` and returns the corresponding `ConditionId`.
+fn parse_condition(
+    condition: MatchSpecCondition,
+    pool: &Pool<SolverMatchSpec<'_>, NameType>,
+    parse_match_spec_cache: &mut MatchSpecParseCache,
+) -> ConditionId {
+    match condition {
+        MatchSpecCondition::MatchSpec(match_spec) => {
+            // Parse the match spec and intern it
+            let version_set_id =
+                parse_match_spec(pool, &match_spec.to_string(), parse_match_spec_cache).unwrap();
+
+            // Intern the match spec condition
+            // TODO: change this once we merged the new extras implementation
+            if version_set_id.0.len() != 1 {
+                panic!("MatchSpec in Condition should have no extras");
+            }
+            let condition = resolvo::Condition::Requirement(version_set_id.0[0]);
+            pool.intern_condition(condition)
+        }
+        MatchSpecCondition::And(left, right) => {
+            let condition_id_lhs = parse_condition(*left, pool, parse_match_spec_cache);
+            let condition_id_rhs = parse_condition(*right, pool, parse_match_spec_cache);
+            // Intern the AND condition
+            let condition = resolvo::Condition::Binary(
+                resolvo::LogicalOperator::And,
+                condition_id_lhs,
+                condition_id_rhs,
+            );
+            pool.intern_condition(condition)
+        }
+        MatchSpecCondition::Or(left, right) => {
+            let condition_id_lhs = parse_condition(*left, pool, parse_match_spec_cache);
+            let condition_id_rhs = parse_condition(*right, pool, parse_match_spec_cache);
+            // Intern the OR condition
+            let condition = resolvo::Condition::Binary(
+                resolvo::LogicalOperator::Or,
+                condition_id_lhs,
+                condition_id_rhs,
+            );
+            pool.intern_condition(condition)
+        }
+    }
 }
