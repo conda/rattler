@@ -17,13 +17,13 @@ pub use indicatif::{
     ProgressFormatter,
 };
 use itertools::Itertools;
-use rayon::prelude::*;
 use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
     MatchSpec, PackageName, Platform, PrefixRecord, RepoDataRecord,
 };
 use rattler_networking::retry_policies::default_retry_policy;
+use rayon::prelude::*;
 pub use reporter::Reporter;
 use reqwest::Client;
 use simple_spawn_blocking::tokio::run_blocking_task;
