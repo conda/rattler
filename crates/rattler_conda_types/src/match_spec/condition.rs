@@ -3,7 +3,7 @@ use std::fmt::Display;
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{char, multispace0, multispace1},
+    character::complete::{char, multispace0},
     sequence::{delimited, preceded},
     IResult, Parser,
 };
@@ -54,15 +54,14 @@ fn matchspec_token(input: &str) -> IResult<&str, &str> {
         if let Some(pos) = input.find(delimiter) {
             // Make sure it's a word boundary for "and"/"or"
             if *delimiter == "and" || *delimiter == "or" {
-                // Check if it's preceded and followed by whitespace or start/end of string
+                // Check if it's preceded and followed by whitespace or start/end of string or parentheses
                 let is_word_boundary = {
                     let before_ok = pos == 0 || input.chars().nth(pos - 1).unwrap().is_whitespace();
                     let after_ok = pos + delimiter.len() >= input.len()
-                        || input
-                            .chars()
-                            .nth(pos + delimiter.len())
-                            .unwrap()
-                            .is_whitespace();
+                        || {
+                            let next_char = input.chars().nth(pos + delimiter.len()).unwrap();
+                            next_char.is_whitespace() || next_char == '(' || next_char == ')'
+                        };
                     before_ok && after_ok
                 };
                 if is_word_boundary {
@@ -124,7 +123,7 @@ fn primary_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
 fn and_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
     let (input, first) = primary_condition(input)?;
     let (input, rest) =
-        nom::multi::many0(preceded((ws, tag("and"), multispace1), primary_condition))
+        nom::multi::many0(preceded((ws, tag("and"), ws), primary_condition))
             .parse(input)?;
 
     Ok((
@@ -139,7 +138,7 @@ fn and_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
 fn or_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
     let (input, first) = and_condition(input)?;
     let (input, rest) =
-        nom::multi::many0(preceded((ws, tag("or"), multispace1), and_condition)).parse(input)?;
+        nom::multi::many0(preceded((ws, tag("or"), ws), and_condition)).parse(input)?;
 
     Ok((
         input,
@@ -158,7 +157,7 @@ pub(crate) fn parse_condition(input: &str) -> IResult<&str, MatchSpecCondition> 
 mod tests {
     use super::*;
     use insta::assert_yaml_snapshot;
-    use nom::{bytes::complete::take_while1, combinator::opt};
+    use nom::{bytes::complete::take_while1, character::complete::multispace1, combinator::opt};
 
     fn parse_and_extract(input: &str) -> Statement {
         let result = parse_statement(input).unwrap();
@@ -199,6 +198,8 @@ mod tests {
             "complex; if a and b or c",
             "nested; if (a or b) and (c or d)",
             "deep; if a and (b or (c and d))",
+            "deep; if a and(b or(c and d))",
+            "deep; if foobar >=1.23 *or* and(b >32.12,<=43 *and or(c and d))",
             "whitespace;   if   foo   or   bar  ",
             "underscores; if foo_bar and baz_qux",
             "mixed; if (alpha and beta) or (gamma and (delta or epsilon))",
@@ -241,6 +242,7 @@ mod tests {
             "bad; if closed_paren)",
             "bad; if and missing_operand",
             "bad; if or missing_operand",
+            "bad; if multiple; if another",
         ];
 
         for case in error_cases {

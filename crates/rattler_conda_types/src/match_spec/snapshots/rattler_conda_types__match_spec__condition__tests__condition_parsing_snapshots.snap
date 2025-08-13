@@ -79,6 +79,38 @@ expression: results
                     name: c
                 - MatchSpec:
                     name: d
+- - deep; if a and(b or(c and d))
+  - prefix: deep
+    condition:
+      And:
+        - MatchSpec:
+            name: a
+        - Or:
+            - MatchSpec:
+                name: b
+            - And:
+                - MatchSpec:
+                    name: c
+                - MatchSpec:
+                    name: d
+- - "deep; if foobar >=1.23 *or* and(b >32.12,<=43 *and or(c and d))"
+  - prefix: deep
+    condition:
+      And:
+        - MatchSpec:
+            name: foobar
+            version: ">=1.23"
+            build: "*or*"
+        - Or:
+            - MatchSpec:
+                name: b
+                version: ">32.12,<=43"
+                build: "*and"
+            - And:
+                - MatchSpec:
+                    name: c
+                - MatchSpec:
+                    name: d
 - - "whitespace;   if   foo   or   bar  "
   - prefix: whitespace
     condition:
