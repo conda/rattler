@@ -34,17 +34,8 @@ pub async fn install_package_to_environment(
 
     // Construct a PrefixRecord for the package
     let prefix_record = PrefixRecord {
-        repodata_record,
-        package_tarball_full_path: None,
         extracted_package_dir: Some(package_dir),
-        files: paths
-            .iter()
-            .map(|entry| entry.relative_path.clone())
-            .collect(),
-        paths_data: paths.into(),
-        requested_spec: Vec::new(),
-        link: None,
-        installed_system_menus: Vec::new(),
+        ..PrefixRecord::from_repodata_record(repodata_record, paths)
     };
 
     // Create the conda-meta directory if it doesnt exist yet.
@@ -199,5 +190,5 @@ pub async fn download_and_get_prefix_record(
     let repodata_record = get_repodata_record(&package_path);
     // Construct a PrefixRecord for the package
 
-    PrefixRecord::from_repodata_record(repodata_record, None, None, paths, Vec::new(), None)
+    PrefixRecord::from_repodata_record(repodata_record, paths)
 }

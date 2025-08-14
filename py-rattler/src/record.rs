@@ -213,14 +213,15 @@ impl PyRecord {
     }
 
     #[staticmethod]
-    #[pyo3(signature = (repodata_record, paths_data, link=None, package_tarball_full_path=None, extracted_package_dir=None, requested_spec=None, files=None))]
+    #[pyo3(signature = (repodata_record, paths_data, link=None, package_tarball_full_path=None, extracted_package_dir=None, requested_spec=None, requested_specs=None, files=None))]
     pub fn create_prefix_record(
         repodata_record: PyRecord,
         paths_data: PyPrefixPaths,
         link: Option<PyLink>,
         package_tarball_full_path: Option<PathBuf>,
         extracted_package_dir: Option<PathBuf>,
-        requested_spec: Option<Vec<String>>,
+        requested_spec: Option<String>,
+        requested_specs: Option<Vec<String>>,
         files: Option<Vec<PathBuf>>,
     ) -> PyResult<Self> {
         if !repodata_record.is_repodata_record() {
@@ -229,6 +230,7 @@ impl PyRecord {
             ));
         }
 
+        #[allow(deprecated)]
         Ok(Self {
             inner: RecordInner::Prefix(PrefixRecord {
                 repodata_record: repodata_record.try_as_repodata_record().unwrap().clone(),
@@ -237,7 +239,8 @@ impl PyRecord {
                 files: files.unwrap_or_default(),
                 paths_data: paths_data.into(),
                 link: link.map(Into::into),
-                requested_spec: requested_spec.unwrap_or_default(),
+                requested_spec,
+                requested_specs: requested_specs.unwrap_or_default(),
                 // TODO wire up support
                 installed_system_menus: Vec::new(),
             }),
@@ -635,14 +638,30 @@ impl PyRecord {
 
     /// The spec that was used when this package was installed. Note that this
     /// field is not updated if the currently another spec was used.
+    /// Deprecated: Use requested_specs instead.
     #[getter]
-    pub fn requested_spec(&self) -> PyResult<Vec<String>> {
+    #[allow(deprecated)]
+    pub fn requested_spec(&self) -> PyResult<Option<String>> {
         Ok(self.try_as_prefix_record()?.requested_spec.clone())
     }
 
     #[setter]
-    pub fn set_requested_spec(&mut self, spec: Vec<String>) -> PyResult<()> {
+    #[allow(deprecated)]
+    pub fn set_requested_spec(&mut self, spec: Option<String>) -> PyResult<()> {
         self.try_as_prefix_record_mut()?.requested_spec = spec;
+        Ok(())
+    }
+
+    /// Multiple specs that were used when this package was installed.
+    /// This field replaces the deprecated requested_spec field.
+    #[getter]
+    pub fn requested_specs(&self) -> PyResult<Vec<String>> {
+        Ok(self.try_as_prefix_record()?.requested_specs.clone())
+    }
+
+    #[setter]
+    pub fn set_requested_specs(&mut self, specs: Vec<String>) -> PyResult<()> {
+        self.try_as_prefix_record_mut()?.requested_specs = specs;
         Ok(())
     }
 

@@ -11,7 +11,7 @@ use rattler_digest::serde::SerializableHash;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use serde_with::{serde_as, DefaultOnNull, OneOrMany};
+use serde_with::serde_as;
 use tempfile::NamedTempFile;
 
 use crate::{
@@ -201,11 +201,16 @@ pub struct PrefixRecord {
     /// The spec that was used when this package was installed. Note that this
     /// field is not updated if the currently another spec was used. Note:
     /// conda seems to serialize a "None" string value instead of `null`.
-    /// Multiple specs can be stored, but for backward compatibility, a single
-    /// spec is serialized as a string.
-    #[serde_as(as = "DefaultOnNull<OneOrMany<_>>")]
+    ///
+    /// This field is deprecated. Use `requested_specs` instead.
+    #[deprecated(note = "Use `requested_specs` instead")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_spec: Option<String>,
+
+    /// Multiple specs that were used when this package was installed.
+    /// This field replaces the deprecated `requested_spec` field.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub requested_spec: Vec<String>,
+    pub requested_specs: Vec<String>,
 
     /// If menuinst is enabled and added menu items, this field contains the
     /// menuinst tracker data. This data is used to remove the menu items
@@ -223,25 +228,22 @@ impl PrefixRecord {
     }
 
     /// Creates a `PrefixRecord` from a `RepoDataRecord`.
-    pub fn from_repodata_record(
-        repodata_record: RepoDataRecord,
-        package_tarball_full_path: Option<PathBuf>,
-        extracted_package_dir: Option<PathBuf>,
-        paths: Vec<PathsEntry>,
-        requested_spec: Vec<String>,
-        link: Option<Link>,
-    ) -> Self {
+    pub fn from_repodata_record(repodata_record: RepoDataRecord, paths: Vec<PathsEntry>) -> Self {
+        let files = paths
+            .iter()
+            .map(|entry| entry.relative_path.clone())
+            .collect();
+
         Self {
             repodata_record,
-            package_tarball_full_path,
-            extracted_package_dir,
-            files: paths
-                .iter()
-                .map(|entry| entry.relative_path.clone())
-                .collect(),
+            package_tarball_full_path: None,
+            extracted_package_dir: None,
+            files,
             paths_data: paths.into(),
-            link,
-            requested_spec,
+            link: None,
+            #[allow(deprecated)]
+            requested_spec: None,
+            requested_specs: Vec::new(),
             installed_system_menus: Vec::new(),
         }
     }

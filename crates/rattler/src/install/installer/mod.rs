@@ -596,7 +596,7 @@ async fn link_package(
     cached_package_dir: &Path,
     install_options: InstallOptions,
     driver: &InstallDriver,
-    requested_spec: Vec<String>,
+    requested_specs: Vec<String>,
 ) -> Result<(), InstallerError> {
     let record = record.clone();
     let target_prefix = target_prefix.clone();
@@ -618,23 +618,15 @@ async fn link_package(
 
             // Construct a PrefixRecord for the package
             let prefix_record = PrefixRecord {
-                repodata_record: record.clone(),
-                package_tarball_full_path: None,
                 extracted_package_dir: Some(cached_package_dir.clone()),
-                files: paths
-                    .iter()
-                    .map(|entry| entry.relative_path.clone())
-                    .collect(),
-                paths_data: paths.into(),
-                requested_spec,
-
                 link: Some(Link {
                     source: cached_package_dir,
                     // TODO: compute the right value here based on the options and `can_hard_link`
                     // ...
                     link_type: Some(LinkType::HardLink),
                 }),
-                installed_system_menus: Vec::new(),
+                requested_specs,
+                ..PrefixRecord::from_repodata_record(record.clone(), paths)
             };
 
             let conda_meta_path = target_prefix.path().join("conda-meta");
@@ -745,8 +737,9 @@ fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<Package
 /// Updates existing `PrefixRecord` files with their requested specs.
 ///
 /// This function takes existing records that weren't modified by the transaction
-/// and updates their `requested_spec` field based on the spec mapping or clears it if requested.
+/// and updates their `requested_specs` field based on the spec mapping or clears it if requested.
 /// The updated records are then written back to disk.
+#[allow(deprecated)]
 fn update_existing_records(
     existing_records: &[PrefixRecord],
     spec_mapping: &HashMap<PackageName, Vec<String>>,
@@ -758,19 +751,41 @@ fn update_existing_records(
             let package_name = &record.repodata_record.package_record.name;
             let mut updated_record = None;
 
+            // First, check if we need to migrate from deprecated requested_spec to requested_specs
+            let current_specs = if !record.requested_specs.is_empty() {
+                // Use the new field if it has data
+                record.requested_specs.clone()
+            } else if let Some(ref spec) = record.requested_spec {
+                // Migrate from deprecated field
+                vec![spec.clone()]
+            } else {
+                // No specs at all
+                Vec::new()
+            };
+
+            // Check if we need to migrate from the deprecated field
+            let needs_migration = record.requested_spec.is_some();
+
             // Check if we have requested specs for this package
             if let Some(requested_specs) = spec_mapping.get(package_name) {
                 // Check if the requested specs are different from what's currently stored
-                if &record.requested_spec != requested_specs {
+                if needs_migration || &current_specs != requested_specs {
                     // Create an updated record with the new requested specs
                     let mut new_record = record.clone();
-                    new_record.requested_spec = requested_specs.clone();
+                    new_record.requested_specs = requested_specs.clone();
+                    new_record.requested_spec = None; // Clear deprecated field
                     updated_record = Some(new_record);
                 }
-            } else if !record.requested_spec.is_empty() {
-                // Clear the requested_spec if it's not in the mapping
+            } else if !current_specs.is_empty() {
+                // Clear the requested_specs if it's not in the mapping
                 let mut new_record = record.clone();
-                new_record.requested_spec = Vec::new();
+                new_record.requested_specs = Vec::new();
+                new_record.requested_spec = None; // Clear deprecated field
+                updated_record = Some(new_record);
+            } else if needs_migration {
+                // Even if current_specs is empty, we still need to clear the deprecated field
+                let mut new_record = record.clone();
+                new_record.requested_spec = None;
                 updated_record = Some(new_record);
             }
 
@@ -792,7 +807,7 @@ fn update_existing_records(
                     .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
                     .map_err(|e| {
                         InstallerError::IoError(
-                            format!("failed to update requested_spec for {pkg_meta_path}"),
+                            format!("failed to update requested_specs for {pkg_meta_path}"),
                             e,
                         )
                     })?;
@@ -995,15 +1010,15 @@ mod tests {
         // Read and verify the PrefixRecord
         let updated_record = read_prefix_record(&meta_file_path);
 
-        // Verify that requested_spec is properly set
+        // Verify that requested_specs is properly set
         assert!(
-            !updated_record.requested_spec.is_empty(),
-            "requested_spec should be populated"
+            !updated_record.requested_specs.is_empty(),
+            "requested_specs should be populated"
         );
         assert_eq!(
-            updated_record.requested_spec.first().unwrap(),
+            updated_record.requested_specs.first().unwrap(),
             "empty >=0.1.0",
-            "requested_spec should match the original spec"
+            "requested_specs should match the original spec"
         );
     }
 
@@ -1023,10 +1038,10 @@ mod tests {
         // Read and verify the PrefixRecord
         let updated_record = read_prefix_record(&meta_file_path);
 
-        // Verify that requested_spec is empty (original behavior)
+        // Verify that requested_specs is empty (original behavior)
         assert!(
-            updated_record.requested_spec.is_empty(),
-            "requested_spec should be empty when not provided"
+            updated_record.requested_specs.is_empty(),
+            "requested_specs should be empty when not provided"
         );
     }
 
@@ -1039,12 +1054,12 @@ mod tests {
         let installer = Installer::new();
         install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
 
-        // Verify that initially there's no requested_spec
+        // Verify that initially there's no requested_specs
         let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
         let initial_record = read_prefix_record(&meta_file_path);
         assert!(
-            initial_record.requested_spec.is_empty(),
-            "Initial installation should have no requested_spec"
+            initial_record.requested_specs.is_empty(),
+            "Initial installation should have no requested_specs"
         );
 
         // Step 2: "Install" the same package again, but this time WITH requested specs
@@ -1055,18 +1070,18 @@ mod tests {
         let installer_with_specs = Installer::new().with_requested_specs(requested_specs);
         install_and_verify_success(installer_with_specs, &target_prefix, repo_record.clone()).await;
 
-        // Step 3: Verify that the existing package now has the requested_spec updated
+        // Step 3: Verify that the existing package now has the requested_specs updated
         let updated_record = read_prefix_record(&meta_file_path);
 
-        // The package should now have the requested_spec populated
+        // The package should now have the requested_specs populated
         assert!(
-            !updated_record.requested_spec.is_empty(),
-            "Updated installation should have requested_spec"
+            !updated_record.requested_specs.is_empty(),
+            "Updated installation should have requested_specs"
         );
         assert_eq!(
-            updated_record.requested_spec.first().unwrap(),
+            updated_record.requested_specs.first().unwrap(),
             "empty >=0.1.0",
-            "requested_spec should match the newly provided spec"
+            "requested_specs should match the newly provided spec"
         );
     }
 
@@ -1082,15 +1097,15 @@ mod tests {
         let installer_with_specs = Installer::new().with_requested_specs(requested_specs);
         install_and_verify_success(installer_with_specs, &target_prefix, repo_record.clone()).await;
 
-        // Verify that the package has requested_spec populated
+        // Verify that the package has requested_specs populated
         let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
         let initial_record = read_prefix_record(&meta_file_path);
         assert!(
-            !initial_record.requested_spec.is_empty(),
-            "Initial installation should have requested_spec"
+            !initial_record.requested_specs.is_empty(),
+            "Initial installation should have requested_specs"
         );
         assert_eq!(
-            initial_record.requested_spec.first().unwrap(),
+            initial_record.requested_specs.first().unwrap(),
             "empty >=0.1.0"
         );
 
@@ -1100,13 +1115,78 @@ mod tests {
         install_and_verify_success(installer_without_specs, &target_prefix, repo_record.clone())
             .await;
 
-        // Step 3: Verify that the existing package now has the requested_spec cleared
+        // Step 3: Verify that the existing package now has the requested_specs cleared
         let updated_record = read_prefix_record(&meta_file_path);
 
-        // The package should now have the requested_spec cleared (set to empty)
+        // The package should now have the requested_specs cleared (set to empty)
         assert!(
-            updated_record.requested_spec.is_empty(),
-            "Updated installation without specs should clear requested_spec"
+            updated_record.requested_specs.is_empty(),
+            "Updated installation without specs should clear requested_specs"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_migrate_deprecated_requested_spec() {
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+
+        // Step 1: Manually create a PrefixRecord with the deprecated requested_spec field
+        // to simulate an old installation
+        let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
+        let conda_meta_path = target_prefix.path().join("conda-meta");
+        std::fs::create_dir_all(&conda_meta_path).unwrap();
+
+        // Create a record with the deprecated field set
+        #[allow(deprecated)]
+        let old_record = PrefixRecord {
+            repodata_record: repo_record.clone(),
+            requested_spec: Some("empty >=0.1.0".to_string()),
+            requested_specs: Vec::new(), // Empty new field
+            ..PrefixRecord::from_repodata_record(repo_record.clone(), Vec::new())
+        };
+
+        old_record.write_to_path(&meta_file_path, true).unwrap();
+
+        // Verify the old record has deprecated field set
+        let initial_record = read_prefix_record(&meta_file_path);
+        #[allow(deprecated)]
+        {
+            assert!(
+                initial_record.requested_spec.is_some(),
+                "Initial record should have deprecated requested_spec"
+            );
+            assert!(
+                initial_record.requested_specs.is_empty(),
+                "Initial record should have empty requested_specs"
+            );
+        }
+
+        // Step 2: Run installer with the same specs to trigger migration
+        let requested_spec = MatchSpec::from_str("empty >=0.1.0", Strict).unwrap();
+        let requested_specs = vec![requested_spec];
+
+        let installer_with_specs = Installer::new().with_requested_specs(requested_specs);
+        install_and_verify_success(installer_with_specs, &target_prefix, repo_record.clone()).await;
+
+        // Step 3: Verify that the migration happened
+        let migrated_record = read_prefix_record(&meta_file_path);
+
+        #[allow(deprecated)]
+        {
+            assert!(
+                migrated_record.requested_spec.is_none(),
+                "Migrated record should have cleared deprecated requested_spec"
+            );
+        }
+
+        assert!(
+            !migrated_record.requested_specs.is_empty(),
+            "Migrated record should have populated requested_specs"
+        );
+        assert_eq!(
+            migrated_record.requested_specs.first().unwrap(),
+            "empty >=0.1.0",
+            "Migrated specs should match the original spec"
         );
     }
 }

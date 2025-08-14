@@ -96,8 +96,11 @@ def test_create_prefix_record() -> None:
         paths_data=paths_data,
     )
 
-    r.requested_spec = "foo"
-    assert r.requested_spec == ["foo"]
+    r.requested_specs = ["foo"]
+    assert r.requested_specs == ["foo"]
+    
+    # Test deprecated field (should be None by default)
+    assert r.requested_spec is None
 
     print(r.to_json())
 

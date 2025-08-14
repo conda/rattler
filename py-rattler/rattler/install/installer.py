@@ -74,8 +74,8 @@ async def install(
         client: An authenticated client to use for downloading packages. If not specified a default
                 client will be used.
         requested_specs: A list of `MatchSpec`s that were originally requested. These will be used
-                to populate the `requested_spec` field in the generated `conda-meta/*.json` files.
-                If `None`, the `requested_spec` field will remain `None`.
+                to populate the `requested_specs` field in the generated `conda-meta/*.json` files.
+                If `None`, the `requested_specs` field will remain empty.
     """
 
     await py_install(
