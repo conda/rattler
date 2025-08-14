@@ -57,11 +57,10 @@ fn matchspec_token(input: &str) -> IResult<&str, &str> {
                 // Check if it's preceded and followed by whitespace or start/end of string or parentheses
                 let is_word_boundary = {
                     let before_ok = pos == 0 || input.chars().nth(pos - 1).unwrap().is_whitespace();
-                    let after_ok = pos + delimiter.len() >= input.len()
-                        || {
-                            let next_char = input.chars().nth(pos + delimiter.len()).unwrap();
-                            next_char.is_whitespace() || next_char == '(' || next_char == ')'
-                        };
+                    let after_ok = pos + delimiter.len() >= input.len() || {
+                        let next_char = input.chars().nth(pos + delimiter.len()).unwrap();
+                        next_char.is_whitespace() || next_char == '(' || next_char == ')'
+                    };
                     before_ok && after_ok
                 };
                 if is_word_boundary {
@@ -123,8 +122,7 @@ fn primary_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
 fn and_condition(input: &str) -> IResult<&str, MatchSpecCondition> {
     let (input, first) = primary_condition(input)?;
     let (input, rest) =
-        nom::multi::many0(preceded((ws, tag("and"), ws), primary_condition))
-            .parse(input)?;
+        nom::multi::many0(preceded((ws, tag("and"), ws), primary_condition)).parse(input)?;
 
     Ok((
         input,
