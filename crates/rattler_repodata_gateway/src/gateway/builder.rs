@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use dashmap::DashMap;
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 
 use crate::{gateway::GatewayInner, ChannelConfig, Gateway};
+use coalesced_map::CoalescedMap;
 
 static USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
@@ -158,13 +158,14 @@ impl GatewayBuilder {
 
         Gateway {
             inner: Arc::new(GatewayInner {
-                subdirs: DashMap::default(),
+                subdirs: CoalescedMap::new(),
                 client,
                 channel_config: self.channel_config,
                 #[cfg(not(target_arch = "wasm32"))]
                 cache,
                 #[cfg(not(target_arch = "wasm32"))]
                 package_cache,
+                subdir_run_exports_cache: Arc::default(),
                 concurrent_requests_semaphore,
             }),
         }
