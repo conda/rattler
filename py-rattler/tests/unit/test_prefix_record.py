@@ -98,7 +98,7 @@ def test_create_prefix_record() -> None:
 
     r.requested_specs = ["foo"]
     assert r.requested_specs == ["foo"]
-    
+
     # Test deprecated field (should be None by default)
     assert r.requested_spec is None
 
