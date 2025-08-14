@@ -180,8 +180,8 @@ class PrefixRecord(RepoDataRecord):
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
-        >>> r.requested_spec
-        None
+        >>> r.requested_spec is None
+        True
         >>>
         ```
         """
