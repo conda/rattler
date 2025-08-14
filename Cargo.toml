@@ -183,7 +183,7 @@ zip = { version = ">=3.0.0,<4.1", default-features = false }
 zstd = { version = "0.13.3", default-features = false }
 
 # These are the all the crates defined in the workspace. We pin all of them together because they are always updated in tendem.
-coalesced_map = { path = "crates/coalesced_map", version = "=0.1.0", default-features = false }
+coalesced_map = { path = "crates/coalesced_map", version = "=0.1.1", default-features = false }
 file_url = { path = "crates/file_url", version = "=0.2.6", default-features = false }
 path_resolver = { path = "crates/path_resolver", version = "=0.1.2", default-features = false }
 rattler = { path = "crates/rattler", version = "=0.34.12", default-features = false }
