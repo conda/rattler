@@ -170,6 +170,14 @@ mod tests {
 
     // Parse the entire statement
     pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
+        // Check for multiple semicolons (only one allowed)
+        if input.matches(';').count() > 1 {
+            return Err(nom::Err::Error(nom::error::Error::new(
+                input,
+                nom::error::ErrorKind::Fail,
+            )));
+        }
+
         let (input, prefix) = identifier(input)?;
         let (input, _) = char(';')(input)?;
         let (input, _) = ws(input)?;
@@ -240,7 +248,7 @@ mod tests {
             "bad; if closed_paren)",
             "bad; if and missing_operand",
             "bad; if or missing_operand",
-            // "bad; if multiple; if another",
+            "bad; if multiple; if another",
         ];
 
         for case in error_cases {

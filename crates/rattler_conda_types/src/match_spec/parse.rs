@@ -1334,6 +1334,15 @@ mod tests {
     }
 
     #[test]
+    fn test_multiple_semicolons() {
+        let spec = MatchSpec::from_str("foo; if bar; if baz", Strict);
+        assert_matches!(spec, Err(ParseMatchSpecError::MoreThanOneSemicolon));
+
+        let spec2 = MatchSpec::from_str("package; something; else", Lenient);
+        assert_matches!(spec2, Err(ParseMatchSpecError::MoreThanOneSemicolon));
+    }
+
+    #[test]
     fn test_namespace() {
         // Test with url channel and url in brackets
         let spec = MatchSpec::from_str(
