@@ -1109,6 +1109,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
+name = "coalesced_map"
+version = "0.1.0"
+dependencies = [
+ "dashmap",
+ "tokio",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3889,7 +3897,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.34.11"
+version = "0.34.12"
 dependencies = [
  "anyhow",
  "console",
@@ -3931,7 +3939,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.29"
+version = "0.3.30"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -3962,7 +3970,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.37.0"
+version = "0.38.0"
 dependencies = [
  "chrono",
  "core-foundation 0.10.1",
@@ -4000,7 +4008,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "console",
  "fs-err",
@@ -4032,7 +4040,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.24.7"
+version = "0.24.8"
 dependencies = [
  "anyhow",
  "bytes",
@@ -4065,7 +4073,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.23.13"
+version = "0.23.14"
 dependencies = [
  "chrono",
  "file_url",
@@ -4097,7 +4105,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.20"
+version = "0.2.21"
 dependencies = [
  "chrono",
  "configparser",
@@ -4125,7 +4133,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.8"
+version = "0.25.9"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4153,7 +4161,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.48"
+version = "0.23.0"
 dependencies = [
  "bzip2",
  "chrono",
@@ -4199,7 +4207,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.23.10"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4210,6 +4218,7 @@ dependencies = [
  "cache_control",
  "cfg-if",
  "chrono",
+ "coalesced_map",
  "dashmap",
  "dirs",
  "file_url",
@@ -4230,6 +4239,7 @@ dependencies = [
  "rattler_conda_types",
  "rattler_digest",
  "rattler_networking",
+ "rattler_package_streaming",
  "rattler_redaction",
  "reqwest",
  "reqwest-middleware",
@@ -4255,7 +4265,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.24.7"
+version = "0.24.8"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4273,7 +4283,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "2.1.8"
+version = "3.0.0"
 dependencies = [
  "chrono",
  "futures",
@@ -4289,7 +4299,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.1.1"
+version = "2.1.2"
 dependencies = [
  "archspec",
  "libloading",

@@ -40,6 +40,7 @@ pub struct PyRecord {
 }
 
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum RecordInner {
     Prefix(PrefixRecord),
     RepoData(RepoDataRecord),
@@ -214,6 +215,7 @@ impl PyRecord {
 
     #[staticmethod]
     #[pyo3(signature = (repodata_record, paths_data, link=None, package_tarball_full_path=None, extracted_package_dir=None, requested_spec=None, requested_specs=None, files=None))]
+    #[allow(clippy::too_many_arguments)]
     pub fn create_prefix_record(
         repodata_record: PyRecord,
         paths_data: PyPrefixPaths,
