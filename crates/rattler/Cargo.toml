@@ -69,3 +69,5 @@ axum = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 tower = { workspace = true, features = ["util"] }
 walkdir.workspace = true
+mockito = "1.0"
+tempfile = "3.0"

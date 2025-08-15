@@ -235,3 +235,185 @@ pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
         Subcommand::Logout(args) => logout(args, storage),
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockito::{Mock, Server};
+    use rattler_networking::AuthenticationStorage;
+    use serde_json::json;
+    use std::sync::Arc;
+    use tempfile::TempDir;
+
+    // Helper function to create a test authentication storage
+    fn create_test_storage() -> (AuthenticationStorage, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = AuthenticationStorage::new(Some(temp_dir.path().to_path_buf()), None).unwrap();
+        (storage, temp_dir)
+    }
+
+    // Helper function to create LoginArgs
+    fn create_login_args(host: &str) -> LoginArgs {
+        LoginArgs {
+            host: host.to_string(),
+            token: None,
+            username: None,
+            password: None,
+            conda_token: None,
+            s3_access_key_id: None,
+            s3_secret_access_key: None,
+            s3_session_token: None,
+        }
+    }
+
+    #[test]
+    fn test_login_with_invalid_token() {
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = create_login_args("prefix.dev");
+        args.token = Some("invalid_token".to_string());
+
+        // Mock the GraphQL API response for invalid token
+        let mut server = Server::new();
+        let mock = server
+            .mock("POST", "/api/graphql")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(json!({
+                "data": {
+                    "viewer": null
+                }
+            }).to_string())
+            .create();
+
+        let result = login(args, storage);
+        assert!(result.is_ok());
+        mock.assert();
+    }
+
+    #[test]
+    fn test_login_missing_password_for_basic_auth() {
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = create_login_args("example.com");
+        args.username = Some("testuser".to_string());
+        // password I set herer is:  None
+        let result = login(args, storage);
+        assert!(matches!(result, Err(AuthenticationCLIError::MissingPassword)));
+    }
+
+    #[test]
+    fn test_login_basic_auth_success() {
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = create_login_args("example.com");
+        args.username = Some("testuser".to_string());
+        args.password = Some("testpass".to_string());
+
+        let result = login(args, storage);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_login_conda_token_success() {
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = create_login_args("anaconda.org");
+        args.conda_token = Some("conda_token_123".to_string());
+
+        let result = login(args, storage);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_login_s3_credentials_success() {
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = create_login_args("s3://my-bucket");
+        args.s3_access_key_id = Some("access_key".to_string());
+        args.s3_secret_access_key = Some("secret_key".to_string());
+        args.s3_session_token = Some("session_token".to_string());
+
+        let result = login(args, storage);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_login_no_authentication_method() {
+        let (storage, _temp_dir) = create_test_storage();
+        let args = create_login_args("example.com");
+        // No authentication method provided
+
+        let result = login(args, storage);
+        assert!(matches!(result, Err(AuthenticationCLIError::NoAuthenticationMethod)));
+    }
+
+    #[test]
+    fn test_login_prefix_dev_requires_token() {
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = create_login_args("prefix.dev");
+        args.username = Some("testuser".to_string());
+        args.password = Some("testpass".to_string());
+
+        let result = login(args, storage);
+        assert!(matches!(result, Err(AuthenticationCLIError::PrefixDevBadMethod)));
+    }
+
+    #[test]
+    fn test_login_anaconda_org_requires_conda_token() {
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = create_login_args("anaconda.org");
+        args.token = Some("bearer_token".to_string());
+
+        let result = login(args, storage);
+        assert!(matches!(result, Err(AuthenticationCLIError::AnacondaOrgBadMethod)));
+    }
+
+    #[test]
+    fn test_login_s3_requires_proper_credentials() {
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = create_login_args("s3://my-bucket");
+        args.token = Some("bearer_token".to_string());
+
+        let result = login(args, storage);
+        assert!(matches!(result, Err(AuthenticationCLIError::S3BadMethod)));
+    }
+
+    #[test]
+    fn test_login_s3_credentials_with_non_s3_host() {
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = create_login_args("example.com");
+        args.s3_access_key_id = Some("access_key".to_string());
+        args.s3_secret_access_key = Some("secret_key".to_string());
+
+        let result = login(args, storage);
+        assert!(matches!(result, Err(AuthenticationCLIError::S3BadMethod)));
+    }
+
+    #[test]
+    fn test_get_url_with_scheme() {
+        let result = get_url("https://prefix.dev").unwrap();
+        assert_eq!(result, "prefix.dev");
+    }
+
+    #[test]
+    fn test_get_url_without_scheme() {
+        let result = get_url("prefix.dev").unwrap();
+        assert_eq!(result, "prefix.dev");
+    }
+
+    #[test]
+    fn test_get_url_with_wildcard() {
+        let result = get_url("example.com").unwrap();
+        assert_eq!(result, "*.example.com");
+    }
+
+    #[test]
+    fn test_get_url_subdomain_no_wildcard() {
+        let result = get_url("api.prefix.dev").unwrap();
+        assert_eq!(result, "api.prefix.dev");
+    }
+
+    #[test]
+    fn test_get_url_invalid_url() {
+        let result = get_url("://invalid-url");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AuthenticationCLIError::ParseUrlError(_)));
+    }
+}
