@@ -1,0 +1,14 @@
+---
+source: crates/rattler_conda_types/src/match_spec/condition.rs
+expression: result
+---
+prefix: xyz
+condition:
+  And:
+    - MatchSpec:
+        name: foobar
+    - Or:
+        - MatchSpec:
+            name: bizbaz
+        - MatchSpec:
+            name: blabla
