@@ -156,25 +156,7 @@ You can [join our discord server via this link][chat-url].
 
 ## Components
 
-Rattler consists of several crates that provide different functionalities.
-
-* **rattler_conda_types**: foundational types for all datastructures used within the conda eco-system.
-* **rattler_package_streaming**: provides functionality to download, extract and create conda package archives.
-* **rattler_repodata_gateway**: downloads, reads and processes information about existing conda packages from an index.
-* **rattler_shell**: code to activate an existing environment and run programs in it.
-* **rattler_solve**: a backend agnostic library to solve the package satisfiability problem.
-* **rattler_virtual_packages**: a crate to detect system capabilities.
-* **rattler_index**: create local conda channels from local packages.
-* **rattler**: functionality to create complete environments from scratch using the crates above.
-* **rattler-lock**: a library to create and parse lockfiles for conda environments.
-* **rattler-networking**: common functionality for networking, like authentication, mirroring and more.
-* **rattler-bin**: an example of a package manager using all the crates above (see: [showcase](#showcase))
-
-You can find these crates in the `crates` folder.
-
-Additionally, we provide Python bindings for most of the functionalities provided by the above crates.
-A python package `py-rattler` is available on [conda-forge](https://prefix.dev/channels/conda-forge/packages/py-rattler) and [PyPI](https://pypi.org/project/py-rattler/).
-Documentation for the python bindings can be found [here](https://conda.github.io/rattler/py-rattler).
+See [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ## What is conda & conda-forge?
 
