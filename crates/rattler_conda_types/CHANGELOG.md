@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.38.0...rattler_conda_types-v0.39.0) - 2025-08-15
+
+### Added
+
+- populate `requested_spec` ([#1596](https://github.com/conda/rattler/pull/1596))
+
 ## [0.38.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.37.0...rattler_conda_types-v0.38.0) - 2025-08-12
 
 ### Added

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.1](https://github.com/conda/rattler/compare/rattler_solve-v3.0.0...rattler_solve-v3.0.1) - 2025-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [3.0.0](https://github.com/conda/rattler/compare/rattler_solve-v2.1.8...rattler_solve-v3.0.0) - 2025-08-12
 
 ### Added
