@@ -11,5 +11,5 @@ environments:
 packages:
   - kind: pypi
     name: minimal-project
-    version: '0.1'
+    version: "0.1"
     path: E:\Developer\prefix\pixi\examples\pypi-source-deps/minimal-project
