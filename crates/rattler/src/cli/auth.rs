@@ -130,7 +130,13 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
     Ok(host)
 }
 
-pub fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
+/// Authenticate with a host using the provided credentials.
+/// 
+/// This function validates the authentication method based on the host and stores
+/// the credentials if successful. For prefix.dev hosts, it validates the token
+/// by making a GraphQL API call.
+/// 
+fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
     let auth = if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
     } else if let Some(username) = args.username {
@@ -182,7 +188,10 @@ pub fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Auth
 
         // Validate whether the user exists
         let client = Client::new();
-        let url = "https://prefix.dev/api/graphql";
+
+        // Allow override of API URL for testing
+        let url = std::env::var("PREFIX_DEV_API_URL")
+            .unwrap_or_else(|_| "https://prefix.dev/api/graphql".to_string());
 
         let body = json!({
             "query": "query { viewer { login } }"
@@ -240,7 +249,7 @@ pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
 mod tests {
     use super::*;
     use mockito::Server;
-    use rattler_networking::{Authentication, AuthenticationStorage};
+    use rattler_networking::{AuthenticationStorage};
     use serde_json::json;
     use tempfile::TempDir;
 
@@ -286,13 +295,14 @@ mod tests {
             }).to_string())
             .create();
 
-        // We'd need to modify the login function to accept a custom URL for testing
-        // For now, this shows the structure of the test
+        // Set environment variable to point to mock server
+        std::env::set_var("PREFIX_DEV_API_URL", format!("{}/api/graphql", server.url()));
         let result = login(args, storage);
         assert!(result.is_ok());
         mock.assert();
+         // Clean up
+        std::env::remove_var("PREFIX_DEV_API_URL");
     }
-
 
     #[test]
     fn test_login_with_invalid_token() {
@@ -313,9 +323,16 @@ mod tests {
             }).to_string())
             .create();
 
+        // Set environment variable to point to mock server
+        std::env::set_var("PREFIX_DEV_API_URL", format!("{}/api/graphql", server.url()));
+
         let result = login(args, storage);
-        assert!(result.is_ok());
+        assert!(result.is_ok()); 
+
         mock.assert();
+        
+        // Clean up
+        std::env::remove_var("PREFIX_DEV_API_URL");
     }
 
     #[test]
