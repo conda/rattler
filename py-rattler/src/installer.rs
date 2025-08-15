@@ -9,6 +9,7 @@ use rattler::{
 use rattler_conda_types::{PackageName, PrefixRecord, RepoDataRecord};
 use std::collections::HashSet;
 
+use crate::match_spec::PyMatchSpec;
 use crate::{
     error::PyRattlerError, networking::client::PyClientWithMiddleware, platform::PyPlatform,
     record::PyRecord,
@@ -17,7 +18,7 @@ use crate::{
 // TODO: Accept functions to report progress
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-#[pyo3(signature = (records, target_prefix, execute_link_scripts=false, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None))]
+#[pyo3(signature = (records, target_prefix, execute_link_scripts=false, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, requested_specs=None))]
 pub fn py_install<'a>(
     py: Python<'a>,
     records: Vec<Bound<'a, PyAny>>,
@@ -29,6 +30,7 @@ pub fn py_install<'a>(
     cache_dir: Option<PathBuf>,
     installed_packages: Option<Vec<Bound<'a, PyAny>>>,
     reinstall_packages: Option<HashSet<String>>,
+    requested_specs: Option<Vec<PyMatchSpec>>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let dependencies = records
         .into_iter()
@@ -80,6 +82,11 @@ pub fn py_install<'a>(
 
         if let Some(reinstall_packages) = reinstall_packages {
             installer.set_reinstall_packages(reinstall_packages);
+        }
+
+        if let Some(requested_specs) = requested_specs {
+            installer
+                .set_requested_specs(requested_specs.into_iter().map(|spec| spec.inner).collect());
         }
 
         // TODO: Return the installation result to python

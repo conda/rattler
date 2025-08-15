@@ -330,7 +330,7 @@
         "paths_version": 1
     },
     "platform": null,
-    "requested_spec": "",
+    "requested_spec": null,
     "sha256": "22c081b4cdd023a514400413f50efdf2c378f56f2a5ea9d65666aacf4696490a",
     "size": 56747,
     "subdir": "noarch",
