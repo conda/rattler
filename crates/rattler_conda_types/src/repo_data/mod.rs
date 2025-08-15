@@ -644,9 +644,8 @@ mod test {
         // Packages with such metadata have been observed on private conda channels.
         // This likely was passed from older versions of conda-build that would pass this key
         // from the recipe even if it was incorrect.
-        let repodata = deserialize_json_from_test_data(
-            "channels/dummy-noarch-str/linux-64/repodata.json",
-        );
+        let repodata =
+            deserialize_json_from_test_data("channels/dummy-noarch-str/linux-64/repodata.json");
         insta::assert_yaml_snapshot!(repodata);
     }
 
@@ -654,7 +653,7 @@ mod test {
     #[should_panic()]
     fn test_deserialize_no_noarch_not_empty_str_should_fail() {
         deserialize_json_from_test_data(
-        "channels/dummy-noarch-str-not-empty/linux-64/repodata.json",
+            "channels/dummy-noarch-str-not-empty/linux-64/repodata.json",
         );
     }
 
