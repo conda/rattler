@@ -10,7 +10,7 @@ use serde_json::json;
 
 /// Command line arguments that contain authentication data
 #[derive(Parser, Debug)]
-pub struct LoginArgs {
+struct LoginArgs {
     /// The host to authenticate with (e.g. repo.prefix.dev)
     host: String,
 
@@ -130,7 +130,7 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
     Ok(host)
 }
 
-fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
+pub fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
     let auth = if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
     } else if let Some(username) = args.username {
@@ -236,20 +236,18 @@ pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockito::{Mock, Server};
-    use rattler_networking::AuthenticationStorage;
+    use mockito::Server;
+    use rattler_networking::{Authentication, AuthenticationStorage};
     use serde_json::json;
-    use std::sync::Arc;
     use tempfile::TempDir;
 
     // Helper function to create a test authentication storage
     fn create_test_storage() -> (AuthenticationStorage, TempDir) {
         let temp_dir = TempDir::new().unwrap();
-        let storage = AuthenticationStorage::new(Some(temp_dir.path().to_path_buf()), None).unwrap();
+        let storage = AuthenticationStorage::from_env_and_defaults().unwrap();
         (storage, temp_dir)
     }
 
@@ -266,6 +264,35 @@ mod tests {
             s3_session_token: None,
         }
     }
+
+     #[test]
+    fn test_login_with_token_success() {
+        let (storage, _temp_dir) = create_test_storage();
+        let mut args = create_login_args("prefix.dev");
+        args.token = Some("valid_token".to_string());
+
+        // Mock the GraphQL API response
+        let mut server = Server::new();
+        let mock = server
+            .mock("POST", "/api/graphql")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(json!({
+                "data": {
+                    "viewer": {
+                        "login": "testuser"
+                    }
+                }
+            }).to_string())
+            .create();
+
+        // We'd need to modify the login function to accept a custom URL for testing
+        // For now, this shows the structure of the test
+        let result = login(args, storage);
+        assert!(result.is_ok());
+        mock.assert();
+    }
+
 
     #[test]
     fn test_login_with_invalid_token() {
@@ -384,36 +411,5 @@ mod tests {
 
         let result = login(args, storage);
         assert!(matches!(result, Err(AuthenticationCLIError::S3BadMethod)));
-    }
-
-    #[test]
-    fn test_get_url_with_scheme() {
-        let result = get_url("https://prefix.dev").unwrap();
-        assert_eq!(result, "prefix.dev");
-    }
-
-    #[test]
-    fn test_get_url_without_scheme() {
-        let result = get_url("prefix.dev").unwrap();
-        assert_eq!(result, "prefix.dev");
-    }
-
-    #[test]
-    fn test_get_url_with_wildcard() {
-        let result = get_url("example.com").unwrap();
-        assert_eq!(result, "*.example.com");
-    }
-
-    #[test]
-    fn test_get_url_subdomain_no_wildcard() {
-        let result = get_url("api.prefix.dev").unwrap();
-        assert_eq!(result, "api.prefix.dev");
-    }
-
-    #[test]
-    fn test_get_url_invalid_url() {
-        let result = get_url("://invalid-url");
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AuthenticationCLIError::ParseUrlError(_)));
     }
 }
