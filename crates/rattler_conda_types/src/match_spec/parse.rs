@@ -1554,7 +1554,7 @@ mod tests {
             "python >=3.6".to_string()
         );
     }
-    
+
     #[test]
     #[cfg(not(feature = "condition_parsing"))]
     fn test_conditional_parsing_disabled() {

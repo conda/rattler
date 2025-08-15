@@ -11,13 +11,12 @@ use std::{
 use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
-use rattler_conda_types::{
-    package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches,
-    NamelessMatchSpec, PackageName, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
-    SolverResult,
-};
 #[cfg(feature = "condition_parsing")]
 use rattler_conda_types::MatchSpecCondition;
+use rattler_conda_types::{
+    package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
+    PackageName, ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult,
+};
 use resolvo::{
     utils::{Pool, VersionSet},
     Candidates, Condition, ConditionId, ConditionalRequirement, Dependencies, DependencyProvider,

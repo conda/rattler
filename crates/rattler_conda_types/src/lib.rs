@@ -39,13 +39,13 @@ pub use explicit_environment_spec::{
     ParseExplicitEnvironmentSpecError, ParsePackageArchiveHashError,
 };
 pub use generic_virtual_package::GenericVirtualPackage;
+#[cfg(feature = "condition_parsing")]
+pub use match_spec::condition::MatchSpecCondition;
 pub use match_spec::{
     matcher::{StringMatcher, StringMatcherParseError},
     parse::ParseMatchSpecError,
     MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
 };
-#[cfg(feature = "condition_parsing")]
-pub use match_spec::condition::MatchSpecCondition;
 pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
 pub use package_name::{InvalidPackageNameError, PackageName};
 pub use parse_mode::ParseStrictness;
