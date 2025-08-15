@@ -4,6 +4,9 @@ use rattler_networking::{
     authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
 };
 use thiserror;
+use reqwest::blocking::Client;
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
+use serde_json::json;
 
 /// Command line arguments that contain authentication data
 #[derive(Parser, Debug)]
@@ -99,6 +102,14 @@ pub enum AuthenticationCLIError {
     /// (keyring or file system)
     #[error("Failed to interact with the authentication storage system")]
     AuthenticationStorageError(#[from] AuthenticationStorageError),
+
+    /// General http request error
+    #[error("General http request error")]
+    ReqwestError(#[from] reqwest::Error),
+
+    /// JSON parsing failed
+    #[error("Failed to parse JSON: {0}")]
+    JsonParseError(String),
 }
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
@@ -161,7 +172,48 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
     let host = get_url(&args.host)?;
     eprintln!("Authenticating with {host} using {} method", auth.method());
 
-    storage.store(&host, &auth)?;
+    // Only validate token for prefix.dev
+    if args.host.contains("prefix.dev") {
+        // Extract the token from BearerToken
+        let token = match &auth {
+            Authentication::BearerToken(t) => t,
+            _ => return Err(AuthenticationCLIError::PrefixDevBadMethod),
+        };
+
+        // Validate whether the user exists
+        let client = Client::new();
+        let url = "https://prefix.dev/api/graphql";
+
+        let body = json!({
+            "query": "query { viewer { login } }"
+        });
+
+        let response = client
+            .post(url)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, "application/json")
+            .json(&body)
+            .send()?;
+
+        let text = response.text()?;
+
+        // Parse JSON
+        let json: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
+            AuthenticationCLIError::JsonParseError(e.to_string())
+        })?;
+
+        match json["data"]["viewer"].is_null() {
+            true => {
+                eprintln!("Error: Unauthorized or invalid token");
+                return Ok(());
+            },
+            false => {
+                // Store the authentication
+                storage.store(&host, &auth)?;
+                println!("✅ Token is valid. Storing it...");
+            }
+        }
+    }
     Ok(())
 }
 
