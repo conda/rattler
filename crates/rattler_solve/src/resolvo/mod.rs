@@ -12,10 +12,12 @@ use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::{
-    package::ArchiveType, GenericVirtualPackage, MatchSpec, MatchSpecCondition, Matches,
+    package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches,
     NamelessMatchSpec, PackageName, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
     SolverResult,
 };
+#[cfg(feature = "condition_parsing")]
+use rattler_conda_types::MatchSpecCondition;
 use resolvo::{
     utils::{Pool, VersionSet},
     Candidates, Condition, ConditionId, ConditionalRequirement, Dependencies, DependencyProvider,
@@ -924,14 +926,20 @@ fn parse_match_spec(
 
     // Parse the match spec and extract the name of the package it depends on.
     let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient)?;
+    #[cfg(feature = "condition_parsing")]
     let condition = match_spec.condition.clone();
+    #[cfg(not(feature = "condition_parsing"))]
+    let _condition: Option<()> = None;
 
+    #[cfg(feature = "condition_parsing")]
     let condition_id = if let Some(condition) = condition {
         let condition_id = parse_condition(condition, pool, parse_match_spec_cache);
         Some(condition_id)
     } else {
         None
     };
+    #[cfg(not(feature = "condition_parsing"))]
+    let condition_id = None;
 
     // Get the version sets for the match spec.
     let version_set_ids = version_sets_for_match_spec(pool, match_spec);
@@ -1004,6 +1012,7 @@ pub fn extra_version_set(
 }
 
 /// Parses a condition from a `MatchSpecCondition` and returns the corresponding `ConditionId`.
+#[cfg(feature = "condition_parsing")]
 fn parse_condition(
     condition: MatchSpecCondition,
     pool: &Pool<SolverMatchSpec<'_>, NameType>,

@@ -12,7 +12,8 @@ readme.workspace = true
 
 [features]
 default = ["rayon"]
-experimental_extras = []
+experimental_extras = ["condition_parsing"]
+condition_parsing = []
 
 [dependencies]
 chrono = { workspace = true }

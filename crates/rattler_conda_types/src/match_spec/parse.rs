@@ -20,9 +20,10 @@ use super::{
     matcher::{StringMatcher, StringMatcherParseError},
     MatchSpec,
 };
+#[cfg(feature = "condition_parsing")]
+use crate::match_spec::condition::parse_condition;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
-    match_spec::condition::parse_condition,
     package::ArchiveIdentifier,
     utils::{path::is_absolute_path, url::parse_scheme},
     version_spec::{
@@ -725,6 +726,7 @@ pub(crate) fn matchspec_parser(
         match_spec.build = match_spec.build.or(build);
     }
 
+    #[cfg(feature = "condition_parsing")]
     if let Some(condition) = condition {
         let (remainder, condition) = parse_condition(condition).map_err(|e| {
             ParseMatchSpecError::InvalidCondition(condition.to_string(), e.to_string())
@@ -738,6 +740,11 @@ pub(crate) fn matchspec_parser(
         }
 
         match_spec.condition = Some(condition);
+    }
+    #[cfg(not(feature = "condition_parsing"))]
+    {
+        let _ = condition; // Avoid unused variable warning
+        match_spec.condition = None;
     }
 
     Ok(match_spec)
@@ -1538,6 +1545,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "condition_parsing")]
     fn test_conditional_parsing() {
         let spec = MatchSpec::from_str("foo; if python >=3.6", Strict).unwrap();
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
@@ -1545,6 +1553,14 @@ mod tests {
             spec.condition.unwrap().to_string(),
             "python >=3.6".to_string()
         );
+    }
+    
+    #[test]
+    #[cfg(not(feature = "condition_parsing"))]
+    fn test_conditional_parsing_disabled() {
+        let spec = MatchSpec::from_str("foo; if python >=3.6", Strict).unwrap();
+        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert!(spec.condition.is_none());
     }
 
     #[cfg(feature = "experimental_extras")]

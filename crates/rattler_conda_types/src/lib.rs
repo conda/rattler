@@ -40,11 +40,12 @@ pub use explicit_environment_spec::{
 };
 pub use generic_virtual_package::GenericVirtualPackage;
 pub use match_spec::{
-    condition::MatchSpecCondition,
     matcher::{StringMatcher, StringMatcherParseError},
     parse::ParseMatchSpecError,
     MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
 };
+#[cfg(feature = "condition_parsing")]
+pub use match_spec::condition::MatchSpecCondition;
 pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
 pub use package_name::{InvalidPackageNameError, PackageName};
 pub use parse_mode::ParseStrictness;
