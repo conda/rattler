@@ -14,7 +14,6 @@
 #![deny(missing_docs)]
 
 use std::path::PathBuf;
-pub mod cli;
 
 #[cfg(feature = "cli-tools")]
 pub mod cli;
