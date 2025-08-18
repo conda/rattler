@@ -73,11 +73,11 @@ impl ClobberRegistry {
     pub fn unregister_paths(&mut self, prefix_paths: &PrefixRecord) {
         let package_name = prefix_paths.repodata_record.package_record.name.clone();
         // Assume that normalized name in different two different PackageName are unique.
-        let normalized_name = package_name.as_normalized();
+        let normalized_name = path_resolver::PackageName::from(package_name.as_normalized());
 
-        let (_, to_add) = self.path_trie.unregister_package(normalized_name);
+        let (_, to_add) = self.path_trie.unregister_package(normalized_name.clone());
 
-        self.package_name_map.remove(normalized_name);
+        self.package_name_map.remove(&normalized_name);
 
         self.to_add.extend(to_add);
     }
@@ -147,8 +147,8 @@ impl ClobberRegistry {
         // 1
         let new_priorities = sorted_prefix_records
             .iter()
-            .map(|&pr| pr.name().as_normalized().to_string())
-            .collect::<Vec<String>>();
+            .map(|&pr| pr.name().as_normalized().into())
+            .collect::<Vec<path_resolver::PackageName>>();
 
         let (mut removals, additions) = self.path_trie.reprioritize_packages(new_priorities);
 
