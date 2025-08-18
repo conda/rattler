@@ -186,7 +186,6 @@ impl PathResolver {
         // 1) detect conflicts against the existing trie
         for p in paths {
             let p = p.as_ref();
-            let pbuf = p.to_path_buf();
 
             // Single trie traversal for all conflict checks
             let mut current_node = &self.root;
@@ -204,7 +203,7 @@ impl PathResolver {
                     Some(node) => {
                         // Check for File vs Directory conflict (file exists at prefix)
                         if i < comp_count - 1 && !node.terminals.is_empty() {
-                            conflicts.insert(pbuf.clone());
+                            conflicts.insert(p.to_path_buf());
                             has_conflict = true;
                             break;
                         }
@@ -225,11 +224,12 @@ impl PathResolver {
                 if let Some(n) = found_node {
                     // File vs File conflict
                     if !n.terminals.is_empty() {
-                        conflicts.insert(pbuf);
+                        conflicts.insert(p.to_path_buf());
                         continue;
                     }
                     // Directory vs File conflict
                     if !n.children.is_empty() {
+                        let pbuf = p.to_path_buf();
                         conflicts.insert(pbuf.clone());
                         dir_inserts.push(pbuf);
                         continue;
