@@ -146,6 +146,7 @@ impl PathResolver {
         node.terminals.insert(package_owned);
     }
 
+
     /// Get a mutable reference to the node at `path`, if it exists.
     fn get_node_mut<'a>(&'a mut self, path: &Path) -> Option<&'a mut PathTrieNode> {
         let mut cur = &mut self.root;
@@ -187,41 +188,52 @@ impl PathResolver {
             let p = p.as_ref();
             let pbuf = p.to_path_buf();
 
-            // File vs File?
-            if let Some(n) = Self::get_node(&self.root, &pbuf) {
-                if !n.terminals.is_empty() {
-                    conflicts.insert(pbuf);
-                    continue;
-                }
-            }
-            // Directory vs File?
-            if let Some(n) = Self::get_node(&self.root, &pbuf) {
-                if !n.children.is_empty() {
-                    conflicts.insert(pbuf.clone());
-                    // Mark this as a directory-insert so we later propagate
-                    dir_inserts.push(pbuf);
-                    continue;
-                }
-            }
-            // File vs Directory under some prefix?
-            // Optimized: Navigate trie directly without building PathBuf for comparison
-            let components: Vec<_> = p.components().collect();
+            // Single trie traversal for all conflict checks
             let mut current_node = &self.root;
+            let mut found_node = None;
+            let mut has_conflict = false;
 
-            // Check each prefix (excluding the full path itself)
-            for i in 0..components.len().saturating_sub(1) {
-                let comp = components[i].as_os_str();
+            let components: Vec<_> = p.components().collect();
+            let comp_count = components.len();
+
+            // Navigate to the target node, checking for prefix conflicts along the way
+            for (i, component) in components.iter().enumerate() {
+                let comp = component.as_os_str();
 
                 match current_node.children.get(comp) {
                     Some(node) => {
-                        if !node.terminals.is_empty() {
-                            // File exists at this prefix
-                            conflicts.insert(pbuf);
+                        // Check for File vs Directory conflict (file exists at prefix)
+                        if i < comp_count - 1 && !node.terminals.is_empty() {
+                            conflicts.insert(pbuf.clone());
+                            has_conflict = true;
                             break;
                         }
+
                         current_node = node;
+
+                        // If this is the final component, save the node
+                        if i == comp_count - 1 {
+                            found_node = Some(node);
+                        }
                     }
-                    None => break, // Prefix doesn't exist, no conflict possible
+                    None => break, // Path doesn't exist in trie
+                }
+            }
+
+            // Check conflicts at the target node (if we found it and no prefix conflict)
+            if !has_conflict {
+                if let Some(n) = found_node {
+                    // File vs File conflict
+                    if !n.terminals.is_empty() {
+                        conflicts.insert(pbuf);
+                        continue;
+                    }
+                    // Directory vs File conflict
+                    if !n.children.is_empty() {
+                        conflicts.insert(pbuf.clone());
+                        dir_inserts.push(pbuf);
+                        continue;
+                    }
                 }
             }
         }
