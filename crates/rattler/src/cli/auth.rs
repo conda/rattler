@@ -3,10 +3,10 @@ use clap::Parser;
 use rattler_networking::{
     authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
 };
-use thiserror;
 use reqwest::blocking::Client;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde_json::json;
+use thiserror;
 
 /// Command line arguments that contain authentication data
 #[derive(Parser, Debug)]
@@ -131,11 +131,11 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
 }
 
 /// Authenticate with a host using the provided credentials.
-/// 
+///
 /// This function validates the authentication method based on the host and stores
 /// the credentials if successful. For prefix.dev hosts, it validates the token
 /// by making a GraphQL API call.
-/// 
+///
 fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
     let auth = if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
@@ -207,15 +207,14 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
         let text = response.text()?;
 
         // Parse JSON
-        let json: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
-            AuthenticationCLIError::JsonParseError(e.to_string())
-        })?;
+        let json: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| AuthenticationCLIError::JsonParseError(e.to_string()))?;
 
         match json["data"]["viewer"].is_null() {
             true => {
                 eprintln!("Error: Unauthorized or invalid token");
                 return Ok(());
-            },
+            }
             false => {
                 // Store the authentication
                 storage.store(&host, &auth)?;
@@ -249,7 +248,7 @@ pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
 mod tests {
     use super::*;
     use mockito::Server;
-    use rattler_networking::{AuthenticationStorage};
+    use rattler_networking::AuthenticationStorage;
     use serde_json::json;
     use tempfile::TempDir;
 
@@ -274,7 +273,7 @@ mod tests {
         }
     }
 
-     #[test]
+    #[test]
     fn test_login_with_token_success() {
         let (storage, _temp_dir) = create_test_storage();
         let mut args = create_login_args("prefix.dev");
@@ -286,21 +285,27 @@ mod tests {
             .mock("POST", "/api/graphql")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "data": {
-                    "viewer": {
-                        "login": "testuser"
+            .with_body(
+                json!({
+                    "data": {
+                        "viewer": {
+                            "login": "testuser"
+                        }
                     }
-                }
-            }).to_string())
+                })
+                .to_string(),
+            )
             .create();
 
         // Set environment variable to point to mock server
-        std::env::set_var("PREFIX_DEV_API_URL", format!("{}/api/graphql", server.url()));
+        std::env::set_var(
+            "PREFIX_DEV_API_URL",
+            format!("{}/api/graphql", server.url()),
+        );
         let result = login(args, storage);
         assert!(result.is_ok());
         mock.assert();
-         // Clean up
+        // Clean up
         std::env::remove_var("PREFIX_DEV_API_URL");
     }
 
@@ -316,21 +321,27 @@ mod tests {
             .mock("POST", "/api/graphql")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "data": {
-                    "viewer": null
-                }
-            }).to_string())
+            .with_body(
+                json!({
+                    "data": {
+                        "viewer": null
+                    }
+                })
+                .to_string(),
+            )
             .create();
 
         // Set environment variable to point to mock server
-        std::env::set_var("PREFIX_DEV_API_URL", format!("{}/api/graphql", server.url()));
+        std::env::set_var(
+            "PREFIX_DEV_API_URL",
+            format!("{}/api/graphql", server.url()),
+        );
 
         let result = login(args, storage);
-        assert!(result.is_ok()); 
+        assert!(result.is_ok());
 
         mock.assert();
-        
+
         // Clean up
         std::env::remove_var("PREFIX_DEV_API_URL");
     }
@@ -342,7 +353,10 @@ mod tests {
         args.username = Some("testuser".to_string());
         // password I set herer is:  None
         let result = login(args, storage);
-        assert!(matches!(result, Err(AuthenticationCLIError::MissingPassword)));
+        assert!(matches!(
+            result,
+            Err(AuthenticationCLIError::MissingPassword)
+        ));
     }
 
     #[test]
@@ -385,7 +399,10 @@ mod tests {
         // No authentication method provided
 
         let result = login(args, storage);
-        assert!(matches!(result, Err(AuthenticationCLIError::NoAuthenticationMethod)));
+        assert!(matches!(
+            result,
+            Err(AuthenticationCLIError::NoAuthenticationMethod)
+        ));
     }
 
     #[test]
@@ -396,7 +413,10 @@ mod tests {
         args.password = Some("testpass".to_string());
 
         let result = login(args, storage);
-        assert!(matches!(result, Err(AuthenticationCLIError::PrefixDevBadMethod)));
+        assert!(matches!(
+            result,
+            Err(AuthenticationCLIError::PrefixDevBadMethod)
+        ));
     }
 
     #[test]
@@ -406,7 +426,10 @@ mod tests {
         args.token = Some("bearer_token".to_string());
 
         let result = login(args, storage);
-        assert!(matches!(result, Err(AuthenticationCLIError::AnacondaOrgBadMethod)));
+        assert!(matches!(
+            result,
+            Err(AuthenticationCLIError::AnacondaOrgBadMethod)
+        ));
     }
 
     #[test]
