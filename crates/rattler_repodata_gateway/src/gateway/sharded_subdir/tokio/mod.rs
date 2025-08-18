@@ -172,7 +172,9 @@ impl SubdirClient for ShardedSubdir {
                     .map(tokio::sync::Semaphore::acquire),
             )
             .await;
-            let reporter = reporter.map(|r| (r, r.on_download_start(&shard_url)));
+            let reporter = reporter
+                .and_then(Reporter::download_reporter)
+                .map(|r| (r, r.on_download_start(&shard_url)));
             let shard_response = self
                 .client
                 .execute(shard_request)
