@@ -192,17 +192,18 @@ impl PathResolver {
             let mut found_node = None;
             let mut has_conflict = false;
 
-            let components: Vec<_> = p.components().collect();
-            let comp_count = components.len();
+            // Single-pass approach: use peekable iterator to detect last component
+            let mut components = p.components().enumerate().peekable();
 
             // Navigate to the target node, checking for prefix conflicts along the way
-            for (i, component) in components.iter().enumerate() {
+            while let Some((_i, component)) = components.next() {
                 let comp = component.as_os_str();
+                let is_last = components.peek().is_none();
 
                 match current_node.children.get(comp) {
                     Some(node) => {
                         // Check for File vs Directory conflict (file exists at prefix)
-                        if i < comp_count - 1 && !node.terminals.is_empty() {
+                        if !is_last && !node.terminals.is_empty() {
                             conflicts.insert(p.to_path_buf());
                             has_conflict = true;
                             break;
@@ -211,7 +212,7 @@ impl PathResolver {
                         current_node = node;
 
                         // If this is the final component, save the node
-                        if i == comp_count - 1 {
+                        if is_last {
                             found_node = Some(node);
                         }
                     }
