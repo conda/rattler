@@ -110,7 +110,8 @@ describe("solving", () => {
                     version: "2.2.0",
                 },
             ],
-        ).then((result) => {            const urls = result.map((pkg) => pkg.url).sort();
+        ).then((result) => {
+            const urls = result.map((pkg) => pkg.url).sort();
             const numpy = result.find((pkg) => pkg.packageName === "numpy");
             expect(numpy).toBeDefined();
             expect(numpy?.version).toBe("2.2.6");
