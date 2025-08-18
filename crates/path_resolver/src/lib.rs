@@ -3,13 +3,13 @@
 //!
 //! For details see methods of `PathResolver`.
 use std::{
-    collections::{HashMap, HashSet},
     ffi::OsString,
     io,
     path::{Component, Path, PathBuf},
 };
 
 use fs_err as fs;
+use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use indexmap::IndexSet;
 use itertools::Itertools;
 
@@ -113,7 +113,7 @@ impl PathResolver {
         // Record insertion order for future reprioritize.
         self.packages.insert(package.clone());
 
-        let mut conflicts = HashSet::new();
+        let mut conflicts = HashSet::default();
         // Which of these paths were *directories* on the old trie?
         let mut dir_inserts = Vec::new();
 
@@ -543,7 +543,7 @@ New:
             }
         }
 
-        let mut results = HashMap::new();
+        let mut results = HashMap::default();
         dfs(
             &self.root,
             &mut PathBuf::new(),

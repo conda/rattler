@@ -3811,6 +3811,7 @@ version = "0.1.2"
 dependencies = [
  "divan",
  "fs-err",
+ "fxhash",
  "indexmap 2.10.0",
  "itertools 0.14.0",
  "proptest",

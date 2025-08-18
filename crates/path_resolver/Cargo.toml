@@ -11,6 +11,7 @@ description = "Provides a trie-based data structure to track and resolve relativ
 
 [dependencies]
 fs-err.workspace = true
+fxhash.workspace = true
 indexmap.workspace = true
 itertools.workspace = true
 proptest.workspace = true
