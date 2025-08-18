@@ -139,17 +139,24 @@ impl PathResolver {
                 }
             }
             // File vs Directory under some prefix?
-            let mut prefix = PathBuf::new();
-            for comp in p.components().map(Component::as_os_str) {
-                prefix.push(comp);
-                if prefix == pbuf {
-                    break;
-                }
-                if let Some(n) = Self::get_node(&self.root, &prefix) {
-                    if !n.terminals.is_empty() {
-                        conflicts.insert(pbuf);
-                        break;
+            // Optimized: Navigate trie directly without building PathBuf for comparison
+            let components: Vec<_> = p.components().collect();
+            let mut current_node = &self.root;
+
+            // Check each prefix (excluding the full path itself)
+            for i in 0..components.len().saturating_sub(1) {
+                let comp = components[i].as_os_str();
+
+                match current_node.children.get(comp) {
+                    Some(node) => {
+                        if !node.terminals.is_empty() {
+                            // File exists at this prefix
+                            conflicts.insert(pbuf);
+                            break;
+                        }
+                        current_node = node;
                     }
+                    None => break, // Prefix doesn't exist, no conflict possible
                 }
             }
         }
