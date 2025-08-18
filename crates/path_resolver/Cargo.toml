@@ -16,3 +16,10 @@ itertools.workspace = true
 proptest.workspace = true
 tempfile.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+divan = "0.1"
+
+[[bench]]
+name = "path_resolver_bench"
+harness = false
