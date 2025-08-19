@@ -15,15 +15,16 @@ use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use indexmap::IndexSet;
 use itertools::Itertools;
 
-/// Type to represent path owner. Using `Arc<String>` to avoid cloning
+/// Type to represent path owner. Using `Arc<str>` to avoid cloning
 /// overhead while maintaining ownership semantics.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct PackageName(Arc<String>);
+pub struct PackageName(Arc<str>);
 
 impl PackageName {
     /// Create a new `PackageName` from a string-like value.
-    pub fn new(s: impl Into<String>) -> Self {
-        Self(Arc::new(s.into()))
+    /// Accepts `&str`, `String`, `Box<str>`, or an existing `Arc<str>`.
+    pub fn new(s: impl Into<Arc<str>>) -> Self {
+        Self(s.into())
     }
 
     /// Get the package name as a string slice.
@@ -46,7 +47,7 @@ impl From<String> for PackageName {
 
 impl From<&String> for PackageName {
     fn from(s: &String) -> Self {
-        Self::new(s)
+        Self::new(s.clone())
     }
 }
 
