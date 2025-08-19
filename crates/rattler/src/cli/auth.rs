@@ -110,6 +110,10 @@ pub enum AuthenticationCLIError {
     /// JSON parsing failed
     #[error("Failed to parse JSON: {0}")]
     JsonParseError(String),
+
+    /// Token is unauthorized or invalid
+    #[error("Unauthorized or invalid token")]
+    UnauthorizedToken,
 }
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
@@ -186,43 +190,55 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
             _ => return Err(AuthenticationCLIError::PrefixDevBadMethod),
         };
 
-        // Validate whether the user exists
-        let client = Client::new();
-
-        // Allow override of API URL for testing
-        let url = std::env::var("PREFIX_DEV_API_URL")
-            .unwrap_or_else(|_| "https://prefix.dev/api/graphql".to_string());
-
-        let body = json!({
-            "query": "query { viewer { login } }"
-        });
-
-        let response = client
-            .post(url)
-            .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, "application/json")
-            .json(&body)
-            .send()?;
-
-        let text = response.text()?;
-
-        // Parse JSON
-        let json: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| AuthenticationCLIError::JsonParseError(e.to_string()))?;
-
-        match json["data"]["viewer"].is_null() {
+        // Validate the token using the extracted function
+        match validate_prefix_dev_token(token, &args.host)? {
             true => {
-                eprintln!("Error: Unauthorized or invalid token");
-                return Ok(());
-            }
-            false => {
                 // Store the authentication
                 storage.store(&host, &auth)?;
                 println!("✅ Token is valid. Storing it...");
             }
+            false => {
+                return Err(AuthenticationCLIError::UnauthorizedToken);
+            }
         }
+    } else {
+        // For non-prefix.dev hosts, store directly without validation
+        storage.store(&host, &auth)?;
     }
     Ok(())
+}
+
+/// Validates a token with prefix.dev by making a GraphQL API call
+/// 
+/// Returns `Ok(true)` if the token is valid, `Ok(false)` if invalid, 
+/// or `Err` if there was a network/parsing error
+fn validate_prefix_dev_token(token: &str, host: &str) -> Result<bool, AuthenticationCLIError> {
+    // Validate whether the user exists
+    let client = Client::new();
+
+    // Allow override of API URL for testing
+    let url = std::env::var("PREFIX_DEV_API_URL")
+        .unwrap_or_else(|_| format!("https://{}/api/graphql", host));
+
+    let body = json!({
+        "query": "query { viewer { login } }"
+    });
+
+    let response = client
+        .post(url)
+        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(CONTENT_TYPE, "application/json")
+        .json(&body)
+        .send()?;
+
+    let text = response.text()?;
+
+    // Parse JSON
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| AuthenticationCLIError::JsonParseError(e.to_string()))?;
+
+    // Return true if token is valid (viewer is not null), false otherwise
+    Ok(!json["data"]["viewer"].is_null())
 }
 
 fn logout(args: LogoutArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
@@ -338,7 +354,12 @@ mod tests {
         );
 
         let result = login(args, storage);
-        assert!(result.is_ok());
+        
+        // Now we expect an UnauthorizedToken error instead of Ok(())
+        assert!(matches!(
+            result,
+            Err(AuthenticationCLIError::UnauthorizedToken)
+        ));
 
         mock.assert();
 
