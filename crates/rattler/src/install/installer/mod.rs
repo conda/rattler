@@ -330,7 +330,8 @@ impl Installer {
     }
 
     /// Sets the requested specs for the installer. These will be used to
-    /// populate the `requested_spec` field in generated `PrefixRecord` instances.
+    /// populate the `requested_spec` field in generated `PrefixRecord`
+    /// instances.
     #[must_use]
     pub fn with_requested_specs(self, specs: Vec<MatchSpec>) -> Self {
         Self {
@@ -340,7 +341,8 @@ impl Installer {
     }
 
     /// Sets the requested specs for the installer. These will be used to
-    /// populate the `requested_spec` field in generated `PrefixRecord` instances.
+    /// populate the `requested_spec` field in generated `PrefixRecord`
+    /// instances.
     pub fn set_requested_specs(&mut self, specs: Vec<MatchSpec>) -> &mut Self {
         self.requested_specs = Some(specs);
         self
@@ -374,17 +376,14 @@ impl Installer {
         // Construct a transaction from the current and desired situation.
         let target_platform = self.target_platform.unwrap_or_else(Platform::current);
         let transaction = Transaction::from_current_and_desired(
-            installed.clone(),
+            installed,
             records.into_iter().collect::<Vec<_>>(),
             self.reinstall_packages,
             self.ignored_packages,
             target_platform,
         )?;
 
-        let remaining = installed
-            .into_iter()
-            .filter(|pr| !transaction.removed_packages().contains(pr))
-            .collect::<Vec<_>>();
+        dbg!(transaction.unchanged_packages());
 
         // Create a mapping from package names to requested specs
         let spec_mapping = self
@@ -393,11 +392,11 @@ impl Installer {
             .map(|specs| create_spec_mapping(specs))
             .map(Arc::new);
 
-        // Update existing records that weren't modified but have matching requested specs
-        // This needs to happen even if the transaction is empty
+        // Update existing records that weren't modified but have matching requested
+        // specs This needs to happen even if the transaction is empty
         if let Some(spec_mapping) = &spec_mapping {
             // We have requested_specs (even if empty), so update/clear as needed
-            update_existing_records(&remaining, spec_mapping, &prefix)?;
+            update_existing_records(transaction.unchanged_packages(), spec_mapping, &prefix)?;
         }
 
         // If the transaction is empty we can short-circuit the installation
@@ -427,7 +426,12 @@ impl Installer {
             .with_io_concurrency_semaphore(
                 self.io_semaphore.unwrap_or(Arc::new(Semaphore::new(100))),
             )
-            .with_prefix_records(&installed)
+            .with_prefix_records(
+                transaction
+                    .unchanged_packages()
+                    .iter()
+                    .chain(transaction.removed_packages()),
+            )
             .finish();
 
         // Determine base installer options.
@@ -586,7 +590,11 @@ impl Installer {
         drop(pending_unlink_futures);
 
         driver
-            .remove_empty_directories(&transaction.operations, remaining.as_slice(), &prefix)
+            .remove_empty_directories(
+                &transaction.operations,
+                transaction.unchanged_packages(),
+                &prefix,
+            )
             .unwrap();
 
         // Wait for all transaction operations to finish
@@ -736,7 +744,8 @@ async fn populate_cache(
 ///
 /// This function takes a list of `MatchSpecs` and creates a mapping where:
 /// - The key is the `PackageName` from the `MatchSpec`
-/// - The value is a vector of string representations of all matching `MatchSpecs`
+/// - The value is a vector of string representations of all matching
+///   `MatchSpecs`
 ///
 /// `MatchSpecs` without names are skipped.
 /// For multiple `MatchSpecs` with the same package name, all are collected.
@@ -757,22 +766,24 @@ fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<Package
 
 /// Updates existing `PrefixRecord` files with their requested specs.
 ///
-/// This function takes existing records that weren't modified by the transaction
-/// and updates their `requested_specs` field based on the spec mapping or clears it if requested.
-/// The updated records are then written back to disk.
+/// This function takes existing records that weren't modified by the
+/// transaction and updates their `requested_specs` field based on the spec
+/// mapping or clears it if requested. The updated records are then written back
+/// to disk.
 #[allow(deprecated)]
-fn update_existing_records(
-    existing_records: &[PrefixRecord],
+fn update_existing_records<'p>(
+    existing_records: impl IntoParallelIterator<Item = &'p PrefixRecord>,
     spec_mapping: &HashMap<PackageName, Vec<String>>,
     prefix: &Prefix,
 ) -> Result<(), InstallerError> {
     existing_records
-        .par_iter()
+        .into_par_iter()
         .map(|record| -> Result<(), InstallerError> {
             let package_name = &record.repodata_record.package_record.name;
             let mut updated_record = None;
 
-            // First, check if we need to migrate from deprecated requested_spec to requested_specs
+            // First, check if we need to migrate from deprecated requested_spec to
+            // requested_specs
             let current_specs = if !record.requested_specs.is_empty() {
                 // Use the new field if it has data
                 record.requested_specs.clone()
@@ -843,14 +854,16 @@ fn update_existing_records(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::path::Path;
+
     use rattler_conda_types::{
         package::IndexJson, prefix::Prefix, MatchSpec, PackageName, ParseStrictness::Strict,
     };
     use rattler_package_streaming::seek::read_package_file;
-    use std::path::Path;
     use tempfile::TempDir;
     use url::Url;
+
+    use super::*;
 
     /// Creates a test environment with a temporary directory and prefix
     fn create_test_environment() -> (TempDir, Prefix) {
@@ -1071,7 +1084,8 @@ mod tests {
         let (_temp_dir, target_prefix) = create_test_environment();
         let repo_record = create_dummy_repo_record();
 
-        // Step 1: Install the package WITHOUT requested specs (simulating existing installation)
+        // Step 1: Install the package WITHOUT requested specs (simulating existing
+        // installation)
         let installer = Installer::new();
         install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
 
@@ -1130,8 +1144,9 @@ mod tests {
             "empty >=0.1.0"
         );
 
-        // Step 2: "Install" the same package again, but this time with EMPTY requested specs
-        // This simulates a user running install with empty specs to clear existing ones
+        // Step 2: "Install" the same package again, but this time with EMPTY requested
+        // specs This simulates a user running install with empty specs to clear
+        // existing ones
         let installer_without_specs = Installer::new().with_requested_specs(vec![]); // Explicitly empty requested_specs
         install_and_verify_success(installer_without_specs, &target_prefix, repo_record.clone())
             .await;
@@ -1193,8 +1208,8 @@ mod tests {
         let (_temp_dir, target_prefix) = create_test_environment();
         let repo_record = create_dummy_repo_record();
 
-        // Step 1: Manually create a PrefixRecord with the deprecated requested_spec field
-        // to simulate an old installation
+        // Step 1: Manually create a PrefixRecord with the deprecated requested_spec
+        // field to simulate an old installation
         let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
         let conda_meta_path = target_prefix.path().join("conda-meta");
         std::fs::create_dir_all(&conda_meta_path).unwrap();
