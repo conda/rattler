@@ -15,7 +15,8 @@ use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use indexmap::IndexSet;
 use itertools::Itertools;
 
-/// Type to represent path owner. Using Rc<String> to avoid cloning overhead while maintaining ownership semantics.
+/// Type to represent path owner. Using `Arc<String>` to avoid cloning
+/// overhead while maintaining ownership semantics.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PackageName(Arc<String>);
 
@@ -141,7 +142,6 @@ impl PathResolver {
         node.prefixes.insert(package.clone());
         node.terminals.insert(package);
     }
-
 
     /// Get a mutable reference to the node at `path`, if it exists.
     fn get_node_mut<'a>(&'a mut self, path: &Path) -> Option<&'a mut PathTrieNode> {
@@ -301,7 +301,14 @@ impl PathResolver {
             // Recurse into all child nodes under this covered subtree.
             for (comp, child) in &n.children {
                 path.push(comp);
-                collect_next_candidate_paths(package.clone(), candidates, child, to_add, path, next_under);
+                collect_next_candidate_paths(
+                    package.clone(),
+                    candidates,
+                    child,
+                    to_add,
+                    path,
+                    next_under,
+                );
                 path.pop();
             }
         }
@@ -604,10 +611,7 @@ New:
         ) {
             if !node.terminals.is_empty() {
                 // Determine the winning package by insertion priority
-                if let Some(winner) = packages
-                    .iter()
-                    .find(|pkg| node.terminals.contains(pkg))
-                {
+                if let Some(winner) = packages.iter().find(|pkg| node.terminals.contains(pkg)) {
                     // Collect all other packages that wrote to this path
                     let others: Vec<PackageName> = node
                         .terminals
@@ -737,10 +741,7 @@ mod tests {
         resolver.insert_package("pkg1".into(), &["foo.txt"]);
         resolver.insert_package("pkg2".into(), &["foo.txt"]);
         let (removed, added) = resolver.reprioritize_packages(vec!["pkg1".into(), "pkg2".into()]);
-        assert_eq!(
-            removed,
-            vec![(PathBuf::from("foo.txt"), "pkg1".into())]
-        );
+        assert_eq!(removed, vec![(PathBuf::from("foo.txt"), "pkg1".into())]);
         assert_eq!(added, vec![(PathBuf::from("foo.txt"), "pkg2".into())]);
     }
 
@@ -751,10 +752,7 @@ mod tests {
         resolver.insert_package("pkg2".into(), &["foo/bar.txt"]);
         let (removed, added) = resolver.reprioritize_packages(vec!["pkg1".into(), "pkg2".into()]);
         assert_eq!(removed, vec![(PathBuf::from("foo"), "pkg1".into())]);
-        assert_eq!(
-            added,
-            vec![(PathBuf::from("foo/bar.txt"), "pkg2".into())]
-        );
+        assert_eq!(added, vec![(PathBuf::from("foo/bar.txt"), "pkg2".into())]);
     }
 
     #[test]
@@ -763,10 +761,7 @@ mod tests {
         resolver.insert_package("pkg1".into(), &["foo/bar.txt"]);
         resolver.insert_package("pkg2".into(), &["foo"]);
         let (removed, added) = resolver.reprioritize_packages(vec!["pkg1".into(), "pkg2".into()]);
-        assert_eq!(
-            removed,
-            vec![(PathBuf::from("foo/bar.txt"), "pkg1".into())]
-        );
+        assert_eq!(removed, vec![(PathBuf::from("foo/bar.txt"), "pkg1".into())]);
         assert_eq!(added, vec![(PathBuf::from("foo"), "pkg2".into())]);
     }
 
@@ -783,10 +778,7 @@ mod tests {
             removed,
             vec![(PathBuf::from("foo/bar2.txt"), "pkg1".into())],
         );
-        assert_eq!(
-            added,
-            vec![(PathBuf::from("foo/bar2.txt"), "pkg2".into())]
-        );
+        assert_eq!(added, vec![(PathBuf::from("foo/bar2.txt"), "pkg2".into())]);
     }
 
     #[test]
@@ -856,10 +848,7 @@ mod tests {
             removed,
             vec![(PathBuf::from("foo/bar2.txt"), "pkg2".into())],
         );
-        assert_eq!(
-            added,
-            vec![(PathBuf::from("foo/bar2.txt"), "pkg3".into())]
-        );
+        assert_eq!(added, vec![(PathBuf::from("foo/bar2.txt"), "pkg3".into())]);
 
         // 4
         let pkgs: &[(String, &[&str])] = &[
@@ -878,10 +867,7 @@ mod tests {
             removed,
             vec![(PathBuf::from("foo/bar2.txt"), "pkg2".into())],
         );
-        assert_eq!(
-            added,
-            vec![(PathBuf::from("foo/bar2.txt"), "pkg3".into())]
-        );
+        assert_eq!(added, vec![(PathBuf::from("foo/bar2.txt"), "pkg3".into())]);
 
         // 5
         let pkgs: &[(String, &[&str])] = &[
