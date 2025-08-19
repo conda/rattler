@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use rattler_conda_types::{PackageName, PackageRecord, Platform};
 
@@ -153,12 +153,12 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         CurIter::IntoIter: Clone,
         NewIter::IntoIter: Clone,
     {
-        let current_iter = current.into_iter();
-        let desired_iter = desired.into_iter();
+        let current_iter = current.into_iter().collect::<Vec<_>>();
+        let desired_iter = desired.into_iter().collect::<Vec<_>>();
 
         // Determine the python version used in the current situation.
-        let current_python_info = find_python_info(current_iter.clone(), platform)?;
-        let desired_python_info = find_python_info(desired_iter.clone(), platform)?;
+        let current_python_info = find_python_info(&current_iter, platform)?;
+        let desired_python_info = find_python_info(&desired_iter, platform)?;
         let needs_python_relink = match (&current_python_info, &desired_python_info) {
             (Some(current), Some(desired)) => desired.is_relink_required(current),
             _ => false,
@@ -168,22 +168,20 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         let reinstall = reinstall.unwrap_or_default();
         let ignored = ignored.unwrap_or_default();
 
-        let mut current_map = current_iter
-            .clone()
-            .map(|r| (r.as_ref().name.clone(), r))
-            .collect::<std::collections::HashMap<_, _>>();
-
         let desired_names = desired_iter
-            .clone()
+            .iter()
             .map(|r| r.as_ref().name.clone())
             .collect::<HashSet<_>>();
 
         // Remove all current packages that are not in desired (but keep order of
         // current), except for ignored packages which should be left untouched
+        let mut current_map = HashMap::new();
         for record in current_iter {
             let package_name = &record.as_ref().name;
             if !desired_names.contains(package_name) && !ignored.contains(package_name) {
                 operations.push(TransactionOperation::Remove(record));
+            } else {
+                current_map.insert(record.as_ref().name.clone(), record);
             }
         }
 
