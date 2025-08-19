@@ -19,7 +19,7 @@ use itertools::Itertools;
 pub struct PackageName(Arc<String>);
 
 impl PackageName {
-    /// Create a new PackageName from a string-like value.
+    /// Create a new `PackageName` from a string-like value.
     pub fn new(s: impl Into<String>) -> Self {
         Self(Arc::new(s.into()))
     }
@@ -125,12 +125,7 @@ impl PathResolver {
     }
 
     /// Insert a file path under `package_name`.
-    fn insert_file<P: AsRef<Path>, N: Into<PackageName>>(&mut self, path: P, package_name: N) {
-        self.insert_file_owned(path, package_name.into());
-    }
-
-    /// Insert a file path with an owned package name (optimized for batch operations).
-    fn insert_file_owned<P: AsRef<Path>>(&mut self, path: P, package_owned: PackageName) {
+    fn insert_file_owned<P: AsRef<Path>>(&mut self, path: P, package: PackageName) {
         let path = path.as_ref();
         assert!(
             path.is_relative(),
@@ -139,11 +134,11 @@ impl PathResolver {
 
         let mut node = &mut self.root;
         for comp in path.components().map(|c| c.as_os_str().to_os_string()) {
-            node.prefixes.insert(package_owned.clone());
+            node.prefixes.insert(package.clone());
             node = node.children.entry(comp).or_default();
         }
-        node.prefixes.insert(package_owned.clone());
-        node.terminals.insert(package_owned);
+        node.prefixes.insert(package.clone());
+        node.terminals.insert(package);
     }
 
 
@@ -167,10 +162,10 @@ impl PathResolver {
     /// Insert a package files; return the new paths that conflict
     /// with what was already in the trie before this call.
     ///
-    /// 1. **File vs File** at `p`: return `p`.
-    /// 2. **Directory vs File** at `p`: return just `p`.
-    /// 3. **File vs Directory** under some existing file `f`: return the new file’s `p`.
-    /// 4. **Directory vs Directory**: no conflict.
+    /// 1. **File -> File** at `p`: return `p`.
+    /// 2. **Directory -> File** at `p`: return just `p`.
+    /// 3. **File -> Directory** under some existing file `f`: return the new file’s `p`.
+    /// 4. **Directory -> Directory**: no conflict.
     pub fn insert_package<P: AsRef<Path>>(
         &mut self,
         package: PackageName,
@@ -233,7 +228,6 @@ impl PathResolver {
                         let pbuf = p.to_path_buf();
                         conflicts.insert(pbuf.clone());
                         dir_inserts.push(pbuf);
-                        continue;
                     }
                 }
             }
