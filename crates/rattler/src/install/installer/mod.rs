@@ -1169,12 +1169,12 @@ mod tests {
         let result = installer_with_ignored
             .install(&target_prefix, Vec::<RepoDataRecord>::new())
             .await;
-        
+
         assert!(result.is_ok(), "Installation with ignored packages should succeed");
 
         // Verify the ignored package is still there
         assert!(meta_file_path.exists(), "Ignored package should still be installed");
-        
+
         // Verify transaction was empty (no operations performed)
         let installation_result = result.unwrap();
         assert!(

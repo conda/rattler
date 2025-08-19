@@ -183,15 +183,15 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         // "desired" iterator. Skip ignored packages entirely.
         for record in desired_iter {
             let name = &record.as_ref().name;
-            
+
             // Skip ignored packages - they should be left in their current state
             if ignored.contains(name) {
-                // Remove from current_map to avoid affecting further logic, 
+                // Remove from current_map to avoid affecting further logic,
                 // but don't add any operations for this package
                 current_map.remove(name);
                 continue;
             }
-            
+
             let old_record = current_map.remove(name);
 
             if let Some(old_record) = old_record {
@@ -320,7 +320,7 @@ mod tests {
         .await;
 
         let name = prefix_record.repodata_record.package_record.name.clone();
-        
+
         // Test case 1: Package is in both current and desired, but ignored - should result in no operations
         let ignored_packages = Some(HashSet::from_iter(vec![name.clone()]));
         let transaction = Transaction::from_current_and_desired(
