@@ -361,13 +361,15 @@ impl Installer {
         // Create a future to determine the currently installed packages. We
         // can start this in parallel with the other operations and resolve it
         // when we need it.
-        let installed: Vec<PrefixRecord> = if let Some(installed) = self.installed {
+        let installed_provided = self.installed.is_some();
+        let mut installed: Vec<PrefixRecord> = if let Some(installed) = self.installed {
             installed
         } else {
             let prefix = prefix.clone();
-            // TODO: Should we add progress reporting here?
+            // Use sparse collection for much faster reading when checking if packages changed
             run_blocking_task(move || {
-                PrefixRecord::collect_from_prefix(&prefix)
+                use rattler_conda_types::MinimalPrefixCollection;
+                PrefixRecord::collect_minimal_from_prefix(&prefix)
                     .map_err(InstallerError::FailedToDetectInstalledPackages)
             })
             .await?
@@ -375,13 +377,35 @@ impl Installer {
 
         // Construct a transaction from the current and desired situation.
         let target_platform = self.target_platform.unwrap_or_else(Platform::current);
-        let transaction = Transaction::from_current_and_desired(
-            installed,
-            records.into_iter().collect::<Vec<_>>(),
-            self.reinstall_packages,
-            self.ignored_packages,
+        let desired_records: Vec<_> = records.into_iter().collect();
+        let mut transaction = Transaction::from_current_and_desired(
+            installed.iter(),
+            desired_records.iter(),
+            self.reinstall_packages.clone(),
+            self.ignored_packages.clone(),
             target_platform,
         )?;
+        // If transaction is non-empty, we need full prefix records for file operations
+        // Reload them and reconstruct the transaction with full records
+        if !transaction.operations.is_empty() && !installed_provided {
+            let prefix = prefix.clone();
+            installed = run_blocking_task(move || {
+                PrefixRecord::collect_from_prefix(&prefix)
+                    .map_err(InstallerError::FailedToDetectInstalledPackages)
+            })
+            .await?;
+
+            // Reconstruct transaction with full records to maintain consistency
+            transaction = Transaction::from_current_and_desired(
+                installed.iter(),
+                desired_records.iter(),
+                self.reinstall_packages,
+                self.ignored_packages,
+                target_platform,
+            )?;
+        }
+
+        let transaction = transaction.to_owned();
 
         // Create a mapping from package names to requested specs
         let spec_mapping = self
@@ -920,7 +944,10 @@ mod tests {
         repo_record: rattler_conda_types::RepoDataRecord,
     ) {
         let result = installer.install(prefix, vec![repo_record]).await;
-        assert!(result.is_ok(), "Installation should succeed");
+        assert!(
+            result.is_ok(),
+            "Installation should succeed, but got error: {result:#?}"
+        );
     }
 
     #[test]
@@ -1155,7 +1182,7 @@ mod tests {
         // The package should now have the requested_specs cleared (set to empty)
         assert!(
             updated_record.requested_specs.is_empty(),
-            "Updated installation without specs should clear requested_specs"
+            "Updated installation without specs should clear requested_specs, got nonempty record requested_specs: {:#?}", updated_record.requested_specs
         );
     }
 

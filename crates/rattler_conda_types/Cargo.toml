@@ -54,6 +54,7 @@ indexmap = { workspace = true }
 dirs = { workspace = true }
 rayon = { workspace = true, optional = true }
 fs-err = { workspace = true }
+gjson = "0.8"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = { version = "0.10.0" }
