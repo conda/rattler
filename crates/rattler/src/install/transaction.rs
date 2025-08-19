@@ -148,17 +148,13 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         reinstall: Option<HashSet<PackageName>>,
         ignored: Option<HashSet<PackageName>>,
         platform: Platform,
-    ) -> Result<Self, TransactionError>
-    where
-        CurIter::IntoIter: Clone,
-        NewIter::IntoIter: Clone,
-    {
-        let current_iter = current.into_iter().collect::<Vec<_>>();
-        let desired_iter = desired.into_iter().collect::<Vec<_>>();
+    ) -> Result<Self, TransactionError> {
+        let current_packages = current.into_iter().collect::<Vec<_>>();
+        let desired_packages = desired.into_iter().collect::<Vec<_>>();
 
         // Determine the python version used in the current situation.
-        let current_python_info = find_python_info(&current_iter, platform)?;
-        let desired_python_info = find_python_info(&desired_iter, platform)?;
+        let current_python_info = find_python_info(&current_packages, platform)?;
+        let desired_python_info = find_python_info(&desired_packages, platform)?;
         let needs_python_relink = match (&current_python_info, &desired_python_info) {
             (Some(current), Some(desired)) => desired.is_relink_required(current),
             _ => false,
@@ -168,7 +164,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         let reinstall = reinstall.unwrap_or_default();
         let ignored = ignored.unwrap_or_default();
 
-        let desired_names = desired_iter
+        let desired_names = desired_packages
             .iter()
             .map(|r| r.as_ref().name.clone())
             .collect::<HashSet<_>>();
@@ -176,7 +172,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         // Remove all current packages that are not in desired (but keep order of
         // current), except for ignored packages which should be left untouched
         let mut current_map = HashMap::new();
-        for record in current_iter {
+        for record in current_packages {
             let package_name = &record.as_ref().name;
             if !desired_names.contains(package_name) && !ignored.contains(package_name) {
                 operations.push(TransactionOperation::Remove(record));
@@ -191,7 +187,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         // Figure out the operations to perform, but keep the order of the original
         // "desired" iterator. Skip ignored packages entirely.
         let mut unchanged = Vec::new();
-        for record in desired_iter {
+        for record in desired_packages {
             let name = &record.as_ref().name;
             let old_record = current_map.remove(name);
 
