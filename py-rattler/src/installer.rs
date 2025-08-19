@@ -18,7 +18,7 @@ use crate::{
 // TODO: Accept functions to report progress
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-#[pyo3(signature = (records, target_prefix, execute_link_scripts=false, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, requested_specs=None))]
+#[pyo3(signature = (records, target_prefix, execute_link_scripts=false, show_progress=false, platform=None, client=None, cache_dir=None, installed_packages=None, reinstall_packages=None, ignored_packages=None, requested_specs=None))]
 pub fn py_install<'a>(
     py: Python<'a>,
     records: Vec<Bound<'a, PyAny>>,
@@ -30,6 +30,7 @@ pub fn py_install<'a>(
     cache_dir: Option<PathBuf>,
     installed_packages: Option<Vec<Bound<'a, PyAny>>>,
     reinstall_packages: Option<HashSet<String>>,
+    ignored_packages: Option<HashSet<String>>,
     requested_specs: Option<Vec<PyMatchSpec>>,
 ) -> PyResult<Bound<'a, PyAny>> {
     let dependencies = records
@@ -46,6 +47,15 @@ pub fn py_install<'a>(
         .transpose()?;
 
     let reinstall_packages = reinstall_packages
+        .map(|pkgs| {
+            pkgs.into_iter()
+                .map(PackageName::try_from)
+                .collect::<Result<HashSet<_>, _>>()
+        })
+        .transpose()
+        .map_err(|_err| PyTypeError::new_err("cannot convert to conda PackageName"))?;
+
+    let ignored_packages = ignored_packages
         .map(|pkgs| {
             pkgs.into_iter()
                 .map(PackageName::try_from)
@@ -82,6 +92,10 @@ pub fn py_install<'a>(
 
         if let Some(reinstall_packages) = reinstall_packages {
             installer.set_reinstall_packages(reinstall_packages);
+        }
+
+        if let Some(ignored_packages) = ignored_packages {
+            installer.set_ignored_packages(ignored_packages);
         }
 
         if let Some(requested_specs) = requested_specs {

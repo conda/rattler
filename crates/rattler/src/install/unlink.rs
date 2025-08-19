@@ -258,6 +258,7 @@ mod tests {
             vec![prefix_record.clone()],
             Vec::<RepoDataRecord>::new().into_iter(),
             None,
+            None, // ignored packages
             Platform::current(),
         )
         .unwrap();
@@ -322,6 +323,7 @@ mod tests {
             vec![prefix_record.clone()],
             Vec::<RepoDataRecord>::new().into_iter(),
             None,
+            None, // ignored packages
             Platform::current(),
         )
         .unwrap();
