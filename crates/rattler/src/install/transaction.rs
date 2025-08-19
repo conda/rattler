@@ -193,7 +193,9 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
 
             // Skip ignored packages - they should be left in their current state
             if ignored.contains(name) {
-                unchanged.push(old_record);
+                if let Some(old_record) = old_record {
+                    unchanged.push(old_record);
+                }
             } else if let Some(old_record) = old_record {
                 if !describe_same_content(record.as_ref(), old_record.as_ref())
                     || reinstall.contains(&record.as_ref().name)
