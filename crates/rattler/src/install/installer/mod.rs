@@ -383,8 +383,6 @@ impl Installer {
             target_platform,
         )?;
 
-        dbg!(transaction.unchanged_packages());
-
         // Create a mapping from package names to requested specs
         let spec_mapping = self
             .requested_specs
