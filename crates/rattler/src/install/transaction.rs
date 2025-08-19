@@ -126,7 +126,8 @@ impl<Old: AsRef<New>, New> Transaction<Old, New> {
 impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New> {
     /// Constructs a [`Transaction`] by taking the current situation and diffing
     /// that against the desired situation. You can specify a set of package names
-    /// that should be reinstalled even if their content has not changed.
+    /// that should be reinstalled even if their content has not changed. You can
+    /// also specify a set of package names that should be ignored (left untouched).
     pub fn from_current_and_desired<
         CurIter: IntoIterator<Item = Old>,
         NewIter: IntoIterator<Item = New>,
@@ -134,6 +135,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         current: CurIter,
         desired: NewIter,
         reinstall: Option<HashSet<PackageName>>,
+        ignored: Option<HashSet<PackageName>>,
         platform: Platform,
     ) -> Result<Self, TransactionError>
     where
@@ -153,6 +155,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
 
         let mut operations = Vec::new();
         let reinstall = reinstall.unwrap_or_default();
+        let ignored = ignored.unwrap_or_default();
 
         let mut current_map = current_iter
             .clone()
@@ -165,9 +168,10 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
             .collect::<HashSet<_>>();
 
         // Remove all current packages that are not in desired (but keep order of
-        // current)
+        // current), except for ignored packages which should be left untouched
         for record in current_iter {
-            if !desired_names.contains(&record.as_ref().name) {
+            let package_name = &record.as_ref().name;
+            if !desired_names.contains(package_name) && !ignored.contains(package_name) {
                 operations.push(TransactionOperation::Remove(record));
             }
         }
@@ -176,9 +180,18 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         operations.reverse();
 
         // Figure out the operations to perform, but keep the order of the original
-        // "desired" iterator
+        // "desired" iterator. Skip ignored packages entirely.
         for record in desired_iter {
             let name = &record.as_ref().name;
+
+            // Skip ignored packages - they should be left in their current state
+            if ignored.contains(name) {
+                // Remove from current_map to avoid affecting further logic,
+                // but don't add any operations for this package
+                current_map.remove(name);
+                continue;
+            }
+
             let old_record = current_map.remove(name);
 
             if let Some(old_record) = old_record {
@@ -283,6 +296,7 @@ mod tests {
             vec![prefix_record.clone()],
             vec![prefix_record.clone()],
             Some(HashSet::from_iter(vec![name])),
+            None, // ignored packages
             Platform::current(),
         )
         .unwrap();
@@ -291,5 +305,62 @@ mod tests {
             transaction.operations[0],
             TransactionOperation::Change { .. }
         );
+    }
+
+    #[tokio::test]
+    async fn test_ignored_packages() {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let prefix_record = download_and_get_prefix_record(
+            &Prefix::create(environment_dir.path()).unwrap(),
+            "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda"
+                .parse()
+                .unwrap(),
+            "25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd",
+        )
+        .await;
+
+        let name = prefix_record.repodata_record.package_record.name.clone();
+
+        // Test case 1: Package is in both current and desired, but ignored - should result in no operations
+        let ignored_packages = Some(HashSet::from_iter(vec![name.clone()]));
+        let transaction = Transaction::from_current_and_desired(
+            vec![prefix_record.clone()],
+            vec![prefix_record.repodata_record.clone()],
+            None, // reinstall
+            ignored_packages,
+            Platform::current(),
+        )
+        .unwrap();
+
+        // Should have no operations because the package is ignored
+        assert!(transaction.operations.is_empty());
+
+        // Test case 2: Package is in current but not desired, and ignored - should not be removed
+        let ignored_packages = Some(HashSet::from_iter(vec![name.clone()]));
+        let transaction = Transaction::from_current_and_desired(
+            vec![prefix_record.clone()],
+            Vec::<rattler_conda_types::RepoDataRecord>::new(), // empty desired
+            None,                                              // reinstall
+            ignored_packages,
+            Platform::current(),
+        )
+        .unwrap();
+
+        // Should have no operations because the package is ignored (not removed)
+        assert!(transaction.operations.is_empty());
+
+        // Test case 3: Package is not in current but in desired, and ignored - should not be installed
+        let ignored_packages = Some(HashSet::from_iter(vec![name.clone()]));
+        let transaction = Transaction::from_current_and_desired(
+            Vec::<rattler_conda_types::PrefixRecord>::new(), // empty current
+            vec![prefix_record.repodata_record.clone()],
+            None, // reinstall
+            ignored_packages,
+            Platform::current(),
+        )
+        .unwrap();
+
+        // Should have no operations because the package is ignored (not installed)
+        assert!(transaction.operations.is_empty());
     }
 }

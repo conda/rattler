@@ -17,6 +17,7 @@ async def install(
     cache_dir: Optional[os.PathLike[str]] = None,
     installed_packages: Optional[List[PrefixRecord]] = None,
     reinstall_packages: Optional[set[str]] = None,
+    ignored_packages: Optional[set[str]] = None,
     platform: Optional[Platform] = None,
     execute_link_scripts: bool = False,
     show_progress: bool = True,
@@ -66,6 +67,8 @@ async def install(
                 If `None` is specified then the `target_prefix` will be scanned for installed
                 packages.
         reinstall_packages: A list of package names that should be reinstalled.
+        ignored_packages: A list of package names that should be ignored (left untouched).
+                These packages will not be removed, installed, or updated.
         platform: Target platform to create and link the
                 environment. Defaults to current platform.
         execute_link_scripts: whether to execute the post-link and pre-unlink scripts
@@ -84,6 +87,7 @@ async def install(
         cache_dir=cache_dir,
         installed_packages=installed_packages,
         reinstall_packages=reinstall_packages,
+        ignored_packages=ignored_packages,
         platform=platform._inner if platform is not None else None,
         client=client._client if client is not None else None,
         execute_link_scripts=execute_link_scripts,

@@ -61,6 +61,7 @@ pub struct Installer {
     apple_code_sign_behavior: AppleCodeSignBehavior,
     alternative_target_prefix: Option<PathBuf>,
     reinstall_packages: Option<HashSet<PackageName>>,
+    ignored_packages: Option<HashSet<PackageName>>,
     requested_specs: Option<Vec<MatchSpec>>,
     // TODO: Determine upfront if these are possible.
     link_options: LinkOptions,
@@ -243,6 +244,25 @@ impl Installer {
         self
     }
 
+    /// Set the packages that should be ignored (left untouched) during installation.
+    /// Ignored packages will not be removed, installed, or updated.
+    #[must_use]
+    pub fn with_ignored_packages(self, ignored: HashSet<PackageName>) -> Self {
+        Self {
+            ignored_packages: Some(ignored),
+            ..self
+        }
+    }
+
+    /// Set the packages that should be ignored (left untouched) during installation.
+    /// Ignored packages will not be removed, installed, or updated.
+    /// This function is similar to [`Self::with_ignored_packages`], but
+    /// modifies an existing instance.
+    pub fn set_ignored_packages(&mut self, ignored: HashSet<PackageName>) -> &mut Self {
+        self.ignored_packages = Some(ignored);
+        self
+    }
+
     /// Sets the packages that are currently installed in the prefix. If this
     /// is not set, the installation process will first figure this out.
     ///
@@ -377,6 +397,7 @@ impl Installer {
             installed.clone(),
             records.into_iter().collect::<Vec<_>>(),
             self.reinstall_packages,
+            self.ignored_packages,
             target_platform,
         )?;
 
@@ -1122,6 +1143,48 @@ mod tests {
         assert!(
             updated_record.requested_specs.is_empty(),
             "Updated installation without specs should clear requested_specs"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_install_with_ignored_packages() {
+        let (_temp_dir, target_prefix) = create_test_environment();
+        let repo_record = create_dummy_repo_record();
+
+        // Step 1: Install the package first
+        let installer = Installer::new();
+        install_and_verify_success(installer, &target_prefix, repo_record.clone()).await;
+
+        // Verify the package was installed
+        let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
+        assert!(meta_file_path.exists(), "Package should be installed");
+
+        // Step 2: Try to "remove" the package by installing an empty environment, but ignore the package
+        let package_name = repo_record.package_record.name.clone();
+        let ignored_packages = HashSet::from_iter(vec![package_name]);
+        let installer_with_ignored = Installer::new().with_ignored_packages(ignored_packages);
+
+        // Install empty environment (should remove all packages, except ignored ones)
+        let result = installer_with_ignored
+            .install(&target_prefix, Vec::<RepoDataRecord>::new())
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "Installation with ignored packages should succeed"
+        );
+
+        // Verify the ignored package is still there
+        assert!(
+            meta_file_path.exists(),
+            "Ignored package should still be installed"
+        );
+
+        // Verify transaction was empty (no operations performed)
+        let installation_result = result.unwrap();
+        assert!(
+            installation_result.transaction.operations.is_empty(),
+            "No operations should be performed on ignored packages"
         );
     }
 

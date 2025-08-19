@@ -289,6 +289,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
             installed_packages,
             required_packages,
             None,
+            None, // ignored packages
             install_platform,
         )?;
 
