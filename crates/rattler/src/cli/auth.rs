@@ -209,8 +209,8 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
 }
 
 /// Validates a token with prefix.dev by making a GraphQL API call
-/// 
-/// Returns `Ok(true)` if the token is valid, `Ok(false)` if invalid, 
+///
+/// Returns `Ok(true)` if the token is valid, `Ok(false)` if invalid,
 /// or `Err` if there was a network/parsing error
 fn validate_prefix_dev_token(token: &str, host: &str) -> Result<bool, AuthenticationCLIError> {
     // Validate whether the user exists
@@ -354,7 +354,7 @@ mod tests {
         );
 
         let result = login(args, storage);
-        
+
         // Now we expect an UnauthorizedToken error instead of Ok(())
         assert!(matches!(
             result,
