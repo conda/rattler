@@ -107,7 +107,7 @@ impl<Old, New> Transaction<Old, New> {
     }
 
     /// Return an iterator over the records that are not touched by the
-    /// transcation
+    /// transaction
     pub fn unchanged_packages(&self) -> &[Old] {
         &self.unchanged
     }
