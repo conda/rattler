@@ -340,7 +340,7 @@ mod tests {
         let transaction = Transaction::from_current_and_desired(
             vec![prefix_record.clone()],
             Vec::<rattler_conda_types::RepoDataRecord>::new(), // empty desired
-            None, // reinstall
+            None,                                              // reinstall
             ignored_packages,
             Platform::current(),
         )

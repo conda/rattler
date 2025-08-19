@@ -1162,18 +1162,23 @@ mod tests {
         // Step 2: Try to "remove" the package by installing an empty environment, but ignore the package
         let package_name = repo_record.package_record.name.clone();
         let ignored_packages = HashSet::from_iter(vec![package_name]);
-        let installer_with_ignored = Installer::new()
-            .with_ignored_packages(ignored_packages);
+        let installer_with_ignored = Installer::new().with_ignored_packages(ignored_packages);
 
         // Install empty environment (should remove all packages, except ignored ones)
         let result = installer_with_ignored
             .install(&target_prefix, Vec::<RepoDataRecord>::new())
             .await;
 
-        assert!(result.is_ok(), "Installation with ignored packages should succeed");
+        assert!(
+            result.is_ok(),
+            "Installation with ignored packages should succeed"
+        );
 
         // Verify the ignored package is still there
-        assert!(meta_file_path.exists(), "Ignored package should still be installed");
+        assert!(
+            meta_file_path.exists(),
+            "Ignored package should still be installed"
+        );
 
         // Verify transaction was empty (no operations performed)
         let installation_result = result.unwrap();
