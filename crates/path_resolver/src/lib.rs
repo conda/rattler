@@ -3,6 +3,7 @@
 //!
 //! For details see methods of `PathResolver`.
 use std::{
+    collections::BTreeSet,
     ffi::OsString,
     io,
     path::{Component, Path, PathBuf},
@@ -174,7 +175,7 @@ impl PathResolver {
         // Record insertion order for future reprioritize.
         self.packages.insert(package.clone());
 
-        let mut conflicts = HashSet::default();
+        let mut conflicts = BTreeSet::default();
         // Which of these paths were *directories* on the old trie?
         let mut dir_inserts = Vec::new();
 
@@ -245,9 +246,7 @@ impl PathResolver {
             }
         }
 
-        let mut out: Vec<_> = conflicts.into_iter().collect();
-        out.sort();
-        out
+        conflicts.into_iter().collect()
     }
 
     /// Unregister all paths belonging to `package`, then prune empty
