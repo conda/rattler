@@ -14,11 +14,11 @@ fn generate_test_paths(size: usize, depth: usize) -> Vec<PathBuf> {
 
         // Create nested directory structure
         for d in 0..depth {
-            path.push(format!("dir_{}", d));
+            path.push(format!("dir_{d}"));
         }
 
         // Add a file at the end
-        path.push(format!("file_{}.txt", i));
+        path.push(format!("file_{i}.txt"));
         paths.push(path);
     }
 
@@ -30,8 +30,8 @@ fn generate_conflicting_paths(base_size: usize) -> Vec<PathBuf> {
 
     // Create paths that will conflict with each other
     for i in 0..base_size / 2 {
-        paths.push(PathBuf::from(format!("shared/file_{}.txt", i)));
-        paths.push(PathBuf::from(format!("shared/file_{}.txt", i))); // Duplicate for conflict
+        paths.push(PathBuf::from(format!("shared/file_{i}.txt")));
+        paths.push(PathBuf::from(format!("shared/file_{i}.txt"))); // Duplicate for conflict
     }
 
     paths
@@ -74,7 +74,7 @@ fn insert_multiple_packages(bencher: Bencher<'_, '_>, num_packages: usize) {
         let mut resolver = black_box(PathResolver::new());
 
         for i in 0..num_packages {
-            let package_name: PackageName = format!("package_{}", i).into();
+            let package_name: PackageName = format!("package_{i}").into();
             let conflicts = resolver.insert_package(black_box(package_name), black_box(&paths_per_package));
             black_box(conflicts);
         }
@@ -107,22 +107,22 @@ fn insert_package_realistic_scenario(bencher: Bencher<'_, '_>) {
 
     // Add library files
     for i in 0..20 {
-        paths.push(PathBuf::from(format!("lib/module_{}.py", i)));
+        paths.push(PathBuf::from(format!("lib/module_{i}.py")));
     }
 
     // Add binary files
     for i in 0..5 {
-        paths.push(PathBuf::from(format!("bin/tool_{}", i)));
+        paths.push(PathBuf::from(format!("bin/tool_{i}")));
     }
 
     // Add documentation
     for i in 0..10 {
-        paths.push(PathBuf::from(format!("docs/page_{}.md", i)));
+        paths.push(PathBuf::from(format!("docs/page_{i}.md")));
     }
 
     // Add test files
     for i in 0..15 {
-        paths.push(PathBuf::from(format!("tests/test_{}.py", i)));
+        paths.push(PathBuf::from(format!("tests/test_{i}.py")));
     }
 
     let package_name: PackageName = "realistic_package".into();
@@ -154,7 +154,7 @@ fn insert_multiple_heavy_packages(bencher: Bencher<'_, '_>, num_packages: usize)
         let mut resolver = black_box(PathResolver::new());
 
         for i in 0..num_packages {
-            let package_name: PackageName = format!("heavy_package_{}", i).into();
+            let package_name: PackageName = format!("heavy_package_{i}").into();
             let conflicts = resolver.insert_package(black_box(package_name), black_box(&paths_per_package));
             black_box(conflicts);
         }
@@ -202,27 +202,27 @@ fn insert_package_enterprise_simulation(bencher: Bencher<'_, '_>) {
 
     // Test files
     for test in 0..200 {
-        paths.push(PathBuf::from(format!("tests/unit/test_{}.rs", test)));
-        paths.push(PathBuf::from(format!("tests/integration/integration_test_{}.rs", test)));
+        paths.push(PathBuf::from(format!("tests/unit/test_{test}.rs")));
+        paths.push(PathBuf::from(format!("tests/integration/integration_test_{test}.rs")));
     }
 
     // Documentation
     for doc in 0..50 {
-        paths.push(PathBuf::from(format!("docs/api/module_{}.md", doc)));
-        paths.push(PathBuf::from(format!("docs/guides/guide_{}.md", doc)));
+        paths.push(PathBuf::from(format!("docs/api/module_{doc}.md")));
+        paths.push(PathBuf::from(format!("docs/guides/guide_{doc}.md")));
     }
 
     // Assets and resources
     for asset in 0..100 {
-        paths.push(PathBuf::from(format!("assets/images/img_{}.png", asset)));
-        paths.push(PathBuf::from(format!("assets/fonts/font_{}.ttf", asset)));
-        paths.push(PathBuf::from(format!("resources/config/config_{}.yaml", asset)));
+        paths.push(PathBuf::from(format!("assets/images/img_{asset}.png")));
+        paths.push(PathBuf::from(format!("assets/fonts/font_{asset}.ttf")));
+        paths.push(PathBuf::from(format!("resources/config/config_{asset}.yaml")));
     }
 
     // Build artifacts simulation
     for artifact in 0..300 {
-        paths.push(PathBuf::from(format!("target/debug/deps/lib_{}.rlib", artifact)));
-        paths.push(PathBuf::from(format!("target/release/build/build_{}/output", artifact)));
+        paths.push(PathBuf::from(format!("target/debug/deps/lib_{artifact}.rlib")));
+        paths.push(PathBuf::from(format!("target/release/build/build_{artifact}/output")));
     }
 
     let package_name: PackageName = "enterprise_package".into();
