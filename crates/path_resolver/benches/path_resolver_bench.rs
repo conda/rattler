@@ -75,7 +75,8 @@ fn insert_multiple_packages(bencher: Bencher<'_, '_>, num_packages: usize) {
 
         for i in 0..num_packages {
             let package_name: PackageName = format!("package_{i}").into();
-            let conflicts = resolver.insert_package(black_box(package_name), black_box(&paths_per_package));
+            let conflicts =
+                resolver.insert_package(black_box(package_name), black_box(&paths_per_package));
             black_box(conflicts);
         }
 
@@ -116,7 +117,8 @@ fn insert_multiple_heavy_packages(bencher: Bencher<'_, '_>, num_packages: usize)
 
         for i in 0..num_packages {
             let package_name: PackageName = format!("heavy_package_{i}").into();
-            let conflicts = resolver.insert_package(black_box(package_name), black_box(&paths_per_package));
+            let conflicts =
+                resolver.insert_package(black_box(package_name), black_box(&paths_per_package));
             black_box(conflicts);
         }
 
@@ -129,13 +131,17 @@ fn insert_package_massive_conflicts(bencher: Bencher<'_, '_>, size: usize) {
     // Create paths where every file will conflict
     let mut conflicting_paths = Vec::with_capacity(size);
     for i in 0..size {
-        conflicting_paths.push(PathBuf::from(format!("shared_file_{}.txt", i % 100))); // Reuse filenames to force conflicts
+        conflicting_paths.push(PathBuf::from(format!("shared_file_{}.txt", i % 100)));
+        // Reuse filenames to force conflicts
     }
 
     bencher.bench_local(|| {
         let mut resolver = black_box(PathResolver::new());
 
-        let _ = resolver.insert_package("package1".into(), black_box(&conflicting_paths[0..size/2]));
+        let _ = resolver.insert_package(
+            "package1".into(),
+            black_box(&conflicting_paths[0..size / 2]),
+        );
 
         let conflicts = resolver.insert_package("package2".into(), black_box(&conflicting_paths));
         black_box(conflicts)
