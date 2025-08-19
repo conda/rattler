@@ -25,13 +25,13 @@ fn generate_test_paths(size: usize, depth: usize) -> Vec<PathBuf> {
     paths
 }
 
+/// Generate conflicting paths by just adding duplicates.
 fn generate_conflicting_paths(base_size: usize) -> Vec<PathBuf> {
     let mut paths = Vec::with_capacity(base_size);
 
-    // Create paths that will conflict with each other
     for i in 0..base_size / 2 {
         paths.push(PathBuf::from(format!("shared/file_{i}.txt")));
-        paths.push(PathBuf::from(format!("shared/file_{i}.txt"))); // Duplicate for conflict
+        paths.push(PathBuf::from(format!("shared/file_{i}.txt")));
     }
 
     paths
@@ -135,10 +135,8 @@ fn insert_package_massive_conflicts(bencher: Bencher<'_, '_>, size: usize) {
     bencher.bench_local(|| {
         let mut resolver = black_box(PathResolver::new());
 
-        // Insert first package
         let _ = resolver.insert_package("package1".into(), black_box(&conflicting_paths[0..size/2]));
 
-        // Insert second package with maximum conflicts
         let conflicts = resolver.insert_package("package2".into(), black_box(&conflicting_paths));
         black_box(conflicts)
     });

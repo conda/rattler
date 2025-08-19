@@ -180,25 +180,43 @@ impl PathResolver {
         let mut dir_inserts = Vec::new();
 
         // 1) detect conflicts against the existing trie
+        //
+        // For each path we want to insert (e.g., "foo/bar/baz.txt"):
+        //
+        // 1. Start at the trie root and break path into components ["foo", "bar", "baz.txt"]
+        //
+        // 2. Traverse the trie component by component:
+        //   - For each component, check if it exists in current node's children
+        //   - Use peekable iterator to know if we're at the last component
+        //
+        // 3. During traversal, detect "File blocks Directory" conflict:
+        //   - If we're not at the last component (still have subdirs to traverse)
+        //   - BUT current node has terminals (meaning a file exists here)
+        //   - Then we have a conflict: existing file blocks our directory path
+        //   - Example: If "foo/bar" is a file, we can't insert "foo/bar/baz.txt"
+        //
+        // 4. If we reach the final component without prefix conflicts:
+        //   - Check "File vs File" conflict:
+        //     - If node has terminals, another file already exists at this exact path
+        //   - Check "Directory vs File" conflict:
+        //     - If node has children, we're trying to replace a directory with a file
+        //     - Example: If "foo/bar/" is a directory, we can't insert "foo/bar" as a file
         for p in paths {
             let p = p.as_ref();
 
-            // Single trie traversal for all conflict checks
             let mut current_node = &self.root;
             let mut found_node = None;
             let mut has_conflict = false;
 
-            // Single-pass approach: use peekable iterator to detect last component
             let mut components = p.components().peekable();
 
-            // Navigate to the target node, checking for prefix conflicts along the way
             while let Some(component) = components.next() {
                 let comp = component.as_os_str();
                 let is_last = components.peek().is_none();
 
                 match current_node.children.get(comp) {
                     Some(node) => {
-                        // Check for File vs Directory conflict (file exists at prefix)
+                        // Check for File -> Directory conflict (file exists at prefix)
                         if !is_last && !node.terminals.is_empty() {
                             conflicts.insert(p.to_path_buf());
                             has_conflict = true;
@@ -207,7 +225,6 @@ impl PathResolver {
 
                         current_node = node;
 
-                        // If this is the final component, save the node
                         if is_last {
                             found_node = Some(node);
                         }
@@ -219,12 +236,12 @@ impl PathResolver {
             // Check conflicts at the target node (if we found it and no prefix conflict)
             if !has_conflict {
                 if let Some(n) = found_node {
-                    // File vs File conflict
+                    // File -> File conflict
                     if !n.terminals.is_empty() {
                         conflicts.insert(p.to_path_buf());
                         continue;
                     }
-                    // Directory vs File conflict
+                    // Directory -> File conflict
                     if !n.children.is_empty() {
                         let pbuf = p.to_path_buf();
                         conflicts.insert(pbuf.clone());
