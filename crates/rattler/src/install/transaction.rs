@@ -47,6 +47,24 @@ pub enum TransactionOperation<Old, New> {
     Remove(Old),
 }
 
+impl<Old: Clone, New: Clone> TransactionOperation<&Old, &New> {
+    /// Own records.
+    pub fn to_owned(self) -> TransactionOperation<Old, New> {
+        match self {
+            TransactionOperation::Install(new) => TransactionOperation::Install(new.clone()),
+            TransactionOperation::Change { old, new } => TransactionOperation::Change {
+                old: old.clone(),
+                new: new.clone(),
+            },
+            TransactionOperation::Reinstall { old, new } => TransactionOperation::Reinstall {
+                old: old.clone(),
+                new: new.clone(),
+            },
+            TransactionOperation::Remove(old) => TransactionOperation::Remove(old.clone()),
+        }
+    }
+}
+
 impl<Old: AsRef<New>, New> TransactionOperation<Old, New> {
     /// Returns the record of the package to install for this operation. If this
     /// operation does not refer to an installable package, `None` is
@@ -95,6 +113,23 @@ pub struct Transaction<Old, New> {
 
     /// The records that are not touched by the transaction.
     pub unchanged: Vec<Old>,
+}
+
+impl<Old: Clone, New: Clone> Transaction<&Old, &New> {
+    /// Own records.
+    pub fn to_owned(self) -> Transaction<Old, New> {
+        Transaction {
+            operations: self
+                .operations
+                .into_iter()
+                .map(TransactionOperation::to_owned)
+                .collect(),
+            python_info: self.python_info,
+            current_python_info: self.current_python_info,
+            platform: self.platform,
+            unchanged: self.unchanged.into_iter().cloned().collect(),
+        }
+    }
 }
 
 impl<Old, New> Transaction<Old, New> {
