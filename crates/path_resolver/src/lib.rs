@@ -70,7 +70,7 @@ impl std::fmt::Display for PackageName {
 
 impl std::ops::Deref for PackageName {
     type Target = str;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.0
     }
