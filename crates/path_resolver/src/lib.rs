@@ -189,10 +189,10 @@ impl PathResolver {
             let mut has_conflict = false;
 
             // Single-pass approach: use peekable iterator to detect last component
-            let mut components = p.components().enumerate().peekable();
+            let mut components = p.components().peekable();
 
             // Navigate to the target node, checking for prefix conflicts along the way
-            while let Some((_i, component)) = components.next() {
+            while let Some(component) = components.next() {
                 let comp = component.as_os_str();
                 let is_last = components.peek().is_none();
 
