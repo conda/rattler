@@ -352,17 +352,6 @@ impl Installer {
         prefix: impl AsRef<Path>,
         records: impl IntoIterator<Item = RepoDataRecord>,
     ) -> Result<InstallationResult, InstallerError> {
-        let downloader = self
-            .downloader
-            .unwrap_or_else(|| reqwest_middleware::ClientWithMiddleware::from(Client::default()));
-        let package_cache = self.package_cache.unwrap_or_else(|| {
-            PackageCache::new(
-                default_cache_dir()
-                    .expect("failed to determine default cache directory")
-                    .join(rattler_cache::PACKAGE_CACHE_DIR),
-            )
-        });
-
         let prefix = Prefix::create(prefix.as_ref().to_path_buf()).map_err(|err| {
             InstallerError::FailedToCreatePrefix(prefix.as_ref().to_path_buf(), err)
         })?;
@@ -381,15 +370,6 @@ impl Installer {
             })
             .await?
         };
-
-        // Construct a driver.
-        let driver = InstallDriver::builder()
-            .execute_link_scripts(self.execute_link_scripts)
-            .with_io_concurrency_semaphore(
-                self.io_semaphore.unwrap_or(Arc::new(Semaphore::new(100))),
-            )
-            .with_prefix_records(&installed)
-            .finish();
 
         // Construct a transaction from the current and desired situation.
         let target_platform = self.target_platform.unwrap_or_else(Platform::current);
@@ -429,6 +409,26 @@ impl Installer {
                 clobbered_paths: HashMap::default(),
             });
         }
+
+        let downloader = self
+            .downloader
+            .unwrap_or_else(|| reqwest_middleware::ClientWithMiddleware::from(Client::default()));
+        let package_cache = self.package_cache.unwrap_or_else(|| {
+            PackageCache::new(
+                default_cache_dir()
+                    .expect("failed to determine default cache directory")
+                    .join(rattler_cache::PACKAGE_CACHE_DIR),
+            )
+        });
+
+        // Construct a driver.
+        let driver = InstallDriver::builder()
+            .execute_link_scripts(self.execute_link_scripts)
+            .with_io_concurrency_semaphore(
+                self.io_semaphore.unwrap_or(Arc::new(Semaphore::new(100))),
+            )
+            .with_prefix_records(&installed)
+            .finish();
 
         // Determine base installer options.
         let base_install_options = InstallOptions {
