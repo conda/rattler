@@ -11,7 +11,7 @@ use std::{
 use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
-#[cfg(feature = "condition_parsing")]
+#[cfg(feature = "conditional_dependencies")]
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
     package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
@@ -925,19 +925,14 @@ fn parse_match_spec(
 
     // Parse the match spec and extract the name of the package it depends on.
     let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient)?;
-    #[cfg(feature = "condition_parsing")]
-    let condition = match_spec.condition.clone();
-    #[cfg(not(feature = "condition_parsing"))]
-    let _condition: Option<()> = None;
-
-    #[cfg(feature = "condition_parsing")]
-    let condition_id = if let Some(condition) = condition {
+    #[cfg(feature = "conditional_dependencies")]
+    let condition_id = if let Some(condition) = match_spec.condition.as_ref() {
         let condition_id = parse_condition(condition, pool, parse_match_spec_cache);
         Some(condition_id)
     } else {
         None
     };
-    #[cfg(not(feature = "condition_parsing"))]
+    #[cfg(not(feature = "conditional_dependencies"))]
     let condition_id = None;
 
     // Get the version sets for the match spec.
@@ -1011,9 +1006,9 @@ pub fn extra_version_set(
 }
 
 /// Parses a condition from a `MatchSpecCondition` and returns the corresponding `ConditionId`.
-#[cfg(feature = "condition_parsing")]
+#[cfg(feature = "conditional_dependencies")]
 fn parse_condition(
-    condition: MatchSpecCondition,
+    condition: &MatchSpecCondition,
     pool: &Pool<SolverMatchSpec<'_>, NameType>,
     parse_match_spec_cache: &mut MatchSpecParseCache,
 ) -> ConditionId {
@@ -1051,8 +1046,8 @@ fn parse_condition(
             }
         }
         MatchSpecCondition::And(left, right) => {
-            let condition_id_lhs = parse_condition(*left, pool, parse_match_spec_cache);
-            let condition_id_rhs = parse_condition(*right, pool, parse_match_spec_cache);
+            let condition_id_lhs = parse_condition(left, pool, parse_match_spec_cache);
+            let condition_id_rhs = parse_condition(right, pool, parse_match_spec_cache);
             // Intern the AND condition
             let condition = resolvo::Condition::Binary(
                 resolvo::LogicalOperator::And,
@@ -1062,8 +1057,8 @@ fn parse_condition(
             pool.intern_condition(condition)
         }
         MatchSpecCondition::Or(left, right) => {
-            let condition_id_lhs = parse_condition(*left, pool, parse_match_spec_cache);
-            let condition_id_rhs = parse_condition(*right, pool, parse_match_spec_cache);
+            let condition_id_lhs = parse_condition(left, pool, parse_match_spec_cache);
+            let condition_id_rhs = parse_condition(right, pool, parse_match_spec_cache);
             // Intern the OR condition
             let condition = resolvo::Condition::Binary(
                 resolvo::LogicalOperator::Or,

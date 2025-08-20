@@ -20,7 +20,7 @@ use super::{
     matcher::{StringMatcher, StringMatcherParseError},
     MatchSpec,
 };
-#[cfg(feature = "condition_parsing")]
+#[cfg(feature = "conditional_dependencies")]
 use crate::match_spec::condition::parse_condition;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
@@ -726,7 +726,7 @@ pub(crate) fn matchspec_parser(
         match_spec.build = match_spec.build.or(build);
     }
 
-    #[cfg(feature = "condition_parsing")]
+    #[cfg(feature = "conditional_dependencies")]
     if let Some(condition) = condition {
         let (remainder, condition) = parse_condition(condition).map_err(|e| {
             ParseMatchSpecError::InvalidCondition(condition.to_string(), e.to_string())
@@ -741,7 +741,7 @@ pub(crate) fn matchspec_parser(
 
         match_spec.condition = Some(condition);
     }
-    #[cfg(not(feature = "condition_parsing"))]
+    #[cfg(not(feature = "conditional_dependencies"))]
     {
         let _ = condition; // Avoid unused variable warning
         match_spec.condition = None;
@@ -1545,7 +1545,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "condition_parsing")]
+    #[cfg(feature = "conditional_dependencies")]
     fn test_conditional_parsing() {
         let spec = MatchSpec::from_str("foo; if python >=3.6", Strict).unwrap();
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
@@ -1556,7 +1556,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "condition_parsing"))]
+    #[cfg(not(feature = "conditional_dependencies"))]
     fn test_conditional_parsing_disabled() {
         let spec = MatchSpec::from_str("foo; if python >=3.6", Strict).unwrap();
         assert_eq!(spec.name, Some("foo".parse().unwrap()));

@@ -1,4 +1,4 @@
-#[cfg(feature = "condition_parsing")]
+#[cfg(feature = "conditional_dependencies")]
 use crate::match_spec::condition::MatchSpecCondition;
 use crate::package::ArchiveIdentifier;
 use crate::{
@@ -19,7 +19,7 @@ use url::Url;
 use crate::Channel;
 use crate::ChannelConfig;
 
-#[cfg(feature = "condition_parsing")]
+#[cfg(feature = "conditional_dependencies")]
 pub mod condition;
 pub mod matcher;
 pub mod parse;
@@ -162,10 +162,10 @@ pub struct MatchSpec {
     /// The license of the package
     pub license: Option<String>,
     /// The condition under which this match spec applies.
-    #[cfg(feature = "condition_parsing")]
+    #[cfg(feature = "conditional_dependencies")]
     pub condition: Option<MatchSpecCondition>,
-    /// The condition under which this match spec applies (disabled without condition_parsing feature).
-    #[cfg(not(feature = "condition_parsing"))]
+    /// The condition under which this match spec applies (disabled without conditional_dependencies feature).
+    #[cfg(not(feature = "conditional_dependencies"))]
     pub condition: Option<()>,
 }
 
@@ -233,11 +233,11 @@ impl Display for MatchSpec {
             write!(f, "[{}]", keys.join(", "))?;
         }
 
-        #[cfg(feature = "condition_parsing")]
+        #[cfg(feature = "conditional_dependencies")]
         if let Some(condition) = &self.condition {
             write!(f, "; if {condition}")?;
         }
-        #[cfg(not(feature = "condition_parsing"))]
+        #[cfg(not(feature = "conditional_dependencies"))]
         {
             let _ = &self.condition; // Avoid unused warning
         }
