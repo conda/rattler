@@ -134,6 +134,15 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
     Ok(host)
 }
 
+/// Result of prefix.dev token validation
+#[derive(Debug, PartialEq)]
+pub enum ValidationResult {
+    /// Token is valid and associated with this username
+    Valid(String),
+    /// Token is invalid or unauthorized
+    Invalid,
+}
+
 /// Authenticate with a host using the provided credentials.
 ///
 /// This function validates the authentication method based on the host and stores
@@ -192,12 +201,12 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
 
         // Validate the token using the extracted function
         match validate_prefix_dev_token(token, &args.host)? {
-            true => {
+            ValidationResult::Valid(username) => {
+                println!("✅ Token is valid. Logged in as \"{}\". Storing credentials...", username);
                 // Store the authentication
                 storage.store(&host, &auth)?;
-                println!("✅ Token is valid. Storing it...");
             }
-            false => {
+            ValidationResult::Invalid => {
                 return Err(AuthenticationCLIError::UnauthorizedToken);
             }
         }
@@ -212,7 +221,7 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
 ///
 /// Returns `Ok(true)` if the token is valid, `Ok(false)` if invalid,
 /// or `Err` if there was a network/parsing error
-fn validate_prefix_dev_token(token: &str, host: &str) -> Result<bool, AuthenticationCLIError> {
+fn validate_prefix_dev_token(token: &str, host: &str) -> Result<ValidationResult, AuthenticationCLIError> {
     // Validate whether the user exists
     let client = Client::new();
 
@@ -237,17 +246,17 @@ fn validate_prefix_dev_token(token: &str, host: &str) -> Result<bool, Authentica
     let json: serde_json::Value = serde_json::from_str(&text)
         .map_err(|e| AuthenticationCLIError::JsonParseError(e.to_string()))?;
 
-    // Return true if token is valid (viewer is not null), false otherwise
-    Ok(!json["data"]["viewer"].is_null())
-}
-
-fn logout(args: LogoutArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
-    let host = get_url(&args.host)?;
-
-    println!("Removing authentication for {host}");
-
-    storage.delete(&host)?;
-    Ok(())
+    // Check if viewer is null (invalid token) or contains user data (valid token)
+    match &json["data"]["viewer"] {
+        serde_json::Value::Null => Ok(ValidationResult::Invalid),
+        viewer_data => {
+            if let Some(username) = viewer_data["login"].as_str() {
+                Ok(ValidationResult::Valid(username.to_string()))
+            } else {
+                Ok(ValidationResult::Invalid)
+            }
+        }
+    }
 }
 
 /// CLI entrypoint for authentication
