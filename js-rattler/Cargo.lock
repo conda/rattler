@@ -265,7 +265,7 @@ dependencies = [
 
 [[package]]
 name = "coalesced_map"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dashmap",
  "tokio",
@@ -1800,7 +1800,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.29"
+version = "0.3.31"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -1831,7 +1831,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.37.0"
+version = "0.39.0"
 dependencies = [
  "chrono",
  "core-foundation",
@@ -1894,7 +1894,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.8"
+version = "0.25.10"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1916,7 +1916,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.48"
+version = "0.23.1"
 dependencies = [
  "bzip2",
  "chrono",
@@ -1953,7 +1953,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.23.10"
+version = "0.24.1"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2011,7 +2011,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "2.1.8"
+version = "3.0.1"
 dependencies = [
  "chrono",
  "futures",
