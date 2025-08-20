@@ -259,6 +259,15 @@ fn validate_prefix_dev_token(token: &str, host: &str) -> Result<ValidationResult
     }
 }
 
+fn logout(args: LogoutArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
+    let host = get_url(&args.host)?;
+
+    println!("Removing authentication for {host}");
+
+    storage.delete(&host)?;
+    Ok(())
+}
+
 /// CLI entrypoint for authentication
 pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
     let storage = AuthenticationStorage::from_env_and_defaults()?;
