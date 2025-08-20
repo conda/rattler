@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use rattler_conda_types::{PackageName, PackageRecord, Platform};
 
@@ -34,7 +34,8 @@ pub enum TransactionOperation<Old, New> {
     /// Reinstall a package. This can happen if the Python version changed in
     /// the environment, we need to relink all noarch python packages in
     /// that case.
-    /// Includes old and new because certain fields like the channel/url may have changed between installations
+    /// Includes old and new because certain fields like the channel/url may
+    /// have changed between installations
     Reinstall {
         /// The old record to remove
         old: Old,
@@ -91,6 +92,9 @@ pub struct Transaction<Old, New> {
 
     /// The target platform of the transaction
     pub platform: Platform,
+
+    /// The records that are not touched by the transaction.
+    pub unchanged: Vec<Old>,
 }
 
 impl<Old, New> Transaction<Old, New> {
@@ -100,6 +104,12 @@ impl<Old, New> Transaction<Old, New> {
         self.operations
             .iter()
             .filter_map(TransactionOperation::record_to_remove)
+    }
+
+    /// Return an iterator over the records that are not touched by the
+    /// transaction
+    pub fn unchanged_packages(&self) -> &[Old] {
+        &self.unchanged
     }
 
     /// Returns the number of records to install.
@@ -125,9 +135,10 @@ impl<Old: AsRef<New>, New> Transaction<Old, New> {
 
 impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New> {
     /// Constructs a [`Transaction`] by taking the current situation and diffing
-    /// that against the desired situation. You can specify a set of package names
-    /// that should be reinstalled even if their content has not changed. You can
-    /// also specify a set of package names that should be ignored (left untouched).
+    /// that against the desired situation. You can specify a set of package
+    /// names that should be reinstalled even if their content has not
+    /// changed. You can also specify a set of package names that should be
+    /// ignored (left untouched).
     pub fn from_current_and_desired<
         CurIter: IntoIterator<Item = Old>,
         NewIter: IntoIterator<Item = New>,
@@ -137,17 +148,13 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         reinstall: Option<HashSet<PackageName>>,
         ignored: Option<HashSet<PackageName>>,
         platform: Platform,
-    ) -> Result<Self, TransactionError>
-    where
-        CurIter::IntoIter: Clone,
-        NewIter::IntoIter: Clone,
-    {
-        let current_iter = current.into_iter();
-        let desired_iter = desired.into_iter();
+    ) -> Result<Self, TransactionError> {
+        let current_packages = current.into_iter().collect::<Vec<_>>();
+        let desired_packages = desired.into_iter().collect::<Vec<_>>();
 
         // Determine the python version used in the current situation.
-        let current_python_info = find_python_info(current_iter.clone(), platform)?;
-        let desired_python_info = find_python_info(desired_iter.clone(), platform)?;
+        let current_python_info = find_python_info(&current_packages, platform)?;
+        let desired_python_info = find_python_info(&desired_packages, platform)?;
         let needs_python_relink = match (&current_python_info, &desired_python_info) {
             (Some(current), Some(desired)) => desired.is_relink_required(current),
             _ => false,
@@ -157,22 +164,20 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         let reinstall = reinstall.unwrap_or_default();
         let ignored = ignored.unwrap_or_default();
 
-        let mut current_map = current_iter
-            .clone()
-            .map(|r| (r.as_ref().name.clone(), r))
-            .collect::<std::collections::HashMap<_, _>>();
-
-        let desired_names = desired_iter
-            .clone()
+        let desired_names = desired_packages
+            .iter()
             .map(|r| r.as_ref().name.clone())
             .collect::<HashSet<_>>();
 
         // Remove all current packages that are not in desired (but keep order of
         // current), except for ignored packages which should be left untouched
-        for record in current_iter {
+        let mut current_map = HashMap::new();
+        for record in current_packages {
             let package_name = &record.as_ref().name;
             if !desired_names.contains(package_name) && !ignored.contains(package_name) {
                 operations.push(TransactionOperation::Remove(record));
+            } else {
+                current_map.insert(record.as_ref().name.clone(), record);
             }
         }
 
@@ -181,20 +186,17 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
 
         // Figure out the operations to perform, but keep the order of the original
         // "desired" iterator. Skip ignored packages entirely.
-        for record in desired_iter {
+        let mut unchanged = Vec::new();
+        for record in desired_packages {
             let name = &record.as_ref().name;
+            let old_record = current_map.remove(name);
 
             // Skip ignored packages - they should be left in their current state
             if ignored.contains(name) {
-                // Remove from current_map to avoid affecting further logic,
-                // but don't add any operations for this package
-                current_map.remove(name);
-                continue;
-            }
-
-            let old_record = current_map.remove(name);
-
-            if let Some(old_record) = old_record {
+                if let Some(old_record) = old_record {
+                    unchanged.push(old_record);
+                }
+            } else if let Some(old_record) = old_record {
                 if !describe_same_content(record.as_ref(), old_record.as_ref())
                     || reinstall.contains(&record.as_ref().name)
                 {
@@ -210,8 +212,10 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
                         old: old_record,
                         new: record,
                     });
+                } else {
+                    // if the content is the same, we dont need to do anything
+                    unchanged.push(old_record);
                 }
-                // if the content is the same, we dont need to do anything
             } else {
                 operations.push(TransactionOperation::Install(record));
             }
@@ -222,6 +226,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
             python_info: desired_python_info,
             current_python_info,
             platform,
+            unchanged,
         })
     }
 }
@@ -272,12 +277,12 @@ fn describe_same_content(from: &PackageRecord, to: &PackageRecord) -> bool {
 mod tests {
     use std::collections::HashSet;
 
+    use assert_matches::assert_matches;
     use rattler_conda_types::{prefix::Prefix, Platform};
 
     use crate::install::{
         test_utils::download_and_get_prefix_record, Transaction, TransactionOperation,
     };
-    use assert_matches::assert_matches;
 
     #[tokio::test]
     async fn test_reinstall_package() {
@@ -321,7 +326,8 @@ mod tests {
 
         let name = prefix_record.repodata_record.package_record.name.clone();
 
-        // Test case 1: Package is in both current and desired, but ignored - should result in no operations
+        // Test case 1: Package is in both current and desired, but ignored - should
+        // result in no operations
         let ignored_packages = Some(HashSet::from_iter(vec![name.clone()]));
         let transaction = Transaction::from_current_and_desired(
             vec![prefix_record.clone()],
@@ -335,7 +341,8 @@ mod tests {
         // Should have no operations because the package is ignored
         assert!(transaction.operations.is_empty());
 
-        // Test case 2: Package is in current but not desired, and ignored - should not be removed
+        // Test case 2: Package is in current but not desired, and ignored - should not
+        // be removed
         let ignored_packages = Some(HashSet::from_iter(vec![name.clone()]));
         let transaction = Transaction::from_current_and_desired(
             vec![prefix_record.clone()],
@@ -349,7 +356,8 @@ mod tests {
         // Should have no operations because the package is ignored (not removed)
         assert!(transaction.operations.is_empty());
 
-        // Test case 3: Package is not in current but in desired, and ignored - should not be installed
+        // Test case 3: Package is not in current but in desired, and ignored - should
+        // not be installed
         let ignored_packages = Some(HashSet::from_iter(vec![name.clone()]));
         let transaction = Transaction::from_current_and_desired(
             Vec::<rattler_conda_types::PrefixRecord>::new(), // empty current

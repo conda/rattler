@@ -422,6 +422,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -476,6 +477,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder()
@@ -544,6 +546,7 @@ mod tests {
                 python_info: None,
                 current_python_info: None,
                 platform: Platform::current(),
+                unchanged: vec![],
             };
 
             // execute transaction
@@ -628,6 +631,7 @@ mod tests {
                 python_info: None,
                 current_python_info: None,
                 platform: Platform::current(),
+                unchanged: vec![],
             };
 
             // execute transaction
@@ -684,6 +688,7 @@ mod tests {
                 python_info: None,
                 current_python_info: None,
                 platform: Platform::current(),
+                unchanged: vec![],
             };
 
             let install_driver = InstallDriver::builder()
@@ -735,6 +740,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -790,6 +796,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder()
@@ -842,6 +849,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -886,6 +894,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder()
@@ -926,6 +935,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -983,6 +993,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
@@ -1016,6 +1027,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
@@ -1061,6 +1073,7 @@ mod tests {
             python_info: Some(python_info.clone()),
             current_python_info: Some(python_info.clone()),
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -1115,6 +1128,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -1146,6 +1160,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder()
@@ -1184,6 +1199,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -1218,6 +1234,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder()
@@ -1270,6 +1287,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -1302,6 +1320,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder()
@@ -1348,6 +1367,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder().with_prefix_records(&[]).finish();
@@ -1398,6 +1418,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder().with_prefix_records(&[]).finish();
