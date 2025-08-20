@@ -202,7 +202,10 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
         // Validate the token using the extracted function
         match validate_prefix_dev_token(token, &args.host)? {
             ValidationResult::Valid(username) => {
-                println!("✅ Token is valid. Logged in as \"{}\". Storing credentials...", username);
+                println!(
+                    "✅ Token is valid. Logged in as \"{}\". Storing credentials...",
+                    username
+                );
                 // Store the authentication
                 storage.store(&host, &auth)?;
             }
@@ -221,7 +224,10 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
 ///
 /// Returns `Ok(true)` if the token is valid, `Ok(false)` if invalid,
 /// or `Err` if there was a network/parsing error
-fn validate_prefix_dev_token(token: &str, host: &str) -> Result<ValidationResult, AuthenticationCLIError> {
+fn validate_prefix_dev_token(
+    token: &str,
+    host: &str,
+) -> Result<ValidationResult, AuthenticationCLIError> {
     // Validate whether the user exists
     let client = Client::new();
 
