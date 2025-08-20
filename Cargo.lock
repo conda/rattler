@@ -4535,6 +4535,8 @@ name = "rattler_index"
 version = "0.24.7"
 dependencies = [
  "anyhow",
+ "aws-config",
+ "aws-sdk-s3",
  "bytes",
  "chrono",
  "clap",

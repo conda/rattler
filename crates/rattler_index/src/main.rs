@@ -159,15 +159,9 @@ async fn main() -> anyhow::Result<()> {
             let s3_config = config
                 .as_ref()
                 .and_then(|config| config.s3_options.0.get(&bucket));
-            let region = region
-                .or(s3_config.map(|c| c.region.clone()))
-                .context("S3 region not provided")?;
-            let endpoint_url = endpoint_url
-                .or(s3_config.map(|c| c.endpoint_url.clone()))
-                .context("S3 endpoint url not provided")?;
-            let force_path_style = force_path_style
-                .or(s3_config.map(|c| c.force_path_style))
-                .context("S3 force-path-style not provided")?;
+            let region = region.or(s3_config.map(|c| c.region.clone()));
+            let endpoint_url = endpoint_url.or(s3_config.map(|c| c.endpoint_url.clone()));
+            let force_path_style = force_path_style.or(s3_config.map(|c| c.force_path_style));
 
             index_s3(IndexS3Config {
                 channel,
