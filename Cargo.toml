@@ -72,17 +72,8 @@ generic-array = "0.14.7"
 getrandom = { version = "0.3.3", default-features = false }
 glob = "0.3.2"
 google-cloud-auth = { version = "0.22.0", default-features = false }
-aws-config = { version = "=1.5.18", default-features = false, features = [
-  "rt-tokio",
-  "rustls",
-  "sso",
-  "credentials-process",
-] }
-aws-sdk-s3 = { version = "1.85.0", default-features = false, features = [
-  "rt-tokio",
-  "rustls",
-  "sigv4a",
-] }
+aws-config = { version = "=1.5.18", default-features = false }
+aws-sdk-s3 = { version = "1.85.0", default-features = false}
 hex = "0.4.3"
 hex-literal = "1.0.0"
 http = "1.3"
