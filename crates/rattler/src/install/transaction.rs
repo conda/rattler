@@ -184,6 +184,10 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         ignored: Option<HashSet<PackageName>>,
         platform: Platform,
     ) -> Result<Self, TransactionError> {
+        // NOTE: If you're changing this function and want to use
+        // previously unused fields don't forget to update
+        // MinimalPrefixRecord as it is used as an optimization in the
+        // `installer::install`.
         let current_packages = current.into_iter().collect::<Vec<_>>();
         let desired_packages = desired.into_iter().collect::<Vec<_>>();
 

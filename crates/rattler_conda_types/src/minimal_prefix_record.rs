@@ -4,16 +4,18 @@
 //! from conda-meta JSON files to determine if packages have changed, avoiding
 //! the expensive parsing of file lists and other large data structures.
 
-use std::path::Path;
 use std::str::FromStr;
+use std::{io, path::Path};
 
 use crate::{NoArchType, PackageName, PackageRecord, PrefixRecord, Version, VersionWithSource};
 use hex;
+use itertools::Itertools;
 use rattler_digest::{Md5Hash, Sha256Hash};
 
 /// A minimal version of `PrefixRecord` that only contains fields needed for transaction computation.
 /// This is much faster to parse than the full `PrefixRecord`.
 #[derive(Debug, Clone)]
+#[allow(deprecated)]
 pub struct MinimalPrefixRecord {
     /// The package name
     pub name: PackageName,
@@ -21,142 +23,121 @@ pub struct MinimalPrefixRecord {
     pub version: String,
     /// The build string
     pub build: String,
-    /// The build number
-    pub build_number: u64,
-    /// The subdirectory (e.g., linux-64, win-64, noarch)
-    pub subdir: Option<String>,
-    /// MD5 hash of the package
-    pub md5: Option<Md5Hash>,
+
     /// SHA256 hash of the package
     pub sha256: Option<Sha256Hash>,
-    /// Size of the package in bytes
+    /// MD5 hash of the package, only if there is no SHA256 hash.
+    pub md5: Option<Md5Hash>,
+    /// Size of the package in bytes, only if there is no MD5 hash.
     pub size: Option<u64>,
-    /// `NoArch` type (python, generic, or None)
-    pub noarch_type: Option<String>,
-    /// The requested specs for this package
+    /// Optionally a path within the environment of the site-packages directory.
+    /// This field is only present for python interpreter packages.
+    /// This field was introduced with <https://github.com/conda/ceps/blob/main/cep-17.md>.
+    pub python_site_packages_path: Option<String>,
+    /// The list of requested specs that were used to install this package.
+    /// This is used to track which specs requested this package.
     pub requested_specs: Vec<String>,
+    /// Deprecated: Old field for requested spec.
+    /// Only used for migration to `requested_specs`.
+    #[deprecated = "Use requested_specs instead"]
+    pub requested_spec: Option<String>,
 }
 
 impl MinimalPrefixRecord {
-    /// Parse a minimal prefix record from a JSON file sparsely.
-    pub fn from_path(path: &Path) -> Result<Self, std::io::Error> {
-        let content = fs_err::read_to_string(path)?;
-        Self::from_json_str(&content)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-    }
-
     // Could use `ajson` as it can parse multiple values at once,
-    // which could make it faster, althought on syntetic benchmarks it
+    // which could make it faster, although on synthetic benchmarks it
     // loses to `gjson` and seems to work incorrectly when parsing multiple values.
-    /// Parse from a JSON string sparsely.
-    pub fn from_json_str(json: &str) -> Result<Self, String> {
-        // Extract only the fields we need for transaction computation
-        let name_val = gjson::get(json, "name");
-        if !name_val.exists() || name_val.kind() != gjson::Kind::String {
-            return Err("Missing 'name' field".to_string());
-        }
-        let name = name_val
-            .str()
-            .parse::<PackageName>()
-            .map_err(|e| format!("Invalid package name: {}", e))?;
+    //
+    // Ideal approach would be to create `SparsePrefixRecord` akin `SpareRepodata`.
+    /// Parse a minimal prefix record from a JSON file sparsely.
+    pub fn from_path(path: &Path) -> Result<Self, io::Error> {
+        let filename_without_ext = path.file_stem().and_then(|stem| stem.to_str()).unwrap(); // It is highly unlikely that path doesn't have filename.
+        let (build, version, name) = filename_without_ext.rsplitn(3, '-').next_tuple().unwrap();
+        let content = fs_err::read_to_string(path)?;
+        let json = content.as_str();
 
-        let version_val = gjson::get(json, "version");
-        if !version_val.exists() || version_val.kind() != gjson::Kind::String {
-            return Err("Missing 'version' field".to_string());
-        }
-        let version = version_val.str().to_string();
-
-        let build_val = gjson::get(json, "build");
-        let build = if build_val.exists() && build_val.kind() == gjson::Kind::String {
-            build_val.str().to_string()
-        } else {
-            "0".to_string()
-        };
-
-        let build_number_val = gjson::get(json, "build_number");
-        let build_number =
-            if build_number_val.exists() && build_number_val.kind() == gjson::Kind::Number {
-                build_number_val.i64() as u64
-            } else {
-                0
-            };
-
-        let subdir_val = gjson::get(json, "subdir");
-        let subdir = if subdir_val.exists() && subdir_val.kind() == gjson::Kind::String {
-            Some(subdir_val.str().to_string())
-        } else {
-            None
-        };
-
-        let md5_val = gjson::get(json, "md5");
-        let md5 = if md5_val.exists() && md5_val.kind() == gjson::Kind::String {
-            hex::decode(md5_val.str()).ok().and_then(|bytes| {
-                if bytes.len() == 16 {
-                    Some(Md5Hash::from(
-                        <[u8; 16]>::try_from(bytes.as_slice()).unwrap(),
-                    ))
-                } else {
-                    None
-                }
-            })
-        } else {
-            None
-        };
+        let mut sha256 = None;
+        let mut md5 = None;
+        let mut size = None;
+        let mut python_site_packages_path = None;
+        let mut requested_specs = Vec::new();
+        let mut requested_spec = None;
 
         let sha256_val = gjson::get(json, "sha256");
-        let sha256 = if sha256_val.exists() && sha256_val.kind() == gjson::Kind::String {
-            hex::decode(sha256_val.str()).ok().and_then(|bytes| {
+        if sha256_val.exists() && sha256_val.kind() == gjson::Kind::String {
+            if let Ok(bytes) = hex::decode(sha256_val.str()) {
                 if bytes.len() == 32 {
-                    Some(Sha256Hash::from(
+                    sha256 = Some(Sha256Hash::from(
                         <[u8; 32]>::try_from(bytes.as_slice()).unwrap(),
-                    ))
-                } else {
-                    None
+                    ));
                 }
-            })
-        } else {
-            None
+            }
         };
+        if sha256.is_none() {
+            let md5_val = gjson::get(json, "md5");
+            if md5_val.exists() && md5_val.kind() == gjson::Kind::String {
+                if let Ok(bytes) = hex::decode(md5_val.str()) {
+                    if bytes.len() == 16 {
+                        md5 = Some(Md5Hash::from(
+                            <[u8; 16]>::try_from(bytes.as_slice()).unwrap(),
+                        ));
+                    }
+                }
+            }
+        }
 
-        let size_val = gjson::get(json, "size");
-        let size = if size_val.exists() && size_val.kind() == gjson::Kind::Number {
-            Some(size_val.i64() as u64)
-        } else {
-            None
-        };
+        if sha256.is_none() && md5.is_none() {
+            let size_val = gjson::get(json, "size");
+            if size_val.exists() && size_val.kind() == gjson::Kind::Number {
+                size = Some(size_val.u64());
+            }
+        }
 
-        let noarch_val = gjson::get(json, "noarch");
-        let noarch_type = if noarch_val.exists() && noarch_val.kind() == gjson::Kind::String {
-            Some(noarch_val.str().to_string())
-        } else {
-            None
-        };
+        if name.trim() == "python" {
+            let python_site_packages_path_val = gjson::get(json, "python_site_packages_path");
+            if python_site_packages_path_val.exists()
+                && python_site_packages_path_val.kind() == gjson::Kind::String
+            {
+                python_site_packages_path = Some(python_site_packages_path_val.str().into());
+            } else {
+                return Err(io::Error::other(format!(
+                    "Could not obtain python site packages path of prefix record at {}",
+                    path.display()
+                )));
+            }
+        }
 
+        // Parse requested_specs array
         let requested_specs_val = gjson::get(json, "requested_specs");
-        let requested_specs = if requested_specs_val.exists() && requested_specs_val.kind() == gjson::Kind::Array {
-            let mut specs = Vec::new();
-            requested_specs_val.each(|_idx, v| {
-                if v.kind() == gjson::Kind::String {
-                    specs.push(v.str().to_string());
+        if requested_specs_val.exists() && requested_specs_val.kind() == gjson::Kind::Array {
+            requested_specs_val.each(|_, val| {
+                if val.kind() == gjson::Kind::String {
+                    requested_specs.push(val.str().to_string());
                 }
-                true  // Continue iteration
+                true
             });
-            specs
-        } else {
-            Vec::new()
-        };
+        }
 
-        Ok(MinimalPrefixRecord {
-            name,
-            version,
-            build,
-            build_number,
-            subdir,
-            md5,
+        // Parse deprecated requested_spec field
+        let requested_spec_val = gjson::get(json, "requested_spec");
+        if requested_spec_val.exists() && requested_spec_val.kind() == gjson::Kind::String {
+            requested_spec = Some(requested_spec_val.str().to_string());
+        }
+
+        #[allow(deprecated)]
+        Ok(Self {
+            name: name
+                .parse::<PackageName>()
+                .map_err(|e| format!("Could not parse package name: {e:#?}"))
+                .map_err(io::Error::other)?,
+            version: version.into(),
+            build: build.into(),
             sha256,
+            md5,
             size,
-            noarch_type,
+            python_site_packages_path,
             requested_specs,
+            requested_spec,
         })
     }
 
@@ -169,26 +150,16 @@ impl MinimalPrefixRecord {
             .unwrap_or_else(|_| Version::from_str(&self.version).unwrap());
         let version_with_source = VersionWithSource::from(version);
 
-        let noarch = if let Some(noarch_str) = &self.noarch_type {
-            match noarch_str.as_str() {
-                "python" => NoArchType::python(),
-                "generic" => NoArchType::generic(),
-                _ => NoArchType::none(),
-            }
-        } else {
-            NoArchType::none()
-        };
-
         PackageRecord {
             name: self.name.clone(),
             version: version_with_source,
             build: self.build.clone(),
-            build_number: self.build_number,
-            subdir: self.subdir.clone().unwrap_or_else(|| "noarch".to_string()),
+            build_number: 0,
+            subdir: "noarch".to_string(),
             md5: self.md5,
             sha256: self.sha256,
             size: self.size,
-            noarch,
+            noarch: NoArchType::none(),
             arch: None,
             platform: None,
             depends: Vec::new(),
@@ -213,7 +184,7 @@ impl MinimalPrefixRecord {
 /// to check if packages have changed.
 pub fn collect_minimal_prefix_records(
     prefix: &Path,
-) -> Result<Vec<MinimalPrefixRecord>, std::io::Error> {
+) -> Result<Vec<MinimalPrefixRecord>, io::Error> {
     let conda_meta_path = prefix.join("conda-meta");
 
     if !conda_meta_path.exists() {
@@ -258,11 +229,11 @@ pub fn collect_minimal_prefix_records(
 pub trait MinimalPrefixCollection {
     /// Collect only the minimal fields needed for transaction computation.
     /// Fall back to full parsing if more fields needed!
-    fn collect_minimal_from_prefix(prefix: &Path) -> Result<Vec<PrefixRecord>, std::io::Error>;
+    fn collect_minimal_from_prefix(prefix: &Path) -> Result<Vec<PrefixRecord>, io::Error>;
 }
 
 impl MinimalPrefixCollection for PrefixRecord {
-    fn collect_minimal_from_prefix(prefix: &Path) -> Result<Vec<PrefixRecord>, std::io::Error> {
+    fn collect_minimal_from_prefix(prefix: &Path) -> Result<Vec<PrefixRecord>, io::Error> {
         let minimal_records = collect_minimal_prefix_records(prefix)?;
 
         // For now, we'll convert minimal records to full PrefixRecords with just the essential fields.
@@ -287,7 +258,7 @@ impl MinimalPrefixCollection for PrefixRecord {
                     extracted_package_dir: None,
                     files: Vec::new(),
                     paths_data: crate::prefix_record::PrefixPaths::default(),
-                    requested_spec: None,
+                    requested_spec: minimal.requested_spec.clone(),
                     requested_specs: minimal.requested_specs.clone(),
                     link: None,
                     installed_system_menus: Vec::new(),

@@ -762,6 +762,59 @@ async fn populate_cache(
         .map_err(|e| InstallerError::FailedToFetch(record.file_name.clone(), e))
 }
 
+/// Updates only the `requested_specs` fields in a conda-meta JSON file.
+/// This performs a targeted update without overwriting other
+/// metadata.
+///
+/// This method is needed as we're initially loading
+/// `MinimalPrefixRecord`, which doesn't contain most of the fields.
+/// Therefore direct writing could overwrite data we want to preserve.
+///
+/// Currently we're loading full json, but we could do that inplace without parsing whole file.
+fn update_requested_specs_in_json(
+    path: &Path,
+    requested_specs: &[String],
+    requested_spec: Option<&str>,
+) -> std::io::Result<()> {
+    use serde_json::Value;
+
+    // Read the existing JSON file
+    let content = fs_err::read_to_string(path)?;
+    let mut json: Value = serde_json::from_str(&content)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+    // Update only the requested_specs fields
+    if let Some(obj) = json.as_object_mut() {
+        // Update requested_specs (plural)
+        obj.insert(
+            "requested_specs".to_string(),
+            Value::Array(
+                requested_specs
+                    .iter()
+                    .map(|s| Value::String(s.clone()))
+                    .collect(),
+            ),
+        );
+
+        // Update or remove requested_spec (singular, deprecated)
+        if let Some(spec) = requested_spec {
+            obj.insert(
+                "requested_spec".to_string(),
+                Value::String(spec.to_string()),
+            );
+        } else {
+            obj.remove("requested_spec");
+        }
+    }
+
+    // Write the updated JSON back to file
+    let updated_content = serde_json::to_string_pretty(&json)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    fs_err::write(path, updated_content)?;
+
+    Ok(())
+}
+
 /// Creates a mapping from package names to their requested spec strings.
 ///
 /// This function takes a list of `MatchSpecs` and creates a mapping where:
@@ -856,15 +909,21 @@ fn update_existing_records<'p>(
                     new_record.repodata_record.package_record.version,
                     new_record.repodata_record.package_record.build
                 );
+                let full_path = conda_meta_path.join(&pkg_meta_path);
 
-                new_record
-                    .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
-                    .map_err(|e| {
-                        InstallerError::IoError(
-                            format!("failed to update requested_specs for {pkg_meta_path}"),
-                            e,
-                        )
-                    })?;
+                // We need to do a targeted update of just the requested_specs fields
+                // to avoid overwriting other metadata when using minimal records
+                update_requested_specs_in_json(
+                    &full_path,
+                    &new_record.requested_specs,
+                    new_record.requested_spec.as_deref(),
+                )
+                .map_err(|e| {
+                    InstallerError::IoError(
+                        format!("failed to update requested_specs for {pkg_meta_path}"),
+                        e,
+                    )
+                })?;
             }
 
             Ok(())
