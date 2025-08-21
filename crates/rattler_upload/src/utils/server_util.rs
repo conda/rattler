@@ -13,7 +13,6 @@ pub enum SimpleServerType {
     Unknown,
 }
 
-
 /// Determine server type from host URL
 ///
 /// # Arguments
@@ -46,8 +45,7 @@ pub fn check_server_type(host_url: &Url) -> SimpleServerType {
 
     // 4. Check S3
     #[cfg(feature = "s3")]
-    if host_url.scheme() == "s3" || 
-       (host.contains("s3") && host.contains("amazonaws.com")) {
+    if host_url.scheme() == "s3" || (host.contains("s3") && host.contains("amazonaws.com")) {
         return SimpleServerType::S3;
     }
 
@@ -56,7 +54,7 @@ pub fn check_server_type(host_url: &Url) -> SimpleServerType {
         return SimpleServerType::Artifactory;
     }
 
-    // 6. Check Quetz 
+    // 6. Check Quetz
     if host_url.path().contains("/api/channels/") {
         return SimpleServerType::Quetz;
     }
@@ -73,7 +71,8 @@ pub fn extract_quetz_info(url: &Url) -> Result<(Url, String), Box<dyn std::error
     base_url.set_query(None);
 
     // Parse path to find channel in /api/channels/CHANNEL pattern
-    let path_segments: Vec<&str> = url.path_segments()
+    let path_segments: Vec<&str> = url
+        .path_segments()
         .ok_or("Cannot extract path segments")?
         .collect();
 
@@ -92,7 +91,8 @@ pub fn extract_quetz_info(url: &Url) -> Result<(Url, String), Box<dyn std::error
 
 // Extract Artifactory base_url and channel from host
 pub fn extract_artifactory_info(url: &Url) -> Result<(Url, String), Box<dyn std::error::Error>> {
-    let path_segments: Vec<&str> = url.path_segments()
+    let path_segments: Vec<&str> = url
+        .path_segments()
         .ok_or("Cannot extract path segments")?
         .collect();
 
@@ -110,7 +110,8 @@ pub fn extract_artifactory_info(url: &Url) -> Result<(Url, String), Box<dyn std:
 
 // Extract Prefix base_url and channel from host
 pub fn extract_prefix_info(url: &Url) -> Result<(Url, String), Box<dyn std::error::Error>> {
-    let path_segments: Vec<&str> = url.path_segments()
+    let path_segments: Vec<&str> = url
+        .path_segments()
         .unwrap_or_else(|| "".split('/'))
         .filter(|s| !s.is_empty())
         .collect();
@@ -119,10 +120,11 @@ pub fn extract_prefix_info(url: &Url) -> Result<(Url, String), Box<dyn std::erro
     base_url.set_path("");
 
     // Look for API upload pattern: /api/v1/upload/CHANNEL
-    if path_segments.len() >= 4 && 
-       path_segments[0] == "api" && 
-       path_segments[1] == "v1" && 
-       path_segments[2] == "upload" {
+    if path_segments.len() >= 4
+        && path_segments[0] == "api"
+        && path_segments[1] == "v1"
+        && path_segments[2] == "upload"
+    {
         return Ok((base_url, path_segments[3].to_string()));
     }
 
@@ -140,7 +142,8 @@ pub fn extract_anaconda_info(url: &Url) -> Result<(Url, Vec<String>), Box<dyn st
     let mut base_url = url.clone();
     base_url.set_path("");
 
-    let path_segments: Vec<&str> = url.path_segments()
+    let path_segments: Vec<&str> = url
+        .path_segments()
         .unwrap_or_else(|| "".split('/'))
         .filter(|s| !s.is_empty())
         .collect();
@@ -161,12 +164,14 @@ pub fn extract_s3_info(url: &Url) -> Result<(Url, Url, String), Box<dyn std::err
     if url.scheme() == "s3" {
         // S3 URI format: s3://bucket-name/channel-name
         let host = url.host_str().ok_or("No host in S3 URL")?;
-        let path_segments: Vec<&str> = url.path_segments()
+        let path_segments: Vec<&str> = url
+            .path_segments()
             .unwrap_or_else(|| "".split('/'))
             .filter(|s| !s.is_empty())
             .collect();
 
-        let channel_name = path_segments.first()
+        let channel_name = path_segments
+            .first()
             .map(|s| s.to_string())
             .unwrap_or_else(|| "main".to_string());
 
@@ -182,19 +187,21 @@ pub fn extract_s3_info(url: &Url) -> Result<(Url, Url, String), Box<dyn std::err
 
         if host_parts.len() >= 4 && host_parts[1] == "s3" && host_parts.last() == Some(&"com") {
             let bucket = host_parts[0];
-            let region = if host_parts.len() > 4 { 
-                host_parts[2].to_string() 
-            } else { 
-                "eu-central-1".to_string() 
+            let region = if host_parts.len() > 4 {
+                host_parts[2].to_string()
+            } else {
+                "eu-central-1".to_string()
             };
 
-            let path_segments: Vec<&str> = url.path_segments()
+            let path_segments: Vec<&str> = url
+                .path_segments()
                 .unwrap_or_else(|| "".split('/'))
                 .filter(|s| !s.is_empty())
                 .collect();
 
             let base_url = url.clone();
-            let channel_name = path_segments.first()
+            let channel_name = path_segments
+                .first()
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| "main".to_string());
             let channel = Url::parse(&format!("s3://{}/{}", bucket, channel_name))?;
@@ -212,7 +219,8 @@ pub fn extract_conda_forge_info(url: &Url) -> Result<(Url, String), Box<dyn std:
     base_url.set_path("");
 
     // Extract channel from path - first path segment or "main" as default
-    let channel = url.path_segments()
+    let channel = url
+        .path_segments()
         .and_then(|mut segments| segments.next())
         .filter(|s| !s.is_empty())
         .unwrap_or("main")
