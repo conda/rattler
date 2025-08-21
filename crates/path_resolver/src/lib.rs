@@ -3,18 +3,80 @@
 //!
 //! For details see methods of `PathResolver`.
 use std::{
-    collections::{HashMap, HashSet},
+    collections::BTreeSet,
     ffi::OsString,
     io,
     path::{Component, Path, PathBuf},
+    sync::Arc,
 };
 
 use fs_err as fs;
+use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use indexmap::IndexSet;
 use itertools::Itertools;
 
-/// Type to represent path owner.
-pub type PackageName = String;
+/// Type to represent path owner. Using `Arc<str>` to avoid cloning
+/// overhead while maintaining ownership semantics.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PackageName(Arc<str>);
+
+impl PackageName {
+    /// Create a new `PackageName` from a string-like value.
+    /// Accepts `&str`, `String`, `Box<str>`, or an existing `Arc<str>`.
+    pub fn new(s: impl Into<Arc<str>>) -> Self {
+        Self(s.into())
+    }
+
+    /// Get the package name as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for PackageName {
+    fn from(s: &str) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<String> for PackageName {
+    fn from(s: String) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<&String> for PackageName {
+    fn from(s: &String) -> Self {
+        Self::new(s.clone())
+    }
+}
+
+impl AsRef<str> for PackageName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<Path> for PackageName {
+    fn as_ref(&self) -> &Path {
+        let s: &str = self.as_ref();
+        Path::new(s)
+    }
+}
+
+impl std::fmt::Display for PackageName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::ops::Deref for PackageName {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Vector of files that we want to move to clobbers directory.
 pub type ToClobbers = Vec<(PathBuf, PackageName)>;
@@ -66,19 +128,20 @@ impl PathResolver {
     }
 
     /// Insert a file path under `package_name`.
-    fn insert_file<P: AsRef<Path>>(&mut self, path: P, package_name: &str) {
+    fn insert_file_owned<P: AsRef<Path>>(&mut self, path: P, package: PackageName) {
         let path = path.as_ref();
         assert!(
             path.is_relative(),
             "All inserted paths must be relative; got {path:?}"
         );
+
         let mut node = &mut self.root;
         for comp in path.components().map(|c| c.as_os_str().to_os_string()) {
-            node.prefixes.insert(package_name.to_owned());
+            node.prefixes.insert(package.clone());
             node = node.children.entry(comp).or_default();
         }
-        node.prefixes.insert(package_name.to_owned());
-        node.terminals.insert(package_name.to_owned());
+        node.prefixes.insert(package.clone());
+        node.terminals.insert(package);
     }
 
     /// Get a mutable reference to the node at `path`, if it exists.
@@ -91,20 +154,20 @@ impl PathResolver {
     }
 
     /// Propagate a `package_name` into every descendant's `prefixes` set.
-    fn propagate_prefix(node: &mut PathTrieNode, package_name: &str) {
-        node.prefixes.insert(package_name.to_owned());
+    fn propagate_prefix(node: &mut PathTrieNode, package_name: PackageName) {
+        node.prefixes.insert(package_name.clone());
         for child in node.children.values_mut() {
-            Self::propagate_prefix(child, package_name);
+            Self::propagate_prefix(child, package_name.clone());
         }
     }
 
     /// Insert a package files; return the new paths that conflict
     /// with what was already in the trie before this call.
     ///
-    /// 1. **File vs File** at `p`: return `p`.
-    /// 2. **Directory vs File** at `p`: return just `p`.
-    /// 3. **File vs Directory** under some existing file `f`: return the new file’s `p`.
-    /// 4. **Directory vs Directory**: no conflict.
+    /// 1. **File -> File** at `p`: return `p`.
+    /// 2. **Directory -> File** at `p`: return just `p`.
+    /// 3. **File -> Directory** under some existing file `f`: return the new file’s `p`.
+    /// 4. **Directory -> Directory**: no conflict.
     pub fn insert_package<P: AsRef<Path>>(
         &mut self,
         package: PackageName,
@@ -113,42 +176,77 @@ impl PathResolver {
         // Record insertion order for future reprioritize.
         self.packages.insert(package.clone());
 
-        let mut conflicts = HashSet::new();
+        let mut conflicts = BTreeSet::default();
         // Which of these paths were *directories* on the old trie?
         let mut dir_inserts = Vec::new();
 
         // 1) detect conflicts against the existing trie
+        //
+        // For each path we want to insert (e.g., "foo/bar/baz.txt"):
+        //
+        // 1. Start at the trie root and break path into components ["foo", "bar", "baz.txt"]
+        //
+        // 2. Traverse the trie component by component:
+        //   - For each component, check if it exists in current node's children
+        //   - Use peekable iterator to know if we're at the last component
+        //
+        // 3. During traversal, detect "File blocks Directory" conflict:
+        //   - If we're not at the last component (still have subdirs to traverse)
+        //   - BUT current node has terminals (meaning a file exists here)
+        //   - Then we have a conflict: existing file blocks our directory path
+        //   - Example: If "foo/bar" is a file, we can't insert "foo/bar/baz.txt"
+        //
+        // 4. If we reach the final component without prefix conflicts:
+        //   - Check "File vs File" conflict:
+        //     - If node has terminals, another file already exists at this exact path
+        //   - Check "Directory vs File" conflict:
+        //     - If node has children, we're trying to replace a directory with a file
+        //     - Example: If "foo/bar/" is a directory, we can't insert "foo/bar" as a file
         for p in paths {
             let p = p.as_ref();
-            let pbuf = p.to_path_buf();
 
-            // File vs File?
-            if let Some(n) = Self::get_node(&self.root, &pbuf) {
-                if !n.terminals.is_empty() {
-                    conflicts.insert(pbuf);
-                    continue;
+            let mut current_node = &self.root;
+            let mut found_node = None;
+            let mut has_conflict = false;
+
+            let mut components = p.components().peekable();
+
+            while let Some(component) = components.next() {
+                let comp = component.as_os_str();
+                let is_last = components.peek().is_none();
+
+                match current_node.children.get(comp) {
+                    Some(node) => {
+                        // Check for File -> Directory conflict (file exists at prefix)
+                        if !is_last && !node.terminals.is_empty() {
+                            conflicts.insert(p.to_path_buf());
+                            has_conflict = true;
+                            break;
+                        }
+
+                        current_node = node;
+
+                        if is_last {
+                            found_node = Some(node);
+                        }
+                    }
+                    None => break, // Path doesn't exist in trie
                 }
             }
-            // Directory vs File?
-            if let Some(n) = Self::get_node(&self.root, &pbuf) {
-                if !n.children.is_empty() {
-                    conflicts.insert(pbuf.clone());
-                    // Mark this as a directory-insert so we later propagate
-                    dir_inserts.push(pbuf);
-                    continue;
-                }
-            }
-            // File vs Directory under some prefix?
-            let mut prefix = PathBuf::new();
-            for comp in p.components().map(Component::as_os_str) {
-                prefix.push(comp);
-                if prefix == pbuf {
-                    break;
-                }
-                if let Some(n) = Self::get_node(&self.root, &prefix) {
+
+            // Check conflicts at the target node (if we found it and no prefix conflict)
+            if !has_conflict {
+                if let Some(n) = found_node {
+                    // File -> File conflict
                     if !n.terminals.is_empty() {
-                        conflicts.insert(pbuf);
-                        break;
+                        conflicts.insert(p.to_path_buf());
+                        continue;
+                    }
+                    // Directory -> File conflict
+                    if !n.children.is_empty() {
+                        let pbuf = p.to_path_buf();
+                        conflicts.insert(pbuf.clone());
+                        dir_inserts.push(pbuf);
                     }
                 }
             }
@@ -156,37 +254,35 @@ impl PathResolver {
 
         // 2) actually insert all files
         for p in paths {
-            self.insert_file(p, &package);
+            self.insert_file_owned(p, package.clone());
         }
 
         // 3) propagate directory inserts into descendants
         for pbuf in dir_inserts {
             if let Some(n) = self.get_node_mut(&pbuf) {
-                Self::propagate_prefix(n, &package);
+                Self::propagate_prefix(n, package.clone());
             }
         }
 
-        let mut out: Vec<_> = conflicts.into_iter().collect();
-        out.sort();
-        out
+        conflicts.into_iter().collect()
     }
 
     /// Unregister all paths belonging to `package`, then prune empty
     /// branches.
     ///
     /// Returns a change vectors.
-    pub fn unregister_package(&mut self, package: &str) -> Changes {
+    pub fn unregister_package<N: Into<PackageName>>(&mut self, package: N) -> Changes {
         fn collect_next_candidate_paths(
-            package: &str,
-            candidates: &indexmap::set::Slice<String>,
+            package: PackageName,
+            candidates: &indexmap::set::Slice<PackageName>,
             n: &PathTrieNode,
-            to_add: &mut Vec<(PathBuf, String)>,
+            to_add: &mut Vec<(PathBuf, PackageName)>,
             path: &mut PathBuf,
             under_removed: bool,
         ) {
             // Determine if this node is part of the removed package's coverage.
-            let removed_here = n.terminals.contains(package);
-            let prefix_here = n.prefixes.contains(package);
+            let removed_here = n.terminals.contains(&package);
+            let prefix_here = n.prefixes.contains(&package);
             // Active if we're under a removed file or at a prefix of a removed package.
             let active = under_removed || removed_here || prefix_here;
             if !active {
@@ -206,7 +302,14 @@ impl PathResolver {
             // Recurse into all child nodes under this covered subtree.
             for (comp, child) in &n.children {
                 path.push(comp);
-                collect_next_candidate_paths(package, candidates, child, to_add, path, next_under);
+                collect_next_candidate_paths(
+                    package.clone(),
+                    candidates,
+                    child,
+                    to_add,
+                    path,
+                    next_under,
+                );
                 path.pop();
             }
         }
@@ -216,15 +319,17 @@ impl PathResolver {
             n.prefixes.is_empty() && n.terminals.is_empty() && n.children.is_empty()
         }
 
-        fn rm(n: &mut PathTrieNode, pkg: &str) {
-            n.prefixes.remove(pkg);
-            n.terminals.remove(pkg);
+        fn rm(n: &mut PathTrieNode, pkg: PackageName) {
+            n.prefixes.remove(&pkg);
+            n.terminals.remove(&pkg);
             for child in n.children.values_mut() {
-                rm(child, pkg);
+                rm(child, pkg.clone());
             }
         }
 
-        if !self.packages.contains(package) {
+        let package = package.into();
+
+        if !self.packages.contains(&package) {
             return Default::default();
         }
 
@@ -233,11 +338,11 @@ impl PathResolver {
 
         if let Some(candidates) = self
             .packages
-            .get_index_of(package)
+            .get_index_of(&package)
             .and_then(|idx| self.packages.get_range(idx + 1..))
         {
             collect_next_candidate_paths(
-                package,
+                package.clone(),
                 candidates,
                 &self.root,
                 &mut from_clobbers,
@@ -246,7 +351,7 @@ impl PathResolver {
             );
         }
 
-        self.packages.shift_remove(package);
+        self.packages.shift_remove(&package);
 
         rm(&mut self.root, package);
 
@@ -435,14 +540,14 @@ New:
 
         for (p, pkg) in to_clobbers {
             let src = target_prefix.join(p);
-            let dst = clobbers_dir.join(pkg).join(p);
+            let dst = clobbers_dir.join::<&Path>(pkg.as_ref()).join(p);
             if src.exists() && !dst.exists() {
                 mv(src, dst)?;
             }
         }
 
         for (p, pkg) in from_clobbers {
-            let src = clobbers_dir.join(pkg).join(p);
+            let src = clobbers_dir.join::<&Path>(pkg.as_ref()).join(p);
             let dst = target_prefix.join(p);
             if src.exists() && !dst.exists() {
                 mv(src, dst)?;
@@ -502,20 +607,17 @@ New:
         fn dfs(
             node: &PathTrieNode,
             path: &mut PathBuf,
-            packages: &IndexSet<String>,
+            packages: &IndexSet<PackageName>,
             results: &mut HashMap<PathBuf, ClobberedPath>,
         ) {
             if !node.terminals.is_empty() {
                 // Determine the winning package by insertion priority
-                if let Some(winner) = packages
-                    .iter()
-                    .find(|pkg| node.terminals.contains(pkg.as_str()))
-                {
+                if let Some(winner) = packages.iter().find(|pkg| node.terminals.contains(pkg)) {
                     // Collect all other packages that wrote to this path
                     let others: Vec<PackageName> = node
                         .terminals
                         .iter()
-                        .filter(|&p| p != winner)
+                        .filter(|&p| (p.as_ref() as &Path) != (winner.as_ref() as &Path))
                         .cloned()
                         .collect();
                     if !others.is_empty() {
@@ -536,7 +638,7 @@ New:
             }
         }
 
-        let mut results = HashMap::new();
+        let mut results = HashMap::default();
         dfs(
             &self.root,
             &mut PathBuf::new(),
@@ -640,11 +742,8 @@ mod tests {
         resolver.insert_package("pkg1".into(), &["foo.txt"]);
         resolver.insert_package("pkg2".into(), &["foo.txt"]);
         let (removed, added) = resolver.reprioritize_packages(vec!["pkg1".into(), "pkg2".into()]);
-        assert_eq!(
-            removed,
-            vec![(PathBuf::from("foo.txt"), "pkg1".to_string())]
-        );
-        assert_eq!(added, vec![(PathBuf::from("foo.txt"), "pkg2".to_string())]);
+        assert_eq!(removed, vec![(PathBuf::from("foo.txt"), "pkg1".into())]);
+        assert_eq!(added, vec![(PathBuf::from("foo.txt"), "pkg2".into())]);
     }
 
     #[test]
@@ -653,11 +752,8 @@ mod tests {
         resolver.insert_package("pkg1".into(), &["foo"]);
         resolver.insert_package("pkg2".into(), &["foo/bar.txt"]);
         let (removed, added) = resolver.reprioritize_packages(vec!["pkg1".into(), "pkg2".into()]);
-        assert_eq!(removed, vec![(PathBuf::from("foo"), "pkg1".to_string())]);
-        assert_eq!(
-            added,
-            vec![(PathBuf::from("foo/bar.txt"), "pkg2".to_string())]
-        );
+        assert_eq!(removed, vec![(PathBuf::from("foo"), "pkg1".into())]);
+        assert_eq!(added, vec![(PathBuf::from("foo/bar.txt"), "pkg2".into())]);
     }
 
     #[test]
@@ -666,11 +762,8 @@ mod tests {
         resolver.insert_package("pkg1".into(), &["foo/bar.txt"]);
         resolver.insert_package("pkg2".into(), &["foo"]);
         let (removed, added) = resolver.reprioritize_packages(vec!["pkg1".into(), "pkg2".into()]);
-        assert_eq!(
-            removed,
-            vec![(PathBuf::from("foo/bar.txt"), "pkg1".to_string())]
-        );
-        assert_eq!(added, vec![(PathBuf::from("foo"), "pkg2".to_string())]);
+        assert_eq!(removed, vec![(PathBuf::from("foo/bar.txt"), "pkg1".into())]);
+        assert_eq!(added, vec![(PathBuf::from("foo"), "pkg2".into())]);
     }
 
     #[test]
@@ -686,18 +779,15 @@ mod tests {
             removed,
             vec![(PathBuf::from("foo/bar2.txt"), "pkg1".into())],
         );
-        assert_eq!(
-            added,
-            vec![(PathBuf::from("foo/bar2.txt"), "pkg2".to_string())]
-        );
+        assert_eq!(added, vec![(PathBuf::from("foo/bar2.txt"), "pkg2".into())]);
     }
 
     #[test]
     fn test_reprioritize_file_vs_dir_vs_dir_with_permuted_insertion_order() {
-        let priority_order = vec!["pkg1".to_string(), "pkg2".into(), "pkg3".into()];
+        let priority_order = vec!["pkg1".into(), "pkg2".into(), "pkg3".into()];
 
         // 1
-        let pkgs: &[(String, &[&str])] = &[
+        let pkgs: &[(PackageName, &[&str])] = &[
             ("pkg1".into(), &["foo"]),
             ("pkg2".into(), &["foo/bar1.txt", "foo/bar2.txt"]),
             ("pkg3".into(), &["foo/bar2.txt"]),
@@ -705,7 +795,7 @@ mod tests {
 
         let mut resolver = PathResolver::new();
         for (pkg_name, paths) in pkgs {
-            resolver.insert_package(pkg_name.into(), paths);
+            resolver.insert_package(pkg_name.clone(), paths);
         }
 
         let (removed, mut added) = resolver.reprioritize_packages(priority_order.clone());
@@ -714,8 +804,8 @@ mod tests {
         assert_eq!(
             added,
             vec![
-                (PathBuf::from("foo/bar1.txt"), "pkg2".to_string()),
-                (PathBuf::from("foo/bar2.txt"), "pkg3".to_string())
+                (PathBuf::from("foo/bar1.txt"), "pkg2".into()),
+                (PathBuf::from("foo/bar2.txt"), "pkg3".into())
             ]
         );
 
@@ -737,8 +827,8 @@ mod tests {
         assert_eq!(
             added,
             vec![
-                (PathBuf::from("foo/bar1.txt"), "pkg2".to_string()),
-                (PathBuf::from("foo/bar2.txt"), "pkg3".to_string())
+                (PathBuf::from("foo/bar1.txt"), "pkg2".into()),
+                (PathBuf::from("foo/bar2.txt"), "pkg3".into())
             ]
         );
 
@@ -759,10 +849,7 @@ mod tests {
             removed,
             vec![(PathBuf::from("foo/bar2.txt"), "pkg2".into())],
         );
-        assert_eq!(
-            added,
-            vec![(PathBuf::from("foo/bar2.txt"), "pkg3".to_string())]
-        );
+        assert_eq!(added, vec![(PathBuf::from("foo/bar2.txt"), "pkg3".into())]);
 
         // 4
         let pkgs: &[(String, &[&str])] = &[
@@ -781,10 +868,7 @@ mod tests {
             removed,
             vec![(PathBuf::from("foo/bar2.txt"), "pkg2".into())],
         );
-        assert_eq!(
-            added,
-            vec![(PathBuf::from("foo/bar2.txt"), "pkg3".to_string())]
-        );
+        assert_eq!(added, vec![(PathBuf::from("foo/bar2.txt"), "pkg3".into())]);
 
         // 5
         let pkgs: &[(String, &[&str])] = &[
@@ -825,10 +909,10 @@ mod tests {
         resolver.insert_package("pkg".into(), &["d1/f1.txt", "d1/f2.txt", "d2/f3.txt"]);
         let p1 = resolver.packages_for_prefix("d1").unwrap();
         assert_eq!(p1.len(), 1);
-        assert!(p1.contains("pkg"));
+        assert!(p1.contains(&"pkg".into()));
         let e = resolver.packages_for_exact("d1/f2.txt").unwrap();
         assert_eq!(e.len(), 1);
-        assert!(e.contains("pkg"));
+        assert!(e.contains(&"pkg".into()));
     }
 
     #[test]
@@ -909,8 +993,8 @@ mod tests {
         assert_eq!(clobbered.len(), 1);
         let path = PathBuf::from("file.txt");
         let entry = clobbered.get(&path).expect("file.txt should be present");
-        assert_eq!(entry.winner, "pkg1".to_string());
-        assert_eq!(entry.losers, vec!["pkg2".to_string()]);
+        assert_eq!(entry.winner, "pkg1".into());
+        assert_eq!(entry.losers, vec!["pkg2".into()]);
     }
 
     #[test]
@@ -928,10 +1012,10 @@ mod tests {
         assert_eq!(clobbered.len(), 1);
         let path = PathBuf::from("dup.txt");
         let entry = clobbered.get(&path).expect("dup.txt should be present");
-        assert_eq!(entry.winner, "pkg1".to_string());
+        assert_eq!(entry.winner, "pkg1".into());
         let mut others = entry.losers.clone();
         others.sort();
-        assert_eq!(others, vec!["pkg2".to_string(), "pkg3".to_string()]);
+        assert_eq!(others, vec!["pkg2".into(), "pkg3".into()]);
     }
 
     #[test]
@@ -1059,8 +1143,9 @@ mod props {
             // keep track of the order in which we insert packages
             let mut initial_order = Vec::with_capacity(pkg_set.len());
 
-            for (pkg, paths) in pkg_set {
+            for (package, paths) in pkg_set {
                 // Insert each package (ignoring any spurious conflicts)
+                let pkg: PackageName = package.into();
                 let _ = resolver.insert_package(pkg.clone(), &paths);
                 initial_order.push(pkg);
             }

@@ -289,6 +289,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
             installed_packages,
             required_packages,
             None,
+            None, // ignored packages
             install_platform,
         )?;
 
@@ -307,6 +308,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .with_target_platform(install_platform)
         .with_installed_packages(installed_packages)
         .with_execute_link_scripts(true)
+        .with_requested_specs(specs)
         .with_reporter(
             IndicatifReporter::builder()
                 .with_multi_progress(global_multi_progress())
