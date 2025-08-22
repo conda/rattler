@@ -171,13 +171,22 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
 
         // Remove all current packages that are not in desired (but keep order of
         // current), except for ignored packages which should be left untouched
+        let mut unchanged = Vec::new();
         let mut current_map = HashMap::new();
         for record in current_packages {
             let package_name = &record.as_ref().name;
-            if !desired_names.contains(package_name) && !ignored.contains(package_name) {
-                operations.push(TransactionOperation::Remove(record));
-            } else {
+            if desired_names.contains(package_name) {
+                // The record is desired. Keep it in the map so we can compare it to the desired record later.
                 current_map.insert(record.as_ref().name.clone(), record);
+            } else {
+                // The record is not desired.
+                if ignored.contains(package_name) {
+                    // But we want to ignore it, so we keep it unchanged.
+                    unchanged.push(record);
+                } else {
+                    // Otherwise we have to remove it.
+                    operations.push(TransactionOperation::Remove(record));
+                }
             }
         }
 
@@ -186,7 +195,6 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
 
         // Figure out the operations to perform, but keep the order of the original
         // "desired" iterator. Skip ignored packages entirely.
-        let mut unchanged = Vec::new();
         for record in desired_packages {
             let name = &record.as_ref().name;
             let old_record = current_map.remove(name);
