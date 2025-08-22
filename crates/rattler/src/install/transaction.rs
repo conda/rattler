@@ -180,8 +180,8 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
     >(
         current: CurIter,
         desired: NewIter,
-        reinstall: Option<HashSet<PackageName>>,
-        ignored: Option<HashSet<PackageName>>,
+        reinstall: Option<&HashSet<PackageName>>,
+        ignored: Option<&HashSet<PackageName>>,
         platform: Platform,
     ) -> Result<Self, TransactionError> {
         // NOTE: If you're changing this function and want to use
@@ -200,8 +200,10 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         };
 
         let mut operations = Vec::new();
-        let reinstall = reinstall.unwrap_or_default();
-        let ignored = ignored.unwrap_or_default();
+
+        let empty_hashset = HashSet::new();
+        let reinstall = reinstall.unwrap_or(&empty_hashset);
+        let ignored = ignored.unwrap_or(&empty_hashset);
 
         let desired_names = desired_packages
             .iter()
@@ -347,7 +349,7 @@ mod tests {
         let transaction = Transaction::from_current_and_desired(
             vec![prefix_record.clone()],
             vec![prefix_record.clone()],
-            Some(HashSet::from_iter(vec![name])),
+            Some(&HashSet::from_iter(vec![name])),
             None, // ignored packages
             Platform::current(),
         )
@@ -380,7 +382,7 @@ mod tests {
             vec![prefix_record.clone()],
             vec![prefix_record.repodata_record.clone()],
             None, // reinstall
-            ignored_packages,
+            ignored_packages.as_ref(),
             Platform::current(),
         )
         .unwrap();
@@ -395,7 +397,7 @@ mod tests {
             vec![prefix_record.clone()],
             Vec::<rattler_conda_types::RepoDataRecord>::new(), // empty desired
             None,                                              // reinstall
-            ignored_packages,
+            ignored_packages.as_ref(),
             Platform::current(),
         )
         .unwrap();
@@ -410,7 +412,7 @@ mod tests {
             Vec::<rattler_conda_types::PrefixRecord>::new(), // empty current
             vec![prefix_record.repodata_record.clone()],
             None, // reinstall
-            ignored_packages,
+            ignored_packages.as_ref(),
             Platform::current(),
         )
         .unwrap();
