@@ -381,8 +381,8 @@ impl Installer {
         let mut transaction = Transaction::from_current_and_desired(
             installed.iter(),
             desired_records.iter(),
-            self.reinstall_packages.clone(),
-            self.ignored_packages.clone(),
+            self.reinstall_packages.as_ref(),
+            self.ignored_packages.as_ref(),
             target_platform,
         )?;
         // If transaction is non-empty, we need full prefix records for file operations
@@ -399,8 +399,8 @@ impl Installer {
             transaction = Transaction::from_current_and_desired(
                 installed.iter(),
                 desired_records.iter(),
-                self.reinstall_packages,
-                self.ignored_packages,
+                self.reinstall_packages.as_ref(),
+                self.ignored_packages.as_ref(),
                 target_platform,
             )?;
         }
