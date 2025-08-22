@@ -1,0 +1,40 @@
+{
+  "info": {
+    "subdir": "noarch",
+    "base_url": "../linux-64"
+  },
+  "packages": {
+    "foo-1-xxx.tar.bz2": {
+      "name": "foo",
+      "version": "1",
+      "build": "xxx",
+      "build_number": 0,
+      "depends": [],
+      "subdir": "linux-64",
+      "extra_depends": {
+        "with-bar": [
+          "bar <2"
+        ]
+      }
+    },
+    "bar-1-xxx.tar.bz2": {
+      "name": "bar",
+      "version": "1",
+      "build": "xxx",
+      "build_number": 0,
+      "depends": [],
+      "noarch": "",
+      "subdir": "linux-64"
+    },
+    "bar-2-xxx.tar.bz2": {
+      "name": "bar",
+      "version": "2",
+      "build": "xxx",
+      "build_number": 0,
+      "depends": [],
+      "subdir": "linux-64"
+    }
+  },
+  "packages.conda": {},
+  "repodata_version": 2
+}

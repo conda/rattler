@@ -1,3 +1,4 @@
+use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Noarch packages are packages that are not architecture specific and therefore only have to be
@@ -122,6 +123,7 @@ impl<'de> Deserialize<'de> for NoArchType {
         enum NoArchSerde {
             OldFormat(bool),
             NewFormat(NoArchTypeSerde),
+            StringFormat(String),
         }
 
         #[derive(Clone, Debug, Deserialize)]
@@ -132,12 +134,22 @@ impl<'de> Deserialize<'de> for NoArchType {
         }
 
         let value = Option::<NoArchSerde>::deserialize(deserializer)?;
-        Ok(NoArchType(value.and_then(|value| match value {
-            NoArchSerde::OldFormat(true) => Some(RawNoArchType::GenericV1),
-            NoArchSerde::OldFormat(false) => None,
-            NoArchSerde::NewFormat(NoArchTypeSerde::Python) => Some(RawNoArchType::Python),
-            NoArchSerde::NewFormat(NoArchTypeSerde::Generic) => Some(RawNoArchType::GenericV2),
-        })))
+        match value {
+            Some(NoArchSerde::OldFormat(true)) => Ok(NoArchType(Some(RawNoArchType::GenericV1))),
+            Some(NoArchSerde::OldFormat(false)) => Ok(NoArchType(None)),
+            Some(NoArchSerde::NewFormat(NoArchTypeSerde::Python)) => {
+                Ok(NoArchType(Some(RawNoArchType::Python)))
+            }
+            Some(NoArchSerde::NewFormat(NoArchTypeSerde::Generic)) => {
+                Ok(NoArchType(Some(RawNoArchType::GenericV2)))
+            }
+            Some(NoArchSerde::StringFormat(s)) if s.is_empty() => Ok(NoArchType(None)),
+            Some(NoArchSerde::StringFormat(s)) => Err(D::Error::invalid_value(
+                serde::de::Unexpected::Str(&s),
+                &"''",
+            )),
+            None => Ok(NoArchType(None)),
+        }
     }
 }
 
