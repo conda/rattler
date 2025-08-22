@@ -185,13 +185,13 @@ zstd = { version = "0.13.3", default-features = false }
 # These are the all the crates defined in the workspace. We pin all of them together because they are always updated in tendem.
 coalesced_map = { path = "crates/coalesced_map", version = "=0.1.1", default-features = false }
 file_url = { path = "crates/file_url", version = "=0.2.6", default-features = false }
-path_resolver = { path = "crates/path_resolver", version = "=0.1.2", default-features = false }
-rattler = { path = "crates/rattler", version = "=0.34.13", default-features = false }
+path_resolver = { path = "crates/path_resolver", version = "=0.2.0", default-features = false }
+rattler = { path = "crates/rattler", version = "=0.35.0", default-features = false }
 rattler_cache = { path = "crates/rattler_cache", version = "=0.3.31", default-features = false }
 rattler_conda_types = { path = "crates/rattler_conda_types", version = "=0.39.0", default-features = false }
 rattler_config = { path = "crates/rattler_config", version = "=0.2.7", default-features = false }
 rattler_digest = { path = "crates/rattler_digest", version = "=1.1.5", default-features = false }
-rattler_index = { path = "crates/rattler_index", version = "=0.24.9", default-features = false }
+rattler_index = { path = "crates/rattler_index", version = "=0.24.10", default-features = false }
 rattler_libsolv_c = { path = "crates/rattler_libsolv_c", version = "=1.2.3", default-features = false }
 rattler_lock = { path = "crates/rattler_lock", version = "=0.23.15", default-features = false }
 rattler_macros = { path = "crates/rattler_macros", version = "=1.0.11", default-features = false }
