@@ -1,3 +1,5 @@
+#[cfg(feature = "conditional_dependencies")]
+use crate::match_spec::condition::MatchSpecCondition;
 use crate::package::ArchiveIdentifier;
 use crate::{
     build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
@@ -17,6 +19,8 @@ use url::Url;
 use crate::Channel;
 use crate::ChannelConfig;
 
+#[cfg(feature = "conditional_dependencies")]
+pub mod condition;
 pub mod matcher;
 pub mod parse;
 
@@ -157,6 +161,12 @@ pub struct MatchSpec {
     pub url: Option<Url>,
     /// The license of the package
     pub license: Option<String>,
+    /// The condition under which this match spec applies.
+    #[cfg(feature = "conditional_dependencies")]
+    pub condition: Option<MatchSpecCondition>,
+    /// The condition under which this match spec applies (disabled without conditional_dependencies feature).
+    #[cfg(not(feature = "conditional_dependencies"))]
+    pub condition: Option<()>,
 }
 
 impl Display for MatchSpec {
@@ -221,6 +231,15 @@ impl Display for MatchSpec {
 
         if !keys.is_empty() {
             write!(f, "[{}]", keys.join(", "))?;
+        }
+
+        #[cfg(feature = "conditional_dependencies")]
+        if let Some(condition) = &self.condition {
+            write!(f, "; if {condition}")?;
+        }
+        #[cfg(not(feature = "conditional_dependencies"))]
+        {
+            let _ = &self.condition; // Avoid unused warning
         }
 
         Ok(())
@@ -348,6 +367,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            // condition: spec.condition,
         }
     }
 }
@@ -369,6 +389,7 @@ impl MatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            condition: None,
         }
     }
 }

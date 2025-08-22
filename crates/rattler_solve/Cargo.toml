@@ -42,6 +42,7 @@ libsolv_c = ["dep:rattler_libsolv_c", "dep:libc"]
 resolvo_diagnostics = ["resolvo?/diagnostics"]
 resolvo = ["dep:resolvo", "dep:futures"]
 experimental_extras = ["rattler_conda_types/experimental_extras"]
+conditional_dependencies = ["rattler_conda_types/conditional_dependencies"]
 
 [[bench]]
 name = "bench"
