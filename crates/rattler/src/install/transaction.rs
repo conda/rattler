@@ -47,6 +47,24 @@ pub enum TransactionOperation<Old, New> {
     Remove(Old),
 }
 
+impl<Old: Clone, New: Clone> TransactionOperation<&Old, &New> {
+    /// Own records.
+    pub fn to_owned(self) -> TransactionOperation<Old, New> {
+        match self {
+            TransactionOperation::Install(new) => TransactionOperation::Install(new.clone()),
+            TransactionOperation::Change { old, new } => TransactionOperation::Change {
+                old: old.clone(),
+                new: new.clone(),
+            },
+            TransactionOperation::Reinstall { old, new } => TransactionOperation::Reinstall {
+                old: old.clone(),
+                new: new.clone(),
+            },
+            TransactionOperation::Remove(old) => TransactionOperation::Remove(old.clone()),
+        }
+    }
+}
+
 impl<Old: AsRef<New>, New> TransactionOperation<Old, New> {
     /// Returns the record of the package to install for this operation. If this
     /// operation does not refer to an installable package, `None` is
@@ -97,6 +115,23 @@ pub struct Transaction<Old, New> {
     pub unchanged: Vec<Old>,
 }
 
+impl<Old: Clone, New: Clone> Transaction<&Old, &New> {
+    /// Own records.
+    pub fn to_owned(self) -> Transaction<Old, New> {
+        Transaction {
+            operations: self
+                .operations
+                .into_iter()
+                .map(TransactionOperation::to_owned)
+                .collect(),
+            python_info: self.python_info,
+            current_python_info: self.current_python_info,
+            platform: self.platform,
+            unchanged: self.unchanged.into_iter().cloned().collect(),
+        }
+    }
+}
+
 impl<Old, New> Transaction<Old, New> {
     /// Return an iterator over the prefix records of all packages that are
     /// going to be removed.
@@ -145,10 +180,14 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
     >(
         current: CurIter,
         desired: NewIter,
-        reinstall: Option<HashSet<PackageName>>,
-        ignored: Option<HashSet<PackageName>>,
+        reinstall: Option<&HashSet<PackageName>>,
+        ignored: Option<&HashSet<PackageName>>,
         platform: Platform,
     ) -> Result<Self, TransactionError> {
+        // NOTE: If you're changing this function and want to use
+        // previously unused fields don't forget to update
+        // MinimalPrefixRecord as it is used as an optimization in the
+        // `installer::install`.
         let current_packages = current.into_iter().collect::<Vec<_>>();
         let desired_packages = desired.into_iter().collect::<Vec<_>>();
 
@@ -161,8 +200,10 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         };
 
         let mut operations = Vec::new();
-        let reinstall = reinstall.unwrap_or_default();
-        let ignored = ignored.unwrap_or_default();
+
+        let empty_hashset = HashSet::new();
+        let reinstall = reinstall.unwrap_or(&empty_hashset);
+        let ignored = ignored.unwrap_or(&empty_hashset);
 
         let desired_names = desired_packages
             .iter()
@@ -308,7 +349,7 @@ mod tests {
         let transaction = Transaction::from_current_and_desired(
             vec![prefix_record.clone()],
             vec![prefix_record.clone()],
-            Some(HashSet::from_iter(vec![name])),
+            Some(&HashSet::from_iter(vec![name])),
             None, // ignored packages
             Platform::current(),
         )
@@ -341,7 +382,7 @@ mod tests {
             vec![prefix_record.clone()],
             vec![prefix_record.repodata_record.clone()],
             None, // reinstall
-            ignored_packages,
+            ignored_packages.as_ref(),
             Platform::current(),
         )
         .unwrap();
@@ -356,7 +397,7 @@ mod tests {
             vec![prefix_record.clone()],
             Vec::<rattler_conda_types::RepoDataRecord>::new(), // empty desired
             None,                                              // reinstall
-            ignored_packages,
+            ignored_packages.as_ref(),
             Platform::current(),
         )
         .unwrap();
@@ -371,7 +412,7 @@ mod tests {
             Vec::<rattler_conda_types::PrefixRecord>::new(), // empty current
             vec![prefix_record.repodata_record.clone()],
             None, // reinstall
-            ignored_packages,
+            ignored_packages.as_ref(),
             Platform::current(),
         )
         .unwrap();
