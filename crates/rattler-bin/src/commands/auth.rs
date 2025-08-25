@@ -3,9 +3,6 @@ use anyhow::Result;
 #[cfg(feature = "cli-tools")]
 use rattler::cli::auth;
 
-#[cfg(not(feature = "cli-tools"))]
-use clap::Parser;
-
 #[cfg(feature = "cli-tools")]
 pub type Opt = auth::Args;
 
