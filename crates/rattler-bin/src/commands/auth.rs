@@ -27,7 +27,7 @@ enum AuthCommand {
 struct LoginOpt {
     /// The host to authenticate with
     host: String,
-    
+
     /// Authentication token
     #[clap(long)]
     token: String,
@@ -40,5 +40,7 @@ pub async fn auth(opt: Opt) -> Result<()> {
 
 #[cfg(not(feature = "cli-tools"))]
 pub async fn auth(_opt: Opt) -> Result<()> {
-    Err(anyhow::anyhow!("Auth command requires cli-tools feature to be enabled"))
+    Err(anyhow::anyhow!(
+        "Auth command requires cli-tools feature to be enabled"
+    ))
 }
