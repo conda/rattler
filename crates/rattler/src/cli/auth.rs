@@ -202,9 +202,7 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
         // Validate the token using the extracted function
         match validate_prefix_dev_token(token, &args.host)? {
             ValidationResult::Valid(username) => {
-                println!(
-    "✅ Token is valid. Logged in as \"{username}\". Storing credentials..."
-);
+                println!("✅ Token is valid. Logged in as \"{username}\". Storing credentials...");
                 // Store the authentication
                 storage.store(&host, &auth)?;
             }
@@ -232,7 +230,7 @@ fn validate_prefix_dev_token(
 
     // Allow override of API URL for testing
     let url = std::env::var("PREFIX_DEV_API_URL")
-       .unwrap_or_else(|_| format!("https://{host}/api/graphql"));
+        .unwrap_or_else(|_| format!("https://{host}/api/graphql"));
 
     let body = json!({
         "query": "query { viewer { login } }"
