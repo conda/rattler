@@ -1,3 +1,8 @@
+//! Utility modules providing various helper functionality.
+//!
+//! This module contains generic utilities and abstractions used throughout
+//! the crate, including request deduplication, encoding handling, and file locking.
+
 pub use body::BodyStreamExt;
 pub use encoding::{AsyncEncoding, Encoding};
 

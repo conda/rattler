@@ -1,4 +1,39 @@
 # Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.35.0](https://github.com/conda/rattler/compare/rattler-v0.34.13...rattler-v0.35.0) - 2025-08-22
+
+### Added
+
+- ability to ignore packages in the installer ([#1612](https://github.com/conda/rattler/pull/1612))
+
+### Fixed
+
+- ignore unchanged ignored packages ([#1616](https://github.com/conda/rattler/pull/1616))
+
+### Other
+
+- *(rattler)* reduce overhead if transaction is empty ([#1613](https://github.com/conda/rattler/pull/1613))
+- optimize path resolver ([#1611](https://github.com/conda/rattler/pull/1611))
+
+## [0.34.13](https://github.com/conda/rattler/compare/rattler-v0.34.12...rattler-v0.34.13) - 2025-08-15
+
+### Added
+
+- populate `requested_spec` ([#1596](https://github.com/conda/rattler/pull/1596))
+
+## [0.34.12](https://github.com/conda/rattler/compare/rattler-v0.34.11...rattler-v0.34.12) - 2025-08-12
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst
+# Changelog
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
