@@ -396,7 +396,19 @@ pub async fn fetch_repo_data(
                     response.error_for_status().unwrap_err(),
                 )));
             }
-            Ok(response) => response.error_for_status()?,
+            Ok(response) => {
+                let response = response.error_for_status()?;
+                if !response.status().is_success() {
+                    return Err(FetchRepoDataError::HttpError(
+                        reqwest_middleware::Error::Middleware(anyhow::format_err!(
+                            "received unexpected status code ({}) when fetching {}",
+                            response.status(),
+                            repo_data_url.redact(),
+                        )),
+                    ));
+                }
+                response
+            }
             Err(e) => {
                 return Err(FetchRepoDataError::from(e));
             }

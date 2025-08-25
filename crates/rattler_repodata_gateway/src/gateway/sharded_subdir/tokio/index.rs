@@ -6,6 +6,7 @@ use fs_err::tokio as tokio_fs;
 use futures::{future::OptionFuture, TryFutureExt};
 use http::{HeaderMap, Method, Uri};
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike};
+use rattler_redaction::Redact;
 use reqwest::Response;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
@@ -45,6 +46,16 @@ pub async fn fetch_index(
         permit: Option<tokio::sync::SemaphorePermit<'_>>,
     ) -> Result<ShardedRepodata, GatewayError> {
         let response = response.error_for_status()?;
+        if !response.status().is_success() {
+            let mut url = response.url().clone().redact();
+            url.set_query(None);
+            url.set_fragment(None);
+            return Err(GatewayError::ReqwestMiddlewareError(anyhow::format_err!(
+                "received unexpected status code ({}) when fetching {}",
+                response.status(),
+                url,
+            )));
+        }
 
         // Read the bytes of the response
         let response_url = response.url().clone();

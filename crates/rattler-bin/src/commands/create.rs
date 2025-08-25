@@ -28,7 +28,7 @@ use rattler_solve::{
     libsolv_c::{self},
     resolvo, SolverImpl, SolverTask,
 };
-use reqwest::{Client, Url};
+use reqwest::Client;
 
 use crate::global_multi_progress;
 
@@ -173,16 +173,11 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         ))
         .with_client(download_client.clone())
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-            default: SourceConfig::default(),
-            per_channel: [(
-                Url::parse("https://prefix.dev")?,
-                SourceConfig {
-                    sharded_enabled: true,
-                    ..SourceConfig::default()
-                },
-            )]
-            .into_iter()
-            .collect(),
+            default: SourceConfig {
+                sharded_enabled: true,
+                ..SourceConfig::default()
+            },
+            per_channel: HashMap::new(),
         })
         .finish();
 
