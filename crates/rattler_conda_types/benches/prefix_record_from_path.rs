@@ -61,7 +61,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let test_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data/conda-meta");
 
     let mut super_long_file: PrefixRecord =
-        PrefixRecord::from_path(test_dir.join("tk-8.6.13-h5083fa2_1.json")).unwrap();
+        PrefixRecord::from_path(test_dir.join("rust-1.88.0-h1a8d7c4_0.json")).unwrap();
     // duplicate data until we have 20k paths
     let files = super_long_file.files.clone();
     while super_long_file.files.len() < 20_000 {
