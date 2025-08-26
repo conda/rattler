@@ -137,7 +137,11 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    
+
+    env:
+      AWS_REGION: eu-west-1
+      BUCKET: tmp-${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+
     steps:
       - name: Checkout source code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -155,28 +159,26 @@ jobs:
         run: |
           pixi run build --bin rattler --release
           pixi run build --bin rattler-index --release
-      
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+
+      - name: Configure AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: us-east-1
-          role-session-name: rattler-e2e-test
-      
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/<GitHubOIDCRole>
+
       - name: Generate unique bucket name
         id: bucket
         run: |
-          BUCKET_NAME="rattler-e2e-test-$(date +%s)-$(echo $GITHUB_RUN_ID | tail -c 6)"
-          echo "name=${BUCKET_NAME}" >> $GITHUB_OUTPUT
-          echo "Using bucket: ${BUCKET_NAME}"
-      
-      - name: Create test S3 bucket
-        uses: aitorres/aws-s3-create-bucket@v1.2.0
-        with:
-          bucket-name: ${{ steps.bucket.outputs.name }}
-          aws-region: us-east-1
-          acl: private
-      
+          # Create a unique bucket name using repository owner, name, run ID, and attempt number
+          aws s3api create-bucket \
+            --bucket "${BUCKET}" \
+            --create-bucket-configuration LocationConstraint=${AWS_REGION}
+          
+          # 1-day auto-expire objects (safety net to ensure we dont retain any files)
+          aws s3api put-bucket-lifecycle-configuration --bucket "BUCKET" --lifecycle-configuration '{
+            "Rules":[{"ID":"ttl-1d","Status":"Enabled","Expiration":{"Days":1},"Filter":{"Prefix":""}}]
+          }'
+
       - name: Run E2E AWS S3 workflow test
         run: |
           set -e
@@ -184,17 +186,17 @@ jobs:
           echo "=== Step 1: Upload package to AWS S3 ==="
           ./target/release/rattler upload conda \
             --package test-data/packages/empty-0.1.0-h4616a5c_0.conda \
-            --channel s3://${{ steps.bucket.outputs.name }}
+            --channel s3://${BUCKET}
           
           echo "=== Step 2: Index the channel ==="
           ./target/release/rattler-index \
-            --channel s3://${{ steps.bucket.outputs.name }} \
+            --channel s3://${BUCKET} \
             --subdir noarch
           
           echo "=== Step 3: Test package discovery with dry-run ==="
           ./target/release/rattler create \
             --dry-run \
-            --channels s3://${{ steps.bucket.outputs.name }} \
+            --channels s3://${BUCKET} \
             empty==0.1.0
           
           echo "=== AWS S3 E2E test completed successfully ==="
@@ -203,13 +205,13 @@ jobs:
         if: failure()
         run: |
           echo "=== AWS S3 bucket contents ==="
-          aws s3 ls s3://${{ steps.bucket.outputs.name }} --recursive || true
+          aws s3 ls s3://${BUCKET} --recursive || true
 
       - name: Cleanup AWS S3 bucket
         if: always()
         run: |
           # Remove all objects first
-          aws s3 rm s3://${{ steps.bucket.outputs.name }} --recursive || true
+          aws s3 rm s3://${BUCKET} --recursive || true
           # Then delete the bucket
-          aws s3 rb s3://${{ steps.bucket.outputs.name }} || true
+          aws s3 rb s3://${BUCKET} || true
           echo "AWS S3 test cleanup completed"
