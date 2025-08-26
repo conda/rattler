@@ -139,7 +139,7 @@ jobs:
     name: E2E Real AWS S3 Upload/Index/Download Test
     runs-on: ubuntu-latest
     # Only run on main branch to avoid creating too many test buckets
-    if: github.ref == 'refs/heads/main'
+    # if: github.ref == 'refs/heads/main'
     permissions:
       id-token: write
       contents: read
