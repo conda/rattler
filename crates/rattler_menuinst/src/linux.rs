@@ -290,11 +290,6 @@ impl LinuxMenu {
     }
 
     fn command(&self) -> Result<String, MenuInstError> {
-        let mut parts = Vec::new();
-        if let Some(pre_command) = &self.command.precommand {
-            parts.push(pre_command.resolve(&self.placeholders));
-        }
-
         let mut envs = Vec::new();
         if self.command.activate.unwrap_or(false) {
             // create a bash activation script and emit it into the script
@@ -310,22 +305,26 @@ impl LinuxMenu {
             }
         }
 
-        let command = self
+        let main_command = self
             .command
             .command
             .iter()
             .map(|s| s.resolve(&self.placeholders))
-            .collect::<Vec<_>>()
+            .map(|part| Ok(shlex::try_quote(&part)?.into_owned()))
+            .collect::<Result<Vec<_>, MenuInstError>>()?
             .join(" ");
 
-        parts.push(command);
-
-        let command = parts.join(" && ");
-        let bash_command = format!("bash -c {}", shlex::try_quote(&command)?);
-        if envs.is_empty() {
-            Ok(bash_command)
+        let main_with_env = if envs.is_empty() {
+            main_command
         } else {
-            Ok(format!("env {} {}", envs.join(" "), bash_command))
+            format!("env {} {}", envs.join(" "), main_command)
+        };
+
+        if let Some(pre_command) = &self.command.precommand {
+            let command = [pre_command.0.clone(), main_with_env].join(" && ");
+            Ok(format!("bash -c {}", shlex::try_quote(&command)?))
+        } else {
+            Ok(main_with_env)
         }
     }
 
