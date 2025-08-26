@@ -1,5 +1,6 @@
 use fs_err::tokio as tokio_fs;
 use futures::TryStreamExt as _;
+use indicatif::{style::TemplateError, HumanBytes, ProgressState};
 use miette::IntoDiagnostic as _;
 use rattler_networking::{Authentication, AuthenticationStorage};
 use reqwest::{
@@ -19,12 +20,12 @@ use super::opt::{
     // ← Import from sibling module
     PrefixData,
 };
+use std::fmt::Write;
 
 use crate::upload::{
     get_client_with_retry, get_default_client,
     trusted_publishing::{check_trusted_publishing, TrustedPublishResult},
 };
-use rattler_progress;
 
 use super::package::sha256_sum;
 
@@ -76,6 +77,25 @@ async fn create_upload_form(
     }
 
     Ok(form)
+}
+
+/// Returns the style to use for a progressbar that is currently in progress.
+fn default_bytes_style() -> Result<indicatif::ProgressStyle, TemplateError> {
+    Ok(indicatif::ProgressStyle::default_bar()
+            .template("{spinner:.green} {prefix:20!} [{elapsed_precise}] [{bar:40!.bright.yellow/dim.white}] {bytes:>8} @ {smoothed_bytes_per_sec:8}")?
+            .progress_chars("━━╾─")
+            .with_key(
+                "smoothed_bytes_per_sec",
+                |s: &ProgressState, w: &mut dyn Write| match (s.pos(), s.elapsed().as_millis()) {
+                    (pos, elapsed_ms) if elapsed_ms > 0 => {
+                        // TODO: log with tracing?
+                        _ = write!(w, "{}/s", HumanBytes((pos as f64 * 1000_f64 / elapsed_ms as f64) as u64));
+                    }
+                    _ => {
+                        _ = write!(w, "-");
+                    },
+                },
+            ))
 }
 
 /// Uploads package files to a prefix.dev server.
@@ -147,7 +167,7 @@ pub async fn upload_package_to_prefix(
 
         let progress_bar = indicatif::ProgressBar::new(file_size)
             .with_prefix("Uploading")
-            .with_style(rattler_progress::default_bytes_style());
+            .with_style(default_bytes_style().into_diagnostic()?);
 
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
         let mut current_try = 0;
