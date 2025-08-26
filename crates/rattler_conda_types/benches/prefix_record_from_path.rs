@@ -40,6 +40,18 @@ fn process_minimal_json_files_from_dir(dir: &Path) {
         }
     }
 }
+fn process_package_record_files_from_dir(dir: &Path) {
+    let entries = fs::read_dir(dir).expect("Directory not found");
+
+    for entry in entries {
+        let entry = entry.expect("Unable to read entry");
+        let path = entry.path();
+
+        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            black_box(PackageRecord::from_path(&path).unwrap());
+        }
+    }
+}
 
 fn load_as_minimal_prefix_record(dir: &Path) -> Vec<PrefixRecord> {
     black_box(PrefixRecord::collect_minimal_from_prefix(dir).unwrap())
@@ -79,6 +91,11 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("load_minimal_prefix_record_serially", |b| {
         b.iter(|| {
             process_minimal_json_files_from_dir(&test_dir);
+        });
+    });
+    c.bench_function("load_package_record_serially", |b| {
+        b.iter(|| {
+            process_package_record_files_from_dir(&test_dir);
         });
     });
 
