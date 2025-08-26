@@ -41,13 +41,13 @@ pub fn py_index_fs(
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-#[pyo3(signature = (channel_url, region, endpoint_url, force_path_style, access_key_id=None,secret_access_key=None, session_token=None, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=None))]
+#[pyo3(signature = (channel_url, region=None, endpoint_url=None, force_path_style=None, access_key_id=None,secret_access_key=None, session_token=None, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=None))]
 pub fn py_index_s3(
     py: Python<'_>,
     channel_url: String,
-    region: String,
-    endpoint_url: String,
-    force_path_style: bool,
+    region: Option<String>,
+    endpoint_url: Option<String>,
+    force_path_style: Option<bool>,
     access_key_id: Option<String>,
     secret_access_key: Option<String>,
     session_token: Option<String>,
@@ -59,7 +59,10 @@ pub fn py_index_s3(
     max_parallel: Option<usize>,
 ) -> PyResult<Bound<'_, PyAny>> {
     let channel_url = Url::parse(&channel_url).map_err(PyRattlerError::from)?;
-    let endpoint_url = Url::parse(&endpoint_url).map_err(PyRattlerError::from)?;
+    let endpoint_url = match endpoint_url {
+        Some(url) => Some(Url::parse(&url).map_err(PyRattlerError::from)?),
+        None => None,
+    };
     let target_platform = target_platform.map(Platform::from);
     future_into_py(py, async move {
         index_s3(IndexS3Config {

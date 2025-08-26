@@ -46,8 +46,8 @@ async def index_fs(
 
 async def index_s3(
     channel_url: str,
-    region: str,
-    endpoint_url: str,
+    region: Optional[str] = None,
+    endpoint_url: Optional[str] = None,
     force_path_style: bool = False,
     access_key_id: Optional[str] = None,
     secret_access_key: Optional[str] = None,
