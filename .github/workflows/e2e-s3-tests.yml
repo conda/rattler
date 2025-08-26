@@ -86,21 +86,20 @@ jobs:
           set -e
 
           echo "=== Step 1: Upload package to Minio ==="
-          ./target/release/rattler upload conda \
-            --package test-data/packages/empty-0.1.0-h4616a5c_0.conda \
+          ./target/release/rattler upload s3 \
             --channel s3://test-channel \
-            --aws-access-key-id "${MINIO_ACCESS_KEY}" \
-            --aws-secret-access-key "${MINIO_SECRET_KEY}" \
-            --aws-region "${MINIO_REGION}" \
-            --endpoint-url "${MINIO_ENDPOINT}"
+            --access-key-id "${MINIO_ACCESS_KEY}" \
+            --secret-access-key "${MINIO_SECRET_KEY}" \
+            --region "${MINIO_REGION}" \
+            --endpoint-url "${MINIO_ENDPOINT}" \
+            test-data/packages/empty-0.1.0-h4616a5c_0.conda
 
           echo "=== Step 2: Index the channel ==="
-          ./target/release/rattler-index \
-            --channel s3://test-channel \
-            --subdir noarch \
-            --aws-access-key-id "${MINIO_ACCESS_KEY}" \
-            --aws-secret-access-key "${MINIO_SECRET_KEY}" \
-            --aws-region "${MINIO_REGION}" \
+          ./target/release/rattler-index s3 \
+            s3://test-channel \
+            --access-key-id "${MINIO_ACCESS_KEY}" \
+            --secret-access-key "${MINIO_SECRET_KEY}" \
+            --region "${MINIO_REGION}" \
             --endpoint-url "${MINIO_ENDPOINT}"
 
           echo "=== Step 3: Test package discovery with dry-run ==="
