@@ -1,0 +1,215 @@
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - crates/rattler-bin/**
+      - crates/rattler_index/**
+      - crates/rattler_upload/**
+      - crates/rattler_networking/**
+      - .github/workflows/e2e-s3-tests.yml
+
+name: E2E S3 Tests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_LOG: info
+  RUST_BACKTRACE: 1
+  RUSTFLAGS: "-D warnings"
+  CARGO_TERM_COLOR: always
+  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,experimental_extras,edit,rattler_config
+
+jobs:
+  e2e-minio-test:
+    name: E2E Minio Upload/Index/Download Test
+    runs-on: ubuntu-latest
+    services:
+      minio:
+        image: minio/minio:RELEASE.2024-08-17T01-24-54Z
+        env:
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - "9000:9000"
+          - "9001:9001"
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 30s
+          --health-timeout 20s
+          --health-retries 3
+        volumes:
+          - /tmp/data:/data
+        command: server /data --console-address ":9001"
+    
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+      
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@8ca4608ef7f4daeb54f5205b20d0b7cb42f11143 # v0.8.14
+      
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      
+      - name: Build rattler binaries
+        run: |
+          pixi run build --bin rattler --release
+          pixi run build --bin rattler-index --release
+      
+      - name: Install Minio client
+        run: |
+          curl -o /tmp/mc https://dl.min.io/client/mc/release/linux-amd64/mc
+          chmod +x /tmp/mc
+          sudo mv /tmp/mc /usr/local/bin/mc
+      
+      - name: Wait for Minio to be ready
+        run: |
+          timeout 60 bash -c 'until curl -f http://localhost:9000/minio/health/live; do sleep 2; done'
+      
+      - name: Setup Minio bucket and policies
+        env:
+          MC_HOST_minio: http://minioadmin:minioadmin@localhost:9000
+        run: |
+          mc alias set minio http://localhost:9000 minioadmin minioadmin
+          mc mb minio/test-channel || true
+          mc policy set public minio/test-channel
+      
+      - name: Run E2E S3 workflow test with Minio
+        run: |
+          set -e
+          
+          # Minio connection parameters
+          MINIO_ENDPOINT="http://localhost:9000"
+          MINIO_ACCESS_KEY="minioadmin"
+          MINIO_SECRET_KEY="minioadmin"
+          MINIO_REGION="us-east-1"
+          
+          echo "=== Step 1: Upload package to Minio ==="
+          ./target/release/rattler upload conda \
+            --package test-data/packages/empty-0.1.0-h4616a5c_0.conda \
+            --channel s3://test-channel \
+            --aws-access-key-id "${MINIO_ACCESS_KEY}" \
+            --aws-secret-access-key "${MINIO_SECRET_KEY}" \
+            --aws-region "${MINIO_REGION}" \
+            --endpoint-url "${MINIO_ENDPOINT}"
+          
+          echo "=== Step 2: Index the channel ==="
+          ./target/release/rattler-index \
+            --channel s3://test-channel \
+            --subdir noarch \
+            --aws-access-key-id "${MINIO_ACCESS_KEY}" \
+            --aws-secret-access-key "${MINIO_SECRET_KEY}" \
+            --aws-region "${MINIO_REGION}" \
+            --endpoint-url "${MINIO_ENDPOINT}"
+          
+          echo "=== Step 3: Test package discovery with dry-run ==="
+          ./target/release/rattler create \
+            --dry-run \
+            --channels s3://test-channel \
+            empty==0.1.0
+          
+          echo "=== E2E test completed successfully ==="
+
+      - name: Debug bucket contents on failure
+        if: failure()
+        run: |
+          echo "=== Minio bucket contents ==="
+          mc ls --recursive minio/test-channel || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "Minio test cleanup completed"
+
+  e2e-aws-s3-test:
+    name: E2E Real AWS S3 Upload/Index/Download Test
+    runs-on: ubuntu-latest
+    # Only run on main branch to avoid creating too many test buckets
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+      
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@8ca4608ef7f4daeb54f5205b20d0b7cb42f11143 # v0.8.14
+      
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      
+      - name: Build rattler binaries
+        run: |
+          pixi run build --bin rattler --release
+          pixi run build --bin rattler-index --release
+      
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: rattler-e2e-test
+      
+      - name: Generate unique bucket name
+        id: bucket
+        run: |
+          BUCKET_NAME="rattler-e2e-test-$(date +%s)-$(echo $GITHUB_RUN_ID | tail -c 6)"
+          echo "name=${BUCKET_NAME}" >> $GITHUB_OUTPUT
+          echo "Using bucket: ${BUCKET_NAME}"
+      
+      - name: Create test S3 bucket
+        uses: aitorres/aws-s3-create-bucket@v1.2.0
+        with:
+          bucket-name: ${{ steps.bucket.outputs.name }}
+          aws-region: us-east-1
+          acl: private
+      
+      - name: Run E2E AWS S3 workflow test
+        run: |
+          set -e
+          
+          echo "=== Step 1: Upload package to AWS S3 ==="
+          ./target/release/rattler upload conda \
+            --package test-data/packages/empty-0.1.0-h4616a5c_0.conda \
+            --channel s3://${{ steps.bucket.outputs.name }}
+          
+          echo "=== Step 2: Index the channel ==="
+          ./target/release/rattler-index \
+            --channel s3://${{ steps.bucket.outputs.name }} \
+            --subdir noarch
+          
+          echo "=== Step 3: Test package discovery with dry-run ==="
+          ./target/release/rattler create \
+            --dry-run \
+            --channels s3://${{ steps.bucket.outputs.name }} \
+            empty==0.1.0
+          
+          echo "=== AWS S3 E2E test completed successfully ==="
+
+      - name: Debug bucket contents on failure
+        if: failure()
+        run: |
+          echo "=== AWS S3 bucket contents ==="
+          aws s3 ls s3://${{ steps.bucket.outputs.name }} --recursive || true
+
+      - name: Cleanup AWS S3 bucket
+        if: always()
+        run: |
+          # Remove all objects first
+          aws s3 rm s3://${{ steps.bucket.outputs.name }} --recursive || true
+          # Then delete the bucket
+          aws s3 rb s3://${{ steps.bucket.outputs.name }} || true
+          echo "AWS S3 test cleanup completed"
