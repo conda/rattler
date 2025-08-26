@@ -11,7 +11,7 @@ use thiserror;
 /// Command line arguments that contain authentication data
 #[derive(Parser, Debug)]
 struct LoginArgs {
-    /// The host to authenticate with (e.g. repo.prefix.dev)
+    /// The host to authenticate with (e.g. prefix.dev)
     host: String,
 
     /// The token to use (for authentication with prefix.dev)

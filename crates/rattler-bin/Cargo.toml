@@ -20,7 +20,6 @@ path = "src/main.rs"
 default = ["rustls-tls"]
 native-tls = ["reqwest/native-tls", "rattler/native-tls", "rattler_repodata_gateway/native-tls", "rattler_networking/native-tls", "rattler_cache/native-tls"]
 rustls-tls = ["reqwest/rustls-tls", "reqwest/rustls-tls-native-roots", "rattler/rustls-tls", "rattler_repodata_gateway/rustls-tls", "rattler_networking/rustls-tls", "rattler_cache/rustls-tls"]
-cli-tools = ["rattler/cli-tools"]
 
 [dependencies]
 anyhow = { workspace = true }
