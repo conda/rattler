@@ -21,7 +21,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use opendal::{
     layers::RetryLayer,
     services::{FsConfig, S3Config, S3},
-    Configurator, Operator,
+    Configurator, ErrorKind, Operator,
 };
 use rattler_conda_types::{
     package::{ArchiveIdentifier, ArchiveType, IndexJson, PackageFile, RunExportsJson},
@@ -525,10 +525,19 @@ pub async fn write_repodata(
             let future = async move || {
                 let shard_path = format!("{subdir}/shards/{digest:x}.msgpack.zst");
                 tracing::trace!("Writing repodata shard to {shard_path}");
-                op.write_with(&shard_path, encoded_shard)
+                match op
+                    .write_with(&shard_path, encoded_shard)
                     .if_not_exists(true)
                     .cache_control("public, max-age=31536000, immutable")
                     .await
+                {
+                    Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
+                        tracing::trace!("{shard_path} already exists");
+                        Ok(())
+                    }
+                    Ok(_metadata) => Ok(()),
+                    Err(e) => Err(e),
+                }
             };
             tasks.push(tokio::spawn(future()));
         }

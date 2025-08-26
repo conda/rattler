@@ -5,7 +5,7 @@ use aws_sdk_s3::config::{Credentials, ProvideCredentials};
 use miette::{Context, IntoDiagnostic};
 use opendal::{
     services::{S3Config, S3},
-    Configurator, Operator,
+    Configurator, ErrorKind, Operator,
 };
 use rattler_networking::{Authentication, AuthenticationStorage};
 use url::Url;
@@ -97,16 +97,26 @@ pub async fn upload_package_to_s3(
             .ok_or_else(|| miette::miette!("Failed to get filename"))?;
         let key = format!("{subdir}/{filename}");
         let body = fs_err::tokio::read(package_file).await.into_diagnostic()?;
-        op.write_with(&key, body)
+        match op
+            .write_with(&key, body)
             .content_disposition(&format!("attachment; filename={filename}"))
             .if_not_exists(!force)
             .await
-            .into_diagnostic()?;
-
-        tracing::info!(
-            "Uploaded package to s3://{bucket}{}/{key}",
-            channel.path().to_string()
-        );
+        {
+            Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
+                tracing::info!(
+                    "Skipped package s3://{bucket}{}/{key}, the package already exists. Use --force to overwrite.",
+                    channel.path().to_string()
+                );
+            }
+            Ok(_metadata) => {
+                tracing::info!(
+                    "Uploaded package to s3://{bucket}{}/{key}",
+                    channel.path().to_string()
+                );
+            }
+            Err(e) => return Err(e).into_diagnostic(),
+        }
     }
 
     Ok(())
