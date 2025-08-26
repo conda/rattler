@@ -26,26 +26,49 @@ jobs:
   e2e-minio-test:
     name: E2E Minio Upload/Index/Download Test
     runs-on: ubuntu-latest
-    services:
-      minio:
-        image: minio/minio:latest
-        ports:
-          - 9000:9000
-        env:
-          MINIO_ROOT_USER: minio
-          MINIO_ROOT_PASSWORD: minio123
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-          minio server /data
+    env:
+      MINIO_ENDPOINT: http://localhost:9000
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minio123
+      MINIO_REGION: us-east-1
 
     steps:
       - name: Checkout source code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           submodules: recursive
+
+      - name: Install MinIO + mc, start server, configure bucket
+        run: |
+          set -euo pipefail
+          
+          # Paths
+          BIN_DIR="$RUNNER_TEMP"
+          DATA_DIR="$RUNNER_TEMP/minio-data"
+          LOG_FILE="$RUNNER_TEMP/minio.log"
+          PID_FILE="$RUNNER_TEMP/minio.pid"
+          
+          mkdir -p "$BIN_DIR" "$DATA_DIR"
+          
+          # Download MinIO server and client without sudo; add to PATH
+          curl -fsSL -o "$BIN_DIR/minio" https://dl.min.io/server/minio/release/linux-amd64/minio
+          curl -fsSL -o "$BIN_DIR/mc" https://dl.min.io/client/mc/release/linux-amd64/mc
+          chmod +x "$BIN_DIR/minio" "$BIN_DIR/mc"
+          echo "$BIN_DIR" >> "$GITHUB_PATH"
+          
+          # Start MinIO in background
+          MINIO_ROOT_USER="$MINIO_ACCESS_KEY" \
+          MINIO_ROOT_PASSWORD="$MINIO_SECRET_KEY" \
+          "$BIN_DIR/minio" server "$DATA_DIR" --address ":9000" > "$LOG_FILE" 2>&1 &
+          echo $! > "$PID_FILE"
+          
+          # Wait for MinIO to be ready
+          timeout 120 bash -c 'until curl -fsS http://localhost:9000/minio/health/live >/dev/null; do sleep 2; done'
+          
+          # Configure mc client and bucket
+          "$BIN_DIR/mc" alias set minio http://localhost:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"
+          "$BIN_DIR/mc" mb minio/test-channel || true
+          "$BIN_DIR/mc" policy set download minio/test-channel
 
       - name: Set up pixi
         uses: prefix-dev/setup-pixi@8ca4608ef7f4daeb54f5205b20d0b7cb42f11143 # v0.8.14
@@ -59,33 +82,11 @@ jobs:
           pixi run build --bin rattler --release
           pixi run build --bin rattler-index --release
 
-      - name: Install Minio client
-        run: |
-          curl -o /tmp/mc https://dl.min.io/client/mc/release/linux-amd64/mc
-          chmod +x /tmp/mc
-          sudo mv /tmp/mc /usr/local/bin/mc
-
-      - name: Wait for Minio to be ready
-        run: |
-          timeout 60 bash -c 'until curl -f http://localhost:9000/minio/health/live; do sleep 2; done'
-
-      - name: Setup Minio bucket and policies
-        env:
-          MC_HOST_minio: http://minioadmin:minioadmin@localhost:9000
-        run: |
-          mc alias set minio http://localhost:9000 minioadmin minioadmin
-          mc mb minio/test-channel || true
-          mc policy set public minio/test-channel
+      # MinIO client and server are installed and configured above
 
       - name: Run E2E S3 workflow test with Minio
         run: |
           set -e
-
-          # Minio connection parameters
-          MINIO_ENDPOINT="http://localhost:9000"
-          MINIO_ACCESS_KEY="minioadmin"
-          MINIO_SECRET_KEY="minioadmin"
-          MINIO_REGION="us-east-1"
 
           echo "=== Step 1: Upload package to Minio ==="
           ./target/release/rattler upload conda \
@@ -122,6 +123,18 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
+          # Stop Minio server (pid written in RUNNER_TEMP)
+          if [ -f "$RUNNER_TEMP/minio.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/minio.pid")" || true
+            rm -f "$RUNNER_TEMP/minio.pid"
+          fi
+          
+          # Show Minio logs for debugging
+          if [ -f "$RUNNER_TEMP/minio.log" ]; then
+            echo "=== Minio server logs ==="
+            tail -20 "$RUNNER_TEMP/minio.log" || true
+          fi
+          
           echo "Minio test cleanup completed"
 
   e2e-aws-s3-test:
