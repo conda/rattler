@@ -107,7 +107,7 @@ jobs:
           echo "=== Step 3: Test package discovery with dry-run ==="
           ./target/release/rattler create \
             --dry-run \
-            --channels s3://test-channel \
+            -c s3://test-channel \
             empty==0.1.0
 
           echo "=== E2E test completed successfully ==="
@@ -158,11 +158,6 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build rattler binaries
-        run: |
-          cargo build --bin rattler --release
-          cargo build --bin rattler-index --release
-
       - name: Configure AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a  # v4.3.1
         with:
@@ -181,6 +176,11 @@ jobs:
           aws s3api put-bucket-lifecycle-configuration --bucket "BUCKET" --lifecycle-configuration '{
             "Rules":[{"ID":"ttl-1d","Status":"Enabled","Expiration":{"Days":1},"Filter":{"Prefix":""}}]
           }'
+          
+      - name: Build rattler binaries
+        run: |
+          cargo build --bin rattler --release
+          cargo build --bin rattler-index --release
 
       - name: Run E2E AWS S3 workflow test
         run: |
@@ -197,7 +197,7 @@ jobs:
           echo "=== Step 3: Test package discovery with dry-run ==="
           ./target/release/rattler create \
             --dry-run \
-            --channels s3://${BUCKET} \
+            -c s3://${BUCKET} \
             empty==0.1.0
 
           echo "=== AWS S3 E2E test completed successfully ==="
