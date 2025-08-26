@@ -196,6 +196,7 @@ rattler_repodata_gateway = { path = "crates/rattler_repodata_gateway", version =
 rattler_sandbox = { path = "crates/rattler_sandbox", version = "=0.1.10", default-features = false }
 rattler_shell = { path = "crates/rattler_shell", version = "=0.24.9", default-features = false }
 rattler_solve = { path = "crates/rattler_solve", version = "=3.0.1", default-features = false }
+rattler_upload = { path = "crates/rattler_upload", version = "=0.2.0", default-features = false }
 rattler_virtual_packages = { path = "crates/rattler_virtual_packages", version = "=2.1.3", default-features = false }
 
 # This is also a rattler crate, but we only pin it to minor version

@@ -2,15 +2,27 @@
 //! files
 #![deny(missing_docs)]
 
+use std::{
+    collections::{HashMap, HashSet},
+    io::{BufRead, BufReader, Cursor, Read, Seek},
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+};
+
 use anyhow::{Context, Result};
-use aws_config::meta::region::RegionProviderChain;
-use aws_config::BehaviorVersion;
+use aws_config::{meta::region::RegionProviderChain, BehaviorVersion};
 use aws_sdk_s3::config::{Credentials, ProvideCredentials};
 use bytes::buf::Buf;
 use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
 use fxhash::FxHashMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use opendal::{
+    layers::RetryLayer,
+    services::{FsConfig, S3Config, S3},
+    Configurator, Operator,
+};
 use rattler_conda_types::{
     package::{ArchiveIdentifier, ArchiveType, IndexJson, PackageFile, RunExportsJson},
     ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
@@ -24,23 +36,8 @@ use rattler_package_streaming::{
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::io::{BufRead, BufReader};
-use std::{
-    collections::{HashMap, HashSet},
-    io::{Cursor, Read, Seek},
-    path::{Path, PathBuf},
-    str::FromStr,
-    sync::Arc,
-};
 use tokio::sync::Semaphore;
 use url::Url;
-
-use opendal::services::S3;
-use opendal::{
-    layers::RetryLayer,
-    services::{FsConfig, S3Config},
-    Configurator, Operator,
-};
 
 const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
 const REPODATA: &str = "repodata.json";
@@ -439,7 +436,8 @@ pub async fn write_repodata(
         let unpatched_repodata_path = format!("{subdir}/{REPODATA_FROM_PACKAGES}");
         tracing::info!("Writing unpatched repodata to {unpatched_repodata_path}");
         let unpatched_repodata_bytes = serde_json::to_vec(&repodata)?;
-        op.write(&unpatched_repodata_path, unpatched_repodata_bytes)
+        op.write_with(&unpatched_repodata_path, unpatched_repodata_bytes)
+            .content_encoding("application/json")
             .await?;
     }
 
@@ -464,7 +462,9 @@ pub async fn write_repodata(
 
     let repodata_path = format!("{subdir}/{REPODATA}");
     tracing::info!("Writing repodata to {repodata_path}");
-    op.write(&repodata_path, repodata_bytes).await?;
+    op.write_with(&repodata_path, repodata_bytes)
+        .content_encoding("application/json")
+        .await?;
 
     if write_shards {
         // See CEP 16 <https://github.com/conda/ceps/blob/main/cep-0016.md>
@@ -525,7 +525,10 @@ pub async fn write_repodata(
             let future = async move || {
                 let shard_path = format!("{subdir}/shards/{digest:x}.msgpack.zst");
                 tracing::trace!("Writing repodata shard to {shard_path}");
-                op.write(&shard_path, encoded_shard).await
+                op.write_with(&shard_path, encoded_shard)
+                    .if_not_exists(true)
+                    .cache_control("public, max-age=31536000, immutable")
+                    .await
             };
             tasks.push(tokio::spawn(future()));
         }
@@ -566,7 +569,8 @@ pub struct IndexFsConfig {
     pub multi_progress: Option<MultiProgress>,
 }
 
-/// Create a new `repodata.json` for all packages in the channel at the given directory.
+/// Create a new `repodata.json` for all packages in the channel at the given
+/// directory.
 pub async fn index_fs(
     IndexFsConfig {
         channel,
@@ -598,10 +602,12 @@ pub async fn index_fs(
 pub struct IndexS3Config {
     /// The channel to index.
     pub channel: Url,
-    /// The region of the S3 bucket. If not set, the region will be auto detected from the endpoint URL.
+    /// The region of the S3 bucket. If not set, the region will be auto
+    /// detected from the endpoint URL.
     pub region: Option<String>,
     /// The endpoint URL of the S3 bucket. If not set:
-    /// - The endpoint will be loaded from `AWS_ENDPOINT_URL` environment variable.
+    /// - The endpoint will be loaded from `AWS_ENDPOINT_URL` environment
+    ///   variable.
     /// - If that is not set, the default endpoint will be used (`https://s3.amazonaws.com`).
     pub endpoint_url: Option<Url>,
     /// Whether to force path style for the S3 bucket.
@@ -635,7 +641,8 @@ pub struct IndexS3Config {
     pub multi_progress: Option<MultiProgress>,
 }
 
-/// Create a new `repodata.json` for all packages in the channel at the given S3 URL.
+/// Create a new `repodata.json` for all packages in the channel at the given S3
+/// URL.
 pub async fn index_s3(
     IndexS3Config {
         channel,
@@ -743,14 +750,14 @@ fn load_s3_credentials_from_auth_storage(
     }
 }
 
-/// Create a new `repodata.json` for all packages in the given configurator's root.
-/// If `target_platform` is `Some`, only that specific subdir is indexed.
+/// Create a new `repodata.json` for all packages in the given configurator's
+/// root. If `target_platform` is `Some`, only that specific subdir is indexed.
 /// Otherwise indexes all subdirs and creates a `repodata.json` for each.
 ///
 /// The process is the following:
-/// 1. Get all subdirs and create `noarch` and `target_platform` if they do not exist.
-/// 2. Iterate subdirs and index each subdir.
-///    Therefore, we need to:
+/// 1. Get all subdirs and create `noarch` and `target_platform` if they do not
+///    exist.
+/// 2. Iterate subdirs and index each subdir. Therefore, we need to:
 ///    1. Collect all uploaded packages in subdir
 ///    2. Collect all registered packages from `repodata.json` (if exists)
 ///    3. Determine which packages to add to and to delete from `repodata.json`

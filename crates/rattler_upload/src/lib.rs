@@ -1,13 +1,13 @@
 pub mod upload;
 pub(crate) mod utils;
 
-use crate::utils::tool_configuration;
 use miette::IntoDiagnostic;
 use rattler_conda_types::package::ArchiveType;
 use upload::opt::{
     AnacondaData, ArtifactoryData, CondaForgeData, PrefixData, QuetzData, ServerType, UploadOpts,
 };
 
+use crate::utils::tool_configuration;
 /// Upload package to different channels
 pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
     // Validate package files are provided
@@ -61,6 +61,7 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
                 s3_opts.secret_access_key,
                 s3_opts.session_token,
                 &args.package_files,
+                s3_opts.force,
             )
             .await
         }

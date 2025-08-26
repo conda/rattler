@@ -4441,6 +4441,7 @@ dependencies = [
  "console 0.16.0",
  "indicatif",
  "itertools 0.14.0",
+ "miette",
  "once_cell",
  "rattler",
  "rattler_cache",
@@ -4449,6 +4450,7 @@ dependencies = [
  "rattler_networking",
  "rattler_repodata_gateway",
  "rattler_solve",
+ "rattler_upload",
  "rattler_virtual_packages",
  "reqwest",
  "reqwest-middleware",
@@ -4916,6 +4918,8 @@ dependencies = [
 name = "rattler_upload"
 version = "0.2.0"
 dependencies = [
+ "aws-config",
+ "aws-sdk-s3",
  "base64 0.22.1",
  "clap",
  "fs-err",

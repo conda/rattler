@@ -178,15 +178,15 @@ impl S3 {
             .strip_prefix("/")
             .ok_or_else(|| anyhow::anyhow!("invalid s3 url: {}", url))?;
 
-        let presigned_request = match method {
-            &Method::HEAD => client
+        let presigned_request = match *method {
+            Method::HEAD => client
                 .head_object()
                 .bucket(bucket_name)
                 .key(key)
                 .presigned(presign_config)
                 .await
                 .context("failed to presign S3 HEAD request")?,
-            &Method::POST => client
+            Method::POST => client
                 .put_object()
                 .bucket(bucket_name)
                 .key(key)
