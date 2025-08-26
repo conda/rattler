@@ -260,6 +260,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-once-cell"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4288f83726785267c6f2ef073a3d83dc3f9b81464e9f99898240cced85fce35a"
+
+[[package]]
 name = "async-process"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3308,9 +3314,10 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "path_resolver"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "fs-err",
+ "fxhash",
  "indexmap 2.10.0",
  "itertools 0.14.0",
  "proptest",
@@ -3897,7 +3904,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.34.13"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "console",
@@ -4040,9 +4047,11 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.24.9"
+version = "0.24.10"
 dependencies = [
  "anyhow",
+ "aws-config",
+ "aws-sdk-s3",
  "bytes",
  "chrono",
  "clap",
@@ -4136,6 +4145,7 @@ name = "rattler_networking"
 version = "0.25.10"
 dependencies = [
  "anyhow",
+ "async-once-cell",
  "async-trait",
  "aws-config",
  "aws-sdk-s3",

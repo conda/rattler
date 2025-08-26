@@ -251,6 +251,7 @@ mod tests {
             async {
                 s3.generate_presigned_s3_url(
                     Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                    &Method::GET,
                 )
                 .await
                 .unwrap()
@@ -277,6 +278,7 @@ mod tests {
             async {
                 s3.generate_presigned_s3_url(
                     Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                    &Method::GET,
                 )
                 .await
                 .unwrap()
@@ -325,6 +327,7 @@ region = eu-central-1
             async {
                 s3.generate_presigned_s3_url(
                     Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                    &Method::GET,
                 )
                 .await
                 .unwrap()
@@ -349,6 +352,7 @@ region = eu-central-1
             async {
                 s3.generate_presigned_s3_url(
                     Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                    &Method::GET,
                 )
                 .await
                 .unwrap()
@@ -393,6 +397,7 @@ region = eu-central-1
         let presigned = s3
             .generate_presigned_s3_url(
                 Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                &Method::GET,
             )
             .await
             .unwrap();
@@ -422,6 +427,7 @@ region = eu-central-1
         let result = s3
             .generate_presigned_s3_url(
                 Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                &Method::GET,
             )
             .await;
         assert!(result.is_err());
@@ -448,6 +454,7 @@ region = eu-central-1
                 let result = s3
                     .generate_presigned_s3_url(
                         Url::parse("s3://rattler-s3-testing/channel/noarch/repodata.json").unwrap(),
+                        &Method::GET,
                     )
                     .await;
                 assert!(result.is_err());

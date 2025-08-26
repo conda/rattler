@@ -52,7 +52,7 @@ chrono = { version = "0.4.41", default-features = false, features = [
   "serde",
   "alloc",
 ] }
-clap = { version = "4.5.38", features = ["derive"] }
+clap = { version = "4.5.38", features = ["derive", "color", "suggestions", "error-context"] }
 clap-verbosity-flag = "3.0.3"
 cmake = "0.1.54"
 console = { version = "0.16.0", features = ["windows-console-colors"] }
@@ -74,7 +74,7 @@ getrandom = { version = "0.3.3", default-features = false }
 glob = "0.3.2"
 google-cloud-auth = { version = "0.22.0", default-features = false }
 aws-config = { version = "=1.5.18", default-features = false }
-aws-sdk-s3 = { version = "1.85.0", default-features = false}
+aws-sdk-s3 = { version = "1.85.0", default-features = false }
 hex = "0.4.3"
 hex-literal = "1.0.0"
 http = "1.3"
