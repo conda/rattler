@@ -70,17 +70,14 @@ jobs:
           "$BIN_DIR/mc" mb minio/test-channel || true
           "$BIN_DIR/mc" policy set download minio/test-channel
 
-      - name: Set up pixi
-        uses: prefix-dev/setup-pixi@8ca4608ef7f4daeb54f5205b20d0b7cb42f11143 # v0.8.14
-
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build rattler binaries
         run: |
-          pixi run build --bin rattler --release
-          pixi run build --bin rattler-index --release
+          cargo build --bin rattler --release
+          cargo build --bin rattler-index --release
 
       # MinIO client and server are installed and configured above
 
@@ -156,17 +153,14 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up pixi
-        uses: prefix-dev/setup-pixi@8ca4608ef7f4daeb54f5205b20d0b7cb42f11143 # v0.8.14
-
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build rattler binaries
         run: |
-          pixi run build --bin rattler --release
-          pixi run build --bin rattler-index --release
+          cargo build --bin rattler --release
+          cargo build --bin rattler-index --release
 
       - name: Configure AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a  # v4.3.1
