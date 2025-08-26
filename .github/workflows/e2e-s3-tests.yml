@@ -173,7 +173,7 @@ jobs:
             --create-bucket-configuration LocationConstraint=${AWS_REGION}
 
           # 1-day auto-expire objects (safety net to ensure we dont retain any files)
-          aws s3api put-bucket-lifecycle-configuration --bucket "BUCKET" --lifecycle-configuration '{
+          aws s3api put-bucket-lifecycle-configuration --bucket "${BUCKET}" --lifecycle-configuration '{
             "Rules":[{"ID":"ttl-1d","Status":"Enabled","Expiration":{"Days":1},"Filter":{"Prefix":""}}]
           }'
           
