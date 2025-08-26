@@ -92,6 +92,7 @@ jobs:
             --secret-access-key "${MINIO_SECRET_KEY}" \
             --region "${MINIO_REGION}" \
             --endpoint-url "${MINIO_ENDPOINT}" \
+            --force-path-style true \
             test-data/packages/empty-0.1.0-h4616a5c_0.conda
 
           echo "=== Step 2: Index the channel ==="
@@ -100,7 +101,8 @@ jobs:
             --access-key-id "${MINIO_ACCESS_KEY}" \
             --secret-access-key "${MINIO_SECRET_KEY}" \
             --region "${MINIO_REGION}" \
-            --endpoint-url "${MINIO_ENDPOINT}"
+            --endpoint-url "${MINIO_ENDPOINT}" \
+            --force-path-style true
 
           echo "=== Step 3: Test package discovery with dry-run ==="
           ./target/release/rattler create \
@@ -165,7 +167,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a  # v4.3.1
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/<GitHubOIDCRole>
+          role-to-assume: arn:aws:iam::239378270001:role/conda-rattler-e2e-test
 
       - name: Generate unique bucket name
         id: bucket
@@ -185,14 +187,12 @@ jobs:
           set -e
 
           echo "=== Step 1: Upload package to AWS S3 ==="
-          ./target/release/rattler upload conda \
-            --package test-data/packages/empty-0.1.0-h4616a5c_0.conda \
-            --channel s3://${BUCKET}
+          ./target/release/rattler upload s3 \
+            --channel s3://${BUCKET} \
+            test-data/packages/empty-0.1.0-h4616a5c_0.conda
 
           echo "=== Step 2: Index the channel ==="
-          ./target/release/rattler-index \
-            --channel s3://${BUCKET} \
-            --subdir noarch
+          ./target/release/rattler-index s3 s3://${BUCKET}
 
           echo "=== Step 3: Test package discovery with dry-run ==="
           ./target/release/rattler create \
