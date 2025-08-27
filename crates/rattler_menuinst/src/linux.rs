@@ -661,7 +661,7 @@ mod tests {
     };
     use tempfile::TempDir;
 
-    use crate::{schema::MenuInstSchema, test::test_data};
+    use crate::{schema::MenuInstSchema, test::test_data, render::PlaceholderString};
 
     use super::{Directories, LinuxMenu};
 
@@ -822,5 +822,134 @@ mod tests {
             .join("mime/packages/text-x-spython.xml");
         let mime_file_content = fs::read_to_string(&mime_file).unwrap();
         insta::assert_snapshot!(mime_file_content);
+    }
+
+    #[test]
+    fn test_command_without_activation() {
+        let dirs = FakeDirectories::new();
+        let fake_prefix = FakePrefix::new("spyder/menu.json");
+        
+        let item = fake_prefix.schema.menu_items[0].clone();
+        let linux = item.platforms.linux.unwrap();
+        let mut command = item.command.merge(linux.base);
+        command.activate = Some(false);
+
+        let placeholders = super::BaseMenuItemPlaceholders::new(
+            fake_prefix.prefix(),
+            fake_prefix.prefix(),
+            rattler_conda_types::Platform::current(),
+        );
+
+        let linux_menu = LinuxMenu::new_with_directories(
+            &fake_prefix.schema.menu_name,
+            fake_prefix.prefix(),
+            linux.specific,
+            command,
+            &placeholders,
+            dirs.directories().clone(),
+        );
+
+        let result = linux_menu.command().unwrap();
+        let normalized_result = result.replace(fake_prefix.prefix().to_str().unwrap(), "<PREFIX>");
+        insta::assert_snapshot!(normalized_result, @"<PREFIX>/bin/spyder '%F'");
+    }
+
+    #[test]
+    fn test_command_with_activation() {
+        let dirs = FakeDirectories::new();
+        let fake_prefix = FakePrefix::new("spyder/menu.json");
+        
+        let item = fake_prefix.schema.menu_items[0].clone();
+        let linux = item.platforms.linux.unwrap();
+        let mut command = item.command.merge(linux.base);
+        command.activate = Some(true);
+
+        let placeholders = super::BaseMenuItemPlaceholders::new(
+            fake_prefix.prefix(),
+            fake_prefix.prefix(),
+            rattler_conda_types::Platform::current(),
+        );
+
+        let linux_menu = LinuxMenu::new_with_directories(
+            &fake_prefix.schema.menu_name,
+            fake_prefix.prefix(),
+            linux.specific,
+            command,
+            &placeholders,
+            dirs.directories().clone(),
+        );
+
+        let result = linux_menu.command().unwrap();
+        assert!(result.starts_with("env "));
+        assert!(result.contains("CONDA_PREFIX="));
+        assert!(result.contains("CONDA_SHLVL="));
+        assert!(result.contains("PATH="));
+        assert!(result.contains("spyder"));
+    }
+
+    #[test]
+    fn test_command_with_precommand() {
+        let dirs = FakeDirectories::new();
+        let fake_prefix = FakePrefix::new("spyder/menu.json");
+        
+        let item = fake_prefix.schema.menu_items[0].clone();
+        let linux = item.platforms.linux.unwrap();
+        let mut command = item.command.merge(linux.base);
+        command.precommand = Some(PlaceholderString("echo 'setup'".to_string()));
+        command.activate = Some(false);
+
+        let placeholders = super::BaseMenuItemPlaceholders::new(
+            fake_prefix.prefix(),
+            fake_prefix.prefix(),
+            rattler_conda_types::Platform::current(),
+        );
+
+        let linux_menu = LinuxMenu::new_with_directories(
+            &fake_prefix.schema.menu_name,
+            fake_prefix.prefix(),
+            linux.specific,
+            command,
+            &placeholders,
+            dirs.directories().clone(),
+        );
+
+        let result = linux_menu.command().unwrap();
+        let normalized_result = result.replace(fake_prefix.prefix().to_str().unwrap(), "<PREFIX>");
+        insta::assert_snapshot!(normalized_result, @r#"bash -c "echo 'setup' && <PREFIX>/bin/spyder '%F'""#);
+    }
+
+    #[test]
+    fn test_command_with_complex_arguments() {
+        let dirs = FakeDirectories::new();
+        let fake_prefix = FakePrefix::new("spyder/menu.json");
+        
+        let item = fake_prefix.schema.menu_items[0].clone();
+        let linux = item.platforms.linux.unwrap();
+        let mut command = item.command.merge(linux.base);
+        command.command = vec![
+            PlaceholderString("python".to_string()),
+            PlaceholderString("-m".to_string()),
+            PlaceholderString("spyder".to_string()),
+            PlaceholderString("--arg with spaces".to_string()),
+        ];
+        command.activate = Some(false);
+
+        let placeholders = super::BaseMenuItemPlaceholders::new(
+            fake_prefix.prefix(),
+            fake_prefix.prefix(),
+            rattler_conda_types::Platform::current(),
+        );
+
+        let linux_menu = LinuxMenu::new_with_directories(
+            &fake_prefix.schema.menu_name,
+            fake_prefix.prefix(),
+            linux.specific,
+            command,
+            &placeholders,
+            dirs.directories().clone(),
+        );
+
+        let result = linux_menu.command().unwrap();
+        insta::assert_snapshot!(result, @"python -m spyder '--arg with spaces'");
     }
 }
