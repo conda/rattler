@@ -60,80 +60,71 @@ impl MinimalPrefixRecord {
     // loses to `gjson` and seems to work incorrectly when parsing multiple values.
     //
     // Ideal approach would be to create `SparsePrefixRecord` akin `SpareRepodata`.
-    /// Parse a minimal prefix record from a JSON file sparsely.
+    /// Parse a minimal prefix record from a JSON file using nom with memory mapping.
+    /// This is optimized for performance and stops parsing at the "files" field.
     pub fn from_path(path: &Path) -> Result<Self, io::Error> {
-        let filename_without_ext = path.file_stem().and_then(|stem| stem.to_str()).unwrap(); // It is highly unlikely that path doesn't have filename.
-        let (build, version, name) = filename_without_ext.rsplitn(3, '-').next_tuple().unwrap();
-        let content = fs_err::read_to_string(path)?;
-        let json = content.as_str();
+        use std::fs::File;
 
-        let mut sha256 = None;
-        let mut md5 = None;
-        let mut size = None;
-        let mut python_site_packages_path = None;
-        let mut requested_specs = Vec::new();
-        let mut requested_spec = None;
+        let filename_without_ext = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .ok_or_else(|| io::Error::other("Invalid filename"))?;
+        let (build, version, name) = filename_without_ext
+            .rsplitn(3, '-')
+            .next_tuple()
+            .ok_or_else(|| io::Error::other("Invalid conda-meta filename format"))?;
 
-        let sha256_val = gjson::get(json, "sha256");
-        if sha256_val.exists() && sha256_val.kind() == gjson::Kind::String {
-            if let Ok(bytes) = hex::decode(sha256_val.str()) {
-                if bytes.len() == 32 {
-                    sha256 = Some(Sha256Hash::from(
-                        <[u8; 32]>::try_from(bytes.as_slice()).unwrap(),
-                    ));
+        let file = File::open(path)?;
+        let mmap = unsafe { Mmap::map(&file)? };
+
+        // Dynamic buffer sizing: start with 64KB, double until we find "files" field or can parse successfully
+        let mut buffer_size = 65536; // Start with 64KB
+        let max_buffer_size = 16 * 1024 * 1024; // Max 16MB
+
+        let parsed = loop {
+            let content_slice = if mmap.len() > buffer_size {
+                &mmap[..buffer_size]
+            } else {
+                &mmap[..] // Use entire file if smaller than buffer
+            };
+
+            let content = std::str::from_utf8(content_slice)
+                .map_err(|e| io::Error::other(format!("Invalid UTF-8: {e}")))?;
+
+            // Try to parse with current buffer size
+            match parse_minimal_json(content) {
+                Ok(parsed) => break parsed,
+                Err(_) if buffer_size < max_buffer_size && buffer_size < mmap.len() => {
+                    // Double buffer size and retry
+                    buffer_size *= 2;
+                }
+                Err(e) => {
+                    return Err(io::Error::other(format!(
+                        "Failed to parse JSON even with {}MB buffer. File size: {} bytes. Error: {}",
+                        buffer_size / (1024 * 1024), mmap.len(), e
+                    )));
                 }
             }
         };
-        if sha256.is_none() {
-            let md5_val = gjson::get(json, "md5");
-            if md5_val.exists() && md5_val.kind() == gjson::Kind::String {
-                if let Ok(bytes) = hex::decode(md5_val.str()) {
-                    if bytes.len() == 16 {
-                        md5 = Some(Md5Hash::from(
-                            <[u8; 16]>::try_from(bytes.as_slice()).unwrap(),
-                        ));
-                    }
-                }
-            }
-        }
 
-        if sha256.is_none() && md5.is_none() {
-            let size_val = gjson::get(json, "size");
-            if size_val.exists() && size_val.kind() == gjson::Kind::Number {
-                size = Some(size_val.u64());
-            }
-        }
+        // Apply the same logic as gjson parser: only one of sha256, md5, or size
+        let (final_sha256, final_md5, final_size) = if parsed.sha256.is_some() {
+            // If sha256 exists, use it and skip md5 and size
+            (parsed.sha256, None, None)
+        } else if parsed.md5.is_some() {
+            // If no sha256 but md5 exists, use md5 and skip size
+            (None, parsed.md5, None)
+        } else {
+            // If neither sha256 nor md5, use size
+            (None, None, parsed.size)
+        };
 
-        if name.trim() == "python" {
-            let python_site_packages_path_val = gjson::get(json, "python_site_packages_path");
-            if python_site_packages_path_val.exists()
-                && python_site_packages_path_val.kind() == gjson::Kind::String
-            {
-                python_site_packages_path = Some(python_site_packages_path_val.str().into());
-            } else {
-                return Err(io::Error::other(format!(
-                    "Could not obtain python site packages path of prefix record at {}",
-                    path.display()
-                )));
-            }
-        }
-
-        // Parse requested_specs array
-        let requested_specs_val = gjson::get(json, "requested_specs");
-        if requested_specs_val.exists() && requested_specs_val.kind() == gjson::Kind::Array {
-            requested_specs_val.each(|_, val| {
-                if val.kind() == gjson::Kind::String {
-                    requested_specs.push(val.str().to_string());
-                }
-                true
-            });
-        }
-
-        // Parse deprecated requested_spec field
-        let requested_spec_val = gjson::get(json, "requested_spec");
-        if requested_spec_val.exists() && requested_spec_val.kind() == gjson::Kind::String {
-            requested_spec = Some(requested_spec_val.str().to_string());
-        }
+        // Apply the same logic as gjson parser: only parse python_site_packages_path for "python" packages
+        let final_python_site_packages_path = if name.trim() == "python" {
+            parsed.python_site_packages_path
+        } else {
+            None
+        };
 
         #[allow(deprecated)]
         Ok(Self {
@@ -143,12 +134,12 @@ impl MinimalPrefixRecord {
                 .map_err(io::Error::other)?,
             version: version.into(),
             build: build.into(),
-            sha256,
-            md5,
-            size,
-            python_site_packages_path,
-            requested_specs,
-            requested_spec,
+            sha256: final_sha256,
+            md5: final_md5,
+            size: final_size,
+            python_site_packages_path: final_python_site_packages_path,
+            requested_specs: parsed.requested_specs,
+            requested_spec: parsed.requested_spec,
         })
     }
 
