@@ -83,58 +83,59 @@ fn criterion_benchmark(c: &mut Criterion) {
     let long_file_path = temp_dir.path().join(filename);
     serde_json::to_writer(File::create(&long_file_path).unwrap(), &super_long_file).unwrap();
 
-    c.bench_function("load_prefix_record_serially", |b| {
-        b.iter(|| {
-            process_json_files_from_dir(&test_dir);
-        });
+    // Serial Processing Benchmarks (one file at a time)
+    let mut serial_group = c.benchmark_group("Serial Processing");
+    serial_group.bench_function("PrefixRecord", |b| {
+        b.iter(|| process_json_files_from_dir(&test_dir));
     });
-    c.bench_function("load_minimal_prefix_record_serially", |b| {
-        b.iter(|| {
-            process_minimal_json_files_from_dir(&test_dir);
-        });
+    serial_group.bench_function("MinimalPrefixRecord", |b| {
+        b.iter(|| process_minimal_json_files_from_dir(&test_dir));
     });
-    c.bench_function("load_package_record_serially", |b| {
-        b.iter(|| {
-            process_package_record_files_from_dir(&test_dir);
-        });
+    serial_group.bench_function("PackageRecord", |b| {
+        b.iter(|| process_package_record_files_from_dir(&test_dir));
     });
+    serial_group.finish();
 
-    c.bench_function("load_as_prefix_record", |b| {
+    // Parallel Processing Benchmarks (batch operations)
+    let mut parallel_group = c.benchmark_group("Parallel Processing");
+    parallel_group.bench_function("PrefixRecord", |b| {
         b.iter(|| load_as_prefix_record(&test_dir));
     });
-    c.bench_function("load_as_minimal_prefix_record", |b| {
+    parallel_group.bench_function("MinimalPrefixRecord", |b| {
         b.iter(|| load_as_minimal_prefix_record(&test_dir));
     });
-    c.bench_function("load_as_package_record", |b| {
+    parallel_group.bench_function("PackageRecord", |b| {
         b.iter(|| load_as_package_record(&test_dir));
     });
+    parallel_group.finish();
 
-    // Single file benchmarks
+    // Single File Benchmarks (normal size ~18MB file)
     if test_file.exists() {
-        c.bench_function("load_single_prefix_record", |b| {
+        let mut single_file_group = c.benchmark_group("Single File");
+        single_file_group.bench_function("PrefixRecord", |b| {
             b.iter(|| black_box(PrefixRecord::from_path(&test_file).unwrap()));
         });
-        c.bench_function("load_single_minimal_prefix_record", |b| {
+        single_file_group.bench_function("MinimalPrefixRecord", |b| {
             b.iter(|| black_box(MinimalPrefixRecord::from_path(&test_file).unwrap()));
         });
-        c.bench_function("load_single_package_record", |b| {
+        single_file_group.bench_function("PackageRecord", |b| {
             b.iter(|| black_box(PackageRecord::from_path(&test_file).unwrap()));
         });
+        single_file_group.finish();
     }
 
-    c.bench_function("load_long_prefix_record", |b| {
+    // Large File Benchmarks (synthetic ~20MB+ file with 20k entries)
+    let mut large_file_group = c.benchmark_group("Large File");
+    large_file_group.bench_function("PrefixRecord", |b| {
         b.iter(|| black_box(PrefixRecord::from_path(&long_file_path).unwrap()));
     });
-    c.bench_function("load_long_minimal_prefix_record", |b| {
-        b.iter(|| {
-            black_box(MinimalPrefixRecord::from_path(&long_file_path).unwrap());
-        });
+    large_file_group.bench_function("MinimalPrefixRecord", |b| {
+        b.iter(|| black_box(MinimalPrefixRecord::from_path(&long_file_path).unwrap()));
     });
-    c.bench_function("load_long_package_record", |b| {
-        b.iter(|| {
-            black_box(PackageRecord::from_path(&long_file_path).unwrap());
-        });
+    large_file_group.bench_function("PackageRecord", |b| {
+        b.iter(|| black_box(PackageRecord::from_path(&long_file_path).unwrap()));
     });
+    large_file_group.finish();
 }
 
 criterion_group!(benches, criterion_benchmark);
