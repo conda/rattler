@@ -34,13 +34,15 @@ pub struct MinimalPrefixRecord {
     /// This field is only present for python interpreter packages.
     /// This field was introduced with <https://github.com/conda/ceps/blob/main/cep-17.md>.
     pub python_site_packages_path: Option<String>,
-    /// The list of requested specs that were used to install this package.
-    /// This is used to track which specs requested this package.
-    pub requested_specs: Vec<String>,
+
     /// Deprecated: Old field for requested spec.
     /// Only used for migration to `requested_specs`.
     #[deprecated = "Use requested_specs instead"]
     pub requested_spec: Option<String>,
+
+    /// The list of requested specs that were used to install this package.
+    /// This is used to track which specs requested this package.
+    pub requested_specs: Vec<String>,
 }
 
 impl MinimalPrefixRecord {
