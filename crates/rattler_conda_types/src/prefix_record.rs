@@ -194,7 +194,7 @@ pub struct PrefixRecord {
 
     /// Multiple specs that were used when this package was installed.
     /// This field replaces the deprecated `requested_spec` field.
-    // #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requested_specs: Vec<String>,
 
     /// A sorted list of all files included in this package

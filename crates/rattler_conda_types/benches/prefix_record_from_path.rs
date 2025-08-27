@@ -36,7 +36,7 @@ fn process_minimal_json_files_from_dir(dir: &Path) {
         let path = entry.path();
 
         if path.extension().and_then(|s| s.to_str()) == Some("json") {
-            black_box(MinimalPrefixRecord::fast_from_path(&path).unwrap());
+            black_box(MinimalPrefixRecord::from_path(&path).unwrap());
         }
     }
 }
@@ -114,15 +114,9 @@ fn criterion_benchmark(c: &mut Criterion) {
         c.bench_function("load_single_prefix_record", |b| {
             b.iter(|| black_box(PrefixRecord::from_path(&test_file).unwrap()));
         });
-
         c.bench_function("load_single_minimal_prefix_record", |b| {
             b.iter(|| black_box(MinimalPrefixRecord::from_path(&test_file).unwrap()));
         });
-
-        c.bench_function("load_single_fast_minimal_prefix_record", |b| {
-            b.iter(|| black_box(MinimalPrefixRecord::fast_from_path(&test_file).unwrap()));
-        });
-
         c.bench_function("load_single_package_record", |b| {
             b.iter(|| black_box(PackageRecord::from_path(&test_file).unwrap()));
         });
@@ -136,13 +130,6 @@ fn criterion_benchmark(c: &mut Criterion) {
             black_box(MinimalPrefixRecord::from_path(&long_file_path).unwrap());
         });
     });
-
-    c.bench_function("load_long_fast_minimal_prefix_record", |b| {
-        b.iter(|| {
-            black_box(MinimalPrefixRecord::fast_from_path(&long_file_path).unwrap());
-        });
-    });
-
     c.bench_function("load_long_package_record", |b| {
         b.iter(|| {
             black_box(PackageRecord::from_path(&long_file_path).unwrap());
