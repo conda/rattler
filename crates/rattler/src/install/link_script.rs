@@ -263,6 +263,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: Vec::new(),
         };
 
         let packages_dir = tempfile::tempdir().unwrap();
@@ -290,6 +291,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: Vec::new(),
         };
 
         execute_transaction(

@@ -27,15 +27,15 @@ clap = { workspace = true, features = ["derive"] }
 console = { workspace = true, features = ["windows-console-colors"] }
 indicatif = { workspace = true }
 once_cell = { workspace = true }
-rattler = { workspace = true, features = ["indicatif"] }
+rattler = { workspace = true, features = ["indicatif", "cli-tools"] }
 rattler_conda_types = { workspace = true, default-features = false }
-rattler_networking = { workspace = true, default-features = false, features = ["gcs", "s3", "system-integration"] }
+rattler_networking = { workspace = true, default-features = false, features = ["gcs", "s3", "system-integration", "netrc-rs"] }
 rattler_repodata_gateway = { workspace = true, default-features = false, features = ["gateway"] }
 rattler_solve = { workspace = true, default-features = false, features = ["resolvo", "libsolv_c"] }
 rattler_virtual_packages = { workspace = true, default-features = false }
 rattler_cache = { workspace = true, default-features = false }
 rattler_menuinst = { workspace = true, default-features = false }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
 reqwest-middleware = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }

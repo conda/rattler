@@ -42,16 +42,18 @@ class PrefixRecord(RepoDataRecord):
         package_tarball_full_path: Optional[os.PathLike[str]] = None,
         extracted_package_dir: Optional[os.PathLike[str]] = None,
         requested_spec: Optional[str] = None,
+        requested_specs: Optional[List[str]] = None,
         files: Optional[List[os.PathLike[str]]] = None,
     ) -> None:
         record = PyRecord.create_prefix_record(
-            repodata_record._record,
-            paths_data._paths,
-            link._inner if link else None,
-            package_tarball_full_path,
-            extracted_package_dir,
-            requested_spec,
-            files,
+            repodata_record=repodata_record._record,
+            paths_data=paths_data._paths,
+            link=link._inner if link else None,
+            package_tarball_full_path=package_tarball_full_path,
+            extracted_package_dir=extracted_package_dir,
+            files=files,
+            requested_spec=requested_spec,
+            requested_specs=requested_specs,
         )
         self._record = record
 
@@ -169,11 +171,8 @@ class PrefixRecord(RepoDataRecord):
     @property
     def requested_spec(self) -> Optional[str]:
         """
-        The spec that was used when this package was installed.
-        Note that this field is not currently updated if another
-        spec was used. If this package was not directly requested by the
-        user but was instead installed as a dependency of another package
-        `None` will be returned.
+        The spec that was used when this package was installed (deprecated).
+        Use requested_specs instead.
 
         Examples
         --------
@@ -181,8 +180,8 @@ class PrefixRecord(RepoDataRecord):
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
-        >>> r.requested_spec
-        ''
+        >>> r.requested_spec is None
+        True
         >>>
         ```
         """
@@ -191,6 +190,31 @@ class PrefixRecord(RepoDataRecord):
     @requested_spec.setter
     def requested_spec(self, value: Optional[str]) -> None:
         self._record.requested_spec = value
+
+    @property
+    def requested_specs(self) -> List[str]:
+        """
+        The specs that were used when this package was installed.
+        If this package was not directly requested by the user but was instead
+        installed as a dependency of another package an empty list will be
+        returned.
+
+        Examples
+        --------
+        ```python
+        >>> r = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ... )
+        >>> r.requested_specs
+        []
+        >>>
+        ```
+        """
+        return self._record.requested_specs
+
+    @requested_specs.setter
+    def requested_specs(self, value: List[str]) -> None:
+        self._record.requested_specs = value
 
     def __repr__(self) -> str:
         """

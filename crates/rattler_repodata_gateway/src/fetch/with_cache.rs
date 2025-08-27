@@ -26,7 +26,7 @@ use crate::{
         cache::{CacheHeaders, Expiring, RepoDataState},
         jlap, CacheAction, FetchRepoDataError, RepoDataNotFoundError, Variant,
     },
-    reporter::ResponseReporterExt,
+    reporter::{DownloadReporter, ResponseReporterExt},
     utils::{AsyncEncoding, Encoding, LockedFile},
     Reporter,
 };
@@ -377,6 +377,7 @@ pub async fn fetch_repo_data(
     // Send the request and wait for a reply
     let download_reporter = reporter
         .as_deref()
+        .and_then(|reporter| reporter.download_reporter())
         .map(|r| (r, r.on_download_start(&repo_data_url)));
 
     let (client, request) = request_builder.headers(headers).build_split();
@@ -549,7 +550,7 @@ async fn stream_and_decode_to_file(
     response: Response,
     content_encoding: Encoding,
     temp_dir: &Path,
-    reporter: Option<(&dyn Reporter, usize)>,
+    reporter: Option<(&dyn DownloadReporter, usize)>,
 ) -> Result<(NamedTempFile, blake2::digest::Output<Blake2b256>), FetchRepoDataError> {
     // Determine the encoding of the response
     let transfer_encoding = Encoding::from(&response);
@@ -1012,7 +1013,7 @@ mod test {
             FetchRepoDataError, RepoDataNotFoundError,
         },
         utils::{simple_channel_server::SimpleChannelServer, Encoding},
-        Reporter,
+        DownloadReporter, JLAPReporter, Reporter,
     };
 
     async fn write_encoded(
@@ -1371,6 +1372,16 @@ mod test {
         }
 
         impl Reporter for BasicReporter {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                Some(self)
+            }
+
+            fn jlap_reporter(&self) -> Option<&dyn JLAPReporter> {
+                None
+            }
+        }
+
+        impl DownloadReporter for BasicReporter {
             fn on_download_progress(
                 &self,
                 _url: &Url,

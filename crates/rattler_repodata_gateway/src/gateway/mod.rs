@@ -8,28 +8,27 @@ mod local_subdir;
 mod query;
 mod remote_subdir;
 mod repo_data;
+mod run_exports_extractor;
 mod sharded_subdir;
 mod subdir;
 mod subdir_builder;
 
-use std::{
-    collections::HashSet,
-    sync::{Arc, Weak},
-};
+use std::{collections::HashSet, sync::Arc};
 
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
-use dashmap::{mapref::entry::Entry, DashMap};
+use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
 pub use query::{NamesQuery, RepoDataQuery};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
-use rattler_conda_types::{Channel, MatchSpec, Platform};
+use rattler_conda_types::{Channel, MatchSpec, Platform, RepoDataRecord};
 pub use repo_data::RepoData;
 use reqwest_middleware::ClientWithMiddleware;
+use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
+pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 use subdir::Subdir;
-use tokio::sync::broadcast;
 use tracing::{instrument, Level};
 use url::Url;
 
@@ -136,6 +135,49 @@ impl Gateway {
         )
     }
 
+    /// Ensure that given repodata records contain `RunExportsJson`.
+    pub async fn ensure_run_exports(
+        &self,
+        records: impl Iterator<Item = &mut RepoDataRecord>,
+        // We can avoid Arc by cloning, but this requires helper method in the trait definition.
+        progress_reporter: Option<Arc<dyn RunExportsReporter>>,
+    ) -> Result<(), RunExportExtractorError> {
+        let futures = records
+            .filter_map(|record| {
+                if record.package_record.run_exports.is_some() {
+                    // If the package already has run exports, we don't need to do anything.
+                    return None;
+                }
+
+                let extractor = RunExportExtractor::default()
+                    .with_opt_max_concurrent_requests(
+                        self.inner.concurrent_requests_semaphore.clone(),
+                    )
+                    .with_client(self.inner.client.clone())
+                    .with_global_run_exports_cache(self.inner.subdir_run_exports_cache.clone());
+
+                #[cfg(not(target_arch = "wasm32"))]
+                let extractor = extractor.with_package_cache(self.inner.package_cache.clone());
+
+                let progress_reporter = progress_reporter.clone();
+                Some(async move {
+                    extractor
+                        .extract(record, progress_reporter)
+                        .await
+                        .map(|rexp| (record, rexp))
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let results = futures::future::try_join_all(futures).await?;
+
+        for (record, result) in results {
+            record.package_record.run_exports = result;
+        }
+
+        Ok(())
+    }
+
     /// Clears any in-memory cache for the given channel.
     ///
     /// Any subsequent query will re-fetch any required data from the source.
@@ -150,7 +192,7 @@ impl Gateway {
 
 struct GatewayInner {
     /// A map of subdirectories for each channel and platform.
-    subdirs: DashMap<(Channel, Platform), PendingOrFetched<Arc<Subdir>>>,
+    subdirs: CoalescedMap<(Channel, Platform), Arc<Subdir>>,
 
     /// The client to use to fetch repodata.
     client: ClientWithMiddleware,
@@ -165,6 +207,9 @@ struct GatewayInner {
     /// The package cache, stored to reuse memory cache
     #[cfg(not(target_arch = "wasm32"))]
     package_cache: PackageCache,
+
+    /// A cache for global run exports.
+    subdir_run_exports_cache: Arc<SubdirRunExportsCache>,
 
     /// A semaphore to limit the number of concurrent requests.
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
@@ -186,85 +231,22 @@ impl GatewayInner {
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Arc<Subdir>, GatewayError> {
-        let sender = match self.subdirs.entry((channel.clone(), platform)) {
-            Entry::Vacant(entry) => {
-                // Construct a sender so other tasks can subscribe
-                let (sender, _) = broadcast::channel(1);
-                let sender = Arc::new(sender);
+        let key = (channel.clone(), platform);
+        let channel = channel.clone();
 
-                // Modify the current entry to the pending entry, this is an atomic operation
-                // because who holds the entry holds mutable access.
-                entry.insert(PendingOrFetched::Pending(Arc::downgrade(&sender)));
-
-                sender
-            }
-            Entry::Occupied(mut entry) => {
-                let subdir = entry.get();
-                match subdir {
-                    PendingOrFetched::Pending(sender) => {
-                        let sender = sender.upgrade();
-
-                        if let Some(sender) = sender {
-                            // Create a receiver before we drop the entry. While we hold on to
-                            // the entry we have exclusive access to it, this means the task
-                            // currently fetching the subdir will not be able to store a value
-                            // until we drop the entry.
-                            // By creating the receiver here we ensure that we are subscribed
-                            // before the other tasks sends a value over the channel.
-                            let mut receiver = sender.subscribe();
-
-                            // Explicitly drop the entry, so we don't block any other tasks.
-                            drop(entry);
-
-                            // The sender is still active, so we can wait for the subdir to be
-                            // created.
-                            return match receiver.recv().await {
-                                Ok(subdir) => Ok(subdir),
-                                Err(_) => {
-                                    // If this happens the sender was dropped.
-                                    Err(GatewayError::IoError(
-                                        "a coalesced request failed".to_string(),
-                                        std::io::ErrorKind::Other.into(),
-                                    ))
-                                }
-                            };
-                        } else {
-                            // Construct a sender so other tasks can subscribe
-                            let (sender, _) = broadcast::channel(1);
-                            let sender = Arc::new(sender);
-
-                            // Modify the current entry to the pending entry, this is an atomic
-                            // operation because who holds the entry holds mutable access.
-                            entry.insert(PendingOrFetched::Pending(Arc::downgrade(&sender)));
-
-                            sender
-                        }
-                    }
-                    PendingOrFetched::Fetched(records) => return Ok(records.clone()),
-                }
-            }
-        };
-
-        // At this point we have exclusive write access to this specific entry. All
-        // other tasks will find a pending entry and will wait for the records
-        // to become available.
-        //
-        // Let's start by creating the subdir. If an error occurs we immediately return
-        // the error. This will drop the sender and all other waiting tasks will
-        // receive an error.
-        let subdir = Arc::new(self.create_subdir(channel, platform, reporter).await?);
-
-        // Store the fetched files in the entry.
-        self.subdirs.insert(
-            (channel.clone(), platform),
-            PendingOrFetched::Fetched(subdir.clone()),
-        );
-
-        // Send the records to all waiting tasks. We don't care if there are no
-        // receivers, so we drop the error.
-        let _ = sender.send(subdir.clone());
-
-        Ok(subdir)
+        self.subdirs
+            .get_or_try_init(key, || async move {
+                let subdir = self.create_subdir(&channel, platform, reporter).await?;
+                Ok(Arc::new(subdir))
+            })
+            .await
+            .map_err(|e| match e {
+                CoalescedGetError::Init(gateway_err) => gateway_err,
+                CoalescedGetError::CoalescedRequestFailed => GatewayError::IoError(
+                    "a coalesced request failed".to_string(),
+                    std::io::ErrorKind::Other.into(),
+                ),
+            })
     }
 
     async fn create_subdir(
@@ -277,13 +259,6 @@ impl GatewayInner {
             .build()
             .await
     }
-}
-
-/// A record that is either pending or has been fetched.
-#[derive(Clone)]
-enum PendingOrFetched<T> {
-    Pending(Weak<broadcast::Sender<T>>),
-    Fetched(T),
 }
 
 fn force_sharded_repodata(url: &Url) -> bool {
@@ -311,11 +286,12 @@ mod test {
     use rstest::rstest;
     use url::Url;
 
-    use crate::fetch::CacheAction;
     use crate::{
+        fetch::CacheAction,
         gateway::Gateway,
         utils::{simple_channel_server::SimpleChannelServer, test::fetch_repo_data},
-        GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
+        DownloadReporter, GatewayError, JLAPReporter, RepoData, Reporter, SourceConfig,
+        SubdirSelection,
     };
 
     async fn local_conda_forge() -> Channel {
@@ -540,6 +516,11 @@ mod test {
         let total_records: usize = records.iter().map(RepoData::len).sum();
         assert!(total_records == 3);
 
+        let _repodata_records = records
+            .iter()
+            .flat_map(|r| r.iter().cloned())
+            .collect::<Vec<_>>();
+
         // Try another spec
         let matchspec = MatchSpec::from_str("openssl=3", Lenient).unwrap();
 
@@ -660,9 +641,17 @@ mod test {
         struct Downloads {
             urls: DashSet<Url>,
         }
-        impl Reporter for Arc<Downloads> {
+        impl DownloadReporter for Arc<Downloads> {
             fn on_download_complete(&self, url: &Url, _index: usize) {
                 self.urls.insert(url.clone());
+            }
+        }
+        impl Reporter for Arc<Downloads> {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                Some(self)
+            }
+            fn jlap_reporter(&self) -> Option<&dyn JLAPReporter> {
+                None
             }
         }
 
@@ -681,7 +670,7 @@ mod test {
 
         let downloads = Arc::new(Downloads::default());
 
-        // Construct a simpel query
+        // Construct a simple query
         let query = gateway
             .query(
                 vec![local_channel.channel()],
@@ -709,5 +698,91 @@ mod test {
             !downloads.urls.is_empty(),
             "after clearing the cache there should be new urls fetched"
         );
+    }
+
+    fn run_exports_missing(records: &[RepoDataRecord]) -> bool {
+        records
+            .iter()
+            .any(|rr| rr.package_record.run_exports.is_none())
+    }
+
+    fn run_exports_in_place(records: &[RepoDataRecord]) -> bool {
+        records.iter().all(|rr| {
+            let Some(run_exports) = &rr.package_record.run_exports else {
+                return false;
+            };
+            !run_exports.is_empty()
+        })
+    }
+
+    #[tokio::test]
+    async fn test_ensure_run_exports_local_conda_forge() {
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        // Try a complex spec
+        let matchspec = MatchSpec::from_str("openssl=3.*=*_1", Lenient).unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+        assert_eq!(total_records, 3);
+
+        let mut repodata_records = records
+            .iter()
+            .flat_map(|r| r.iter().cloned())
+            .collect::<Vec<_>>();
+
+        assert!(run_exports_missing(&repodata_records));
+
+        gateway
+            .ensure_run_exports(repodata_records.iter_mut(), None)
+            .await
+            .unwrap();
+
+        assert!(run_exports_in_place(&repodata_records));
+    }
+
+    #[tokio::test]
+    async fn test_ensure_run_exports_remote_conda_forge() {
+        let gateway = Gateway::new();
+
+        let records = gateway
+            .query(
+                vec![Channel::from_url(
+                    Url::parse("https://conda.anaconda.org/conda-forge/").unwrap(),
+                )],
+                vec![Platform::Linux64, Platform::NoArch],
+                vec![MatchSpec::from_str("openssl=3.*=*_1", Lenient).unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+        assert_eq!(total_records, 15);
+
+        let mut repodata_records = records
+            .iter()
+            .flat_map(|r| r.iter().cloned())
+            .collect::<Vec<_>>();
+
+        assert!(run_exports_missing(&repodata_records));
+
+        gateway
+            .ensure_run_exports(repodata_records.iter_mut(), None)
+            .await
+            .unwrap();
+
+        assert!(run_exports_in_place(&repodata_records));
     }
 }

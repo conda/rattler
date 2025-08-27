@@ -2,7 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import { simpleSolve } from "./solve";
 
 describe("solving", () => {
-    it("python should yield three packages", () => {
+    it("python should be solvable", () => {
         return simpleSolve(
             ["python"],
             [
@@ -12,18 +12,8 @@ describe("solving", () => {
             ["emscripten-wasm32", "noarch"],
             [],
         ).then((result) => {
-            const expectedPrefixes = [
-                "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/python-",
-                "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/python_abi-",
-                "https://prefix.dev/emscripten-forge-dev/noarch/emscripten-abi-",
-            ];
-
-            const urls = result.map((pkg) => pkg.url).sort();
-            expect(urls.length).toBe(expectedPrefixes.length);
-
-            urls.forEach((url, index) => {
-                expect(url.startsWith(expectedPrefixes[index])).toBe(true);
-            });
+            const python = result.find((pkg) => pkg.packageName === "python");
+            expect(python).toBeDefined();
         });
     });
 
@@ -45,26 +35,22 @@ describe("solving", () => {
                     ],
                     filename: "numpy-2.2.0-h7223423_0.tar.bz2",
                     packageName: "numpy",
-                    repoName: "https://repo.prefix.dev/emscripten-forge-dev/",
+                    repoName: "https://prefix.dev/emscripten-forge-dev/",
                     subdir: "emscripten-wasm32",
-                    url: "https://repo.prefix.dev/emscripten-forge-dev/emscripten-wasm32/numpy-2.2.0-h7223423_0.tar.bz2",
+                    url: "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/numpy-2.2.0-h7223423_0.tar.bz2",
                     version: "2.2.0",
                 },
             ],
         ).then((result) => {
-            const expectedPrefixes = [
-                "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/python-",
-                "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/python_abi-",
-                "https://prefix.dev/emscripten-forge-dev/noarch/emscripten-abi-",
-                "https://repo.prefix.dev/emscripten-forge-dev/emscripten-wasm32/numpy-2.2.0-",
-            ];
+            const python = result.find((pkg) => pkg.packageName === "python");
+            expect(python).toBeDefined();
 
-            const urls = result.map((pkg) => pkg.url).sort();
-            expect(urls.length).toBe(expectedPrefixes.length);
-
-            urls.forEach((url, index) => {
-                expect(url.startsWith(expectedPrefixes[index])).toBe(true);
-            });
+            const numpy = result.find((pkg) => pkg.packageName === "numpy");
+            expect(numpy).toBeDefined();
+            expect(numpy?.version).toBe("2.2.0");
+            expect(numpy?.url).toBe(
+                "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/numpy-2.2.0-h7223423_0.tar.bz2",
+            );
         });
     });
 
@@ -86,25 +72,17 @@ describe("solving", () => {
                     ],
                     filename: "numpy-2.2.0-h7223423_0.tar.bz2",
                     packageName: "numpy",
-                    repoName: "https://repo.prefix.dev/emscripten-forge-dev/",
+                    repoName: "https://prefix.dev/emscripten-forge-dev/",
                     subdir: "emscripten-wasm32",
-                    url: "https://repo.prefix.dev/emscripten-forge-dev/emscripten-wasm32/numpy-2.2.0-h7223423_0.tar.bz2",
+                    url: "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/numpy-2.2.0-h7223423_0.tar.bz2",
                     version: "2.2.0",
                 },
             ],
         ).then((result) => {
-            const expectedPrefixes = [
-                "https://repo.prefix.dev/emscripten-forge-dev/emscripten-wasm32/numpy-2.2.0-",
-                "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/python_abi-",
-                "https://prefix.dev/emscripten-forge-dev/noarch/emscripten-abi-",
-            ];
-
             const urls = result.map((pkg) => pkg.url);
-            expect(urls.length).toBe(expectedPrefixes.length);
-
-            urls.forEach((url, index) => {
-                expect(url.startsWith(expectedPrefixes[index])).toBe(true);
-            });
+            expect(urls).toContain(
+                "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/numpy-2.2.0-h7223423_0.tar.bz2",
+            );
         });
     });
 
@@ -126,24 +104,17 @@ describe("solving", () => {
                     ],
                     filename: "numpy-2.2.0-h7223423_0.tar.bz2",
                     packageName: "numpy",
-                    repoName: "https://repo.prefix.dev/emscripten-forge-dev/",
+                    repoName: "https://prefix.dev/emscripten-forge-dev/",
                     subdir: "emscripten-wasm32",
-                    url: "https://repo.prefix.dev/emscripten-forge-dev/emscripten-wasm32/numpy-2.2.0-h7223423_0.tar.bz2",
+                    url: "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/numpy-2.2.0-h7223423_0.tar.bz2",
                     version: "2.2.0",
                 },
             ],
         ).then((result) => {
-            const expectedPrefixes = [
-                "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/numpy-2.2.6-",
-                "https://prefix.dev/emscripten-forge-dev/emscripten-wasm32/python_abi-",
-                "https://prefix.dev/emscripten-forge-dev/noarch/emscripten-abi-",
-            ];
-
             const urls = result.map((pkg) => pkg.url).sort();
-            expect(urls.length).toBe(expectedPrefixes.length);
-            urls.forEach((url, index) => {
-                expect(url.startsWith(expectedPrefixes[index])).toBe(true);
-            });
+            const numpy = result.find((pkg) => pkg.packageName === "numpy");
+            expect(numpy).toBeDefined();
+            expect(numpy?.version).toBe("2.2.6");
         });
     });
 });

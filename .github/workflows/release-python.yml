@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build sdist"
-        uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1.49.3
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           working-directory: py-rattler
           command: sdist
@@ -81,7 +81,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
       - name: "Build wheels"
-        uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1.49.3
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
@@ -116,7 +116,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Build wheels"
-        uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1.49.3
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           working-directory: py-rattler
           target: ${{ matrix.target }}
@@ -153,7 +153,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
-        uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1.49.3
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
@@ -201,7 +201,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
-        uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1.49.3
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
@@ -246,7 +246,7 @@ jobs:
           architecture: x64
       - name: "Build wheels (rustls-tls)"
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1.49.3
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           working-directory: py-rattler
           target: ${{ matrix.target }}
@@ -254,7 +254,7 @@ jobs:
           args: --release --out dist --no-default-features --features rustls-tls
       - name: "Build wheels (native-tls)"
         if: matrix.target != 'x86_64-unknown-linux-musl'
-        uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1.49.3
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           working-directory: py-rattler
           target: ${{ matrix.target }}
@@ -296,7 +296,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build wheels"
-        uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1.49.3
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
@@ -331,7 +331,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Build wheels - x86_64"
-        uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1.49.3
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           working-directory: py-rattler
           target: x86_64
@@ -358,7 +358,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Build wheels - universal2"
-        uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1.49.3
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           args: --release --target universal2-apple-darwin --out dist --no-default-features --features rustls-tls
           working-directory: py-rattler

@@ -16,7 +16,7 @@ build = "cargo build"
 check = "cargo check"
 # libsolv compilation cannot find pixi's clang for some reason
 # so we skip that test for now
-test = "cargo nextest run --workspace --no-default-features --features=indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,experimental_extras,edit,rattler_config -E 'not test(libsolv_bindings_up_to_date)' --no-fail-fast"
+test = "cargo nextest run --workspace --no-default-features --features=indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,experimental_extras,edit,rattler_config,cli-tools -E 'not test(libsolv_bindings_up_to_date)' --no-fail-fast"
 rattler = "cargo run --bin rattler --release --"
 doc = "RUSTDOCFLAGS='-Dwarnings -Wunreachable-pub' cargo doc --no-deps --all --all-features"
 

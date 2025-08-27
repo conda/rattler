@@ -53,7 +53,7 @@ pub use repo_data::{
     compute_package_url,
     patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},
     sharded::{Shard, ShardedRepodata, ShardedSubdirInfo},
-    ChannelInfo, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
+    ChannelInfo, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData, SubdirRunExportsJson,
     ValidatePackageRecordsError,
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};

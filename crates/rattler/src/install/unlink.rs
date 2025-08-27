@@ -258,6 +258,7 @@ mod tests {
             vec![prefix_record.clone()],
             Vec::<RepoDataRecord>::new().into_iter(),
             None,
+            None, // ignored packages
             Platform::current(),
         )
         .unwrap();
@@ -322,6 +323,7 @@ mod tests {
             vec![prefix_record.clone()],
             Vec::<RepoDataRecord>::new().into_iter(),
             None,
+            None, // ignored packages
             Platform::current(),
         )
         .unwrap();
@@ -418,8 +420,7 @@ mod tests {
             let repodata_record = get_repodata_record(&package_path);
             // Construct a PrefixRecord for the package
 
-            let prefix_record =
-                PrefixRecord::from_repodata_record(repodata_record, None, None, paths, None, None);
+            let prefix_record = PrefixRecord::from_repodata_record(repodata_record, paths);
             prefix_record
                 .write_to_path(conda_meta_path.join(prefix_record.file_name()), true)
                 .unwrap();

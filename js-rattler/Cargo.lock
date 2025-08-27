@@ -264,6 +264,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "coalesced_map"
+version = "0.1.1"
+dependencies = [
+ "dashmap",
+ "tokio",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -530,11 +538,11 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "file_url"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "itertools",
  "percent-encoding",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "typed-path",
  "url",
 ]
@@ -591,9 +599,9 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "form_urlencoded"
-version = "1.2.1"
+version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e13624c2627564efccf4934284bdd98cbaa14e79b0b5a141218e507b3a823456"
+checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
 ]
@@ -786,7 +794,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -1105,9 +1113,9 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "idna"
-version = "1.0.3"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "686f825264d630750a544639377bae737628043f20d38bbc029e8f29ea968a7e"
+checksum = "3b0875f23caa03898994f6ddc501886a45c7d3d62d04d2d90788d47be1b1e4de"
 dependencies = [
  "idna_adapter",
  "smallvec",
@@ -1137,9 +1145,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.9.0"
+version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cea70ddb795996207ad57735b50c5982d8844f38ba9ee5f1aedcfb708a2aa11e"
+checksum = "fe4cd85333e22411419a0bcae1297d25e58c9443848b11dc6a86fefe8c78a661"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.4",
@@ -1200,7 +1208,7 @@ dependencies = [
  "rattler_solve",
  "serde",
  "serde-wasm-bindgen",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1509,18 +1517,20 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "percent-encoding"
-version = "2.3.1"
+version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
+checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "petgraph"
-version = "0.7.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772"
+checksum = "54acf3a685220b533e437e264e4d932cfbdc4cc7ec0cd232ed73c08d03b8a7ca"
 dependencies = [
  "fixedbitset",
- "indexmap 2.9.0",
+ "hashbrown 0.15.4",
+ "indexmap 2.10.0",
+ "serde",
 ]
 
 [[package]]
@@ -1649,7 +1659,7 @@ dependencies = [
  "phf",
  "serde",
  "smartstring",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "unicase",
 ]
 
@@ -1667,7 +1677,7 @@ dependencies = [
  "rustc-hash",
  "rustls",
  "socket2",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tokio",
  "tracing",
  "web-time",
@@ -1688,7 +1698,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tinyvec",
  "tracing",
  "web-time",
@@ -1790,7 +1800,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.26"
+version = "0.3.31"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -1806,13 +1816,14 @@ dependencies = [
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_redaction",
  "rayon",
  "reqwest",
  "reqwest-middleware",
  "serde_json",
  "simple_spawn_blocking",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tokio",
  "tracing",
  "url",
@@ -1820,7 +1831,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.35.6"
+version = "0.39.0"
 dependencies = [
  "chrono",
  "core-foundation",
@@ -1830,7 +1841,7 @@ dependencies = [
  "fxhash",
  "glob",
  "hex",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "itertools",
  "lazy-regex",
  "nom",
@@ -1851,7 +1862,7 @@ dependencies = [
  "smallvec",
  "strum",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tracing",
  "typed-path",
  "url",
@@ -1859,7 +1870,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.1.4"
+version = "1.1.5"
 dependencies = [
  "blake2",
  "digest",
@@ -1883,7 +1894,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.6"
+version = "0.25.10"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1898,14 +1909,14 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tracing",
  "url",
 ]
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.45"
+version = "0.23.1"
 dependencies = [
  "bzip2",
  "chrono",
@@ -1922,7 +1933,7 @@ dependencies = [
  "simple_spawn_blocking",
  "tar",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1942,7 +1953,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.23.7"
+version = "0.24.1"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -1953,6 +1964,7 @@ dependencies = [
  "cache_control",
  "cfg-if 1.0.1",
  "chrono",
+ "coalesced_map",
  "dashmap",
  "dirs",
  "file_url",
@@ -1973,6 +1985,7 @@ dependencies = [
  "rattler_conda_types",
  "rattler_digest",
  "rattler_networking",
+ "rattler_package_streaming",
  "rattler_redaction",
  "reqwest",
  "reqwest-middleware",
@@ -1986,7 +1999,7 @@ dependencies = [
  "strum",
  "superslice",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1998,7 +2011,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "2.1.6"
+version = "3.0.1"
 dependencies = [
  "chrono",
  "futures",
@@ -2007,7 +2020,7 @@ dependencies = [
  "rattler_digest",
  "resolvo",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
  "tracing",
 ]
 
@@ -2048,7 +2061,7 @@ checksum = "dd6f9d3d47bdd2ad6945c5015a226ec6155d0bcdfd8f7cd29f86b71f8de99d2b"
 dependencies = [
  "getrandom 0.2.16",
  "libredox",
- "thiserror 2.0.12",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -2160,16 +2173,16 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.9.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dba027c8e5dd4b5e5a690cfcfb3900d5ffe6985adb048cbd111d5aa596a6c0c8"
+checksum = "037a5f3f35329f29885132d030c628f3142d2a098d0abb30513c572b900692fd"
 dependencies = [
  "ahash",
  "bitvec",
  "elsa",
  "event-listener",
  "futures",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "itertools",
  "petgraph",
  "tracing",
@@ -2469,7 +2482,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "schemars",
  "serde",
  "serde_derive",
@@ -2496,7 +2509,7 @@ version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "itoa",
  "ryu",
  "serde",
@@ -2720,11 +2733,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.12"
+version = "2.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
+checksum = "3467d614147380f2e4e374161426ff399c91084acd2363eaf549172b3d5e60c0"
 dependencies = [
- "thiserror-impl 2.0.12",
+ "thiserror-impl 2.0.16",
 ]
 
 [[package]]
@@ -2740,9 +2753,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.12"
+version = "2.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f7cf42b4507d8ea322120659672cf1b9dbb93f8f2d4ecfd6e51350ff5b17a1d"
+checksum = "6c5e1be1c48b9172ee610da68fd9cd2770e7a4056cb3fc98710ee6906f0c7960"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2981,9 +2994,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "url"
-version = "2.5.4"
+version = "2.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32f8b686cadd1473f4bd0117a5d28d36b1ade384ea9b5069a1c40aefed7fda60"
+checksum = "08bc136a29a3d1758e07a9cca267be308aeebf5cfd5a10f3f67ab2097683ef5b"
 dependencies = [
  "form_urlencoded",
  "idna",
@@ -3604,7 +3617,7 @@ dependencies = [
  "arbitrary",
  "crc32fast",
  "flate2",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "memchr",
  "time",
  "zopfli",
