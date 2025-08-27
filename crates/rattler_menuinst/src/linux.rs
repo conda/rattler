@@ -290,20 +290,28 @@ impl LinuxMenu {
     }
 
     fn command(&self) -> Result<String, MenuInstError> {
-        let mut envs = Vec::new();
-        if self.command.activate.unwrap_or(false) {
-            // create a bash activation script and emit it into the script
-            let activator = Activator::from_path(&self.prefix, shell::Bash, Platform::current())?;
-            let activation_variables = ActivationVariables {
-                path_modification_behavior: PathModificationBehavior::Prepend,
-                ..Default::default()
-            };
-            let activation_env = activator.run_activation(activation_variables, None)?;
+        let envs = self
+            .command
+            .activate
+            .unwrap_or(false)
+            .then(|| {
+                // create a bash activation script and emit it into the script
+                let activator =
+                    Activator::from_path(&self.prefix, shell::Bash, Platform::current())?;
+                let activation_variables = ActivationVariables {
+                    path_modification_behavior: PathModificationBehavior::Prepend,
+                    ..Default::default()
+                };
+                let activation_env = activator.run_activation(activation_variables, None)?;
 
-            for (k, v) in activation_env {
-                envs.push(format!(r#""{k}={v}""#));
-            }
-        }
+                let envs = activation_env
+                    .into_iter()
+                    .map(|(k, v)| format!(r#""{k}={v}""#))
+                    .collect();
+                Ok::<Vec<String>, MenuInstError>(envs)
+            })
+            .transpose()?
+            .unwrap_or_default();
 
         let main_command = self
             .command
