@@ -36,7 +36,7 @@ fn process_minimal_json_files_from_dir(dir: &Path) {
         let path = entry.path();
 
         if path.extension().and_then(|s| s.to_str()) == Some("json") {
-            black_box(MinimalPrefixRecord::from_path(&path).unwrap());
+            black_box(MinimalPrefixRecord::fast_from_path(&path).unwrap());
         }
     }
 }
@@ -59,9 +59,9 @@ fn load_as_minimal_prefix_record(dir: &Path) -> Vec<PrefixRecord> {
 
 fn criterion_benchmark(c: &mut Criterion) {
     let test_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data/conda-meta");
+    let test_file = test_dir.join("rust-1.88.0-h1a8d7c4_0.json");
 
-    let mut super_long_file: PrefixRecord =
-        PrefixRecord::from_path(test_dir.join("rust-1.88.0-h1a8d7c4_0.json")).unwrap();
+    let mut super_long_file: PrefixRecord = PrefixRecord::from_path(&test_file).unwrap();
     // duplicate data until we have 20k paths
     let files = super_long_file.files.clone();
     while super_long_file.files.len() < 20_000 {
@@ -109,6 +109,25 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| load_as_package_record(&test_dir));
     });
 
+    // Single file benchmarks
+    if test_file.exists() {
+        c.bench_function("load_single_prefix_record", |b| {
+            b.iter(|| black_box(PrefixRecord::from_path(&test_file).unwrap()));
+        });
+
+        c.bench_function("load_single_minimal_prefix_record", |b| {
+            b.iter(|| black_box(MinimalPrefixRecord::from_path(&test_file).unwrap()));
+        });
+
+        c.bench_function("load_single_fast_minimal_prefix_record", |b| {
+            b.iter(|| black_box(MinimalPrefixRecord::fast_from_path(&test_file).unwrap()));
+        });
+
+        c.bench_function("load_single_package_record", |b| {
+            b.iter(|| black_box(PackageRecord::from_path(&test_file).unwrap()));
+        });
+    }
+
     c.bench_function("load_long_prefix_record", |b| {
         b.iter(|| black_box(PrefixRecord::from_path(&long_file_path).unwrap()));
     });
@@ -117,6 +136,13 @@ fn criterion_benchmark(c: &mut Criterion) {
             black_box(MinimalPrefixRecord::from_path(&long_file_path).unwrap());
         });
     });
+
+    c.bench_function("load_long_fast_minimal_prefix_record", |b| {
+        b.iter(|| {
+            black_box(MinimalPrefixRecord::fast_from_path(&long_file_path).unwrap());
+        });
+    });
+
     c.bench_function("load_long_package_record", |b| {
         b.iter(|| {
             black_box(PackageRecord::from_path(&long_file_path).unwrap());
