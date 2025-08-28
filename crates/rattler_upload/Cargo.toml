@@ -22,7 +22,7 @@ rattler_package_streaming = { workspace = true, default-features = false }
 rattler_config = { workspace = true, default-features = false }
 rattler_solve = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }
-clap = { workspace = true }
+clap = { workspace = true, features = ["env"] }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indicatif = { workspace = true }
