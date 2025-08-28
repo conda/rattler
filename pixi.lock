@@ -4577,7 +4577,7 @@ packages:
 - conda: crates/rattler-bin
   name: rattler
   version: 0.1.0
-  build: hbf21a9e_0
+  build: ha7ad5ef_0
   subdir: linux-64
   constrains:
   - __glibc >=2.17
@@ -4591,7 +4591,7 @@ packages:
 - conda: crates/rattler-bin
   name: rattler
   version: 0.1.0
-  build: hbf21a9e_0
+  build: ha7ad5ef_0
   subdir: osx-64
   constrains:
   - __osx >=10.13
@@ -4605,7 +4605,7 @@ packages:
 - conda: crates/rattler-bin
   name: rattler
   version: 0.1.0
-  build: hbf21a9e_0
+  build: ha7ad5ef_0
   subdir: osx-arm64
   constrains:
   - __osx >=11.0
@@ -4619,7 +4619,7 @@ packages:
 - conda: crates/rattler-bin
   name: rattler
   version: 0.1.0
-  build: hbf21a9e_0
+  build: ha7ad5ef_0
   subdir: win-64
   license: BSD-3-Clause
   input:
@@ -4631,7 +4631,7 @@ packages:
 - conda: crates/rattler_index
   name: rattler_index
   version: 0.24.10
-  build: hbf21a9e_0
+  build: ha7ad5ef_0
   subdir: linux-64
   constrains:
   - __glibc >=2.17
@@ -4645,7 +4645,7 @@ packages:
 - conda: crates/rattler_index
   name: rattler_index
   version: 0.24.10
-  build: hbf21a9e_0
+  build: ha7ad5ef_0
   subdir: osx-64
   constrains:
   - __osx >=10.13
@@ -4659,7 +4659,7 @@ packages:
 - conda: crates/rattler_index
   name: rattler_index
   version: 0.24.10
-  build: hbf21a9e_0
+  build: ha7ad5ef_0
   subdir: osx-arm64
   constrains:
   - __osx >=11.0
@@ -4673,7 +4673,7 @@ packages:
 - conda: crates/rattler_index
   name: rattler_index
   version: 0.24.10
-  build: hbf21a9e_0
+  build: ha7ad5ef_0
   subdir: win-64
   license: BSD-3-Clause
   input:
