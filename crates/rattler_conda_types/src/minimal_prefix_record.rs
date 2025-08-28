@@ -55,10 +55,6 @@ pub struct MinimalPrefixRecord {
 }
 
 impl MinimalPrefixRecord {
-    // Could use `ajson` as it can parse multiple values at once,
-    // which could make it faster, although on synthetic benchmarks it
-    // loses to `gjson` and seems to work incorrectly when parsing multiple values.
-    //
     // Ideal approach would be to create `SparsePrefixRecord` akin `SpareRepodata`.
     /// Parse a minimal prefix record from a JSON file using nom with memory mapping.
     /// This is optimized for performance and stops parsing at the "files" field.
@@ -178,88 +174,6 @@ impl MinimalPrefixRecord {
             experimental_extra_depends: std::collections::BTreeMap::new(),
             legacy_bz2_md5: None,
         }
-    }
-
-    /// Fast parsing using nom with memory mapping (64KB limit).
-    /// This is potentially much faster than the gjson-based parser for large files.
-    pub fn fast_from_path(path: &Path) -> Result<Self, io::Error> {
-        use std::fs::File;
-
-        let filename_without_ext = path
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .ok_or_else(|| io::Error::other("Invalid filename"))?;
-        let (build, version, name) = filename_without_ext
-            .rsplitn(3, '-')
-            .next_tuple()
-            .ok_or_else(|| io::Error::other("Invalid conda-meta filename format"))?;
-
-        let file = File::open(path)?;
-        let mmap = unsafe { Mmap::map(&file)? };
-
-        // Dynamic buffer sizing: start with 64KB, double until we find "files" field or can parse successfully
-        let mut buffer_size = 65536; // Start with 64KB
-        let max_buffer_size = 16 * 1024 * 1024; // Max 16MB
-
-        let parsed = loop {
-            let content_slice = if mmap.len() > buffer_size {
-                &mmap[..buffer_size]
-            } else {
-                &mmap[..] // Use entire file if smaller than buffer
-            };
-
-            let content = std::str::from_utf8(content_slice)
-                .map_err(|e| io::Error::other(format!("Invalid UTF-8: {e}")))?;
-
-            // Try to parse with current buffer size
-            match parse_minimal_json(content) {
-                Ok(parsed) => break parsed,
-                Err(_) if buffer_size < max_buffer_size && buffer_size < mmap.len() => {
-                    // Double buffer size and retry
-                    buffer_size *= 2;
-                }
-                Err(e) => {
-                    return Err(io::Error::other(format!(
-                        "Failed to parse JSON even with {}MB buffer. File size: {} bytes. Error: {}",
-                        buffer_size / (1024 * 1024), mmap.len(), e
-                    )));
-                }
-            }
-        };
-
-        // Apply the same logic as gjson parser: only one of sha256, md5, or size
-        let (final_sha256, final_md5, final_size) = if parsed.sha256.is_some() {
-            // If sha256 exists, use it and skip md5 and size
-            (parsed.sha256, None, None)
-        } else if parsed.md5.is_some() {
-            // If no sha256 but md5 exists, use md5 and skip size
-            (None, parsed.md5, None)
-        } else {
-            // If neither sha256 nor md5, use size
-            (None, None, parsed.size)
-        };
-
-        // Apply the same logic as gjson parser: only parse python_site_packages_path for "python" packages
-        let final_python_site_packages_path = if name.trim() == "python" {
-            parsed.python_site_packages_path
-        } else {
-            None
-        };
-
-        #[allow(deprecated)]
-        Ok(Self {
-            name: name
-                .parse::<PackageName>()
-                .map_err(|e| io::Error::other(format!("Invalid package name: {e}")))?,
-            version: version.to_string(),
-            build: build.to_string(),
-            sha256: final_sha256,
-            md5: final_md5,
-            size: final_size,
-            python_site_packages_path: final_python_site_packages_path,
-            requested_specs: parsed.requested_specs,
-            requested_spec: parsed.requested_spec,
-        })
     }
 }
 
@@ -578,39 +492,6 @@ mod tests {
     use super::*;
     use std::fs;
 
-    /// Create test file with proper conda-meta naming convention
-    fn create_named_test_file() -> tempfile::TempDir {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let file_path = temp_dir.path().join("test-package-1.2.3-py39_0.json");
-
-        let json_content = r#"{
-  "name": "test-package",
-  "version": "1.2.3",
-  "build": "py39_0",
-  "build_number": 0,
-  "depends": ["python >=3.9"],
-  "sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-  "md5": "1234567890abcdef1234567890abcdef",
-  "size": 1048576,
-  "channel": "conda-forge",
-  "url": "https://conda.anaconda.org/conda-forge/test-package-1.2.3-py39_0.tar.bz2",
-  "python_site_packages_path": "lib/python3.9/site-packages",
-  "requested_spec": "test-package >=1.0",
-  "requested_specs": ["test-package >=1.0", "test-package <2.0"],
-  "files": [
-    "lib/python3.9/site-packages/test/__init__.py",
-    "lib/python3.9/site-packages/test/module.py"
-  ],
-  "paths_data": {
-    "paths_version": 1,
-    "paths": []
-  }
-}"#;
-
-        fs::write(&file_path, json_content).unwrap();
-        temp_dir
-    }
-
     /// Test file with missing optional fields
     fn create_minimal_test_file() -> tempfile::TempDir {
         let temp_dir = tempfile::tempdir().unwrap();
@@ -654,110 +535,41 @@ mod tests {
     }
 
     #[test]
-    fn test_fast_parser_matches_gjson_parser() {
-        let temp_dir = create_named_test_file();
-        let file_path = temp_dir.path().join("test-package-1.2.3-py39_0.json");
-
-        // Parse with both methods
-        let gjson_result = MinimalPrefixRecord::from_path(&file_path).unwrap();
-        let fast_result = MinimalPrefixRecord::fast_from_path(&file_path).unwrap();
-
-        // Compare all fields
-        assert_eq!(
-            gjson_result.name, fast_result.name,
-            "Package names should match"
-        );
-        assert_eq!(
-            gjson_result.version, fast_result.version,
-            "Versions should match"
-        );
-        assert_eq!(gjson_result.build, fast_result.build, "Builds should match");
-        assert_eq!(
-            gjson_result.sha256, fast_result.sha256,
-            "SHA256 hashes should match"
-        );
-        assert_eq!(gjson_result.md5, fast_result.md5, "MD5 hashes should match");
-        assert_eq!(gjson_result.size, fast_result.size, "Sizes should match");
-        assert_eq!(
-            gjson_result.python_site_packages_path, fast_result.python_site_packages_path,
-            "Python site packages paths should match"
-        );
-        assert_eq!(
-            gjson_result.requested_specs, fast_result.requested_specs,
-            "Requested specs should match"
-        );
-        assert_eq!(
-            gjson_result.requested_spec, fast_result.requested_spec,
-            "Requested spec (deprecated) should match"
-        );
-    }
-
-    #[test]
     fn test_fast_parser_handles_missing_fields() {
         let temp_dir = create_minimal_test_file();
         let file_path = temp_dir.path().join("minimal-package-0.1.0-build_1.json");
 
-        // Parse with both methods
-        let gjson_result = MinimalPrefixRecord::from_path(&file_path).unwrap();
-        let fast_result = MinimalPrefixRecord::fast_from_path(&file_path).unwrap();
+        let result = MinimalPrefixRecord::from_path(&file_path).unwrap();
 
-        // Compare all fields
-        assert_eq!(gjson_result.name.as_source(), "minimal-package");
-        assert_eq!(fast_result.name.as_source(), "minimal-package");
-        assert_eq!(gjson_result.version, "0.1.0");
-        assert_eq!(fast_result.version, "0.1.0");
-        assert_eq!(gjson_result.build, "build_1");
-        assert_eq!(fast_result.build, "build_1");
+        assert_eq!(result.name.as_source(), "minimal-package");
+        assert_eq!(result.version, "0.1.0");
+        assert_eq!(result.build, "build_1");
 
-        // These should be None/empty for minimal file
-        assert_eq!(gjson_result.sha256, None);
-        assert_eq!(fast_result.sha256, None);
-        assert_eq!(gjson_result.md5, None);
-        assert_eq!(fast_result.md5, None);
-        assert_eq!(gjson_result.size, None);
-        assert_eq!(fast_result.size, None);
-        assert_eq!(gjson_result.python_site_packages_path, None);
-        assert_eq!(fast_result.python_site_packages_path, None);
-        assert_eq!(gjson_result.requested_spec, None);
-        assert_eq!(fast_result.requested_spec, None);
+        assert_eq!(result.sha256, None);
+        assert_eq!(result.md5, None);
+        assert_eq!(result.size, None);
+        assert_eq!(result.python_site_packages_path, None);
+        assert_eq!(result.requested_spec, None);
 
-        // Requested specs should be empty
-        assert!(gjson_result.requested_specs.is_empty());
-        assert!(fast_result.requested_specs.is_empty());
+        assert!(result.requested_specs.is_empty());
     }
 
     #[test]
-    fn test_fast_parser_handles_legacy_requested_spec() {
+    fn test_parser_handles_legacy_requested_spec() {
         let temp_dir = create_legacy_test_file();
         let file_path = temp_dir.path().join("legacy-package-2.0.0-abc123.json");
 
-        // Parse with both methods
-        let gjson_result = MinimalPrefixRecord::from_path(&file_path).unwrap();
-        let fast_result = MinimalPrefixRecord::fast_from_path(&file_path).unwrap();
+        let result = MinimalPrefixRecord::from_path(&file_path).unwrap();
 
-        // Compare all fields
-        assert_eq!(gjson_result.name, fast_result.name);
-        assert_eq!(gjson_result.version, fast_result.version);
-        assert_eq!(gjson_result.build, fast_result.build);
-        assert_eq!(gjson_result.sha256, fast_result.sha256);
-        assert_eq!(gjson_result.md5, fast_result.md5);
-        assert_eq!(gjson_result.size, fast_result.size);
-
-        // Should have legacy requested_spec but no requested_specs
         assert_eq!(
-            gjson_result.requested_spec,
+            result.requested_spec,
             Some("legacy-package ==2.0.0".to_string())
         );
-        assert_eq!(
-            fast_result.requested_spec,
-            Some("legacy-package ==2.0.0".to_string())
-        );
-        assert!(gjson_result.requested_specs.is_empty());
-        assert!(fast_result.requested_specs.is_empty());
+        assert!(result.requested_specs.is_empty());
     }
 
     #[test]
-    fn test_fast_parser_early_termination_at_files() {
+    fn test_parser_early_termination_at_files() {
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("early-term-test-1.0.0-build1.json");
 
@@ -779,86 +591,20 @@ mod tests {
         fs::write(&file_path, json_content).unwrap();
 
         // The fast parser should work and ignore fields after "files"
-        let fast_result = MinimalPrefixRecord::fast_from_path(&file_path).unwrap();
+        let result = MinimalPrefixRecord::from_path(&file_path).unwrap();
 
-        assert_eq!(fast_result.name.as_source(), "early-term-test");
-        assert_eq!(fast_result.version, "1.0.0");
-        assert_eq!(fast_result.build, "build1");
-        assert!(fast_result.sha256.is_some());
-        assert_eq!(fast_result.requested_specs, vec!["early-term-test >=1.0"]);
+        assert_eq!(result.name.as_source(), "early-term-test");
+        assert_eq!(result.version, "1.0.0");
+        assert_eq!(result.build, "build1");
+        assert!(result.sha256.is_some());
+        assert_eq!(result.requested_specs, vec!["early-term-test >=1.0"]);
     }
 
     #[test]
-    fn test_fast_parser_handles_large_prefix_simulation() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let file_path = temp_dir.path().join("large-sim-1.0.0-build1.json");
-
-        // Create a JSON that simulates the structure but is small enough for testing
-        // Put all our fields before "files" to test realistic ordering
-        let mut json_content = r#"{
-  "name": "large-sim",
-  "version": "1.0.0",
-  "build": "build1",
-  "build_number": 0,
-  "depends": ["python >=3.8"],
-  "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-  "md5": "abcdef1234567890abcdef1234567890",
-  "size": 5242880,
-  "channel": "conda-forge",
-  "subdir": "noarch",
-  "python_site_packages_path": "lib/python3.8/site-packages",
-  "requested_spec": "large-sim >=1.0",
-  "requested_specs": ["large-sim >=1.0", "large-sim <2.0"],
-  "files": ["#
-            .to_string();
-
-        // Add many file entries to simulate a large package
-        for i in 0..1000 {
-            json_content.push_str(&format!(
-                "\"lib/python3.8/site-packages/package/file_{i}.py\",\n    ",
-            ));
-        }
-
-        // Remove trailing comma and close
-        json_content.truncate(json_content.len() - 6); // Remove ",\n    "
-        json_content.push_str(
-            r#"
-  ],
-  "paths_data": {
-    "paths_version": 1,
-    "paths": []
-  }
-}"#,
-        );
-
-        fs::write(&file_path, json_content).unwrap();
-
-        // Both parsers should work
-        let gjson_result = MinimalPrefixRecord::from_path(&file_path).unwrap();
-        let fast_result = MinimalPrefixRecord::fast_from_path(&file_path).unwrap();
-
-        // They should produce identical results
-        assert_eq!(gjson_result.name, fast_result.name);
-        assert_eq!(gjson_result.version, fast_result.version);
-        assert_eq!(gjson_result.build, fast_result.build);
-        assert_eq!(gjson_result.sha256, fast_result.sha256);
-        assert_eq!(gjson_result.md5, fast_result.md5);
-        assert_eq!(gjson_result.size, fast_result.size);
-        assert_eq!(
-            gjson_result.python_site_packages_path,
-            fast_result.python_site_packages_path
-        );
-        assert_eq!(gjson_result.requested_specs, fast_result.requested_specs);
-        assert_eq!(gjson_result.requested_spec, fast_result.requested_spec);
-    }
-
-    #[test]
-    fn test_fast_parser_large_file() {
+    fn test_parse_large_file() {
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("size-test-1.0.0-build1.json");
 
-        // Create JSON larger than 64KB to test memory mapping limit
-        // Keep all essential fields small and at the beginning
         let json_content = format!(
             r#"{{
   "name": "size-test",
@@ -878,30 +624,26 @@ mod tests {
 
         fs::write(&file_path, json_content).unwrap();
 
-        // Fast parser should work with dynamic buffer sizing
-        let fast_result = MinimalPrefixRecord::fast_from_path(&file_path).unwrap();
+        let result = MinimalPrefixRecord::from_path(&file_path).unwrap();
 
-        assert_eq!(fast_result.name.as_source(), "size-test");
-        assert_eq!(fast_result.version, "1.0.0");
-        assert_eq!(fast_result.build, "build1");
-        assert!(fast_result.sha256.is_some());
-        assert_eq!(fast_result.requested_specs, vec!["size-test >=1.0"]);
+        assert_eq!(result.name.as_source(), "size-test");
+        assert_eq!(result.version, "1.0.0");
+        assert_eq!(result.build, "build1");
+        assert!(result.sha256.is_some());
+        assert_eq!(result.requested_specs, vec!["size-test >=1.0"]);
     }
 
     #[test]
-    fn test_fast_parser_buffer_doubling() {
+    fn test_parser_buffer_doubling() {
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("buffer-test-1.0.0-build1.json");
 
-        // Create JSON that requires buffer doubling - put essential fields after 64KB
         let mut json_content = r#"{"#.to_string();
 
-        // Add a large field at the beginning to push past 64KB
         json_content.push_str(r#""large_padding": ""#);
         json_content.push_str(&"x".repeat(70000)); // 70KB of padding
         json_content.push_str(r#"","#);
 
-        // Now add essential fields after the 64KB boundary
         json_content.push_str(
             r#"
   "name": "buffer-test",
@@ -918,19 +660,17 @@ mod tests {
 
         fs::write(&file_path, &json_content).unwrap();
 
-        // Verify the file is larger than 64KB
         assert!(
             json_content.len() > 65536,
             "Test file should be larger than 64KB"
         );
 
-        // Fast parser should work by doubling buffer size automatically
-        let fast_result = MinimalPrefixRecord::fast_from_path(&file_path).unwrap();
+        let result = MinimalPrefixRecord::from_path(&file_path).unwrap();
 
-        assert_eq!(fast_result.name.as_source(), "buffer-test");
-        assert_eq!(fast_result.version, "1.0.0");
-        assert_eq!(fast_result.build, "build1");
-        assert!(fast_result.sha256.is_some());
-        assert_eq!(fast_result.requested_specs, vec!["buffer-test >=1.0"]);
+        assert_eq!(result.name.as_source(), "buffer-test");
+        assert_eq!(result.version, "1.0.0");
+        assert_eq!(result.build, "build1");
+        assert!(result.sha256.is_some());
+        assert_eq!(result.requested_specs, vec!["buffer-test >=1.0"]);
     }
 }
