@@ -2,33 +2,33 @@ version: 5
 environments:
   default:
     channels:
-    - url: https://conda.anaconda.org/conda-forge/
+      - url: https://conda.anaconda.org/conda-forge/
     packages:
-     win-64:
-      - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda
+      win-64:
+        - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda
 packages:
-- kind: conda
-  name: tzdata
-  version: 2024b
-  build: hc8b5060_0
-  subdir: noarch
-  noarch: generic
-  url: https://conda.anaconda.org/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda
-  sha256: 4fde5c3008bf5d2db82f2b50204464314cc3c91c1d953652f7bd01d9e52aefdf
-  md5: 8ac3367aafb1cc0a068483c580af8015
-  license: LicenseRef-Public-Domain
-  size: 122354
-  timestamp: 1728047496079
-- kind: conda
-  name: tzdata
-  version: 2024b
-  build: hc8b5060_0
-  subdir: noarch
-  noarch: generic
-  url: https://conda.anaconda.org/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda
-  sha256: 4fde5c3008bf5d2db82f2b50204464314cc3c91c1d953652f7bd01d9e52aefdf
-  md5: 8ac3367aafb1cc0a068483c580af8015
-  license: LicenseRef-Public-Domain
-  purls: []
-  size: 122354
-  timestamp: 1728047496079
+  - kind: conda
+    name: tzdata
+    version: 2024b
+    build: hc8b5060_0
+    subdir: noarch
+    noarch: generic
+    url: https://conda.anaconda.org/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda
+    sha256: 4fde5c3008bf5d2db82f2b50204464314cc3c91c1d953652f7bd01d9e52aefdf
+    md5: 8ac3367aafb1cc0a068483c580af8015
+    license: LicenseRef-Public-Domain
+    size: 122354
+    timestamp: 1728047496079
+  - kind: conda
+    name: tzdata
+    version: 2024b
+    build: hc8b5060_0
+    subdir: noarch
+    noarch: generic
+    url: https://conda.anaconda.org/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda
+    sha256: 4fde5c3008bf5d2db82f2b50204464314cc3c91c1d953652f7bd01d9e52aefdf
+    md5: 8ac3367aafb1cc0a068483c580af8015
+    license: LicenseRef-Public-Domain
+    purls: []
+    size: 122354
+    timestamp: 1728047496079
