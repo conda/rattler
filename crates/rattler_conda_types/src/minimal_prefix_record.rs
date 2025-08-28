@@ -2,7 +2,13 @@
 //!
 //! This module provides functionality to read only the minimal metadata needed
 //! from conda-meta JSON files to determine if packages have changed, avoiding
-//! the expensive parsing of file lists and other large data structures.
+//! the expensive parsing of file lists and other large fields of `PrefixRecord`.
+//!
+//! The most interesting part of this file is custom parser written
+//! using `nom`. It uses `PrefixRecord` structure to parse as little
+//! data as possible, also uses byte parsing on memory map, so we
+//! don't read file entirely. See documentation of
+//! [`MinimalPrefixRecord::from_path`] for more information.
 
 use std::str::FromStr;
 use std::{io, path::Path};
@@ -12,9 +18,8 @@ use hex;
 use itertools::Itertools;
 use memmap2::Mmap;
 use nom::{
-    bytes::complete::take_until,
-    character::complete::{char, multispace0},
-    combinator::{map, opt},
+    bytes::complete::{tag, take_while},
+    combinator::opt,
     multi::separated_list0,
     sequence::{delimited, preceded},
     IResult, Parser,
@@ -58,6 +63,18 @@ impl MinimalPrefixRecord {
     // Ideal approach would be to create `SparsePrefixRecord` akin `SpareRepodata`.
     /// Parse a minimal prefix record from a JSON file using nom with memory mapping.
     /// This is optimized for performance and stops parsing at the "files" field.
+    ///
+    /// The corner stone of its logic is decision of whether or not we
+    /// want to parse file completely.
+    ///
+    /// If we already met `requested_specs` field and now we're at
+    /// `files`, then we stop as this means new `PrefixRecord` format with
+    /// reordered fields and mandatory serialization of empty
+    /// `requested_spec`.
+    ///
+    /// If we at `files`, but haven't met `requested_specs`, then we have
+    /// legacy file format, so continue parsing either until we find this
+    /// field or until the end of file.
     pub fn from_path(path: &Path) -> Result<Self, io::Error> {
         use std::fs::File;
 
@@ -73,54 +90,51 @@ impl MinimalPrefixRecord {
         let file = File::open(path)?;
         let mmap = unsafe { Mmap::map(&file)? };
 
-        // Dynamic buffer sizing: start with 64KB, double until we find "files" field or can parse successfully
-        let mut buffer_size = 65536; // Start with 64KB
-        let max_buffer_size = 16 * 1024 * 1024; // Max 16MB
+        let parsed = parse_minimal_json(&mmap[..])
+            .map_err(|e| io::Error::other(format!("Failed to parse JSON: {e}")))?;
 
-        let parsed = loop {
-            let content_slice = if mmap.len() > buffer_size {
-                &mmap[..buffer_size]
-            } else {
-                &mmap[..] // Use entire file if smaller than buffer
-            };
-
-            let content = std::str::from_utf8(content_slice)
-                .map_err(|e| io::Error::other(format!("Invalid UTF-8: {e}")))?;
-
-            // Try to parse with current buffer size
-            match parse_minimal_json(content) {
-                Ok(parsed) => break parsed,
-                Err(_) if buffer_size < max_buffer_size && buffer_size < mmap.len() => {
-                    // Double buffer size and retry
-                    buffer_size *= 2;
-                }
-                Err(e) => {
-                    return Err(io::Error::other(format!(
-                        "Failed to parse JSON even with {}MB buffer. File size: {} bytes. Error: {}",
-                        buffer_size / (1024 * 1024), mmap.len(), e
-                    )));
-                }
-            }
-        };
-
-        // Apply the same logic as gjson parser: only one of sha256, md5, or size
         let (final_sha256, final_md5, final_size) = if parsed.sha256.is_some() {
-            // If sha256 exists, use it and skip md5 and size
             (parsed.sha256, None, None)
         } else if parsed.md5.is_some() {
-            // If no sha256 but md5 exists, use md5 and skip size
             (None, parsed.md5, None)
         } else {
-            // If neither sha256 nor md5, use size
             (None, None, parsed.size)
         };
 
-        // Apply the same logic as gjson parser: only parse python_site_packages_path for "python" packages
         let final_python_site_packages_path = if name.trim() == "python" {
-            parsed.python_site_packages_path
+            parsed.python_site_packages_path.and_then(|quoted_bytes| {
+                // Use serde_json directly on the quoted byte slice - no allocation!
+                if let Ok(json_str) = std::str::from_utf8(quoted_bytes) {
+                    serde_json::from_str::<String>(json_str).ok()
+                } else {
+                    None
+                }
+            })
         } else {
             None
         };
+
+        // Properly unescape requested_spec if present
+        let final_requested_spec = parsed.requested_spec.and_then(|quoted_bytes| {
+            if let Ok(json_str) = std::str::from_utf8(quoted_bytes) {
+                serde_json::from_str::<String>(json_str).ok()
+            } else {
+                None
+            }
+        });
+
+        // Properly unescape requested_specs
+        let final_requested_specs = parsed
+            .requested_specs
+            .into_iter()
+            .filter_map(|quoted_bytes| {
+                if let Ok(json_str) = std::str::from_utf8(quoted_bytes) {
+                    serde_json::from_str::<String>(json_str).ok()
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         #[allow(deprecated)]
         Ok(Self {
@@ -134,8 +148,8 @@ impl MinimalPrefixRecord {
             md5: final_md5,
             size: final_size,
             python_site_packages_path: final_python_site_packages_path,
-            requested_specs: parsed.requested_specs,
-            requested_spec: parsed.requested_spec,
+            requested_specs: final_requested_specs,
+            requested_spec: final_requested_spec,
         })
     }
 
@@ -173,6 +187,38 @@ impl MinimalPrefixRecord {
             python_site_packages_path: None,
             experimental_extra_depends: std::collections::BTreeMap::new(),
             legacy_bz2_md5: None,
+        }
+    }
+
+    /// Create a `MinimalPrefixRecord` from a full `PrefixRecord` for comparison purposes
+    pub fn from_prefix_record(prefix_record: &PrefixRecord) -> Self {
+        let package_record = &prefix_record.repodata_record.package_record;
+
+        let (final_sha256, final_md5, final_size) = if package_record.sha256.is_some() {
+            (package_record.sha256, None, None)
+        } else if package_record.md5.is_some() {
+            (None, package_record.md5, None)
+        } else {
+            (None, None, package_record.size)
+        };
+
+        let final_python_site_packages_path = if package_record.name.as_source() == "python" {
+            package_record.python_site_packages_path.clone()
+        } else {
+            None
+        };
+
+        #[allow(deprecated)]
+        Self {
+            name: package_record.name.clone(),
+            version: package_record.version.version().to_string(),
+            build: package_record.build.clone(),
+            sha256: final_sha256,
+            md5: final_md5,
+            size: final_size,
+            python_site_packages_path: final_python_site_packages_path,
+            requested_spec: prefix_record.requested_spec.clone(),
+            requested_specs: prefix_record.requested_specs.clone(),
         }
     }
 }
@@ -268,121 +314,232 @@ impl MinimalPrefixCollection for PrefixRecord {
 
 /// Struct to hold the parsed fields from JSON
 #[derive(Debug, Default)]
-struct ParsedFields {
+struct ParsedFields<'a> {
     sha256: Option<Sha256Hash>,
     md5: Option<Md5Hash>,
     size: Option<u64>,
-    python_site_packages_path: Option<String>,
-    requested_specs: Vec<String>,
-    requested_spec: Option<String>,
+    python_site_packages_path: Option<&'a [u8]>, // Store quoted JSON string
+    requested_specs: Vec<&'a [u8]>,              // Store quoted JSON strings
+    requested_spec: Option<&'a [u8]>,            // Store quoted JSON string
+}
+
+/// Parsing state to track what fields we've found
+#[derive(Debug, Default)]
+struct ParseState {
+    found_requested_specs: bool,
+    found_files: bool,
+}
+
+/// Parse whitespace characters
+fn multispace0_bytes(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    take_while(|c| c == b' ' || c == b'\t' || c == b'\n' || c == b'\r')(input)
 }
 
 /// Parse minimal JSON fields using nom, stopping at "files" field
-fn parse_minimal_json(input: &str) -> Result<ParsedFields, nom::Err<nom::error::Error<&str>>> {
+fn parse_minimal_json(
+    input: &[u8],
+) -> Result<ParsedFields<'_>, nom::Err<nom::error::Error<&[u8]>>> {
     let (_, parsed) = parse_json_object(input)?;
     Ok(parsed)
 }
 
 /// Parse JSON object looking for specific fields
-fn parse_json_object(input: &str) -> IResult<&str, ParsedFields> {
+fn parse_json_object(input: &[u8]) -> IResult<&[u8], ParsedFields<'_>> {
     let mut fields = ParsedFields::default();
+    let mut state = ParseState::default();
 
-    let (input, _) = preceded(multispace0, char('{')).parse(input)?;
-    let (input, _) = multispace0(input)?;
+    let (input, _) = preceded(multispace0_bytes, tag(&b"{"[..])).parse(input)?;
+    let (input, _) = multispace0_bytes(input)?;
 
-    let (remaining, _) = parse_fields(input, &mut fields)?;
+    let (remaining, _) = parse_fields(input, &mut fields, &mut state)?;
 
     Ok((remaining, fields))
 }
 
-/// Parse JSON fields until we find "files" or reach end
-fn parse_fields<'a>(mut input: &'a str, fields: &mut ParsedFields) -> IResult<&'a str, ()> {
+/// Parse JSON fields with stateful logic for `requested_specs` and files
+fn parse_fields<'a>(
+    mut input: &'a [u8],
+    fields: &mut ParsedFields<'a>,
+    state: &mut ParseState,
+) -> IResult<&'a [u8], ()> {
     loop {
-        // Skip whitespace
-        let (rest, _) = multispace0(input)?;
+        let (rest, _) = multispace0_bytes(input)?;
         input = rest;
 
-        // Check for end of object
-        if input.starts_with('}') {
+        if input.starts_with(b"}") {
             return Ok((input, ()));
         }
 
-        // Parse field name
-        let (rest, field_name) = parse_json_string(input)?;
+        let (rest, field_name) = parse_json_string_content(input)?;
         input = rest;
 
-        // Check if we hit the "files" field - stop parsing here
-        if field_name == "files" {
-            return Ok((input, ()));
+        match field_name {
+            b"files" => {
+                state.found_files = true;
+                // If we've already found requested_specs, we can stop here
+                if state.found_requested_specs {
+                    return Ok((input, ()));
+                }
+                // Otherwise, we need to continue parsing to find requested_specs
+            }
+            b"requested_specs" => {
+                state.found_requested_specs = true;
+            }
+            _ => {}
         }
 
-        // Skip colon and whitespace
-        let (rest, _) = preceded(multispace0, char(':')).parse(input)?;
-        let (rest, _) = multispace0(rest)?;
+        let (rest, _) = preceded(multispace0_bytes, tag(&b":"[..])).parse(input)?;
+        let (rest, _) = multispace0_bytes(rest)?;
         input = rest;
 
-        // Parse field value based on field name
         let (rest, _) = parse_field_value(input, field_name, fields)?;
         input = rest;
 
-        // Skip optional comma and whitespace
-        let (rest, _) = multispace0(input)?;
-        let (rest, _) = opt(char(',')).parse(rest)?;
-        let (rest, _) = multispace0(rest)?;
+        // If we just parsed requested_specs and we already found files, we can stop
+        if field_name == b"requested_specs" && state.found_files {
+            return Ok((rest, ()));
+        }
+
+        let (rest, _) = multispace0_bytes(input)?;
+        let (rest, _) = opt(tag(&b","[..])).parse(rest)?;
+        let (rest, _) = multispace0_bytes(rest)?;
         input = rest;
     }
 }
 
-/// Parse JSON string value (handles escaping)
-fn parse_json_string(input: &str) -> IResult<&str, &str> {
-    delimited(char('"'), take_until("\""), char('"')).parse(input)
+/// Parse JSON string value, returning the content without quotes
+fn parse_json_string_content(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    let (input, _) = tag(&b"\""[..])(input)?;
+
+    let mut i = 0;
+    while i < input.len() {
+        match input[i] {
+            b'"' => {
+                // Found closing quote
+                return Ok((&input[i + 1..], &input[..i]));
+            }
+            b'\\' => {
+                if i + 1 < input.len() {
+                    i += 2;
+                } else {
+                    return Err(nom::Err::Error(nom::error::Error::new(
+                        input,
+                        nom::error::ErrorKind::Escaped,
+                    )));
+                }
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    Err(nom::Err::Error(nom::error::Error::new(
+        input,
+        nom::error::ErrorKind::Tag,
+    )))
+}
+
+/// Parse JSON string value, returning the full quoted string for `serde_json`.
+fn parse_json_string_quoted(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    let start = input;
+    let (input, _) = tag(&b"\""[..])(input)?;
+
+    let mut i = 0;
+    while i < input.len() {
+        match input[i] {
+            b'"' => {
+                // Found closing quote, return the full quoted string
+                let end_pos = (input.as_ptr() as usize + i + 1) - start.as_ptr() as usize;
+                return Ok((&input[i + 1..], &start[..end_pos]));
+            }
+            b'\\' => {
+                if i + 1 < input.len() {
+                    i += 2;
+                } else {
+                    return Err(nom::Err::Error(nom::error::Error::new(
+                        input,
+                        nom::error::ErrorKind::Escaped,
+                    )));
+                }
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    Err(nom::Err::Error(nom::error::Error::new(
+        input,
+        nom::error::ErrorKind::Tag,
+    )))
 }
 
 /// Parse field value based on field name
 fn parse_field_value<'a>(
-    input: &'a str,
-    field_name: &str,
-    fields: &mut ParsedFields,
-) -> IResult<&'a str, ()> {
+    input: &'a [u8],
+    field_name: &[u8],
+    fields: &mut ParsedFields<'a>,
+) -> IResult<&'a [u8], ()> {
     match field_name {
-        "sha256" => {
-            let (rest, value) = parse_json_string(input)?;
-            if let Ok(bytes) = hex::decode(value) {
-                if bytes.len() == 32 {
-                    fields.sha256 = Some(Sha256Hash::from(
-                        <[u8; 32]>::try_from(bytes.as_slice()).unwrap(),
-                    ));
+        b"sha256" => {
+            let (rest, value) = parse_json_string_content(input)?;
+            if let Ok(hex_str) = std::str::from_utf8(value) {
+                if let Ok(bytes) = hex::decode(hex_str) {
+                    if bytes.len() == 32 {
+                        fields.sha256 = Some(Sha256Hash::from(
+                            <[u8; 32]>::try_from(bytes.as_slice()).unwrap(),
+                        ));
+                    }
                 }
             }
             Ok((rest, ()))
         }
-        "md5" => {
-            let (rest, value) = parse_json_string(input)?;
-            if let Ok(bytes) = hex::decode(value) {
-                if bytes.len() == 16 {
-                    fields.md5 = Some(Md5Hash::from(
-                        <[u8; 16]>::try_from(bytes.as_slice()).unwrap(),
-                    ));
+        b"md5" => {
+            let (rest, value) = parse_json_string_content(input)?;
+            if let Ok(hex_str) = std::str::from_utf8(value) {
+                if let Ok(bytes) = hex::decode(hex_str) {
+                    if bytes.len() == 16 {
+                        fields.md5 = Some(Md5Hash::from(
+                            <[u8; 16]>::try_from(bytes.as_slice()).unwrap(),
+                        ));
+                    }
                 }
             }
             Ok((rest, ()))
         }
-        "size" => {
+        b"size" => {
             let (rest, value) = take_until_comma_or_brace(input)?;
-            fields.size = value.trim().parse().ok();
+            if let Ok(size_str) = std::str::from_utf8(value) {
+                fields.size = size_str.trim().parse().ok();
+            }
             Ok((rest, ()))
         }
-        "python_site_packages_path" => {
-            let (rest, value) = parse_json_string(input)?;
-            fields.python_site_packages_path = Some(value.to_string());
-            Ok((rest, ()))
+        b"python_site_packages_path" => {
+            // Handle both string and null values for python_site_packages_path
+            let (rest, _) = multispace0_bytes(input)?;
+            if rest.starts_with(b"null") {
+                fields.python_site_packages_path = None;
+                Ok((&rest[4..], ()))
+            } else {
+                let (rest, quoted_value) = parse_json_string_quoted(input)?;
+                fields.python_site_packages_path = Some(quoted_value);
+                Ok((rest, ()))
+            }
         }
-        "requested_spec" => {
-            let (rest, value) = parse_json_string(input)?;
-            fields.requested_spec = Some(value.to_string());
-            Ok((rest, ()))
+        b"requested_spec" => {
+            // Handle both string and null values for requested_spec
+            let (rest, _) = multispace0_bytes(input)?;
+            if rest.starts_with(b"null") {
+                fields.requested_spec = None;
+                Ok((&rest[4..], ()))
+            } else {
+                let (rest, quoted_value) = parse_json_string_quoted(input)?;
+                fields.requested_spec = Some(quoted_value);
+                Ok((rest, ()))
+            }
         }
-        "requested_specs" => {
+        b"requested_specs" => {
             let (rest, specs) = parse_json_array(input)?;
             fields.requested_specs = specs;
             Ok((rest, ()))
@@ -395,32 +552,36 @@ fn parse_field_value<'a>(
     }
 }
 
-/// Parse JSON array of strings
-fn parse_json_array(input: &str) -> IResult<&str, Vec<String>> {
+/// Parse JSON array of strings, returning quoted byte slices
+fn parse_json_array(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
     delimited(
-        preceded(multispace0, char('[')),
+        preceded(multispace0_bytes, tag(&b"["[..])),
         separated_list0(
-            preceded(multispace0, char(',')),
-            preceded(multispace0, map(parse_json_string, ToString::to_string)),
+            preceded(multispace0_bytes, tag(&b","[..])),
+            preceded(multispace0_bytes, parse_json_string_quoted),
         ),
-        preceded(multispace0, char(']')),
+        preceded(multispace0_bytes, tag(&b"]"[..])),
     )
     .parse(input)
 }
 
 /// Skip any JSON value (string, number, object, array, boolean, null)
-fn skip_json_value(input: &str) -> IResult<&str, ()> {
-    let (rest, _) = multispace0(input)?;
+fn skip_json_value(input: &[u8]) -> IResult<&[u8], ()> {
+    let (rest, _) = multispace0_bytes(input)?;
 
-    if rest.starts_with('"') {
-        let (rest, _) = parse_json_string(rest)?;
+    if rest.starts_with(b"\"") {
+        let (rest, _) = parse_json_string_content(rest)?;
         Ok((rest, ()))
-    } else if rest.starts_with('[') {
+    } else if rest.starts_with(b"[") {
         skip_json_array(rest)
-    } else if rest.starts_with('{') {
+    } else if rest.starts_with(b"{") {
         skip_json_object(rest)
-    } else if rest.starts_with("true") || rest.starts_with("false") || rest.starts_with("null") {
-        take_until_comma_or_brace(rest).map(|(rest, _)| (rest, ()))
+    } else if rest.starts_with(b"true") {
+        Ok((&rest[4..], ()))
+    } else if rest.starts_with(b"false") {
+        Ok((&rest[5..], ()))
+    } else if rest.starts_with(b"null") {
+        Ok((&rest[4..], ()))
     } else {
         // Number
         take_until_comma_or_brace(rest).map(|(rest, _)| (rest, ()))
@@ -428,17 +589,17 @@ fn skip_json_value(input: &str) -> IResult<&str, ()> {
 }
 
 /// Skip JSON array
-fn skip_json_array(input: &str) -> IResult<&str, ()> {
+fn skip_json_array(input: &[u8]) -> IResult<&[u8], ()> {
     let mut input = input;
-    let (rest, _) = char('[').parse(input)?;
+    let (rest, _) = tag(&b"["[..]).parse(input)?;
     input = rest;
 
     let mut depth = 1;
     while depth > 0 && !input.is_empty() {
-        if input.starts_with('[') {
+        if input.starts_with(b"[") {
             depth += 1;
             input = &input[1..];
-        } else if input.starts_with(']') {
+        } else if input.starts_with(b"]") {
             depth -= 1;
             input = &input[1..];
         } else {
@@ -450,17 +611,17 @@ fn skip_json_array(input: &str) -> IResult<&str, ()> {
 }
 
 /// Skip JSON object
-fn skip_json_object(input: &str) -> IResult<&str, ()> {
+fn skip_json_object(input: &[u8]) -> IResult<&[u8], ()> {
     let mut input = input;
-    let (rest, _) = char('{').parse(input)?;
+    let (rest, _) = tag(&b"{"[..]).parse(input)?;
     input = rest;
 
     let mut depth = 1;
     while depth > 0 && !input.is_empty() {
-        if input.starts_with('{') {
+        if input.starts_with(b"{") {
             depth += 1;
             input = &input[1..];
-        } else if input.starts_with('}') {
+        } else if input.starts_with(b"}") {
             depth -= 1;
             input = &input[1..];
         } else {
@@ -471,16 +632,15 @@ fn skip_json_object(input: &str) -> IResult<&str, ()> {
     Ok((input, ()))
 }
 
-/// Take characters until comma, closing brace, or closing bracket
-fn take_until_comma_or_brace(input: &str) -> IResult<&str, &str> {
+/// Take bytes until comma, closing brace, or closing bracket
+fn take_until_comma_or_brace(input: &[u8]) -> IResult<&[u8], &[u8]> {
     let mut end = 0;
-    let chars: Vec<char> = input.chars().collect();
 
-    for &ch in &chars {
-        if ch == ',' || ch == '}' || ch == ']' {
+    for &byte in input {
+        if byte == b',' || byte == b'}' || byte == b']' {
             break;
         }
-        end += ch.len_utf8();
+        end += 1;
     }
 
     Ok((&input[end..], &input[..end]))
@@ -490,187 +650,173 @@ fn take_until_comma_or_brace(input: &str) -> IResult<&str, &str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
 
-    /// Test file with missing optional fields
-    fn create_minimal_test_file() -> tempfile::TempDir {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let file_path = temp_dir.path().join("minimal-package-0.1.0-build_1.json");
+    use std::{fs, path::PathBuf};
 
-        let json_content = r#"{
-  "name": "minimal-package",
-  "version": "0.1.0",
-  "build": "build_1",
-  "build_number": 0,
-  "depends": [],
-  "requested_specs": [],
-  "files": []
-}"#;
-
-        fs::write(&file_path, json_content).unwrap();
-        temp_dir
-    }
-
-    /// Test file with only deprecated `requested_spec` field
-    fn create_legacy_test_file() -> tempfile::TempDir {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let file_path = temp_dir.path().join("legacy-package-2.0.0-abc123.json");
-
-        let json_content = r#"{
-  "name": "legacy-package",
-  "version": "2.0.0",
-  "build": "abc123",
-  "build_number": 5,
-  "depends": ["python"],
-  "sha256": "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
-  "size": 2097152,
-  "requested_spec": "legacy-package ==2.0.0",
-  "files": [
-    "bin/legacy-tool"
-  ]
-}"#;
-
-        fs::write(&file_path, json_content).unwrap();
-        temp_dir
-    }
+    use rstest::rstest;
 
     #[test]
-    fn test_fast_parser_handles_missing_fields() {
-        let temp_dir = create_minimal_test_file();
-        let file_path = temp_dir.path().join("minimal-package-0.1.0-build_1.json");
-
-        let result = MinimalPrefixRecord::from_path(&file_path).unwrap();
-
-        assert_eq!(result.name.as_source(), "minimal-package");
-        assert_eq!(result.version, "0.1.0");
-        assert_eq!(result.build, "build_1");
-
-        assert_eq!(result.sha256, None);
-        assert_eq!(result.md5, None);
-        assert_eq!(result.size, None);
-        assert_eq!(result.python_site_packages_path, None);
-        assert_eq!(result.requested_spec, None);
-
-        assert!(result.requested_specs.is_empty());
-    }
-
-    #[test]
-    fn test_parser_handles_legacy_requested_spec() {
-        let temp_dir = create_legacy_test_file();
-        let file_path = temp_dir.path().join("legacy-package-2.0.0-abc123.json");
-
-        let result = MinimalPrefixRecord::from_path(&file_path).unwrap();
-
-        assert_eq!(
-            result.requested_spec,
-            Some("legacy-package ==2.0.0".to_string())
-        );
-        assert!(result.requested_specs.is_empty());
-    }
-
-    #[test]
-    fn test_parser_early_termination_at_files() {
+    fn test_stateful_parsing_requested_specs_before_files() {
+        // Test case where requested_specs appears before files
         let temp_dir = tempfile::tempdir().unwrap();
-        let file_path = temp_dir.path().join("early-term-test-1.0.0-build1.json");
+        let file_path = temp_dir.path().join("stateful-before-1.0.0-build1.json");
 
-        // Create JSON with "files" field in the middle, followed by more data
         let json_content = r#"{
-  "name": "early-term-test",
+  "name": "stateful-before",
   "version": "1.0.0",
   "build": "build1",
   "sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-  "requested_specs": ["early-term-test >=1.0"],
-  "files": [
-    "this should not be parsed",
-    "neither should this"
-  ],
-  "this_field_after_files_should_be_ignored": "ignored_value",
-  "another_ignored_field": 12345
-}"#;
-
-        fs::write(&file_path, json_content).unwrap();
-
-        // The fast parser should work and ignore fields after "files"
-        let result = MinimalPrefixRecord::from_path(&file_path).unwrap();
-
-        assert_eq!(result.name.as_source(), "early-term-test");
-        assert_eq!(result.version, "1.0.0");
-        assert_eq!(result.build, "build1");
-        assert!(result.sha256.is_some());
-        assert_eq!(result.requested_specs, vec!["early-term-test >=1.0"]);
-    }
-
-    #[test]
-    fn test_parse_large_file() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let file_path = temp_dir.path().join("size-test-1.0.0-build1.json");
-
-        let json_content = format!(
-            r#"{{
-  "name": "size-test",
-  "version": "1.0.0",
-  "build": "build1",
-  "sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-  "requested_specs": ["size-test >=1.0"],
-  "files": [
-    {}
-  ]
-}}"#,
-            (0..5000)
-                .map(|i| format!("\"large_file_{i}.txt\""))
-                .collect::<Vec<_>>()
-                .join(",\n    ")
-        );
-
-        fs::write(&file_path, json_content).unwrap();
-
-        let result = MinimalPrefixRecord::from_path(&file_path).unwrap();
-
-        assert_eq!(result.name.as_source(), "size-test");
-        assert_eq!(result.version, "1.0.0");
-        assert_eq!(result.build, "build1");
-        assert!(result.sha256.is_some());
-        assert_eq!(result.requested_specs, vec!["size-test >=1.0"]);
-    }
-
-    #[test]
-    fn test_parser_buffer_doubling() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let file_path = temp_dir.path().join("buffer-test-1.0.0-build1.json");
-
-        let mut json_content = r#"{"#.to_string();
-
-        json_content.push_str(r#""large_padding": ""#);
-        json_content.push_str(&"x".repeat(70000)); // 70KB of padding
-        json_content.push_str(r#"","#);
-
-        json_content.push_str(
-            r#"
-  "name": "buffer-test",
-  "version": "1.0.0",
-  "build": "build1",
-  "sha256": "1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff",
-  "requested_specs": ["buffer-test >=1.0"],
+  "requested_specs": ["stateful-before >=1.0"],
   "files": [
     "file1.txt",
     "file2.txt"
-  ]
-}"#,
-        );
+  ],
+  "this_field_after_files": "should_be_ignored"
+}"#;
 
-        fs::write(&file_path, &json_content).unwrap();
-
-        assert!(
-            json_content.len() > 65536,
-            "Test file should be larger than 64KB"
-        );
+        fs::write(&file_path, json_content).unwrap();
 
         let result = MinimalPrefixRecord::from_path(&file_path).unwrap();
 
-        assert_eq!(result.name.as_source(), "buffer-test");
-        assert_eq!(result.version, "1.0.0");
-        assert_eq!(result.build, "build1");
-        assert!(result.sha256.is_some());
-        assert_eq!(result.requested_specs, vec!["buffer-test >=1.0"]);
+        assert_eq!(result.name.as_source(), "stateful-before");
+        assert_eq!(result.requested_specs, vec!["stateful-before >=1.0"]);
+    }
+
+    #[test]
+    fn test_stateful_parsing_requested_specs_after_files() {
+        // Test case where requested_specs appears after files
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("stateful-after-1.0.0-build1.json");
+
+        let json_content = r#"{
+  "name": "stateful-after",
+  "version": "1.0.0",
+  "build": "build1",
+  "sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+  "files": [
+    "file1.txt",
+    "file2.txt"
+  ],
+  "requested_specs": ["stateful-after >=1.0"],
+  "this_field_after_requested_specs": "should_be_ignored"
+}"#;
+
+        fs::write(&file_path, json_content).unwrap();
+
+        let result = MinimalPrefixRecord::from_path(&file_path).unwrap();
+
+        assert_eq!(result.name.as_source(), "stateful-after");
+        assert_eq!(result.requested_specs, vec!["stateful-after >=1.0"]);
+    }
+
+    #[test]
+    fn test_stateful_parsing_no_requested_specs() {
+        // Test case where requested_specs is missing entirely
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("stateful-missing-1.0.0-build1.json");
+
+        let json_content = r#"{
+  "name": "stateful-missing",
+  "version": "1.0.0",
+  "build": "build1",
+  "sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+  "files": [
+    "file1.txt",
+    "file2.txt"
+  ],
+  "other_field": "value"
+}"#;
+
+        fs::write(&file_path, json_content).unwrap();
+
+        let result = MinimalPrefixRecord::from_path(&file_path).unwrap();
+
+        assert_eq!(result.name.as_source(), "stateful-missing");
+        assert!(result.requested_specs.is_empty());
+    }
+
+    #[test]
+    fn test_json_string_escaping() {
+        // Test case with escaped characters in requested_specs
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("escape-test-1.0.0-build1.json");
+
+        let json_content = r#"{
+  "name": "escape-test",
+  "version": "1.0.0",
+  "build": "build1",
+  "sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+  "requested_specs": ["escape-test >= \"1.0\"", "python-site \"lib/site\""],
+  "python_site_packages_path": "lib/python3.9/site-packages",
+  "files": ["file1.txt"]
+}"#;
+
+        fs::write(&file_path, json_content).unwrap();
+
+        let result = MinimalPrefixRecord::from_path(&file_path).unwrap();
+
+        assert_eq!(result.name.as_source(), "escape-test");
+
+        // Verify that JSON escapes are properly handled during conversion
+        assert_eq!(
+            result.requested_specs,
+            vec![r#"escape-test >= "1.0""#, r#"python-site "lib/site""#]
+        );
+
+        // python_site_packages_path should be None since package name is not "python"
+        assert_eq!(result.python_site_packages_path, None);
+    }
+
+    #[rstest]
+    fn test_minimal_prefix_record_vs_prefix_record_parsing(
+        #[files("../../test-data/conda-meta/*.json")] test_file: PathBuf,
+    ) {
+        let file_name = test_file.file_name().unwrap().to_string_lossy();
+        // Parse with full PrefixRecord
+        let full_record = crate::PrefixRecord::from_path(&test_file).unwrap();
+
+        // Parse with MinimalPrefixRecord
+        let minimal_record = MinimalPrefixRecord::from_path(&test_file).unwrap();
+
+        // Convert full record to minimal for comparison
+        let minimal_from_full = MinimalPrefixRecord::from_prefix_record(&full_record);
+
+        // Compare core fields
+        assert_eq!(
+            minimal_record.name, minimal_from_full.name,
+            "name mismatch in {file_name}"
+        );
+        assert_eq!(
+            minimal_record.version, minimal_from_full.version,
+            "version mismatch in {file_name}"
+        );
+        assert_eq!(
+            minimal_record.build, minimal_from_full.build,
+            "build mismatch in {file_name}"
+        );
+        assert_eq!(
+            minimal_record.sha256, minimal_from_full.sha256,
+            "sha256 mismatch in {file_name}"
+        );
+        assert_eq!(
+            minimal_record.md5, minimal_from_full.md5,
+            "md5 mismatch in {file_name}"
+        );
+        assert_eq!(
+            minimal_record.size, minimal_from_full.size,
+            "size mismatch in {file_name}"
+        );
+        assert_eq!(
+            minimal_record.python_site_packages_path, minimal_from_full.python_site_packages_path,
+            "python_site_packages_path mismatch in {file_name}"
+        );
+        assert_eq!(
+            minimal_record.requested_spec, minimal_from_full.requested_spec,
+            "requested_spec mismatch in {file_name}"
+        );
+        assert_eq!(
+            minimal_record.requested_specs, minimal_from_full.requested_specs,
+            "requested_specs mismatch in {file_name}"
+        );
     }
 }
