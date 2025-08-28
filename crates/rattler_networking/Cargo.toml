@@ -20,13 +20,23 @@ system-integration = ["keyring", "netrc-rs", "dirs"]
 
 [dependencies]
 anyhow = { workspace = true }
+async-once-cell = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 dirs = { workspace = true, optional = true }
 fs-err = { workspace = true }
 google-cloud-auth = { workspace = true, optional = true }
-aws-config = { workspace = true, optional = true }
-aws-sdk-s3 = { workspace = true, optional = true }
+aws-config = { workspace = true, optional = true, features = [
+    "rt-tokio",
+    "rustls",
+    "sso",
+    "credentials-process",
+] }
+aws-sdk-s3 = { workspace = true, optional = true, features = [
+    "rt-tokio",
+    "rustls",
+    "sigv4a",
+] }
 http = { workspace = true }
 itertools = { workspace = true }
 keyring = { workspace = true, optional = true, features = [

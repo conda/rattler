@@ -11,7 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-s3 = ["rattler_networking/s3"]
+s3 = ["rattler_networking/s3", "rattler_s3"]
 
 [dependencies]
 rattler_conda_types = { workspace = true, default-features = false }
@@ -21,29 +21,30 @@ rattler_redaction = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
 rattler_config = { workspace = true, default-features = false }
 rattler_solve = { workspace = true }
-miette = { version = "7.6.0", features = ["fancy"] }
-clap = { version = "4.5.37", features = ["derive", "env", "cargo"] }
+rattler_s3 = { workspace = true, optional = true, features = ["clap"] }
+miette = { workspace = true, features = ["fancy"] }
+clap = { workspace = true, features = ["env"] }
 fs-err = { workspace = true, features = ["tokio"] }
-futures = "0.3.31"
-indicatif = "0.18.0"
-opendal = { version = "0.54.0", default-features = false, features = [
+futures = { workspace = true }
+indicatif = { workspace = true }
+opendal = { workspace = true , default-features = false, features = [
   "services-s3",
 ]}
-reqwest-retry = "0.7.0"
-tokio-util = { version = "0.7.15", features = ["codec", "compat"] }
-reqwest = { version = "0.12.15", default-features = false, features = [
+reqwest-retry = { workspace = true }
+tokio-util = { workspace = true, features = ["codec", "compat"] }
+reqwest = { workspace = true, default-features = false, features = [
   "multipart",
 ]}
-url = "2.5.4"
-tracing = "0.1.41"
-reqwest-middleware = { version = "0.4.2", features = ["json"] }
-serde_yaml = "0.9.34"
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-base64 = "0.22.1"
-tempfile = "3.19.1"
-thiserror = "2.0.12"
-tokio = { version = "1.44.2", features = [
+url = { workspace = true }
+tracing = { workspace = true }
+reqwest-middleware = { workspace = true, features = ["json"] }
+serde_yaml = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+base64 = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = [
   "rt",
   "macros",
   "rt-multi-thread",
@@ -51,7 +52,7 @@ tokio = { version = "1.44.2", features = [
 ] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
-sha2 = { version = "0.10.8", features = ["asm"] }
+sha2 = { workspace = true, features = ["asm"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-sha2 = { version = "0.10.8" }
+sha2 = { workspace = true }

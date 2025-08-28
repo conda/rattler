@@ -26,3 +26,6 @@ test-data/channels/conda-forge/
 
 # Visual studio files
 .vs/
+
+# Local environment files
+*.local.*
