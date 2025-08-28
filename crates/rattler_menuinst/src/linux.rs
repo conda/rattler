@@ -306,7 +306,7 @@ impl LinuxMenu {
             let activation_env = activator.run_activation(activation_variables, None)?;
 
             for (k, v) in activation_env {
-                envs.push(format!(r#"{k}="{v}""#));
+                envs.push(format!(r#""{k}={v}""#));
             }
         }
 

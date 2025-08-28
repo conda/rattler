@@ -40,6 +40,7 @@ struct Opt {
 /// Different commands supported by `rattler`.
 #[derive(Debug, clap::Subcommand)]
 enum Command {
+    Auth(commands::auth::Opt),
     Create(commands::create::Opt),
     VirtualPackages(commands::virtual_packages::Opt),
     InstallMenu(commands::menu::InstallOpt),
@@ -78,6 +79,7 @@ async fn main() -> miette::Result<()> {
 
     // Dispatch the selected comment
     match opt.command {
+        Command::Auth(opts) => commands::auth::auth(opts).await,
         Command::Create(opts) => commands::create::create(opts).await,
         Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
         Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,

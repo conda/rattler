@@ -24,7 +24,7 @@ env:
 
 jobs:
   e2e-minio-test:
-    name: E2E Minio Upload/Index/Download Test
+    name: E2E Upload/Index/Download [Minio]
     runs-on: ubuntu-latest
     env:
       MINIO_ENDPOINT: http://localhost:9000
@@ -136,7 +136,7 @@ jobs:
           echo "Minio test cleanup completed"
 
   e2e-aws-s3-test:
-    name: E2E Real AWS S3 Upload/Index/Download Test
+    name: E2E Upload/Index/Download [AWS S3]
     runs-on: ubuntu-latest
     # Only run on main branch to avoid creating too many test buckets
     # if: github.ref == 'refs/heads/main'
