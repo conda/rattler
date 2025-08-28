@@ -11,8 +11,6 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use aws_config::{meta::region::RegionProviderChain, BehaviorVersion};
-use aws_sdk_s3::config::{Credentials, ProvideCredentials};
 use bytes::buf::Buf;
 use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
@@ -20,7 +18,7 @@ use fxhash::FxHashMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use opendal::{
     layers::RetryLayer,
-    services::{FsConfig, S3Config, S3},
+    services::{FsConfig, S3Config},
     Configurator, ErrorKind, Operator,
 };
 use rattler_conda_types::{
@@ -29,11 +27,11 @@ use rattler_conda_types::{
     ShardedSubdirInfo,
 };
 use rattler_digest::Sha256Hash;
-use rattler_networking::{Authentication, AuthenticationStorage};
 use rattler_package_streaming::{
     read,
     seek::{self, stream_conda_content},
 };
+use rattler_s3::ResolvedS3Credentials;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
@@ -611,29 +609,10 @@ pub async fn index_fs(
 pub struct IndexS3Config {
     /// The channel to index.
     pub channel: Url,
-    /// The region of the S3 bucket. If not set, the region will be auto
-    /// detected from the endpoint URL.
-    pub region: Option<String>,
-    /// The endpoint URL of the S3 bucket. If not set:
-    /// - The endpoint will be loaded from `AWS_ENDPOINT_URL` environment
-    ///   variable.
-    /// - If that is not set, the default endpoint will be used (`https://s3.amazonaws.com`).
-    pub endpoint_url: Option<Url>,
+    /// The resolved credentials to use for S3 access.
+    pub credentials: ResolvedS3Credentials,
     /// Whether to force path style for the S3 bucket.
     pub force_path_style: Option<bool>,
-    /// The access key ID for the S3 bucket.
-    /// If not set, the access key will be loaded from the environment, if the
-    /// access key was still not loaded, the authentication storage will be
-    /// queried.
-    pub access_key_id: Option<String>,
-    /// The secret access key for the S3 bucket.
-    /// If not set, the access key will be loaded from the environment, if the
-    /// access key was still not loaded, the authentication storage will be
-    /// queried.
-    pub secret_access_key: Option<String>,
-    /// The session token for the S3 bucket.
-    /// If not set, the authentication storage will be queried.
-    pub session_token: Option<String>,
     /// The target platform to index.
     pub target_platform: Option<Platform>,
     /// The path to a repodata patch to apply to the index.
@@ -655,12 +634,8 @@ pub struct IndexS3Config {
 pub async fn index_s3(
     IndexS3Config {
         channel,
-        region,
-        endpoint_url,
+        credentials,
         force_path_style,
-        access_key_id,
-        secret_access_key,
-        session_token,
         target_platform,
         repodata_patch,
         write_zst,
@@ -678,53 +653,14 @@ pub async fn index_s3(
         .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
         .to_string();
 
-    // Determine region and endpoint URL.
-    let endpoint = endpoint_url
-        .map(|url| url.to_string())
-        .or_else(|| std::env::var("AWS_ENDPOINT_URL").ok())
-        .unwrap_or_else(|| String::from("https://s3.amazonaws.com"));
-
-    let mut region = region;
-    if region.is_none() {
-        // Try to use the AWS SDK to determine the region.
-        let region_provider = RegionProviderChain::default_provider();
-        region = region_provider.region().await.map(|r| r.to_string());
-    }
-    if region.is_none() {
-        // If no region is provided, we try to detect it from the endpoint URL.
-        region = S3::detect_region(&endpoint, &s3_config.bucket).await;
-    }
-    s3_config.region = region;
-    s3_config.endpoint = Some(endpoint);
+    s3_config.region = Some(credentials.region);
+    s3_config.endpoint = Some(credentials.endpoint_url.to_string());
+    s3_config.secret_access_key = Some(credentials.secret_access_key);
+    s3_config.access_key_id = Some(credentials.access_key_id);
+    s3_config.session_token = credentials.session_token;
 
     // How to access the S3 bucket.
     s3_config.enable_virtual_host_style = force_path_style.is_none_or(|x| !x);
-
-    // Use credentials from the CLI if they are provided.
-    if let (Some(access_key_id), Some(secret_access_key)) = (access_key_id, secret_access_key) {
-        s3_config.secret_access_key = Some(secret_access_key);
-        s3_config.access_key_id = Some(access_key_id);
-        s3_config.session_token = session_token;
-    } else if let Some((access_key_id, secret_access_key, session_token)) =
-        load_s3_credentials_from_auth_storage(channel.clone())?
-    {
-        // Use the credentials from the authentication storage if they are available.
-        s3_config.access_key_id = Some(access_key_id);
-        s3_config.secret_access_key = Some(secret_access_key);
-        s3_config.session_token = session_token;
-    } else {
-        let config = aws_config::load_defaults(BehaviorVersion::latest()).await;
-        let Some(credentials_provider) = config.credentials_provider() else {
-            return Err(anyhow::anyhow!("No AWS credentials provider found",));
-        };
-        let credentials: Credentials = credentials_provider
-            .provide_credentials()
-            .await
-            .context("failed to determine AWS credentials")?;
-        s3_config.access_key_id = Some(credentials.access_key_id().to_string());
-        s3_config.secret_access_key = Some(credentials.secret_access_key().to_string());
-        s3_config.session_token = credentials.session_token().map(ToString::to_string);
-    }
 
     index(
         target_platform,
@@ -737,26 +673,6 @@ pub async fn index_s3(
         multi_progress,
     )
     .await
-}
-
-fn load_s3_credentials_from_auth_storage(
-    channel: Url,
-) -> anyhow::Result<Option<(String, String, Option<String>)>> {
-    let auth_storage = AuthenticationStorage::from_env_and_defaults()?;
-    let auth = auth_storage.get_by_url(channel)?;
-    if let (
-        _,
-        Some(Authentication::S3Credentials {
-            access_key_id,
-            secret_access_key,
-            session_token,
-        }),
-    ) = auth
-    {
-        Ok(Some((access_key_id, secret_access_key, session_token)))
-    } else {
-        Ok(None)
-    }
 }
 
 /// Create a new `repodata.json` for all packages in the given configurator's

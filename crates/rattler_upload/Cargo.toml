@@ -11,7 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-s3 = ["rattler_networking/s3", "aws-config", "aws-sdk-s3"]
+s3 = ["rattler_networking/s3", "rattler_s3"]
 
 [dependencies]
 rattler_conda_types = { workspace = true, default-features = false }
@@ -21,6 +21,7 @@ rattler_redaction = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
 rattler_config = { workspace = true, default-features = false }
 rattler_solve = { workspace = true }
+rattler_s3 = { workspace = true, optional = true, features = ["clap"] }
 miette = { workspace = true, features = ["fancy"] }
 clap = { workspace = true, features = ["env"] }
 fs-err = { workspace = true, features = ["tokio"] }
@@ -49,8 +50,6 @@ tokio = { workspace = true, features = [
   "rt-multi-thread",
   "process",
 ] }
-aws-config = { workspace = true, optional = true }
-aws-sdk-s3 = { workspace = true, optional = true }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 sha2 = { workspace = true, features = ["asm"] }

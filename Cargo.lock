@@ -4632,8 +4632,6 @@ name = "rattler_index"
 version = "0.24.10"
 dependencies = [
  "anyhow",
- "aws-config",
- "aws-sdk-s3",
  "bytes",
  "chrono",
  "clap",
@@ -4649,6 +4647,7 @@ dependencies = [
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_s3",
  "reqwest",
  "rmp-serde",
  "serde",
@@ -4900,6 +4899,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_s3"
+version = "0.1.0"
+dependencies = [
+ "aws-config",
+ "aws-credential-types",
+ "aws-sdk-s3",
+ "clap",
+ "rattler_networking",
+ "thiserror 2.0.16",
+ "url",
+]
+
+[[package]]
 name = "rattler_sandbox"
 version = "0.1.10"
 dependencies = [
@@ -4962,8 +4974,6 @@ dependencies = [
 name = "rattler_upload"
 version = "0.2.0"
 dependencies = [
- "aws-config",
- "aws-sdk-s3",
  "base64 0.22.1",
  "clap",
  "fs-err",
@@ -4977,6 +4987,7 @@ dependencies = [
  "rattler_networking",
  "rattler_package_streaming",
  "rattler_redaction",
+ "rattler_s3",
  "rattler_solve",
  "reqwest",
  "reqwest-middleware",

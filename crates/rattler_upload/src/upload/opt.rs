@@ -429,29 +429,12 @@ pub struct S3Opts {
     #[arg(short, long, env = "S3_CHANNEL", value_parser = parse_s3_url)]
     pub channel: Url,
 
-    /// The endpoint URL of the S3 backend
-    #[arg(long, env = "S3_ENDPOINT_URL")]
-    pub endpoint_url: Option<Url>,
-
-    /// The region of the S3 backend
-    #[arg(long, env = "S3_REGION")]
-    pub region: Option<String>,
+    #[clap(flatten)]
+    pub credentials: rattler_s3::clap::S3CredentialsOpts,
 
     /// Whether to use path-style S3 URLs
-    #[arg(long, env = "S3_FORCE_PATH_STYLE", default_value = "false")]
+    #[arg(long, env = "S3_FORCE_PATH_STYLE")]
     pub force_path_style: Option<bool>,
-
-    /// The access key ID for the S3 bucket.
-    #[arg(long, env = "S3_ACCESS_KEY_ID", requires_all = ["secret_access_key"])]
-    pub access_key_id: Option<String>,
-
-    /// The secret access key for the S3 bucket.
-    #[arg(long, env = "S3_SECRET_ACCESS_KEY", requires_all = ["access_key_id"])]
-    pub secret_access_key: Option<String>,
-
-    /// The session token for the S3 bucket.
-    #[arg(long, env = "S3_SESSION_TOKEN", requires_all = ["access_key_id", "secret_access_key"])]
-    pub session_token: Option<String>,
 
     /// Replace files if it already exists.
     #[arg(long)]

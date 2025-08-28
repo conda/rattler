@@ -1,7 +1,7 @@
 #!/usr/bin/env nu
 
 # Paths
-let tmp = ($env.RUNNER_TMP? | default $env.TMP)
+let tmp = ($env.RUNNER_TEMP? | default $env.TEMP? | default "/tmp")
 let bin_dir = $tmp
 let data_dir = $"($tmp)/minio-data"
 let log_file = $"($tmp)/minio.log"
@@ -41,45 +41,39 @@ print $"== Configuring bucket ($bucket_name)..."
 ^mc policy set download $"minio/($bucket_name)"
 
 print "== Upload packages to Minio"
-let args = [
-  upload s3
-  --channel $"s3://($bucket_name)"
-  --access-key-id $root_user
-  --secret-access-key $root_password
-  --region "us-east-1"
-  --endpoint-url "http://localhost:9000"
-  --force-path-style true
-  test-data/packages/empty-0.1.0-h4616a5c_0.conda
-]
+(^rattler
+    upload s3
+    --channel $"s3://($bucket_name)"
+    --access-key-id $root_user
+    --secret-access-key $root_password
+    --region "us-east-1"
+    --endpoint-url "http://localhost:9000"
+    --force-path-style true
+    test-data/packages/empty-0.1.0-h4616a5c_0.conda
+)
 
-^rattler ...$args
-
-print "== Index the channel ==="
-let args = [
-  s3
-  $"s3://($bucket_name)"
-  --access-key-id $root_user
-  --secret-access-key $root_password
-  --region "us-east-1"
-  --endpoint-url "http://localhost:9000"
-  --force-path-style true
-]
-
-^rattler-index ...$args
+print "== Index the channel"
+(^rattler-index
+    s3
+    $"s3://($bucket_name)"
+    --access-key-id $root_user
+    --secret-access-key $root_password
+    --region "us-east-1"
+    --endpoint-url "http://localhost:9000"
+    --force-path-style true
+)
 
 print "== Test package can be installed from the channel ==="
-let args = [
-  create
-  --dry-run
-  -c $"s3://($bucket_name)"
-  empty==0.1.0
-]
-
 with-env {
   AWS_ACCESS_KEY_ID: $root_user
   AWS_SECRET_ACCESS_KEY: $root_password
   AWS_REGION: "us-east-1"
   AWS_ENDPOINT_URL: "http://localhost:9000"
 } {
-  ^rattler ...$args
+  (^rattler
+      create
+      --dry-run
+      -c $"s3://($bucket_name)"
+      empty==0.1.0
+  )
 }

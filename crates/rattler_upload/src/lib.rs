@@ -54,13 +54,9 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
             upload::upload_package_to_s3(
                 &store,
                 s3_opts.channel,
-                s3_opts.endpoint_url,
-                s3_opts.region,
-                s3_opts.force_path_style,
-                s3_opts.access_key_id,
-                s3_opts.secret_access_key,
-                s3_opts.session_token,
+                s3_opts.credentials.into(),
                 &args.package_files,
+                s3_opts.force_path_style,
                 s3_opts.force,
             )
             .await
