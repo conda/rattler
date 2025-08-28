@@ -12,6 +12,10 @@ platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
 license = "BSD-3-Clause"
 preview = ["pixi-build"]
 
+[workspace.build-variants]
+# Use the same Rust version everywhere
+rust_compiler_version = ["1.88.0"]
+
 [tasks]
 build = "cargo build"
 fmt = "cargo fmt --all"
@@ -80,9 +84,10 @@ no-default-feature = true
 awscli = ">=2.28.18,<3"
 rattler_index = { path = "crates/rattler_index" }
 rattler = { path = "crates/rattler-bin" }
+nushell = ">=0.106.1,<0.107"
 
 [feature.s3.tasks]
-e2e-s3-aws = "nu scripts/e2e/s3_aws.nu"
+e2e-s3-aws = "nu scripts/e2e/s3-aws.nu"
 
 [environments.s3]
 features = ["s3"]
