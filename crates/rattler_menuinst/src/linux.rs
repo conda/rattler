@@ -661,7 +661,7 @@ mod tests {
     };
     use tempfile::TempDir;
 
-    use crate::{schema::MenuInstSchema, test::test_data, render::PlaceholderString};
+    use crate::{render::PlaceholderString, schema::MenuInstSchema, test::test_data};
 
     use super::{Directories, LinuxMenu};
 
@@ -828,7 +828,7 @@ mod tests {
     fn test_command_without_activation() {
         let dirs = FakeDirectories::new();
         let fake_prefix = FakePrefix::new("spyder/menu.json");
-        
+
         let item = fake_prefix.schema.menu_items[0].clone();
         let linux = item.platforms.linux.unwrap();
         let mut command = item.command.merge(linux.base);
@@ -858,7 +858,7 @@ mod tests {
     fn test_command_with_activation() {
         let dirs = FakeDirectories::new();
         let fake_prefix = FakePrefix::new("spyder/menu.json");
-        
+
         let item = fake_prefix.schema.menu_items[0].clone();
         let linux = item.platforms.linux.unwrap();
         let mut command = item.command.merge(linux.base);
@@ -891,7 +891,7 @@ mod tests {
     fn test_command_with_precommand() {
         let dirs = FakeDirectories::new();
         let fake_prefix = FakePrefix::new("spyder/menu.json");
-        
+
         let item = fake_prefix.schema.menu_items[0].clone();
         let linux = item.platforms.linux.unwrap();
         let mut command = item.command.merge(linux.base);
@@ -922,7 +922,7 @@ mod tests {
     fn test_command_with_complex_arguments() {
         let dirs = FakeDirectories::new();
         let fake_prefix = FakePrefix::new("spyder/menu.json");
-        
+
         let item = fake_prefix.schema.menu_items[0].clone();
         let linux = item.platforms.linux.unwrap();
         let mut command = item.command.merge(linux.base);
