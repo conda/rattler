@@ -13,7 +13,7 @@ name: E2E S3 Tests
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   RUST_LOG: info
@@ -61,7 +61,11 @@ jobs:
       # This environment variable is picked up by pixi build which will then
       # set up the rust build using sccache.
       SCCACHE_GHA_ENABLED: "true"
+
+      # The region to create buckets it.
       AWS_REGION: eu-west-1
+
+      # The name of the test bucket to create.
       BUCKET: tmp-${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
@@ -82,66 +86,3 @@ jobs:
           activate-environment: s3
 
       - run: pixi run e2e-s3-aws
-
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          submodules: recursive
-
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Generate unique bucket name
-        id: bucket
-        run: |
-          # Create a unique bucket name using repository owner, name, run ID, and attempt number
-          aws s3api create-bucket \
-            --bucket "${BUCKET}" \
-            --create-bucket-configuration LocationConstraint=${AWS_REGION}
-
-          # 1-day auto-expire objects (safety net to ensure we dont retain any files)
-          aws s3api put-bucket-lifecycle-configuration --bucket "${BUCKET}" --lifecycle-configuration '{
-            "Rules":[{"ID":"ttl-1d","Status":"Enabled","Expiration":{"Days":1},"Filter":{"Prefix":""}}]
-          }'
-
-      - name: Build rattler binaries
-        run: |
-          cargo build --bin rattler --release
-          cargo build --bin rattler-index --release
-
-      - name: Run E2E AWS S3 workflow test
-        run: |
-          set -e
-
-          echo "=== Step 1: Upload package to AWS S3 ==="
-          ./target/release/rattler upload s3 \
-            --channel s3://${BUCKET} \
-            test-data/packages/empty-0.1.0-h4616a5c_0.conda
-
-          echo "=== Step 2: Index the channel ==="
-          ./target/release/rattler-index s3 s3://${BUCKET}
-
-          echo "=== Step 3: Test package discovery with dry-run ==="
-          ./target/release/rattler create \
-            --dry-run \
-            -c s3://${BUCKET} \
-            empty==0.1.0
-
-          echo "=== AWS S3 E2E test completed successfully ==="
-
-      - name: Debug bucket contents on failure
-        if: failure()
-        run: |
-          echo "=== AWS S3 bucket contents ==="
-          aws s3 ls s3://${BUCKET} --recursive || true
-
-      - name: Cleanup AWS S3 bucket
-        if: always()
-        run: |
-          # Remove all objects first
-          aws s3 rm s3://${BUCKET} --recursive || true
-          # Then delete the bucket
-          aws s3 rb s3://${BUCKET} || true
-          echo "AWS S3 test cleanup completed"
