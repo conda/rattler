@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.23](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.22...rattler_menuinst-v0.2.23) - 2025-08-28
+
+### Fixed
+
+- *(menuinst)* correct environment variable quoting on Linux ([#1625](https://github.com/conda/rattler/pull/1625))
+
 ## [0.2.22](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.21...rattler_menuinst-v0.2.22) - 2025-08-15
 
 ### Other
