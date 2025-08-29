@@ -22,6 +22,7 @@ channel: "https://conda.anaconda.org/conda-forge/noarch"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\wheel-0.38.4-pyhd8ed1ab_0.tar.bz2"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\wheel-0.38.4-pyhd8ed1ab_0"
 requested_spec: "conda-forge/noarch::wheel==0.38.4=pyhd8ed1ab_0[md5=c829cfb8cb826acb9de0ac1a2df0a940]"
+requested_specs: []
 files:
   - Lib/site-packages/wheel-0.38.4-py3.11.egg-info/PKG-INFO
   - Lib/site-packages/wheel-0.38.4-py3.11.egg-info/SOURCES.txt

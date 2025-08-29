@@ -24,6 +24,7 @@ channel: "https://conda.anaconda.org/conda-forge/win-64"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\tk-8.6.12-h8ffe710_0.tar.bz2"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\tk-8.6.12-h8ffe710_0"
 requested_spec: "conda-forge/win-64::tk==8.6.12=h8ffe710_0[md5=c69a5047cc9291ae40afd4a1ad6f0c0f]"
+requested_specs: []
 files:
   - Library/bin/tcl86t.dll
   - Library/bin/tclsh.exe
