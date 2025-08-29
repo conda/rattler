@@ -24,6 +24,7 @@ channel: "https://conda.anaconda.org/conda-forge/win-64"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\vc-14.3-hb6edc58_10.conda"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\vc-14.3-hb6edc58_10"
 requested_spec: "conda-forge/win-64::vc==14.3=hb6edc58_10[md5=52d246d8d14b83c516229be5bb03a163]"
+requested_specs: []
 files: []
 paths_data:
   paths_version: 1

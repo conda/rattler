@@ -24,6 +24,7 @@ channel: "https://conda.anaconda.org/conda-forge/win-64"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\libsqlite-3.40.0-hcfcfb64_0.tar.bz2"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\libsqlite-3.40.0-hcfcfb64_0"
 requested_spec: "conda-forge/win-64::libsqlite==3.40.0=hcfcfb64_0[md5=5e5a97795de72f8cc3baf3d9ea6327a2]"
+requested_specs: []
 files:
   - Library/bin/sqlite3.dll
   - Library/include/sqlite3.h
