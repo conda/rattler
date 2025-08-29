@@ -23,6 +23,8 @@ url: "https://conda.anaconda.org/conda-forge/noarch/pip-23.0-pyhd8ed1ab_0.conda"
 channel: "https://conda.anaconda.org/conda-forge/noarch"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\pip-23.0-pyhd8ed1ab_0.conda"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\pip-23.0-pyhd8ed1ab_0"
+requested_spec: "conda-forge/noarch::pip==23.0=pyhd8ed1ab_0[md5=85b35999162ec95f9f999bac15279c02]"
+requested_specs: []
 files:
   - Lib/site-packages/pip-23.0-py3.11.egg-info/PKG-INFO
   - Lib/site-packages/pip-23.0-py3.11.egg-info/SOURCES.txt
@@ -4551,4 +4553,3 @@ paths_data:
 link:
   source: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\pip-23.0-pyhd8ed1ab_0"
   type: 1
-requested_spec: "conda-forge/noarch::pip==23.0=pyhd8ed1ab_0[md5=85b35999162ec95f9f999bac15279c02]"

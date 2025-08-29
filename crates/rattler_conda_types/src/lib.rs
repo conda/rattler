@@ -22,6 +22,7 @@ pub mod version_spec;
 pub mod compression_level;
 mod environment_yaml;
 mod generic_virtual_package;
+pub mod minimal_prefix_record;
 pub mod package;
 mod package_name;
 pub mod prefix;
@@ -43,6 +44,9 @@ pub use match_spec::{
     matcher::{StringMatcher, StringMatcherParseError},
     parse::ParseMatchSpecError,
     MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
+};
+pub use minimal_prefix_record::{
+    collect_minimal_prefix_records, MinimalPrefixCollection, MinimalPrefixRecord,
 };
 pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
 pub use package_name::{InvalidPackageNameError, PackageName};
