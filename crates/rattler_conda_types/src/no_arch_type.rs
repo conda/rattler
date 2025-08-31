@@ -120,6 +120,7 @@ impl<'de> Deserialize<'de> for NoArchType {
     {
         #[derive(Clone, Debug, Deserialize)]
         #[serde(untagged)]
+        #[allow(clippy::enum_variant_names)]
         enum NoArchSerde {
             OldFormat(bool),
             NewFormat(NoArchTypeSerde),
@@ -136,7 +137,7 @@ impl<'de> Deserialize<'de> for NoArchType {
         let value = Option::<NoArchSerde>::deserialize(deserializer)?;
         match value {
             Some(NoArchSerde::OldFormat(true)) => Ok(NoArchType(Some(RawNoArchType::GenericV1))),
-            Some(NoArchSerde::OldFormat(false)) => Ok(NoArchType(None)),
+            Some(NoArchSerde::OldFormat(false)) | None => Ok(NoArchType(None)),
             Some(NoArchSerde::NewFormat(NoArchTypeSerde::Python)) => {
                 Ok(NoArchType(Some(RawNoArchType::Python)))
             }
@@ -148,7 +149,6 @@ impl<'de> Deserialize<'de> for NoArchType {
                 serde::de::Unexpected::Str(&s),
                 &"''",
             )),
-            None => Ok(NoArchType(None)),
         }
     }
 }
