@@ -75,7 +75,9 @@ pub fn py_index_s3<'py>(
                 Some((credentials, auth_storage)) => credentials
                     .resolve(&channel_url, &auth_storage)
                     .ok_or_else(|| PyValueError::new_err("could not resolve s3 credentials"))?,
-                None => ResolvedS3Credentials::from_sdk().await.map_err(PyRattlerError::from)?,
+                None => ResolvedS3Credentials::from_sdk()
+                    .await
+                    .map_err(PyRattlerError::from)?,
             };
 
         index_s3(IndexS3Config {

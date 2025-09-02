@@ -1,7 +1,7 @@
 use std::{error::Error, io};
 
-use pyo3::{create_exception, exceptions::PyException, PyErr};
 use pyo3::exceptions::PyValueError;
+use pyo3::{create_exception, exceptions::PyException, PyErr};
 use rattler::install::TransactionError;
 use rattler_conda_types::{
     ConvertSubdirError, InvalidPackageNameError, ParseArchError, ParseChannelError,
@@ -188,9 +188,7 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::InvalidHeaderValueError(err) => {
                 InvalidHeaderValueError::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::FromSdkError(err) => {
-                PyValueError::new_err(pretty_print_error(&err))
-            }
+            PyRattlerError::FromSdkError(err) => PyValueError::new_err(pretty_print_error(&err)),
         }
     }
 }
