@@ -176,7 +176,7 @@ jobs:
 
       - name: Run rattler upload with attestation generation
         if: ${{ !matrix.skip-tests }}
-        run: >
+        run: |
           curl -L -o rich-14.1.0-pyhe01879c_0.conda https://prefix.dev/conda-forge/noarch/rich-14.1.0-pyhe01879c_0.conda
           cargo run --bin rattler -- upload prefix --generate-attestation -c wolf-private-test rich-14.1.0-pyhe01879c_0.conda
 
