@@ -45,6 +45,7 @@ jobs:
 
       - run: pixi run e2e-s3-minio
 
+  # TODO: add cloudflare R2 integration tests here as well
   e2e-aws-s3-test:
     name: E2E Upload/Index/Download [AWS S3]
     runs-on: ubuntu-latest
