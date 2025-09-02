@@ -650,11 +650,13 @@ mod test {
     }
 
     #[test]
-    #[should_panic()]
     fn test_deserialize_no_noarch_not_empty_str_should_fail() {
-        deserialize_json_from_test_data(
-            "channels/dummy-noarch-str-not-empty/linux-64/repodata.json",
-        );
+        let test_data_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
+        let data_path =
+            test_data_path.join("channels/dummy-noarch-str-not-empty/linux-64/repodata.json");
+        let err = RepoData::from_path(data_path).unwrap_err();
+        insta::assert_snapshot!(err.to_string(), @r#"invalid value: string "notempty-this-should-fail", expected '' at line 26 column 43"#);
     }
 
     #[test]
