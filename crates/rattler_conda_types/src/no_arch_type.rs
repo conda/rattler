@@ -1,27 +1,30 @@
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
 
-/// Noarch packages are packages that are not architecture specific and therefore only have to be
-/// built once. Noarch packages are either generic or Python.
+/// Noarch packages are packages that are not architecture specific and
+/// therefore only have to be built once. Noarch packages are either generic or
+/// Python.
 ///
-/// This type describes the exact form in which the `noarch` was specified in a package record. Use
-/// the [`NoArchType`] and [`NoArchKind`] for a higher level API.
+/// This type describes the exact form in which the `noarch` was specified in a
+/// package record. Use the [`NoArchType`] and [`NoArchKind`] for a higher level
+/// API.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum RawNoArchType {
-    /// A generic noarch package. This differs from `GenericV2` by how it is stored in the
-    /// repodata (old-format vs new-format)
+    /// A generic noarch package. This differs from `GenericV2` by how it is
+    /// stored in the repodata (old-format vs new-format)
     GenericV1,
 
-    /// A generic noarch package. This differs from `GenericV1` by how it is stored in the
-    /// repodata (old-format vs new-format)
+    /// A generic noarch package. This differs from `GenericV1` by how it is
+    /// stored in the repodata (old-format vs new-format)
     GenericV2,
 
     /// A noarch python package.
     Python,
 }
 
-/// Noarch packages are packages that are not architecture specific and therefore only have to be
-/// built once. A `NoArchType` is either specific to an architecture or not. See [`NoArchKind`] for
-/// more information on the different types of `noarch`.
+/// Noarch packages are packages that are not architecture specific and
+/// therefore only have to be built once. A `NoArchType` is either specific to
+/// an architecture or not. See [`NoArchKind`] for more information on the
+/// different types of `noarch`.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Default)]
 pub struct NoArchType(pub Option<RawNoArchType>);
 
@@ -32,7 +35,8 @@ impl From<NoArchType> for Option<RawNoArchType> {
 }
 
 impl NoArchType {
-    /// Returns the kind of this instance or `None` if this is not a noarch instance at all.
+    /// Returns the kind of this instance or `None` if this is not a noarch
+    /// instance at all.
     pub fn kind(&self) -> Option<NoArchKind> {
         match self.0.as_ref() {
             None => None,
@@ -66,8 +70,8 @@ impl NoArchType {
         Self(Some(RawNoArchType::GenericV2))
     }
 
-    /// Constructs a `None` noarch type, this basically indicates that the package is specific to
-    /// an architecture.
+    /// Constructs a `None` noarch type, this basically indicates that the
+    /// package is specific to an architecture.
     pub fn none() -> Self {
         Self(None)
     }
@@ -91,23 +95,26 @@ impl From<Option<RawNoArchType>> for NoArchType {
 /// Defines the type of noarch that a package could be.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum NoArchKind {
-    /// A noarch python package is a python package without any precompiled python files (`.pyc` or
-    /// `__pycache__`). Normally these files are bundled with the package. However, these files are
-    /// tied to a specific version of Python and must therefor be generated for every target
-    /// platform and architecture. This complicates the build process.
+    /// A noarch python package is a python package without any precompiled
+    /// python files (`.pyc` or `__pycache__`). Normally these files are
+    /// bundled with the package. However, these files are
+    /// tied to a specific version of Python and must therefor be generated for
+    /// every target platform and architecture. This complicates the build
+    /// process.
     ///
-    /// For noarch python packages these files are generated when installing the package by invoking
-    /// the compilation process through the python binary that is installed in the same environment.
+    /// For noarch python packages these files are generated when installing the
+    /// package by invoking the compilation process through the python
+    /// binary that is installed in the same environment.
     ///
-    /// This introductory blog post highlights some of specific of noarch python packages:
-    /// <https://www.anaconda.com/blog/condas-new-noarch-packages>
+    /// This introductory blog post highlights some of specific of noarch python
+    /// packages: <https://www.anaconda.com/blog/condas-new-noarch-packages>
     ///
     /// Or read the docs for more information:
     /// <https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/packages.html#noarch-python>
     Python,
 
-    /// Noarch generic packages allow users to distribute docs, datasets, and source code in conda
-    /// packages.
+    /// Noarch generic packages allow users to distribute docs, datasets, and
+    /// source code in conda packages.
     Generic,
 }
 
@@ -119,9 +126,10 @@ impl<'de> Deserialize<'de> for NoArchType {
     {
         #[derive(Clone, Debug, Deserialize)]
         #[serde(untagged)]
-        enum NoArchSerde {
-            OldFormat(bool),
-            NewFormat(NoArchTypeSerde),
+        enum NoArchSerde<'a> {
+            OldBoolean(bool),
+            NewEnum(NoArchTypeSerde),
+            CompatibilityString(&'a str),
         }
 
         #[derive(Clone, Debug, Deserialize)]
@@ -131,13 +139,26 @@ impl<'de> Deserialize<'de> for NoArchType {
             Generic,
         }
 
-        let value = Option::<NoArchSerde>::deserialize(deserializer)?;
-        Ok(NoArchType(value.and_then(|value| match value {
-            NoArchSerde::OldFormat(true) => Some(RawNoArchType::GenericV1),
-            NoArchSerde::OldFormat(false) => None,
-            NoArchSerde::NewFormat(NoArchTypeSerde::Python) => Some(RawNoArchType::Python),
-            NoArchSerde::NewFormat(NoArchTypeSerde::Generic) => Some(RawNoArchType::GenericV2),
-        })))
+        let value = Option::<NoArchSerde<'de>>::deserialize(deserializer)?;
+        #[allow(clippy::match_same_arms)]
+        match value {
+            Some(NoArchSerde::OldBoolean(true)) => Ok(NoArchType(Some(RawNoArchType::GenericV1))),
+            Some(NoArchSerde::OldBoolean(false)) | None => Ok(NoArchType(None)),
+            Some(NoArchSerde::NewEnum(NoArchTypeSerde::Python)) => {
+                Ok(NoArchType(Some(RawNoArchType::Python)))
+            }
+            Some(NoArchSerde::NewEnum(NoArchTypeSerde::Generic)) => {
+                Ok(NoArchType(Some(RawNoArchType::GenericV2)))
+            }
+            // Some older versions of artifactory use an empty string to indicate noarch=None.
+            // Although this is completely non-standard we support it here for compatibility
+            // reasons.
+            Some(NoArchSerde::CompatibilityString("")) => Ok(NoArchType(None)),
+            Some(NoArchSerde::CompatibilityString(s)) => Err(D::Error::invalid_value(
+                serde::de::Unexpected::Str(s),
+                &"''",
+            )),
+        }
     }
 }
 
