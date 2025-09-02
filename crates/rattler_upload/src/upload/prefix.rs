@@ -176,6 +176,7 @@ pub async fn upload_package_to_prefix(
                     // Save attestation to a temporary file
                     let attestation_json =
                         serde_json::to_string_pretty(&attestation_bundle).into_diagnostic()?;
+                    tracing::info!("Generated attestation: {}", attestation_json);
                     let attestation_file = package_file.with_extension("attestation.json");
                     tokio_fs::write(&attestation_file, attestation_json)
                         .await

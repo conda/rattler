@@ -4511,6 +4511,7 @@ dependencies = [
  "rattler_networking",
  "rattler_repodata_gateway",
  "rattler_solve",
+ "rattler_upload",
  "rattler_virtual_packages",
  "reqwest",
  "reqwest-middleware",

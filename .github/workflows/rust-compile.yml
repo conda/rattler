@@ -167,6 +167,12 @@ jobs:
         run: |
           echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS} --exclude tools" >> $GITHUB_OUTPUT
 
+      - name: Run rattler upload with attestation generation
+        if: ${{ !matrix.skip-tests }}
+        run: >
+          curl -L -o rich-14.1.0-pyhe01879c_0.conda https://prefix.dev/conda-forge/noarch/rich-14.1.0-pyhe01879c_0.conda
+          cargo run --bin rattler -- upload prefix --generate-attestation -c wolf-private-test rich-14.1.0-pyhe01879c_0.conda
+
       - name: Install cargo nextest
         if: ${{ !matrix.skip-tests }}
         uses: taiki-e/install-action@9ba3ac3fd006a70c6e186a683577abc1ccf0ff3a # v2.54.0

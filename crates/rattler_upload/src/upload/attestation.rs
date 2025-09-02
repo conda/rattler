@@ -226,20 +226,20 @@ async fn sign_attestation_with_github(
     Ok(bundle)
 }
 
-/// Create an attestation using Sigstore directly (for public repositories)
-pub async fn create_sigstore_attestation(
-    package_path: &Path,
-    channel_url: &str,
-    oidc_token: &str,
-    client: &ClientWithMiddleware,
-) -> miette::Result<AttestationBundle> {
-    // This would use Sigstore's public-good instance for signing
-    // Implementation would involve:
-    // 1. Get a signing certificate from Fulcio
-    // 2. Sign the statement
-    // 3. Upload to Rekor transparency log
-    // 4. Create the attestation bundle
+// Create an attestation using Sigstore directly (for public repositories)
+// pub async fn create_sigstore_attestation(
+//     package_path: &Path,
+//     channel_url: &str,
+//     oidc_token: &str,
+//     client: &ClientWithMiddleware,
+// ) -> miette::Result<AttestationBundle> {
+//     // This would use Sigstore's public-good instance for signing
+//     // Implementation would involve:
+//     // 1. Get a signing certificate from Fulcio
+//     // 2. Sign the statement
+//     // 3. Upload to Rekor transparency log
+//     // 4. Create the attestation bundle
 
-    // For now, we'll use GitHub's attestation service
-    create_conda_attestation(package_path, channel_url, oidc_token, client).await
-}
+//     // For now, we'll use GitHub's attestation service
+//     create_conda_attestation(package_path, channel_url, oidc_token, client).await
+// }
