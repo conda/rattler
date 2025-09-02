@@ -190,7 +190,7 @@ async fn sign_attestation_with_github(
     // Make the request to GitHub's attestation API
     let response = client
         .post(attestation_url)
-        .header(header::AUTHORIZATION, format!("Bearer {}", oidc_token))
+        .bearer_auth(oidc_token)
         .header(header::ACCEPT, "application/vnd.github+json")
         .header("X-GitHub-Api-Version", "2022-11-28")
         .json(&request_body)

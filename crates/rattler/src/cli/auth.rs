@@ -4,7 +4,7 @@ use rattler_networking::{
     authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
 };
 use reqwest::blocking::Client;
-use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
+use reqwest::header::CONTENT_TYPE;
 use serde_json::json;
 use thiserror;
 
@@ -250,7 +250,7 @@ fn validate_prefix_dev_token(
 
     let response = client
         .post(prefix_url)
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .bearer_auth(token)
         .header(CONTENT_TYPE, "application/json")
         .json(&body)
         .send()?;

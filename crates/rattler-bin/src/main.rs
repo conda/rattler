@@ -79,6 +79,9 @@ async fn main() -> anyhow::Result<()> {
         Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
         Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
         Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
-        Command::Upload(opts) => Ok(rattler_upload::upload_from_args(*opts).await.unwrap()),
+        Command::Upload(opts) => {
+            rattler_upload::upload_from_args(*opts).await.unwrap();
+            Ok(())
+        }
     }
 }
