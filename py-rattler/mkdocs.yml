@@ -86,7 +86,7 @@ markdown_extensions:
   - mdx_truly_sane_lists
   - pymdownx.snippets:
       base_path:
-      - !relative $config_dir  # Relative to the current Markdown file
+        - !relative $config_dir # Relative to the current Markdown file
 
 nav:
   - First Steps: index.md
@@ -175,7 +175,6 @@ extra:
       link: https://www.linkedin.com/company/prefix-dev
     - icon: fontawesome/brands/github
       link: https://github.com/prefix-dev
-
 
 plugins:
   - mkdocstrings:
