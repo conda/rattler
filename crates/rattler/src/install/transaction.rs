@@ -1,8 +1,129 @@
 use std::collections::{HashMap, HashSet};
 
-use rattler_conda_types::{PackageName, PackageRecord, Platform};
+use rattler_conda_types::{
+    MinimalPrefixRecord, PackageName, PackageRecord, Platform, PrefixRecord, RepoDataRecord,
+};
+use rattler_digest::{Md5Hash, Sha256Hash};
 
 use crate::install::{python::PythonInfoError, PythonInfo};
+
+/// Trait that defines the fields needed for package content comparison.
+/// This ensures type safety - if `describe_same_content` needs a new field,
+/// it must be added here and implemented for all types.
+pub trait ContentComparable {
+    fn name(&self) -> &PackageName;
+    fn version_string(&self) -> String;
+    fn build(&self) -> &str;
+    fn sha256(&self) -> Option<&Sha256Hash>;
+    fn md5(&self) -> Option<&Md5Hash>;
+    fn size(&self) -> Option<u64>;
+}
+
+impl ContentComparable for PackageRecord {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+    fn version_string(&self) -> String {
+        self.version.to_string()
+    }
+    fn build(&self) -> &str {
+        &self.build
+    }
+    fn sha256(&self) -> Option<&Sha256Hash> {
+        self.sha256.as_ref()
+    }
+    fn md5(&self) -> Option<&Md5Hash> {
+        self.md5.as_ref()
+    }
+    fn size(&self) -> Option<u64> {
+        self.size
+    }
+}
+
+impl ContentComparable for MinimalPrefixRecord {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+    fn version_string(&self) -> String {
+        self.version.clone()
+    }
+    fn build(&self) -> &str {
+        &self.build
+    }
+    fn sha256(&self) -> Option<&Sha256Hash> {
+        self.sha256.as_ref()
+    }
+    fn md5(&self) -> Option<&Md5Hash> {
+        self.md5.as_ref()
+    }
+    fn size(&self) -> Option<u64> {
+        self.size
+    }
+}
+
+impl ContentComparable for PrefixRecord {
+    fn name(&self) -> &PackageName {
+        &self.repodata_record.package_record.name
+    }
+    fn version_string(&self) -> String {
+        self.repodata_record.package_record.version.to_string()
+    }
+    fn build(&self) -> &str {
+        &self.repodata_record.package_record.build
+    }
+    fn sha256(&self) -> Option<&Sha256Hash> {
+        self.repodata_record.package_record.sha256.as_ref()
+    }
+    fn md5(&self) -> Option<&Md5Hash> {
+        self.repodata_record.package_record.md5.as_ref()
+    }
+    fn size(&self) -> Option<u64> {
+        self.repodata_record.package_record.size
+    }
+}
+
+impl ContentComparable for RepoDataRecord {
+    fn name(&self) -> &PackageName {
+        &self.package_record.name
+    }
+    fn version_string(&self) -> String {
+        self.package_record.version.to_string()
+    }
+    fn build(&self) -> &str {
+        &self.package_record.build
+    }
+    fn sha256(&self) -> Option<&Sha256Hash> {
+        self.package_record.sha256.as_ref()
+    }
+    fn md5(&self) -> Option<&Md5Hash> {
+        self.package_record.md5.as_ref()
+    }
+    fn size(&self) -> Option<u64> {
+        self.package_record.size
+    }
+}
+
+// Blanket implementation for references
+impl<T: ContentComparable> ContentComparable for &T {
+    fn name(&self) -> &PackageName {
+        (*self).name()
+    }
+    fn version_string(&self) -> String {
+        (*self).version_string()
+    }
+    fn build(&self) -> &str {
+        (*self).build()
+    }
+    fn sha256(&self) -> Option<&Sha256Hash> {
+        (*self).sha256()
+    }
+    fn md5(&self) -> Option<&Md5Hash> {
+        (*self).md5()
+    }
+    fn size(&self) -> Option<u64> {
+        (*self).size()
+    }
+}
 
 /// Error that occurred during creation of a Transaction
 #[derive(Debug, thiserror::Error)]
@@ -168,7 +289,11 @@ impl<Old: AsRef<New>, New> Transaction<Old, New> {
     }
 }
 
-impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New> {
+impl<Old, New> Transaction<Old, New>
+where
+    Old: ContentComparable + AsRef<PackageRecord>,
+    New: ContentComparable + AsRef<PackageRecord>,
+{
     /// Constructs a [`Transaction`] by taking the current situation and diffing
     /// that against the desired situation. You can specify a set of package
     /// names that should be reinstalled even if their content has not
@@ -184,10 +309,6 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         ignored: Option<&HashSet<PackageName>>,
         platform: Platform,
     ) -> Result<Self, TransactionError> {
-        // NOTE: If you're changing this function and want to use
-        // previously unused fields don't forget to update
-        // MinimalPrefixRecord as it is used as an optimization in the
-        // `installer::install`.
         let current_packages = current.into_iter().collect::<Vec<_>>();
         let desired_packages = desired.into_iter().collect::<Vec<_>>();
 
@@ -246,7 +367,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
                     unchanged.push(old_record);
                 }
             } else if let Some(old_record) = old_record {
-                if !describe_same_content(record.as_ref(), old_record.as_ref())
+                if !describe_same_content(&record, &old_record)
                     || reinstall.contains(&record.as_ref().name)
                 {
                     // if the content changed, we need to reinstall (remove and install)
@@ -299,32 +420,34 @@ fn is_python_record(record: &PackageRecord) -> bool {
 }
 
 /// Returns true if the `from` and `to` describe the same package content
-fn describe_same_content(from: &PackageRecord, to: &PackageRecord) -> bool {
+fn describe_same_content<T: ContentComparable, U: ContentComparable>(from: &T, to: &U) -> bool {
     // If one hash is set and the other is not, the packages are different
-    if from.sha256.is_some() != to.sha256.is_some() {
+    if from.sha256().is_some() != to.sha256().is_some() {
         return false;
     }
 
     // If the hashes of the packages match we consider them to be equal
-    if let (Some(a), Some(b)) = (from.sha256.as_ref(), to.sha256.as_ref()) {
+    if let (Some(a), Some(b)) = (from.sha256(), to.sha256()) {
         return a == b;
     }
 
-    if from.md5.is_some() != to.md5.is_some() {
+    if from.md5().is_some() != to.md5().is_some() {
         return false;
     }
 
-    if let (Some(a), Some(b)) = (from.md5.as_ref(), to.md5.as_ref()) {
+    if let (Some(a), Some(b)) = (from.md5(), to.md5()) {
         return a == b;
     }
 
     // If the size doesn't match, the contents must be different
-    if matches!((from.size.as_ref(), to.size.as_ref()), (Some(a), Some(b)) if a != b) {
+    if matches!((from.size(), to.size()), (Some(a), Some(b)) if a != b) {
         return false;
     }
 
     // Otherwise, just check that the name, version and build string match
-    from.name == to.name && from.version == to.version && from.build == to.build
+    from.name() == to.name()
+        && from.version_string() == to.version_string()
+        && from.build() == to.build()
 }
 
 #[cfg(test)]
