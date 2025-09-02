@@ -336,6 +336,10 @@ pub struct PrefixOpts {
     #[arg(long, required = false)]
     pub attestation: Option<PathBuf>,
 
+    /// Automatically generate attestations when using trusted publishing
+    #[arg(long, default_value = "false")]
+    pub generate_attestation: bool,
+
     /// Skip upload if package is existed.
     #[arg(short, long)]
     pub skip_existing: bool,
@@ -348,6 +352,7 @@ pub struct PrefixData {
     pub channel: String,
     pub api_key: Option<String>,
     pub attestation: Option<PathBuf>,
+    pub generate_attestation: bool,
     pub skip_existing: bool,
 }
 
@@ -358,6 +363,7 @@ impl From<PrefixOpts> for PrefixData {
             value.channel,
             value.api_key,
             value.attestation,
+            value.generate_attestation,
             value.skip_existing,
         )
     }
@@ -370,6 +376,7 @@ impl PrefixData {
         channel: String,
         api_key: Option<String>,
         attestation: Option<PathBuf>,
+        generate_attestation: bool,
         skip_existing: bool,
     ) -> Self {
         Self {
@@ -377,6 +384,7 @@ impl PrefixData {
             channel,
             api_key,
             attestation,
+            generate_attestation,
             skip_existing,
         }
     }
