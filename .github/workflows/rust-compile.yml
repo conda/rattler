@@ -25,6 +25,7 @@ env:
   DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,experimental_extras,edit,rattler_config
 
 jobs:
+
   check-rustdoc-links:
     name: Check intra-doc links
     runs-on: ubuntu-latest
@@ -39,6 +40,12 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    # These permissions are needed to create a sigstore certificate.
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+
     strategy:
       fail-fast: false
       matrix:
