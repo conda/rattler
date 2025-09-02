@@ -1,10 +1,31 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import os
 from typing import Optional
 
 from rattler.platform import Platform
 from rattler.rattler import py_index_fs, py_index_s3
+
+
+@dataclass
+class S3Credentials:
+    """Credentials for accessing an S3 backend."""
+
+    # The endpoint URL of the S3 backend
+    endpoint_url: str
+
+    # The region of the S3 backend
+    region: str
+
+    # The access key ID for the S3 bucket.
+    access_key_id: Optional[str] = None
+
+    # The secret access key for the S3 bucket.
+    secret_access_key: Optional[str] = None
+
+    # The session token for the S3 bucket.
+    session_token: Optional[str] = None
 
 
 async def index_fs(
@@ -46,12 +67,8 @@ async def index_fs(
 
 async def index_s3(
     channel_url: str,
-    region: Optional[str] = None,
-    endpoint_url: Optional[str] = None,
-    force_path_style: bool = False,
-    access_key_id: Optional[str] = None,
-    secret_access_key: Optional[str] = None,
-    session_token: Optional[str] = None,
+    credentials: Optional[S3Credentials] = None,
+    force_path_style: Optional[bool] = False,
     target_platform: Optional[Platform] = None,
     repodata_patch: Optional[str] = None,
     write_zst: bool = True,
@@ -69,12 +86,9 @@ async def index_s3(
     Arguments:
         channel_url: An S3 URL (e.g., s3://my-bucket/my-channel that containins the subdirectories
                      of dependencies to index.
-        region: The region of the S3 bucket.
-        endpoint_url: The endpoint URL of the S3 bucket.
         force_path_style: Whether to use path-style addressing for S3.
-        access_key_id: The access key ID to use for authentication.
-        secret_access_key: The secret access key to use for authentication.
-        session_token: The session token to use for authentication.
+        credentials: The credentials to use for accessing the S3 bucket. If not provided, will use the default
+                     credentials from the environment.
         target_platform: A `Platform` to index dependencies for.
         repodata_patch: The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
         write_zst: Whether to write repodata.json.zst.
@@ -84,12 +98,8 @@ async def index_s3(
     """
     await py_index_s3(
         channel_url,
-        region,
-        endpoint_url,
+        credentials,
         force_path_style,
-        access_key_id,
-        secret_access_key,
-        session_token,
         target_platform._inner if target_platform else target_platform,
         repodata_patch,
         write_zst,

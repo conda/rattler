@@ -58,6 +58,7 @@ pub struct S3 {
     config: HashMap<String, S3Config>,
     expiration: std::time::Duration,
     default_client: Arc<async_once_cell::OnceCell<aws_config::SdkConfig>>,
+    provider_name: &'static str,
 }
 
 /// S3 middleware to authenticate requests.
@@ -84,8 +85,16 @@ impl S3 {
             auth_storage,
             expiration: std::time::Duration::from_secs(300),
             default_client: Arc::new(OnceCell::new()),
+            provider_name: "rattler",
         }
     }
+
+    /// Sets the provider name that is used by the s3 client.
+    pub fn with_provider_name(mut self, name: &'static str) -> Self {
+        self.provider_name = name;
+        self
+    }
+
     /// Create an S3 client.
     ///
     /// # Arguments
@@ -130,7 +139,7 @@ impl S3 {
                         secret_access_key,
                         session_token,
                         None,
-                        "pixi",
+                        self.provider_name,
                     )),
                 (_, Some(_)) => {
                     return Err(anyhow::anyhow!("unsupported authentication method"));
@@ -193,13 +202,14 @@ impl S3 {
                 .presigned(presign_config)
                 .await
                 .context("failed to presign S3 PUT request")?,
-            _ => client
+            Method::GET => client
                 .get_object()
                 .bucket(bucket_name)
                 .key(key)
                 .presigned(presign_config)
                 .await
                 .context("failed to presign S3 GET request")?,
+            _ => unimplemented!("Only HEAD, POST and GET are supported for S3 requests"),
         };
 
         Ok(Url::parse(presigned_request.uri()).context("failed to parse presigned S3 URL")?)

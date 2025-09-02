@@ -4907,6 +4907,7 @@ dependencies = [
  "aws-sdk-s3",
  "clap",
  "rattler_networking",
+ "serde",
  "thiserror 2.0.16",
  "url",
 ]

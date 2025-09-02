@@ -50,10 +50,13 @@ pub async fn fetch_index(
             let mut url = response.url().clone().redact();
             url.set_query(None);
             url.set_fragment(None);
+            let status = response.status();
+            let body = response.text().await.ok();
             return Err(GatewayError::ReqwestMiddlewareError(anyhow::format_err!(
-                "received unexpected status code ({}) when fetching {}",
-                response.status(),
+                "received unexpected status code ({}) when fetching {}.\n\nBody:\n{}",
+                status,
                 url,
+                body.as_deref().unwrap_or("<failed to get body>")
             )));
         }
 

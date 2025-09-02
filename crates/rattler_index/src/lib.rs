@@ -41,6 +41,7 @@ const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
 const REPODATA: &str = "repodata.json";
 const REPODATA_SHARDS: &str = "repodata_shards.msgpack.zst";
 const ZSTD_REPODATA_COMPRESSION_LEVEL: i32 = 19;
+const CACHE_CONTROL_IMMUTABLE: &str = "public, max-age=31536000, immutable";
 
 /// Extract the package record from an `index.json` file.
 pub fn package_record_from_index_json<T: Read>(
@@ -526,7 +527,7 @@ pub async fn write_repodata(
                 match op
                     .write_with(&shard_path, encoded_shard)
                     .if_not_exists(true)
-                    .cache_control("public, max-age=31536000, immutable")
+                    .cache_control(CACHE_CONTROL_IMMUTABLE)
                     .await
                 {
                     Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {

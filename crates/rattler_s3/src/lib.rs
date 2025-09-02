@@ -11,6 +11,7 @@ use url::Url;
 /// through CLI arguments combined with credentials coming from `rattler auth`,
 /// or everything is loaded through the AWS SDK.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct S3Credentials {
     /// The endpoint URL of the S3 backend
     pub endpoint_url: Url,
@@ -30,6 +31,7 @@ pub struct S3Credentials {
 
 /// The resolved S3 credentials.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ResolvedS3Credentials {
     /// The endpoint URL of the S3 backend
     pub endpoint_url: Url,

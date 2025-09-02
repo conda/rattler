@@ -19,3 +19,5 @@ aws-sdk-s3 = { workspace = true }
 aws-credential-types = { workspace = true }
 
 rattler_networking = { workspace = true }
+
+serde = { workspace = true, optional = true }
