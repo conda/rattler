@@ -229,15 +229,27 @@ fn validate_prefix_dev_token(
     let client = Client::new();
 
     // Allow override of API URL for testing
-    let url = std::env::var("PREFIX_DEV_API_URL")
-        .unwrap_or_else(|_| format!("https://{host}/api/graphql"));
+    let mut prefix_url = if host.contains("://") {
+        host.to_string()
+    } else {
+        format!("https://{host}")
+    };
+
+    if prefix_url.contains("*.") {
+        // strip wildcard if given
+        prefix_url = prefix_url.replace("*.", "");
+    }
+
+    if let Ok(env_var) = std::env::var("PREFIX_DEV_API_URL") {
+        prefix_url = env_var;
+    }
 
     let body = json!({
         "query": "query { viewer { login } }"
     });
 
     let response = client
-        .post(url)
+        .post(prefix_url)
         .header(AUTHORIZATION, format!("Bearer {token}"))
         .header(CONTENT_TYPE, "application/json")
         .json(&body)
