@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.1](https://github.com/conda/rattler/compare/rattler-v0.36.0...rattler-v0.36.1) - 2025-09-02
+
+### Fixed
+
+- logic to get to `prefix.dev` host ([#1646](https://github.com/conda/rattler/pull/1646))
+
+## [0.36.0](https://github.com/conda/rattler/compare/rattler-v0.35.0...rattler-v0.36.0) - 2025-08-28
+
+### Fixed
+
+- fix login authentication ([#1600](https://github.com/conda/rattler/pull/1600))
+
 ## [0.35.0](https://github.com/conda/rattler/compare/rattler-v0.34.13...rattler-v0.35.0) - 2025-08-22
 
 ### Added
