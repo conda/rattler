@@ -14,6 +14,7 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::serde_as;
 use tempfile::NamedTempFile;
 
+use crate::utils::serde::is_none_or_empty_string;
 use crate::{
     menuinst, package::FileMode, repo_data::RecordFromPath, repo_data_record::RepoDataRecord,
     PackageName, PackageRecord,
@@ -189,7 +190,7 @@ pub struct PrefixRecord {
     ///
     /// This field is deprecated. Use `requested_specs` instead.
     #[deprecated(note = "Use `requested_specs` instead")]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "is_none_or_empty_string")]
     pub requested_spec: Option<String>,
 
     /// Multiple specs that were used when this package was installed.
