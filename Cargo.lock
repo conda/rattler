@@ -2337,9 +2337,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-auth"
-version = "0.22.3"
+version = "0.22.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb930bdeb70c93de0a8c635a23cfb2447e8da167ffe90eab1330b0a8b6091d2e"
+checksum = "7314c5dcd0feb905728aa809f46d10a58587be2bdd90f3003e09bcef05e919dc"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2359,9 +2359,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-gax"
-version = "0.23.3"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "876a08b972e05565d562f2575e110092492835bf5f7b76aec4e90f792b581960"
+checksum = "58148fad34ed71d986c8e3244c1575793445d211bee643740066e3a2388f4319"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2785,7 +2785,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -3202,7 +3202,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.53.3",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -4280,7 +4280,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls 0.23.31",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "thiserror 2.0.16",
  "tokio",
  "tracing",
@@ -4317,7 +4317,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.60.2",
 ]
