@@ -639,6 +639,27 @@ mod test {
     }
 
     #[test]
+    fn test_deserialize_no_noarch_empty_str() {
+        // This test covers the case where a repodata entry may contain a "noarch" key set to an empty string.
+        // Packages with such metadata have been observed on private conda channels.
+        // This likely was passed from older versions of conda-build that would pass this key
+        // from the recipe even if it was incorrect.
+        let repodata =
+            deserialize_json_from_test_data("channels/dummy-noarch-str/linux-64/repodata.json");
+        insta::assert_yaml_snapshot!(repodata);
+    }
+
+    #[test]
+    fn test_deserialize_no_noarch_not_empty_str_should_fail() {
+        let test_data_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
+        let data_path =
+            test_data_path.join("channels/dummy-noarch-str-not-empty/linux-64/repodata.json");
+        let err = RepoData::from_path(data_path).unwrap_err();
+        insta::assert_snapshot!(err.to_string(), @r#"invalid value: string "notempty-this-should-fail", expected '' at line 26 column 43"#);
+    }
+
+    #[test]
     fn test_base_url_packages() {
         // load test data
         let test_data_path = dunce::canonicalize(

@@ -157,6 +157,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "assert-json-diff"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47e4f2b81832e72834d7518d8487a0396a28cc408186a2e8854c0f98011faf12"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "assert_matches"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1267,6 +1277,15 @@ name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
+
+[[package]]
+name = "colored"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
+dependencies = [
+ "windows-sys 0.59.0",
+]
 
 [[package]]
 name = "concurrent-queue"
@@ -3380,6 +3399,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "mockito"
+version = "1.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7760e0e418d9b7e5777c0374009ca4c93861b9066f18cb334a20ce50ab63aa48"
+dependencies = [
+ "assert-json-diff",
+ "bytes",
+ "colored",
+ "futures-util",
+ "http 1.3.1",
+ "http-body 1.0.1",
+ "http-body-util",
+ "hyper 1.6.0",
+ "hyper-util",
+ "log",
+ "rand 0.9.2",
+ "regex",
+ "serde_json",
+ "serde_urlencoded",
+ "similar",
+ "tokio",
+]
+
+[[package]]
 name = "native-tls"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3807,7 +3850,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "path_resolver"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "divan",
  "fs-err",
@@ -4372,7 +4415,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.34.13"
+version = "0.36.1"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4390,6 +4433,7 @@ dependencies = [
  "itertools 0.14.0",
  "memchr",
  "memmap2",
+ "mockito",
  "once_cell",
  "parking_lot 0.12.4",
  "path_resolver",
@@ -4450,7 +4494,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.31"
+version = "0.3.32"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4489,7 +4533,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.39.0"
+version = "0.39.1"
 dependencies = [
  "assert_matches",
  "chrono",
@@ -4539,7 +4583,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "console 0.16.0",
  "fs-err",
@@ -4576,7 +4620,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.24.9"
+version = "0.24.12"
 dependencies = [
  "anyhow",
  "bytes",
@@ -4623,7 +4667,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.23.15"
+version = "0.23.16"
 dependencies = [
  "chrono",
  "file_url",
@@ -4660,7 +4704,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.22"
+version = "0.2.24"
 dependencies = [
  "chrono",
  "configparser",
@@ -4689,7 +4733,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.10"
+version = "0.25.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4725,7 +4769,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.1"
+version = "0.23.2"
 dependencies = [
  "assert_matches",
  "bzip2",
@@ -4777,7 +4821,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.1"
+version = "0.24.2"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4856,7 +4900,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.24.9"
+version = "0.24.10"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4878,7 +4922,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "3.0.1"
+version = "3.0.2"
 dependencies = [
  "chrono",
  "criterion",
@@ -4904,7 +4948,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.1.5"
+version = "0.2.1"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -4937,7 +4981,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.1.3"
+version = "2.1.4"
 dependencies = [
  "archspec",
  "libloading",

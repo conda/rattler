@@ -129,7 +129,7 @@ packages:
     name: numpy
     version: 2.2.1
     sha256: 3ecc47cd7f6ea0336042be87d9e7da378e5c7e9b3c8ad0f7c966f714fc10d821
-    requires_python: '>=3.10'
+    requires_python: ">=3.10"
   - conda: https://prefix.dev/conda-forge/osx-arm64/openssl-3.4.0-h81ee809_1.conda
     sha256: 97772762abc70b3a537683ca9fc3ff3d6099eb64e4aba3b9c99e6fce48422d21
     md5: 22f971393637480bda8c679f374d8861
