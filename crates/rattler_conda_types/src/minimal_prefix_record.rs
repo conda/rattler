@@ -88,10 +88,24 @@ impl MinimalPrefixRecord {
             .ok_or_else(|| io::Error::other("Invalid conda-meta filename format"))?;
 
         let file = File::open(path)?;
+        let initial_metadata = file.metadata()?;
+
+        // SAFETY: We create a read-only memory map of a regular file.
+        // We capture the file's metadata to detect if it changes during parsing.
         let mmap = unsafe { Mmap::map(&file)? };
 
         let parsed = parse_minimal_json(&mmap[..])
-            .map_err(|e| io::Error::other(format!("Failed to parse JSON: {e}")))?;
+            .map_err(|e| io::Error::other(format!("Failed to parse JSON: {e}")));
+
+        // Verify file hasn't changed during parsing
+        let final_metadata = file.metadata()?;
+        if initial_metadata.modified()? != final_metadata.modified()?
+            || initial_metadata.len() != final_metadata.len()
+        {
+            return Err(io::Error::other("File was modified during parsing"));
+        }
+
+        let parsed = parsed?;
 
         let (final_sha256, final_md5, final_size) = if parsed.sha256.is_some() {
             (parsed.sha256, None, None)
