@@ -13,7 +13,7 @@
 use std::str::FromStr;
 use std::{io, path::Path};
 
-use crate::{NoArchType, PackageName, PackageRecord, PrefixRecord, Version, VersionWithSource};
+use crate::{NoArchType, PackageName, PackageRecord, PrefixRecord, VersionWithSource};
 use hex;
 use itertools::Itertools;
 use memmap2::Mmap;
@@ -33,8 +33,8 @@ use rattler_digest::{Md5Hash, Sha256Hash};
 pub struct MinimalPrefixRecord {
     /// The package name
     pub name: PackageName,
-    /// The package version as a string
-    pub version: String,
+    /// The package version
+    pub version: VersionWithSource,
     /// The build string
     pub build: String,
 
@@ -44,6 +44,10 @@ pub struct MinimalPrefixRecord {
     pub md5: Option<Md5Hash>,
     /// Size of the package in bytes, only if there is no MD5 hash.
     pub size: Option<u64>,
+
+    /// If this package is independent of architecture this field specifies in
+    /// what way. See [`NoArchType`] for more information.
+    pub noarch: NoArchType,
     /// Optionally a path within the environment of the site-packages directory.
     /// This field is only present for python interpreter packages.
     /// This field was introduced with <https://github.com/conda/ceps/blob/main/cep-17.md>.
@@ -107,6 +111,9 @@ impl MinimalPrefixRecord {
 
         let parsed = parsed?;
 
+        let version = VersionWithSource::from_str(version)
+            .map_err(|e| io::Error::other(format!("Failed to parse version: {e}")))?;
+
         let (final_sha256, final_md5, final_size) = if parsed.sha256.is_some() {
             (parsed.sha256, None, None)
         } else if parsed.md5.is_some() {
@@ -150,17 +157,37 @@ impl MinimalPrefixRecord {
             })
             .collect();
 
+        // Parse noarch field
+        let final_noarch = match parsed.noarch {
+            Some(quoted_bytes) => {
+                if let Ok(json_str) = std::str::from_utf8(quoted_bytes) {
+                    match serde_json::from_str::<String>(json_str) {
+                        Ok(s) => match s.as_str() {
+                            "python" => NoArchType::python(),
+                            "generic" => NoArchType::generic(),
+                            _ => NoArchType::none(),
+                        },
+                        Err(_) => NoArchType::none(),
+                    }
+                } else {
+                    NoArchType::none()
+                }
+            }
+            None => NoArchType::none(),
+        };
+
         #[allow(deprecated)]
         Ok(Self {
             name: name
                 .parse::<PackageName>()
                 .map_err(|e| format!("Could not parse package name: {e:#?}"))
                 .map_err(io::Error::other)?,
-            version: version.into(),
+            version,
             build: build.into(),
             sha256: final_sha256,
             md5: final_md5,
             size: final_size,
+            noarch: final_noarch,
             python_site_packages_path: final_python_site_packages_path,
             requested_specs: final_requested_specs,
             requested_spec: final_requested_spec,
@@ -170,15 +197,9 @@ impl MinimalPrefixRecord {
     /// Convert to a partial `PackageRecord` for use in transaction computation.
     /// This creates a `PackageRecord` with only the essential fields filled in.
     pub fn to_package_record(&self) -> PackageRecord {
-        let version = self
-            .version
-            .parse::<Version>()
-            .unwrap_or_else(|_| Version::from_str(&self.version).unwrap());
-        let version_with_source = VersionWithSource::from(version);
-
         PackageRecord {
             name: self.name.clone(),
-            version: version_with_source,
+            version: self.version.clone(),
             build: self.build.clone(),
             build_number: 0,
             subdir: "noarch".to_string(),
@@ -225,11 +246,12 @@ impl MinimalPrefixRecord {
         #[allow(deprecated)]
         Self {
             name: package_record.name.clone(),
-            version: package_record.version.version().to_string(),
+            version: package_record.version.clone(),
             build: package_record.build.clone(),
             sha256: final_sha256,
             md5: final_md5,
             size: final_size,
+            noarch: package_record.noarch,
             python_site_packages_path: final_python_site_packages_path,
             requested_spec: prefix_record.requested_spec.clone(),
             requested_specs: prefix_record.requested_specs.clone(),
@@ -335,6 +357,7 @@ struct ParsedFields<'a> {
     python_site_packages_path: Option<&'a [u8]>, // Store quoted JSON string
     requested_specs: Vec<&'a [u8]>,              // Store quoted JSON strings
     requested_spec: Option<&'a [u8]>,            // Store quoted JSON string
+    noarch: Option<&'a [u8]>, // Store quoted JSON string or raw for null/bool/other
 }
 
 /// Parsing state to track what fields we've found
@@ -557,6 +580,23 @@ fn parse_field_value<'a>(
             let (rest, specs) = parse_json_array(input)?;
             fields.requested_specs = specs;
             Ok((rest, ()))
+        }
+        b"noarch" => {
+            // Handle string values like "python", "generic" or null/false
+            let (rest, _) = multispace0_bytes(input)?;
+            if rest.starts_with(b"null") || rest.starts_with(b"false") {
+                fields.noarch = None;
+                let consumed = if rest.starts_with(b"null") { 4 } else { 5 };
+                Ok((&rest[consumed..], ()))
+            } else if rest.starts_with(b"\"") {
+                let (rest, quoted_value) = parse_json_string_quoted(input)?;
+                fields.noarch = Some(quoted_value);
+                Ok((rest, ()))
+            } else {
+                // Skip unknown noarch values
+                let (rest, _) = skip_json_value(input)?;
+                Ok((rest, ()))
+            }
         }
         _ => {
             // Skip unknown fields
