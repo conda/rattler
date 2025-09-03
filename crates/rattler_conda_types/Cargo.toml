@@ -86,7 +86,3 @@ harness = false
 [[bench]]
 name = "prefix_record_from_path"
 harness = false
-
-[[bench]]
-name = "minimal_prefix_record"
-harness = false
