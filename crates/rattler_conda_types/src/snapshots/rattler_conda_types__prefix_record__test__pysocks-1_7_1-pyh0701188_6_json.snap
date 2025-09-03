@@ -24,7 +24,6 @@ url: "https://conda.anaconda.org/conda-forge/noarch/pysocks-1.7.1-pyh0701188_6.t
 channel: "https://conda.anaconda.org/conda-forge/noarch"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\pkgs\\pysocks-1.7.1-pyh0701188_6.tar.bz2"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\pkgs\\pysocks-1.7.1-pyh0701188_6"
-requested_spec: ""
 requested_specs: []
 files:
   - Lib/site-packages/PySocks-1.7.1.dist-info/INSTALLER

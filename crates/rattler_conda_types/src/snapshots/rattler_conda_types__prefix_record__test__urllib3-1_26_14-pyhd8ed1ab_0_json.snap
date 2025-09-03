@@ -28,7 +28,6 @@ url: "https://conda.anaconda.org/conda-forge/noarch/urllib3-1.26.14-pyhd8ed1ab_0
 channel: conda-forge
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\pkgs\\urllib3-1.26.14-pyhd8ed1ab_0.tar.bz2"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\pkgs\\urllib3-1.26.14-pyhd8ed1ab_0"
-requested_spec: ""
 requested_specs: []
 files:
   - Lib/site-packages/urllib3-1.26.14.dist-info/INSTALLER

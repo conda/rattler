@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use rattler_conda_types::{
-    MinimalPrefixRecord, PackageName, PackageRecord, Platform, PrefixRecord, RepoDataRecord,
+    MinimalPrefixRecord, NoArchType, PackageName, PackageRecord, Platform, PrefixRecord,
+    RepoDataRecord, VersionWithSource,
 };
 use rattler_digest::{Md5Hash, Sha256Hash};
 
@@ -12,19 +13,21 @@ use crate::install::{python::PythonInfoError, PythonInfo};
 /// it must be added here and implemented for all types.
 pub trait ContentComparable {
     fn name(&self) -> &PackageName;
-    fn version_string(&self) -> String;
+    fn version(&self) -> &VersionWithSource;
     fn build(&self) -> &str;
     fn sha256(&self) -> Option<&Sha256Hash>;
     fn md5(&self) -> Option<&Md5Hash>;
     fn size(&self) -> Option<u64>;
+    fn noarch(&self) -> NoArchType;
+    fn python_site_packages_path(&self) -> Option<&str>;
 }
 
 impl ContentComparable for PackageRecord {
     fn name(&self) -> &PackageName {
         &self.name
     }
-    fn version_string(&self) -> String {
-        self.version.to_string()
+    fn version(&self) -> &VersionWithSource {
+        &self.version
     }
     fn build(&self) -> &str {
         &self.build
@@ -37,6 +40,12 @@ impl ContentComparable for PackageRecord {
     }
     fn size(&self) -> Option<u64> {
         self.size
+    }
+    fn noarch(&self) -> NoArchType {
+        self.noarch
+    }
+    fn python_site_packages_path(&self) -> Option<&str> {
+        self.python_site_packages_path.as_deref()
     }
 }
 
@@ -44,8 +53,8 @@ impl ContentComparable for MinimalPrefixRecord {
     fn name(&self) -> &PackageName {
         &self.name
     }
-    fn version_string(&self) -> String {
-        self.version.clone()
+    fn version(&self) -> &VersionWithSource {
+        &self.version
     }
     fn build(&self) -> &str {
         &self.build
@@ -59,14 +68,20 @@ impl ContentComparable for MinimalPrefixRecord {
     fn size(&self) -> Option<u64> {
         self.size
     }
+    fn noarch(&self) -> NoArchType {
+        self.noarch
+    }
+    fn python_site_packages_path(&self) -> Option<&str> {
+        self.python_site_packages_path.as_deref()
+    }
 }
 
 impl ContentComparable for PrefixRecord {
     fn name(&self) -> &PackageName {
         &self.repodata_record.package_record.name
     }
-    fn version_string(&self) -> String {
-        self.repodata_record.package_record.version.to_string()
+    fn version(&self) -> &VersionWithSource {
+        &self.repodata_record.package_record.version
     }
     fn build(&self) -> &str {
         &self.repodata_record.package_record.build
@@ -80,14 +95,23 @@ impl ContentComparable for PrefixRecord {
     fn size(&self) -> Option<u64> {
         self.repodata_record.package_record.size
     }
+    fn noarch(&self) -> NoArchType {
+        self.repodata_record.package_record.noarch
+    }
+    fn python_site_packages_path(&self) -> Option<&str> {
+        self.repodata_record
+            .package_record
+            .python_site_packages_path
+            .as_deref()
+    }
 }
 
 impl ContentComparable for RepoDataRecord {
     fn name(&self) -> &PackageName {
         &self.package_record.name
     }
-    fn version_string(&self) -> String {
-        self.package_record.version.to_string()
+    fn version(&self) -> &VersionWithSource {
+        &self.package_record.version
     }
     fn build(&self) -> &str {
         &self.package_record.build
@@ -101,6 +125,12 @@ impl ContentComparable for RepoDataRecord {
     fn size(&self) -> Option<u64> {
         self.package_record.size
     }
+    fn noarch(&self) -> NoArchType {
+        self.package_record.noarch
+    }
+    fn python_site_packages_path(&self) -> Option<&str> {
+        self.package_record.python_site_packages_path.as_deref()
+    }
 }
 
 // Blanket implementation for references
@@ -108,8 +138,8 @@ impl<T: ContentComparable> ContentComparable for &T {
     fn name(&self) -> &PackageName {
         (*self).name()
     }
-    fn version_string(&self) -> String {
-        (*self).version_string()
+    fn version(&self) -> &VersionWithSource {
+        (*self).version()
     }
     fn build(&self) -> &str {
         (*self).build()
@@ -122,6 +152,12 @@ impl<T: ContentComparable> ContentComparable for &T {
     }
     fn size(&self) -> Option<u64> {
         (*self).size()
+    }
+    fn noarch(&self) -> NoArchType {
+        T::noarch(self)
+    }
+    fn python_site_packages_path(&self) -> Option<&str> {
+        T::python_site_packages_path(self)
     }
 }
 
@@ -291,8 +327,8 @@ impl<Old: AsRef<New>, New> Transaction<Old, New> {
 
 impl<Old, New> Transaction<Old, New>
 where
-    Old: ContentComparable + AsRef<PackageRecord>,
-    New: ContentComparable + AsRef<PackageRecord>,
+    Old: ContentComparable,
+    New: ContentComparable,
 {
     /// Constructs a [`Transaction`] by taking the current situation and diffing
     /// that against the desired situation. You can specify a set of package
@@ -328,7 +364,7 @@ where
 
         let desired_names = desired_packages
             .iter()
-            .map(|r| r.as_ref().name.clone())
+            .map(|r| r.name().clone())
             .collect::<HashSet<_>>();
 
         // Remove all current packages that are not in desired (but keep order of
@@ -336,10 +372,10 @@ where
         let mut unchanged = Vec::new();
         let mut current_map = HashMap::new();
         for record in current_packages {
-            let package_name = &record.as_ref().name;
+            let package_name = record.name();
             if desired_names.contains(package_name) {
                 // The record is desired. Keep it in the map so we can compare it to the desired record later.
-                current_map.insert(record.as_ref().name.clone(), record);
+                current_map.insert(record.name().clone(), record);
             } else {
                 // The record is not desired.
                 if ignored.contains(package_name) {
@@ -358,7 +394,7 @@ where
         // Figure out the operations to perform, but keep the order of the original
         // "desired" iterator. Skip ignored packages entirely.
         for record in desired_packages {
-            let name = &record.as_ref().name;
+            let name = record.name();
             let old_record = current_map.remove(name);
 
             // Skip ignored packages - they should be left in their current state
@@ -367,15 +403,14 @@ where
                     unchanged.push(old_record);
                 }
             } else if let Some(old_record) = old_record {
-                if !describe_same_content(&record, &old_record)
-                    || reinstall.contains(&record.as_ref().name)
+                if !describe_same_content(&record, &old_record) || reinstall.contains(record.name())
                 {
                     // if the content changed, we need to reinstall (remove and install)
                     operations.push(TransactionOperation::Change {
                         old: old_record,
                         new: record,
                     });
-                } else if needs_python_relink && old_record.as_ref().noarch.is_python() {
+                } else if needs_python_relink && old_record.noarch().is_python() {
                     // when the python version changed, we need to relink all noarch packages
                     // to recompile the bytecode
                     operations.push(TransactionOperation::Reinstall {
@@ -404,19 +439,20 @@ where
 /// Determine the version of Python used by a set of packages. Returns `None` if
 /// none of the packages refers to a Python installation.
 fn find_python_info(
-    records: impl IntoIterator<Item = impl AsRef<PackageRecord>>,
+    records: impl IntoIterator<Item = impl ContentComparable>,
     platform: Platform,
 ) -> Result<Option<PythonInfo>, PythonInfoError> {
     records
         .into_iter()
-        .find(|r| is_python_record(r.as_ref()))
-        .map(|record| PythonInfo::from_python_record(record.as_ref(), platform))
+        .find(|r| r.name().as_normalized() == "python")
+        .map(|record| {
+            PythonInfo::from_version(
+                record.version(),
+                record.python_site_packages_path(),
+                platform,
+            )
+        })
         .map_or(Ok(None), |info| info.map(Some))
-}
-
-/// Returns true if the specified record refers to Python.
-fn is_python_record(record: &PackageRecord) -> bool {
-    record.name.as_normalized() == "python"
 }
 
 /// Returns true if the `from` and `to` describe the same package content
@@ -445,9 +481,7 @@ fn describe_same_content<T: ContentComparable, U: ContentComparable>(from: &T, t
     }
 
     // Otherwise, just check that the name, version and build string match
-    from.name() == to.name()
-        && from.version_string() == to.version_string()
-        && from.build() == to.build()
+    from.name() == to.name() && from.version() == to.version() && from.build() == to.build()
 }
 
 #[cfg(test)]
