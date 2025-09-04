@@ -56,14 +56,14 @@ pub struct ResolvedS3Credentials {
     /// The region of the S3 backend
     pub region: String,
 
+    /// How to address the S3 buckets.
+    pub addressing_style: S3AddressingStyle,
+
     /// The access key ID for the S3 bucket.
     pub access_key_id: String,
 
     /// The secret access key for the S3 bucket.
     pub secret_access_key: String,
-
-    /// How to address the S3 buckets.
-    pub addressing_style: S3AddressingStyle,
 
     /// The session token for the S3 bucket.
     pub session_token: Option<String>,
