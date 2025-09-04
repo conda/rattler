@@ -361,13 +361,15 @@ impl Installer {
         // Create a future to determine the currently installed packages. We
         // can start this in parallel with the other operations and resolve it
         // when we need it.
-        let installed: Vec<PrefixRecord> = if let Some(installed) = self.installed {
+        let installed_provided = self.installed.is_some();
+        let mut installed: Vec<PrefixRecord> = if let Some(installed) = self.installed {
             installed
         } else {
             let prefix = prefix.clone();
-            // TODO: Should we add progress reporting here?
+            // Use sparse collection for much faster reading when checking if packages changed
             run_blocking_task(move || {
-                PrefixRecord::collect_from_prefix(&prefix)
+                use rattler_conda_types::MinimalPrefixCollection;
+                PrefixRecord::collect_minimal_from_prefix(&prefix)
                     .map_err(InstallerError::FailedToDetectInstalledPackages)
             })
             .await?
@@ -375,13 +377,35 @@ impl Installer {
 
         // Construct a transaction from the current and desired situation.
         let target_platform = self.target_platform.unwrap_or_else(Platform::current);
-        let transaction = Transaction::from_current_and_desired(
-            installed,
-            records.into_iter().collect::<Vec<_>>(),
-            self.reinstall_packages,
-            self.ignored_packages,
+        let desired_records: Vec<_> = records.into_iter().collect();
+        let mut transaction = Transaction::from_current_and_desired(
+            installed.iter(),
+            desired_records.iter(),
+            self.reinstall_packages.as_ref(),
+            self.ignored_packages.as_ref(),
             target_platform,
         )?;
+        // If transaction is non-empty, we need full prefix records for file operations
+        // Reload them and reconstruct the transaction with full records
+        if !transaction.operations.is_empty() && !installed_provided {
+            let prefix = prefix.clone();
+            installed = run_blocking_task(move || {
+                PrefixRecord::collect_from_prefix(&prefix)
+                    .map_err(InstallerError::FailedToDetectInstalledPackages)
+            })
+            .await?;
+
+            // Reconstruct transaction with full records to maintain consistency
+            transaction = Transaction::from_current_and_desired(
+                installed.iter(),
+                desired_records.iter(),
+                self.reinstall_packages.as_ref(),
+                self.ignored_packages.as_ref(),
+                target_platform,
+            )?;
+        }
+
+        let transaction = transaction.to_owned();
 
         // Create a mapping from package names to requested specs
         let spec_mapping = self
@@ -738,6 +762,59 @@ async fn populate_cache(
         .map_err(|e| InstallerError::FailedToFetch(record.file_name.clone(), e))
 }
 
+/// Updates only the `requested_specs` fields in a conda-meta JSON file.
+/// This performs a targeted update without overwriting other
+/// metadata.
+///
+/// This method is needed as we're initially loading
+/// `MinimalPrefixRecord`, which doesn't contain most of the fields.
+/// Therefore direct writing could overwrite data we want to preserve.
+///
+/// Currently we're loading full json, but we could do that inplace without parsing whole file.
+fn update_requested_specs_in_json(
+    path: &Path,
+    requested_specs: &[String],
+    requested_spec: Option<&str>,
+) -> std::io::Result<()> {
+    use serde_json::Value;
+
+    // Read the existing JSON file
+    let content = fs_err::read_to_string(path)?;
+    let mut json: Value = serde_json::from_str(&content)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+    // Update only the requested_specs fields
+    if let Some(obj) = json.as_object_mut() {
+        // Update requested_specs (plural)
+        obj.insert(
+            "requested_specs".to_string(),
+            Value::Array(
+                requested_specs
+                    .iter()
+                    .map(|s| Value::String(s.clone()))
+                    .collect(),
+            ),
+        );
+
+        // Update or remove requested_spec (singular, deprecated)
+        if let Some(spec) = requested_spec {
+            obj.insert(
+                "requested_spec".to_string(),
+                Value::String(spec.to_string()),
+            );
+        } else {
+            obj.remove("requested_spec");
+        }
+    }
+
+    // Write the updated JSON back to file
+    let updated_content = serde_json::to_string_pretty(&json)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    fs_err::write(path, updated_content)?;
+
+    Ok(())
+}
+
 /// Creates a mapping from package names to their requested spec strings.
 ///
 /// This function takes a list of `MatchSpecs` and creates a mapping where:
@@ -832,15 +909,21 @@ fn update_existing_records<'p>(
                     new_record.repodata_record.package_record.version,
                     new_record.repodata_record.package_record.build
                 );
+                let full_path = conda_meta_path.join(&pkg_meta_path);
 
-                new_record
-                    .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
-                    .map_err(|e| {
-                        InstallerError::IoError(
-                            format!("failed to update requested_specs for {pkg_meta_path}"),
-                            e,
-                        )
-                    })?;
+                // We need to do a targeted update of just the requested_specs fields
+                // to avoid overwriting other metadata when using minimal records
+                update_requested_specs_in_json(
+                    &full_path,
+                    &new_record.requested_specs,
+                    new_record.requested_spec.as_deref(),
+                )
+                .map_err(|e| {
+                    InstallerError::IoError(
+                        format!("failed to update requested_specs for {pkg_meta_path}"),
+                        e,
+                    )
+                })?;
             }
 
             Ok(())
@@ -920,7 +1003,10 @@ mod tests {
         repo_record: rattler_conda_types::RepoDataRecord,
     ) {
         let result = installer.install(prefix, vec![repo_record]).await;
-        assert!(result.is_ok(), "Installation should succeed");
+        assert!(
+            result.is_ok(),
+            "Installation should succeed, but got error: {result:#?}"
+        );
     }
 
     #[test]
@@ -1155,7 +1241,7 @@ mod tests {
         // The package should now have the requested_specs cleared (set to empty)
         assert!(
             updated_record.requested_specs.is_empty(),
-            "Updated installation without specs should clear requested_specs"
+            "Updated installation without specs should clear requested_specs, got nonempty record requested_specs: {:#?}", updated_record.requested_specs
         );
     }
 

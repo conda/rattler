@@ -1,8 +1,165 @@
 use std::collections::{HashMap, HashSet};
 
-use rattler_conda_types::{PackageName, PackageRecord, Platform};
+use rattler_conda_types::{
+    MinimalPrefixRecord, NoArchType, PackageName, PackageRecord, Platform, PrefixRecord,
+    RepoDataRecord, VersionWithSource,
+};
+use rattler_digest::{Md5Hash, Sha256Hash};
 
 use crate::install::{python::PythonInfoError, PythonInfo};
+
+/// Trait that defines the fields needed for package content comparison.
+/// This ensures type safety - if `describe_same_content` needs a new field,
+/// it must be added here and implemented for all types.
+pub trait ContentComparable {
+    fn name(&self) -> &PackageName;
+    fn version(&self) -> &VersionWithSource;
+    fn build(&self) -> &str;
+    fn sha256(&self) -> Option<&Sha256Hash>;
+    fn md5(&self) -> Option<&Md5Hash>;
+    fn size(&self) -> Option<u64>;
+    fn noarch(&self) -> NoArchType;
+    fn python_site_packages_path(&self) -> Option<&str>;
+}
+
+impl ContentComparable for PackageRecord {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+    fn version(&self) -> &VersionWithSource {
+        &self.version
+    }
+    fn build(&self) -> &str {
+        &self.build
+    }
+    fn sha256(&self) -> Option<&Sha256Hash> {
+        self.sha256.as_ref()
+    }
+    fn md5(&self) -> Option<&Md5Hash> {
+        self.md5.as_ref()
+    }
+    fn size(&self) -> Option<u64> {
+        self.size
+    }
+    fn noarch(&self) -> NoArchType {
+        self.noarch
+    }
+    fn python_site_packages_path(&self) -> Option<&str> {
+        self.python_site_packages_path.as_deref()
+    }
+}
+
+impl ContentComparable for MinimalPrefixRecord {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+    fn version(&self) -> &VersionWithSource {
+        &self.version
+    }
+    fn build(&self) -> &str {
+        &self.build
+    }
+    fn sha256(&self) -> Option<&Sha256Hash> {
+        self.sha256.as_ref()
+    }
+    fn md5(&self) -> Option<&Md5Hash> {
+        self.md5.as_ref()
+    }
+    fn size(&self) -> Option<u64> {
+        self.size
+    }
+    fn noarch(&self) -> NoArchType {
+        self.noarch
+    }
+    fn python_site_packages_path(&self) -> Option<&str> {
+        self.python_site_packages_path.as_deref()
+    }
+}
+
+impl ContentComparable for PrefixRecord {
+    fn name(&self) -> &PackageName {
+        &self.repodata_record.package_record.name
+    }
+    fn version(&self) -> &VersionWithSource {
+        &self.repodata_record.package_record.version
+    }
+    fn build(&self) -> &str {
+        &self.repodata_record.package_record.build
+    }
+    fn sha256(&self) -> Option<&Sha256Hash> {
+        self.repodata_record.package_record.sha256.as_ref()
+    }
+    fn md5(&self) -> Option<&Md5Hash> {
+        self.repodata_record.package_record.md5.as_ref()
+    }
+    fn size(&self) -> Option<u64> {
+        self.repodata_record.package_record.size
+    }
+    fn noarch(&self) -> NoArchType {
+        self.repodata_record.package_record.noarch
+    }
+    fn python_site_packages_path(&self) -> Option<&str> {
+        self.repodata_record
+            .package_record
+            .python_site_packages_path
+            .as_deref()
+    }
+}
+
+impl ContentComparable for RepoDataRecord {
+    fn name(&self) -> &PackageName {
+        &self.package_record.name
+    }
+    fn version(&self) -> &VersionWithSource {
+        &self.package_record.version
+    }
+    fn build(&self) -> &str {
+        &self.package_record.build
+    }
+    fn sha256(&self) -> Option<&Sha256Hash> {
+        self.package_record.sha256.as_ref()
+    }
+    fn md5(&self) -> Option<&Md5Hash> {
+        self.package_record.md5.as_ref()
+    }
+    fn size(&self) -> Option<u64> {
+        self.package_record.size
+    }
+    fn noarch(&self) -> NoArchType {
+        self.package_record.noarch
+    }
+    fn python_site_packages_path(&self) -> Option<&str> {
+        self.package_record.python_site_packages_path.as_deref()
+    }
+}
+
+// Blanket implementation for references
+impl<T: ContentComparable> ContentComparable for &T {
+    fn name(&self) -> &PackageName {
+        (*self).name()
+    }
+    fn version(&self) -> &VersionWithSource {
+        (*self).version()
+    }
+    fn build(&self) -> &str {
+        (*self).build()
+    }
+    fn sha256(&self) -> Option<&Sha256Hash> {
+        (*self).sha256()
+    }
+    fn md5(&self) -> Option<&Md5Hash> {
+        (*self).md5()
+    }
+    fn size(&self) -> Option<u64> {
+        (*self).size()
+    }
+    fn noarch(&self) -> NoArchType {
+        T::noarch(self)
+    }
+    fn python_site_packages_path(&self) -> Option<&str> {
+        T::python_site_packages_path(self)
+    }
+}
 
 /// Error that occurred during creation of a Transaction
 #[derive(Debug, thiserror::Error)]
@@ -45,6 +202,24 @@ pub enum TransactionOperation<Old, New> {
 
     /// Completely remove a package
     Remove(Old),
+}
+
+impl<Old: Clone, New: Clone> TransactionOperation<&Old, &New> {
+    /// Own records.
+    pub fn to_owned(self) -> TransactionOperation<Old, New> {
+        match self {
+            TransactionOperation::Install(new) => TransactionOperation::Install(new.clone()),
+            TransactionOperation::Change { old, new } => TransactionOperation::Change {
+                old: old.clone(),
+                new: new.clone(),
+            },
+            TransactionOperation::Reinstall { old, new } => TransactionOperation::Reinstall {
+                old: old.clone(),
+                new: new.clone(),
+            },
+            TransactionOperation::Remove(old) => TransactionOperation::Remove(old.clone()),
+        }
+    }
 }
 
 impl<Old: AsRef<New>, New> TransactionOperation<Old, New> {
@@ -97,6 +272,23 @@ pub struct Transaction<Old, New> {
     pub unchanged: Vec<Old>,
 }
 
+impl<Old: Clone, New: Clone> Transaction<&Old, &New> {
+    /// Own records.
+    pub fn to_owned(self) -> Transaction<Old, New> {
+        Transaction {
+            operations: self
+                .operations
+                .into_iter()
+                .map(TransactionOperation::to_owned)
+                .collect(),
+            python_info: self.python_info,
+            current_python_info: self.current_python_info,
+            platform: self.platform,
+            unchanged: self.unchanged.into_iter().cloned().collect(),
+        }
+    }
+}
+
 impl<Old, New> Transaction<Old, New> {
     /// Return an iterator over the prefix records of all packages that are
     /// going to be removed.
@@ -133,7 +325,11 @@ impl<Old: AsRef<New>, New> Transaction<Old, New> {
     }
 }
 
-impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New> {
+impl<Old, New> Transaction<Old, New>
+where
+    Old: ContentComparable,
+    New: ContentComparable,
+{
     /// Constructs a [`Transaction`] by taking the current situation and diffing
     /// that against the desired situation. You can specify a set of package
     /// names that should be reinstalled even if their content has not
@@ -145,8 +341,8 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
     >(
         current: CurIter,
         desired: NewIter,
-        reinstall: Option<HashSet<PackageName>>,
-        ignored: Option<HashSet<PackageName>>,
+        reinstall: Option<&HashSet<PackageName>>,
+        ignored: Option<&HashSet<PackageName>>,
         platform: Platform,
     ) -> Result<Self, TransactionError> {
         let current_packages = current.into_iter().collect::<Vec<_>>();
@@ -161,12 +357,14 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         };
 
         let mut operations = Vec::new();
-        let reinstall = reinstall.unwrap_or_default();
-        let ignored = ignored.unwrap_or_default();
+
+        let empty_hashset = HashSet::new();
+        let reinstall = reinstall.unwrap_or(&empty_hashset);
+        let ignored = ignored.unwrap_or(&empty_hashset);
 
         let desired_names = desired_packages
             .iter()
-            .map(|r| r.as_ref().name.clone())
+            .map(|r| r.name().clone())
             .collect::<HashSet<_>>();
 
         // Remove all current packages that are not in desired (but keep order of
@@ -174,10 +372,10 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         let mut unchanged = Vec::new();
         let mut current_map = HashMap::new();
         for record in current_packages {
-            let package_name = &record.as_ref().name;
+            let package_name = record.name();
             if desired_names.contains(package_name) {
                 // The record is desired. Keep it in the map so we can compare it to the desired record later.
-                current_map.insert(record.as_ref().name.clone(), record);
+                current_map.insert(record.name().clone(), record);
             } else {
                 // The record is not desired.
                 if ignored.contains(package_name) {
@@ -196,7 +394,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         // Figure out the operations to perform, but keep the order of the original
         // "desired" iterator. Skip ignored packages entirely.
         for record in desired_packages {
-            let name = &record.as_ref().name;
+            let name = record.name();
             let old_record = current_map.remove(name);
 
             // Skip ignored packages - they should be left in their current state
@@ -205,15 +403,14 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
                     unchanged.push(old_record);
                 }
             } else if let Some(old_record) = old_record {
-                if !describe_same_content(record.as_ref(), old_record.as_ref())
-                    || reinstall.contains(&record.as_ref().name)
+                if !describe_same_content(&record, &old_record) || reinstall.contains(record.name())
                 {
                     // if the content changed, we need to reinstall (remove and install)
                     operations.push(TransactionOperation::Change {
                         old: old_record,
                         new: record,
                     });
-                } else if needs_python_relink && old_record.as_ref().noarch.is_python() {
+                } else if needs_python_relink && old_record.noarch().is_python() {
                     // when the python version changed, we need to relink all noarch packages
                     // to recompile the bytecode
                     operations.push(TransactionOperation::Reinstall {
@@ -242,43 +439,49 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
 /// Determine the version of Python used by a set of packages. Returns `None` if
 /// none of the packages refers to a Python installation.
 fn find_python_info(
-    records: impl IntoIterator<Item = impl AsRef<PackageRecord>>,
+    records: impl IntoIterator<Item = impl ContentComparable>,
     platform: Platform,
 ) -> Result<Option<PythonInfo>, PythonInfoError> {
     records
         .into_iter()
-        .find(|r| is_python_record(r.as_ref()))
-        .map(|record| PythonInfo::from_python_record(record.as_ref(), platform))
+        .find(|r| r.name().as_normalized() == "python")
+        .map(|record| {
+            PythonInfo::from_version(
+                record.version(),
+                record.python_site_packages_path(),
+                platform,
+            )
+        })
         .map_or(Ok(None), |info| info.map(Some))
 }
 
-/// Returns true if the specified record refers to Python.
-fn is_python_record(record: &PackageRecord) -> bool {
-    record.name.as_normalized() == "python"
-}
-
 /// Returns true if the `from` and `to` describe the same package content
-fn describe_same_content(from: &PackageRecord, to: &PackageRecord) -> bool {
+fn describe_same_content<T: ContentComparable, U: ContentComparable>(from: &T, to: &U) -> bool {
     // If one hash is set and the other is not, the packages are different
-    if from.sha256.is_some() != to.sha256.is_some() || from.md5.is_some() != to.md5.is_some() {
+    if from.sha256().is_some() != to.sha256().is_some() {
         return false;
     }
 
     // If the hashes of the packages match we consider them to be equal
-    if let (Some(a), Some(b)) = (from.sha256.as_ref(), to.sha256.as_ref()) {
-        return a == b;
-    }
-    if let (Some(a), Some(b)) = (from.md5.as_ref(), to.md5.as_ref()) {
+    if let (Some(a), Some(b)) = (from.sha256(), to.sha256()) {
         return a == b;
     }
 
-    // If the size doesnt match, the contents must be different
-    if matches!((from.size.as_ref(), to.size.as_ref()), (Some(a), Some(b)) if a == b) {
+    if from.md5().is_some() != to.md5().is_some() {
+        return false;
+    }
+
+    if let (Some(a), Some(b)) = (from.md5(), to.md5()) {
+        return a == b;
+    }
+
+    // If the size doesn't match, the contents must be different
+    if matches!((from.size(), to.size()), (Some(a), Some(b)) if a != b) {
         return false;
     }
 
     // Otherwise, just check that the name, version and build string match
-    from.name == to.name && from.version == to.version && from.build == to.build
+    from.name() == to.name() && from.version() == to.version() && from.build() == to.build()
 }
 
 #[cfg(test)]
@@ -308,7 +511,7 @@ mod tests {
         let transaction = Transaction::from_current_and_desired(
             vec![prefix_record.clone()],
             vec![prefix_record.clone()],
-            Some(HashSet::from_iter(vec![name])),
+            Some(&HashSet::from_iter(vec![name])),
             None, // ignored packages
             Platform::current(),
         )
@@ -341,7 +544,7 @@ mod tests {
             vec![prefix_record.clone()],
             vec![prefix_record.repodata_record.clone()],
             None, // reinstall
-            ignored_packages,
+            ignored_packages.as_ref(),
             Platform::current(),
         )
         .unwrap();
@@ -356,7 +559,7 @@ mod tests {
             vec![prefix_record.clone()],
             Vec::<rattler_conda_types::RepoDataRecord>::new(), // empty desired
             None,                                              // reinstall
-            ignored_packages,
+            ignored_packages.as_ref(),
             Platform::current(),
         )
         .unwrap();
@@ -371,7 +574,7 @@ mod tests {
             Vec::<rattler_conda_types::PrefixRecord>::new(), // empty current
             vec![prefix_record.repodata_record.clone()],
             None, // reinstall
-            ignored_packages,
+            ignored_packages.as_ref(),
             Platform::current(),
         )
         .unwrap();
