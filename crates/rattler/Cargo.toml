@@ -71,3 +71,4 @@ tower = { workspace = true, features = ["util"] }
 walkdir.workspace = true
 mockito = "1.0"
 tempfile = "3.0"
+temp-env = { workspace = true }

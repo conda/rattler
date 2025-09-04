@@ -3,10 +3,13 @@ use clap::Parser;
 use rattler_networking::{
     authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
 };
-use reqwest::blocking::Client;
-use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
+use reqwest::{
+    header::{AUTHORIZATION, CONTENT_TYPE},
+    Client,
+};
 use serde_json::json;
 use thiserror;
+use url::Url;
 
 /// Command line arguments that contain authentication data
 #[derive(Parser, Debug)]
@@ -138,18 +141,20 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
 #[derive(Debug, PartialEq)]
 pub enum ValidationResult {
     /// Token is valid and associated with this username
-    Valid(String),
+    Valid(String, Url),
     /// Token is invalid or unauthorized
     Invalid,
 }
 
 /// Authenticate with a host using the provided credentials.
 ///
-/// This function validates the authentication method based on the host and stores
-/// the credentials if successful. For prefix.dev hosts, it validates the token
-/// by making a GraphQL API call.
-///
-fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
+/// This function validates the authentication method based on the host and
+/// stores the credentials if successful. For prefix.dev hosts, it validates the
+/// token by making a GraphQL API call.
+async fn login(
+    args: LoginArgs,
+    storage: AuthenticationStorage,
+) -> Result<(), AuthenticationCLIError> {
     let auth = if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
     } else if let Some(username) = args.username {
@@ -200,9 +205,9 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
         };
 
         // Validate the token using the extracted function
-        match validate_prefix_dev_token(token, &args.host)? {
-            ValidationResult::Valid(username) => {
-                println!("✅ Token is valid. Logged in as \"{username}\". Storing credentials...");
+        match validate_prefix_dev_token(token, &args.host).await? {
+            ValidationResult::Valid(username, url) => {
+                println!("✅ Token is valid. Logged into {url} as \"{username}\". Storing credentials...");
                 // Store the authentication
                 storage.store(&host, &auth)?;
             }
@@ -221,41 +226,46 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
 ///
 /// Returns `Ok(true)` if the token is valid, `Ok(false)` if invalid,
 /// or `Err` if there was a network/parsing error
-fn validate_prefix_dev_token(
+async fn validate_prefix_dev_token(
     token: &str,
     host: &str,
 ) -> Result<ValidationResult, AuthenticationCLIError> {
-    // Validate whether the user exists
-    let client = Client::new();
-
-    // Allow override of API URL for testing
-    let mut prefix_url = if host.contains("://") {
-        host.to_string()
+    let prefix_url = if let Ok(env_var) = std::env::var("PREFIX_DEV_API_URL") {
+        // If env var is set, parse it as a full URL
+        Url::parse(&env_var).expect("PREFIX_DEV_API_URL must be a valid URL")
     } else {
-        format!("https://{host}")
+        // Strip wildcard if given
+        let host = host.replace("*.", "");
+
+        // Convert the host URL to a full URL if it doesn't contain a scheme
+        let host_url = if host.contains("://") {
+            Url::parse(&host)?
+        } else {
+            Url::parse(&format!("https://{host}"))?
+        };
+
+        let host_url = host_url.host_str().unwrap_or("prefix.dev");
+        // Strip "repo." prefix if present
+        let host_url = host_url.strip_prefix("repo.").unwrap_or(host_url);
+
+        Url::parse(&format!("https://{host_url}")).expect("constructed url must be valid")
     };
-
-    if prefix_url.contains("*.") {
-        // strip wildcard if given
-        prefix_url = prefix_url.replace("*.", "");
-    }
-
-    if let Ok(env_var) = std::env::var("PREFIX_DEV_API_URL") {
-        prefix_url = env_var;
-    }
 
     let body = json!({
         "query": "query { viewer { login } }"
     });
 
+    let client = Client::new();
     let response = client
-        .post(prefix_url)
+        .post(prefix_url.join("api/graphql").expect("must be valid"))
         .header(AUTHORIZATION, format!("Bearer {token}"))
         .header(CONTENT_TYPE, "application/json")
         .json(&body)
-        .send()?;
+        .send()
+        .await?
+        .error_for_status()?;
 
-    let text = response.text()?;
+    let text = response.text().await?;
 
     // Parse JSON
     let json: serde_json::Value = serde_json::from_str(&text)
@@ -266,7 +276,7 @@ fn validate_prefix_dev_token(
         serde_json::Value::Null => Ok(ValidationResult::Invalid),
         viewer_data => {
             if let Some(username) = viewer_data["login"].as_str() {
-                Ok(ValidationResult::Valid(username.to_string()))
+                Ok(ValidationResult::Valid(username.to_string(), prefix_url))
             } else {
                 Ok(ValidationResult::Invalid)
             }
@@ -288,23 +298,28 @@ pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
     let storage = AuthenticationStorage::from_env_and_defaults()?;
 
     match args.subcommand {
-        Subcommand::Login(args) => login(args, storage),
+        Subcommand::Login(args) => login(args, storage).await,
         Subcommand::Logout(args) => logout(args, storage),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use mockito::Server;
-    use rattler_networking::AuthenticationStorage;
+    use rattler_networking::{
+        authentication_storage::backends::memory::MemoryStorage, AuthenticationStorage,
+    };
     use serde_json::json;
+    use temp_env::async_with_vars;
     use tempfile::TempDir;
+
+    use super::*;
 
     // Helper function to create a test authentication storage
     fn create_test_storage() -> (AuthenticationStorage, TempDir) {
         let temp_dir = TempDir::new().unwrap();
-        let storage = AuthenticationStorage::from_env_and_defaults().unwrap();
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(std::sync::Arc::new(MemoryStorage::new()));
         (storage, temp_dir)
     }
 
@@ -322,18 +337,17 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_login_with_token_success() {
+    #[tokio::test]
+    async fn test_login_with_token_success() {
         let (storage, _temp_dir) = create_test_storage();
-        let mut args = create_login_args("prefix.dev");
-        args.token = Some("valid_token".to_string());
 
         // Mock the GraphQL API response
-        let mut server = Server::new();
+        let mut server = Server::new_async().await;
         let mock = server
             .mock("POST", "/api/graphql")
             .with_status(200)
             .with_header("content-type", "application/json")
+            .with_header("authorization", "Bearer valid_token")
             .with_body(
                 json!({
                     "data": {
@@ -344,32 +358,34 @@ mod tests {
                 })
                 .to_string(),
             )
+            .expect(1)
             .create();
 
-        // Set environment variable to point to mock server
-        std::env::set_var(
-            "PREFIX_DEV_API_URL",
-            format!("{}/api/graphql", server.url()),
-        );
-        let result = login(args, storage);
+        let mut args = create_login_args("prefix.dev");
+        args.token = Some("valid_token".to_string());
+
+        // Use temp_env to isolate environment variable
+        let result = async_with_vars(
+            [("PREFIX_DEV_API_URL", Some(server.url().as_str()))],
+            async { login(args, storage).await },
+        )
+        .await;
+
         assert!(result.is_ok());
         mock.assert();
-        // Clean up
-        std::env::remove_var("PREFIX_DEV_API_URL");
     }
 
-    #[test]
-    fn test_login_with_invalid_token() {
+    #[tokio::test]
+    async fn test_login_with_invalid_token() {
         let (storage, _temp_dir) = create_test_storage();
-        let mut args = create_login_args("prefix.dev");
-        args.token = Some("invalid_token".to_string());
 
         // Mock the GraphQL API response for invalid token
-        let mut server = Server::new();
+        let mut server = Server::new_async().await;
         let mock = server
             .mock("POST", "/api/graphql")
             .with_status(200)
             .with_header("content-type", "application/json")
+            .with_header("authorization", "Bearer invalid_token")
             .with_body(
                 json!({
                     "data": {
@@ -378,15 +394,18 @@ mod tests {
                 })
                 .to_string(),
             )
+            .expect(1)
             .create();
 
-        // Set environment variable to point to mock server
-        std::env::set_var(
-            "PREFIX_DEV_API_URL",
-            format!("{}/api/graphql", server.url()),
-        );
+        let mut args = create_login_args("prefix.dev");
+        args.token = Some("invalid_token".to_string());
 
-        let result = login(args, storage);
+        // Use temp_env to isolate environment variable
+        let result = async_with_vars(
+            [("PREFIX_DEV_API_URL", Some(server.url().as_str()))],
+            async { login(args, storage).await },
+        )
+        .await;
 
         // Now we expect an UnauthorizedToken error instead of Ok(())
         assert!(matches!(
@@ -395,115 +414,112 @@ mod tests {
         ));
 
         mock.assert();
-
-        // Clean up
-        std::env::remove_var("PREFIX_DEV_API_URL");
     }
 
-    #[test]
-    fn test_login_missing_password_for_basic_auth() {
+    #[tokio::test]
+    async fn test_login_missing_password_for_basic_auth() {
         let (storage, _temp_dir) = create_test_storage();
         let mut args = create_login_args("example.com");
         args.username = Some("testuser".to_string());
         // password I set herer is:  None
-        let result = login(args, storage);
+        let result = login(args, storage).await;
         assert!(matches!(
             result,
             Err(AuthenticationCLIError::MissingPassword)
         ));
     }
 
-    #[test]
-    fn test_login_basic_auth_success() {
+    #[tokio::test]
+    async fn test_login_basic_auth_success() {
         let (storage, _temp_dir) = create_test_storage();
         let mut args = create_login_args("example.com");
         args.username = Some("testuser".to_string());
         args.password = Some("testpass".to_string());
 
-        let result = login(args, storage);
+        let result = login(args, storage).await;
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_login_conda_token_success() {
+    #[tokio::test]
+    async fn test_login_conda_token_success() {
         let (storage, _temp_dir) = create_test_storage();
         let mut args = create_login_args("anaconda.org");
         args.conda_token = Some("conda_token_123".to_string());
 
-        let result = login(args, storage);
+        let result = login(args, storage).await;
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_login_s3_credentials_success() {
+    #[tokio::test]
+    async fn test_login_s3_credentials_success() {
         let (storage, _temp_dir) = create_test_storage();
         let mut args = create_login_args("s3://my-bucket");
         args.s3_access_key_id = Some("access_key".to_string());
         args.s3_secret_access_key = Some("secret_key".to_string());
         args.s3_session_token = Some("session_token".to_string());
 
-        let result = login(args, storage);
+        let result = login(args, storage).await;
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_login_no_authentication_method() {
+    #[tokio::test]
+    async fn test_login_no_authentication_method() {
         let (storage, _temp_dir) = create_test_storage();
         let args = create_login_args("example.com");
         // No authentication method provided
 
-        let result = login(args, storage);
+        let result = login(args, storage).await;
         assert!(matches!(
             result,
             Err(AuthenticationCLIError::NoAuthenticationMethod)
         ));
     }
 
-    #[test]
-    fn test_login_prefix_dev_requires_token() {
+    #[tokio::test]
+    async fn test_login_prefix_dev_requires_token() {
         let (storage, _temp_dir) = create_test_storage();
         let mut args = create_login_args("prefix.dev");
         args.username = Some("testuser".to_string());
         args.password = Some("testpass".to_string());
 
-        let result = login(args, storage);
+        let result = login(args, storage).await;
         assert!(matches!(
             result,
             Err(AuthenticationCLIError::PrefixDevBadMethod)
         ));
     }
 
-    #[test]
-    fn test_login_anaconda_org_requires_conda_token() {
+    #[tokio::test]
+    async fn test_login_anaconda_org_requires_conda_token() {
         let (storage, _temp_dir) = create_test_storage();
         let mut args = create_login_args("anaconda.org");
         args.token = Some("bearer_token".to_string());
 
-        let result = login(args, storage);
+        let result = login(args, storage).await;
         assert!(matches!(
             result,
             Err(AuthenticationCLIError::AnacondaOrgBadMethod)
         ));
     }
 
-    #[test]
-    fn test_login_s3_requires_proper_credentials() {
+    #[tokio::test]
+    async fn test_login_s3_requires_proper_credentials() {
         let (storage, _temp_dir) = create_test_storage();
         let mut args = create_login_args("s3://my-bucket");
         args.token = Some("bearer_token".to_string());
 
-        let result = login(args, storage);
+        let result = login(args, storage).await;
         assert!(matches!(result, Err(AuthenticationCLIError::S3BadMethod)));
     }
 
-    #[test]
-    fn test_login_s3_credentials_with_non_s3_host() {
+    #[tokio::test]
+    async fn test_login_s3_credentials_with_non_s3_host() {
         let (storage, _temp_dir) = create_test_storage();
         let mut args = create_login_args("example.com");
         args.s3_access_key_id = Some("access_key".to_string());
         args.s3_secret_access_key = Some("secret_key".to_string());
 
-        let result = login(args, storage);
+        let result = login(args, storage).await;
         assert!(matches!(result, Err(AuthenticationCLIError::S3BadMethod)));
     }
 }

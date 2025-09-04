@@ -4474,6 +4474,7 @@ dependencies = [
  "serde_json",
  "simple_spawn_blocking",
  "smallvec",
+ "temp-env",
  "tempfile",
  "thiserror 2.0.16",
  "tokio",
