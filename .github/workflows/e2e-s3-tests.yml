@@ -49,8 +49,8 @@ jobs:
   e2e-aws-s3-test:
     name: E2E Upload/Index/Download [AWS S3]
     runs-on: ubuntu-latest
-    # Only run on main branch to avoid creating too many test buckets
-    # if: github.ref == 'refs/heads/main'
+    # As a security precaution, only run this job on main branch. The AWS credentials are also only valid on the main branch.
+    if: github.ref == 'refs/heads/main'
     permissions:
       id-token: write
       contents: read
