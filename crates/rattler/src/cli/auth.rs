@@ -3,10 +3,13 @@ use clap::Parser;
 use rattler_networking::{
     authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
 };
-use reqwest::blocking::Client;
-use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
+use reqwest::{
+    header::{AUTHORIZATION, CONTENT_TYPE},
+    Client,
+};
 use serde_json::json;
 use thiserror;
+use url::Url;
 
 /// Command line arguments that contain authentication data
 #[derive(Parser, Debug)]
@@ -138,18 +141,20 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
 #[derive(Debug, PartialEq)]
 pub enum ValidationResult {
     /// Token is valid and associated with this username
-    Valid(String),
+    Valid(String, Url),
     /// Token is invalid or unauthorized
     Invalid,
 }
 
 /// Authenticate with a host using the provided credentials.
 ///
-/// This function validates the authentication method based on the host and stores
-/// the credentials if successful. For prefix.dev hosts, it validates the token
-/// by making a GraphQL API call.
-///
-fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
+/// This function validates the authentication method based on the host and
+/// stores the credentials if successful. For prefix.dev hosts, it validates the
+/// token by making a GraphQL API call.
+async fn login(
+    args: LoginArgs,
+    storage: AuthenticationStorage,
+) -> Result<(), AuthenticationCLIError> {
     let auth = if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
     } else if let Some(username) = args.username {
@@ -200,9 +205,9 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
         };
 
         // Validate the token using the extracted function
-        match validate_prefix_dev_token(token, &args.host)? {
-            ValidationResult::Valid(username) => {
-                println!("✅ Token is valid. Logged in as \"{username}\". Storing credentials...");
+        match validate_prefix_dev_token(token, &args.host).await? {
+            ValidationResult::Valid(username, url) => {
+                println!("✅ Token is valid. Logged into {url} as \"{username}\". Storing credentials...");
                 // Store the authentication
                 storage.store(&host, &auth)?;
             }
@@ -221,41 +226,48 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
 ///
 /// Returns `Ok(true)` if the token is valid, `Ok(false)` if invalid,
 /// or `Err` if there was a network/parsing error
-fn validate_prefix_dev_token(
+async fn validate_prefix_dev_token(
     token: &str,
     host: &str,
 ) -> Result<ValidationResult, AuthenticationCLIError> {
-    // Validate whether the user exists
-    let client = Client::new();
-
-    // Allow override of API URL for testing
-    let mut prefix_url = if host.contains("://") {
-        host.to_string()
+    let prefix_url = if let Ok(env_var) = std::env::var("PREFIX_DEV_API_URL") {
+        env_var
     } else {
-        format!("https://{host}")
+        // Strip wildcard if given
+        let host = host.replace("*.", "");
+
+        // Convert the host URL to a full URL if it doesn't contain a scheme
+        let host_url = if host.contains("://") {
+            Url::parse(&host)?
+        } else {
+            Url::parse(&format!("https://{host}"))?
+        };
+
+        let host_url = host_url.host_str().unwrap_or("prefix.dev");
+        // Strip "repo." prefix if present
+        let host_url = host_url.strip_prefix("repo.").unwrap_or(host_url);
+
+        host_url.to_owned()
     };
 
-    if prefix_url.contains("*.") {
-        // strip wildcard if given
-        prefix_url = prefix_url.replace("*.", "");
-    }
-
-    if let Ok(env_var) = std::env::var("PREFIX_DEV_API_URL") {
-        prefix_url = env_var;
-    }
+    let prefix_url =
+        Url::parse(&format!("https://{prefix_url}")).expect("constructed url must be valid");
 
     let body = json!({
         "query": "query { viewer { login } }"
     });
 
+    let client = Client::new();
     let response = client
-        .post(prefix_url)
+        .post(prefix_url.join("api/graphql").expect("must be valid"))
         .header(AUTHORIZATION, format!("Bearer {token}"))
         .header(CONTENT_TYPE, "application/json")
         .json(&body)
-        .send()?;
+        .send()
+        .await?
+        .error_for_status()?;
 
-    let text = response.text()?;
+    let text = response.text().await?;
 
     // Parse JSON
     let json: serde_json::Value = serde_json::from_str(&text)
@@ -266,7 +278,7 @@ fn validate_prefix_dev_token(
         serde_json::Value::Null => Ok(ValidationResult::Invalid),
         viewer_data => {
             if let Some(username) = viewer_data["login"].as_str() {
-                Ok(ValidationResult::Valid(username.to_string()))
+                Ok(ValidationResult::Valid(username.to_string(), prefix_url))
             } else {
                 Ok(ValidationResult::Invalid)
             }
@@ -288,18 +300,19 @@ pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
     let storage = AuthenticationStorage::from_env_and_defaults()?;
 
     match args.subcommand {
-        Subcommand::Login(args) => login(args, storage),
+        Subcommand::Login(args) => login(args, storage).await,
         Subcommand::Logout(args) => logout(args, storage),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use mockito::Server;
     use rattler_networking::AuthenticationStorage;
     use serde_json::json;
     use tempfile::TempDir;
+
+    use super::*;
 
     // Helper function to create a test authentication storage
     fn create_test_storage() -> (AuthenticationStorage, TempDir) {
