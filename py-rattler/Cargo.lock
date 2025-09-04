@@ -3916,7 +3916,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.36.1"
+version = "0.37.0"
 dependencies = [
  "anyhow",
  "console",
@@ -4093,7 +4093,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.23.16"
+version = "0.24.0"
 dependencies = [
  "chrono",
  "file_url",
