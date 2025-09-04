@@ -117,9 +117,9 @@ impl ResolvedS3Credentials {
         Ok(Self {
             endpoint_url,
             region,
+            addressing_style,
             access_key_id,
             secret_access_key,
-            addressing_style,
             session_token,
         })
     }
