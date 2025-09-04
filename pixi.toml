@@ -1,4 +1,4 @@
-[project]
+[workspace]
 name = "rattler"
 description = "Rust library to install conda environments"
 authors = [
@@ -10,6 +10,11 @@ authors = [
 channels = ["https://prefix.dev/conda-forge"]
 platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
 license = "BSD-3-Clause"
+preview = ["pixi-build"]
+
+[workspace.build-variants]
+# Use the same Rust version everywhere
+rust_compiler_version = ["1.88.0"]
 
 [tasks]
 build = "cargo build"
@@ -67,3 +72,36 @@ cargo-clippy = "cargo clippy --all-targets --workspace -- -D warnings -Dclippy::
 
 [environments]
 lint = { features = [ "lint" ], solve-group = "default" }
+
+#------------------------------
+# Minio E2E test
+#------------------------------
+[feature.minio.dependencies]
+minio-server = ">=2025.1.20,<2026"
+minio-client = ">=2025.7.21,<2026"
+rattler_index = { path = "crates/rattler_index" }
+rattler = { path = "crates/rattler-bin" }
+nushell = ">=0.106.1,<0.107"
+
+[feature.minio.tasks]
+e2e-s3-minio = "nu scripts/e2e/s3-minio.nu"
+
+[environments.minio]
+features = ["minio"]
+no-default-feature = true
+
+#------------------------------
+# S3 E2E test
+#------------------------------
+[feature.s3.dependencies]
+awscli = ">=2.28.18,<3"
+rattler_index = { path = "crates/rattler_index" }
+rattler = { path = "crates/rattler-bin" }
+nushell = ">=0.106.1,<0.107"
+
+[feature.s3.tasks]
+e2e-s3-aws = "nu scripts/e2e/s3-aws.nu"
+
+[environments.s3]
+features = ["s3"]
+no-default-feature = true

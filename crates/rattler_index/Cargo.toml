@@ -52,6 +52,7 @@ rattler_networking = { workspace = true, default-features = false, features = [
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
+rattler_s3 = { workspace = true, features = ["clap"] }
 reqwest = { workspace = true, default-features = false, features = [
   "http2",
   "macos-system-configuration",

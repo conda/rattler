@@ -432,6 +432,20 @@ pub async fn fetch_repo_data(
             });
         }
 
+        // Fail if the status code is not a success
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.ok();
+            return Err(FetchRepoDataError::HttpError(
+                reqwest_middleware::Error::Middleware(anyhow::format_err!(
+                    "received unexpected status code ({}) when fetching {}.\n\nBody:\n{}",
+                    status,
+                    repo_data_url.redact(),
+                    body.as_deref().unwrap_or("<failed to get body>"),
+                )),
+            ));
+        }
+
         // Get cache headers from the response
         let cache_headers = CacheHeaders::from(&response);
 

@@ -279,6 +279,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-once-cell"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4288f83726785267c6f2ef073a3d83dc3f9b81464e9f99898240cced85fce35a"
+
+[[package]]
 name = "async-process"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4497,6 +4503,7 @@ dependencies = [
  "console 0.16.0",
  "indicatif",
  "itertools 0.14.0",
+ "miette",
  "once_cell",
  "rattler",
  "rattler_cache",
@@ -4505,6 +4512,7 @@ dependencies = [
  "rattler_networking",
  "rattler_repodata_gateway",
  "rattler_solve",
+ "rattler_upload",
  "rattler_virtual_packages",
  "reqwest",
  "reqwest-middleware",
@@ -4657,6 +4665,7 @@ dependencies = [
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_s3",
  "reqwest",
  "rmp-serde",
  "serde",
@@ -4755,6 +4764,7 @@ name = "rattler_networking"
 version = "0.25.11"
 dependencies = [
  "anyhow",
+ "async-once-cell",
  "async-trait",
  "aws-config",
  "aws-sdk-s3",
@@ -4907,6 +4917,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_s3"
+version = "0.1.0"
+dependencies = [
+ "aws-config",
+ "aws-credential-types",
+ "aws-sdk-s3",
+ "clap",
+ "rattler_networking",
+ "serde",
+ "thiserror 2.0.16",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "rattler_sandbox"
 version = "0.1.10"
 dependencies = [
@@ -4982,6 +5007,7 @@ dependencies = [
  "rattler_networking",
  "rattler_package_streaming",
  "rattler_redaction",
+ "rattler_s3",
  "rattler_solve",
  "reqwest",
  "reqwest-middleware",

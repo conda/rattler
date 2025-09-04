@@ -28,6 +28,7 @@ chrono = { version = "0.4" }
 futures = "0.3.31"
 parking_lot = { version = "0.12.3", features = ["arc_lock", "send_guard"] }
 
+rattler_s3 = { path = "../crates/rattler_s3", features = ["serde"]}
 rattler = { path = "../crates/rattler", default-features = false, features = [
     "indicatif",
 ] }
@@ -58,6 +59,7 @@ pyo3 = { version = "0.25.1", features = [
     "chrono",
 ] }
 pyo3-async-runtimes = { version = "0.25.0", features = ["tokio-runtime"] }
+pythonize = "0.25.0"
 tokio = { version = "1.46.1" }
 
 reqwest = { version = "0.12.15", default-features = false }

@@ -1,0 +1,87 @@
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - crates/rattler-bin/**
+      - crates/rattler_index/**
+      - crates/rattler_upload/**
+      - crates/rattler_networking/**
+      - .github/workflows/e2e-s3-tests.yml
+
+name: E2E S3 Tests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RUST_LOG: info
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+  DEFAULT_FEATURES: s3
+
+jobs:
+  e2e-minio-test:
+    name: E2E Upload/Index/Download [Minio]
+    runs-on: ubuntu-latest
+
+    env:
+      # Enable sccache.
+      #
+      # This environment variable is picked up by pixi build which will then
+      # set up the rust build using sccache.
+      SCCACHE_GHA_ENABLED: "true"
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+
+      - uses: prefix-dev/setup-pixi@fef5c9568ca6c4ff7707bf840ab0692ba3f08293 # v0.9.0
+        with:
+          environments: minio
+
+      - run: pixi run e2e-s3-minio
+
+  # TODO: add cloudflare R2 integration tests here as well
+  e2e-aws-s3-test:
+    name: E2E Upload/Index/Download [AWS S3]
+    runs-on: ubuntu-latest
+    # Only run on main branch to avoid creating too many test buckets
+    # if: github.ref == 'refs/heads/main'
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      # Enable sccache.
+      #
+      # This environment variable is picked up by pixi build which will then
+      # set up the rust build using sccache.
+      SCCACHE_GHA_ENABLED: "true"
+
+      # The region to create buckets it.
+      AWS_REGION: eu-west-1
+
+      # The name of the test bucket to create.
+      BUCKET: tmp-${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+
+      - name: Configure AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::239378270001:role/conda-rattler-e2e-test
+
+      - uses: prefix-dev/setup-pixi@fef5c9568ca6c4ff7707bf840ab0692ba3f08293 # v0.9.0
+        with:
+          environments: s3
+
+      - run: pixi run e2e-s3-aws
