@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.37.0](https://github.com/conda/rattler/compare/rattler-v0.36.1...rattler-v0.37.0) - 2025-09-04
+
+### Fixed
+
+- `auth` for prefix.dev ([#1652](https://github.com/conda/rattler/pull/1652))
+
 ## [0.36.1](https://github.com/conda/rattler/compare/rattler-v0.36.0...rattler-v0.36.1) - 2025-09-02
 
 ### Fixed
