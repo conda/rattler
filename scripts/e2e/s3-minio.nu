@@ -48,7 +48,7 @@ print "== Upload packages to Minio"
     --secret-access-key $root_password
     --region "us-east-1"
     --endpoint-url "http://localhost:9000"
-    --force-path-style true
+    --addressing-style path
     test-data/packages/empty-0.1.0-h4616a5c_0.conda
 )
 
@@ -60,7 +60,7 @@ print "== Index the channel"
     --secret-access-key $root_password
     --region "us-east-1"
     --endpoint-url "http://localhost:9000"
-    --force-path-style true
+    --addressing-style path
 )
 
 print "== Test package can be installed from the channel ==="
