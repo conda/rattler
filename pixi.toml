@@ -59,7 +59,7 @@ lint-fast = { cmd = "lefthook run pre-commit --all-files --force", description =
 lint-slow = { cmd = "lefthook run pre-push --all-files --force", description = "Run all slow linters and formatters on all code" }
 pre-commit-install = "lefthook install"
 pre-commit-install-minimal = "lefthook install pre-commit"
-typos = "typos --write-changes --force-exclude"
+typos = "typos --force-exclude"
 ruff-format = "ruff format --force-exclude"
 ruff-lint = "ruff check --fix --exit-non-zero-on-fix --force-exclude"
 cargo-fmt = "cargo fmt --all"
