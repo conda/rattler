@@ -58,7 +58,6 @@ pub struct S3 {
     config: HashMap<String, S3Config>,
     expiration: std::time::Duration,
     default_client: Arc<async_once_cell::OnceCell<aws_config::SdkConfig>>,
-    provider_name: &'static str,
 }
 
 /// S3 middleware to authenticate requests.
@@ -85,14 +84,7 @@ impl S3 {
             auth_storage,
             expiration: std::time::Duration::from_secs(300),
             default_client: Arc::new(OnceCell::new()),
-            provider_name: "rattler",
         }
-    }
-
-    /// Sets the provider name that is used by the s3 client.
-    pub fn with_provider_name(mut self, name: &'static str) -> Self {
-        self.provider_name = name;
-        self
     }
 
     /// Create an S3 client.
@@ -139,7 +131,7 @@ impl S3 {
                         secret_access_key,
                         session_token,
                         None,
-                        self.provider_name,
+                        "rattler",
                     )),
                 (_, Some(_)) => {
                     return Err(anyhow::anyhow!("unsupported authentication method"));
