@@ -5,14 +5,13 @@ let region = ($env.AWS_REGION? | default "eu-west-1")
 
 def run [desc: string, cmd: closure] {
   print $"== ($desc)"
-  do $cmd | ignore
-  let code = ($env.LAST_EXIT_CODE? | default 0)
+  try { do $cmd } catch { }     # run as-is
+  let code = ($env.LAST_EXIT_CODE? | default 0)  # capture before any pipes
   if $code != 0 {
     print $"WARN: ($desc) failed \(exit=($code)\)"
     false
   } else { true }
 }
-
 
 def bucket_exists [] {
   (do { ^aws s3api head-bucket --bucket $bucket_name } | complete).exit_code == 0
@@ -41,4 +40,6 @@ if (bucket_exists) {
 }
 
 # --- exit non-zero if any step failed ---
-if not $test_ok { exit 1 }
+if not $test_ok {
+  exit 1
+}

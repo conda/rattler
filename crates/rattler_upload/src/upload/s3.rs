@@ -15,7 +15,6 @@ pub async fn upload_package_to_s3(
     channel: Url,
     credentials: Option<S3Credentials>,
     package_files: &Vec<PathBuf>,
-    force_path_style: Option<bool>,
     force: bool,
 ) -> miette::Result<()> {
     let bucket = channel
@@ -26,7 +25,6 @@ pub async fn upload_package_to_s3(
     let mut s3_config = S3Config::default();
     s3_config.root = Some(channel.path().to_string());
     s3_config.bucket = bucket.to_string();
-    s3_config.enable_virtual_host_style = force_path_style.is_none_or(|x| !x);
 
     // Resolve the credentials to use.
     let resolved_credentials = match credentials {
@@ -43,6 +41,8 @@ pub async fn upload_package_to_s3(
     s3_config.access_key_id = Some(resolved_credentials.access_key_id);
     s3_config.secret_access_key = Some(resolved_credentials.secret_access_key);
     s3_config.session_token = resolved_credentials.session_token;
+    s3_config.enable_virtual_host_style =
+        resolved_credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
 
     let builder = s3_config.into_builder();
     let op = Operator::new(builder).into_diagnostic()?.finish();

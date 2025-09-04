@@ -612,8 +612,6 @@ pub struct IndexS3Config {
     pub channel: Url,
     /// The resolved credentials to use for S3 access.
     pub credentials: ResolvedS3Credentials,
-    /// Whether to force path style for the S3 bucket.
-    pub force_path_style: Option<bool>,
     /// The target platform to index.
     pub target_platform: Option<Platform>,
     /// The path to a repodata patch to apply to the index.
@@ -636,7 +634,6 @@ pub async fn index_s3(
     IndexS3Config {
         channel,
         credentials,
-        force_path_style,
         target_platform,
         repodata_patch,
         write_zst,
@@ -659,9 +656,8 @@ pub async fn index_s3(
     s3_config.secret_access_key = Some(credentials.secret_access_key);
     s3_config.access_key_id = Some(credentials.access_key_id);
     s3_config.session_token = credentials.session_token;
-
-    // How to access the S3 bucket.
-    s3_config.enable_virtual_host_style = force_path_style.is_none_or(|x| !x);
+    s3_config.enable_virtual_host_style =
+        credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
 
     index(
         target_platform,

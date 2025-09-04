@@ -409,6 +409,7 @@ pub struct AnacondaOpts {
     pub force: bool,
 }
 
+#[cfg(feature = "s3")]
 fn parse_s3_url(value: &str) -> Result<Url, String> {
     let url: Url =
         Url::parse(value).map_err(|err| format!("`{value}` isn't a valid URL: {err}"))?;
@@ -422,6 +423,7 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
 }
 
 /// Options for uploading to S3
+#[cfg(feature = "s3")]
 #[derive(Clone, Debug, PartialEq, Parser)]
 pub struct S3Opts {
     /// The channel URL in the S3 bucket to upload the package to, e.g.,
@@ -431,10 +433,6 @@ pub struct S3Opts {
 
     #[clap(flatten)]
     pub credentials: rattler_s3::clap::S3CredentialsOpts,
-
-    /// Whether to use path-style S3 URLs
-    #[arg(long, env = "S3_FORCE_PATH_STYLE")]
-    pub force_path_style: Option<bool>,
 
     /// Replace files if it already exists.
     #[arg(long)]

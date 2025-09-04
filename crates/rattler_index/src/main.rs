@@ -86,10 +86,6 @@ enum Commands {
 
         #[clap(flatten)]
         credentials: rattler_s3::clap::S3CredentialsOpts,
-
-        /// Whether to use path-style S3 URLs
-        #[arg(long, env = "S3_FORCE_PATH_STYLE")]
-        force_path_style: Option<bool>,
     },
 }
 
@@ -136,7 +132,6 @@ async fn main() -> anyhow::Result<()> {
         Commands::S3 {
             channel,
             mut credentials,
-            force_path_style,
         } => {
             let bucket = channel.host().context("Invalid S3 url")?.to_string();
             let s3_config = config
@@ -161,7 +156,6 @@ async fn main() -> anyhow::Result<()> {
             index_s3(IndexS3Config {
                 channel,
                 credentials,
-                force_path_style,
                 target_platform: cli.target_platform,
                 repodata_patch: cli.repodata_patch,
                 write_zst: cli.write_zst.unwrap_or(true),

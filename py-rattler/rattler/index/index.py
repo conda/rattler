@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
-from typing import Optional
+from typing import Optional, Literal
 
 from rattler.platform import Platform
 from rattler.rattler import py_index_fs, py_index_s3
@@ -26,6 +26,9 @@ class S3Credentials:
 
     # The session token for the S3 bucket.
     session_token: Optional[str] = None
+
+    # Defines how to address the bucket, either using virtual-hosted-style or path-style.
+    addressing_style: Literal["path", "virtual-host"] = "virtual-host"
 
 
 async def index_fs(
@@ -68,7 +71,6 @@ async def index_fs(
 async def index_s3(
     channel_url: str,
     credentials: Optional[S3Credentials] = None,
-    force_path_style: Optional[bool] = False,
     target_platform: Optional[Platform] = None,
     repodata_patch: Optional[str] = None,
     write_zst: bool = True,
@@ -86,7 +88,6 @@ async def index_s3(
     Arguments:
         channel_url: An S3 URL (e.g., s3://my-bucket/my-channel that containins the subdirectories
                      of dependencies to index.
-        force_path_style: Whether to use path-style addressing for S3.
         credentials: The credentials to use for accessing the S3 bucket. If not provided, will use the default
                      credentials from the environment.
         target_platform: A `Platform` to index dependencies for.
@@ -99,7 +100,6 @@ async def index_s3(
     await py_index_s3(
         channel_url,
         credentials,
-        force_path_style,
         target_platform._inner if target_platform else target_platform,
         repodata_patch,
         write_zst,

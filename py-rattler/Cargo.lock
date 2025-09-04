@@ -4295,6 +4295,7 @@ dependencies = [
  "rattler_networking",
  "serde",
  "thiserror 2.0.16",
+ "tracing",
  "url",
 ]
 

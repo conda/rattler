@@ -44,12 +44,11 @@ pub fn py_index_fs(
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-#[pyo3(signature = (channel_url, credentials=None, force_path_style=None, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=None))]
+#[pyo3(signature = (channel_url, credentials=None, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=None))]
 pub fn py_index_s3<'py>(
     py: Python<'py>,
     channel_url: String,
     credentials: Option<Bound<'py, PyAny>>,
-    force_path_style: Option<bool>,
     target_platform: Option<PyPlatform>,
     repodata_patch: Option<String>,
     write_zst: bool,
@@ -83,7 +82,6 @@ pub fn py_index_s3<'py>(
         index_s3(IndexS3Config {
             channel: channel_url,
             credentials,
-            force_path_style,
             target_platform,
             repodata_patch,
             write_zst,
