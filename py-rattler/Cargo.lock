@@ -3379,50 +3379,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "phf"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078"
-dependencies = [
- "phf_macros",
- "phf_shared",
-]
-
-[[package]]
-name = "phf_generator"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
-dependencies = [
- "phf_shared",
- "rand 0.8.5",
-]
-
-[[package]]
-name = "phf_macros"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f84ac04429c13a7ff43785d75ad27569f2951ce0ffd30a3321230db2fc727216"
-dependencies = [
- "phf_generator",
- "phf_shared",
- "proc-macro2",
- "quote",
- "syn",
- "unicase",
-]
-
-[[package]]
-name = "phf_shared"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
-dependencies = [
- "siphasher",
- "unicase",
-]
-
-[[package]]
 name = "pin-project"
 version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3605,11 +3561,8 @@ checksum = "60ebe4262ae91ddd28c8721111a0a6e9e58860e211fc92116c4bb85c98fd96ad"
 dependencies = [
  "hex",
  "percent-encoding",
- "phf",
  "serde",
- "smartstring",
  "thiserror 2.0.16",
- "unicase",
 ]
 
 [[package]]
@@ -3916,7 +3869,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.37.0"
+version = "0.37.1"
 dependencies = [
  "anyhow",
  "console",
@@ -3958,7 +3911,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.32"
+version = "0.3.33"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -4059,7 +4012,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.24.12"
+version = "0.25.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -4153,7 +4106,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.11"
+version = "0.25.12"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4182,7 +4135,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.2"
+version = "0.23.3"
 dependencies = [
  "bzip2",
  "chrono",
@@ -4228,7 +4181,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.2"
+version = "0.24.3"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4286,7 +4239,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -5193,12 +5146,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "siphasher"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56199f7ddabf13fe5074ce809e7d3f42b42ae711800501b5b16ea82ad029c39d"
-
-[[package]]
 name = "skeptic"
 version = "0.13.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5226,17 +5173,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "smartstring"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
-dependencies = [
- "autocfg",
- "static_assertions",
- "version_check",
 ]
 
 [[package]]
