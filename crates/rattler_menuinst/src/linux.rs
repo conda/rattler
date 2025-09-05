@@ -207,14 +207,6 @@ fn xdg_mime(
     Ok(())
 }
 
-/// Update the desktop database by running `update-desktop-database`
-fn update_desktop_database() -> Result<(), MenuInstError> {
-    // We don't care about the output of update-desktop-database
-    let _ = Command::new("update-desktop-database").output();
-
-    Ok(())
-}
-
 impl LinuxMenu {
     fn new(
         menu_name: &str,
@@ -456,8 +448,41 @@ impl LinuxMenu {
         self.pre_create()?;
         self.create_desktop_entry(tracker)?;
         self.register_mime_types(tracker)?;
-        update_desktop_database()?;
+        self.update_desktop_database();
         Ok(())
+    }
+
+    /// Update the desktop database by running `update-desktop-database`
+    pub fn update_desktop_database(&self) {
+        if self.directories.desktop_entries_location.is_dir() {
+            match Command::new("update-desktop-database")
+                .arg(&self.directories.desktop_entries_location)
+                .status()
+            {
+                Ok(status) if status.success() => {
+                    tracing::debug!(
+                        "Updated desktop database at {}",
+                        self.directories.desktop_entries_location.display()
+                    );
+                }
+                Ok(status) => {
+                    tracing::warn!(
+                        "update-desktop-database exited with status {} for {}",
+                        status,
+                        self.directories.desktop_entries_location.display()
+                    );
+                }
+                Err(err) => {
+                    // Command might not exist (desktop-file-utils not installed); don't fail the operation
+                    tracing::warn!("Could not run update-desktop-database: {}", err);
+                }
+            }
+        } else {
+            tracing::warn!(
+                "Desktop entries location does not exist: {} (skipping update-desktop-database)",
+                self.directories.desktop_entries_location.display()
+            );
+        }
     }
 
     fn register_mime_types(&self, tracker: &mut LinuxTracker) -> Result<(), MenuInstError> {
