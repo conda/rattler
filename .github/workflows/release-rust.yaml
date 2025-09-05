@@ -111,6 +111,11 @@ jobs:
             # Relock the pixi.lock file because it may have changed.
             pixi lock
             git add .
-            git commit -m "Update pixi.lock"
-            git push
+            # Only commit if there are actually changes staged
+            if ! git diff --cached --quiet; then
+              git commit -m "Update pixi.lock"
+              git push
+            else
+              echo "No changes to pixi.lock, skipping commit"
+            fi
           fi
