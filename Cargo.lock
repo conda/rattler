@@ -4440,7 +4440,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.37.0"
+version = "0.37.1"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4522,7 +4522,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.32"
+version = "0.3.33"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4647,7 +4647,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.24.12"
+version = "0.25.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -4761,7 +4761,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.11"
+version = "0.25.12"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4798,7 +4798,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.2"
+version = "0.23.3"
 dependencies = [
  "assert_matches",
  "bzip2",
@@ -4850,7 +4850,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.2"
+version = "0.24.3"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4918,7 +4918,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4933,7 +4933,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_sandbox"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "birdcage",
  "clap",
@@ -4992,7 +4992,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -7839,9 +7839,9 @@ dependencies = [
 
 [[package]]
 name = "zstd-sys"
-version = "2.0.15+zstd.1.5.7"
+version = "2.0.16+zstd.1.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb81183ddd97d0c74cedf1d50d85c8d08c1b8b68ee863bdee9e706eedba1a237"
+checksum = "91e19ebc2adc8f83e43039e79776e3fda8ca919132d68a1fed6a5faca2683748"
 dependencies = [
  "cc",
  "pkg-config",
