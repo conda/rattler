@@ -35,11 +35,11 @@ jobs:
           # Remove LFS first
           git lfs uninstall
           sudo apt remove -y git-lfs
-          
+
           # Clean any LFS remnants
           rm -rf .git/lfs
           rm -rf ~/.git-lfs
-          
+
           # Verify configs are gone
           git config --global --list
       - name: Run release-plz
@@ -78,11 +78,11 @@ jobs:
           # Remove LFS first
           git lfs uninstall
           sudo apt remove -y git-lfs
-          
+
           # Clean any LFS remnants
           rm -rf .git/lfs
           rm -rf ~/.git-lfs
-          
+
           # Verify configs are gone
           git config --global --list
 
@@ -104,7 +104,7 @@ jobs:
           PR: ${{ steps.release-plz.outputs.pr }}
         run: |
           set -e
-          
+
           pr_number=${{ fromJSON(steps.release-plz.outputs.pr).number }}
           if [[ -n "$pr_number" ]]; then
             gh pr checkout $pr_number
