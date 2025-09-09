@@ -4,12 +4,12 @@ use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_conda_types::{NamedChannelOrUrl, Platform};
 use rattler_networking::mirror_middleware;
 use rattler_networking::AuthenticationStorage;
+#[cfg(feature = "s3")]
+use rattler_s3::S3Credentials;
 use rattler_solve::ChannelPriority;
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tracing::warn;
 use url::Url;
-#[cfg(feature = "s3")]
-use rattler_s3::S3Credentials;
 
 #[cfg(feature = "s3")]
 use rattler_networking::s3_middleware;
@@ -480,8 +480,9 @@ pub struct S3Data {
 #[cfg(feature = "s3")]
 impl From<S3Opts> for S3Data {
     fn from(value: S3Opts) -> Self {
-        let credentials = if let (Some(access_key_id), Some(secret_access_key)) = 
-            (value.access_key_id.clone(), value.secret_access_key.clone()) {
+        let credentials = if let (Some(access_key_id), Some(secret_access_key)) =
+            (value.access_key_id.clone(), value.secret_access_key.clone())
+        {
             Some(S3Credentials {
                 endpoint_url: value.endpoint_url.clone(),
                 region: value.region.clone(),
