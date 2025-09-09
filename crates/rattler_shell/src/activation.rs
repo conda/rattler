@@ -15,7 +15,7 @@ use std::{
 #[cfg(target_family = "unix")]
 use anyhow::{Context, Result};
 use fs_err as fs;
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use rattler_conda_types::Platform;
 #[cfg(target_family = "unix")]
 use rattler_pty::unix::PtySession;
@@ -95,6 +95,10 @@ pub struct Activator<T: Shell + 'static> {
 
     /// A list of environment variables to set when activating the environment
     pub env_vars: IndexMap<String, String>,
+
+    /// A list of environment variables to set after running the activation
+    /// scripts. These are evaluated after `activation_scripts` have run.
+    pub post_activation_env_vars: IndexMap<String, String>,
 
     /// The platform for which to generate the Activator
     pub platform: Platform,
@@ -323,6 +327,35 @@ pub struct ActivationResult<T: Shell + 'static> {
 }
 
 impl<T: Shell + Clone> Activator<T> {
+    /// Return unique env var keys from both maps in insertion order.
+    fn unique_env_keys(&self) -> IndexSet<&str> {
+        let mut keys: IndexSet<&str> = IndexSet::new();
+        keys.extend(self.env_vars.keys().map(|k| k.as_str()));
+        keys.extend(self.post_activation_env_vars.keys().map(|k| k.as_str()));
+        keys
+    }
+
+    /// Apply the provided environment variables to the activation script while
+    /// backing up the existing values to the current shell level.
+    fn apply_env_vars_with_backup(
+        &self,
+        script: &mut ShellScript<T>,
+        current_env: &HashMap<String, String>,
+        new_shlvl: i32,
+        envs: &IndexMap<String, String>,
+    ) -> Result<(), ActivationError> {
+        for (key, value) in envs {
+            if let Some(existing_value) = current_env.get(key) {
+                script.set_env_var(
+                    &format!("CONDA_ENV_SHLVL_{new_shlvl}_{key}"),
+                    existing_value,
+                )?;
+            }
+            script.set_env_var(key, value)?;
+        }
+        Ok(())
+    }
+
     /// Create a new activator for the given conda environment.
     ///
     /// # Arguments
@@ -368,6 +401,7 @@ impl<T: Shell + Clone> Activator<T> {
             activation_scripts,
             deactivation_scripts,
             env_vars,
+            post_activation_env_vars: IndexMap::new(),
             platform,
         })
     }
@@ -496,21 +530,24 @@ impl<T: Shell + Clone> Activator<T> {
         script.set_env_var("CONDA_PREFIX", &self.target_prefix.to_string_lossy())?;
 
         // For each environment variable that was set during activation
-        for (key, value) in &self.env_vars {
-            // Save original value if it exists
-            if let Some(existing_value) = variables.current_env.get(key) {
-                script.set_env_var(
-                    &format!("CONDA_ENV_SHLVL_{new_shlvl}_{key}"),
-                    existing_value,
-                )?;
-            }
-            // Set new value
-            script.set_env_var(key, value)?;
-        }
+        self.apply_env_vars_with_backup(
+            &mut script,
+            &variables.current_env,
+            new_shlvl,
+            &self.env_vars,
+        )?;
 
         for activation_script in &self.activation_scripts {
             script.run_script(activation_script)?;
         }
+
+        // Set environment variables that should be applied after activation scripts
+        self.apply_env_vars_with_backup(
+            &mut script,
+            &variables.current_env,
+            new_shlvl,
+            &self.post_activation_env_vars,
+        )?;
 
         Ok(ActivationResult { script, path })
     }
@@ -539,8 +576,8 @@ impl<T: Shell + Clone> Activator<T> {
                     "Proceeding to unset conda variables without restoring previous values.",
                 )?;
 
-                // Just unset without restoring
-                for (key, _) in &self.env_vars {
+                // Just unset without restoring (each key once)
+                for key in self.unique_env_keys() {
                     script.unset_env_var(key)?;
                 }
                 script.unset_env_var("CONDA_PREFIX")?;
@@ -553,8 +590,8 @@ impl<T: Shell + Clone> Activator<T> {
                     "Proceeding to unset conda variables without restoring previous values.",
                 )?;
 
-                // Just unset without restoring
-                for (key, _) in &self.env_vars {
+                // Just unset without restoring (each key once)
+                for key in self.unique_env_keys() {
                     script.unset_env_var(key)?;
                 }
                 script.unset_env_var("CONDA_PREFIX")?;
@@ -563,7 +600,7 @@ impl<T: Shell + Clone> Activator<T> {
             Some(current_level) => {
                 // Unset the current level
                 // For each environment variable that was set during activation
-                for (key, _) in &self.env_vars {
+                for key in self.unique_env_keys() {
                     let backup_key = format!("CONDA_ENV_SHLVL_{current_level}_{key}");
                     script.restore_env_var(key, &backup_key)?;
                 }
@@ -613,9 +650,8 @@ impl<T: Shell + Clone> Activator<T> {
             ShellScript::new(self.shell_type.clone(), self.platform);
         activation_detection_script
             .print_env()?
-            .echo(ENV_START_SEPARATOR)?;
-        activation_detection_script.append_script(&activation_script);
-        activation_detection_script
+            .echo(ENV_START_SEPARATOR)?
+            .append_script(&activation_script)
             .echo(ENV_START_SEPARATOR)?
             .print_env()?;
 
@@ -1037,6 +1073,7 @@ mod tests {
                 activation_scripts: vec![],
                 deactivation_scripts: vec![],
                 env_vars: env_vars.clone(),
+                post_activation_env_vars: IndexMap::new(),
                 platform: Platform::current(),
             };
 
@@ -1093,6 +1130,7 @@ mod tests {
                 activation_scripts: vec![],
                 deactivation_scripts: vec![],
                 env_vars: env_vars.clone(),
+                post_activation_env_vars: IndexMap::new(),
                 platform: Platform::current(),
             };
 
@@ -1162,6 +1200,7 @@ mod tests {
                 activation_scripts: vec![],
                 deactivation_scripts: vec![],
                 env_vars: second_env_vars.clone(),
+                post_activation_env_vars: IndexMap::new(),
                 platform: Platform::current(),
             };
 
@@ -1280,6 +1319,7 @@ mod tests {
                 activation_scripts: vec![],
                 deactivation_scripts: vec![],
                 env_vars: second_env_vars.clone(),
+                post_activation_env_vars: IndexMap::new(),
                 platform: Platform::current(),
             };
 
