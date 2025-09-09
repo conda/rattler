@@ -310,7 +310,13 @@ impl LinuxMenu {
             .command
             .iter()
             .map(|s| s.resolve(&self.placeholders))
-            .map(|part| Ok(shlex::try_quote(&part)?.into_owned()))
+            .map(|part| {
+                if part.starts_with("%") {
+                    Ok(part)
+                } else {
+                    Ok(shlex::try_quote(&part)?.into_owned())
+                }
+            })
             .collect::<Result<Vec<_>, MenuInstError>>()?
             .join(" ");
 
@@ -876,7 +882,7 @@ mod tests {
 
         let result = linux_menu.command().unwrap();
         let normalized_result = result.replace(fake_prefix.prefix().to_str().unwrap(), "<PREFIX>");
-        insta::assert_snapshot!(normalized_result, @"<PREFIX>/bin/spyder '%F'");
+        insta::assert_snapshot!(normalized_result, @"<PREFIX>/bin/spyder %F");
     }
 
     #[test]
@@ -940,7 +946,7 @@ mod tests {
 
         let result = linux_menu.command().unwrap();
         let normalized_result = result.replace(fake_prefix.prefix().to_str().unwrap(), "<PREFIX>");
-        insta::assert_snapshot!(normalized_result, @r#"bash -c "echo 'setup' && <PREFIX>/bin/spyder '%F'""#);
+        insta::assert_snapshot!(normalized_result, @r#"bash -c "echo 'setup' && <PREFIX>/bin/spyder %F""#);
     }
 
     #[test]
