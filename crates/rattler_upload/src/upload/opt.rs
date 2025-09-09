@@ -8,6 +8,8 @@ use rattler_solve::ChannelPriority;
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tracing::warn;
 use url::Url;
+#[cfg(feature = "s3")]
+use rattler_s3::S3Credentials;
 
 #[cfg(feature = "s3")]
 use rattler_networking::s3_middleware;
@@ -410,6 +412,7 @@ pub struct AnacondaOpts {
     pub force: bool,
 }
 
+#[cfg(feature = "s3")]
 fn parse_s3_url(value: &str) -> Result<Url, String> {
     let url: Url =
         Url::parse(value).map_err(|err| format!("`{value}` isn't a valid URL: {err}"))?;
@@ -423,6 +426,7 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
 }
 
 /// Options for uploading to S3
+#[cfg(feature = "s3")]
 #[derive(Clone, Debug, PartialEq, Parser)]
 pub struct S3Opts {
     /// The channel URL in the S3 bucket to upload the package to, e.g., `s3://my-bucket/my-channel`
@@ -456,6 +460,72 @@ pub struct S3Opts {
     /// The session token for the S3 bucket.
     #[arg(long, env = "S3_SESSION_TOKEN", requires_all = ["access_key_id", "secret_access_key"])]
     pub session_token: Option<String>,
+
+    /// S3 credentials (set programmatically, not via CLI)
+    #[clap(skip)]
+    pub credentials: Option<S3Credentials>,
+}
+
+#[cfg(feature = "s3")]
+#[derive(Debug)]
+#[allow(missing_docs)]
+pub struct S3Data {
+    pub channel: Url,
+    pub endpoint_url: Url,
+    pub region: String,
+    pub force_path_style: bool,
+    pub credentials: Option<S3Credentials>,
+}
+
+#[cfg(feature = "s3")]
+impl From<S3Opts> for S3Data {
+    fn from(value: S3Opts) -> Self {
+        let credentials = if let (Some(access_key_id), Some(secret_access_key)) = 
+            (value.access_key_id.clone(), value.secret_access_key.clone()) {
+            Some(S3Credentials {
+                endpoint_url: value.endpoint_url.clone(),
+                region: value.region.clone(),
+                addressing_style: if value.force_path_style {
+                    rattler_s3::S3AddressingStyle::Path
+                } else {
+                    rattler_s3::S3AddressingStyle::VirtualHost
+                },
+                access_key_id: Some(access_key_id),
+                secret_access_key: Some(secret_access_key),
+                session_token: value.session_token.clone(),
+            })
+        } else {
+            value.credentials
+        };
+
+        Self {
+            channel: value.channel,
+            endpoint_url: value.endpoint_url,
+            region: value.region,
+            force_path_style: value.force_path_style,
+            credentials,
+        }
+    }
+}
+
+#[cfg(feature = "s3")]
+impl S3Data {
+    /// Create a new instance of `S3Data`
+    pub fn new(
+        channel: Url,
+        endpoint_url: Url,
+        region: String,
+        force_path_style: bool,
+        credentials: Option<S3Credentials>,
+    ) -> Self {
+        Self {
+            channel,
+            endpoint_url,
+            region,
+            force_path_style,
+            credentials,
+        }
+    }
 }
 
 #[derive(Debug)]

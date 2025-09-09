@@ -1,8 +1,7 @@
-name: pre-commit
-
+name: lint
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
     types:
       - labeled
@@ -10,18 +9,16 @@ on:
       - opened
 
 jobs:
-  pre-commit:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           lfs: false
+          submodules: recursive
       - name: Set up pixi
         uses: prefix-dev/setup-pixi@8ca4608ef7f4daeb54f5205b20d0b7cb42f11143 # v0.8.14
         with:
           environments: lint
-      - name: pre-commit
-        run: pixi run pre-commit-run --color=always --show-diff-on-failure
-        env:
-          # As the rust GitHub action is better at the rust jobs it can be skipped in this job.
-          SKIP: clippy,fmt
+      - name: lint (if this step fails, please 'pixi run lint' locally and push the changes)
+        run: pixi run lint

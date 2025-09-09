@@ -2,46 +2,46 @@
 //! files
 #![deny(missing_docs)]
 
+use std::{
+    collections::{HashMap, HashSet},
+    io::{BufRead, BufReader, Cursor, Read, Seek},
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+};
+
 use anyhow::{Context, Result};
 use bytes::buf::Buf;
 use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
 use fxhash::FxHashMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use opendal::{
+    layers::RetryLayer,
+    services::{FsConfig, S3Config},
+    Configurator, ErrorKind, Operator,
+};
 use rattler_conda_types::{
     package::{ArchiveIdentifier, ArchiveType, IndexJson, PackageFile, RunExportsJson},
     ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
     ShardedSubdirInfo,
 };
 use rattler_digest::Sha256Hash;
-use rattler_networking::{Authentication, AuthenticationStorage};
 use rattler_package_streaming::{
     read,
     seek::{self, stream_conda_content},
 };
+use rattler_s3::ResolvedS3Credentials;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::io::{BufRead, BufReader};
-use std::{
-    collections::{HashMap, HashSet},
-    io::{Cursor, Read, Seek},
-    path::{Path, PathBuf},
-    str::FromStr,
-    sync::Arc,
-};
 use tokio::sync::Semaphore;
 use url::Url;
-
-use opendal::{
-    layers::RetryLayer,
-    services::{FsConfig, S3Config},
-    Configurator, Operator,
-};
 
 const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
 const REPODATA: &str = "repodata.json";
 const REPODATA_SHARDS: &str = "repodata_shards.msgpack.zst";
 const ZSTD_REPODATA_COMPRESSION_LEVEL: i32 = 19;
+const CACHE_CONTROL_IMMUTABLE: &str = "public, max-age=31536000, immutable";
 
 /// Extract the package record from an `index.json` file.
 pub fn package_record_from_index_json<T: Read>(
@@ -435,7 +435,8 @@ pub async fn write_repodata(
         let unpatched_repodata_path = format!("{subdir}/{REPODATA_FROM_PACKAGES}");
         tracing::info!("Writing unpatched repodata to {unpatched_repodata_path}");
         let unpatched_repodata_bytes = serde_json::to_vec(&repodata)?;
-        op.write(&unpatched_repodata_path, unpatched_repodata_bytes)
+        op.write_with(&unpatched_repodata_path, unpatched_repodata_bytes)
+            .content_encoding("application/json")
             .await?;
     }
 
@@ -460,7 +461,9 @@ pub async fn write_repodata(
 
     let repodata_path = format!("{subdir}/{REPODATA}");
     tracing::info!("Writing repodata to {repodata_path}");
-    op.write(&repodata_path, repodata_bytes).await?;
+    op.write_with(&repodata_path, repodata_bytes)
+        .content_encoding("application/json")
+        .await?;
 
     if write_shards {
         // See CEP 16 <https://github.com/conda/ceps/blob/main/cep-0016.md>
@@ -521,7 +524,19 @@ pub async fn write_repodata(
             let future = async move || {
                 let shard_path = format!("{subdir}/shards/{digest:x}.msgpack.zst");
                 tracing::trace!("Writing repodata shard to {shard_path}");
-                op.write(&shard_path, encoded_shard).await
+                match op
+                    .write_with(&shard_path, encoded_shard)
+                    .if_not_exists(true)
+                    .cache_control(CACHE_CONTROL_IMMUTABLE)
+                    .await
+                {
+                    Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
+                        tracing::trace!("{shard_path} already exists");
+                        Ok(())
+                    }
+                    Ok(_metadata) => Ok(()),
+                    Err(e) => Err(e),
+                }
             };
             tasks.push(tokio::spawn(future()));
         }
@@ -562,7 +577,8 @@ pub struct IndexFsConfig {
     pub multi_progress: Option<MultiProgress>,
 }
 
-/// Create a new `repodata.json` for all packages in the channel at the given directory.
+/// Create a new `repodata.json` for all packages in the channel at the given
+/// directory.
 pub async fn index_fs(
     IndexFsConfig {
         channel,
@@ -594,21 +610,8 @@ pub async fn index_fs(
 pub struct IndexS3Config {
     /// The channel to index.
     pub channel: Url,
-    /// The region of the S3 bucket.
-    pub region: String,
-    /// The endpoint URL of the S3 bucket.
-    pub endpoint_url: Url,
-    /// Whether to force path style for the S3 bucket.
-    pub force_path_style: bool,
-    /// The access key ID for the S3 bucket.
-    /// If not set, the authentication storage will be queried.
-    pub access_key_id: Option<String>,
-    /// The secret access key for the S3 bucket.
-    /// If not set, the authentication storage will be queried.
-    pub secret_access_key: Option<String>,
-    /// The session token for the S3 bucket.
-    /// If not set, the authentication storage will be queried.
-    pub session_token: Option<String>,
+    /// The resolved credentials to use for S3 access.
+    pub credentials: ResolvedS3Credentials,
     /// The target platform to index.
     pub target_platform: Option<Platform>,
     /// The path to a repodata patch to apply to the index.
@@ -625,16 +628,12 @@ pub struct IndexS3Config {
     pub multi_progress: Option<MultiProgress>,
 }
 
-/// Create a new `repodata.json` for all packages in the channel at the given S3 URL.
+/// Create a new `repodata.json` for all packages in the channel at the given S3
+/// URL.
 pub async fn index_s3(
     IndexS3Config {
         channel,
-        region,
-        endpoint_url,
-        force_path_style,
-        access_key_id,
-        secret_access_key,
-        session_token,
+        credentials,
         target_platform,
         repodata_patch,
         write_zst,
@@ -644,38 +643,22 @@ pub async fn index_s3(
         multi_progress,
     }: IndexS3Config,
 ) -> anyhow::Result<()> {
+    // Create the S3 configuration for opendal.
     let mut s3_config = S3Config::default();
     s3_config.root = Some(channel.path().to_string());
     s3_config.bucket = channel
         .host_str()
         .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
         .to_string();
-    s3_config.region = Some(region);
-    s3_config.endpoint = Some(endpoint_url.to_string());
-    s3_config.enable_virtual_host_style = !force_path_style;
-    // Use credentials from the CLI if they are provided.
-    if let (Some(access_key_id), Some(secret_access_key)) = (access_key_id, secret_access_key) {
-        s3_config.secret_access_key = Some(secret_access_key);
-        s3_config.access_key_id = Some(access_key_id);
-        s3_config.session_token = session_token;
-    } else {
-        // If they're not provided, check rattler authentication storage for credentials.
-        let auth_storage = AuthenticationStorage::from_env_and_defaults()?;
-        let auth = auth_storage.get_by_url(channel)?;
-        if let (
-            _,
-            Some(Authentication::S3Credentials {
-                access_key_id,
-                secret_access_key,
-                session_token,
-            }),
-        ) = auth
-        {
-            s3_config.access_key_id = Some(access_key_id);
-            s3_config.secret_access_key = Some(secret_access_key);
-            s3_config.session_token = session_token;
-        }
-    }
+
+    s3_config.region = Some(credentials.region);
+    s3_config.endpoint = Some(credentials.endpoint_url.to_string());
+    s3_config.secret_access_key = Some(credentials.secret_access_key);
+    s3_config.access_key_id = Some(credentials.access_key_id);
+    s3_config.session_token = credentials.session_token;
+    s3_config.enable_virtual_host_style =
+        credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
+
     index(
         target_platform,
         s3_config,
@@ -689,14 +672,14 @@ pub async fn index_s3(
     .await
 }
 
-/// Create a new `repodata.json` for all packages in the given configurator's root.
-/// If `target_platform` is `Some`, only that specific subdir is indexed.
+/// Create a new `repodata.json` for all packages in the given configurator's
+/// root. If `target_platform` is `Some`, only that specific subdir is indexed.
 /// Otherwise indexes all subdirs and creates a `repodata.json` for each.
 ///
 /// The process is the following:
-/// 1. Get all subdirs and create `noarch` and `target_platform` if they do not exist.
-/// 2. Iterate subdirs and index each subdir.
-///    Therefore, we need to:
+/// 1. Get all subdirs and create `noarch` and `target_platform` if they do not
+///    exist.
+/// 2. Iterate subdirs and index each subdir. Therefore, we need to:
 ///    1. Collect all uploaded packages in subdir
 ///    2. Collect all registered packages from `repodata.json` (if exists)
 ///    3. Determine which packages to add to and to delete from `repodata.json`

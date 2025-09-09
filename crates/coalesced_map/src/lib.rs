@@ -277,6 +277,16 @@ where
     {
         self.map.retain(|k, v| f(k, v));
     }
+
+    /// Clears all non-pending cached values, preserving only in-flight entries.
+    ///
+    /// This removes entries whose state is `Fetched(..)` while keeping entries
+    /// that are currently `Pending(..)` so ongoing initializations are not
+    /// disrupted.
+    pub fn clear(&self) {
+        self.map
+            .retain(|_, v| matches!(v, PendingOrFetched::Pending(_)));
+    }
 }
 
 /// Internal state for a coalesced entry.
@@ -686,5 +696,55 @@ mod tests {
             .unwrap();
 
         assert_eq!(result2, "value2");
+    }
+
+    #[tokio::test]
+    async fn test_clear_removes_fetched_keeps_pending() {
+        let map = Arc::new(CoalescedMap::new());
+
+        // Create a pending entry by starting an initialization that never completes.
+        let barrier = Arc::new(tokio::sync::Barrier::new(2));
+        let map1 = map.clone();
+        let barrier1 = barrier.clone();
+        let pending_handle = tokio::spawn(async move {
+            map1.get_or_try_init("pending".to_string(), || {
+                let barrier = barrier1.clone();
+                async move {
+                    // Signal the test that the init started and entry is pending.
+                    barrier.wait().await;
+                    // Never complete; simulate long-running in-flight work.
+                    let () = pending().await;
+                    #[allow(unreachable_code)]
+                    Ok::<_, &str>("never".to_string())
+                }
+            })
+            .await
+        });
+
+        // Wait for the initializer to start and set the entry to Pending.
+        barrier.wait().await;
+
+        // Insert a fetched entry.
+        map.get_or_try_init("fetched".to_string(), || async {
+            Ok::<_, &str>("value".to_string())
+        })
+        .await
+        .unwrap();
+
+        // Sanity: we have both entries.
+        assert_eq!(map.len(), 2);
+        assert_eq!(map.get(&"fetched".to_string()), Some("value".to_string()));
+        assert_eq!(map.get(&"pending".to_string()), None);
+
+        // Clear should remove fetched entries but keep pending ones.
+        map.clear();
+
+        assert_eq!(map.len(), 1, "only the pending entry should remain");
+        assert_eq!(map.get(&"fetched".to_string()), None);
+        assert_eq!(map.get(&"pending".to_string()), None);
+
+        // Clean up the spawned pending task to avoid leaking.
+        pending_handle.abort();
+        let _ = pending_handle.await;
     }
 }

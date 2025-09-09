@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0](https://github.com/conda/rattler/compare/rattler_index-v0.24.12...rattler_index-v0.25.0) - 2025-09-04
+
+### Added
+
+- derive default credentials from aws sdk ([#1629](https://github.com/conda/rattler/pull/1629))
+
+## [0.24.12](https://github.com/conda/rattler/compare/rattler_index-v0.24.11...rattler_index-v0.24.12) - 2025-09-02
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.24.11](https://github.com/conda/rattler/compare/rattler_index-v0.24.10...rattler_index-v0.24.11) - 2025-08-28
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.24.10](https://github.com/conda/rattler/compare/rattler_index-v0.24.9...rattler_index-v0.24.10) - 2025-08-22
 
 ### Other

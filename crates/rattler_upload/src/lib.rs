@@ -15,7 +15,7 @@ use upload::opt::{
 };
 
 #[cfg(feature = "s3")]
-use crate::upload::opt::S3Opts;
+use crate::upload::opt::{S3Data, S3Opts};
 #[cfg(feature = "s3")]
 use crate::utils::server_util::extract_s3_info;
 
@@ -110,16 +110,17 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
         #[cfg(feature = "s3")]
         SimpleServerType::S3 => {
             let host_url = args.host.as_ref().unwrap();
-            let (base_url, channel, region) =
+            let (endpoint_url, channel, region) =
                 extract_s3_info(host_url).expect("Failed to parse S3 URL");
             ServerType::S3(S3Opts {
-                endpoint_url: base_url,
                 channel,
+                endpoint_url,
                 region,
                 force_path_style: false,
+                access_key_id: None,
                 secret_access_key: None,
                 session_token: None,
-                access_key_id: None,
+                credentials: None,
             })
         }
         SimpleServerType::CondaForge => {
@@ -160,16 +161,13 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
         }
         #[cfg(feature = "s3")]
         ServerType::S3(s3_opts) => {
+            let s3_data = S3Data::from(s3_opts);
             upload::upload_package_to_s3(
                 &store,
-                s3_opts.channel,
-                s3_opts.endpoint_url,
-                s3_opts.region,
-                s3_opts.force_path_style,
-                s3_opts.access_key_id,
-                s3_opts.secret_access_key,
-                s3_opts.session_token,
+                s3_data.channel,
+                s3_data.credentials,
                 &args.package_files,
+                false, // force parameter - using false as default
             )
             .await
         }
