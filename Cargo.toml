@@ -23,7 +23,7 @@ tag-prefix = ""
 lto = true
 
 [workspace.dependencies]
-ahash = { version = "0.8.12", features = ["serde"] }
+ahash = "0.8.12"
 anyhow = "1.0.98"
 archspec = "0.1.3"
 assert_matches = "1.5.0"
