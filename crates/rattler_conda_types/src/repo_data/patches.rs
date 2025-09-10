@@ -1,8 +1,12 @@
 #![allow(clippy::option_option)]
 
-use std::{collections::BTreeSet, io, path::Path};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    io,
+    path::Path,
+};
 
-use fxhash::{FxHashMap, FxHashSet};
+use ahash::RandomState;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
@@ -17,14 +21,14 @@ use crate::{package::ArchiveType, PackageRecord, PackageUrl, RepoData, Shard};
 #[derive(Debug, Default, Clone)]
 pub struct RepoDataPatch {
     /// The patches to apply for each subdir
-    pub subdirs: FxHashMap<String, PatchInstructions>,
+    pub subdirs: HashMap<String, PatchInstructions, RandomState>,
 }
 
 impl RepoDataPatch {
     /// Load repodata patches from an extracted repodata patches package
     /// archive.
     pub fn from_package(package: impl AsRef<Path>) -> io::Result<Self> {
-        let mut subdirs = FxHashMap::default();
+        let mut subdirs = HashMap::default();
 
         // Iterate over all directories in the package
         for entry in std::fs::read_dir(package)? {
@@ -154,20 +158,20 @@ mod tracked_features {
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct PatchInstructions {
     /// Filenames that have been removed from the subdirectory
-    #[serde(default, skip_serializing_if = "FxHashSet::is_empty")]
-    pub remove: FxHashSet<String>,
+    #[serde(default, skip_serializing_if = "HashSet::is_empty")]
+    pub remove: HashSet<String, RandomState>,
 
     /// Patches for package records
-    #[serde(default, skip_serializing_if = "FxHashMap::is_empty")]
-    pub packages: FxHashMap<String, PackageRecordPatch>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub packages: HashMap<String, PackageRecordPatch, RandomState>,
 
     /// Patches for package records
     #[serde(
         default,
         rename = "packages.conda",
-        skip_serializing_if = "FxHashMap::is_empty"
+        skip_serializing_if = "HashMap::is_empty"
     )]
-    pub conda_packages: FxHashMap<String, PackageRecordPatch>,
+    pub conda_packages: HashMap<String, PackageRecordPatch, RandomState>,
 }
 
 impl PackageRecord {
@@ -200,9 +204,9 @@ impl PackageRecord {
 /// Apply a patch to a repodata file
 /// Note that we currently do not handle `revoked` instructions
 pub fn apply_patches_impl(
-    packages: &mut FxHashMap<String, PackageRecord>,
-    conda_packages: &mut FxHashMap<String, PackageRecord>,
-    removed: &mut FxHashSet<String>,
+    packages: &mut HashMap<String, PackageRecord, RandomState>,
+    conda_packages: &mut HashMap<String, PackageRecord, RandomState>,
+    removed: &mut HashSet<String, RandomState>,
     instructions: &PatchInstructions,
 ) {
     for (pkg, patch) in instructions.packages.iter() {

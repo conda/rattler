@@ -3,15 +3,15 @@
 //!
 //! For details see methods of `PathResolver`.
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap, HashSet},
     ffi::OsString,
     io,
     path::{Component, Path, PathBuf},
     sync::Arc,
 };
 
+use ahash::RandomState;
 use fs_err as fs;
-use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use indexmap::IndexSet;
 use itertools::Itertools;
 
@@ -99,11 +99,11 @@ pub struct ClobberedPath {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 struct PathTrieNode {
     /// All tags that touch this prefix *or* any descendant.
-    prefixes: HashSet<PackageName>,
+    prefixes: HashSet<PackageName, RandomState>,
     /// Tags that have a file exactly at this node.
-    terminals: HashSet<PackageName>,
+    terminals: HashSet<PackageName, RandomState>,
     /// Child components.
-    children: HashMap<OsString, PathTrieNode>,
+    children: HashMap<OsString, PathTrieNode, RandomState>,
 }
 
 /// A trie of relative file-paths, tagged by package name (in insertion order).
@@ -562,7 +562,10 @@ New:
     }
 
     /// Which packages own this prefix?
-    pub fn packages_for_prefix<P: AsRef<Path>>(&self, path: P) -> Option<&HashSet<PackageName>> {
+    pub fn packages_for_prefix<P: AsRef<Path>>(
+        &self,
+        path: P,
+    ) -> Option<&HashSet<PackageName, RandomState>> {
         let mut cur = &self.root;
 
         for comp in path.as_ref().components().map(Component::as_os_str) {
@@ -573,7 +576,10 @@ New:
     }
 
     /// Who owns exactly this file?
-    pub fn packages_for_exact<P: AsRef<Path>>(&self, path: P) -> Option<&HashSet<PackageName>> {
+    pub fn packages_for_exact<P: AsRef<Path>>(
+        &self,
+        path: P,
+    ) -> Option<&HashSet<PackageName, RandomState>> {
         Self::get_node(&self.root, path.as_ref()).map(|n| &n.terminals)
     }
 

@@ -23,6 +23,7 @@ tag-prefix = ""
 lto = true
 
 [workspace.dependencies]
+ahash = { version = "0.8.12", features = ["serde"] }
 anyhow = "1.0.98"
 archspec = "0.1.3"
 assert_matches = "1.5.0"
@@ -67,7 +68,6 @@ fs-err = { version = "3.1.0" }
 fslock = "0.2.1"
 futures = "0.3.31"
 futures-util = "0.3.31"
-fxhash = "0.2.1"
 # lots of other crates are still stuck on older version which breaks `deserialize`
 # pinning to 0.14.7 because 0.14.8 introduces deprecation notices.
 generic-array = "=0.14.7"
