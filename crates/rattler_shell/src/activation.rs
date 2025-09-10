@@ -94,7 +94,8 @@ pub struct Activator<T: Shell + 'static> {
     /// A list of scripts to run when deactivating the environment
     pub deactivation_scripts: Vec<PathBuf>,
 
-    /// A list of environment variables to set when activating the environment
+    /// A list of environment variables to set before running the activation
+    /// scripts. These are evaluated before `activation_scripts` have run.
     pub env_vars: IndexMap<String, String>,
 
     /// A list of environment variables to set after running the activation
@@ -698,6 +699,76 @@ mod tests {
     #[cfg(unix)]
     use crate::activation::PathModificationBehavior;
     use crate::shell::{self, native_path_to_unix, ShellEnum};
+
+    #[test]
+    #[cfg(unix)]
+    fn test_post_activation_env_vars_applied_after_scripts_bash() {
+        let temp_dir = TempDir::new("test_post_activation_env_vars").unwrap();
+
+        // Create a dummy activation script so the activator will run it
+        let activate_dir = temp_dir.path().join("etc/conda/activate.d");
+        fs::create_dir_all(&activate_dir).unwrap();
+        let script_path = activate_dir.join("script1.sh");
+        fs::write(&script_path, "# noop\n").unwrap();
+
+        // Build an activator with both pre and post env vars
+        let pre_env = IndexMap::from_iter([(String::from("A"), String::from("x"))]);
+
+        // Ensure we also override a pre var in post
+        let post_env = IndexMap::from_iter([
+            (String::from("B"), String::from("y")),
+            (String::from("A"), String::from("z")),
+        ]);
+
+        let activator = Activator {
+            target_prefix: temp_dir.path().to_path_buf(),
+            shell_type: shell::Bash,
+            paths: vec![temp_dir.path().join("bin")],
+            activation_scripts: vec![script_path.clone()],
+            deactivation_scripts: vec![],
+            env_vars: pre_env,
+            post_activation_env_vars: post_env,
+            platform: Platform::current(),
+        };
+
+        let result = activator
+            .activation(ActivationVariables {
+                conda_prefix: None,
+                path: None,
+                path_modification_behavior: PathModificationBehavior::Prepend,
+                current_env: HashMap::new(),
+            })
+            .unwrap();
+
+        let mut contents = result.script.contents().unwrap();
+
+        // Normalize prefix path for consistent assertions
+        let prefix = temp_dir.path().to_str().unwrap();
+        contents = contents.replace(prefix, "__PREFIX__");
+
+        // Check ordering: pre env vars before script run, post env vars after script run
+        let idx_pre_a = contents.find("export A=x").expect("missing pre env A=x");
+        let idx_run = contents
+            .find(". __PREFIX__/etc/conda/activate.d/script1.sh")
+            .expect("missing activation script run");
+        let idx_post_b = contents.find("export B=y").expect("missing post env B=y");
+        let idx_post_a = contents
+            .find("export A=z")
+            .expect("missing post override A=z");
+
+        assert!(
+            idx_pre_a < idx_run,
+            "pre env var should be before activation script"
+        );
+        assert!(
+            idx_run < idx_post_b,
+            "post env var should be after activation script"
+        );
+        assert!(
+            idx_run < idx_post_a,
+            "post override should be after activation script"
+        );
+    }
 
     #[test]
     fn test_collect_scripts() {
