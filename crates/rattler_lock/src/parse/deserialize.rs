@@ -1,11 +1,11 @@
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     marker::PhantomData,
     sync::Arc,
 };
 
-use fxhash::FxHashMap;
+use ahash::RandomState;
 use indexmap::IndexSet;
 use itertools::Either;
 use pep508_rs::ExtraName;
@@ -176,7 +176,7 @@ fn parse_from_lock<P>(
     }
 
     // Determine the indices of the packages by url
-    let mut conda_url_lookup: FxHashMap<UrlOrPath, Vec<_>> = FxHashMap::default();
+    let mut conda_url_lookup: HashMap<UrlOrPath, Vec<_>, RandomState> = HashMap::default();
     for (idx, conda_package) in conda_packages.iter().enumerate() {
         conda_url_lookup
             .entry(conda_package.location().clone())
@@ -188,7 +188,7 @@ fn parse_from_lock<P>(
         .iter()
         .enumerate()
         .map(|(idx, p)| (&p.location, idx))
-        .collect::<FxHashMap<_, _>>();
+        .collect::<HashMap<_, _, RandomState>>();
     let mut pypi_runtime_lookup = IndexSet::new();
 
     let environments = raw
