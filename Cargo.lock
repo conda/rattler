@@ -4962,6 +4962,7 @@ dependencies = [
  "rattler_redaction",
  "rattler_s3",
  "rattler_solve",
+ "regex",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",

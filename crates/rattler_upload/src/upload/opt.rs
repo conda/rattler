@@ -1,19 +1,20 @@
 //! Command-line options.
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
-
 use clap::{arg, Parser};
-use rattler_conda_types::{
-    utils::url_with_trailing_slash::UrlWithTrailingSlash, NamedChannelOrUrl, Platform,
-};
+use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
+use rattler_conda_types::{NamedChannelOrUrl, Platform};
+use rattler_networking::mirror_middleware;
+use rattler_networking::AuthenticationStorage;
 #[cfg(feature = "s3")]
-use rattler_networking::s3_middleware;
-use rattler_networking::{mirror_middleware, AuthenticationStorage};
+use rattler_s3::S3Credentials;
 use rattler_solve::ChannelPriority;
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tracing::warn;
 use url::Url;
 
-/// The configuration type for rattler-build - just extends rattler / pixi
-/// config and can load the same TOML files.
+#[cfg(feature = "s3")]
+use rattler_networking::s3_middleware;
+
+/// The configuration type for rattler-build - just extends rattler / pixi config and can load the same TOML files.
 pub type Config = rattler_config::config::ConfigBase<()>;
 
 /// Container for `rattler_solver::ChannelPriority` so that it can be parsed
@@ -99,8 +100,7 @@ impl CommonData {
         allow_insecure_host: Option<Vec<String>>,
     ) -> Self {
         // mirror config
-        // todo: this is a duplicate in pixi and pixi-pack: do it like in
-        // `compute_s3_config`
+        // todo: this is a duplicate in pixi and pixi-pack: do it like in `compute_s3_config`
         let mut mirror_config = HashMap::new();
         tracing::debug!("Using mirrors: {:?}", config.mirrors);
 
@@ -158,13 +158,16 @@ impl CommonData {
 /// Upload options.
 #[derive(Parser, Debug)]
 pub struct UploadOpts {
+    /// The host + channel (optional if the server type is provided)
+    pub host: Option<Url>,
+
     /// The package file to upload
     #[arg(global = true, required = false)]
     pub package_files: Vec<PathBuf>,
 
-    /// The server type
+    //// The server type (optional if host is provided)
     #[clap(subcommand)]
-    pub server_type: ServerType,
+    pub server_type: Option<ServerType>,
 
     /// Common options.
     #[clap(flatten)]
@@ -426,17 +429,104 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
 #[cfg(feature = "s3")]
 #[derive(Clone, Debug, PartialEq, Parser)]
 pub struct S3Opts {
-    /// The channel URL in the S3 bucket to upload the package to, e.g.,
-    /// `s3://my-bucket/my-channel`
+    /// The channel URL in the S3 bucket to upload the package to, e.g., `s3://my-bucket/my-channel`
     #[arg(short, long, env = "S3_CHANNEL", value_parser = parse_s3_url)]
     pub channel: Url,
 
-    #[clap(flatten)]
-    pub credentials: rattler_s3::clap::S3CredentialsOpts,
+    /// The endpoint URL of the S3 backend
+    #[arg(
+        long,
+        env = "S3_ENDPOINT_URL",
+        default_value = "https://s3.amazonaws.com"
+    )]
+    pub endpoint_url: Url,
 
-    /// Replace files if it already exists.
-    #[arg(long)]
-    pub force: bool,
+    /// The region of the S3 backend
+    #[arg(long, env = "S3_REGION", default_value = "eu-central-1")]
+    pub region: String,
+
+    /// Whether to use path-style S3 URLs
+    #[arg(long, env = "S3_FORCE_PATH_STYLE", default_value = "false")]
+    pub force_path_style: bool,
+
+    /// The access key ID for the S3 bucket.
+    #[arg(long, env = "S3_ACCESS_KEY_ID", requires_all = ["secret_access_key"])]
+    pub access_key_id: Option<String>,
+
+    /// The secret access key for the S3 bucket.
+    #[arg(long, env = "S3_SECRET_ACCESS_KEY", requires_all = ["access_key_id"])]
+    pub secret_access_key: Option<String>,
+
+    /// The session token for the S3 bucket.
+    #[arg(long, env = "S3_SESSION_TOKEN", requires_all = ["access_key_id", "secret_access_key"])]
+    pub session_token: Option<String>,
+
+    /// S3 credentials (set programmatically, not via CLI)
+    #[clap(skip)]
+    pub credentials: Option<S3Credentials>,
+}
+
+#[cfg(feature = "s3")]
+#[derive(Debug)]
+#[allow(missing_docs)]
+pub struct S3Data {
+    pub channel: Url,
+    pub endpoint_url: Url,
+    pub region: String,
+    pub force_path_style: bool,
+    pub credentials: Option<S3Credentials>,
+}
+
+#[cfg(feature = "s3")]
+impl From<S3Opts> for S3Data {
+    fn from(value: S3Opts) -> Self {
+        let credentials = if let (Some(access_key_id), Some(secret_access_key)) =
+            (value.access_key_id.clone(), value.secret_access_key.clone())
+        {
+            Some(S3Credentials {
+                endpoint_url: value.endpoint_url.clone(),
+                region: value.region.clone(),
+                addressing_style: if value.force_path_style {
+                    rattler_s3::S3AddressingStyle::Path
+                } else {
+                    rattler_s3::S3AddressingStyle::VirtualHost
+                },
+                access_key_id: Some(access_key_id),
+                secret_access_key: Some(secret_access_key),
+                session_token: value.session_token.clone(),
+            })
+        } else {
+            value.credentials
+        };
+
+        Self {
+            channel: value.channel,
+            endpoint_url: value.endpoint_url,
+            region: value.region,
+            force_path_style: value.force_path_style,
+            credentials,
+        }
+    }
+}
+
+#[cfg(feature = "s3")]
+impl S3Data {
+    /// Create a new instance of `S3Data`
+    pub fn new(
+        channel: Url,
+        endpoint_url: Url,
+        region: String,
+        force_path_style: bool,
+        credentials: Option<S3Credentials>,
+    ) -> Self {
+        Self {
+            channel,
+            endpoint_url,
+            region,
+            force_path_style,
+            credentials,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -607,8 +697,7 @@ pub struct DebugOpts {
     #[clap(flatten)]
     pub common: CommonOpts,
 
-    /// Name of the specific output to debug (only required when a recipe has
-    /// multiple outputs)
+    /// Name of the specific output to debug (only required when a recipe has multiple outputs)
     #[arg(long, help = "Name of the specific output to debug")]
     pub output_name: Option<String>,
 }
@@ -635,8 +724,8 @@ pub struct DebugData {
 }
 
 impl DebugData {
-    /// Generate a new `TestData` struct from `TestOpts` and an optional pixi
-    /// config. `TestOpts` have higher priority than the pixi config.
+    /// Generate a new `TestData` struct from `TestOpts` and an optional pixi config.
+    /// `TestOpts` have higher priority than the pixi config.
     pub fn from_opts_and_config(opts: DebugOpts, config: Option<Config>) -> Self {
         Self {
             recipe_path: opts.recipe,
