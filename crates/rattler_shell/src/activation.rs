@@ -15,7 +15,8 @@ use std::{
 #[cfg(target_family = "unix")]
 use anyhow::{Context, Result};
 use fs_err as fs;
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
+use itertools::Itertools;
 use rattler_conda_types::Platform;
 #[cfg(target_family = "unix")]
 use rattler_pty::unix::PtySession;
@@ -327,34 +328,16 @@ pub struct ActivationResult<T: Shell + 'static> {
 }
 
 impl<T: Shell + Clone> Activator<T> {
-    /// Return unique env var keys from both maps in insertion order.
-    fn unique_env_keys(&self) -> IndexSet<&str> {
-        let mut keys: IndexSet<&str> = IndexSet::new();
-        keys.extend(self.env_vars.keys().map(|k| k.as_str()));
-        keys.extend(self.post_activation_env_vars.keys().map(|k| k.as_str()));
-        keys
+    /// Return unique env var keys from both `env_vars` and `post_activation_env_vars` in insertion order.
+    fn unique_env_keys(&self) -> impl Iterator<Item = &str> {
+        self.env_vars
+            .keys()
+            .chain(self.post_activation_env_vars.keys())
+            .map(String::as_str)
+            .unique()
     }
 
-    /// Apply the provided environment variables to the activation script while
-    /// backing up the existing values to the current shell level.
-    fn apply_env_vars_with_backup(
-        &self,
-        script: &mut ShellScript<T>,
-        current_env: &HashMap<String, String>,
-        new_shlvl: i32,
-        envs: &IndexMap<String, String>,
-    ) -> Result<(), ActivationError> {
-        for (key, value) in envs {
-            if let Some(existing_value) = current_env.get(key) {
-                script.set_env_var(
-                    &format!("CONDA_ENV_SHLVL_{new_shlvl}_{key}"),
-                    existing_value,
-                )?;
-            }
-            script.set_env_var(key, value)?;
-        }
-        Ok(())
-    }
+    // moved: apply_env_vars_with_backup now lives on `ShellScript`
 
     /// Create a new activator for the given conda environment.
     ///
@@ -530,20 +513,14 @@ impl<T: Shell + Clone> Activator<T> {
         script.set_env_var("CONDA_PREFIX", &self.target_prefix.to_string_lossy())?;
 
         // For each environment variable that was set during activation
-        self.apply_env_vars_with_backup(
-            &mut script,
-            &variables.current_env,
-            new_shlvl,
-            &self.env_vars,
-        )?;
+        script.apply_env_vars_with_backup(&variables.current_env, new_shlvl, &self.env_vars)?;
 
         for activation_script in &self.activation_scripts {
             script.run_script(activation_script)?;
         }
 
         // Set environment variables that should be applied after activation scripts
-        self.apply_env_vars_with_backup(
-            &mut script,
+        script.apply_env_vars_with_backup(
             &variables.current_env,
             new_shlvl,
             &self.post_activation_env_vars,
