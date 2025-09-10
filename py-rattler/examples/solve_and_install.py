@@ -14,7 +14,7 @@ async def main() -> None:
         # Channels to use for solving
         channels=["conda-forge"],
         # The specs to solve for
-        specs=["python ~=3.12.0", "pip", "requests 2.31.0"],
+        specs=["python ~=3.12.0", "pip", "requests 2.31.0.*"],
         # Virtual packages define the specifications of the environment
         virtual_packages=VirtualPackage.detect(),
     )
