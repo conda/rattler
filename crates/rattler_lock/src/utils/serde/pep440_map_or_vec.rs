@@ -1,4 +1,6 @@
-use fxhash::FxBuildHasher;
+use std::hash::BuildHasherDefault;
+
+use ahash::AHasher;
 use indexmap::IndexMap;
 use pep508_rs::{Requirement, VersionOrUrl};
 use serde::{Deserialize, Deserializer};
@@ -17,8 +19,8 @@ impl<'de> DeserializeAs<'de, Vec<Requirement>> for Pep440MapOrVec {
         enum MapOrVec {
             Vec(Vec<Requirement>),
             Map(
-                #[serde_as(as = "IndexMap<_, DisplayFromStr, FxBuildHasher>")]
-                IndexMap<String, pep440_rs::VersionSpecifiers, FxBuildHasher>,
+                #[serde_as(as = "IndexMap<_, DisplayFromStr, BuildHasherDefault<AHasher>>")]
+                IndexMap<String, pep440_rs::VersionSpecifiers, BuildHasherDefault<AHasher>>,
             ),
         }
 

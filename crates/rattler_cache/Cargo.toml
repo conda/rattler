@@ -17,13 +17,13 @@ native-tls = ["reqwest/native-tls", "rattler_networking/native-tls", "rattler_pa
 [dependencies]
 
 [target.'cfg(not( target_arch = "wasm32" ))'.dependencies]
+ahash = { workspace = true }
 anyhow = { workspace = true }
 dashmap = { workspace = true }
 dirs = { workspace = true }
 futures = { workspace = true }
 fs-err = { workspace = true }
 fs4 = { workspace = true, features = ["fs-err3-tokio", "tokio"] }
-fxhash = { workspace = true }
 itertools = { workspace = true }
 parking_lot = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
