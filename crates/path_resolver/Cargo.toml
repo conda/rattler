@@ -10,8 +10,8 @@ readme.workspace = true
 description = "Provides a trie-based data structure to track and resolve relative path ownership across multiple packages"
 
 [dependencies]
+ahash.workspace = true
 fs-err.workspace = true
-fxhash.workspace = true
 indexmap.workspace = true
 itertools.workspace = true
 proptest.workspace = true

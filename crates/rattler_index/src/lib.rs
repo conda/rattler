@@ -10,11 +10,11 @@ use std::{
     sync::Arc,
 };
 
+use ahash::RandomState;
 use anyhow::{Context, Result};
 use bytes::buf::Buf;
 use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
-use fxhash::FxHashMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use opendal::{
     layers::RetryLayer,
@@ -88,7 +88,7 @@ pub fn package_record_from_index_json<T: Read>(
 fn repodata_patch_from_conda_package_stream<'a>(
     package: impl Read + Seek + 'a,
 ) -> anyhow::Result<rattler_conda_types::RepoDataPatch> {
-    let mut subdirs = FxHashMap::default();
+    let mut subdirs = HashMap::default();
 
     let mut content_reader = stream_conda_content(package)?;
     let entries = content_reader.entries()?;
@@ -203,7 +203,7 @@ async fn index_subdir(
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
 ) -> Result<()> {
-    let mut registered_packages: FxHashMap<String, PackageRecord> = HashMap::default();
+    let mut registered_packages: HashMap<String, PackageRecord, RandomState> = HashMap::default();
     if !force {
         let repodata_bytes = if repodata_patch.is_some() {
             op.read(&format!("{subdir}/{REPODATA_FROM_PACKAGES}")).await
@@ -376,8 +376,8 @@ async fn index_subdir(
         registered_packages.insert(filename, record);
     }
 
-    let mut packages: FxHashMap<String, PackageRecord> = HashMap::default();
-    let mut conda_packages: FxHashMap<String, PackageRecord> = HashMap::default();
+    let mut packages: HashMap<String, PackageRecord, RandomState> = HashMap::default();
+    let mut conda_packages: HashMap<String, PackageRecord, RandomState> = HashMap::default();
     for (filename, package) in registered_packages {
         match ArchiveType::try_from(&filename) {
             Some(ArchiveType::TarBz2) => {

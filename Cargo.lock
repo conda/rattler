@@ -37,6 +37,7 @@ dependencies = [
  "cfg-if",
  "getrandom 0.3.3",
  "once_cell",
+ "serde",
  "version_check",
  "zerocopy",
 ]
@@ -774,9 +775,9 @@ dependencies = [
 
 [[package]]
 name = "axum"
-version = "0.8.5"
+version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98e529aee37b5c8206bb4bf4c44797127566d72f76952c970bd3d1e85de8f4e2"
+checksum = "8a18ed336352031311f4e0b4dd2ff392d4fbb370777c9d18d7fc9d7359f73871"
 dependencies = [
  "axum-core",
  "bytes",
@@ -802,9 +803,9 @@ dependencies = [
 
 [[package]]
 name = "axum-core"
-version = "0.5.4"
+version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ac7a6beb1182c7e30253ee75c3e918080bfb83f5a3023bcdf7209d85fd147e6"
+checksum = "59446ce19cd142f8833f856eb31f3eb097812d1479ab224f54d72428ca21ea22"
 dependencies = [
  "bytes",
  "futures-core",
@@ -2213,15 +2214,6 @@ dependencies = [
  "pin-project-lite",
  "pin-utils",
  "slab",
-]
-
-[[package]]
-name = "fxhash"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
-dependencies = [
- "byteorder",
 ]
 
 [[package]]
@@ -3842,9 +3834,9 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 name = "path_resolver"
 version = "0.2.1"
 dependencies = [
+ "ahash",
  "divan",
  "fs-err",
- "fxhash",
  "indexmap 2.11.4",
  "itertools 0.14.0",
  "proptest",
@@ -3945,9 +3937,9 @@ dependencies = [
 
 [[package]]
 name = "petgraph"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54acf3a685220b533e437e264e4d932cfbdc4cc7ec0cd232ed73c08d03b8a7ca"
+checksum = "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455"
 dependencies = [
  "fixedbitset",
  "hashbrown 0.15.5",
@@ -4442,6 +4434,7 @@ dependencies = [
 name = "rattler_cache"
 version = "0.3.35"
 dependencies = [
+ "ahash",
  "anyhow",
  "assert_matches",
  "axum",
@@ -4452,7 +4445,6 @@ dependencies = [
  "fs-err",
  "fs4",
  "futures",
- "fxhash",
  "itertools 0.14.0",
  "parking_lot 0.12.4",
  "rattler_conda_types",
@@ -4481,6 +4473,7 @@ dependencies = [
 name = "rattler_conda_types"
 version = "0.39.3"
 dependencies = [
+ "ahash",
  "assert_matches",
  "chrono",
  "core-foundation 0.10.1",
@@ -4489,7 +4482,6 @@ dependencies = [
  "dunce",
  "file_url",
  "fs-err",
- "fxhash",
  "glob",
  "hex",
  "hex-literal",
@@ -4568,6 +4560,7 @@ dependencies = [
 name = "rattler_index"
 version = "0.25.3"
 dependencies = [
+ "ahash",
  "anyhow",
  "bytes",
  "chrono",
@@ -4576,7 +4569,6 @@ dependencies = [
  "console 0.16.1",
  "fs-err",
  "futures",
- "fxhash",
  "indicatif",
  "opendal",
  "rattler_conda_types",
@@ -4616,9 +4608,9 @@ dependencies = [
 name = "rattler_lock"
 version = "0.24.2"
 dependencies = [
+ "ahash",
  "chrono",
  "file_url",
- "fxhash",
  "indexmap 2.11.4",
  "insta",
  "itertools 0.14.0",
