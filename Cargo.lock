@@ -37,6 +37,7 @@ dependencies = [
  "cfg-if",
  "getrandom 0.3.4",
  "once_cell",
+ "serde",
  "version_check",
  "zerocopy",
 ]
@@ -1080,9 +1081,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.41"
+version = "1.2.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac9fe6cdbb24b6ade63616c0a0688e45bb56732262c158df3c0c4bea4ca47cb7"
+checksum = "81bbf3b3619004ad9bd139f62a9ab5cfe467f307455a0d307b0cf58bf070feaa"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -1985,9 +1986,9 @@ checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
 name = "flate2"
-version = "1.1.4"
+version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc5a4e564e38c699f2880d3fda590bedc2e69f3f84cd48b457bd892ce61d0aa9"
+checksum = "bfe33edd8e85a12a67454e37f8c75e730830d83e313556ab9ebf9ee7fbeb3bfb"
 dependencies = [
  "crc32fast",
  "libz-rs-sys",
@@ -2192,15 +2193,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fxhash"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2277,9 +2269,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-auth"
-version = "1.0.1"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5a0f0ef58bc79d636e95db264939a6f3fd80951f77743f2b7ec55e22171150d"
+checksum = "f084abe65c3bdde490bf4a4eebc7e103637fb3ac4b101d09508dd5bf12ce82b1"
 dependencies = [
  "async-trait",
  "base64",
@@ -2299,9 +2291,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-gax"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58bc95deae841e35758fa5caba317092f26940135c7184570feb691a1844db08"
+checksum = "a36f8701dac18c2cbedf588d15ee4ce5c018da531c2e74e9ad043cbd32b0fccb"
 dependencies = [
  "base64",
  "bytes",
@@ -2473,11 +2465,11 @@ dependencies = [
 
 [[package]]
 name = "home"
-version = "0.5.11"
+version = "0.5.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "589533453244b0995c858700322199b2becb13b627df2851f64a2775d024abcf"
+checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3749,9 +3741,9 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 name = "path_resolver"
 version = "0.2.1"
 dependencies = [
+ "ahash",
  "divan",
  "fs-err",
- "fxhash",
  "indexmap 2.12.0",
  "itertools 0.14.0",
  "proptest",
@@ -4026,9 +4018,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.102"
+version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e0f6df8eaa422d97d72edcd152e1451618fed47fabbdbd5a8864167b1d4aff7"
+checksum = "5ee95bc4ef87b8d5ba32e8b7714ccc834865276eab0aed5c9958d00ec45f49e8"
 dependencies = [
  "unicode-ident",
 ]
@@ -4349,6 +4341,7 @@ dependencies = [
 name = "rattler_cache"
 version = "0.3.41"
 dependencies = [
+ "ahash",
  "anyhow",
  "assert_matches",
  "axum",
@@ -4359,7 +4352,6 @@ dependencies = [
  "fs-err",
  "fs4",
  "futures",
- "fxhash",
  "itertools 0.14.0",
  "parking_lot 0.12.5",
  "rattler_conda_types",
@@ -4388,6 +4380,7 @@ dependencies = [
 name = "rattler_conda_types"
 version = "0.40.3"
 dependencies = [
+ "ahash",
  "assert_matches",
  "chrono",
  "core-foundation 0.10.1",
@@ -4396,7 +4389,6 @@ dependencies = [
  "dunce",
  "file_url",
  "fs-err",
- "fxhash",
  "glob",
  "hex",
  "hex-literal",
@@ -4478,6 +4470,7 @@ dependencies = [
 name = "rattler_index"
 version = "0.26.4"
 dependencies = [
+ "ahash",
  "anyhow",
  "bytes",
  "chrono",
@@ -4486,7 +4479,6 @@ dependencies = [
  "console 0.16.1",
  "fs-err",
  "futures",
- "fxhash",
  "indicatif",
  "opendal",
  "rattler_conda_types",
@@ -4527,9 +4519,9 @@ dependencies = [
 name = "rattler_lock"
 version = "0.25.3"
 dependencies = [
+ "ahash",
  "chrono",
  "file_url",
- "fxhash",
  "indexmap 2.12.0",
  "insta",
  "itertools 0.14.0",
