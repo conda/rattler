@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0](https://github.com/conda/rattler/compare/rattler_shell-v0.24.11...rattler_shell-v0.25.0) - 2025-09-12
+
+### Added
+
+- add support for post-activation environment variables in Activator ([#1673](https://github.com/conda/rattler/pull/1673))
+
 ## [0.24.11](https://github.com/conda/rattler/compare/rattler_shell-v0.24.10...rattler_shell-v0.24.11) - 2025-09-05
 
 ### Other
