@@ -12,6 +12,7 @@ use std::{
 };
 
 use enum_dispatch::enum_dispatch;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use rattler_conda_types::Platform;
 use thiserror::Error;
@@ -1044,6 +1045,26 @@ impl<T: Shell + 'static> ShellScript<T> {
             contents: String::new(),
             platform,
         }
+    }
+
+    /// Apply the provided environment variables to the script while
+    /// backing up existing values to the current shell level.
+    pub fn apply_env_vars_with_backup(
+        &mut self,
+        current_env: &HashMap<String, String>,
+        new_shlvl: i32,
+        envs: &IndexMap<String, String>,
+    ) -> Result<&mut Self, ShellError> {
+        for (key, value) in envs {
+            if let Some(existing_value) = current_env.get(key) {
+                self.set_env_var(
+                    &format!("CONDA_ENV_SHLVL_{new_shlvl}_{key}"),
+                    existing_value,
+                )?;
+            }
+            self.set_env_var(key, value)?;
+        }
+        Ok(self)
     }
 
     /// Export an environment variable.
