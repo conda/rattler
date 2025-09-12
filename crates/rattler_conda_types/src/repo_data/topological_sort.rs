@@ -1,5 +1,8 @@
+use std::collections::{HashMap, HashSet};
+
+use ahash::RandomState;
+
 use crate::PackageRecord;
-use fxhash::{FxHashMap, FxHashSet};
 
 /// Sorts the packages topologically
 ///
@@ -13,7 +16,7 @@ use fxhash::{FxHashMap, FxHashSet};
 ///
 /// Note that this function only works for packages with unique names.
 pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> Vec<T> {
-    let mut all_packages: FxHashMap<String, T> = packages
+    let mut all_packages: HashMap<String, T, RandomState> = packages
         .iter()
         .cloned()
         .map(|p| (p.as_ref().name.as_normalized().to_owned(), p))
@@ -27,9 +30,11 @@ pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> 
 }
 
 /// Find cycles with DFS
-fn find_all_cycles<T: AsRef<PackageRecord>>(packages: &FxHashMap<String, T>) -> Vec<Vec<String>> {
+fn find_all_cycles<T: AsRef<PackageRecord>>(
+    packages: &HashMap<String, T, RandomState>,
+) -> Vec<Vec<String>> {
     let mut all_cycles = Vec::new();
-    let mut visited = FxHashSet::default();
+    let mut visited = HashSet::default();
 
     for package in packages.keys() {
         if !visited.contains(package) {
@@ -43,8 +48,8 @@ fn find_all_cycles<T: AsRef<PackageRecord>>(packages: &FxHashMap<String, T>) -> 
 
 fn dfs<T: AsRef<PackageRecord>>(
     node: &str,
-    packages: &FxHashMap<String, T>,
-    visited: &mut FxHashSet<String>,
+    packages: &HashMap<String, T, RandomState>,
+    visited: &mut HashSet<String, RandomState>,
     path: &mut Vec<String>,
     all_cycles: &mut Vec<Vec<String>>,
 ) {
@@ -77,14 +82,14 @@ fn dfs<T: AsRef<PackageRecord>>(
 /// A -> B will be removed)
 fn get_graph_roots<T: AsRef<PackageRecord>>(
     records: &[T],
-    cycle_breaks: &FxHashSet<(String, String)>,
+    cycle_breaks: &HashSet<(String, String), RandomState>,
 ) -> Vec<String> {
-    let all_packages: FxHashSet<_> = records
+    let all_packages: HashSet<_, RandomState> = records
         .iter()
         .map(|r| r.as_ref().name.as_normalized())
         .collect();
 
-    let dependencies: FxHashSet<_> = records
+    let dependencies: HashSet<_, RandomState> = records
         .iter()
         .flat_map(|r| {
             r.as_ref()
@@ -116,10 +121,10 @@ enum Action {
 /// Edges from arch to noarch packages are removed to break the cycles.
 fn break_cycles<T: AsRef<PackageRecord>>(
     cycles: &[Vec<String>],
-    packages: &FxHashMap<String, T>,
-) -> FxHashSet<(String, String)> {
+    packages: &HashMap<String, T, RandomState>,
+) -> HashSet<(String, String), RandomState> {
     // we record the edges that we want to remove
-    let mut cycle_breaks = FxHashSet::default();
+    let mut cycle_breaks: HashSet<(String, String), RandomState> = HashSet::default();
 
     for cycle in cycles {
         for i in 0..cycle.len() {
@@ -152,8 +157,8 @@ fn break_cycles<T: AsRef<PackageRecord>>(
 /// roots
 fn get_topological_order<T: AsRef<PackageRecord>>(
     mut roots: Vec<String>,
-    packages: &mut FxHashMap<String, T>,
-    cycle_breaks: &FxHashSet<(String, String)>,
+    packages: &mut HashMap<String, T, RandomState>,
+    cycle_breaks: &HashSet<(String, String), RandomState>,
 ) -> Vec<T> {
     // Sorting makes this step deterministic (i.e. the same output is returned, regardless of the
     // original order of the input)
@@ -161,7 +166,7 @@ fn get_topological_order<T: AsRef<PackageRecord>>(
 
     // Store the name of each package in `order` according to the graph's topological sort
     let mut order = Vec::new();
-    let mut visited_packages = FxHashSet::default();
+    let mut visited_packages: HashSet<String, RandomState> = HashSet::default();
     let mut stack: Vec<_> = roots.into_iter().map(Action::ResolveAndInstall).collect();
     while let Some(action) = stack.pop() {
         match action {
@@ -228,11 +233,11 @@ mod tests {
         sorted_packages: &[RepoDataRecord],
         original_packages: &[RepoDataRecord],
     ) {
-        let all_sorted_packages: FxHashSet<_> = sorted_packages
+        let all_sorted_packages: HashSet<_, RandomState> = sorted_packages
             .iter()
             .map(|p| p.package_record.name.as_normalized())
             .collect();
-        let all_original_packages: FxHashSet<_> = original_packages
+        let all_original_packages: HashSet<_, RandomState> = original_packages
             .iter()
             .map(|p| p.package_record.name.as_normalized())
             .collect();
@@ -262,9 +267,9 @@ mod tests {
     /// package before its dependencies are met (ignoring circular dependencies)
     fn simulate_install(
         sorted_packages: &[RepoDataRecord],
-        circular_dependencies: &FxHashSet<(&str, &str)>,
+        circular_dependencies: &HashSet<(&str, &str), RandomState>,
     ) {
-        let packages_by_name: FxHashMap<_, _> = sorted_packages
+        let packages_by_name: HashMap<_, _, RandomState> = sorted_packages
             .iter()
             .map(|p| {
                 (
@@ -273,7 +278,7 @@ mod tests {
                 )
             })
             .collect();
-        let mut installed = FxHashSet::default();
+        let mut installed: HashSet<&str, RandomState> = HashSet::default();
 
         for (i, p) in sorted_packages.iter().enumerate() {
             let name = p.package_record.name.as_normalized();
@@ -318,7 +323,7 @@ mod tests {
         #[case] packages: Vec<RepoDataRecord>,
         #[case] expected_roots: &[&str],
     ) {
-        let mut roots = get_graph_roots(&packages, &FxHashSet::default());
+        let mut roots = get_graph_roots(&packages, &HashSet::default());
         roots.sort();
         assert_eq!(roots.as_slice(), expected_roots);
     }

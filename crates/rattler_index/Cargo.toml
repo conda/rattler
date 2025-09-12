@@ -31,6 +31,7 @@ name = "rattler-index"
 path = "src/main.rs"
 
 [dependencies]
+ahash = { workspace = true }
 anyhow = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
@@ -38,7 +39,6 @@ clap = { workspace = true, features = ["derive", "env"] }
 clap-verbosity-flag = { workspace = true, features = ["tracing"] }
 console = { workspace = true }
 fs-err = { workspace = true }
-fxhash = { workspace = true }
 futures = { workspace = true }
 indicatif = { workspace = true }
 opendal = { workspace = true, features = [

@@ -1,7 +1,9 @@
 //! Structs to deal with repodata "shards" which are per-package repodata files.
 
+use std::collections::{HashMap, HashSet};
+
+use ahash::RandomState;
 use chrono::{DateTime, Utc};
-use fxhash::{FxHashMap, FxHashSet};
 use rattler_digest::Sha256Hash;
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +18,7 @@ pub struct ShardedRepodata {
     /// url.
     pub info: ShardedSubdirInfo,
     /// The individual shards indexed by package name.
-    pub shards: FxHashMap<String, Sha256Hash>,
+    pub shards: HashMap<String, Sha256Hash, RandomState>,
 }
 
 /// Information about a sharded subdirectory that is stored inside the index
@@ -47,13 +49,13 @@ pub struct ShardedSubdirInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Shard {
     /// The records for all `.tar.bz2` packages
-    pub packages: FxHashMap<String, PackageRecord>,
+    pub packages: HashMap<String, PackageRecord, RandomState>,
 
     /// The records for all `.conda` packages
     #[serde(rename = "packages.conda", default)]
-    pub conda_packages: FxHashMap<String, PackageRecord>,
+    pub conda_packages: HashMap<String, PackageRecord, RandomState>,
 
     /// The file names of all removed for this shard
     #[serde(default)]
-    pub removed: FxHashSet<String>,
+    pub removed: HashSet<String, RandomState>,
 }
