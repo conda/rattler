@@ -285,7 +285,7 @@ impl LinuxMenu {
         let envs = self
             .command
             .activate
-            .unwrap_or(false)
+            .unwrap_or(true)
             .then(|| {
                 // create a bash activation script and emit it into the script
                 let activator =
