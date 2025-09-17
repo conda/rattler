@@ -472,7 +472,7 @@ pub struct S3Opts {
 pub struct S3Data {
     pub channel: Url,
     pub endpoint_url: Url,
-    pub region: String,
+    pub region: Option<String>,
     pub force_path_style: bool,
     pub credentials: Option<S3Credentials>,
 }
@@ -480,12 +480,12 @@ pub struct S3Data {
 #[cfg(feature = "s3")]
 impl From<S3Opts> for S3Data {
     fn from(value: S3Opts) -> Self {
-        let credentials = if let (Some(access_key_id), Some(secret_access_key)) =
+        let credentials: Option<S3Credentials> = if let (Some(access_key_id), Some(secret_access_key)) =
             (value.access_key_id.clone(), value.secret_access_key.clone())
         {
             Some(S3Credentials {
                 endpoint_url: value.endpoint_url.clone(),
-                region: value.region.clone(),
+                region: Some(value.region.clone()),  // Clone here
                 addressing_style: if value.force_path_style {
                     rattler_s3::S3AddressingStyle::Path
                 } else {
@@ -502,7 +502,7 @@ impl From<S3Opts> for S3Data {
         Self {
             channel: value.channel,
             endpoint_url: value.endpoint_url,
-            region: value.region,
+            region: Some(value.region), 
             force_path_style: value.force_path_style,
             credentials,
         }
@@ -515,7 +515,7 @@ impl S3Data {
     pub fn new(
         channel: Url,
         endpoint_url: Url,
-        region: String,
+        region: Option<String>,
         force_path_style: bool,
         credentials: Option<S3Credentials>,
     ) -> Self {

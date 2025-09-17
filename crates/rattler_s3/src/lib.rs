@@ -30,7 +30,7 @@ pub struct S3Credentials {
     pub endpoint_url: Url,
 
     /// The region of the S3 backend
-    pub region: String,
+    pub region: Option<String>,
 
     /// The addressing style to use for the bucket.
     #[cfg_attr(feature = "serde", serde(default))]
@@ -149,7 +149,7 @@ impl S3Credentials {
 
         Some(ResolvedS3Credentials {
             endpoint_url: self.endpoint_url,
-            region: self.region,
+            region: self.region?,
             access_key_id,
             secret_access_key,
             session_token,
