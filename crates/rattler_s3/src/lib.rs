@@ -23,14 +23,14 @@ pub enum S3AddressingStyle {
 /// Rattler based crates always either use S3 credentials specified by the user
 /// through CLI arguments combined with credentials coming from `rattler auth`,
 /// or everything is loaded through the AWS SDK.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct S3Credentials {
     /// The endpoint URL of the S3 backend
     pub endpoint_url: Url,
 
     /// The region of the S3 backend
-    pub region: String,
+    pub region: Option<String>,
 
     /// The addressing style to use for the bucket.
     #[cfg_attr(feature = "serde", serde(default))]
@@ -149,7 +149,7 @@ impl S3Credentials {
 
         Some(ResolvedS3Credentials {
             endpoint_url: self.endpoint_url,
-            region: self.region,
+            region: self.region?,
             access_key_id,
             secret_access_key,
             session_token,

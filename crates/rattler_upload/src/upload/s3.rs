@@ -15,6 +15,7 @@ pub async fn upload_package_to_s3(
     channel: Url,
     credentials: Option<S3Credentials>,
     package_files: &Vec<PathBuf>,
+    region: Option<String>,
     force: bool,
 ) -> miette::Result<()> {
     let bucket = channel
@@ -36,8 +37,13 @@ pub async fn upload_package_to_s3(
         }
     };
 
+    if let Some(r) = region {
+        s3_config.region = Some(r);
+    } else {
+        s3_config.region = Some(resolved_credentials.region);
+    }
+
     s3_config.endpoint = Some(resolved_credentials.endpoint_url.to_string());
-    s3_config.region = Some(resolved_credentials.region);
     s3_config.access_key_id = Some(resolved_credentials.access_key_id);
     s3_config.secret_access_key = Some(resolved_credentials.secret_access_key);
     s3_config.session_token = resolved_credentials.session_token;
