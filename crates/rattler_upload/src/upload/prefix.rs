@@ -21,8 +21,9 @@ use super::opt::{
 };
 
 use crate::upload::{
+    attestation::create_conda_attestation,
     default_bytes_style, get_client_with_retry, get_default_client,
-    trusted_publishing::{check_trusted_publishing, TrustedPublishResult},
+    trusted_publishing::{check_trusted_publishing, get_raw_oidc_token, TrustedPublishResult},
 };
 
 use super::package::sha256_sum;
@@ -103,31 +104,43 @@ pub async fn upload_package_to_prefix(
         }
     };
 
-    let token = match prefix_data.api_key {
-        Some(api_key) => api_key,
-        None => match check_trusted_publishing(
-            &get_client_with_retry().into_diagnostic()?,
-            &prefix_data.url,
-        )
-        .await
-        {
-            TrustedPublishResult::Configured(token) => token.secret().to_string(),
+    let client = get_client_with_retry().into_diagnostic()?;
+
+    // Check if we're using trusted publishing and if we should generate attestations
+    let (token, should_generate_attestation, oidc_token) = match prefix_data.api_key {
+        Some(api_key) => (api_key, false, None),
+        None => match check_trusted_publishing(&client, &prefix_data.url).await {
+            TrustedPublishResult::Configured(token) => {
+                // Get the OIDC token for attestation generation
+                let oidc_token = if prefix_data.generate_attestation {
+                    match get_raw_oidc_token(&client).await {
+                        Ok(token) => Some(token),
+                        Err(e) => {
+                            tracing::warn!("Failed to get OIDC token for attestation: {e}");
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+                (token.secret().to_string(), oidc_token.is_some(), oidc_token)
+            }
             TrustedPublishResult::Skipped => {
-                if prefix_data.attestation.is_some() {
+                if prefix_data.attestation.is_some() || prefix_data.generate_attestation {
                     return Err(miette::miette!(
-                        "An attestation was provided, but trusted publishing is not configured"
+                        "Attestation was requested, but trusted publishing is not configured"
                     ));
                 }
-                check_storage()?
+                (check_storage()?, false, None)
             }
             TrustedPublishResult::Ignored(err) => {
                 tracing::warn!("Checked for trusted publishing but failed with {err}");
-                if prefix_data.attestation.is_some() {
+                if prefix_data.attestation.is_some() || prefix_data.generate_attestation {
                     return Err(miette::miette!(
-                        "An attestation was provided, but trusted publishing is not configured"
+                        "Attestation was requested, but trusted publishing is not configured"
                     ));
                 }
-                check_storage()?
+                (check_storage()?, false, None)
             }
         },
     };
@@ -143,6 +156,52 @@ pub async fn upload_package_to_prefix(
             .url
             .join(&format!("api/v1/upload/{}", prefix_data.channel))
             .into_diagnostic()?;
+
+        // Generate attestation if we're using trusted publishing and it was requested
+        let attestation_path = if should_generate_attestation && oidc_token.is_some() {
+            let channel_url = prefix_data
+                .url
+                .join(&prefix_data.channel)
+                .into_diagnostic()?;
+
+            match create_conda_attestation(
+                package_file,
+                channel_url.as_str(),
+                oidc_token.as_ref().unwrap(),
+                &client,
+            )
+            .await
+            {
+                Ok(attestation_bundle) => {
+                    // Save attestation to a temporary file
+                    let attestation_json =
+                        serde_json::to_string_pretty(&attestation_bundle).into_diagnostic()?;
+                    tracing::info!("Generated attestation: {}", attestation_json);
+                    let attestation_file = package_file.with_extension("attestation.json");
+                    tokio_fs::write(&attestation_file, attestation_json)
+                        .await
+                        .into_diagnostic()?;
+                    info!("Generated attestation for {}", filename);
+                    Some(attestation_file)
+                }
+                Err(e) => {
+                    // If attestation generation was explicitly requested, fail the upload
+                    return Err(miette::miette!(
+                        "Failed to generate attestation for {}: {}\n\
+                         Upload aborted because attestation generation was requested but failed.\n\
+                         \n\
+                         Troubleshooting:\n\
+                         1. Ensure cosign is installed: pixi global install cosign\n\
+                         2. Check that you're running in GitHub Actions with 'id-token: write' permission\n\
+                         3. Verify OIDC token is available and valid\n\
+                         4. Check cosign logs above for specific errors",
+                        filename, e
+                    ));
+                }
+            }
+        } else {
+            prefix_data.attestation.clone()
+        };
 
         let progress_bar = indicatif::ProgressBar::new(file_size)
             .with_prefix("Uploading")
@@ -160,7 +219,7 @@ pub async fn upload_package_to_prefix(
                 &filename,
                 file_size,
                 progress_bar.clone(),
-                &prefix_data.attestation,
+                &attestation_path,
             )
             .await?;
 
