@@ -166,6 +166,12 @@ impl RecordFromPath for PrefixRecord {
     }
 }
 
+impl RecordFromPath for Box<PrefixRecord> {
+    fn from_path(path: &Path) -> Result<Self, std::io::Error> {
+        PrefixRecord::from_path(path).map(Box::new)
+    }
+}
+
 /// A record of a single package installed within an environment. The struct
 /// includes the [`RepoDataRecord`] which specifies information about where the
 /// original package comes from.

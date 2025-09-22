@@ -5,6 +5,7 @@ mod reporter;
 use std::{
     collections::{HashMap, HashSet},
     future::ready,
+    io,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -20,7 +21,7 @@ use itertools::Itertools;
 use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
-    MatchSpec, PackageName, Platform, PrefixRecord, RepoDataRecord,
+    MatchSpec, MinimalPrefixRecord, PackageName, Platform, PrefixRecord, RepoDataRecord,
 };
 use rattler_networking::retry_policies::default_retry_policy;
 use rayon::prelude::*;
@@ -30,7 +31,8 @@ use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
 
 use super::{
-    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
+    transaction::ContentComparable, unlink_package, AppleCodeSignBehavior, InstallDriver,
+    InstallOptions, Prefix, Transaction, TransactionOperation,
 };
 use crate::{
     default_cache_dir,
@@ -46,6 +48,243 @@ pub struct LinkOptions {
     pub allow_symbolic_links: Option<bool>,
     pub allow_hard_links: Option<bool>,
     pub allow_ref_links: Option<bool>,
+}
+
+/// Special kind of record that either can be minimal or full.
+///
+/// This is a structure which is needed to ensure type safety of optimization.
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone)]
+pub enum InstallationResultRecord {
+    /// Full record.
+    Max(PrefixRecord),
+    /// Minimal record.
+    Min(MinimalPrefixRecord),
+}
+
+#[allow(deprecated)]
+impl InstallationResultRecord {
+    /// Either just returns stored `PrefixRecord` or parses `PrefixRecord` from the given prefix.
+    pub fn prefix_record(self, prefix: impl AsRef<Path>) -> Result<PrefixRecord, io::Error> {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => Ok(prefix_record),
+            InstallationResultRecord::Min(minimal_prefix_record) => {
+                let record_name = format!(
+                    "{build}-{version}-{name}.json",
+                    build = minimal_prefix_record.build,
+                    version = minimal_prefix_record.version,
+                    name = minimal_prefix_record.name.as_normalized()
+                );
+                let record_path = prefix.as_ref().join(record_name);
+                PrefixRecord::from_path(record_path)
+            }
+        }
+    }
+
+    /// Return reference to the underlying `requested_spec`.
+    pub fn requested_spec(&self) -> Option<&String> {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.requested_spec.as_ref(),
+            InstallationResultRecord::Min(minimal_prefix_record) => {
+                minimal_prefix_record.requested_spec.as_ref()
+            }
+        }
+    }
+
+    /// Return reference to the underlying `requested_specs`.
+    pub fn requested_specs(&self) -> &Vec<String> {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => &prefix_record.requested_specs,
+            InstallationResultRecord::Min(minimal_prefix_record) => {
+                &minimal_prefix_record.requested_specs
+            }
+        }
+    }
+
+    /// Return reference to the underlying `requested_spec`.
+    pub fn requested_spec_mut(&mut self) -> &mut Option<String> {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => &mut prefix_record.requested_spec,
+            InstallationResultRecord::Min(minimal_prefix_record) => {
+                &mut minimal_prefix_record.requested_spec
+            }
+        }
+    }
+
+    /// Return reference to the underlying `requested_specs`.
+    pub fn requested_specs_mut(&mut self) -> &mut Vec<String> {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => &mut prefix_record.requested_specs,
+            InstallationResultRecord::Min(minimal_prefix_record) => {
+                &mut minimal_prefix_record.requested_specs
+            }
+        }
+    }
+}
+
+impl ContentComparable for InstallationResultRecord {
+    fn name(&self) -> &PackageName {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.name(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.name(),
+        }
+    }
+
+    fn version(&self) -> &rattler_conda_types::VersionWithSource {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.version(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.version(),
+        }
+    }
+
+    fn build(&self) -> &str {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.build(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.build(),
+        }
+    }
+
+    fn sha256(&self) -> Option<&rattler_digest::Sha256Hash> {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.sha256(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.sha256(),
+        }
+    }
+
+    fn md5(&self) -> Option<&rattler_digest::Md5Hash> {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.md5(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.md5(),
+        }
+    }
+
+    fn size(&self) -> Option<u64> {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.size(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.size(),
+        }
+    }
+
+    fn noarch(&self) -> rattler_conda_types::NoArchType {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.noarch(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.noarch(),
+        }
+    }
+
+    fn python_site_packages_path(&self) -> Option<&str> {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => {
+                prefix_record.python_site_packages_path()
+            }
+            InstallationResultRecord::Min(minimal_prefix_record) => {
+                minimal_prefix_record.python_site_packages_path()
+            }
+        }
+    }
+}
+
+/// Convert transaction to contain `PrefixRecord` instead of `InstallationResultRecord`.
+pub fn prefix_record_transaction(
+    t: Transaction<InstallationResultRecord, RepoDataRecord>,
+    prefix: impl AsRef<Path>,
+) -> Result<Transaction<PrefixRecord, RepoDataRecord>, io::Error> {
+    let Transaction {
+        operations,
+        python_info,
+        current_python_info,
+        platform,
+        unchanged,
+    } = t;
+    let convert_op = |op: TransactionOperation<InstallationResultRecord, RepoDataRecord>,
+                      prefix: &Path|
+     -> Result<_, io::Error> {
+        Ok(match op {
+            TransactionOperation::Install(new) => TransactionOperation::Install(new),
+            TransactionOperation::Change { old, new } => TransactionOperation::Change {
+                old: old.prefix_record(prefix)?,
+                new,
+            },
+            TransactionOperation::Reinstall { old, new } => TransactionOperation::Reinstall {
+                old: old.prefix_record(prefix)?,
+                new,
+            },
+            TransactionOperation::Remove(old) => {
+                TransactionOperation::Remove(old.prefix_record(prefix)?)
+            }
+        })
+    };
+    let operations = {
+        let mut ops = Vec::with_capacity(operations.len());
+        for op in operations {
+            ops.push(convert_op(op, prefix.as_ref())?);
+        }
+        ops
+    };
+    let unchanged = {
+        let mut unch = Vec::with_capacity(unchanged.len());
+        for u in unchanged {
+            unch.push(u.prefix_record(prefix.as_ref())?);
+        }
+        unch
+    };
+
+    Ok(Transaction {
+        operations,
+        python_info,
+        current_python_info,
+        platform,
+        unchanged,
+    })
+}
+
+/// Convert transaction to contain `InstallationResultRecord` instead of `PrefixRecord`.
+pub fn installation_result_record_transaction(
+    t: Transaction<PrefixRecord, RepoDataRecord>,
+) -> Transaction<InstallationResultRecord, RepoDataRecord> {
+    let Transaction {
+        operations,
+        python_info,
+        current_python_info,
+        platform,
+        unchanged,
+    } = t;
+    let convert_op = |op: TransactionOperation<PrefixRecord, RepoDataRecord>| match op {
+        TransactionOperation::Install(new) => TransactionOperation::Install(new),
+        TransactionOperation::Change { old, new } => TransactionOperation::Change {
+            old: InstallationResultRecord::Max(old),
+            new,
+        },
+        TransactionOperation::Reinstall { old, new } => TransactionOperation::Reinstall {
+            old: InstallationResultRecord::Max(old),
+            new,
+        },
+        TransactionOperation::Remove(old) => {
+            TransactionOperation::Remove(InstallationResultRecord::Max(old))
+        }
+    };
+    let operations = {
+        let mut ops = Vec::with_capacity(operations.len());
+        for op in operations {
+            ops.push(convert_op(op));
+        }
+        ops
+    };
+    let unchanged = {
+        let mut unch = Vec::with_capacity(unchanged.len());
+        for u in unchanged {
+            unch.push(InstallationResultRecord::Max(u));
+        }
+        unch
+    };
+
+    Transaction {
+        operations,
+        python_info,
+        current_python_info,
+        platform,
+        unchanged,
+    }
 }
 
 /// An installer that can install packages into a prefix.
@@ -70,7 +309,7 @@ pub struct Installer {
 #[derive(Debug)]
 pub struct InstallationResult {
     /// The transaction that was applied
-    pub transaction: Transaction<PrefixRecord, RepoDataRecord>,
+    pub transaction: Transaction<InstallationResultRecord, RepoDataRecord>,
 
     /// The result of running pre link scripts. `None` if no
     /// pre-processing was performed, possibly because link scripts were
@@ -362,8 +601,11 @@ impl Installer {
         // can start this in parallel with the other operations and resolve it
         // when we need it.
         let installed_provided = self.installed.is_some();
-        let mut installed: Vec<PrefixRecord> = if let Some(installed) = self.installed {
+        let mut installed: Vec<InstallationResultRecord> = if let Some(installed) = self.installed {
             installed
+                .into_iter()
+                .map(InstallationResultRecord::Max)
+                .collect()
         } else {
             let prefix = prefix.clone();
             // Use sparse collection for much faster reading when checking if packages changed
@@ -373,6 +615,9 @@ impl Installer {
                     .map_err(InstallerError::FailedToDetectInstalledPackages)
             })
             .await?
+            .into_iter()
+            .map(InstallationResultRecord::Min)
+            .collect()
         };
 
         // Construct a transaction from the current and desired situation.
@@ -393,7 +638,10 @@ impl Installer {
                 PrefixRecord::collect_from_prefix(&prefix)
                     .map_err(InstallerError::FailedToDetectInstalledPackages)
             })
-            .await?;
+            .await?
+            .into_iter()
+            .map(InstallationResultRecord::Max)
+            .collect();
 
             // Reconstruct transaction with full records to maintain consistency
             transaction = Transaction::from_current_and_desired(
@@ -430,6 +678,10 @@ impl Installer {
                 clobbered_paths: HashMap::default(),
             });
         }
+
+        // At this point we can't have any minimal prefix records, so force them to be prefix records.
+        let transaction = prefix_record_transaction(transaction, &prefix)
+            .map_err(InstallerError::FailedToDetectInstalledPackages)?;
 
         let downloader = self
             .downloader
@@ -632,6 +884,8 @@ impl Installer {
             reporter.on_transaction_complete();
         }
 
+        let transaction = installation_result_record_transaction(transaction);
+
         Ok(InstallationResult {
             transaction,
             pre_link_script_result: pre_process_result,
@@ -774,14 +1028,14 @@ async fn populate_cache(
 fn update_requested_specs_in_json(
     path: &Path,
     requested_specs: &[String],
-    requested_spec: Option<&str>,
-) -> std::io::Result<()> {
+    requested_spec: Option<&String>,
+) -> io::Result<()> {
     use serde_json::Value;
 
     // Read the existing JSON file
     let content = fs_err::read_to_string(path)?;
     let mut json: Value = serde_json::from_str(&content)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
     // Update only the requested_specs fields
     if let Some(obj) = json.as_object_mut() {
@@ -798,10 +1052,7 @@ fn update_requested_specs_in_json(
 
         // Update or remove requested_spec (singular, deprecated)
         if let Some(spec) = requested_spec {
-            obj.insert(
-                "requested_spec".to_string(),
-                Value::String(spec.to_string()),
-            );
+            obj.insert("requested_spec".to_string(), Value::String(spec.clone()));
         } else {
             obj.remove("requested_spec");
         }
@@ -809,7 +1060,7 @@ fn update_requested_specs_in_json(
 
     // Write the updated JSON back to file
     let updated_content = serde_json::to_string_pretty(&json)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     fs_err::write(path, updated_content)?;
 
     Ok(())
@@ -847,22 +1098,22 @@ fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<Package
 /// to disk.
 #[allow(deprecated)]
 fn update_existing_records<'p>(
-    existing_records: impl IntoParallelIterator<Item = &'p PrefixRecord>,
+    existing_records: impl IntoParallelIterator<Item = &'p InstallationResultRecord>,
     spec_mapping: &HashMap<PackageName, Vec<String>>,
     prefix: &Prefix,
 ) -> Result<(), InstallerError> {
     existing_records
         .into_par_iter()
         .map(|record| -> Result<(), InstallerError> {
-            let package_name = &record.repodata_record.package_record.name;
+            let package_name = record.name();
             let mut updated_record = None;
 
             // First, check if we need to migrate from deprecated requested_spec to
             // requested_specs
-            let current_specs = if !record.requested_specs.is_empty() {
+            let current_specs = if !record.requested_specs().is_empty() {
                 // Use the new field if it has data
-                record.requested_specs.clone()
-            } else if let Some(ref spec) = record.requested_spec {
+                record.requested_specs().clone()
+            } else if let Some(spec) = record.requested_spec() {
                 // Migrate from deprecated field
                 vec![spec.clone()]
             } else {
@@ -871,7 +1122,7 @@ fn update_existing_records<'p>(
             };
 
             // Check if we need to migrate from the deprecated field
-            let needs_migration = record.requested_spec.is_some();
+            let needs_migration = record.requested_spec().is_some();
 
             // Check if we have requested specs for this package
             if let Some(requested_specs) = spec_mapping.get(package_name) {
@@ -879,20 +1130,20 @@ fn update_existing_records<'p>(
                 if needs_migration || &current_specs != requested_specs {
                     // Create an updated record with the new requested specs
                     let mut new_record = record.clone();
-                    new_record.requested_specs = requested_specs.clone();
-                    new_record.requested_spec = None; // Clear deprecated field
+                    *new_record.requested_specs_mut() = requested_specs.clone();
+                    *new_record.requested_spec_mut() = None; // Clear deprecated field
                     updated_record = Some(new_record);
                 }
             } else if !current_specs.is_empty() {
                 // Clear the requested_specs if it's not in the mapping
                 let mut new_record = record.clone();
-                new_record.requested_specs = Vec::new();
-                new_record.requested_spec = None; // Clear deprecated field
+                *new_record.requested_specs_mut() = Vec::new();
+                *new_record.requested_spec_mut() = None; // Clear deprecated field
                 updated_record = Some(new_record);
             } else if needs_migration {
                 // Even if current_specs is empty, we still need to clear the deprecated field
                 let mut new_record = record.clone();
-                new_record.requested_spec = None;
+                *new_record.requested_spec_mut() = None;
                 updated_record = Some(new_record);
             }
 
@@ -901,13 +1152,9 @@ fn update_existing_records<'p>(
                 let conda_meta_path = prefix.path().join("conda-meta");
                 let pkg_meta_path = format!(
                     "{}-{}-{}.json",
-                    new_record
-                        .repodata_record
-                        .package_record
-                        .name
-                        .as_normalized(),
-                    new_record.repodata_record.package_record.version,
-                    new_record.repodata_record.package_record.build
+                    new_record.name().as_normalized(),
+                    new_record.version(),
+                    new_record.build()
                 );
                 let full_path = conda_meta_path.join(&pkg_meta_path);
 
@@ -915,8 +1162,8 @@ fn update_existing_records<'p>(
                 // to avoid overwriting other metadata when using minimal records
                 update_requested_specs_in_json(
                     &full_path,
-                    &new_record.requested_specs,
-                    new_record.requested_spec.as_deref(),
+                    new_record.requested_specs(),
+                    new_record.requested_spec(),
                 )
                 .map_err(|e| {
                     InstallerError::IoError(

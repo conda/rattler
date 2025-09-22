@@ -15,7 +15,9 @@ use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler::{
     default_cache_dir,
-    install::{IndicatifReporter, Installer, Transaction, TransactionOperation},
+    install::{
+        prefix_record_transaction, IndicatifReporter, Installer, Transaction, TransactionOperation,
+    },
     package_cache::PackageCache,
 };
 use rattler_conda_types::{
@@ -333,7 +335,9 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
             console::style(console::Emoji("✔", "")).green(),
             install_start.elapsed()
         );
-        print_transaction(&result.transaction, solver_result.extras);
+        // Since operations are nonempty we can safely unwrap.
+        let transaction = prefix_record_transaction(result.transaction, target_prefix).unwrap();
+        print_transaction(&transaction, solver_result.extras);
     }
 
     Ok(())

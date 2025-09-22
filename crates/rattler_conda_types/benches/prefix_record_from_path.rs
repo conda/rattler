@@ -53,7 +53,7 @@ fn process_package_record_files_from_dir(dir: &Path) {
     }
 }
 
-fn load_as_minimal_prefix_record(dir: &Path) -> Vec<PrefixRecord> {
+fn load_as_minimal_prefix_record(dir: &Path) -> Vec<MinimalPrefixRecord> {
     black_box(PrefixRecord::collect_minimal_from_prefix(dir).unwrap())
 }
 
