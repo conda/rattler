@@ -315,36 +315,6 @@ pub trait MinimalPrefixCollection {
 impl MinimalPrefixCollection for PrefixRecord {
     fn collect_minimal_from_prefix(prefix: &Path) -> Result<Vec<MinimalPrefixRecord>, io::Error> {
         collect_minimal_prefix_records(prefix)
-
-        // // For now, we'll convert minimal records to full PrefixRecords with just the essential fields.
-        // // In the future, we could make Transaction work directly with SparsePrefixRecord.
-        // Ok(minimal_records
-        //     .into_iter()
-        //     .map(|minimal| {
-        //         let package_record = minimal.to_package_record();
-        //         let file_name = format!("{}-{}-{}.tar.bz2",
-        //             minimal.name.as_normalized(),
-        //             minimal.version,
-        //             minimal.build);
-        //         #[allow(deprecated)]
-        //         PrefixRecord {
-        //             repodata_record: crate::RepoDataRecord {
-        //                 package_record,
-        //                 file_name,
-        //                 url: url::Url::parse("https://conda.anaconda.org/conda-forge/noarch/placeholder-1.0.0-0.tar.bz2").unwrap(),
-        //                 channel: Some(String::new()),
-        //             },
-        //             package_tarball_full_path: None,
-        //             extracted_package_dir: None,
-        //             files: Vec::new(),
-        //             paths_data: crate::prefix_record::PrefixPaths::default(),
-        //             requested_spec: minimal.requested_spec.clone(),
-        //             requested_specs: minimal.requested_specs.clone(),
-        //             link: None,
-        //             installed_system_menus: Vec::new(),
-        //         }
-        //     })
-        //     .collect())
     }
 }
 

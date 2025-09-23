@@ -186,7 +186,7 @@ impl ContentComparable for InstallationResultRecord {
 
 /// Convert transaction to contain `PrefixRecord` instead of `InstallationResultRecord`.
 pub fn prefix_record_transaction(
-    t: Transaction<InstallationResultRecord, RepoDataRecord>,
+    transaction: Transaction<InstallationResultRecord, RepoDataRecord>,
     prefix: impl AsRef<Path>,
 ) -> Result<Transaction<PrefixRecord, RepoDataRecord>, io::Error> {
     let Transaction {
@@ -195,7 +195,7 @@ pub fn prefix_record_transaction(
         current_python_info,
         platform,
         unchanged,
-    } = t;
+    } = transaction;
     let convert_op = |op: TransactionOperation<InstallationResultRecord, RepoDataRecord>,
                       prefix: &Path|
      -> Result<_, io::Error> {
@@ -240,7 +240,7 @@ pub fn prefix_record_transaction(
 
 /// Convert transaction to contain `InstallationResultRecord` instead of `PrefixRecord`.
 pub fn installation_result_record_transaction(
-    t: Transaction<PrefixRecord, RepoDataRecord>,
+    transaction: Transaction<PrefixRecord, RepoDataRecord>,
 ) -> Transaction<InstallationResultRecord, RepoDataRecord> {
     let Transaction {
         operations,
@@ -248,7 +248,7 @@ pub fn installation_result_record_transaction(
         current_python_info,
         platform,
         unchanged,
-    } = t;
+    } = transaction;
     let convert_op = |op: TransactionOperation<PrefixRecord, RepoDataRecord>| match op {
         TransactionOperation::Install(new) => TransactionOperation::Install(new),
         TransactionOperation::Change { old, new } => TransactionOperation::Change {
