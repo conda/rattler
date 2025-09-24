@@ -1,165 +1,13 @@
-use std::collections::{HashMap, HashSet};
-
-use rattler_conda_types::{
-    MinimalPrefixRecord, NoArchType, PackageName, PackageRecord, Platform, PrefixRecord,
-    RepoDataRecord, VersionWithSource,
+use std::{
+    collections::{HashMap, HashSet},
+    io,
+    path::Path,
 };
-use rattler_digest::{Md5Hash, Sha256Hash};
 
+use rattler_conda_types::{PackageName, Platform, PrefixRecord};
+
+use super::{installer::result_record::ContentComparable, InstallationResultRecord};
 use crate::install::{python::PythonInfoError, PythonInfo};
-
-/// Trait that defines the fields needed for package content comparison.
-/// This ensures type safety - if `describe_same_content` needs a new field,
-/// it must be added here and implemented for all types.
-pub trait ContentComparable {
-    fn name(&self) -> &PackageName;
-    fn version(&self) -> &VersionWithSource;
-    fn build(&self) -> &str;
-    fn sha256(&self) -> Option<&Sha256Hash>;
-    fn md5(&self) -> Option<&Md5Hash>;
-    fn size(&self) -> Option<u64>;
-    fn noarch(&self) -> NoArchType;
-    fn python_site_packages_path(&self) -> Option<&str>;
-}
-
-impl ContentComparable for PackageRecord {
-    fn name(&self) -> &PackageName {
-        &self.name
-    }
-    fn version(&self) -> &VersionWithSource {
-        &self.version
-    }
-    fn build(&self) -> &str {
-        &self.build
-    }
-    fn sha256(&self) -> Option<&Sha256Hash> {
-        self.sha256.as_ref()
-    }
-    fn md5(&self) -> Option<&Md5Hash> {
-        self.md5.as_ref()
-    }
-    fn size(&self) -> Option<u64> {
-        self.size
-    }
-    fn noarch(&self) -> NoArchType {
-        self.noarch
-    }
-    fn python_site_packages_path(&self) -> Option<&str> {
-        self.python_site_packages_path.as_deref()
-    }
-}
-
-impl ContentComparable for MinimalPrefixRecord {
-    fn name(&self) -> &PackageName {
-        &self.name
-    }
-    fn version(&self) -> &VersionWithSource {
-        &self.version
-    }
-    fn build(&self) -> &str {
-        &self.build
-    }
-    fn sha256(&self) -> Option<&Sha256Hash> {
-        self.sha256.as_ref()
-    }
-    fn md5(&self) -> Option<&Md5Hash> {
-        self.md5.as_ref()
-    }
-    fn size(&self) -> Option<u64> {
-        self.size
-    }
-    fn noarch(&self) -> NoArchType {
-        self.noarch
-    }
-    fn python_site_packages_path(&self) -> Option<&str> {
-        self.python_site_packages_path.as_deref()
-    }
-}
-
-impl ContentComparable for PrefixRecord {
-    fn name(&self) -> &PackageName {
-        &self.repodata_record.package_record.name
-    }
-    fn version(&self) -> &VersionWithSource {
-        &self.repodata_record.package_record.version
-    }
-    fn build(&self) -> &str {
-        &self.repodata_record.package_record.build
-    }
-    fn sha256(&self) -> Option<&Sha256Hash> {
-        self.repodata_record.package_record.sha256.as_ref()
-    }
-    fn md5(&self) -> Option<&Md5Hash> {
-        self.repodata_record.package_record.md5.as_ref()
-    }
-    fn size(&self) -> Option<u64> {
-        self.repodata_record.package_record.size
-    }
-    fn noarch(&self) -> NoArchType {
-        self.repodata_record.package_record.noarch
-    }
-    fn python_site_packages_path(&self) -> Option<&str> {
-        self.repodata_record
-            .package_record
-            .python_site_packages_path
-            .as_deref()
-    }
-}
-
-impl ContentComparable for RepoDataRecord {
-    fn name(&self) -> &PackageName {
-        &self.package_record.name
-    }
-    fn version(&self) -> &VersionWithSource {
-        &self.package_record.version
-    }
-    fn build(&self) -> &str {
-        &self.package_record.build
-    }
-    fn sha256(&self) -> Option<&Sha256Hash> {
-        self.package_record.sha256.as_ref()
-    }
-    fn md5(&self) -> Option<&Md5Hash> {
-        self.package_record.md5.as_ref()
-    }
-    fn size(&self) -> Option<u64> {
-        self.package_record.size
-    }
-    fn noarch(&self) -> NoArchType {
-        self.package_record.noarch
-    }
-    fn python_site_packages_path(&self) -> Option<&str> {
-        self.package_record.python_site_packages_path.as_deref()
-    }
-}
-
-// Blanket implementation for references
-impl<T: ContentComparable> ContentComparable for &T {
-    fn name(&self) -> &PackageName {
-        (*self).name()
-    }
-    fn version(&self) -> &VersionWithSource {
-        (*self).version()
-    }
-    fn build(&self) -> &str {
-        (*self).build()
-    }
-    fn sha256(&self) -> Option<&Sha256Hash> {
-        (*self).sha256()
-    }
-    fn md5(&self) -> Option<&Md5Hash> {
-        (*self).md5()
-    }
-    fn size(&self) -> Option<u64> {
-        (*self).size()
-    }
-    fn noarch(&self) -> NoArchType {
-        T::noarch(self)
-    }
-    fn python_site_packages_path(&self) -> Option<&str> {
-        T::python_site_packages_path(self)
-    }
-}
 
 /// Error that occurred during creation of a Transaction
 #[derive(Debug, thiserror::Error)]
@@ -433,6 +281,111 @@ where
             platform,
             unchanged,
         })
+    }
+}
+
+impl<New> Transaction<InstallationResultRecord, New> {
+    /// Convert transaction to contain `PrefixRecord` instead of `InstallationResultRecord`.
+    pub fn into_prefix_record(
+        self,
+        prefix: impl AsRef<Path>,
+    ) -> Result<Transaction<PrefixRecord, New>, io::Error> {
+        let Transaction {
+            operations,
+            python_info,
+            current_python_info,
+            platform,
+            unchanged,
+        } = self;
+        let convert_op = |op: TransactionOperation<InstallationResultRecord, New>,
+                          prefix: &Path|
+         -> Result<_, io::Error> {
+            Ok(match op {
+                TransactionOperation::Install(new) => TransactionOperation::Install(new),
+                TransactionOperation::Change { old, new } => TransactionOperation::Change {
+                    old: old.into_prefix_record(prefix)?,
+                    new,
+                },
+                TransactionOperation::Reinstall { old, new } => TransactionOperation::Reinstall {
+                    old: old.into_prefix_record(prefix)?,
+                    new,
+                },
+                TransactionOperation::Remove(old) => {
+                    TransactionOperation::Remove(old.into_prefix_record(prefix)?)
+                }
+            })
+        };
+        let operations = {
+            let mut ops = Vec::with_capacity(operations.len());
+            for op in operations {
+                ops.push(convert_op(op, prefix.as_ref())?);
+            }
+            ops
+        };
+        let unchanged = {
+            let mut unch = Vec::with_capacity(unchanged.len());
+            for u in unchanged {
+                unch.push(u.into_prefix_record(prefix.as_ref())?);
+            }
+            unch
+        };
+
+        Ok(Transaction {
+            operations,
+            python_info,
+            current_python_info,
+            platform,
+            unchanged,
+        })
+    }
+}
+
+impl<New> Transaction<PrefixRecord, New> {
+    /// Convert transaction to contain `InstallationResultRecord` instead of `PrefixRecord`.
+    pub fn into_installation_result_record(self) -> Transaction<InstallationResultRecord, New> {
+        let Transaction {
+            operations,
+            python_info,
+            current_python_info,
+            platform,
+            unchanged,
+        } = self;
+        let convert_op = |op: TransactionOperation<PrefixRecord, New>| match op {
+            TransactionOperation::Install(new) => TransactionOperation::Install(new),
+            TransactionOperation::Change { old, new } => TransactionOperation::Change {
+                old: InstallationResultRecord::Max(old),
+                new,
+            },
+            TransactionOperation::Reinstall { old, new } => TransactionOperation::Reinstall {
+                old: InstallationResultRecord::Max(old),
+                new,
+            },
+            TransactionOperation::Remove(old) => {
+                TransactionOperation::Remove(InstallationResultRecord::Max(old))
+            }
+        };
+        let operations = {
+            let mut ops = Vec::with_capacity(operations.len());
+            for op in operations {
+                ops.push(convert_op(op));
+            }
+            ops
+        };
+        let unchanged = {
+            let mut unch = Vec::with_capacity(unchanged.len());
+            for u in unchanged {
+                unch.push(InstallationResultRecord::Max(u));
+            }
+            unch
+        };
+
+        Transaction {
+            operations,
+            python_info,
+            current_python_info,
+            platform,
+            unchanged,
+        }
     }
 }
 

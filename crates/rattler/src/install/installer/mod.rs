@@ -2,6 +2,8 @@ mod error;
 #[cfg(feature = "indicatif")]
 mod indicatif;
 mod reporter;
+pub(crate) mod result_record;
+
 use std::{
     collections::{HashMap, HashSet},
     future::ready,
@@ -21,7 +23,7 @@ use itertools::Itertools;
 use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
-    MatchSpec, MinimalPrefixRecord, PackageName, Platform, PrefixRecord, RepoDataRecord,
+    MatchSpec, PackageName, Platform, PrefixRecord, RepoDataRecord,
 };
 use rattler_networking::retry_policies::default_retry_policy;
 use rayon::prelude::*;
@@ -31,9 +33,9 @@ use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
 
 use super::{
-    transaction::ContentComparable, unlink_package, AppleCodeSignBehavior, InstallDriver,
-    InstallOptions, Prefix, Transaction, TransactionOperation,
+    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
 };
+use crate::install::installer::result_record::{ContentComparable, InstallationResultRecord};
 use crate::{
     default_cache_dir,
     install::{
@@ -48,243 +50,6 @@ pub struct LinkOptions {
     pub allow_symbolic_links: Option<bool>,
     pub allow_hard_links: Option<bool>,
     pub allow_ref_links: Option<bool>,
-}
-
-/// Special kind of record that either can be minimal or full.
-///
-/// This is a structure which is needed to ensure type safety of optimization.
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone)]
-pub enum InstallationResultRecord {
-    /// Full record.
-    Max(PrefixRecord),
-    /// Minimal record.
-    Min(MinimalPrefixRecord),
-}
-
-#[allow(deprecated)]
-impl InstallationResultRecord {
-    /// Either just returns stored `PrefixRecord` or parses `PrefixRecord` from the given prefix.
-    pub fn prefix_record(self, prefix: impl AsRef<Path>) -> Result<PrefixRecord, io::Error> {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => Ok(prefix_record),
-            InstallationResultRecord::Min(minimal_prefix_record) => {
-                let record_name = format!(
-                    "{build}-{version}-{name}.json",
-                    build = minimal_prefix_record.build,
-                    version = minimal_prefix_record.version,
-                    name = minimal_prefix_record.name.as_normalized()
-                );
-                let record_path = prefix.as_ref().join(record_name);
-                PrefixRecord::from_path(record_path)
-            }
-        }
-    }
-
-    /// Return reference to the underlying `requested_spec`.
-    pub fn requested_spec(&self) -> Option<&String> {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.requested_spec.as_ref(),
-            InstallationResultRecord::Min(minimal_prefix_record) => {
-                minimal_prefix_record.requested_spec.as_ref()
-            }
-        }
-    }
-
-    /// Return reference to the underlying `requested_specs`.
-    pub fn requested_specs(&self) -> &Vec<String> {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => &prefix_record.requested_specs,
-            InstallationResultRecord::Min(minimal_prefix_record) => {
-                &minimal_prefix_record.requested_specs
-            }
-        }
-    }
-
-    /// Return reference to the underlying `requested_spec`.
-    pub fn requested_spec_mut(&mut self) -> &mut Option<String> {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => &mut prefix_record.requested_spec,
-            InstallationResultRecord::Min(minimal_prefix_record) => {
-                &mut minimal_prefix_record.requested_spec
-            }
-        }
-    }
-
-    /// Return reference to the underlying `requested_specs`.
-    pub fn requested_specs_mut(&mut self) -> &mut Vec<String> {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => &mut prefix_record.requested_specs,
-            InstallationResultRecord::Min(minimal_prefix_record) => {
-                &mut minimal_prefix_record.requested_specs
-            }
-        }
-    }
-}
-
-impl ContentComparable for InstallationResultRecord {
-    fn name(&self) -> &PackageName {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.name(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.name(),
-        }
-    }
-
-    fn version(&self) -> &rattler_conda_types::VersionWithSource {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.version(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.version(),
-        }
-    }
-
-    fn build(&self) -> &str {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.build(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.build(),
-        }
-    }
-
-    fn sha256(&self) -> Option<&rattler_digest::Sha256Hash> {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.sha256(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.sha256(),
-        }
-    }
-
-    fn md5(&self) -> Option<&rattler_digest::Md5Hash> {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.md5(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.md5(),
-        }
-    }
-
-    fn size(&self) -> Option<u64> {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.size(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.size(),
-        }
-    }
-
-    fn noarch(&self) -> rattler_conda_types::NoArchType {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.noarch(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.noarch(),
-        }
-    }
-
-    fn python_site_packages_path(&self) -> Option<&str> {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => {
-                prefix_record.python_site_packages_path()
-            }
-            InstallationResultRecord::Min(minimal_prefix_record) => {
-                minimal_prefix_record.python_site_packages_path()
-            }
-        }
-    }
-}
-
-/// Convert transaction to contain `PrefixRecord` instead of `InstallationResultRecord`.
-pub fn prefix_record_transaction(
-    transaction: Transaction<InstallationResultRecord, RepoDataRecord>,
-    prefix: impl AsRef<Path>,
-) -> Result<Transaction<PrefixRecord, RepoDataRecord>, io::Error> {
-    let Transaction {
-        operations,
-        python_info,
-        current_python_info,
-        platform,
-        unchanged,
-    } = transaction;
-    let convert_op = |op: TransactionOperation<InstallationResultRecord, RepoDataRecord>,
-                      prefix: &Path|
-     -> Result<_, io::Error> {
-        Ok(match op {
-            TransactionOperation::Install(new) => TransactionOperation::Install(new),
-            TransactionOperation::Change { old, new } => TransactionOperation::Change {
-                old: old.prefix_record(prefix)?,
-                new,
-            },
-            TransactionOperation::Reinstall { old, new } => TransactionOperation::Reinstall {
-                old: old.prefix_record(prefix)?,
-                new,
-            },
-            TransactionOperation::Remove(old) => {
-                TransactionOperation::Remove(old.prefix_record(prefix)?)
-            }
-        })
-    };
-    let operations = {
-        let mut ops = Vec::with_capacity(operations.len());
-        for op in operations {
-            ops.push(convert_op(op, prefix.as_ref())?);
-        }
-        ops
-    };
-    let unchanged = {
-        let mut unch = Vec::with_capacity(unchanged.len());
-        for u in unchanged {
-            unch.push(u.prefix_record(prefix.as_ref())?);
-        }
-        unch
-    };
-
-    Ok(Transaction {
-        operations,
-        python_info,
-        current_python_info,
-        platform,
-        unchanged,
-    })
-}
-
-/// Convert transaction to contain `InstallationResultRecord` instead of `PrefixRecord`.
-pub fn installation_result_record_transaction(
-    transaction: Transaction<PrefixRecord, RepoDataRecord>,
-) -> Transaction<InstallationResultRecord, RepoDataRecord> {
-    let Transaction {
-        operations,
-        python_info,
-        current_python_info,
-        platform,
-        unchanged,
-    } = transaction;
-    let convert_op = |op: TransactionOperation<PrefixRecord, RepoDataRecord>| match op {
-        TransactionOperation::Install(new) => TransactionOperation::Install(new),
-        TransactionOperation::Change { old, new } => TransactionOperation::Change {
-            old: InstallationResultRecord::Max(old),
-            new,
-        },
-        TransactionOperation::Reinstall { old, new } => TransactionOperation::Reinstall {
-            old: InstallationResultRecord::Max(old),
-            new,
-        },
-        TransactionOperation::Remove(old) => {
-            TransactionOperation::Remove(InstallationResultRecord::Max(old))
-        }
-    };
-    let operations = {
-        let mut ops = Vec::with_capacity(operations.len());
-        for op in operations {
-            ops.push(convert_op(op));
-        }
-        ops
-    };
-    let unchanged = {
-        let mut unch = Vec::with_capacity(unchanged.len());
-        for u in unchanged {
-            unch.push(InstallationResultRecord::Max(u));
-        }
-        unch
-    };
-
-    Transaction {
-        operations,
-        python_info,
-        current_python_info,
-        platform,
-        unchanged,
-    }
 }
 
 /// An installer that can install packages into a prefix.
@@ -680,7 +445,8 @@ impl Installer {
         }
 
         // At this point we can't have any minimal prefix records, so force them to be prefix records.
-        let transaction = prefix_record_transaction(transaction, &prefix)
+        let transaction = transaction
+            .into_prefix_record(&prefix)
             .map_err(InstallerError::FailedToDetectInstalledPackages)?;
 
         let downloader = self
@@ -884,7 +650,7 @@ impl Installer {
             reporter.on_transaction_complete();
         }
 
-        let transaction = installation_result_record_transaction(transaction);
+        let transaction = transaction.into_installation_result_record();
 
         Ok(InstallationResult {
             transaction,
