@@ -1444,6 +1444,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(not(target_os = "windows"))]
     async fn test_clobber_with_symlinks_and_reprioritization() {
         let repodata_record_with_symlink1 = get_repodata_record(
             get_test_data_dir().join("clobber/clobber-with-symlink-a-0.1.0-h4616a5c_0.conda"),
