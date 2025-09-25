@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.27](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.26...rattler_menuinst-v0.2.27) - 2025-09-17
+
+### Fixed
+
+- *(menuinst)* activate menuinst per default ([#1678](https://github.com/conda/rattler/pull/1678))
+
 ## [0.2.26](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.25...rattler_menuinst-v0.2.26) - 2025-09-12
 
 ### Fixed
