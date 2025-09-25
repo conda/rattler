@@ -35,7 +35,7 @@ use tokio::{sync::Semaphore, task::JoinError};
 use super::{
     unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
 };
-use crate::install::installer::result_record::{ContentComparable, InstallationResultRecord};
+use crate::install::installer::result_record::InstallationResultRecord;
 use crate::{
     default_cache_dir,
     install::{

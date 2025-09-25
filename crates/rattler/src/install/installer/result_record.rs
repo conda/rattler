@@ -41,6 +41,74 @@ impl InstallationResultRecord {
         }
     }
 
+    /// Return reference to the underlying `PackageName`.
+    pub fn name(&self) -> &PackageName {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.name(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.name(),
+        }
+    }
+
+    /// Return reference to the underlying `VersionWithSource`.
+    pub fn version(&self) -> &rattler_conda_types::VersionWithSource {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.version(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.version(),
+        }
+    }
+
+    /// Return reference to the underlying build string.
+    pub fn build(&self) -> &str {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.build(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.build(),
+        }
+    }
+
+    /// Return reference to the underlying `Sha256Hash`.
+    pub fn sha256(&self) -> Option<&rattler_digest::Sha256Hash> {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.sha256(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.sha256(),
+        }
+    }
+
+    /// Return reference to the underlying `Md5Hash`.
+    pub fn md5(&self) -> Option<&rattler_digest::Md5Hash> {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.md5(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.md5(),
+        }
+    }
+
+    /// Return reference to the underlying content size.
+    pub fn size(&self) -> Option<u64> {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.size(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.size(),
+        }
+    }
+
+    /// Return reference to the underlying `NoArchType`.
+    pub fn noarch(&self) -> rattler_conda_types::NoArchType {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => prefix_record.noarch(),
+            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.noarch(),
+        }
+    }
+
+    /// Return reference to the underlying `python_site_packages_path`.
+    pub fn python_site_packages_path(&self) -> Option<&str> {
+        match self {
+            InstallationResultRecord::Max(prefix_record) => {
+                prefix_record.python_site_packages_path()
+            }
+            InstallationResultRecord::Min(minimal_prefix_record) => {
+                minimal_prefix_record.python_site_packages_path()
+            }
+        }
+    }
+
     /// Return reference to the underlying `requested_spec`.
     pub fn requested_spec(&self) -> Option<&String> {
         match self {
@@ -62,7 +130,7 @@ impl InstallationResultRecord {
     }
 
     /// Return reference to the underlying `requested_spec`.
-    pub fn requested_spec_mut(&mut self) -> &mut Option<String> {
+    pub(crate) fn requested_spec_mut(&mut self) -> &mut Option<String> {
         match self {
             InstallationResultRecord::Max(prefix_record) => &mut prefix_record.requested_spec,
             InstallationResultRecord::Min(minimal_prefix_record) => {
@@ -72,73 +140,11 @@ impl InstallationResultRecord {
     }
 
     /// Return reference to the underlying `requested_specs`.
-    pub fn requested_specs_mut(&mut self) -> &mut Vec<String> {
+    pub(crate) fn requested_specs_mut(&mut self) -> &mut Vec<String> {
         match self {
             InstallationResultRecord::Max(prefix_record) => &mut prefix_record.requested_specs,
             InstallationResultRecord::Min(minimal_prefix_record) => {
                 &mut minimal_prefix_record.requested_specs
-            }
-        }
-    }
-}
-
-impl ContentComparable for InstallationResultRecord {
-    fn name(&self) -> &PackageName {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.name(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.name(),
-        }
-    }
-
-    fn version(&self) -> &rattler_conda_types::VersionWithSource {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.version(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.version(),
-        }
-    }
-
-    fn build(&self) -> &str {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.build(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.build(),
-        }
-    }
-
-    fn sha256(&self) -> Option<&rattler_digest::Sha256Hash> {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.sha256(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.sha256(),
-        }
-    }
-
-    fn md5(&self) -> Option<&rattler_digest::Md5Hash> {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.md5(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.md5(),
-        }
-    }
-
-    fn size(&self) -> Option<u64> {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.size(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.size(),
-        }
-    }
-
-    fn noarch(&self) -> rattler_conda_types::NoArchType {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => prefix_record.noarch(),
-            InstallationResultRecord::Min(minimal_prefix_record) => minimal_prefix_record.noarch(),
-        }
-    }
-
-    fn python_site_packages_path(&self) -> Option<&str> {
-        match self {
-            InstallationResultRecord::Max(prefix_record) => {
-                prefix_record.python_site_packages_path()
-            }
-            InstallationResultRecord::Min(minimal_prefix_record) => {
-                minimal_prefix_record.python_site_packages_path()
             }
         }
     }
@@ -156,6 +162,40 @@ pub trait ContentComparable {
     fn size(&self) -> Option<u64>;
     fn noarch(&self) -> NoArchType;
     fn python_site_packages_path(&self) -> Option<&str>;
+}
+
+impl ContentComparable for InstallationResultRecord {
+    fn name(&self) -> &PackageName {
+        self.name()
+    }
+
+    fn version(&self) -> &rattler_conda_types::VersionWithSource {
+        self.version()
+    }
+
+    fn build(&self) -> &str {
+        self.build()
+    }
+
+    fn sha256(&self) -> Option<&rattler_digest::Sha256Hash> {
+        self.sha256()
+    }
+
+    fn md5(&self) -> Option<&rattler_digest::Md5Hash> {
+        self.md5()
+    }
+
+    fn size(&self) -> Option<u64> {
+        self.size()
+    }
+
+    fn noarch(&self) -> rattler_conda_types::NoArchType {
+        self.noarch()
+    }
+
+    fn python_site_packages_path(&self) -> Option<&str> {
+        self.python_site_packages_path()
+    }
 }
 
 impl ContentComparable for PackageRecord {
@@ -269,7 +309,6 @@ impl ContentComparable for RepoDataRecord {
     }
 }
 
-// Blanket implementation for references
 impl<T: ContentComparable> ContentComparable for &T {
     fn name(&self) -> &PackageName {
         (*self).name()
