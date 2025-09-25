@@ -480,29 +480,30 @@ pub struct S3Data {
 #[cfg(feature = "s3")]
 impl From<S3Opts> for S3Data {
     fn from(value: S3Opts) -> Self {
-        let credentials: Option<S3Credentials> = if let (Some(access_key_id), Some(secret_access_key)) =
-            (value.access_key_id.clone(), value.secret_access_key.clone())
-        {
-            Some(S3Credentials {
-                endpoint_url: value.endpoint_url.clone(),
-                region: Some(value.region.clone()),  // Clone here
-                addressing_style: if value.force_path_style {
-                    rattler_s3::S3AddressingStyle::Path
-                } else {
-                    rattler_s3::S3AddressingStyle::VirtualHost
-                },
-                access_key_id: Some(access_key_id),
-                secret_access_key: Some(secret_access_key),
-                session_token: value.session_token.clone(),
-            })
-        } else {
-            value.credentials
-        };
+        let credentials: Option<S3Credentials> =
+            if let (Some(access_key_id), Some(secret_access_key)) =
+                (value.access_key_id.clone(), value.secret_access_key.clone())
+            {
+                Some(S3Credentials {
+                    endpoint_url: value.endpoint_url.clone(),
+                    region: Some(value.region.clone()), // Clone here
+                    addressing_style: if value.force_path_style {
+                        rattler_s3::S3AddressingStyle::Path
+                    } else {
+                        rattler_s3::S3AddressingStyle::VirtualHost
+                    },
+                    access_key_id: Some(access_key_id),
+                    secret_access_key: Some(secret_access_key),
+                    session_token: value.session_token.clone(),
+                })
+            } else {
+                value.credentials
+            };
 
         Self {
             channel: value.channel,
             endpoint_url: value.endpoint_url,
-            region: Some(value.region), 
+            region: Some(value.region),
             force_path_style: value.force_path_style,
             credentials,
         }

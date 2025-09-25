@@ -172,11 +172,10 @@ pub fn extract_s3_info(url: &Url) -> Result<(Url, Url, String), Box<dyn std::err
 
         let channel_name = path_segments
             .first()
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "main".to_string());
+            .map_or_else(|| "main".to_string(), ToString::to_string);
 
         let base_url = Url::parse("https://s3.amazonaws.com")?;
-        let channel = Url::parse(&format!("s3://{}/{}", host, channel_name))?;
+        let channel = Url::parse(&format!("s3://{host}/{channel_name}"))?;
         let region = "eu-central-1".to_string();
 
         return Ok((base_url, channel, region));
@@ -202,9 +201,8 @@ pub fn extract_s3_info(url: &Url) -> Result<(Url, Url, String), Box<dyn std::err
             let base_url = url.clone();
             let channel_name = path_segments
                 .first()
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "main".to_string());
-            let channel = Url::parse(&format!("s3://{}/{}", bucket, channel_name))?;
+                .map_or_else(|| "main".to_string(), ToString::to_string);
+            let channel = Url::parse(&format!("s3://{bucket}/{channel_name}"))?;
 
             return Ok((base_url, channel, region));
         }
