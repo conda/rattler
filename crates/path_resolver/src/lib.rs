@@ -539,7 +539,7 @@ New:
         }
 
         fn check_file_exists(path: &Path) -> bool {
-            path.is_symlink() || path.exists()
+            path.symlink_metadata().is_ok()
         }
 
         for (p, pkg) in to_clobbers {
