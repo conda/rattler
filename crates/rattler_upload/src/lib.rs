@@ -18,6 +18,8 @@ use upload::opt::{
 use crate::upload::opt::{S3Data, S3Opts};
 #[cfg(feature = "s3")]
 use crate::utils::server_util::extract_s3_info;
+#[cfg(feature = "s3")]
+use rattler_s3::clap::S3AddressingStyleOpts::VirtualHost;
 
 /// Upload package to different channels
 pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
@@ -122,6 +124,7 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
                 session_token: None,
                 credentials: None,
                 force: false,
+                addressing_style: VirtualHost,
             })
         }
         SimpleServerType::CondaForge => {

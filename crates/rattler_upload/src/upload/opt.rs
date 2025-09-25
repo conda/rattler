@@ -5,7 +5,9 @@ use rattler_conda_types::{NamedChannelOrUrl, Platform};
 use rattler_networking::mirror_middleware;
 use rattler_networking::AuthenticationStorage;
 #[cfg(feature = "s3")]
-use rattler_s3::S3Credentials;
+use rattler_s3::clap::S3AddressingStyleOpts;
+#[cfg(feature = "s3")]
+use rattler_s3::{S3AddressingStyle, S3Credentials};
 use rattler_solve::ChannelPriority;
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tracing::warn;
@@ -468,6 +470,10 @@ pub struct S3Opts {
     /// Replace files on conflict
     #[arg(long, short, env = "ANACONDA_FORCE")]
     pub force: bool,
+
+    /// The addressing style to use for the bucket.
+    #[arg(long, env = "S3_ADDRESSING_STYLE", default_value = "virtual-host")]
+    pub addressing_style: S3AddressingStyleOpts,
 }
 
 #[cfg(feature = "s3")]
@@ -485,18 +491,17 @@ pub struct S3Data {
 #[cfg(feature = "s3")]
 impl From<S3Opts> for S3Data {
     fn from(value: S3Opts) -> Self {
+        let addressing_style = value.addressing_style.into();
+        let force_path_style = matches!(addressing_style, S3AddressingStyle::Path);
+
         let credentials: Option<S3Credentials> =
             if let (Some(access_key_id), Some(secret_access_key)) =
                 (value.access_key_id.clone(), value.secret_access_key.clone())
             {
                 Some(S3Credentials {
                     endpoint_url: value.endpoint_url.clone(),
-                    region: Some(value.region.clone()), // Clone here
-                    addressing_style: if value.force_path_style {
-                        rattler_s3::S3AddressingStyle::Path
-                    } else {
-                        rattler_s3::S3AddressingStyle::VirtualHost
-                    },
+                    region: Some(value.region.clone()),
+                    addressing_style,
                     access_key_id: Some(access_key_id),
                     secret_access_key: Some(secret_access_key),
                     session_token: value.session_token.clone(),
@@ -509,7 +514,7 @@ impl From<S3Opts> for S3Data {
             channel: value.channel,
             endpoint_url: value.endpoint_url,
             region: Some(value.region),
-            force_path_style: value.force_path_style,
+            force_path_style,
             credentials,
             force: value.force,
         }
