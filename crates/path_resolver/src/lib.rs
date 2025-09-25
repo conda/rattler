@@ -538,10 +538,14 @@ New:
             fs::rename(src, dst)
         }
 
+        fn check_file_exists(path: &Path) -> bool {
+            path.symlink_metadata().is_ok()
+        }
+
         for (p, pkg) in to_clobbers {
             let src = target_prefix.join(p);
             let dst = clobbers_dir.join::<&Path>(pkg.as_ref()).join(p);
-            if src.exists() && !dst.exists() {
+            if check_file_exists(&src) && !check_file_exists(&dst) {
                 mv(src, dst)?;
             }
         }
@@ -549,7 +553,7 @@ New:
         for (p, pkg) in from_clobbers {
             let src = clobbers_dir.join::<&Path>(pkg.as_ref()).join(p);
             let dst = target_prefix.join(p);
-            if src.exists() && !dst.exists() {
+            if check_file_exists(&src) && !check_file_exists(&dst) {
                 mv(src, dst)?;
             }
         }

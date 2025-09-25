@@ -1442,4 +1442,49 @@ mod tests {
             ],
         );
     }
+
+    #[tokio::test]
+    #[cfg(not(target_os = "windows"))]
+    async fn test_clobber_with_symlinks_and_reprioritization() {
+        let repodata_record_with_symlink1 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-with-symlink-a-0.1.0-h4616a5c_0.conda"),
+        );
+        let repodata_record_with_symlink2 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-with-symlink-b-0.1.0-h4616a5c_0.conda"),
+        );
+
+        let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
+        let packages_dir = tempfile::tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: vec![
+                TransactionOperation::Install(repodata_record_with_symlink1),
+                TransactionOperation::Install(repodata_record_with_symlink2),
+            ],
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+            unchanged: vec![],
+        };
+
+        let install_driver = InstallDriver::builder().with_prefix_records(&[]).finish();
+
+        execute_transaction(
+            transaction,
+            &prefix_path,
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &install_driver,
+            &InstallOptions::default(),
+        )
+        .await;
+
+        // Validate that the clobber.so symbolic link is still present in the libraries directory
+        assert_check_files!(
+            &target_prefix.path(),
+            &["lib/clobber-1.txt", "lib/clobber-2.txt", "lib/clobber.so"],
+        );
+    }
 }
