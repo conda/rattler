@@ -4527,6 +4527,7 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "lazy-regex",
+ "memmap2",
  "nom 8.0.0",
  "nom-language",
  "pathdiff",
