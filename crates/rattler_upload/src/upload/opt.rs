@@ -464,6 +464,10 @@ pub struct S3Opts {
     /// S3 credentials (set programmatically, not via CLI)
     #[clap(skip)]
     pub credentials: Option<S3Credentials>,
+
+    /// Replace files on conflict
+    #[arg(long, short, env = "ANACONDA_FORCE")]
+    pub force: bool,
 }
 
 #[cfg(feature = "s3")]
@@ -475,6 +479,7 @@ pub struct S3Data {
     pub region: Option<String>,
     pub force_path_style: bool,
     pub credentials: Option<S3Credentials>,
+    pub force: bool,
 }
 
 #[cfg(feature = "s3")]
@@ -506,6 +511,7 @@ impl From<S3Opts> for S3Data {
             region: Some(value.region),
             force_path_style: value.force_path_style,
             credentials,
+            force: value.force,
         }
     }
 }
@@ -519,6 +525,7 @@ impl S3Data {
         region: Option<String>,
         force_path_style: bool,
         credentials: Option<S3Credentials>,
+        force: bool,
     ) -> Self {
         Self {
             channel,
@@ -526,6 +533,7 @@ impl S3Data {
             region,
             force_path_style,
             credentials,
+            force,
         }
     }
 }

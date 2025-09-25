@@ -15,7 +15,7 @@ pub async fn upload_package_to_s3(
     auth_storage: &AuthenticationStorage,
     channel: Url,
     credentials: Option<S3Credentials>,
-    package_files: &Vec<PathBuf>,
+    package_files: &[PathBuf],
     region: Option<String>,
     force: bool,
 ) -> miette::Result<()> {

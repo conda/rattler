@@ -121,6 +121,7 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
                 secret_access_key: None,
                 session_token: None,
                 credentials: None,
+                force: false,
             })
         }
         SimpleServerType::CondaForge => {
@@ -168,7 +169,7 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
                 s3_data.credentials,
                 &args.package_files,
                 s3_data.region,
-                false, // force parameter - using false as default
+                s3_data.force, // force parameter - using false as default
             )
             .await
         }
