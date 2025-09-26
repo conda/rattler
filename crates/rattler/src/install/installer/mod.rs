@@ -22,7 +22,6 @@ pub use indicatif::{
 use itertools::Itertools;
 use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
-    match_spec::package_name_matcher::{package_name_matcher_to_package_name, PackageNameMatcher},
     prefix_record::{Link, LinkType},
     MatchSpec, PackageName, Platform, PrefixRecord, RepoDataRecord,
 };
@@ -848,7 +847,7 @@ fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<Package
     for spec in specs {
         if let Some(name) = &spec.name {
             mapping
-                .entry(package_name_matcher_to_package_name(name))
+                .entry(name.as_exact().clone())
                 .or_insert_with(Vec::new)
                 .push(spec.to_string());
         }

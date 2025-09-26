@@ -60,6 +60,22 @@ impl PackageNameMatcher {
             PackageNameMatcher::Regex(regex) => regex.is_match(other.as_normalized()),
         }
     }
+
+    /// Convert [`PackageNameMatcher`] to [`PackageName`].
+    pub fn into_exact(self) -> PackageName {
+        match self {
+            PackageNameMatcher::Exact(s) => s,
+            _ => panic!("PackageNameMatcher is not Exact"),
+        }
+    }
+
+    /// Convert [`PackageNameMatcher`] to [`PackageName`].
+    pub fn as_exact(&self) -> &PackageName {
+        match self {
+            PackageNameMatcher::Exact(s) => s,
+            _ => panic!("PackageNameMatcher is not Exact"),
+        }
+    }
 }
 
 /// Error when parsing [`PackageNameMatcher`]
@@ -200,13 +216,5 @@ mod tests {
             PackageNameMatcher::Regex(regex::Regex::new("^foo.*$").unwrap()),
             "^foo.*$".parse().unwrap()
         );
-    }
-}
-
-/// todo
-pub fn package_name_matcher_to_package_name(matcher: &PackageNameMatcher) -> PackageName {
-    match matcher {
-        PackageNameMatcher::Exact(name) => name.clone(),
-        _ => panic!("Packages with no name are not supported"),
     }
 }

@@ -6,7 +6,7 @@ use std::{
 
 use futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
-use rattler_conda_types::{match_spec::package_name_matcher::package_name_matcher_to_package_name, Channel, MatchSpec, Matches, PackageName, Platform};
+use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, Platform};
 
 use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
 use crate::Reporter;
@@ -118,12 +118,12 @@ impl RepoDataQuery {
                     .name
                     .clone()
                     .ok_or(GatewayError::MatchSpecWithoutName(Box::new(spec.clone())))?;
-                seen.insert(package_name_matcher_to_package_name(&name.clone()));
-                direct_url_specs.push((spec.clone(), url, name));
+                seen.insert(name.clone().into_exact());
+                direct_url_specs.push((spec.clone(), url, name.clone()));
             } else if let Some(name) = &spec.name {
-                seen.insert(package_name_matcher_to_package_name(&name.clone()));
+                seen.insert(name.clone().into_exact());
                 let pending = pending_package_specs
-                    .entry(package_name_matcher_to_package_name(&name.clone()))
+                    .entry(name.clone().into_exact())
                     .or_insert_with(|| SourceSpecs::Input(vec![]));
                 let SourceSpecs::Input(input_specs) = pending else {
                     panic!("RootSpecs::Input was overwritten by RootSpecs::Transitive");

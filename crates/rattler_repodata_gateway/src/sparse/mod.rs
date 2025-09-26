@@ -15,7 +15,9 @@ use bytes::Bytes;
 use fs_err as fs;
 use itertools::Itertools;
 use rattler_conda_types::{
-    compute_package_url, match_spec::package_name_matcher::PackageNameMatcher, package::ArchiveType, Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord
+    compute_package_url, match_spec::package_name_matcher::PackageNameMatcher,
+    package::ArchiveType, Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord,
+    RepoDataRecord,
 };
 use rattler_redaction::Redact;
 use serde::{
