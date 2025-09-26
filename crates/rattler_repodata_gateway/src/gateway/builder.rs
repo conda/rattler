@@ -11,7 +11,7 @@ use coalesced_map::CoalescedMap;
 static USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
 /// Defines the maximum concurrency for the gateway.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub enum MaxConcurrency {
     /// No limit on the number of concurrent requests.
     #[default]
@@ -39,7 +39,7 @@ impl From<Arc<tokio::sync::Semaphore>> for MaxConcurrency {
 }
 
 /// A builder for constructing a [`Gateway`].
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct GatewayBuilder {
     channel_config: ChannelConfig,
     client: Option<ClientWithMiddleware>,
