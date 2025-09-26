@@ -5,7 +5,8 @@ use std::path::Path;
 use futures::FutureExt;
 use itertools::Itertools;
 use rattler_conda_types::{
-    Channel, MatchSpec, PackageName, ParseStrictness::Lenient, RepoDataRecord,
+    match_spec::package_name_matcher::package_name_matcher_to_package_name, Channel, MatchSpec,
+    PackageName, ParseStrictness::Lenient, RepoDataRecord,
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{resolvo::CondaDependencyProvider, ChannelPriority, SolveStrategy};
@@ -35,7 +36,7 @@ fn load_repodata(package_name: &PackageName) -> Vec<Vec<RepoDataRecord>> {
 
 fn create_sorting_snapshot(package_name: &str, strategy: SolveStrategy) -> String {
     let match_spec = MatchSpec::from_str(package_name, Lenient).unwrap();
-    let package_name = match_spec.name.clone().unwrap();
+    let package_name = package_name_matcher_to_package_name(&match_spec.name.clone().unwrap());
 
     // Load repodata
     let repodata = load_repodata(&package_name);
