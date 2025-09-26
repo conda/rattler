@@ -12,8 +12,10 @@ use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::{
-    package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
-    PackageName, ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult,
+    match_spec::package_name_matcher::{package_name_matcher_to_package_name, PackageNameMatcher},
+    package::ArchiveType,
+    GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName, ParseMatchSpecError,
+    ParseStrictness, RepoDataRecord, SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -297,7 +299,8 @@ impl<'a> CondaDependencyProvider<'a> {
         let direct_dependencies = match_specs
             .iter()
             .filter_map(|spec| spec.name.as_ref())
-            .map(|name| pool.intern_package_name(name))
+            .map(package_name_matcher_to_package_name)
+            .map(|name| pool.intern_package_name(&name))
             .collect();
 
         // TODO: Normalize these channel names to urls so we can compare them correctly.
@@ -403,10 +406,10 @@ impl<'a> CondaDependencyProvider<'a> {
                 // Add to excluded when package is not in the specified channel.
                 if !channel_specific_specs.is_empty() {
                     if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
-                        spec.name
-                            .as_ref()
-                            .expect("expecting a name")
-                            .as_normalized()
+                        package_name_matcher_to_package_name(
+                            spec.name.as_ref().expect("expecting a name"),
+                        )
+                        .as_normalized()
                             == record.package_record.name.as_normalized()
                     }) {
                         // Check if the spec has a channel, and compare it to the repodata
@@ -846,7 +849,9 @@ impl super::SolverImpl for Solver {
                 let (Some(name), spec) = spec.clone().into_nameless() else {
                     unimplemented!("matchspecs without a name are not supported");
                 };
-                let name_id = provider.pool.intern_package_name(&name);
+                let name_id = provider
+                    .pool
+                    .intern_package_name(&package_name_matcher_to_package_name(&name));
                 provider.pool.intern_version_set(name_id, spec.into())
             })
             .collect();
@@ -923,11 +928,15 @@ fn version_sets_for_match_spec(
     // Add a dependency on each extra.
     let mut version_set_ids = vec![];
     for extra in spec.extras.iter().flatten() {
-        version_set_ids.push(extra_version_set(pool, name.clone(), extra.clone()));
+        version_set_ids.push(extra_version_set(
+            pool,
+            package_name_matcher_to_package_name(&name),
+            extra.clone(),
+        ));
     }
 
     // Create a version set for the match spec itself.
-    let dependency_name = pool.intern_package_name(&name);
+    let dependency_name = pool.intern_package_name(&package_name_matcher_to_package_name(&name));
     let version_set_id = pool.intern_version_set(dependency_name, spec.into());
     version_set_ids.push(version_set_id);
 
