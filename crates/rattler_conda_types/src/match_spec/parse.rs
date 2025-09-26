@@ -30,7 +30,7 @@ use crate::{
         version_tree::{recognize_constraint, recognize_version},
         ParseVersionSpecError,
     },
-    Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, ParseChannelError,
+    Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError,
     ParseStrictness::{self, Lenient, Strict},
     ParseVersionError, Platform, VersionSpec,
 };
@@ -95,10 +95,6 @@ pub enum ParseMatchSpecError {
     /// Unable to parse hash digest from hex
     #[error("unable to parse hash digest from hex")]
     InvalidHashDigest,
-
-    /// The package name was invalid
-    #[error(transparent)]
-    InvalidPackageName(#[from] InvalidPackageNameError),
 
     /// The package name matcher was invalid
     #[error(transparent)]
@@ -1363,7 +1359,7 @@ mod tests {
             .expect_err("Should try to parse as name not url");
         assert_eq!(
             err.to_string(),
-            "'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+            "invalid package name bla/bla: 'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
         );
     }
 
@@ -1379,7 +1375,7 @@ mod tests {
     fn test_issue_717() {
         assert_matches!(
             MatchSpec::from_str("ray[default,data] >=2.9.0,<3.0.0", Strict),
-            Err(ParseMatchSpecError::InvalidPackageName(_))
+            Err(ParseMatchSpecError::InvalidPackageNameMatcher(_))
         );
     }
 

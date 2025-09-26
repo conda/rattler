@@ -1,12 +1,12 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, str::FromStr};
 use std::sync::Arc;
 
 use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
-use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, ParseStrictness};
+use rattler_conda_types::{Channel, MatchSpec, Matches, PackageNameMatcher, ParseStrictness};
 
 use crate::{
     channel::PyChannel, error::PyRattlerError, nameless_match_spec::PyNamelessMatchSpec,
-    package_name::PyPackageName, record::PyRecord,
+    package_name_matcher::PyPackageNameMatcher, record::PyRecord,
 };
 
 #[pyclass]
@@ -52,7 +52,7 @@ impl PyMatchSpec {
 
     /// The name of the package
     #[getter]
-    pub fn name(&self) -> Option<PyPackageName> {
+    pub fn name(&self) -> Option<PyPackageNameMatcher> {
         self.inner.name.clone().map(std::convert::Into::into)
     }
 
@@ -135,7 +135,7 @@ impl PyMatchSpec {
         Ok(Self {
             inner: MatchSpec::from_nameless(
                 spec.clone().into(),
-                Some(PackageName::try_from(name).map_err(PyRattlerError::from)?),
+                Some(PackageNameMatcher::from_str(&name).map_err(PyRattlerError::from)?),
             ),
         })
     }

@@ -48,6 +48,7 @@ pub use match_spec::{
 pub use minimal_prefix_record::{
     collect_minimal_prefix_records, MinimalPrefixCollection, MinimalPrefixRecord,
 };
+pub use match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError};
 pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
 pub use package_name::{InvalidPackageNameError, PackageName};
 pub use parse_mode::ParseStrictness;

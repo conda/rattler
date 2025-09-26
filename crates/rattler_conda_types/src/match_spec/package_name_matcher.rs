@@ -189,7 +189,7 @@ mod tests {
             "foo".parse().unwrap()
         );
         assert_eq!(
-            PackageNameMatcher::Glob(glob::Pattern::new("foo*").unwrap()),
+            PackageNameMatcher::Glob(glob::Pattern::new("foo*bar").unwrap()),
             "foo*bar".parse().unwrap()
         );
         assert_eq!(
