@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.27](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.26...rattler_menuinst-v0.2.27) - 2025-09-17
+
+### Fixed
+
+- *(menuinst)* activate menuinst per default ([#1678](https://github.com/conda/rattler/pull/1678))
+
+## [0.2.26](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.25...rattler_menuinst-v0.2.26) - 2025-09-12
+
+### Fixed
+
+- menuinst on linux with `%` command ([#1671](https://github.com/conda/rattler/pull/1671))
+
+## [0.2.25](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.24...rattler_menuinst-v0.2.25) - 2025-09-05
+
+### Fixed
+
+- update correct desktop database when installing packages with shortcuts ([#1656](https://github.com/conda/rattler/pull/1656))
+
+## [0.2.24](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.23...rattler_menuinst-v0.2.24) - 2025-09-02
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.23](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.22...rattler_menuinst-v0.2.23) - 2025-08-28
+
+### Fixed
+
+- *(menuinst)* improve linux ([#1628](https://github.com/conda/rattler/pull/1628))
+- *(menuinst)* correct environment variable quoting on Linux ([#1625](https://github.com/conda/rattler/pull/1625))
+
+## [0.2.22](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.21...rattler_menuinst-v0.2.22) - 2025-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.21](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.20...rattler_menuinst-v0.2.21) - 2025-08-12
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.20](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.19...rattler_menuinst-v0.2.20) - 2025-07-24
+
+### Other
+
+- updated the following local packages: rattler_shell
+
+## [0.2.19](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.18...rattler_menuinst-v0.2.19) - 2025-07-23
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.18](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.17...rattler_menuinst-v0.2.18) - 2025-07-21
+
+### Other
+
+- bump rust 1.88.0 ([#1536](https://github.com/conda/rattler/pull/1536))
+
+## [0.2.17](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.16...rattler_menuinst-v0.2.17) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.16](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.15...rattler_menuinst-v0.2.16) - 2025-07-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
 ## [0.2.15](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.14...rattler_menuinst-v0.2.15) - 2025-07-01
 
 ### Fixed

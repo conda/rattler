@@ -4,11 +4,9 @@ use crate::{tool_configuration::APP_USER_AGENT, AnacondaData, ArtifactoryData, Q
 use fs_err::tokio as fs;
 use futures::TryStreamExt;
 use indicatif::{style::TemplateError, HumanBytes, ProgressState};
-use opendal::{services::S3Config, Configurator, Operator};
 use reqwest_retry::{policies::ExponentialBackoff, RetryDecision, RetryPolicy};
 use std::{
     fmt::Write,
-    net::Ipv4Addr,
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
@@ -28,7 +26,11 @@ pub mod conda_forge;
 pub mod opt;
 mod package;
 mod prefix;
+#[cfg(feature = "s3")]
+mod s3;
 mod trusted_publishing;
+#[cfg(feature = "s3")]
+pub use s3::upload_package_to_s3;
 
 pub use prefix::upload_package_to_prefix;
 
@@ -265,88 +267,6 @@ pub async fn upload_package_to_anaconda(
             }
         }
     }
-    Ok(())
-}
-
-/// Uploads a package to a channel in an S3 bucket.
-#[allow(clippy::too_many_arguments)]
-pub async fn upload_package_to_s3(
-    storage: &AuthenticationStorage,
-    channel: Url,
-    endpoint_url: Url,
-    region: String,
-    force_path_style: bool,
-    access_key_id: Option<String>,
-    secret_access_key: Option<String>,
-    session_token: Option<String>,
-    package_files: &Vec<PathBuf>,
-) -> miette::Result<()> {
-    let bucket = channel
-        .host_str()
-        .ok_or_else(|| miette::miette!("Failed to get host from channel URL"))?;
-
-    if let Some(host_endpoint) = endpoint_url.host_str() {
-        if host_endpoint.parse::<Ipv4Addr>().is_ok() && !force_path_style {
-            return Err(miette::miette!(
-                "Endpoint URL {} (IPv4 address) cannot be used without path style, please use --force-path-style",
-                endpoint_url
-            ));
-        }
-    }
-
-    let mut s3_config = S3Config::default();
-    s3_config.root = Some(channel.path().to_string());
-    s3_config.bucket = bucket.to_string();
-    s3_config.region = Some(region);
-    s3_config.endpoint = Some(endpoint_url.to_string());
-    s3_config.enable_virtual_host_style = !force_path_style;
-    // Use credentials from the CLI if they are provided.
-    if let (Some(access_key_id), Some(secret_access_key)) = (access_key_id, secret_access_key) {
-        s3_config.secret_access_key = Some(secret_access_key);
-        s3_config.access_key_id = Some(access_key_id);
-        s3_config.session_token = session_token;
-    } else {
-        // If they're not provided, check rattler authentication storage for credentials.
-        let auth = storage.get_by_url(channel.clone()).into_diagnostic()?;
-        if let (
-            _,
-            Some(Authentication::S3Credentials {
-                access_key_id,
-                secret_access_key,
-                session_token,
-            }),
-        ) = auth
-        {
-            s3_config.access_key_id = Some(access_key_id);
-            s3_config.secret_access_key = Some(secret_access_key);
-            s3_config.session_token = session_token;
-        }
-    }
-
-    let builder = s3_config.into_builder();
-    let op = Operator::new(builder).into_diagnostic()?.finish();
-
-    for package_file in package_files {
-        let package = ExtractedPackage::from_package_file(package_file)?;
-        let subdir = package
-            .subdir()
-            .ok_or_else(|| miette::miette!("Failed to get subdir"))?;
-        let filename = package
-            .filename()
-            .ok_or_else(|| miette::miette!("Failed to get filename"))?;
-        let key = format!("{subdir}/{filename}");
-        let body = fs::read(package_file).await.into_diagnostic()?;
-        op.write_with(&key, body)
-            .if_not_exists(true)
-            .await
-            .into_diagnostic()?;
-
-        tracing::info!(
-            "Uploaded package to s3://{bucket}{}/{key}",
-            channel.path().to_string()
-        );
-    }
-
     Ok(())
 }
 

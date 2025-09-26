@@ -1,10 +1,79 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.24.4](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.3...rattler_repodata_gateway-v0.24.4) - 2025-09-05
+
+### Other
+
+- updated the following local packages: coalesced_map, rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
+## [0.24.3](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.2...rattler_repodata_gateway-v0.24.3) - 2025-09-04
+
+### Added
+
+- derive default credentials from aws sdk ([#1629](https://github.com/conda/rattler/pull/1629))
+
+## [0.24.2](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.1...rattler_repodata_gateway-v0.24.2) - 2025-09-02
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
+## [0.24.1](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.0...rattler_repodata_gateway-v0.24.1) - 2025-08-15
+
+### Other
+
+- updated the following local packages: coalesced_map, rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
+## [0.24.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.10...rattler_repodata_gateway-v0.24.0) - 2025-08-12
+
+### Added
+
+- *(gateway)* add method to ensure `run_exports.json` ([#1540](https://github.com/conda/rattler/pull/1540))
+# Changelog
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.23.10](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.9...rattler_repodata_gateway-v0.23.10) - 2025-07-28
+
+### Other
+
+- updated the following local packages: rattler_cache
+
+## [0.23.9](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.8...rattler_repodata_gateway-v0.23.9) - 2025-07-23
+
+### Fixed
+
+- indexing `extra-depends` ([#1546](https://github.com/conda/rattler/pull/1546))
+- use channel `subdir` instead of the one from the record ([#1543](https://github.com/conda/rattler/pull/1543))
+
+## [0.23.8](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.7...rattler_repodata_gateway-v0.23.8) - 2025-07-21
+
+### Other
+
+- bump rust 1.88.0 ([#1536](https://github.com/conda/rattler/pull/1536))
+
+## [0.23.7](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.6...rattler_repodata_gateway-v0.23.7) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_cache
+
+## [0.23.6](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.5...rattler_repodata_gateway-v0.23.6) - 2025-07-09
+
+### Added
+
+- implement config conversion for repodata_gateway ([#1498](https://github.com/conda/rattler/pull/1498))
 
 ## [0.23.5](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.23.4...rattler_repodata_gateway-v0.23.5) - 2025-07-01
 

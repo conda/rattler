@@ -66,7 +66,7 @@ mod reporter;
 #[cfg(feature = "sparse")]
 pub mod sparse;
 mod utils;
-pub use reporter::Reporter;
+pub use reporter::{DownloadReporter, JLAPReporter, Reporter};
 
 #[cfg(feature = "gateway")]
 mod gateway;
@@ -76,3 +76,5 @@ pub use gateway::{
     ChannelConfig, Gateway, GatewayBuilder, GatewayError, MaxConcurrency, RepoData, SourceConfig,
     SubdirSelection,
 };
+#[cfg(all(not(target_arch = "wasm32"), feature = "gateway"))]
+pub use gateway::{RunExportExtractorError, RunExportsReporter};

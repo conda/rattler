@@ -16,6 +16,7 @@ use std::{
 use anyhow::{Context, Result};
 use fs_err as fs;
 use indexmap::IndexMap;
+use itertools::Itertools;
 use rattler_conda_types::Platform;
 #[cfg(target_family = "unix")]
 use rattler_pty::unix::PtySession;
@@ -93,8 +94,13 @@ pub struct Activator<T: Shell + 'static> {
     /// A list of scripts to run when deactivating the environment
     pub deactivation_scripts: Vec<PathBuf>,
 
-    /// A list of environment variables to set when activating the environment
+    /// A list of environment variables to set before running the activation
+    /// scripts. These are evaluated before `activation_scripts` have run.
     pub env_vars: IndexMap<String, String>,
+
+    /// A list of environment variables to set after running the activation
+    /// scripts. These are evaluated after `activation_scripts` have run.
+    pub post_activation_env_vars: IndexMap<String, String>,
 
     /// The platform for which to generate the Activator
     pub platform: Platform,
@@ -241,7 +247,7 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
 
             for (key, value) in env_var_json {
                 if let Some(value) = value.as_str() {
-                    env_vars.insert(key.to_string(), value.to_string());
+                    env_vars.insert(key.clone(), value.to_string());
                 } else {
                     tracing::warn!(
                         "WARNING: environment variable {key} has no string value (path: {env_var_file:?})"
@@ -323,6 +329,17 @@ pub struct ActivationResult<T: Shell + 'static> {
 }
 
 impl<T: Shell + Clone> Activator<T> {
+    /// Return unique env var keys from both `env_vars` and `post_activation_env_vars` in insertion order.
+    fn unique_env_keys(&self) -> impl Iterator<Item = &str> {
+        self.env_vars
+            .keys()
+            .chain(self.post_activation_env_vars.keys())
+            .map(String::as_str)
+            .unique()
+    }
+
+    // moved: apply_env_vars_with_backup now lives on `ShellScript`
+
     /// Create a new activator for the given conda environment.
     ///
     /// # Arguments
@@ -368,6 +385,7 @@ impl<T: Shell + Clone> Activator<T> {
             activation_scripts,
             deactivation_scripts,
             env_vars,
+            post_activation_env_vars: IndexMap::new(),
             platform,
         })
     }
@@ -496,21 +514,18 @@ impl<T: Shell + Clone> Activator<T> {
         script.set_env_var("CONDA_PREFIX", &self.target_prefix.to_string_lossy())?;
 
         // For each environment variable that was set during activation
-        for (key, value) in &self.env_vars {
-            // Save original value if it exists
-            if let Some(existing_value) = variables.current_env.get(key) {
-                script.set_env_var(
-                    &format!("CONDA_ENV_SHLVL_{new_shlvl}_{key}"),
-                    existing_value,
-                )?;
-            }
-            // Set new value
-            script.set_env_var(key, value)?;
-        }
+        script.apply_env_vars_with_backup(&variables.current_env, new_shlvl, &self.env_vars)?;
 
         for activation_script in &self.activation_scripts {
             script.run_script(activation_script)?;
         }
+
+        // Set environment variables that should be applied after activation scripts
+        script.apply_env_vars_with_backup(
+            &variables.current_env,
+            new_shlvl,
+            &self.post_activation_env_vars,
+        )?;
 
         Ok(ActivationResult { script, path })
     }
@@ -539,8 +554,8 @@ impl<T: Shell + Clone> Activator<T> {
                     "Proceeding to unset conda variables without restoring previous values.",
                 )?;
 
-                // Just unset without restoring
-                for (key, _) in &self.env_vars {
+                // Just unset without restoring (each key once)
+                for key in self.unique_env_keys() {
                     script.unset_env_var(key)?;
                 }
                 script.unset_env_var("CONDA_PREFIX")?;
@@ -553,8 +568,8 @@ impl<T: Shell + Clone> Activator<T> {
                     "Proceeding to unset conda variables without restoring previous values.",
                 )?;
 
-                // Just unset without restoring
-                for (key, _) in &self.env_vars {
+                // Just unset without restoring (each key once)
+                for key in self.unique_env_keys() {
                     script.unset_env_var(key)?;
                 }
                 script.unset_env_var("CONDA_PREFIX")?;
@@ -563,7 +578,7 @@ impl<T: Shell + Clone> Activator<T> {
             Some(current_level) => {
                 // Unset the current level
                 // For each environment variable that was set during activation
-                for (key, _) in &self.env_vars {
+                for key in self.unique_env_keys() {
                     let backup_key = format!("CONDA_ENV_SHLVL_{current_level}_{key}");
                     script.restore_env_var(key, &backup_key)?;
                 }
@@ -613,9 +628,8 @@ impl<T: Shell + Clone> Activator<T> {
             ShellScript::new(self.shell_type.clone(), self.platform);
         activation_detection_script
             .print_env()?
-            .echo(ENV_START_SEPARATOR)?;
-        activation_detection_script.append_script(&activation_script);
-        activation_detection_script
+            .echo(ENV_START_SEPARATOR)?
+            .append_script(&activation_script)
             .echo(ENV_START_SEPARATOR)?
             .print_env()?;
 
@@ -685,6 +699,76 @@ mod tests {
     #[cfg(unix)]
     use crate::activation::PathModificationBehavior;
     use crate::shell::{self, native_path_to_unix, ShellEnum};
+
+    #[test]
+    #[cfg(unix)]
+    fn test_post_activation_env_vars_applied_after_scripts_bash() {
+        let temp_dir = TempDir::new("test_post_activation_env_vars").unwrap();
+
+        // Create a dummy activation script so the activator will run it
+        let activate_dir = temp_dir.path().join("etc/conda/activate.d");
+        fs::create_dir_all(&activate_dir).unwrap();
+        let script_path = activate_dir.join("script1.sh");
+        fs::write(&script_path, "# noop\n").unwrap();
+
+        // Build an activator with both pre and post env vars
+        let pre_env = IndexMap::from_iter([(String::from("A"), String::from("x"))]);
+
+        // Ensure we also override a pre var in post
+        let post_env = IndexMap::from_iter([
+            (String::from("B"), String::from("y")),
+            (String::from("A"), String::from("z")),
+        ]);
+
+        let activator = Activator {
+            target_prefix: temp_dir.path().to_path_buf(),
+            shell_type: shell::Bash,
+            paths: vec![temp_dir.path().join("bin")],
+            activation_scripts: vec![script_path.clone()],
+            deactivation_scripts: vec![],
+            env_vars: pre_env,
+            post_activation_env_vars: post_env,
+            platform: Platform::current(),
+        };
+
+        let result = activator
+            .activation(ActivationVariables {
+                conda_prefix: None,
+                path: None,
+                path_modification_behavior: PathModificationBehavior::Prepend,
+                current_env: HashMap::new(),
+            })
+            .unwrap();
+
+        let mut contents = result.script.contents().unwrap();
+
+        // Normalize prefix path for consistent assertions
+        let prefix = temp_dir.path().to_str().unwrap();
+        contents = contents.replace(prefix, "__PREFIX__");
+
+        // Check ordering: pre env vars before script run, post env vars after script run
+        let idx_pre_a = contents.find("export A=x").expect("missing pre env A=x");
+        let idx_run = contents
+            .find(". __PREFIX__/etc/conda/activate.d/script1.sh")
+            .expect("missing activation script run");
+        let idx_post_b = contents.find("export B=y").expect("missing post env B=y");
+        let idx_post_a = contents
+            .find("export A=z")
+            .expect("missing post override A=z");
+
+        assert!(
+            idx_pre_a < idx_run,
+            "pre env var should be before activation script"
+        );
+        assert!(
+            idx_run < idx_post_b,
+            "post env var should be after activation script"
+        );
+        assert!(
+            idx_run < idx_post_a,
+            "post override should be after activation script"
+        );
+    }
 
     #[test]
     fn test_collect_scripts() {
@@ -1037,6 +1121,7 @@ mod tests {
                 activation_scripts: vec![],
                 deactivation_scripts: vec![],
                 env_vars: env_vars.clone(),
+                post_activation_env_vars: IndexMap::new(),
                 platform: Platform::current(),
             };
 
@@ -1093,6 +1178,7 @@ mod tests {
                 activation_scripts: vec![],
                 deactivation_scripts: vec![],
                 env_vars: env_vars.clone(),
+                post_activation_env_vars: IndexMap::new(),
                 platform: Platform::current(),
             };
 
@@ -1162,6 +1248,7 @@ mod tests {
                 activation_scripts: vec![],
                 deactivation_scripts: vec![],
                 env_vars: second_env_vars.clone(),
+                post_activation_env_vars: IndexMap::new(),
                 platform: Platform::current(),
             };
 
@@ -1280,6 +1367,7 @@ mod tests {
                 activation_scripts: vec![],
                 deactivation_scripts: vec![],
                 env_vars: second_env_vars.clone(),
+                post_activation_env_vars: IndexMap::new(),
                 platform: Platform::current(),
             };
 

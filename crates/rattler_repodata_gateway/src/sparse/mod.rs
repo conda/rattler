@@ -3,6 +3,14 @@
 
 #![allow(clippy::mem_forget)]
 
+use std::{
+    borrow::Borrow,
+    collections::{HashSet, VecDeque},
+    fmt, io,
+    marker::PhantomData,
+    path::Path,
+};
+
 use bytes::Bytes;
 use fs_err as fs;
 use itertools::Itertools;
@@ -15,13 +23,6 @@ use serde::{
     Deserialize, Deserializer,
 };
 use serde_json::value::RawValue;
-use std::borrow::Borrow;
-use std::{
-    collections::{HashSet, VecDeque},
-    fmt, io,
-    marker::PhantomData,
-    path::Path,
-};
 use superslice::Ext;
 use thiserror::Error;
 
@@ -555,7 +556,7 @@ fn parse_record_raw<'i>(
             &channel
                 .base_url
                 .url()
-                .join(&format!("{}/", &package_record.subdir))
+                .join(&format!("{subdir}/"))
                 .expect("failed determine repo_base_url"),
             base_url,
             filename.filename,
@@ -621,7 +622,7 @@ pub async fn load_repo_data_recursively(
             })
             .unwrap_or_else(|r| match r.try_into_panic() {
                 Ok(panic) => std::panic::resume_unwind(panic),
-                Err(err) => Err(io::Error::new(io::ErrorKind::Other, err.to_string())),
+                Err(err) => Err(io::Error::other(err.to_string())),
             })
         })
         .buffered(50)

@@ -80,7 +80,7 @@ async fn get_reader(
                 } else if err.is_decode() {
                     std::io::Error::new(std::io::ErrorKind::InvalidData, err)
                 } else {
-                    std::io::Error::new(std::io::ErrorKind::Other, err)
+                    std::io::Error::other(err)
                 }
             },
         ))))

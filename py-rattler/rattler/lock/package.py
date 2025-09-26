@@ -80,7 +80,7 @@ class LockedPackage(ABC):
         """
         Returns a representation of the LockedPackage.
         """
-        return f"{type(self).__name__}(" f"name={self.name!r}," f"location={self.location!r}" ")"
+        return f"{type(self).__name__}(name={self.name!r},location={self.location!r})"
 
     @classmethod
     def _from_py_locked_package(cls, py_pkg: PyLockedPackage) -> LockedPackage:

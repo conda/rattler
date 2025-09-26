@@ -1,26 +1,31 @@
 //! Defines the `[PrefixRecord]` struct.
 
-use crate::package::FileMode;
-use crate::repo_data::RecordFromPath;
-use crate::repo_data_record::RepoDataRecord;
-use crate::{menuinst, PackageRecord};
+use std::{
+    io::{BufWriter, Read},
+    path::{Path, PathBuf},
+    str::FromStr,
+};
+
 use rattler_digest::serde::SerializableHash;
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::serde_as;
-use std::io::{BufWriter, Read};
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use tempfile::NamedTempFile;
 
-#[cfg(feature = "rayon")]
-use rayon::prelude::*;
+use crate::utils::serde::is_none_or_empty_string;
+use crate::{
+    menuinst, package::FileMode, repo_data::RecordFromPath, repo_data_record::RepoDataRecord,
+    PackageName, PackageRecord,
+};
 
 /// Information about every file installed with the package.
 ///
-/// This struct is similar to the [`crate::package::PathsJson`] struct. The difference is that this
-/// information refers to installed files whereas [`crate::package::PathsJson`] describes the
-/// instructions on how to install a package.
+/// This struct is similar to the [`crate::package::PathsJson`] struct. The
+/// difference is that this information refers to installed files whereas
+/// [`crate::package::PathsJson`] describes the instructions on how to install a
+/// package.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrefixPaths {
     /// The version of the file
@@ -51,9 +56,10 @@ impl From<Vec<PathsEntry>> for PrefixPaths {
 
 /// Information about a single file installed for a package.
 ///
-/// This struct is similar to the [`crate::package::PathsEntry`] struct. The difference is that this
-/// information refers to installed files whereas [`crate::package::PathsEntry`] describes the
-/// instructions on how to install a file.
+/// This struct is similar to the [`crate::package::PathsEntry`] struct. The
+/// difference is that this information refers to installed files whereas
+/// [`crate::package::PathsEntry`] describes the instructions on how to install
+/// a file.
 #[serde_as]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct PathsEntry {
@@ -62,8 +68,9 @@ pub struct PathsEntry {
     #[serde_as(as = "crate::utils::serde::NormalizedPath")]
     pub relative_path: PathBuf,
 
-    /// The original path of the file in the package. This is only set if the file was clobbered by
-    /// another package and therefore the original path is not the same as the relative path.
+    /// The original path of the file in the package. This is only set if the
+    /// file was clobbered by another package and therefore the original
+    /// path is not the same as the relative path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub original_path: Option<PathBuf>,
 
@@ -82,7 +89,8 @@ pub struct PathsEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha256: Option<rattler_digest::Sha256Hash>,
 
-    /// A hex representation of the SHA256 hash of the original file from which this was created.
+    /// A hex representation of the SHA256 hash of the original file from which
+    /// this was created.
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha256_in_prefix: Option<rattler_digest::Sha256Hash>,
@@ -91,7 +99,8 @@ pub struct PathsEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size_in_bytes: Option<u64>,
 
-    /// The file mode of the entry. This is used in conjunction with a prefix_placeholder
+    /// The file mode of the entry. This is used in conjunction with a
+    /// prefix_placeholder
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_mode: Option<FileMode>,
 
@@ -100,30 +109,42 @@ pub struct PathsEntry {
     pub prefix_placeholder: Option<String>,
 }
 
+impl PathsEntry {
+    /// Returns either `original_path` or `relative_path`.
+    pub fn path(&self) -> &PathBuf {
+        self.original_path.as_ref().unwrap_or(&self.relative_path)
+    }
+}
+
 /// Information about a single file installed for a package.
 ///
-/// This enum is similar to the [`crate::package::PathType`] enum. This enum includes more enum entries
-/// that are created when a file is installed.
+/// This enum is similar to the [`crate::package::PathType`] enum. This enum
+/// includes more enum entries that are created when a file is installed.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum PathType {
-    /// The file was installed as a hard link (i.e. a file that points to another file in the package cache)
+    /// The file was installed as a hard link (i.e. a file that points to
+    /// another file in the package cache)
     #[serde(rename = "hardlink")]
     HardLink,
     #[serde(rename = "softlink")]
-    /// The file was installed as a soft link (i.e. a soft link to a file in the package cache)
+    /// The file was installed as a soft link (i.e. a soft link to a file in the
+    /// package cache)
     SoftLink,
     /// An empty directory was created at installation time here
     Directory,
-    /// This is a file that was automatically "compiled" from Python source code when a `noarch` package
-    /// was installed
+    /// This is a file that was automatically "compiled" from Python source code
+    /// when a `noarch` package was installed
     PycFile,
-    /// This file is a Python entry point script for Windows (a `<entrypoint>-script.py` Python script file)
+    /// This file is a Python entry point script for Windows (a
+    /// `<entrypoint>-script.py` Python script file)
     WindowsPythonEntryPointScript,
-    /// This file is a Python entry point executable for Windows (a `<entrypoint>.exe` file)
+    /// This file is a Python entry point executable for Windows (a
+    /// `<entrypoint>.exe` file)
     WindowsPythonEntryPointExe,
-    /// This file is a Python entry point executable for Unix (a `<entrypoint>` Python script file)
-    /// Entry points are created in the `bin/...` directory when installing Python noarch packages
+    /// This file is a Python entry point executable for Unix (a `<entrypoint>`
+    /// Python script file) Entry points are created in the `bin/...`
+    /// directory when installing Python noarch packages
     UnixPythonEntryPoint,
     /// NOT USED - path to the package's .json file in conda-meta
     LinkedPackageRecord,
@@ -145,8 +166,15 @@ impl RecordFromPath for PrefixRecord {
     }
 }
 
-/// A record of a single package installed within an environment. The struct includes the
-/// [`RepoDataRecord`] which specifies information about where the original package comes from.
+impl RecordFromPath for Box<PrefixRecord> {
+    fn from_path(path: &Path) -> Result<Self, std::io::Error> {
+        PrefixRecord::from_path(path).map(Box::new)
+    }
+}
+
+/// A record of a single package installed within an environment. The struct
+/// includes the [`RepoDataRecord`] which specifies information about where the
+/// original package comes from.
 #[serde_as]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct PrefixRecord {
@@ -162,26 +190,38 @@ pub struct PrefixRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extracted_package_dir: Option<PathBuf>,
 
+    /// The spec that was used when this package was installed. Note that this
+    /// field is not updated if the currently another spec was used. Note:
+    /// conda seems to serialize a "None" string value instead of `null`.
+    ///
+    /// This field is deprecated. Use `requested_specs` instead.
+    #[deprecated(note = "Use `requested_specs` instead")]
+    #[serde(default, skip_serializing_if = "is_none_or_empty_string")]
+    pub requested_spec: Option<String>,
+
+    /// Multiple specs that were used when this package was installed.
+    /// This field replaces the deprecated `requested_spec` field.
+    #[serde(default)]
+    pub requested_specs: Vec<String>,
+
     /// A sorted list of all files included in this package
     #[serde(default)]
     #[serde_as(as = "Vec<crate::utils::serde::NormalizedPath>")]
     pub files: Vec<PathBuf>,
 
-    /// Information about how files have been linked when installing the package.
+    /// Information about how files have been linked when installing the
+    /// package.
     #[serde(default)]
     pub paths_data: PrefixPaths,
 
-    /// This field contains a reference to the package cache from where the package was linked.
+    /// This field contains a reference to the package cache from where the
+    /// package was linked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<Link>,
 
-    /// The spec that was used when this package was installed. Note that this field is not updated if the
-    /// currently another spec was used. Note: conda seems to serialize a "None" string value instead of `null`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub requested_spec: Option<String>,
-
-    /// If menuinst is enabled and added menu items, this field contains the menuinst tracker data.
-    /// This data is used to remove the menu items when the package is uninstalled.
+    /// If menuinst is enabled and added menu items, this field contains the
+    /// menuinst tracker data. This data is used to remove the menu items
+    /// when the package is uninstalled.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub installed_system_menus: Vec<menuinst::Tracker>,
 }
@@ -195,25 +235,22 @@ impl PrefixRecord {
     }
 
     /// Creates a `PrefixRecord` from a `RepoDataRecord`.
-    pub fn from_repodata_record(
-        repodata_record: RepoDataRecord,
-        package_tarball_full_path: Option<PathBuf>,
-        extracted_package_dir: Option<PathBuf>,
-        paths: Vec<PathsEntry>,
-        requested_spec: Option<String>,
-        link: Option<Link>,
-    ) -> Self {
+    pub fn from_repodata_record(repodata_record: RepoDataRecord, paths: Vec<PathsEntry>) -> Self {
+        let files = paths
+            .iter()
+            .map(|entry| entry.relative_path.clone())
+            .collect();
+
         Self {
             repodata_record,
-            package_tarball_full_path,
-            extracted_package_dir,
-            files: paths
-                .iter()
-                .map(|entry| entry.relative_path.clone())
-                .collect(),
+            package_tarball_full_path: None,
+            extracted_package_dir: None,
+            files,
             paths_data: paths.into(),
-            link,
-            requested_spec,
+            link: None,
+            #[allow(deprecated)]
+            requested_spec: None,
+            requested_specs: Vec::new(),
             installed_system_menus: Vec::new(),
         }
     }
@@ -234,7 +271,8 @@ impl PrefixRecord {
         )
     }
 
-    /// Writes the contents of this instance to the file at the specified location.
+    /// Writes the contents of this instance to the file at the specified
+    /// location.
     pub fn write_to_path(
         &self,
         path: impl AsRef<Path>,
@@ -272,7 +310,8 @@ impl PrefixRecord {
         Ok(())
     }
 
-    /// Writes the contents of this instance to the file at the specified location.
+    /// Writes the contents of this instance to the file at the specified
+    /// location.
     pub fn write_to(
         &self,
         writer: impl std::io::Write,
@@ -286,8 +325,9 @@ impl PrefixRecord {
         Ok(())
     }
 
-    /// Collects all `PrefixRecord`s from the specified prefix. This function will read all files in
-    /// the `$PREFIX/conda-meta` directory and parse them as `PrefixRecord`s.
+    /// Collects all `PrefixRecord`s from the specified prefix. This function
+    /// will read all files in the `$PREFIX/conda-meta` directory and parse
+    /// them as `PrefixRecord`s.
     pub fn collect_from_prefix<T: RecordFromPath + Send>(
         prefix: &Path,
     ) -> Result<Vec<T>, std::io::Error> {
@@ -297,7 +337,8 @@ impl PrefixRecord {
             return Ok(Vec::new());
         }
 
-        // Collect paths first to avoid holding the directory iterator during parallel processing
+        // Collect paths first to avoid holding the directory iterator during parallel
+        // processing
         let json_paths: Vec<_> = fs_err::read_dir(&conda_meta_path)?
             .filter_map(|entry| {
                 entry.ok().and_then(|e| {
@@ -328,6 +369,11 @@ impl PrefixRecord {
                 .map(|path| RecordFromPath::from_path(path))
                 .collect()
         }
+    }
+
+    /// Returns package name of a prefix record.
+    pub fn name(&self) -> &PackageName {
+        &self.repodata_record.package_record.name
     }
 }
 
@@ -370,7 +416,8 @@ fn no_link_default() -> bool {
     false
 }
 
-/// Returns true if the value is equal to the default value for the `no_link` value of a [`PathsEntry`]
+/// Returns true if the value is equal to the default value for the `no_link`
+/// value of a [`PathsEntry`]
 fn is_no_link_default(value: &bool) -> bool {
     *value == no_link_default()
 }
@@ -389,8 +436,9 @@ impl AsRef<PackageRecord> for PrefixRecord {
 
 #[cfg(test)]
 mod test {
-    use crate::get_test_data_dir;
     use rstest::rstest;
+
+    use crate::get_test_data_dir;
 
     #[rstest]
     #[case::xz_5_2_6_h8d14728_0("xz-5.2.6-h8d14728_0.json")]

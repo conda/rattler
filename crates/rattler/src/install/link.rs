@@ -107,6 +107,7 @@ pub enum LinkFileError {
 }
 
 /// The successful result of calling [`link_file`].
+#[derive(Debug)]
 pub struct LinkedFile {
     /// True if an existing file already existed and linking overwrote the original file.
     pub clobbered: bool,

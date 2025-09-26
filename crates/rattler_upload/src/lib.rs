@@ -1,13 +1,13 @@
 pub mod upload;
 pub(crate) mod utils;
 
-use crate::utils::tool_configuration;
 use miette::IntoDiagnostic;
 use rattler_conda_types::package::ArchiveType;
 use upload::opt::{
     AnacondaData, ArtifactoryData, CondaForgeData, PrefixData, QuetzData, ServerType, UploadOpts,
 };
 
+use crate::utils::tool_configuration;
 /// Upload package to different channels
 pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
     // Validate package files are provided
@@ -26,7 +26,8 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
     }
 
     // Initialize authentication store
-    let store = tool_configuration::get_auth_store(args.common.auth_file).into_diagnostic()?;
+    let store = tool_configuration::get_auth_store(args.common.auth_file, args.auth_store)
+        .into_diagnostic()?;
 
     // Upload handler based on server type
     match args.server_type {
@@ -48,17 +49,14 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
             let anaconda_data = AnacondaData::from(anaconda_opts);
             upload::upload_package_to_anaconda(&store, &args.package_files, anaconda_data).await
         }
+        #[cfg(feature = "s3")]
         ServerType::S3(s3_opts) => {
             upload::upload_package_to_s3(
                 &store,
                 s3_opts.channel,
-                s3_opts.endpoint_url,
-                s3_opts.region,
-                s3_opts.force_path_style,
-                s3_opts.access_key_id,
-                s3_opts.secret_access_key,
-                s3_opts.session_token,
+                s3_opts.credentials.into(),
                 &args.package_files,
+                s3_opts.force,
             )
             .await
         }

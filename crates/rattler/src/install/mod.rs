@@ -43,12 +43,12 @@ pub use apple_codesign::AppleCodeSignBehavior;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
+pub use installer::{result_record::InstallationResultRecord, Installer, InstallerError, Reporter};
 #[cfg(feature = "indicatif")]
 pub use installer::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
     ProgressFormatter,
 };
-pub use installer::{Installer, InstallerError, Reporter};
 use itertools::Itertools;
 pub use link::{link_file, LinkFileError, LinkMethod};
 pub use python::PythonInfo;
@@ -69,7 +69,7 @@ pub use unlink::{empty_trash, unlink_package};
 
 pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 use crate::install::{
-    clobber_registry::ClobberRegistry,
+    clobber_registry::{ClobberRegistry, CLOBBERS_DIR_NAME},
     entry_point::{create_unix_python_entry_point, create_windows_python_entry_point},
 };
 
@@ -97,7 +97,7 @@ pub enum InstallError {
     FailedToLink(PathBuf, #[source] LinkFileError),
 
     /// A directory could not be created.
-    #[error("failed to create directory '{0}")]
+    #[error("failed to create directory '{0}'")]
     FailedToCreateDirectory(PathBuf, #[source] std::io::Error),
 
     /// The target prefix is not UTF-8.
@@ -248,6 +248,7 @@ pub struct InstallOptions {
     pub apple_codesign_behavior: AppleCodeSignBehavior,
 }
 
+#[derive(Debug)]
 struct LinkPath {
     entry: PathsEntry,
     computed_path: PathBuf,
@@ -353,6 +354,19 @@ pub async fn link_package(
                 break;
             }
         }
+
+        // Since we store clobbers in the separate directory
+        // (`__clobbers__`) now we have to create all necessary
+        // directories for it as well.
+        let clobber_path = link_path.clobber_path.as_ref();
+        let mut current_clobber_path = clobber_path.and_then(|p| p.parent());
+        while let Some(path) = current_clobber_path {
+            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
+                current_clobber_path = path.parent();
+            } else {
+                break;
+            }
+        }
     }
 
     let directories_target_dir = target_dir.path().to_path_buf();
@@ -410,7 +424,7 @@ pub async fn link_package(
             {
                 Ok(Ok(linked_file)) => linked_file,
                 Ok(Err(e)) => {
-                    return Err(InstallError::FailedToLink(entry.relative_path.clone(), e))
+                    return Err(InstallError::FailedToLink(entry.relative_path.clone(), e));
                 }
                 Err(Ok(payload)) => std::panic::resume_unwind(payload),
                 Err(Err(_err)) => return Err(InstallError::Cancelled),
@@ -682,6 +696,19 @@ pub fn link_package_sync(
             }
         }
 
+        // Since we store clobbers in the separate directory
+        // (`__clobbers__`) now we have to create all necessary
+        // directories for it as well.
+        let clobber_path = link_path.clobber_path.as_ref();
+        let mut current_path = clobber_path.and_then(|p| p.parent());
+        while let Some(path) = current_path {
+            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
+                current_path = path.parent();
+            } else {
+                break;
+            }
+        }
+
         // Store the path by directory so we can create them in parallel
         paths_by_directory
             .entry(entry_parent.to_path_buf())
@@ -710,7 +737,11 @@ pub fn link_package_sync(
             continue;
         }
 
-        if allow_ref_links && cfg!(target_os = "macos") && !index_json.noarch.is_python() {
+        if allow_ref_links
+            && cfg!(target_os = "macos")
+            && !directory.starts_with(CLOBBERS_DIR_NAME)
+            && !index_json.noarch.is_python()
+        {
             // reflink the whole directory if possible
             // currently this does not handle noarch packages
             match reflink_copy::reflink(package_dir.join(&directory), &full_path) {
@@ -811,7 +842,7 @@ pub fn link_package_sync(
                         return vec![Err(InstallError::FailedToLink(
                             entry.relative_path.clone(),
                             e,
-                        ))]
+                        ))];
                     }
                 };
 
@@ -1167,7 +1198,11 @@ mod test {
             get_test_data_dir().join(format!("python/explicit-env-{current_platform}.txt"));
         let env = ExplicitEnvironmentSpec::from_path(&explicit_env_path).unwrap();
 
-        assert_eq!(env.platform, Some(current_platform), "the platform for which the explicit lock file was created does not match the current platform");
+        assert_eq!(
+            env.platform,
+            Some(current_platform),
+            "the platform for which the explicit lock file was created does not match the current platform"
+        );
 
         test_install_python(
             env.packages.into_iter().map(|p| p.url),
@@ -1190,7 +1225,9 @@ mod test {
             .expect("no default environment in lock file");
 
         let Some(packages) = lock_env.packages(current_platform) else {
-            panic!("the platform for which the explicit lock file was created does not match the current platform")
+            panic!(
+                "the platform for which the explicit lock file was created does not match the current platform"
+            )
         };
 
         test_install_python(

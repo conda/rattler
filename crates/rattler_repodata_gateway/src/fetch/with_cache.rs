@@ -26,7 +26,7 @@ use crate::{
         cache::{CacheHeaders, Expiring, RepoDataState},
         jlap, CacheAction, FetchRepoDataError, RepoDataNotFoundError, Variant,
     },
-    reporter::ResponseReporterExt,
+    reporter::{DownloadReporter, ResponseReporterExt},
     utils::{AsyncEncoding, Encoding, LockedFile},
     Reporter,
 };
@@ -377,6 +377,7 @@ pub async fn fetch_repo_data(
     // Send the request and wait for a reply
     let download_reporter = reporter
         .as_deref()
+        .and_then(|reporter| reporter.download_reporter())
         .map(|r| (r, r.on_download_start(&repo_data_url)));
 
     let (client, request) = request_builder.headers(headers).build_split();
@@ -429,6 +430,20 @@ pub async fn fetch_repo_data(
                 cache_state,
                 cache_result: CacheResult::CacheHitAfterFetch,
             });
+        }
+
+        // Fail if the status code is not a success
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.ok();
+            return Err(FetchRepoDataError::HttpError(
+                reqwest_middleware::Error::Middleware(anyhow::format_err!(
+                    "received unexpected status code ({}) when fetching {}.\n\nBody:\n{}",
+                    status,
+                    repo_data_url.redact(),
+                    body.as_deref().unwrap_or("<failed to get body>"),
+                )),
+            ));
         }
 
         // Get cache headers from the response
@@ -549,7 +564,7 @@ async fn stream_and_decode_to_file(
     response: Response,
     content_encoding: Encoding,
     temp_dir: &Path,
-    reporter: Option<(&dyn Reporter, usize)>,
+    reporter: Option<(&dyn DownloadReporter, usize)>,
 ) -> Result<(NamedTempFile, blake2::digest::Output<Blake2b256>), FetchRepoDataError> {
     // Determine the encoding of the response
     let transfer_encoding = Encoding::from(&response);
@@ -561,7 +576,7 @@ async fn stream_and_decode_to_file(
         .inspect_ok(|bytes| {
             total_bytes += bytes.len();
         })
-        .map_err(|e| std::io::Error::new(ErrorKind::Other, e));
+        .map_err(std::io::Error::other);
 
     // Create a new stream from the byte stream that decodes the bytes using the
     // transfer encoding on the fly.
@@ -1012,7 +1027,7 @@ mod test {
             FetchRepoDataError, RepoDataNotFoundError,
         },
         utils::{simple_channel_server::SimpleChannelServer, Encoding},
-        Reporter,
+        DownloadReporter, JLAPReporter, Reporter,
     };
 
     async fn write_encoded(
@@ -1371,6 +1386,16 @@ mod test {
         }
 
         impl Reporter for BasicReporter {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                Some(self)
+            }
+
+            fn jlap_reporter(&self) -> Option<&dyn JLAPReporter> {
+                None
+            }
+        }
+
+        impl DownloadReporter for BasicReporter {
             fn on_download_progress(
                 &self,
                 _url: &Url,
@@ -1510,10 +1535,7 @@ mod test {
                 // Create a stream that ends prematurely
                 let stream = stream::iter(vec![
                     Ok(bytes.into_iter().collect::<Bytes>()),
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "premature close",
-                    )),
+                    Err(std::io::Error::other("premature close")),
                     // The stream ends after sending partial data, simulating a premature close
                 ]);
                 let body = Body::from_stream(stream);

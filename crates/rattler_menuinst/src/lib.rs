@@ -64,6 +64,12 @@ pub enum MenuInstError {
     MenuConfigNotAFile(PathBuf),
 }
 
+/// Returns true if the given relative path points to a Menu schema JSON file
+/// within a package (i.e. `Menu/*.json`).
+pub fn is_menu_schema_path(path: &Path) -> bool {
+    path.starts_with("Menu/") && path.extension().is_some_and(|ext| ext == "json")
+}
+
 /// Install menu items for a given prefix record according to `Menu/*.json` files
 /// Note: this function will update the prefix record with the installed menu items
 /// and write it back to the prefix record file if any Menu item is found
@@ -78,13 +84,7 @@ pub fn install_menuitems_for_record(
         .paths_data
         .paths
         .iter()
-        .filter(|path| {
-            path.relative_path.starts_with("Menu/")
-                && path
-                    .relative_path
-                    .extension()
-                    .is_some_and(|ext| ext == "json")
-        })
+        .filter(|path| is_menu_schema_path(&path.relative_path))
         .collect();
 
     for menu_file in menu_files {

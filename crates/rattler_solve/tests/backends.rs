@@ -105,7 +105,7 @@ fn installed_package(
             sha256: Some(dummy_sha256_hash()),
             size: None,
             arch: None,
-            extra_depends: BTreeMap::new(),
+            experimental_extra_depends: BTreeMap::new(),
             platform: None,
             depends: Vec::new(),
             constrains: Vec::new(),
@@ -724,13 +724,12 @@ mod resolvo {
     use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
     use url::Url;
 
+    #[cfg(feature = "experimental_extras")]
+    use super::dummy_channel_with_optional_dependencies_json_path;
     use super::{
         dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
         GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
     };
-
-    #[cfg(feature = "experimental_extras")]
-    use super::dummy_channel_with_optional_dependencies_json_path;
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
 
@@ -976,361 +975,117 @@ mod resolvo {
 
         insta::assert_snapshot!(result.unwrap_err());
     }
+
+    /// A test that checks that extras can be used to select optional dependencies.
     #[cfg(feature = "experimental_extras")]
-    /// Installs `foo` while enabling a single optional dependency `[with-latest-bors]`.
-    /// This should pull in `bors >=2.0`.
     #[test]
-    fn test_solve_dummy_repo_extra_depends_foo_latest_bors_resolvo() {
+    fn test_optional_dependency() {
         let mut result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
-                specs: &["foo[extras=[with-latest-bors]]"],
+                specs: &["foo[extras=[with-bar]]"],
                 ..SimpleSolveTask::default()
             },
         )
         .unwrap();
 
+        // Sort the records by package name to make the test deterministic
         result
             .records
             .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
 
+        // Collect the extras into a vector
+        let extras = result.extras.into_iter().collect_vec();
+
+        // Make sure we have two packages `foo` and `bar`
         assert_eq!(result.records.len(), 2);
+        assert_eq!(result.records[0].package_record.name.as_normalized(), "bar");
         assert_eq!(result.records[1].package_record.name.as_normalized(), "foo");
-        assert_eq!(
-            result.features.get("foo"),
-            Some(&vec!["with-latest-bors".to_string()])
-        );
-        assert_eq!(
-            result.records[1].package_record.version,
-            Version::from_str("2.0.2").unwrap(),
-            "expected lowest version of foobar"
-        );
 
-        assert_eq!(
-            result.records[0].package_record.name.as_normalized(),
-            "bors"
-        );
-        assert_eq!(
-            result.records[0].package_record.version,
-            Version::from_str("2.1").unwrap(),
-            "expected highest compatible version of bors"
-        );
+        // Make sure there is an extra feature `with-bar` for `foo`
+        assert_eq!(extras.len(), 1);
+        assert_eq!(extras[0].0.as_normalized(), "foo");
+        assert_eq!(extras[0].1, vec!["with-bar"]);
     }
 
+    /// A test that checks that extras influence the version selection of other packages.
     #[cfg(feature = "experimental_extras")]
-    /// Installs `cuda-version` with `[with-cudadev]` which depends on `"foo >=4.0.2", "bar >=1.2.3"`.
     #[test]
-    fn test_solve_dummy_repo_extra_depends_cuda_dev_resolvo() {
+    fn test_optional_dependency_restrict() {
         let mut result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
-                specs: &["cuda-version[extras=[with-cudadev]]"],
+                specs: &["foo[extras=[with-bar]]", "bar"],
                 ..SimpleSolveTask::default()
             },
         )
         .unwrap();
 
+        // Sort the records by package name to make the test deterministic
         result
             .records
             .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
 
-        assert_eq!(result.records.len(), 3);
-        assert_eq!(result.records[0].package_record.name.as_normalized(), "bar");
-
-        assert_eq!(
-            result.records[0].package_record.version,
-            Version::from_str("1.2.3").unwrap(),
-            "expected version 1.2.3 of bar"
-        );
-
-        // The cuda-version with feature `with-cudadev`:
-        assert_eq!(
-            result.records[1].package_record.name.as_normalized(),
-            "cuda-version"
-        );
-        assert_eq!(
-            result.records[1].package_record.version,
-            Version::from_str("12.5").unwrap(),
-            "expected version 12.5 of cuda-version"
-        );
-
-        assert_eq!(
-            result.features.get("cuda-version"),
-            Some(&vec!["with-cudadev".to_string()])
-        );
-
-        assert_eq!(result.records[2].package_record.name.as_normalized(), "foo");
-        assert_eq!(
-            result.records[2].package_record.version,
-            Version::from_str("4.0.2").unwrap(),
-            "expected version 4.0.2 of foo"
-        );
-    }
-
-    #[cfg(feature = "experimental_extras")]
-    /// Attempts to enable two optional features that conflict: `[with-oldbors,with-latest-bors]`.
-    /// This should fail because one requests `bors <2.0` and the other requests `bors >=2.0`.
-    #[test]
-    fn test_solve_dummy_repo_extra_depends_conflict_resolvo() {
-        let result = solve::<rattler_solve::resolvo::Solver>(
-            &[dummy_channel_with_optional_dependencies_json_path()],
-            SimpleSolveTask {
-                specs: &["foo[extras=[with-oldbors,with-latest-bors]]"],
-                ..SimpleSolveTask::default()
-            },
-        );
-
-        insta::assert_snapshot!(result.unwrap_err());
-    }
-
-    #[cfg(feature = "experimental_extras")]
-    /// Enables multiple optional dependencies in the same spec (like `[with-baz2,with-bar]`).
-    /// This should pull in `baz >=2.0` and `bar >=1.2.3` if both can coexist.
-    #[test]
-    fn test_solve_dummy_repo_extra_depends_foo_multi_resolvo() {
-        let mut result = solve::<rattler_solve::resolvo::Solver>(
-            &[dummy_channel_with_optional_dependencies_json_path()],
-            SimpleSolveTask {
-                specs: &["foo[extras=[with-baz2,with-bar]]"],
-                ..SimpleSolveTask::default()
-            },
-        )
-        .unwrap();
-
-        result
-            .records
-            .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
-
-        assert_eq!(result.records.len(), 3);
-
-        assert_eq!(result.records[0].package_record.name.as_normalized(), "bar");
-        assert_eq!(
-            result.records[0].package_record.version,
-            Version::from_str("1.2.3").unwrap(),
-            "expected version 1.2.3 of bar"
-        );
-
-        assert_eq!(result.records[1].package_record.name.as_normalized(), "baz");
-        assert_eq!(
-            result.records[1].package_record.version,
-            Version::from_str("2.0").unwrap(),
-            "expected version 2.0 of baz"
-        );
-
-        assert_eq!(result.records[2].package_record.name.as_normalized(), "foo");
-        assert_eq!(
-            result.records[2].package_record.version,
-            Version::from_str("3.0.2").unwrap(),
-            "expected version 3.0.2 of foo"
-        );
-        let mut features = result.features.get("foo").unwrap().clone();
-        features.sort();
-        result.features.insert("foo".parse().unwrap(), features);
-        assert_eq!(
-            result.features.get("foo"),
-            Some(&vec!["with-bar".to_string(), "with-baz2".to_string()])
-        );
-    }
-
-    #[cfg(feature = "experimental_extras")]
-    /// Should install xfoo with the feature with-issue717 which requires `with-issue717[with-bors21]` hence pulling in bors 2.1 as well
-    #[test]
-    fn test_solve_dummy_repo_extra_depends_xfoo_extra_depends_with_features() {
-        let mut result = solve::<rattler_solve::resolvo::Solver>(
-            &[dummy_channel_with_optional_dependencies_json_path()],
-            SimpleSolveTask {
-                specs: &["xfoo[extras=[with-issue717]]"],
-                ..SimpleSolveTask::default()
-            },
-        )
-        .unwrap();
-
-        result
-            .records
-            .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
-
-        assert_eq!(result.records.len(), 3);
-        assert_eq!(
-            result.records[0].package_record.name.as_normalized(),
-            "bors"
-        );
-        assert_eq!(
-            result.records[0].package_record.version,
-            Version::from_str("2.1").unwrap(),
-            "expected version 2.1 of bors"
-        );
-
-        assert_eq!(
-            result.records[1].package_record.name.as_normalized(),
-            "issue_717"
-        );
-        assert_eq!(
-            result.records[1].package_record.version,
-            Version::from_str("2.1").unwrap(),
-            "expected version 2.1 of issue_717"
-        );
-
-        assert_eq!(
-            result.records[2].package_record.name.as_normalized(),
-            "xfoo"
-        );
-        assert_eq!(
-            result.records[2].package_record.version,
-            Version::from_str("2.0").unwrap(),
-            "expected version 2.0 of xfoo"
-        );
-        assert_eq!(
-            result.features.get("xfoo"),
-            Some(&vec!["with-issue717".to_string()])
-        );
-    }
-
-    #[cfg(feature = "experimental_extras")]
-    /// Tests what happens when a feature depends on the base package but with another feature enabled
-    #[test]
-    fn test_solve_dummy_repo_extra_depends_recursive_feature() {
-        let result = solve::<rattler_solve::resolvo::Solver>(
-            &[dummy_channel_with_optional_dependencies_json_path()],
-            SimpleSolveTask {
-                specs: &["foo[extras=[with-recursive]]"],
-                ..SimpleSolveTask::default()
-            },
-        );
-
-        // Sort records by name for stable test results
-        insta::assert_snapshot!(result.unwrap_err());
-    }
-
-    #[cfg(feature = "experimental_extras")]
-    /// Tests that an optional dependency can restrict the highest version of a base dependency
-    #[test]
-    fn test_solve_dummy_repo_extra_depends_version_restriction() {
-        let result = solve::<rattler_solve::resolvo::Solver>(
-            &[dummy_channel_with_optional_dependencies_json_path()],
-            SimpleSolveTask {
-                specs: &["foo[extras=[with-version-restrict]]"],
-                ..SimpleSolveTask::default()
-            },
-        )
-        .unwrap();
-
-        assert_eq!(result.records.len(), 1);
-        // Both records should be foo
-        assert_eq!(result.records[0].package_record.name.as_normalized(), "foo");
-        assert_eq!(
-            result.records[0].package_record.version,
-            Version::from_str("3.0.2").unwrap(),
-            "expected version 3.0.2 of foo due to version restriction from feature"
-        );
-        assert_eq!(
-            result.features.get("foo"),
-            Some(&vec!["with-version-restrict".to_string()])
-        );
-    }
-
-    #[cfg(feature = "experimental_extras")]
-    /// Tests what happens if a feature introduces a dependency on the base package itself
-    #[test]
-    fn test_solve_dummy_repo_extra_depends_self_dependency() {
-        let mut result = solve::<rattler_solve::resolvo::Solver>(
-            &[dummy_channel_with_optional_dependencies_json_path()],
-            SimpleSolveTask {
-                specs: &["foo[extras=[with-self]]"],
-                ..SimpleSolveTask::default()
-            },
-        )
-        .unwrap();
-
-        // Sort records by name for stable test results
-        result
-            .records
-            .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
-
-        assert_eq!(result.records.len(), 1);
-        // Both records should be foo
-        assert_eq!(result.records[0].package_record.name.as_normalized(), "foo");
-        assert_eq!(
-            result.records[0].package_record.version,
-            Version::from_str("2.0.2").unwrap(),
-            "expected version 2.0.2 of foo"
-        );
-        assert_eq!(
-            result.features.get("foo"),
-            Some(&vec!["with-self".to_string()])
-        );
-    }
-
-    #[cfg(feature = "experimental_extras")]
-    /// Tests what happens if there are two packages for foo but only the package with the lower version has the package that is requested
-    #[test]
-    fn test_solve_dummy_repo_extra_depends_feature_only_in_older() {
-        let mut result = solve::<rattler_solve::resolvo::Solver>(
-            &[dummy_channel_with_optional_dependencies_json_path()],
-            SimpleSolveTask {
-                specs: &["foo[extras=[legacy-only]]"],
-                ..SimpleSolveTask::default()
-            },
-        )
-        .unwrap();
-
-        // Sort records by name for stable test results
-        result
-            .records
-            .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
-
+        // Even though 2 versions of `bar` are available, we should have
+        // selected the one with version "1" because it is restricted by the
+        // extra added to foo.
         assert_eq!(result.records.len(), 2);
-
-        // Both records should be foo
+        assert_eq!(result.records[0].file_name, "bar-1-xxx.tar.bz2");
         assert_eq!(result.records[1].package_record.name.as_normalized(), "foo");
-        assert_eq!(
-            result.records[1].package_record.version,
-            Version::from_str("2.0.2").unwrap(),
-            "expected older version 2.0.2 of foo since it has the required feature"
-        );
-        assert_eq!(
-            result.features.get("foo"),
-            Some(&vec!["legacy-only".to_string()])
-        );
-
-        assert_eq!(result.records[0].package_record.name.as_normalized(), "bar");
-        assert_eq!(
-            result.records[0].package_record.version,
-            Version::from_str("1.2.3").unwrap(),
-            "expected version 1.2.3 of bar"
-        );
     }
 
+    /// A test that checks that if two extras have conflicting dependencies the
+    /// solution is unsolvable.
     #[cfg(feature = "experimental_extras")]
-    /// Test what happens if a feature is requested that doesn't exist
     #[test]
-    fn test_solve_dummy_repo_extra_depends_nonexistent_feature() {
+    fn test_optional_dependency_conflicting_extras() {
         let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
-                specs: &["foo[extras=[does-not-exist]]"],
+                specs: &["conflicting-extras[extras=[extra1, extra2]]"],
                 ..SimpleSolveTask::default()
             },
         );
 
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Cannot solve the request because of: No candidates were found for foo[does-not-exist] *.\n"
-        );
+        insta::assert_snapshot!(result.unwrap_err(), @r###"
+        Cannot solve the request because of: The following packages are incompatible
+        ├─ conflicting-extras[extra1] can be installed with any of the following options:
+        │  └─ conflicting-extras[extra1]
+        ├─ conflicting-extras[extra2] can be installed with any of the following options:
+        │  └─ conflicting-extras[extra2]
+        └─ conflicting-extras * cannot be installed because there are no viable options:
+           └─ conflicting-extras 1 would require
+              ├─ bar >=2, which can be installed with any of the following options:
+              │  └─ bar 2
+              └─ bar <2, which cannot be installed because there are no viable options:
+                 └─ bar 1, which conflicts with the versions reported above.
+        "###);
     }
 
+    /// A test that checks that extras can cause conflicts with other package
+    /// dependencies.
     #[cfg(feature = "experimental_extras")]
-    /// Test what happens when the only package that provides a certain feature cannot be selected due to a conflict
     #[test]
-    fn test_solve_dummy_repo_extra_depends_feature_conflict() {
+    fn test_optional_dependency_conflicting_with_package() {
         let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_with_optional_dependencies_json_path()],
             SimpleSolveTask {
-                specs: &["foo[extras=[with-bar]]", "foo>=4.0"],
+                specs: &["conflicting-extras[extras=[extra1]]", "bar>=2"],
                 ..SimpleSolveTask::default()
             },
         );
 
-        insta::assert_snapshot!(result.unwrap_err());
+        insta::assert_snapshot!(result.unwrap_err(), @r###"
+        Cannot solve the request because of: The following packages are incompatible
+        ├─ conflicting-extras[extra1] can be installed with any of the following options:
+        │  └─ conflicting-extras[extra1]
+        ├─ bar >=2 can be installed with any of the following options:
+        │  └─ bar 2
+        └─ conflicting-extras * cannot be installed because there are no viable options:
+           └─ conflicting-extras 1 would require
+              └─ bar <2, which cannot be installed because there are no viable options:
+                 └─ bar 1, which conflicts with the versions reported above.
+        "###);
     }
 }
 

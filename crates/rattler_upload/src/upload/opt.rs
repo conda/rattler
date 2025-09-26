@@ -1,14 +1,19 @@
 //! Command-line options.
-use clap::{arg, Parser};
-use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
-use rattler_conda_types::{NamedChannelOrUrl, Platform};
-use rattler_networking::{mirror_middleware, s3_middleware};
-use rattler_solve::ChannelPriority;
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
+
+use clap::{arg, Parser};
+use rattler_conda_types::{
+    utils::url_with_trailing_slash::UrlWithTrailingSlash, NamedChannelOrUrl, Platform,
+};
+#[cfg(feature = "s3")]
+use rattler_networking::s3_middleware;
+use rattler_networking::{mirror_middleware, AuthenticationStorage};
+use rattler_solve::ChannelPriority;
 use tracing::warn;
 use url::Url;
 
-/// The configuration type for rattler-build - just extends rattler / pixi config and can load the same TOML files.
+/// The configuration type for rattler-build - just extends rattler / pixi
+/// config and can load the same TOML files.
 pub type Config = rattler_config::config::ConfigBase<()>;
 
 /// Container for `rattler_solver::ChannelPriority` so that it can be parsed
@@ -77,9 +82,10 @@ pub struct CommonData {
     pub experimental: bool,
     pub auth_file: Option<PathBuf>,
     pub channel_priority: ChannelPriority,
-    pub s3_config: HashMap<String, s3_middleware::S3Config>,
     pub mirror_config: HashMap<Url, Vec<mirror_middleware::Mirror>>,
     pub allow_insecure_host: Option<Vec<String>>,
+    #[cfg(feature = "s3")]
+    pub s3_config: HashMap<String, s3_middleware::S3Config>,
 }
 
 impl CommonData {
@@ -93,7 +99,8 @@ impl CommonData {
         allow_insecure_host: Option<Vec<String>>,
     ) -> Self {
         // mirror config
-        // todo: this is a duplicate in pixi and pixi-pack: do it like in `compute_s3_config`
+        // todo: this is a duplicate in pixi and pixi-pack: do it like in
+        // `compute_s3_config`
         let mut mirror_config = HashMap::new();
         tracing::debug!("Using mirrors: {:?}", config.mirrors);
 
@@ -122,11 +129,13 @@ impl CommonData {
             }
             mirror_config.insert(ensure_trailing_slash(key), mirrors);
         }
+        #[cfg(feature = "s3")]
         let s3_config = rattler_networking::s3_middleware::compute_s3_config(&config.s3_options.0);
         Self {
             output_dir: output_dir.unwrap_or_else(|| PathBuf::from("./output")),
             experimental,
             auth_file,
+            #[cfg(feature = "s3")]
             s3_config,
             mirror_config,
             channel_priority: channel_priority.unwrap_or(ChannelPriority::Strict),
@@ -160,6 +169,16 @@ pub struct UploadOpts {
     /// Common options.
     #[clap(flatten)]
     pub common: CommonOpts,
+
+    #[clap(skip)]
+    pub auth_store: Option<AuthenticationStorage>,
+}
+
+impl UploadOpts {
+    pub fn with_auth_store(mut self, auth_store: Option<AuthenticationStorage>) -> Self {
+        self.auth_store = auth_store;
+        self
+    }
 }
 
 /// Server type.
@@ -170,6 +189,7 @@ pub enum ServerType {
     Artifactory(ArtifactoryOpts),
     Prefix(PrefixOpts),
     Anaconda(AnacondaOpts),
+    #[cfg(feature = "s3")]
     S3(S3Opts),
     #[clap(hide = true)]
     CondaForge(CondaForgeOpts),
@@ -389,6 +409,7 @@ pub struct AnacondaOpts {
     pub force: bool,
 }
 
+#[cfg(feature = "s3")]
 fn parse_s3_url(value: &str) -> Result<Url, String> {
     let url: Url =
         Url::parse(value).map_err(|err| format!("`{value}` isn't a valid URL: {err}"))?;
@@ -402,39 +423,20 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
 }
 
 /// Options for uploading to S3
+#[cfg(feature = "s3")]
 #[derive(Clone, Debug, PartialEq, Parser)]
 pub struct S3Opts {
-    /// The channel URL in the S3 bucket to upload the package to, e.g., `s3://my-bucket/my-channel`
+    /// The channel URL in the S3 bucket to upload the package to, e.g.,
+    /// `s3://my-bucket/my-channel`
     #[arg(short, long, env = "S3_CHANNEL", value_parser = parse_s3_url)]
     pub channel: Url,
 
-    /// The endpoint URL of the S3 backend
-    #[arg(
-        long,
-        env = "S3_ENDPOINT_URL",
-        default_value = "https://s3.amazonaws.com"
-    )]
-    pub endpoint_url: Url,
+    #[clap(flatten)]
+    pub credentials: rattler_s3::clap::S3CredentialsOpts,
 
-    /// The region of the S3 backend
-    #[arg(long, env = "S3_REGION", default_value = "eu-central-1")]
-    pub region: String,
-
-    /// Whether to use path-style S3 URLs
-    #[arg(long, env = "S3_FORCE_PATH_STYLE", default_value = "false")]
-    pub force_path_style: bool,
-
-    /// The access key ID for the S3 bucket.
-    #[arg(long, env = "S3_ACCESS_KEY_ID", requires_all = ["secret_access_key"])]
-    pub access_key_id: Option<String>,
-
-    /// The secret access key for the S3 bucket.
-    #[arg(long, env = "S3_SECRET_ACCESS_KEY", requires_all = ["access_key_id"])]
-    pub secret_access_key: Option<String>,
-
-    /// The session token for the S3 bucket.
-    #[arg(long, env = "S3_SESSION_TOKEN", requires_all = ["access_key_id", "secret_access_key"])]
-    pub session_token: Option<String>,
+    /// Replace files if it already exists.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Debug)]
@@ -605,7 +607,8 @@ pub struct DebugOpts {
     #[clap(flatten)]
     pub common: CommonOpts,
 
-    /// Name of the specific output to debug (only required when a recipe has multiple outputs)
+    /// Name of the specific output to debug (only required when a recipe has
+    /// multiple outputs)
     #[arg(long, help = "Name of the specific output to debug")]
     pub output_name: Option<String>,
 }
@@ -632,8 +635,8 @@ pub struct DebugData {
 }
 
 impl DebugData {
-    /// Generate a new `TestData` struct from `TestOpts` and an optional pixi config.
-    /// `TestOpts` have higher priority than the pixi config.
+    /// Generate a new `TestData` struct from `TestOpts` and an optional pixi
+    /// config. `TestOpts` have higher priority than the pixi config.
     pub fn from_opts_and_config(opts: DebugOpts, config: Option<Config>) -> Self {
         Self {
             recipe_path: opts.recipe,

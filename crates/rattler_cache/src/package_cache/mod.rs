@@ -22,6 +22,7 @@ use rattler_conda_types::package::ArchiveIdentifier;
 use rattler_digest::Sha256Hash;
 use rattler_networking::retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy};
 use rattler_package_streaming::{DownloadReporter, ExtractError};
+use rattler_redaction::Redact;
 pub use reporter::CacheReporter;
 use simple_spawn_blocking::Cancelled;
 use tracing::instrument;
@@ -284,8 +285,11 @@ impl PackageCache {
                                     // Delete the package if the hash does not match
                                     tokio_fs::remove_dir_all(&destination).await.unwrap();
                                     return Err(ExtractError::HashMismatch {
+                                        url: url.clone().redact().to_string(),
+                                        destination: destination.display().to_string(),
                                         expected: format!("{md5:x}"),
                                         actual: format!("{:x}", result.md5),
+                                        total_size: result.total_size,
                                     });
                                 }
                             }
@@ -295,8 +299,11 @@ impl PackageCache {
                                     // Delete the package if the hash does not match
                                     tokio_fs::remove_dir_all(&destination).await.unwrap();
                                     return Err(ExtractError::HashMismatch {
+                                        url: url.clone().redact().to_string(),
+                                        destination: destination.display().to_string(),
                                         expected: format!("{sha256:x}"),
                                         actual: format!("{:x}", result.sha256),
+                                        total_size: result.total_size,
                                     });
                                 }
                             }
@@ -448,7 +455,8 @@ where
             tracing::debug!("cache directory does not exist, fetching package");
         } else if hash_mismatch {
             tracing::warn!(
-                "hash mismatch, wanted a package with hash {} but the cached package has hash {}, fetching package",
+                "hash mismatch, wanted a package at location {} with hash {} but the cached package has hash {}, fetching package",
+                path.display(),
                 given_sha.map_or(String::from("<unknown>"), |s| format!("{s:x}")),
                 locked_sha256.map_or(String::from("<unknown>"), |s| format!("{s:x}"))
             );

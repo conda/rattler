@@ -6,6 +6,7 @@ use fs_err::tokio as tokio_fs;
 use futures::{future::OptionFuture, TryFutureExt};
 use http::{HeaderMap, Method, Uri};
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike};
+use rattler_redaction::Redact;
 use reqwest::Response;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
@@ -18,8 +19,11 @@ use url::Url;
 
 use super::ShardedRepodata;
 use crate::{
-    fetch::CacheAction, gateway::sharded_subdir::decode_zst_bytes_async,
-    reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError, Reporter,
+    fetch::CacheAction,
+    gateway::sharded_subdir::decode_zst_bytes_async,
+    reporter::{DownloadReporter, ResponseReporterExt},
+    utils::url_to_cache_filename,
+    GatewayError, Reporter,
 };
 
 const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
@@ -38,10 +42,23 @@ pub async fn fetch_index(
         cache_path: &Path,
         policy: CachePolicy,
         response: Response,
-        reporter: Option<(&dyn Reporter, usize)>,
+        reporter: Option<(&dyn DownloadReporter, usize)>,
         permit: Option<tokio::sync::SemaphorePermit<'_>>,
     ) -> Result<ShardedRepodata, GatewayError> {
         let response = response.error_for_status()?;
+        if !response.status().is_success() {
+            let mut url = response.url().clone().redact();
+            url.set_query(None);
+            url.set_fragment(None);
+            let status = response.status();
+            let body = response.text().await.ok();
+            return Err(GatewayError::ReqwestMiddlewareError(anyhow::format_err!(
+                "received unexpected status code ({}) when fetching {}.\n\nBody:\n{}",
+                status,
+                url,
+                body.as_deref().unwrap_or("<failed to get body>")
+            )));
+        }
 
         // Read the bytes of the response
         let response_url = response.url().clone();
@@ -185,8 +202,9 @@ pub async fn fetch_index(
                         .expect("failed to acquire semaphore permit");
 
                         // Send the request
-                        let download_reporter =
-                            reporter.map(|r| (r, r.on_download_start(&shards_url)));
+                        let download_reporter = reporter
+                            .and_then(Reporter::download_reporter)
+                            .map(|r| (r, r.on_download_start(&shards_url)));
                         let response = client.execute(request).await?;
 
                         match cache_header.policy.after_response(
@@ -266,7 +284,9 @@ pub async fn fetch_index(
     .expect("failed to acquire semaphore permit");
 
     // Do a fresh requests
-    let reporter = reporter.map(|r| (r, r.on_download_start(&shards_url)));
+    let reporter = reporter
+        .and_then(Reporter::download_reporter)
+        .map(|r| (r, r.on_download_start(&shards_url)));
     let response = client
         .execute(
             request

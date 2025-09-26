@@ -1,0 +1,18 @@
+[package]
+name = "coalesced_map"
+version = "0.1.2"
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+categories.workspace = true
+readme = "README.md"
+description = "A thread-safe, deduplicating map that ensures expensive computations are executed only once per key"
+
+[dependencies]
+dashmap = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }
+futures = { workspace = true }

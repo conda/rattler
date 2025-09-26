@@ -121,7 +121,8 @@ pub struct PackageRecord {
     /// are only required if certain features are enabled or if certain
     /// conditions are met.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub extra_depends: BTreeMap<String, Vec<String>>,
+    #[serde(rename = "extra_depends")]
+    pub experimental_extra_depends: BTreeMap<String, Vec<String>>,
 
     /// Features are a deprecated way to specify different feature sets for the
     /// conda solver. This is not supported anymore and should not be used.
@@ -156,8 +157,8 @@ pub struct PackageRecord {
     pub noarch: NoArchType,
 
     /// Optionally the platform the package supports.
-    /// Note that this does not match the [`Platform`] enum, but is only the first
-    /// part of the platform (e.g. `linux`, `osx`, `win`, ...).
+    /// Note that this does not match the [`Platform`] enum, but is only the
+    /// first part of the platform (e.g. `linux`, `osx`, `win`, ...).
     /// The `subdir` field contains the `Platform` enum.
     pub platform: Option<String>,
 
@@ -234,6 +235,13 @@ impl RecordFromPath for PackageRecord {
     fn from_path(path: &Path) -> Result<Self, std::io::Error> {
         let contents = fs_err::read_to_string(path)?;
         Ok(serde_json::from_str(&contents)?)
+    }
+}
+
+impl PackageRecord {
+    /// Returns true if package `run_exports` is some.
+    pub fn has_run_exports(&self) -> bool {
+        self.run_exports.is_some()
     }
 }
 
@@ -335,7 +343,7 @@ impl PackageRecord {
             noarch: NoArchType::default(),
             platform: None,
             python_site_packages_path: None,
-            extra_depends: BTreeMap::new(),
+            experimental_extra_depends: BTreeMap::new(),
             sha256: None,
             size: None,
             subdir: Platform::current().to_string(),
@@ -365,7 +373,7 @@ impl PackageRecord {
     /// dependency that is not satisfied, this function will return an error.
     pub fn validate<T: AsRef<PackageRecord>>(
         records: Vec<T>,
-    ) -> Result<(), ValidatePackageRecordsError> {
+    ) -> Result<(), Box<ValidatePackageRecordsError>> {
         for package in records.iter() {
             let package = package.as_ref();
             // First we check if all dependencies are in the environment.
@@ -374,32 +382,78 @@ impl PackageRecord {
                 if dep.starts_with("__") {
                     continue;
                 }
-                let dep_spec = MatchSpec::from_str(dep, ParseStrictness::Lenient)?;
+                let dep_spec = MatchSpec::from_str(dep, ParseStrictness::Lenient)
+                    .map_err(ValidatePackageRecordsError::ParseMatchSpec)?;
                 if !records.iter().any(|p| dep_spec.matches(p.as_ref())) {
-                    return Err(ValidatePackageRecordsError::DependencyNotInEnvironment {
-                        package: package.to_owned(),
-                        dependency: dep.to_string(),
-                    });
+                    return Err(Box::new(
+                        ValidatePackageRecordsError::DependencyNotInEnvironment {
+                            package: package.to_owned(),
+                            dependency: dep.clone(),
+                        },
+                    ));
                 }
             }
 
             // Then we check if all constraints are satisfied.
             for constraint in package.constrains.iter() {
-                let constraint_spec = MatchSpec::from_str(constraint, ParseStrictness::Lenient)?;
+                let constraint_spec = MatchSpec::from_str(constraint, ParseStrictness::Lenient)
+                    .map_err(ValidatePackageRecordsError::ParseMatchSpec)?;
                 let matching_package = records.iter().find(|record| match &constraint_spec.name {
                     Some(matcher) => matcher.matches(&record.as_ref().name),
                     None => false,
                 });
                 if matching_package.is_some_and(|p| !constraint_spec.matches(p.as_ref())) {
-                    return Err(ValidatePackageRecordsError::PackageConstraintNotSatisfied {
-                        package: package.to_owned(),
-                        constraint: constraint.to_owned(),
-                        violating_package: matching_package.unwrap().as_ref().to_owned(),
-                    });
+                    return Err(Box::new(
+                        ValidatePackageRecordsError::PackageConstraintNotSatisfied {
+                            package: package.to_owned(),
+                            constraint: constraint.to_owned(),
+                            violating_package: matching_package.unwrap().as_ref().to_owned(),
+                        },
+                    ));
                 }
             }
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Default, Deserialize, Serialize, Eq, PartialEq, Clone)]
+struct PackageRunExports {
+    run_exports: RunExportsJson,
+}
+
+/// Represents [`Channel`] global map from package file names to
+/// [`RunExportsJson`].
+///
+/// See [CEP 12](https://github.com/conda/ceps/blob/main/cep-0012.md) for more info.
+#[derive(Debug, Default, Deserialize, Serialize, Eq, PartialEq, Clone)]
+pub struct SubdirRunExportsJson {
+    info: Option<ChannelInfo>,
+
+    #[serde(default, serialize_with = "sort_map_alphabetically")]
+    packages: FxHashMap<String, PackageRunExports>,
+
+    #[serde(
+        default,
+        rename = "packages.conda",
+        serialize_with = "sort_map_alphabetically"
+    )]
+    conda_packages: FxHashMap<String, PackageRunExports>,
+}
+
+impl SubdirRunExportsJson {
+    /// Get package [`RunExportsJson`] based on the package file name.
+    pub fn get(&self, record: &RepoDataRecord) -> Option<&RunExportsJson> {
+        let file_name = &record.file_name;
+        self.packages
+            .get(file_name)
+            .or_else(|| self.conda_packages.get(file_name))
+            .map(|pre| &pre.run_exports)
+    }
+
+    /// Returns optional [`ChannelInfo`].
+    pub fn info(&self) -> Option<&ChannelInfo> {
+        self.info.as_ref()
     }
 }
 
@@ -416,7 +470,8 @@ pub enum ValidatePackageRecordsError {
         dependency: String,
     },
     /// A package constraint is not met in the environment.
-    #[error("package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment")]
+    #[error("package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment"
+    )]
     PackageConstraintNotSatisfied {
         /// The package containing the unmet constraint.
         package: PackageRecord,
@@ -510,7 +565,7 @@ impl PackageRecord {
             noarch: index.noarch,
             platform: index.platform,
             python_site_packages_path: index.python_site_packages_path,
-            extra_depends: BTreeMap::new(),
+            experimental_extra_depends: index.experimental_extra_depends,
             sha256,
             size,
             subdir,
@@ -582,6 +637,27 @@ mod test {
             "channels/dummy-no-conda-packages/linux-64/repodata.json",
         );
         insta::assert_yaml_snapshot!(repodata);
+    }
+
+    #[test]
+    fn test_deserialize_no_noarch_empty_str() {
+        // This test covers the case where a repodata entry may contain a "noarch" key set to an empty string.
+        // Packages with such metadata have been observed on private conda channels.
+        // This likely was passed from older versions of conda-build that would pass this key
+        // from the recipe even if it was incorrect.
+        let repodata =
+            deserialize_json_from_test_data("channels/dummy-noarch-str/linux-64/repodata.json");
+        insta::assert_yaml_snapshot!(repodata);
+    }
+
+    #[test]
+    fn test_deserialize_no_noarch_not_empty_str_should_fail() {
+        let test_data_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
+        let data_path =
+            test_data_path.join("channels/dummy-noarch-str-not-empty/linux-64/repodata.json");
+        let err = RepoData::from_path(data_path).unwrap_err();
+        insta::assert_snapshot!(err.to_string(), @r#"invalid value: string "notempty-this-should-fail", expected '' at line 26 column 43"#);
     }
 
     #[test]

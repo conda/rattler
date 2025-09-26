@@ -1,10 +1,78 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.25.0](https://github.com/conda/rattler/compare/rattler_shell-v0.24.11...rattler_shell-v0.25.0) - 2025-09-12
+
+### Added
+
+- add support for post-activation environment variables in Activator ([#1673](https://github.com/conda/rattler/pull/1673))
+
+## [0.24.11](https://github.com/conda/rattler/compare/rattler_shell-v0.24.10...rattler_shell-v0.24.11) - 2025-09-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.24.10](https://github.com/conda/rattler/compare/rattler_shell-v0.24.9...rattler_shell-v0.24.10) - 2025-09-02
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.24.9](https://github.com/conda/rattler/compare/rattler_shell-v0.24.8...rattler_shell-v0.24.9) - 2025-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.24.8](https://github.com/conda/rattler/compare/rattler_shell-v0.24.7...rattler_shell-v0.24.8) - 2025-08-12
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+# Changelog
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.24.7](https://github.com/conda/rattler/compare/rattler_shell-v0.24.6...rattler_shell-v0.24.7) - 2025-07-24
+
+### Fixed
+
+- allow variable expansion ([#1552](https://github.com/conda/rattler/pull/1552))
+
+## [0.24.6](https://github.com/conda/rattler/compare/rattler_shell-v0.24.5...rattler_shell-v0.24.6) - 2025-07-23
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.24.5](https://github.com/conda/rattler/compare/rattler_shell-v0.24.4...rattler_shell-v0.24.5) - 2025-07-21
+
+### Other
+
+- bump rust 1.88.0 ([#1536](https://github.com/conda/rattler/pull/1536))
+
+## [0.24.4](https://github.com/conda/rattler/compare/rattler_shell-v0.24.3...rattler_shell-v0.24.4) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.24.3](https://github.com/conda/rattler/compare/rattler_shell-v0.24.2...rattler_shell-v0.24.3) - 2025-07-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
 
 ## [0.24.2](https://github.com/conda/rattler/compare/rattler_shell-v0.24.1...rattler_shell-v0.24.2) - 2025-07-01
 

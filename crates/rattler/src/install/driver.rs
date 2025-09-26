@@ -216,20 +216,20 @@ impl InstallDriver {
         transaction: &Transaction<Old, New>,
         target_prefix: &Prefix,
     ) -> Result<PostProcessResult, PostProcessingError> {
-        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix)
+        let prefix_records: Vec<PrefixRecord> = PrefixRecord::collect_from_prefix(target_prefix)
             .map_err(PostProcessingError::FailedToDetectInstalledPackages)?;
 
         let required_packages =
             PackageRecord::sort_topologically(prefix_records.iter().collect::<Vec<_>>());
 
+        let clobbered_paths = self
+            .clobber_registry()
+            .unclobber(&required_packages, target_prefix)?;
+
         self.remove_empty_directories(&transaction.operations, &prefix_records, target_prefix)
             .unwrap_or_else(|e| {
                 tracing::warn!("Failed to remove empty directories: {} (ignored)", e);
             });
-
-        let clobbered_paths = self
-            .clobber_registry()
-            .unclobber(&required_packages, target_prefix)?;
 
         let post_link_result = if self.execute_link_scripts {
             Some(self.run_post_link_scripts(transaction, &required_packages, target_prefix))

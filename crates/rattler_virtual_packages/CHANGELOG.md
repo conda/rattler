@@ -1,10 +1,67 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [2.1.5](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.4...rattler_virtual_packages-v2.1.5) - 2025-09-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.3...rattler_virtual_packages-v2.1.4) - 2025-09-02
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.3](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.2...rattler_virtual_packages-v2.1.3) - 2025-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.2](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.1...rattler_virtual_packages-v2.1.2) - 2025-08-12
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+# Changelog
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [2.1.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.0...rattler_virtual_packages-v2.1.1) - 2025-07-23
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.19...rattler_virtual_packages-v2.1.0) - 2025-07-21
+
+### Added
+
+- make `Platform` `non_exhaustive` ([#1539](https://github.com/conda/rattler/pull/1539))
+- add support for loong64 platform to rattler ([#1534](https://github.com/conda/rattler/pull/1534))
+
+## [2.0.19](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.18...rattler_virtual_packages-v2.0.19) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.18](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.17...rattler_virtual_packages-v2.0.18) - 2025-07-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
 
 ## [2.0.17](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.16...rattler_virtual_packages-v2.0.17) - 2025-07-01
 

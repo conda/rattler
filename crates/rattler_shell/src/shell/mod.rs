@@ -12,6 +12,7 @@ use std::{
 };
 
 use enum_dispatch::enum_dispatch;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use rattler_conda_types::Platform;
 use thiserror::Error;
@@ -52,9 +53,9 @@ pub trait Shell {
     fn run_script(&self, f: &mut impl Write, path: &Path) -> ShellResult;
 
     /// Source completion scripts for the shell from a given prefix path.
-    /// Note: the `completions_dir` is the directory where the completions are stored.
-    /// You can use [`Self::completion_script_location`] to get the correct location for a given
-    /// shell type.
+    /// Note: the `completions_dir` is the directory where the completions are
+    /// stored. You can use [`Self::completion_script_location`] to get the
+    /// correct location for a given shell type.
     fn source_completions(&self, _f: &mut impl Write, _completions_dir: &Path) -> ShellResult {
         Ok(())
     }
@@ -171,18 +172,21 @@ pub trait Shell {
         "\n"
     }
 
-    /// Return the location where completion scripts are found in a Conda environment.
+    /// Return the location where completion scripts are found in a Conda
+    /// environment.
     ///
     /// - bash: `share/bash-completion/completions`
     /// - zsh: `share/zsh/site-functions`
     /// - fish: `share/fish/vendor_completions.d`
     ///
-    /// The return value must be joined with `prefix.join(completion_script_location())`.
+    /// The return value must be joined with
+    /// `prefix.join(completion_script_location())`.
     fn completion_script_location(&self) -> Option<&'static Path> {
         None
     }
 
-    /// Restores an environment variable from its backup if it exists, otherwise unsets it.
+    /// Restores an environment variable from its backup if it exists, otherwise
+    /// unsets it.
     ///
     /// # Arguments
     /// * `key` - The name of the environment variable to restore
@@ -205,21 +209,14 @@ pub(crate) fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> 
 
     match output {
         Ok(output) if output.status.success() => Ok(String::from_utf8(output.stdout)
-            .map_err(|_err| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "failed to convert path to Unix style",
-                )
-            })?
+            .map_err(|_err| std::io::Error::other("failed to convert path to Unix style"))?
             .trim()
             .to_string()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(e),
-        Err(e) => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("failed to convert path to Unix style: {e}"),
-        )),
-        _ => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(e) => Err(std::io::Error::other(format!(
+            "failed to convert path to Unix style: {e}"
+        ))),
+        _ => Err(std::io::Error::other(
             "failed to convert path to Unix style: cygpath failed",
         )),
     }
@@ -273,8 +270,18 @@ pub struct Bash;
 impl Shell for Bash {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
         validate_env_var_name(env_var)?;
-        let quoted_value = shlex::try_quote(value).unwrap_or_default();
-        Ok(writeln!(f, "export {env_var}={quoted_value}")?)
+
+        // Check if the value contains variable references ($)
+        // If so, use double quotes to allow variable expansion, otherwise use shlex quoting
+        if value.contains('$') {
+            // Use double quotes to allow variable expansion, but escape any existing double quotes
+            let escaped_value = value.replace('"', "\\\"");
+            Ok(writeln!(f, "export {env_var}=\"{escaped_value}\"")?)
+        } else {
+            // Use shlex quoting for values that don't need variable expansion
+            let quoted_value = shlex::try_quote(value).unwrap_or_else(|_| value.into());
+            Ok(writeln!(f, "export {env_var}={quoted_value}")?)
+        }
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult {
@@ -306,8 +313,9 @@ impl Shell for Bash {
                     match native_path_to_unix(path.to_string_lossy().as_ref()) {
                         Ok(path) => path,
                         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                            // This indicates that the cygpath executable could not be found. In that
-                            // case we just ignore any conversion and use the windows path directly.
+                            // This indicates that the cygpath executable could not be found. In
+                            // that case we just ignore any conversion
+                            // and use the windows path directly.
                             path.to_string_lossy().to_string()
                         }
                         Err(e) => panic!("{e}"),
@@ -335,7 +343,8 @@ impl Shell for Bash {
         Ok(writeln!(f, "export {path_var}=\"{paths_str}\"")?)
     }
 
-    /// For Bash, the separator in the path variable is always ":", even on Windows
+    /// For Bash, the separator in the path variable is always ":", even on
+    /// Windows
     fn path_separator(&self, _platform: &Platform) -> &str {
         ":"
     }
@@ -355,7 +364,8 @@ impl Shell for Bash {
 
     fn source_completions(&self, f: &mut impl Write, completions_dir: &Path) -> ShellResult {
         if completions_dir.exists() {
-            // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
+            // check if we are on Windows, and if yes, convert native path to unix for (Git)
+            // Bash
             let completions_dir_str = if cfg!(windows) {
                 match native_path_to_unix(completions_dir.to_string_lossy().as_ref()) {
                     Ok(path) => path,
@@ -1037,6 +1047,26 @@ impl<T: Shell + 'static> ShellScript<T> {
         }
     }
 
+    /// Apply the provided environment variables to the script while
+    /// backing up existing values to the current shell level.
+    pub fn apply_env_vars_with_backup(
+        &mut self,
+        current_env: &HashMap<String, String>,
+        new_shlvl: i32,
+        envs: &IndexMap<String, String>,
+    ) -> Result<&mut Self, ShellError> {
+        for (key, value) in envs {
+            if let Some(existing_value) = current_env.get(key) {
+                self.set_env_var(
+                    &format!("CONDA_ENV_SHLVL_{new_shlvl}_{key}"),
+                    existing_value,
+                )?;
+            }
+            self.set_env_var(key, value)?;
+        }
+        Ok(self)
+    }
+
     /// Export an environment variable.
     pub fn set_env_var(&mut self, env_var: &str, value: &str) -> Result<&mut Self, ShellError> {
         self.shell.set_env_var(&mut self.contents, env_var, value)?;
@@ -1070,7 +1100,8 @@ impl<T: Shell + 'static> ShellScript<T> {
         Ok(self)
     }
 
-    /// Source completion scripts for the shell from a given directory with completion scripts.
+    /// Source completion scripts for the shell from a given directory with
+    /// completion scripts.
     pub fn source_completions(&mut self, completions_dir: &Path) -> Result<&mut Self, ShellError> {
         self.shell
             .source_completions(&mut self.contents, completions_dir)?;
@@ -1110,7 +1141,8 @@ impl<T: Shell + 'static> ShellScript<T> {
         Ok(self)
     }
 
-    /// Restores an environment variable from its backup if it exists, otherwise unsets it.
+    /// Restores an environment variable from its backup if it exists, otherwise
+    /// unsets it.
     pub fn restore_env_var(
         &mut self,
         key: &str,
