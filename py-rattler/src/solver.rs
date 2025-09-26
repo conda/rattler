@@ -158,7 +158,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
 
             let package_names = specs
                 .iter()
-                .filter_map(|match_spec| match_spec.inner.name.clone());
+                .filter_map(|match_spec| match_spec.inner.name.as_ref().map(|n| n.clone().unwrap_into_exact()));
 
             let available_packages = SparseRepoData::load_records_recursive(
                 repo_data_refs,
