@@ -1,3 +1,4 @@
+//! Query language for conda packages.
 use crate::package::ArchiveIdentifier;
 use crate::{
     build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
@@ -17,11 +18,11 @@ use url::Url;
 use crate::Channel;
 use crate::ChannelConfig;
 
-/// todo
+/// Match a given string either by exact match, glob or regex
 pub mod matcher;
-/// todo
+/// Match package names either by exact match, glob or regex
 pub mod package_name_matcher;
-/// todo
+/// Parse a match spec from a string
 pub mod parse;
 
 use matcher::StringMatcher;

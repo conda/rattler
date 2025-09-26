@@ -112,18 +112,19 @@ impl RepoDataQuery {
         let mut seen = HashSet::new();
         let mut pending_package_specs = HashMap::new();
         let mut direct_url_specs = vec![];
+        // TODO: allow glob/regex package names as well
         for spec in self.specs {
             if let Some(url) = spec.url.clone() {
                 let name = spec
                     .name
                     .clone()
                     .ok_or(GatewayError::MatchSpecWithoutName(Box::new(spec.clone())))?;
-                seen.insert(name.clone().into_exact());
+                seen.insert(name.clone().unwrap_into_exact());
                 direct_url_specs.push((spec.clone(), url, name.clone()));
             } else if let Some(name) = &spec.name {
-                seen.insert(name.clone().into_exact());
+                seen.insert(name.clone().unwrap_into_exact());
                 let pending = pending_package_specs
-                    .entry(name.clone().into_exact())
+                    .entry(name.clone().unwrap_into_exact())
                     .or_insert_with(|| SourceSpecs::Input(vec![]));
                 let SourceSpecs::Input(input_specs) = pending else {
                     panic!("RootSpecs::Input was overwritten by RootSpecs::Transitive");

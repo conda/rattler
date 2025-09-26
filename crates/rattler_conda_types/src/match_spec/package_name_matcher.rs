@@ -62,7 +62,7 @@ impl PackageNameMatcher {
     }
 
     /// Convert [`PackageNameMatcher`] to [`PackageName`].
-    pub fn into_exact(self) -> PackageName {
+    pub fn unwrap_into_exact(self) -> PackageName {
         match self {
             PackageNameMatcher::Exact(s) => s,
             _ => panic!("PackageNameMatcher is not Exact"),
@@ -70,7 +70,7 @@ impl PackageNameMatcher {
     }
 
     /// Convert [`PackageNameMatcher`] to [`PackageName`].
-    pub fn as_exact(&self) -> &PackageName {
+    pub fn unwrap_as_exact(&self) -> &PackageName {
         match self {
             PackageNameMatcher::Exact(s) => s,
             _ => panic!("PackageNameMatcher is not Exact"),
@@ -176,26 +176,6 @@ pub enum IntoPackageNameError {
     /// The package name matcher is not an exact package name
     #[error("not an exact package name")]
     NotExact,
-}
-
-impl TryInto<PackageName> for PackageNameMatcher {
-    type Error = IntoPackageNameError;
-    fn try_into(self) -> Result<PackageName, Self::Error> {
-        match self {
-            PackageNameMatcher::Exact(name) => Ok(name),
-            _ => Err(IntoPackageNameError::NotExact),
-        }
-    }
-}
-
-impl TryInto<PackageName> for &PackageNameMatcher {
-    type Error = IntoPackageNameError;
-    fn try_into(self) -> Result<PackageName, Self::Error> {
-        match self {
-            PackageNameMatcher::Exact(name) => Ok(name.clone()),
-            _ => Err(IntoPackageNameError::NotExact),
-        }
-    }
 }
 
 #[cfg(test)]

@@ -297,7 +297,7 @@ impl<'a> CondaDependencyProvider<'a> {
         let direct_dependencies = match_specs
             .iter()
             .filter_map(|spec| spec.name.as_ref())
-            .map(|name| pool.intern_package_name(name.as_exact()))
+            .map(|name| pool.intern_package_name(name.unwrap_as_exact()))
             .collect();
 
         // TODO: Normalize these channel names to urls so we can compare them correctly.
@@ -406,7 +406,7 @@ impl<'a> CondaDependencyProvider<'a> {
                         spec.name
                             .as_ref()
                             .expect("expecting a name")
-                            .as_exact()
+                            .unwrap_as_exact()
                             .as_normalized()
                             == record.package_record.name.as_normalized()
                     }) {
@@ -847,7 +847,7 @@ impl super::SolverImpl for Solver {
                 let (Some(name), spec) = spec.clone().into_nameless() else {
                     unimplemented!("matchspecs without a name are not supported");
                 };
-                let name_id = provider.pool.intern_package_name(name.as_exact());
+                let name_id = provider.pool.intern_package_name(name.unwrap_as_exact());
                 provider.pool.intern_version_set(name_id, spec.into())
             })
             .collect();
@@ -926,13 +926,13 @@ fn version_sets_for_match_spec(
     for extra in spec.extras.iter().flatten() {
         version_set_ids.push(extra_version_set(
             pool,
-            name.clone().into_exact(),
+            name.clone().unwrap_into_exact(),
             extra.clone(),
         ));
     }
 
     // Create a version set for the match spec itself.
-    let dependency_name = pool.intern_package_name(name.clone().as_exact());
+    let dependency_name = pool.intern_package_name(name.clone().unwrap_as_exact());
     let version_set_id = pool.intern_version_set(dependency_name, spec.into());
     version_set_ids.push(version_set_id);
 

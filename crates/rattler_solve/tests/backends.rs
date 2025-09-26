@@ -3,9 +3,8 @@ use std::{collections::BTreeMap, str::FromStr, time::Instant};
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
-    match_spec::package_name_matcher::package_name_matcher_to_package_name, Channel, ChannelConfig,
-    GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord, ParseStrictness, RepoData,
-    RepoDataRecord, SolverResult, Version,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
+    ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
@@ -133,11 +132,9 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
 
     let sparse_repo_data = read_real_world_repo_data();
 
-    let names = specs.iter().filter_map(|s| {
-        s.name
-            .as_ref()
-            .map(|n| package_name_matcher_to_package_name(&n))
-    });
+    let names = specs
+        .iter()
+        .filter_map(|s| s.name.as_ref().map(|n| n.clone().unwrap_into_exact()));
     let available_packages = SparseRepoData::load_records_recursive(
         sparse_repo_data,
         names,
@@ -1161,11 +1158,9 @@ fn compare_solve(task: CompareTask<'_>) {
 
     let sparse_repo_data = read_real_world_repo_data();
 
-    let names = specs.iter().filter_map(|s| {
-        s.name
-            .as_ref()
-            .map(|n| package_name_matcher_to_package_name(&n))
-    });
+    let names = specs
+        .iter()
+        .filter_map(|s| s.name.as_ref().map(|n| n.clone().unwrap_into_exact()));
     let available_packages = SparseRepoData::load_records_recursive(
         sparse_repo_data,
         names,
@@ -1301,11 +1296,9 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
 ) {
     let spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient).unwrap();
     let specs = vec![spec.clone()];
-    let names = specs.iter().filter_map(|s| {
-        s.name
-            .as_ref()
-            .map(|n| package_name_matcher_to_package_name(&n))
-    });
+    let names = specs
+        .iter()
+        .filter_map(|s| s.name.as_ref().map(|n| n.clone().unwrap_into_exact()));
 
     let available_packages = SparseRepoData::load_records_recursive(
         repo_data,
