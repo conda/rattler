@@ -32,16 +32,16 @@
 //! use reqwest_middleware::ClientWithMiddleware;
 //! use url::Url;
 //! use rattler_repodata_gateway::fetch;
+//! use rattler_networking::LazyClient;
 //!
 //! #[tokio::main]
 //! async fn main() {
 //!     let repodata_url = Url::parse("https://conda.anaconda.org/conda-forge/osx-64/").unwrap();
-//!     let client = ClientWithMiddleware::from(Client::new());
 //!     let cache = PathBuf::from("./cache");
 //!
 //!     let result = fetch::fetch_repo_data(
 //!         repodata_url,
-//!         client,
+//!         LazyClient::default(),
 //!         cache,
 //!         fetch::FetchRepoDataOptions { ..Default::default() },
 //!         None,
