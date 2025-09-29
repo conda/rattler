@@ -219,18 +219,18 @@ impl LockFile {
 
     /// Returns an iterator over all environments defined in the lock-file.
     pub fn environments(&self) -> impl ExactSizeIterator<Item = (&str, Environment<'_>)> + '_ {
-        self.inner
-            .environment_lookup
-            .iter()
-            .map(move |(name, index)| {
-                (
-                    name.as_str(),
-                    Environment {
-                        lock_file: self,
-                        index: *index,
-                    },
-                )
-            })
+        let mut environments: Vec<_> = self.inner.environment_lookup.iter().collect();
+        environments.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+        environments.into_iter().map(move |(name, index)| {
+            (
+                name.as_str(),
+                Environment {
+                    lock_file: self,
+                    index: *index,
+                },
+            )
+        })
     }
 
     /// Returns the version of the lock-file.
