@@ -10,7 +10,6 @@ use std::{
     sync::Arc,
 };
 
-use ahash::RandomState;
 use anyhow::{Context, Result};
 use bytes::buf::Buf;
 use fs_err::{self as fs};
@@ -203,7 +202,7 @@ async fn index_subdir(
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
 ) -> Result<()> {
-    let mut registered_packages: HashMap<String, PackageRecord, RandomState> = HashMap::default();
+    let mut registered_packages: ahash::HashMap<String, PackageRecord> = ahash::HashMap::default();
     if !force {
         let repodata_bytes = if repodata_patch.is_some() {
             op.read(&format!("{subdir}/{REPODATA_FROM_PACKAGES}")).await
@@ -376,8 +375,8 @@ async fn index_subdir(
         registered_packages.insert(filename, record);
     }
 
-    let mut packages: HashMap<String, PackageRecord, RandomState> = HashMap::default();
-    let mut conda_packages: HashMap<String, PackageRecord, RandomState> = HashMap::default();
+    let mut packages: ahash::HashMap<String, PackageRecord> = ahash::HashMap::default();
+    let mut conda_packages: ahash::HashMap<String, PackageRecord> = ahash::HashMap::default();
     for (filename, package) in registered_packages {
         match ArchiveType::try_from(&filename) {
             Some(ArchiveType::TarBz2) => {

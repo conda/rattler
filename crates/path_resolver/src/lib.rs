@@ -10,7 +10,6 @@ use std::{
     sync::Arc,
 };
 
-use ahash::RandomState;
 use fs_err as fs;
 use indexmap::IndexSet;
 use itertools::Itertools;
@@ -99,11 +98,11 @@ pub struct ClobberedPath {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 struct PathTrieNode {
     /// All tags that touch this prefix *or* any descendant.
-    prefixes: HashSet<PackageName, RandomState>,
+    prefixes: ahash::HashSet<PackageName>,
     /// Tags that have a file exactly at this node.
-    terminals: HashSet<PackageName, RandomState>,
+    terminals: ahash::HashSet<PackageName>,
     /// Child components.
-    children: HashMap<OsString, PathTrieNode, RandomState>,
+    children: ahash::HashMap<OsString, PathTrieNode>,
 }
 
 /// A trie of relative file-paths, tagged by package name (in insertion order).
@@ -565,7 +564,7 @@ New:
     pub fn packages_for_prefix<P: AsRef<Path>>(
         &self,
         path: P,
-    ) -> Option<&HashSet<PackageName, RandomState>> {
+    ) -> Option<&ahash::HashSet<PackageName>> {
         let mut cur = &self.root;
 
         for comp in path.as_ref().components().map(Component::as_os_str) {
@@ -579,7 +578,7 @@ New:
     pub fn packages_for_exact<P: AsRef<Path>>(
         &self,
         path: P,
-    ) -> Option<&HashSet<PackageName, RandomState>> {
+    ) -> Option<&ahash::HashSet<PackageName>> {
         Self::get_node(&self.root, path.as_ref()).map(|n| &n.terminals)
     }
 
