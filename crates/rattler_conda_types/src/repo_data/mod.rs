@@ -23,7 +23,9 @@ use crate::{
     build_spec::BuildNumber,
     package::{IndexJson, RunExportsJson},
     utils::{
-        serde::{sort_map_alphabetically, DeserializeFromStrUnchecked},
+        serde::{
+            sort_indexmap_alphabetically, sort_map_alphabetically, DeserializeFromStrUnchecked,
+        },
         UrlWithTrailingSlash,
     },
     Arch, Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
@@ -40,7 +42,7 @@ pub struct RepoData {
     pub info: Option<ChannelInfo>,
 
     /// The tar.bz2 packages contained in the repodata.json file
-    #[serde(default)]
+    #[serde(default, serialize_with = "sort_indexmap_alphabetically")]
     pub packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// The conda packages contained in the repodata.json file (under a
@@ -280,6 +282,7 @@ impl RepoData {
                 file_name: filename,
             });
         }
+        records.sort_by(|a, b| a.file_name.cmp(&b.file_name));
         records
     }
 }

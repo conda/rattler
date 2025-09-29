@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/repo_data/mod.rs
-assertion_line: 694
 expression: file_urls
 ---
 - channels/dummy/linux-64/bar-1.0-unix_py36h1af98f8_2.tar.bz2
