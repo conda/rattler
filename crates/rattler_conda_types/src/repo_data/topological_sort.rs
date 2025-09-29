@@ -36,7 +36,10 @@ fn find_all_cycles<T: AsRef<PackageRecord>>(
     let mut all_cycles = Vec::new();
     let mut visited = HashSet::default();
 
-    for package in packages.keys() {
+    let mut package_names: Vec<_> = packages.keys().collect();
+    package_names.sort();
+
+    for package in package_names {
         if !visited.contains(package) {
             let mut path = Vec::new();
             dfs(package, packages, &mut visited, &mut path, &mut all_cycles);
