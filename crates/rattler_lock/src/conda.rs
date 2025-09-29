@@ -6,6 +6,7 @@ use rattler_conda_types::{
 use rattler_digest::Sha256Hash;
 use std::collections::BTreeMap;
 use std::{borrow::Cow, cmp::Ordering, hash::Hash};
+use typed_path::Utf8TypedPathBuf;
 use url::Url;
 
 /// A locked conda dependency can be either a binary package or a source
@@ -152,23 +153,13 @@ pub enum GitShallowSpec {
     Branch(String),
     /// A git tag reference (e.g., "v1.0.0", "release-2023")
     Tag(String),
+    /// Revision here means that original manifest explicitly pinned revision.
+    Rev,
 }
 
-/// Package build source location for reproducible builds.
-///
-/// This stores the exact source location information needed to
-/// reproducibly build a package from source. Used by pixi build
-/// and other package building tools.
-///
-/// There are 3 different types of locations: path, git, url
-/// (archive). We store only git and url sources, since path-based
-/// sources can change over time and would require expensive
-/// computation of directory file hashes for reproducibility.
-///
-/// For git sources we store the repository url and exact revision.
-/// For url sources we store the archive url and its content hash.
+/// Package build source kind.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum PackageBuildSource {
+pub enum PackageBuildSourceKind {
     /// Git repository source with specific revision
     Git {
         /// The repository URL
@@ -187,6 +178,29 @@ pub enum PackageBuildSource {
         /// The SHA256 hash of the archive content
         sha256: Sha256Hash,
     },
+}
+
+/// Package build source location for reproducible builds.
+///
+/// This stores the exact source location information needed to
+/// reproducibly build a package from source. Used by pixi build
+/// and other package building tools.
+///
+/// There are 3 different types of locations: path, git, url
+/// (archive). We store only git and url sources, since path-based
+/// sources can change over time and would require expensive
+/// computation of directory file hashes for reproducibility.
+///
+/// For git sources we store the repository url and exact revision.
+/// For url sources we store the archive url and its content hash.
+///
+/// For both kinds we store subdirectory.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PackageBuildSource {
+    /// Kind of source we fetch.
+    pub kind: PackageBuildSourceKind,
+    /// Subdirectory of the source from which build starts.
+    pub subdirectory: Option<Utf8TypedPathBuf>,
 }
 
 /// Information about a source package stored in the lock-file.
