@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeSet, io, path::Path};
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
@@ -199,7 +200,7 @@ impl PackageRecord {
 /// Apply a patch to a repodata file
 /// Note that we currently do not handle `revoked` instructions
 pub fn apply_patches_impl(
-    packages: &mut ahash::HashMap<String, PackageRecord>,
+    packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
     conda_packages: &mut ahash::HashMap<String, PackageRecord>,
     removed: &mut ahash::HashSet<String>,
     instructions: &PatchInstructions,
@@ -229,7 +230,7 @@ pub fn apply_patches_impl(
         if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
             match archive_type {
                 ArchiveType::TarBz2 => {
-                    if packages.remove_entry(pkg).is_some() {
+                    if packages.shift_remove_entry(pkg).is_some() {
                         removed.insert(pkg.clone());
                     }
 

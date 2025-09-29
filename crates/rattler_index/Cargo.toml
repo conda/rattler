@@ -34,6 +34,7 @@ path = "src/main.rs"
 ahash = { workspace = true }
 anyhow = { workspace = true }
 bytes = { workspace = true }
+indexmap = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 clap-verbosity-flag = { workspace = true, features = ["tracing"] }

@@ -11,6 +11,7 @@ use std::{
     path::Path,
 };
 
+use indexmap::IndexMap;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
@@ -39,8 +40,8 @@ pub struct RepoData {
     pub info: Option<ChannelInfo>,
 
     /// The tar.bz2 packages contained in the repodata.json file
-    #[serde(default, serialize_with = "sort_map_alphabetically")]
-    pub packages: ahash::HashMap<String, PackageRecord>,
+    #[serde(default)]
+    pub packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// The conda packages contained in the repodata.json file (under a
     /// different key for backwards compatibility with previous conda
@@ -279,8 +280,6 @@ impl RepoData {
                 file_name: filename,
             });
         }
-        // Sort to keep the resulting list deterministic across hash implementations.
-        records.sort_by(|a, b| a.file_name.cmp(&b.file_name));
         records
     }
 }
@@ -587,6 +586,7 @@ fn sort_set_alphabetically<S: serde::Serializer>(
 
 #[cfg(test)]
 mod test {
+    use indexmap::IndexMap;
     use std::collections::HashMap;
 
     use crate::{
@@ -611,7 +611,7 @@ mod test {
         let repodata = RepoData {
             version: Some(2),
             info: None,
-            packages: HashMap::default(),
+            packages: IndexMap::default(),
             conda_packages: HashMap::default(),
             removed: ["xyz", "foo", "bar", "baz", "qux", "aux", "quux"]
                 .iter()

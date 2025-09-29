@@ -1,6 +1,7 @@
 //! Structs to deal with repodata "shards" which are per-package repodata files.
 
 use chrono::{DateTime, Utc};
+use indexmap::IndexMap;
 use rattler_digest::{serde::SerializableHash, Sha256, Sha256Hash};
 use serde::{Deserialize, Serialize};
 
@@ -48,7 +49,7 @@ pub struct ShardedSubdirInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Shard {
     /// The records for all `.tar.bz2` packages
-    pub packages: ahash::HashMap<String, PackageRecord>,
+    pub packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// The records for all `.conda` packages
     #[serde(rename = "packages.conda", default)]

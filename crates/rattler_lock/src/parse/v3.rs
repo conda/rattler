@@ -1,11 +1,6 @@
 //! A module that enables parsing of lock files version 3 or lower.
 
-use std::{
-    collections::{BTreeSet, HashMap},
-    ops::Not,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{collections::BTreeSet, ops::Not, str::FromStr, sync::Arc};
 
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
