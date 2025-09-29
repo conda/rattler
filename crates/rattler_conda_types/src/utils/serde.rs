@@ -1,9 +1,7 @@
-use ahash::RandomState;
 use chrono::{DateTime, Utc};
 use serde::{de::Error as _, ser::Error, Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, SerializeAs};
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::{
     collections::BTreeMap,
     marker::PhantomData,
@@ -148,7 +146,7 @@ pub struct DeserializeFromStrUnchecked;
 
 /// A helper function used to sort map alphabetically when serializing.
 pub(crate) fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(
-    value: &HashMap<String, T, RandomState>,
+    value: &ahash::HashMap<String, T>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     value

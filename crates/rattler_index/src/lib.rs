@@ -14,7 +14,6 @@ use std::{
     time::SystemTime,
 };
 
-use ahash::RandomState;
 use anyhow::{Context, Result};
 use bytes::buf::Buf;
 use chrono::{DateTime, Utc};
@@ -678,8 +677,8 @@ async fn index_subdir_inner(
         registered_packages.insert(filename, record);
     }
 
-    let mut packages: HashMap<String, PackageRecord, RandomState> = HashMap::default();
-    let mut conda_packages: HashMap<String, PackageRecord, RandomState> = HashMap::default();
+    let mut packages: ahash::HashMap<String, PackageRecord> = ahash::HashMap::default();
+    let mut conda_packages: ahash::HashMap<String, PackageRecord> = ahash::HashMap::default();
     for (filename, package) in registered_packages {
         match ArchiveType::try_from(&filename) {
             Some(ArchiveType::TarBz2) => {

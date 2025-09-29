@@ -6,12 +6,11 @@ pub mod sharded;
 mod topological_sort;
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
     path::Path,
 };
 
-use ahash::RandomState;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
@@ -41,7 +40,7 @@ pub struct RepoData {
 
     /// The tar.bz2 packages contained in the repodata.json file
     #[serde(default, serialize_with = "sort_map_alphabetically")]
-    pub packages: HashMap<String, PackageRecord, RandomState>,
+    pub packages: ahash::HashMap<String, PackageRecord>,
 
     /// The conda packages contained in the repodata.json file (under a
     /// different key for backwards compatibility with previous conda
@@ -51,16 +50,16 @@ pub struct RepoData {
         rename = "packages.conda",
         serialize_with = "sort_map_alphabetically"
     )]
-    pub conda_packages: HashMap<String, PackageRecord, RandomState>,
+    pub conda_packages: ahash::HashMap<String, PackageRecord>,
 
     /// removed packages (files are still accessible, but they are not
     /// installable like regular packages)
     #[serde(
         default,
         serialize_with = "sort_set_alphabetically",
-        skip_serializing_if = "HashSet::is_empty"
+        skip_serializing_if = "ahash::HashSet::is_empty"
     )]
-    pub removed: HashSet<String, RandomState>,
+    pub removed: ahash::HashSet<String>,
 
     /// The version of the repodata format
     #[serde(rename = "repodata_version")]
@@ -432,14 +431,14 @@ pub struct SubdirRunExportsJson {
     info: Option<ChannelInfo>,
 
     #[serde(default, serialize_with = "sort_map_alphabetically")]
-    packages: HashMap<String, PackageRunExports, RandomState>,
+    packages: ahash::HashMap<String, PackageRunExports>,
 
     #[serde(
         default,
         rename = "packages.conda",
         serialize_with = "sort_map_alphabetically"
     )]
-    conda_packages: HashMap<String, PackageRunExports, RandomState>,
+    conda_packages: ahash::HashMap<String, PackageRunExports>,
 }
 
 impl SubdirRunExportsJson {
@@ -580,7 +579,7 @@ impl PackageRecord {
 }
 
 fn sort_set_alphabetically<S: serde::Serializer>(
-    value: &HashSet<String, RandomState>,
+    value: &ahash::HashSet<String>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     value.iter().collect::<BTreeSet<_>>().serialize(serializer)
