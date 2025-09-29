@@ -115,6 +115,7 @@ impl SubdirClient for ShardedSubdir {
 
         let shard_request = self
             .client
+            .client()
             .get(shard_url.clone())
             .build()
             .expect("failed to build shard request");
@@ -131,6 +132,7 @@ impl SubdirClient for ShardedSubdir {
                 .map(|r| (r, r.on_download_start(&shard_url)));
             let shard_response = self
                 .client
+                .client()
                 .execute(shard_request)
                 .await
                 .and_then(|r| r.error_for_status().map_err(Into::into))
