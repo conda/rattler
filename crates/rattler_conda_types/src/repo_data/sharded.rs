@@ -1,8 +1,5 @@
 //! Structs to deal with repodata "shards" which are per-package repodata files.
 
-use std::collections::{HashMap, HashSet};
-
-use ahash::RandomState;
 use chrono::{DateTime, Utc};
 use rattler_digest::{serde::SerializableHash, Sha256, Sha256Hash};
 use serde::{Deserialize, Serialize};
@@ -19,8 +16,8 @@ pub struct ShardedRepodata {
     /// url.
     pub info: ShardedSubdirInfo,
     /// The individual shards indexed by package name.
-    #[serde_as(as = "HashMap<_, SerializableHash<Sha256>, RandomState>")]
-    pub shards: HashMap<String, Sha256Hash, RandomState>,
+    #[serde_as(as = "ahash::HashMap<_, SerializableHash<Sha256>>")]
+    pub shards: ahash::HashMap<String, Sha256Hash>,
 }
 
 /// Information about a sharded subdirectory that is stored inside the index
@@ -51,13 +48,13 @@ pub struct ShardedSubdirInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Shard {
     /// The records for all `.tar.bz2` packages
-    pub packages: HashMap<String, PackageRecord, RandomState>,
+    pub packages: ahash::HashMap<String, PackageRecord>,
 
     /// The records for all `.conda` packages
     #[serde(rename = "packages.conda", default)]
-    pub conda_packages: HashMap<String, PackageRecord, RandomState>,
+    pub conda_packages: ahash::HashMap<String, PackageRecord>,
 
     /// The file names of all removed for this shard
     #[serde(default)]
-    pub removed: HashSet<String, RandomState>,
+    pub removed: ahash::HashSet<String>,
 }
