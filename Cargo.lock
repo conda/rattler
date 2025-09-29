@@ -4477,6 +4477,7 @@ dependencies = [
  "console 0.16.1",
  "fs-err",
  "futures",
+ "indexmap 2.12.0",
  "indicatif",
  "opendal",
  "rattler_conda_types",

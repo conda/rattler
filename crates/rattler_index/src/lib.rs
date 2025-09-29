@@ -19,6 +19,7 @@ use bytes::buf::Buf;
 use chrono::{DateTime, Utc};
 use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
+use indexmap::IndexMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use opendal::{
     layers::RetryLayer,
@@ -677,7 +678,7 @@ async fn index_subdir_inner(
         registered_packages.insert(filename, record);
     }
 
-    let mut packages: ahash::HashMap<String, PackageRecord> = ahash::HashMap::default();
+    let mut packages: IndexMap<String, PackageRecord, ahash::RandomState> = IndexMap::default();
     let mut conda_packages: ahash::HashMap<String, PackageRecord> = ahash::HashMap::default();
     for (filename, package) in registered_packages {
         match ArchiveType::try_from(&filename) {
