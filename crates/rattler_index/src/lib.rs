@@ -679,7 +679,8 @@ async fn index_subdir_inner(
     }
 
     let mut packages: IndexMap<String, PackageRecord, ahash::RandomState> = IndexMap::default();
-    let mut conda_packages: ahash::HashMap<String, PackageRecord> = ahash::HashMap::default();
+    let mut conda_packages: IndexMap<String, PackageRecord, ahash::RandomState> =
+        IndexMap::default();
     for (filename, package) in registered_packages {
         match ArchiveType::try_from(&filename) {
             Some(ArchiveType::TarBz2) => {
