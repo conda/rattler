@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.37.5](https://github.com/conda/rattler/compare/rattler-v0.37.4...rattler-v0.37.5) - 2025-09-29
+
+### Fixed
+
+- Rattler not copying back symbolic links from the clobbers directory. ([#1685](https://github.com/conda/rattler/pull/1685))
+
+### Other
+
+- optimize transaction operations ([#1615](https://github.com/conda/rattler/pull/1615))
+
 ## [0.37.4](https://github.com/conda/rattler/compare/rattler-v0.37.3...rattler-v0.37.4) - 2025-09-17
 
 ### Other

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.5](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.4...rattler_repodata_gateway-v0.24.5) - 2025-09-29
+
+### Added
+
+- add Clone for GatewayBuilder ([#1686](https://github.com/conda/rattler/pull/1686))
+
+### Other
+
+- optimize transaction operations ([#1615](https://github.com/conda/rattler/pull/1615))
+
 ## [0.24.4](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.3...rattler_repodata_gateway-v0.24.4) - 2025-09-05
 
 ### Other

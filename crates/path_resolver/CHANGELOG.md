@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/conda/rattler/compare/path_resolver-v0.2.0...path_resolver-v0.2.1) - 2025-09-29
+
+### Fixed
+
+- Rattler not copying back symbolic links from the clobbers directory. ([#1685](https://github.com/conda/rattler/pull/1685))
+
 ## [0.2.0](https://github.com/conda/rattler/compare/path_resolver-v0.1.2...path_resolver-v0.2.0) - 2025-08-22
 
 ### Other
