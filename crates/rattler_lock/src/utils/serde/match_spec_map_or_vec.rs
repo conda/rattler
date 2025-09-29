@@ -1,6 +1,5 @@
 use std::hash::BuildHasherDefault;
 
-use ahash::AHasher;
 use indexmap::IndexMap;
 use rattler_conda_types::{MatchSpec, NamelessMatchSpec, PackageName};
 use serde::{Deserialize, Deserializer};
@@ -19,8 +18,8 @@ impl<'de> DeserializeAs<'de, Vec<String>> for MatchSpecMapOrVec {
         enum MapOrVec {
             Vec(Vec<String>),
             Map(
-                #[serde_as(as = "IndexMap<_, DisplayFromStr, BuildHasherDefault<AHasher>>")]
-                IndexMap<PackageName, NamelessMatchSpec, BuildHasherDefault<AHasher>>,
+                #[serde_as(as = "IndexMap<_, DisplayFromStr, BuildHasherDefault<ahash::AHasher>>")]
+                IndexMap<PackageName, NamelessMatchSpec, BuildHasherDefault<ahash::AHasher>>,
             ),
         }
 
