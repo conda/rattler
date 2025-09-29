@@ -51,9 +51,9 @@ pub struct RepoData {
     #[serde(
         default,
         rename = "packages.conda",
-        serialize_with = "sort_map_alphabetically"
+        serialize_with = "sort_indexmap_alphabetically"
     )]
-    pub conda_packages: ahash::HashMap<String, PackageRecord>,
+    pub conda_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// removed packages (files are still accessible, but they are not
     /// installable like regular packages)
@@ -282,7 +282,6 @@ impl RepoData {
                 file_name: filename,
             });
         }
-        records.sort_by(|a, b| a.file_name.cmp(&b.file_name));
         records
     }
 }
@@ -590,7 +589,6 @@ fn sort_set_alphabetically<S: serde::Serializer>(
 #[cfg(test)]
 mod test {
     use indexmap::IndexMap;
-    use std::collections::HashMap;
 
     use crate::{
         repo_data::{compute_package_url, determine_subdir},
@@ -615,7 +613,7 @@ mod test {
             version: Some(2),
             info: None,
             packages: IndexMap::default(),
-            conda_packages: HashMap::default(),
+            conda_packages: IndexMap::default(),
             removed: ["xyz", "foo", "bar", "baz", "qux", "aux", "quux"]
                 .iter()
                 .map(|s| (*s).to_string())

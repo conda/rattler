@@ -201,7 +201,7 @@ impl PackageRecord {
 /// Note that we currently do not handle `revoked` instructions
 pub fn apply_patches_impl(
     packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
-    conda_packages: &mut ahash::HashMap<String, PackageRecord>,
+    conda_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
     removed: &mut ahash::HashSet<String>,
     instructions: &PatchInstructions,
 ) {
@@ -236,12 +236,12 @@ pub fn apply_patches_impl(
 
                     // also remove equivalent .conda package if it exists
                     let conda_pkg_name = format!("{pkg_name}.conda");
-                    if conda_packages.remove_entry(&conda_pkg_name).is_some() {
+                    if conda_packages.shift_remove_entry(&conda_pkg_name).is_some() {
                         removed.insert(conda_pkg_name);
                     }
                 }
                 ArchiveType::Conda => {
-                    if conda_packages.remove_entry(pkg).is_some() {
+                    if conda_packages.shift_remove_entry(pkg).is_some() {
                         removed.insert(pkg.clone());
                     }
                 }
