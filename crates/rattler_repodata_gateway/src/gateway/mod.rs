@@ -769,7 +769,7 @@ mod test {
             .unwrap();
 
         let total_records: usize = records.iter().map(RepoData::len).sum();
-        assert_eq!(total_records, 15);
+        assert_eq!(total_records, 16);
 
         let mut repodata_records = records
             .iter()

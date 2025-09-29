@@ -43,12 +43,12 @@ pub use apple_codesign::AppleCodeSignBehavior;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
+pub use installer::{result_record::InstallationResultRecord, Installer, InstallerError, Reporter};
 #[cfg(feature = "indicatif")]
 pub use installer::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
     ProgressFormatter,
 };
-pub use installer::{Installer, InstallerError, Reporter};
 use itertools::Itertools;
 pub use link::{link_file, LinkFileError, LinkMethod};
 pub use python::PythonInfo;

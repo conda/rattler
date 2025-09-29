@@ -4388,7 +4388,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.37.3"
+version = "0.37.4"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4527,6 +4527,7 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "lazy-regex",
+ "memmap2",
  "nom 8.0.0",
  "nom-language",
  "pathdiff",
@@ -4595,7 +4596,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.25.1"
+version = "0.25.2"
 dependencies = [
  "anyhow",
  "bytes",
@@ -4680,7 +4681,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.26"
+version = "0.2.27"
 dependencies = [
  "chrono",
  "configparser",
