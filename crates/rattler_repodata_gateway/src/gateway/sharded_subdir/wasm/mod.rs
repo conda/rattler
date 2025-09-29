@@ -3,7 +3,7 @@ use std::sync::Arc;
 use futures::future::OptionFuture;
 use http::StatusCode;
 use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata};
-use reqwest_middleware::ClientWithMiddleware;
+use rattler_networking::LazyClient;
 use url::Url;
 
 use super::add_trailing_slash;
@@ -23,7 +23,7 @@ use crate::{
 
 pub struct ShardedSubdir {
     channel: Channel,
-    client: ClientWithMiddleware,
+    client: LazyClient,
     shards_base_url: Url,
     package_base_url: Url,
     sharded_repodata: ShardedRepodata,
@@ -34,7 +34,7 @@ impl ShardedSubdir {
     pub async fn new(
         channel: Channel,
         subdir: String,
-        client: ClientWithMiddleware,
+        client: LazyClient,
         concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, GatewayError> {
