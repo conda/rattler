@@ -1,22 +1,5 @@
 use std::{path::Path, str::FromStr, sync::Arc, time::SystemTime};
 
-use async_fd_lock::{LockWrite, RwLockWriteGuard};
-use bytes::Bytes;
-use fs_err::tokio as tokio_fs;
-use futures::{future::OptionFuture, TryFutureExt};
-use http::{HeaderMap, Method, Uri};
-use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike};
-use rattler_redaction::Redact;
-use reqwest::Response;
-use reqwest_middleware::ClientWithMiddleware;
-use serde::{Deserialize, Serialize};
-use simple_spawn_blocking::tokio::run_blocking_task;
-use tokio::{
-    fs::File,
-    io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader, BufWriter},
-};
-use url::Url;
-
 use super::ShardedRepodata;
 use crate::{
     fetch::CacheAction,
@@ -25,12 +8,28 @@ use crate::{
     utils::url_to_cache_filename,
     GatewayError, Reporter,
 };
+use async_fd_lock::{LockWrite, RwLockWriteGuard};
+use bytes::Bytes;
+use fs_err::tokio as tokio_fs;
+use futures::{future::OptionFuture, TryFutureExt};
+use http::{HeaderMap, Method, Uri};
+use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike};
+use rattler_networking::LazyClient;
+use rattler_redaction::Redact;
+use reqwest::Response;
+use serde::{Deserialize, Serialize};
+use simple_spawn_blocking::tokio::run_blocking_task;
+use tokio::{
+    fs::File,
+    io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader, BufWriter},
+};
+use url::Url;
 
 const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
 
 // Fetches the shard index from the url or read it from the cache.
 pub async fn fetch_index(
-    client: ClientWithMiddleware,
+    client: LazyClient,
     channel_base_url: &Url,
     cache_dir: &Path,
     cache_action: CacheAction,
@@ -186,6 +185,7 @@ pub async fn fetch_index(
 
                         // Construct the actual request that we will send
                         let request = client
+                            .client()
                             .get(shards_url.clone())
                             .headers(state_request.headers().clone())
                             .build()
@@ -205,7 +205,7 @@ pub async fn fetch_index(
                         let download_reporter = reporter
                             .and_then(Reporter::download_reporter)
                             .map(|r| (r, r.on_download_start(&shards_url)));
-                        let response = client.execute(request).await?;
+                        let response = client.client().execute(request).await?;
 
                         match cache_header.policy.after_response(
                             &state_request,
@@ -269,6 +269,7 @@ pub async fn fetch_index(
 
     // Construct the actual request that we will send
     let request = client
+        .client()
         .get(shards_url.clone())
         .build()
         .expect("failed to build request for shard index");
@@ -288,6 +289,7 @@ pub async fn fetch_index(
         .and_then(Reporter::download_reporter)
         .map(|r| (r, r.on_download_start(&shards_url)));
     let response = client
+        .client()
         .execute(
             request
                 .try_clone()

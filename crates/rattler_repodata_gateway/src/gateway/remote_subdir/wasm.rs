@@ -22,7 +22,7 @@ impl RemoteSubdirClient {
     pub async fn new(
         channel: Channel,
         platform: Platform,
-        client: ClientWithMiddleware,
+        client: LazyClient,
         source_config: SourceConfig,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Self, GatewayError> {

@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
+use coalesced_map::CoalescedMap;
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
+use rattler_networking::LazyClient;
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 
 use crate::{gateway::GatewayInner, ChannelConfig, Gateway};
-use coalesced_map::CoalescedMap;
 
 static USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
@@ -42,7 +43,7 @@ impl From<Arc<tokio::sync::Semaphore>> for MaxConcurrency {
 #[derive(Default, Clone)]
 pub struct GatewayBuilder {
     channel_config: ChannelConfig,
-    client: Option<ClientWithMiddleware>,
+    client: Option<LazyClient>,
     #[cfg(not(target_arch = "wasm32"))]
     cache: Option<std::path::PathBuf>,
     #[cfg(not(target_arch = "wasm32"))]
@@ -58,14 +59,14 @@ impl GatewayBuilder {
 
     /// Set the client to use for fetching repodata.
     #[must_use]
-    pub fn with_client(mut self, client: ClientWithMiddleware) -> Self {
+    pub fn with_client(mut self, client: impl Into<LazyClient>) -> Self {
         self.set_client(client);
         self
     }
 
     /// Set the client to use for fetching repodata.
-    pub fn set_client(&mut self, client: ClientWithMiddleware) -> &mut Self {
-        self.client = Some(client);
+    pub fn set_client(&mut self, client: impl Into<LazyClient>) -> &mut Self {
+        self.client = Some(client.into());
         self
     }
 
@@ -135,7 +136,11 @@ impl GatewayBuilder {
     /// Finish the construction of the gateway returning a constructed gateway.
     pub fn finish(self) -> Gateway {
         let client = self.client.unwrap_or_else(|| {
-            ClientWithMiddleware::from(Client::builder().user_agent(USER_AGENT).build().unwrap())
+            LazyClient::new(|| {
+                ClientWithMiddleware::from(
+                    Client::builder().user_agent(USER_AGENT).build().unwrap(),
+                )
+            })
         });
 
         #[cfg(not(target_arch = "wasm32"))]

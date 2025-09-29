@@ -1468,6 +1468,7 @@ dependencies = [
  "itertools 0.14.0",
  "rattler_cache",
  "rattler_conda_types",
+ "rattler_networking",
  "rattler_repodata_gateway",
  "rattler_solve",
  "reqwest",
