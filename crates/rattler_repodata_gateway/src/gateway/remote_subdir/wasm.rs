@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use rattler_conda_types::{Channel, Platform};
-use reqwest_middleware::ClientWithMiddleware;
+use rattler_networking::LazyClient;
 
 use crate::{
     fetch::{
