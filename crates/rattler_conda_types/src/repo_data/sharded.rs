@@ -53,7 +53,7 @@ pub struct Shard {
 
     /// The records for all `.conda` packages
     #[serde(rename = "packages.conda", default)]
-    pub conda_packages: ahash::HashMap<String, PackageRecord>,
+    pub conda_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// The file names of all removed for this shard
     #[serde(default)]
