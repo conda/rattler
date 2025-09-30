@@ -177,7 +177,7 @@ impl S3 {
         let key = url
             .path()
             .strip_prefix("/")
-            .ok_or_else(|| anyhow::anyhow!("invalid s3 url: {}", url))?;
+            .ok_or_else(|| anyhow::anyhow!("invalid s3 url: {url}"))?;
 
         let presigned_request = match *method {
             Method::HEAD => client
