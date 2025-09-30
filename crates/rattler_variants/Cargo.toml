@@ -1,0 +1,25 @@
+[package]
+name = "rattler_variants"
+version = "0.1.0"
+edition = "2021"
+authors = ["Prefix.dev"]
+license = "BSD-3-Clause"
+description = "Utilities for parsing conda variant configuration files"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+miette = { workspace = true }
+fs-err = { workspace = true }
+indexmap = { workspace = true }
+minijinja = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+strum = { workspace = true }
+thiserror = { workspace = true }
+rattler_conda_types = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = "1.4.0"
