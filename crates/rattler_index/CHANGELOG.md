@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.3](https://github.com/conda/rattler/compare/rattler_index-v0.25.2...rattler_index-v0.25.3) - 2025-09-30
+
+### Other
+
+- add LazyClient to late initialize the reqwest client ([#1687](https://github.com/conda/rattler/pull/1687))
+
 ## [0.24.7](https://github.com/conda/rattler/compare/rattler_index-v0.24.6...rattler_index-v0.24.7) - 2025-07-28
 
 ### Other

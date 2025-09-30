@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.2](https://github.com/conda/rattler/compare/rattler_lock-v0.24.1...rattler_lock-v0.24.2) - 2025-09-30
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
 ## [0.23.13](https://github.com/conda/rattler/compare/rattler_lock-v0.23.12...rattler_lock-v0.23.13) - 2025-07-23
 
 ### Fixed
