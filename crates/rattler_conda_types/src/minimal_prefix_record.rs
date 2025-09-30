@@ -10,6 +10,7 @@
 //! don't read file entirely. See documentation of
 //! [`MinimalPrefixRecord::from_path`] for more information.
 
+use std::io::Read;
 use std::str::FromStr;
 use std::{io, path::Path};
 
@@ -25,6 +26,13 @@ use nom::{
     IResult, Parser,
 };
 use rattler_digest::{Md5Hash, Sha256Hash};
+
+/// We want to use memory map if file size is larger than 1MB to avoid
+/// doing many small reads, as this can be inefficient.
+///
+/// Ideally we should collect statistics to make this choice more
+/// justified, but this is good enough.
+pub const MMAP_HEURISTIC_THRESHOLD: usize = 1024 * 1024;
 
 /// A minimal version of `PrefixRecord` that only contains fields needed for transaction computation.
 /// This is much faster to parse than the full `PrefixRecord`.
@@ -91,14 +99,29 @@ impl MinimalPrefixRecord {
             .next_tuple()
             .ok_or_else(|| io::Error::other("Invalid conda-meta filename format"))?;
 
-        let file = File::open(path)?;
+        let mut file = File::open(path)?;
+
         let initial_metadata = file.metadata()?;
+
+        let file_size = initial_metadata.len() as usize;
 
         // SAFETY: We create a read-only memory map of a regular file.
         // We capture the file's metadata to detect if it changes during parsing.
-        let mmap = unsafe { Mmap::map(&file)? };
+        let map_or_content = if file_size > MMAP_HEURISTIC_THRESHOLD {
+            let mmap = unsafe { Mmap::map(&file)? };
+            Ok(mmap)
+        } else {
+            let mut content = Vec::with_capacity(file_size);
+            #[allow(clippy::verbose_file_reads)]
+            file.read_to_end(&mut content)?;
+            Err(content)
+        };
+        let input = match &map_or_content {
+            Ok(mmap) => &mmap[..],
+            Err(content) => content.as_slice(),
+        };
 
-        let parsed = parse_minimal_json(&mmap[..])
+        let parsed = parse_minimal_json(input)
             .map_err(|e| io::Error::other(format!("Failed to parse JSON: {e}")));
 
         // Verify file hasn't changed during parsing
