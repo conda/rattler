@@ -204,11 +204,7 @@ fn render_string(
 }
 
 fn preprocess_template(input: &str) -> String {
-    if input.contains("${{") {
-        input.replace("${{", "{{").replace("}}", "}}")
-    } else {
-        input.to_string()
-    }
+    input.replace("${{", "{{")
 }
 
 fn evaluate_selector(
