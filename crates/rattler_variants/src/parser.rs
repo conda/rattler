@@ -47,7 +47,7 @@ impl VariantConfig {
     fn merge(&mut self, other: VariantConfig) {
         self.variants.extend(other.variants);
         match (&mut self.pin_run_as_build, other.pin_run_as_build) {
-            (Some(existing), Some(new)) => existing.extend(new.into_iter()),
+            (Some(existing), Some(new)) => existing.extend(new),
             (None, Some(new)) => self.pin_run_as_build = Some(new),
             _ => {}
         }
@@ -217,7 +217,7 @@ fn evaluate_selector(
     env: &Environment<'_>,
     ctx: &serde_json::Value,
 ) -> Result<bool, VariantConfigError> {
-    let template = format!("{{% if {} %}}true{{% else %}}false{{% endif %}}", condition);
+    let template = format!("{{% if {condition} %}}true{{% else %}}false{{% endif %}}");
     let rendered = env.render_str(&template, ctx).map_err(|err| {
         VariantConfigError::Selector(path.to_path_buf(), condition.to_string(), err.to_string())
     })?;

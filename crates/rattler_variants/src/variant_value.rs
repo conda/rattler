@@ -28,10 +28,10 @@ impl VariantValue {
 impl fmt::Display for VariantValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            VariantValue::Bool(b) => write!(f, "{}", b),
-            VariantValue::Integer(i) => write!(f, "{}", i),
-            VariantValue::Float(fl) => write!(f, "{}", fl),
-            VariantValue::String(s) => write!(f, "{}", s),
+            VariantValue::Bool(b) => write!(f, "{b}"),
+            VariantValue::Integer(i) => write!(f, "{i}"),
+            VariantValue::Float(fl) => write!(f, "{fl}"),
+            VariantValue::String(s) => write!(f, "{s}"),
         }
     }
 }
