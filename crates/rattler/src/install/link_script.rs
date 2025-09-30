@@ -232,8 +232,6 @@ impl InstallDriver {
 
 #[cfg(test)]
 mod tests {
-    use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord};
-
     use crate::{
         get_repodata_record, get_test_data_dir,
         install::{
@@ -242,6 +240,8 @@ mod tests {
         },
         package_cache::PackageCache,
     };
+    use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord};
+    use rattler_networking::LazyClient;
 
     fn test_operations() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
         let repodata_record_1 = get_repodata_record(
@@ -273,7 +273,7 @@ mod tests {
         execute_transaction(
             transaction,
             &target_prefix,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &driver,
             &InstallOptions::default(),
@@ -297,7 +297,7 @@ mod tests {
         execute_transaction(
             transaction,
             &target_prefix,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &driver,
             &InstallOptions::default(),

@@ -20,7 +20,10 @@ use itertools::Itertools;
 use parking_lot::Mutex;
 use rattler_conda_types::package::ArchiveIdentifier;
 use rattler_digest::Sha256Hash;
-use rattler_networking::retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy};
+use rattler_networking::{
+    retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy},
+    LazyClient,
+};
 use rattler_package_streaming::{DownloadReporter, ExtractError};
 use rattler_redaction::Redact;
 pub use reporter::CacheReporter;
@@ -114,8 +117,8 @@ impl PackageCache {
         }
     }
 
-    /// Adds the origin (url or path) to the cache key to avoid unwanted cache hits of packages
-    /// with packages with similar properties.
+    /// Adds the origin (url or path) to the cache key to avoid unwanted cache
+    /// hits of packages with packages with similar properties.
     pub fn with_cached_origin(self) -> Self {
         Self {
             cache_origin: true,
@@ -185,7 +188,7 @@ impl PackageCache {
         &self,
         pkg: impl Into<CacheKey>,
         url: Url,
-        client: reqwest_middleware::ClientWithMiddleware,
+        client: LazyClient,
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheLock, PackageCacheError> {
         self.get_or_fetch_from_url_with_retry(pkg, url, client, DoNotRetryPolicy, reporter)
@@ -239,7 +242,7 @@ impl PackageCache {
         &self,
         pkg: impl Into<CacheKey>,
         url: Url,
-        client: reqwest_middleware::ClientWithMiddleware,
+        client: LazyClient,
         retry_policy: impl RetryPolicy + Send + 'static + Clone,
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheLock, PackageCacheError> {
@@ -267,7 +270,7 @@ impl PackageCache {
                     tracing::debug!("downloading {} to {}", &url, destination.display());
                     // Extract the package
                     let result = rattler_package_streaming::reqwest::tokio::extract(
-                        client.clone(),
+                        client.client().clone(),
                         url.clone(),
                         &destination,
                         sha256,
@@ -741,7 +744,7 @@ mod test {
             .get_or_fetch_from_url_with_retry(
                 ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
                 server_url.join(archive_name).unwrap(),
-                client.clone(),
+                client.clone().into(),
                 DoNotRetryPolicy,
                 None,
             )
@@ -764,7 +767,7 @@ mod test {
             .get_or_fetch_from_url_with_retry(
                 ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
                 server_url.join(archive_name).unwrap(),
-                client,
+                client.into(),
                 retry_policy,
                 None,
             )

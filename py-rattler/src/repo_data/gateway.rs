@@ -82,11 +82,11 @@ impl PyGateway {
         }
 
         if let Some(client) = client {
-            gateway.set_client(client.into());
+            gateway.set_client(client);
         } else {
             // Set a default client if no client is provided to
             // make sure a default user-agent is set.
-            gateway.set_client(PyClientWithMiddleware::new(None, None)?.into());
+            gateway.set_client(PyClientWithMiddleware::new(None, None)?);
         }
 
         Ok(Self {

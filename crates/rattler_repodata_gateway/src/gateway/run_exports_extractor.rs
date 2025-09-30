@@ -8,6 +8,7 @@ use bytes::Buf;
 use coalesced_map::CoalescedMap;
 use http::StatusCode;
 use rattler_conda_types::{package::RunExportsJson, RepoDataRecord, SubdirRunExportsJson};
+use rattler_networking::LazyClient;
 use reqwest_middleware::ClientWithMiddleware;
 use thiserror::Error;
 use tokio::sync::Semaphore;
@@ -42,7 +43,7 @@ pub trait RunExportsReporter: Send + Sync {
 #[derive(Default)]
 pub struct RunExportExtractor {
     max_concurrent_requests: Option<Arc<Semaphore>>,
-    client: Option<ClientWithMiddleware>,
+    client: Option<LazyClient>,
     subdir_run_exports_cache: Arc<SubdirRunExportsCache>,
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -96,7 +97,7 @@ impl RunExportExtractor {
     }
 
     /// Sets the download client that the extractor can use.
-    pub fn with_client(self, client: ClientWithMiddleware) -> Self {
+    pub fn with_client(self, client: LazyClient) -> Self {
         Self {
             client: Some(client),
             ..self
@@ -279,11 +280,19 @@ impl RunExportExtractor {
                 // Try to fetch the `run_exports.json.zst` file first, and if that
                 // fails, fall back to the `run_exports.json` file.
                 let mut run_exports = self
-                    .fetch_subdir_run_exports_zst_json(subdir_url, &client, reporter.clone())
+                    .fetch_subdir_run_exports_zst_json(
+                        subdir_url,
+                        client.client(),
+                        reporter.clone(),
+                    )
                     .await?;
                 if run_exports.is_none() {
                     run_exports = self
-                        .fetch_subdir_run_exports_json(subdir_url, &client, reporter.clone())
+                        .fetch_subdir_run_exports_json(
+                            subdir_url,
+                            client.client(),
+                            reporter.clone(),
+                        )
                         .await?;
                 }
 

@@ -70,7 +70,7 @@ impl<Old: Clone, New: Clone> TransactionOperation<&Old, &New> {
     }
 }
 
-impl<Old: AsRef<New>, New> TransactionOperation<Old, New> {
+impl<Old, New> TransactionOperation<Old, New> {
     /// Returns the record of the package to install for this operation. If this
     /// operation does not refer to an installable package, `None` is
     /// returned.
@@ -158,7 +158,7 @@ impl<Old, New> Transaction<Old, New> {
     }
 }
 
-impl<Old: AsRef<New>, New> Transaction<Old, New> {
+impl<Old, New> Transaction<Old, New> {
     /// Return an iterator over the prefix records of all packages that are
     /// going to be installed.
     pub fn installed_packages(&self) -> impl Iterator<Item = &New> + '_ {
