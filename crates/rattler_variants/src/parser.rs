@@ -20,8 +20,15 @@ pub struct Pin {
 
 #[derive(Debug, Clone, Default)]
 pub struct VariantConfig {
+    /// Pin run dependencies by using the versions from the build dependencies
+    /// (and applying the pin).
     pin_run_as_build: Option<BTreeMap<String, Pin>>,
+
+    /// The zip keys are used to "zip" together variants to create specific
+    /// combinations.
     zip_keys: Option<Vec<Vec<NormalizedKey>>>,
+    /// The variants are a mapping of package names to a list of versions. Each
+    /// version represents a variant for the build matrix.
     variants: BTreeMap<NormalizedKey, Vec<VariantValue>>,
 }
 
