@@ -619,6 +619,10 @@ impl<T: Shell + Clone> Activator<T> {
         variables: ActivationVariables,
         environment: Option<HashMap<&OsStr, &OsStr>>,
     ) -> Result<HashMap<String, String>, ActivationError> {
+        if variables.conda_prefix.is_none() && self.activation_scripts.is_empty() {
+            return Ok(variables.current_env);
+        }
+
         let activation_script = self.activation(variables)?.script;
 
         // Create a script that starts by emitting all environment variables, then runs
