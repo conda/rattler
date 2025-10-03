@@ -3,7 +3,7 @@ pub mod clap;
 
 use aws_config::{BehaviorVersion, Region};
 use aws_credential_types::provider::error::CredentialsError;
-use aws_sdk_s3::config::{Credentials, ProvideCredentials};
+use aws_sdk_s3::config::{Credentials, ProvideCredentials, SharedHttpClient};
 use rattler_networking::{Authentication, AuthenticationStorage};
 use url::Url;
 
@@ -87,9 +87,29 @@ pub enum FromSDKError {
     CredentialsError(CredentialsError),
 }
 
+/// Returns the default HTTP client to use by the aws SDK.
+fn default_http_client() -> SharedHttpClient {
+    use aws_smithy_http_client::{
+        tls::{self, rustls_provider::CryptoMode},
+        Builder,
+    };
+
+    static CLIENT: std::sync::OnceLock<SharedHttpClient> = std::sync::OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            Builder::new()
+                .tls_provider(tls::Provider::Rustls(CryptoMode::Ring))
+                .build_https()
+        })
+        .clone()
+}
+
 impl ResolvedS3Credentials {
     pub async fn from_sdk() -> Result<Self, FromSDKError> {
-        let config = aws_config::load_defaults(BehaviorVersion::latest()).await;
+        let config = aws_config::defaults(BehaviorVersion::latest())
+            .http_client(default_http_client())
+            .load()
+            .await;
         let s3_config = aws_sdk_s3::config::Builder::from(&config).build();
 
         let region = s3_config
