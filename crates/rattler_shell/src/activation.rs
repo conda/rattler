@@ -620,7 +620,37 @@ impl<T: Shell + Clone> Activator<T> {
         environment: Option<HashMap<&OsStr, &OsStr>>,
     ) -> Result<HashMap<String, String>, ActivationError> {
         if variables.conda_prefix.is_none() && self.activation_scripts.is_empty() {
-            return Ok(variables.current_env);
+            let mut env_diff = variables.current_env.clone();
+
+            let shlvl = variables
+                .current_env
+                .get("CONDA_SHLVL")
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(0);
+            env_diff.insert("CONDA_SHLVL".to_string(), (shlvl + 1).to_string());
+
+            env_diff.insert("CONDA_PREFIX".to_string(), self.target_prefix.to_string_lossy().to_string());
+
+            let mut new_path = self.paths.clone();
+            if let Some(paths) = &variables.path {
+                new_path.extend(paths.clone());
+            }
+            env_diff.insert(
+                "PATH".to_string(),
+                std::env::join_paths(new_path)
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string(),
+            );
+
+            for (key, value) in &self.env_vars {
+                env_diff.insert(key.clone(), value.clone());
+            }
+            for (key, value) in &self.post_activation_env_vars {
+                env_diff.insert(key.clone(), value.clone());
+            }
+
+            return Ok(env_diff);
         }
 
         let activation_script = self.activation(variables)?.script;
