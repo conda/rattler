@@ -32,6 +32,8 @@ pub enum Platform {
     LinuxRiscv32,
     LinuxRiscv64,
 
+    FreeBsd64,
+
     Osx64,
     OsxArm64,
 
@@ -246,6 +248,7 @@ impl Platform {
             | Platform::LinuxS390X
             | Platform::LinuxRiscv32
             | Platform::LinuxRiscv64 => Some("linux"),
+            Platform::FreeBsd64 => Some("freebsd"),
             Platform::Osx64 | Platform::OsxArm64 => Some("osx"),
             Platform::Win32 | Platform::Win64 | Platform::WinArm64 => Some("win"),
             Platform::EmscriptenWasm32 => Some("emscripten"),
@@ -324,6 +327,7 @@ impl From<Platform> for &'static str {
             Platform::LinuxS390X => "linux-s390x",
             Platform::LinuxRiscv32 => "linux-riscv32",
             Platform::LinuxRiscv64 => "linux-riscv64",
+            Platform::FreeBsd64 => "freebsd-64",
             Platform::Osx64 => "osx-64",
             Platform::OsxArm64 => "osx-arm64",
             Platform::Win32 => "win-32",
@@ -355,7 +359,9 @@ impl Platform {
             Platform::LinuxRiscv32 => Some(Arch::Riscv32),
             Platform::LinuxRiscv64 => Some(Arch::Riscv64),
             Platform::Linux32 | Platform::Win32 => Some(Arch::X86),
-            Platform::Linux64 | Platform::Win64 | Platform::Osx64 => Some(Arch::X86_64),
+            Platform::Linux64 | Platform::Win64 | Platform::Osx64 | Platform::FreeBsd64 => {
+                Some(Arch::X86_64)
+            }
             Platform::LinuxAarch64 => Some(Arch::Aarch64),
             Platform::WinArm64 | Platform::OsxArm64 => Some(Arch::Arm64),
             Platform::EmscriptenWasm32 | Platform::WasiWasm32 => Some(Arch::Wasm32),
