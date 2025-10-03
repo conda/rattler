@@ -17,6 +17,7 @@ url = { workspace = true }
 
 aws-config = { workspace = true, features = ["sso", "credentials-process", "rt-tokio"] }
 aws-sdk-s3 = { workspace = true, features = ["rt-tokio"] }
+aws-smithy-http-client = { workspace = true, features = ["rustls-ring"] }
 aws-credential-types = { workspace = true }
 
 rattler_networking = { workspace = true }
