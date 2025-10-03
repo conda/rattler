@@ -2,9 +2,10 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, DeserializeAs, SerializeAs};
+use typed_path::Utf8TypedPathBuf;
 use url::Url;
 
-use crate::conda::{GitShallowSpec, PackageBuildSource};
+use crate::conda::{GitShallowSpec, PackageBuildSource, PackageBuildSourceKind};
 use crate::source::{
     GitReference, GitSourceLocation, PathSourceLocation, SourceLocation, UrlSourceLocation,
 };
@@ -182,37 +183,53 @@ struct PackageBuildSourceData<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tag: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub explicit_rev: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub rev: Option<Cow<'a, str>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subdir: Option<Cow<'a, str>>,
 }
 
 impl<'a> From<&'a PackageBuildSource> for PackageBuildSourceData<'a> {
     fn from(value: &'a PackageBuildSource) -> Self {
-        match value {
-            PackageBuildSource::Url { url, sha256 } => Self {
-                url: Some(Cow::Borrowed(url)),
-                sha256: Some(*sha256),
-                git: None,
-                branch: None,
-                tag: None,
-                rev: None,
-            },
-            PackageBuildSource::Git { url, spec, rev } => {
-                let (branch, tag) = match spec {
+        match &value.kind {
+            PackageBuildSourceKind::Git { url, spec, rev } => {
+                let (branch, tag, explicit_rev) = match spec {
                     Some(GitShallowSpec::Branch(branch)) => {
-                        (Some(Cow::Borrowed(branch.as_str())), None)
+                        (Some(Cow::Borrowed(branch.as_str())), None, None)
                     }
-                    Some(GitShallowSpec::Tag(tag)) => (None, Some(Cow::Borrowed(tag.as_str()))),
-                    None => (None, None),
+                    Some(GitShallowSpec::Tag(tag)) => {
+                        (None, Some(Cow::Borrowed(tag.as_str())), None)
+                    }
+                    Some(GitShallowSpec::Rev) => (None, None, Some(true)),
+                    None => (None, None, None),
                 };
+                let subdir = value
+                    .subdirectory
+                    .as_ref()
+                    .map(|p| Cow::Borrowed(p.as_str()));
                 Self {
                     url: None,
                     sha256: None,
                     git: Some(Cow::Borrowed(url)),
                     branch,
                     tag,
+                    explicit_rev,
+                    subdir,
                     rev: Some(Cow::Borrowed(rev)),
                 }
             }
+            PackageBuildSourceKind::Url { url, sha256 } => Self {
+                url: Some(Cow::Borrowed(url)),
+                sha256: Some(*sha256),
+                git: None,
+                branch: None,
+                tag: None,
+                explicit_rev: None,
+                rev: None,
+                subdir: None,
+            },
         }
     }
 }
@@ -243,6 +260,8 @@ impl<'a> TryFrom<PackageBuildSourceData<'a>> for PackageBuildSource {
             branch,
             tag,
             rev,
+            explicit_rev,
+            subdir,
         } = value;
 
         let count = [url.is_some(), git.is_some()]
@@ -253,10 +272,15 @@ impl<'a> TryFrom<PackageBuildSourceData<'a>> for PackageBuildSource {
             return Err(PackageBuildSourceError::MissingOrMultipleSourceRoots);
         }
 
+        let subdirectory = subdir.map(|s| Utf8TypedPathBuf::from(&*s));
+
         if let Some(url) = url {
             let url = url.into_owned();
             let sha256 = sha256.ok_or(PackageBuildSourceError::MissingSha256ForUrl)?;
-            Ok(PackageBuildSource::Url { url, sha256 })
+            Ok(PackageBuildSource {
+                kind: PackageBuildSourceKind::Url { url, sha256 },
+                subdirectory,
+            })
         } else if let Some(git) = git {
             let git = git.into_owned();
             let rev = rev
@@ -269,14 +293,21 @@ impl<'a> TryFrom<PackageBuildSourceData<'a>> for PackageBuildSource {
 
             let spec = if let Some(branch) = branch {
                 Some(GitShallowSpec::Branch(branch.into_owned()))
+            } else if let Some(tag) = tag {
+                Some(GitShallowSpec::Tag(tag.into_owned()))
+            } else if let Some(true) = explicit_rev {
+                Some(GitShallowSpec::Rev)
             } else {
-                tag.map(|tag| GitShallowSpec::Tag(tag.into_owned()))
+                None
             };
 
-            Ok(PackageBuildSource::Git {
-                url: git,
-                spec,
-                rev,
+            Ok(PackageBuildSource {
+                kind: PackageBuildSourceKind::Git {
+                    url: git,
+                    spec,
+                    rev,
+                },
+                subdirectory,
             })
         } else {
             unreachable!("we already checked that exactly one of url or git is set")
