@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use fxhash::FxHashMap;
+use indexmap::IndexMap;
 use serde::{de::Error as _, ser::Error, Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, SerializeAs};
 use std::borrow::Cow;
@@ -147,7 +147,18 @@ pub struct DeserializeFromStrUnchecked;
 
 /// A helper function used to sort map alphabetically when serializing.
 pub(crate) fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(
-    value: &FxHashMap<String, T>,
+    value: &ahash::HashMap<String, T>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    value
+        .iter()
+        .collect::<BTreeMap<_, _>>()
+        .serialize(serializer)
+}
+
+/// A helper function used to sort map alphabetically when serializing.
+pub(crate) fn sort_indexmap_alphabetically<T: Serialize, S: serde::Serializer>(
+    value: &IndexMap<String, T, ahash::RandomState>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     value

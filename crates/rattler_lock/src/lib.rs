@@ -78,7 +78,6 @@
 
 use std::{collections::HashMap, io::Read, path::Path, str::FromStr, sync::Arc};
 
-use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use rattler_conda_types::{Platform, RepoDataRecord};
 
@@ -136,7 +135,7 @@ struct LockFileInner {
     pypi_packages: Vec<PypiPackageData>,
     pypi_environment_package_data: Vec<PypiPackageEnvironmentData>,
 
-    environment_lookup: FxHashMap<String, usize>,
+    environment_lookup: ahash::HashMap<String, usize>,
 }
 
 /// An package used in an environment. Selects a type of package based on the
@@ -168,7 +167,7 @@ struct EnvironmentData {
 
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
-    packages: FxHashMap<Platform, IndexSet<EnvironmentPackageData>>,
+    packages: ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>>,
 }
 
 impl LockFile {
@@ -219,18 +218,18 @@ impl LockFile {
 
     /// Returns an iterator over all environments defined in the lock-file.
     pub fn environments(&self) -> impl ExactSizeIterator<Item = (&str, Environment<'_>)> + '_ {
-        self.inner
-            .environment_lookup
-            .iter()
-            .map(move |(name, index)| {
-                (
-                    name.as_str(),
-                    Environment {
-                        lock_file: self,
-                        index: *index,
-                    },
-                )
-            })
+        let mut environments: Vec<_> = self.inner.environment_lookup.iter().collect();
+        environments.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+        environments.into_iter().map(move |(name, index)| {
+            (
+                name.as_str(),
+                Environment {
+                    lock_file: self,
+                    index: *index,
+                },
+            )
+        })
     }
 
     /// Returns the version of the lock-file.

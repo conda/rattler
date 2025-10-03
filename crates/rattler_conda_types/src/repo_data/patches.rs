@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeSet, io, path::Path};
 
-use fxhash::{FxHashMap, FxHashSet};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
@@ -17,14 +17,14 @@ use crate::{package::ArchiveType, PackageRecord, PackageUrl, RepoData, Shard};
 #[derive(Debug, Default, Clone)]
 pub struct RepoDataPatch {
     /// The patches to apply for each subdir
-    pub subdirs: FxHashMap<String, PatchInstructions>,
+    pub subdirs: ahash::HashMap<String, PatchInstructions>,
 }
 
 impl RepoDataPatch {
     /// Load repodata patches from an extracted repodata patches package
     /// archive.
     pub fn from_package(package: impl AsRef<Path>) -> io::Result<Self> {
-        let mut subdirs = FxHashMap::default();
+        let mut subdirs = ahash::HashMap::default();
 
         // Iterate over all directories in the package
         for entry in std::fs::read_dir(package)? {
@@ -154,20 +154,20 @@ mod tracked_features {
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct PatchInstructions {
     /// Filenames that have been removed from the subdirectory
-    #[serde(default, skip_serializing_if = "FxHashSet::is_empty")]
-    pub remove: FxHashSet<String>,
+    #[serde(default, skip_serializing_if = "ahash::HashSet::is_empty")]
+    pub remove: ahash::HashSet<String>,
 
     /// Patches for package records
-    #[serde(default, skip_serializing_if = "FxHashMap::is_empty")]
-    pub packages: FxHashMap<String, PackageRecordPatch>,
+    #[serde(default, skip_serializing_if = "ahash::HashMap::is_empty")]
+    pub packages: ahash::HashMap<String, PackageRecordPatch>,
 
     /// Patches for package records
     #[serde(
         default,
         rename = "packages.conda",
-        skip_serializing_if = "FxHashMap::is_empty"
+        skip_serializing_if = "ahash::HashMap::is_empty"
     )]
-    pub conda_packages: FxHashMap<String, PackageRecordPatch>,
+    pub conda_packages: ahash::HashMap<String, PackageRecordPatch>,
 }
 
 impl PackageRecord {
@@ -200,9 +200,9 @@ impl PackageRecord {
 /// Apply a patch to a repodata file
 /// Note that we currently do not handle `revoked` instructions
 pub fn apply_patches_impl(
-    packages: &mut FxHashMap<String, PackageRecord>,
-    conda_packages: &mut FxHashMap<String, PackageRecord>,
-    removed: &mut FxHashSet<String>,
+    packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
+    conda_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
+    removed: &mut ahash::HashSet<String>,
     instructions: &PatchInstructions,
 ) {
     for (pkg, patch) in instructions.packages.iter() {
@@ -230,18 +230,18 @@ pub fn apply_patches_impl(
         if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
             match archive_type {
                 ArchiveType::TarBz2 => {
-                    if packages.remove_entry(pkg).is_some() {
+                    if packages.shift_remove_entry(pkg).is_some() {
                         removed.insert(pkg.clone());
                     }
 
                     // also remove equivalent .conda package if it exists
                     let conda_pkg_name = format!("{pkg_name}.conda");
-                    if conda_packages.remove_entry(&conda_pkg_name).is_some() {
+                    if conda_packages.shift_remove_entry(&conda_pkg_name).is_some() {
                         removed.insert(conda_pkg_name);
                     }
                 }
                 ArchiveType::Conda => {
-                    if conda_packages.remove_entry(pkg).is_some() {
+                    if conda_packages.shift_remove_entry(pkg).is_some() {
                         removed.insert(pkg.clone());
                     }
                 }
