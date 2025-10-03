@@ -37,7 +37,7 @@ pytest-xprocess = ">=1.0.2,<2"
 # used in examples
 typer = "*"
 # for rust-analyzer
-rust-src = "~=1.88.0"
+rust-src = "~=1.90.0"
 
 [feature.test.pypi-dependencies]
 types-networkx = "*"
