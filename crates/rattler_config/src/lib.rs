@@ -417,7 +417,6 @@ mod tests {
         let content = std::fs::read_to_string(&config_path).unwrap();
         assert!(content.contains("default_channels") || content.contains("default-channels"));
         assert!(content.contains("tls_no_verify") || content.contains("tls-no-verify"));
-        panic!("{content}");
         assert!(content.contains("[concurrency]"));
 
         // Load config from file

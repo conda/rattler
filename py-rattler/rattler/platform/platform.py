@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections.abc import Iterator
 from typing import Any, Dict, Literal, Tuple, Optional
 
 from rattler.rattler import PyPlatform
@@ -97,7 +98,14 @@ class Platform(metaclass=PlatformSingleton):
         """
         Returns the current platform.
         """
-        return Platform._from_py_platform(PyPlatform.current())
+        return cls._from_py_platform(PyPlatform.current())
+
+    @classmethod
+    def all(cls) -> Iterator[Platform]:
+        """
+        Returns all supported platforms.
+        """
+        return (cls._from_py_platform(p) for p in PyPlatform.all())
 
     @property
     def is_linux(self) -> bool:
