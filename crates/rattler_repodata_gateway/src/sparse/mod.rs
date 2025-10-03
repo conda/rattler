@@ -260,6 +260,8 @@ impl SparseRepoData {
         let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
         for (package_name, specs) in &spec.into_iter().chunk_by(|spec| spec.borrow().name.clone()) {
             let grouped_specs = specs.into_iter().collect::<Vec<_>>();
+            // TODO: support glob/regex package names
+            let package_name = package_name.map(|name| name.unwrap_into_exact());
             let mut parsed_records = parse_records(
                 package_name.as_ref(),
                 &repo_data.packages,

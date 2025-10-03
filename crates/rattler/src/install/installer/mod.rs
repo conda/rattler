@@ -838,7 +838,7 @@ fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<Package
     for spec in specs {
         if let Some(name) = &spec.name {
             mapping
-                .entry(name.clone())
+                .entry(name.unwrap_as_exact().clone())
                 .or_insert_with(Vec::new)
                 .push(spec.to_string());
         }
