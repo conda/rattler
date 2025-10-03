@@ -38,7 +38,9 @@ class PlatformSingleton(type):
     def __init__(cls, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> None:
         cls._instances = {}
 
-    def __call__(cls, platform: str, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> Platform:
+    def __call__(
+        cls, platform: str, *args: Tuple[Any], **kwargs: Dict[Any, Any]
+    ) -> Platform:
         try:
             return cls._instances[platform]
         except KeyError:
@@ -111,6 +113,7 @@ class Platform(metaclass=PlatformSingleton):
         Platform(noarch)
         >>> len(list(Platform.all()))
         23
+        >>>
         """
         return (cls._from_py_platform(p) for p in PyPlatform.all())
 
