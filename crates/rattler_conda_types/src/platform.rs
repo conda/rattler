@@ -521,7 +521,10 @@ mod tests {
             "linux-armv6l".parse::<Platform>().unwrap(),
             Platform::LinuxArmV6l
         );
-        assert_eq!("freebsd-64".parse::<Platform>().unwrap(), Platform::FreeBsd64);
+        assert_eq!(
+            "freebsd-64".parse::<Platform>().unwrap(),
+            Platform::FreeBsd64
+        );
         assert_eq!("win-arm64".parse::<Platform>().unwrap(), Platform::WinArm64);
         assert_eq!(
             "emscripten-wasm32".parse::<Platform>().unwrap(),

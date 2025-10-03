@@ -10,12 +10,14 @@ export const platformNames = [
     "linux-aarch64",
     "linux-armv6l",
     "linux-armv7l",
+    "linux-loong64",
     "linux-ppc64le",
     "linux-ppc64",
     "linux-ppc",
     "linux-s390x",
     "linux-riscv32",
     "linux-riscv64",
+    "freebsd-64",
     "osx-64",
     "osx-arm64",
     "win-32",
@@ -57,6 +59,7 @@ export const archNames = [
     "arm64",
     "armv6l",
     "armv7l",
+    "loong64",
     "ppc64le",
     "ppc64",
     "ppc",
@@ -105,6 +108,8 @@ export function platformArch(platform: Platform): Arch | null {
             return "armv6l";
         case "linux-armv7l":
             return "armv7l";
+        case "linux-loong64":
+            return "loong64";
         case "linux-ppc64le":
             return "ppc64le";
         case "linux-ppc64":
@@ -117,6 +122,8 @@ export function platformArch(platform: Platform): Arch | null {
             return "riscv32";
         case "linux-riscv64":
             return "riscv64";
+        case "freebsd-64":
+            return "x86_64";
         case "osx-64":
             return "x86_64";
         case "osx-arm64":
