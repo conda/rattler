@@ -15,8 +15,8 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 
-aws-config = { workspace = true, features = ["sso", "credentials-process", "rt-tokio", "rustls"] }
-aws-sdk-s3 = { workspace = true, features = ["rustls", "rt-tokio"] }
+aws-config = { workspace = true, features = ["sso", "credentials-process", "rt-tokio"] }
+aws-sdk-s3 = { workspace = true, features = ["rt-tokio"] }
 aws-credential-types = { workspace = true }
 
 rattler_networking = { workspace = true }
