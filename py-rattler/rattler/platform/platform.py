@@ -11,17 +11,22 @@ PlatformLiteral = Literal[
     "linux-aarch64",
     "linux-armv6l",
     "linux-armv7l",
+    "linux-loong64",
     "linux-ppc64le",
     "linux-ppc64",
+    "linux-ppc",
     "linux-s390x",
     "linux-riscv32",
     "linux-riscv64",
+    "freebsd-64",
     "osx-64",
     "osx-arm64",
     "win-32",
     "win-64",
     "win-arm64",
-    "emscripten-32",
+    "emscripten-wasm32",
+    "wasi-wasm32",
+    "zos-z",
 ]
 
 
@@ -31,7 +36,9 @@ class PlatformSingleton(type):
     def __init__(cls, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> None:
         cls._instances = {}
 
-    def __call__(cls, platform: str, *args: Tuple[Any], **kwargs: Dict[Any, Any]) -> Platform:
+    def __call__(
+        cls, platform: str, *args: Tuple[Any], **kwargs: Dict[Any, Any]
+    ) -> Platform:
         try:
             return cls._instances[platform]
         except KeyError:
@@ -73,7 +80,7 @@ class Platform(metaclass=PlatformSingleton):
 
     def __repr__(self) -> str:
         """
-        Returnrs a representation of the platform.
+        Returns a representation of the platform.
 
         Examples
         --------
