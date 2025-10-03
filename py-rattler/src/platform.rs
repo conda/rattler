@@ -95,7 +95,7 @@ impl PyPlatform {
 
     #[staticmethod]
     pub fn all() -> Vec<Self> {
-        Platform::all().into_iter().map(Into::into).collect()
+        Platform::all().map(Into::into).collect()
     }
 
     #[getter]
