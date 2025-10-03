@@ -629,7 +629,10 @@ impl<T: Shell + Clone> Activator<T> {
                 .unwrap_or(0);
             env_diff.insert("CONDA_SHLVL".to_string(), (shlvl + 1).to_string());
 
-            env_diff.insert("CONDA_PREFIX".to_string(), self.target_prefix.to_string_lossy().to_string());
+            env_diff.insert(
+                "CONDA_PREFIX".to_string(),
+                self.target_prefix.to_string_lossy().to_string(),
+            );
 
             let mut new_path = self.paths.clone();
             if let Some(paths) = &variables.path {
