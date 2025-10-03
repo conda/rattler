@@ -5,6 +5,7 @@
  */
 export const platformNames = [
     "noarch",
+    "unknown",
     "linux-32",
     "linux-64",
     "linux-aarch64",
@@ -97,6 +98,8 @@ export function isArch(maybeArch: unknown): maybeArch is Platform {
 export function platformArch(platform: Platform): Arch | null {
     switch (platform) {
         case "noarch":
+            return null;
+        case "unknown":
             return null;
         case "linux-32":
             return "x86";

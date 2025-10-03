@@ -7,6 +7,7 @@ from rattler.platform.arch import Arch
 
 PlatformLiteral = Literal[
     "noarch",
+    "unknown",
     "linux-32",
     "linux-64",
     "linux-aarch64",
@@ -102,6 +103,14 @@ class Platform(metaclass=PlatformSingleton):
     def all(cls) -> Iterator[Platform]:
         """
         Returns all supported platforms.
+
+        Examples
+        --------
+        ```python
+        >>> next(Platform.all())
+        Platform(noarch)
+        >>> len(list(Platform.all()))
+        23
         """
         return (cls._from_py_platform(p) for p in PyPlatform.all())
 

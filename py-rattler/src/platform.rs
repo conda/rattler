@@ -93,6 +93,11 @@ impl PyPlatform {
         Platform::current().into()
     }
 
+    #[staticmethod]
+    pub fn all() -> Vec<Self> {
+        Platform::all().into_iter().map(Into::into).collect()
+    }
+
     #[getter]
     pub fn name(&self) -> String {
         self.inner.to_string()

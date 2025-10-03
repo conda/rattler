@@ -1,5 +1,6 @@
 export const platformNames = [
     "noarch",
+    "unknown",
     "linux-32",
     "linux-64",
     "linux-aarch64",
