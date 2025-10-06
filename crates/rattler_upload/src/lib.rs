@@ -19,7 +19,7 @@ use crate::upload::opt::{S3Data, S3Opts};
 #[cfg(feature = "s3")]
 use crate::utils::server_util::extract_s3_info;
 #[cfg(feature = "s3")]
-use rattler_s3::clap::S3AddressingStyleOpts::VirtualHost;
+use rattler_s3::clap::{S3AddressingStyleOpts, S3CredentialsOpts};
 
 /// Upload package to different channels
 pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
@@ -116,15 +116,17 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
                 extract_s3_info(host_url).expect("Failed to parse S3 URL");
             ServerType::S3(S3Opts {
                 channel,
-                endpoint_url,
-                region,
-                force_path_style: false,
-                access_key_id: None,
-                secret_access_key: None,
-                session_token: None,
+                s3_credentials: S3CredentialsOpts {
+                    endpoint_url: Some(endpoint_url),
+                    region: Some(region),
+                    access_key_id: None,
+                    secret_access_key: None,
+                    session_token: None,
+                    addressing_style: S3AddressingStyleOpts::VirtualHost,
+                    force_path_style: None,
+                },
                 credentials: None,
                 force: false,
-                addressing_style: VirtualHost,
             })
         }
         SimpleServerType::CondaForge => {

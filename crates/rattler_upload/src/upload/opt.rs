@@ -5,7 +5,7 @@ use rattler_conda_types::{NamedChannelOrUrl, Platform};
 use rattler_networking::mirror_middleware;
 use rattler_networking::AuthenticationStorage;
 #[cfg(feature = "s3")]
-use rattler_s3::clap::S3AddressingStyleOpts;
+use rattler_s3::clap::S3CredentialsOpts;
 #[cfg(feature = "s3")]
 use rattler_s3::{S3AddressingStyle, S3Credentials};
 use rattler_solve::ChannelPriority;
@@ -435,33 +435,9 @@ pub struct S3Opts {
     #[arg(short, long, env = "S3_CHANNEL", value_parser = parse_s3_url)]
     pub channel: Url,
 
-    /// The endpoint URL of the S3 backend
-    #[arg(
-        long,
-        env = "S3_ENDPOINT_URL",
-        default_value = "https://s3.amazonaws.com"
-    )]
-    pub endpoint_url: Url,
-
-    /// The region of the S3 backend
-    #[arg(long, env = "S3_REGION", default_value = "eu-central-1")]
-    pub region: String,
-
-    /// Whether to use path-style S3 URLs
-    #[arg(long, env = "S3_FORCE_PATH_STYLE", default_value = "false")]
-    pub force_path_style: bool,
-
-    /// The access key ID for the S3 bucket.
-    #[arg(long, env = "S3_ACCESS_KEY_ID", requires_all = ["secret_access_key"])]
-    pub access_key_id: Option<String>,
-
-    /// The secret access key for the S3 bucket.
-    #[arg(long, env = "S3_SECRET_ACCESS_KEY", requires_all = ["access_key_id"])]
-    pub secret_access_key: Option<String>,
-
-    /// The session token for the S3 bucket.
-    #[arg(long, env = "S3_SESSION_TOKEN", requires_all = ["access_key_id", "secret_access_key"])]
-    pub session_token: Option<String>,
+    /// S3 credentials
+    #[clap(flatten)]
+    pub s3_credentials: S3CredentialsOpts,
 
     /// S3 credentials (set programmatically, not via CLI)
     #[clap(skip)]
@@ -470,10 +446,6 @@ pub struct S3Opts {
     /// Replace files on conflict
     #[arg(long, short, env = "ANACONDA_FORCE")]
     pub force: bool,
-
-    /// The addressing style to use for the bucket.
-    #[arg(long, env = "S3_ADDRESSING_STYLE", default_value = "virtual-host")]
-    pub addressing_style: S3AddressingStyleOpts,
 }
 
 #[cfg(feature = "s3")]
@@ -491,20 +463,25 @@ pub struct S3Data {
 #[cfg(feature = "s3")]
 impl From<S3Opts> for S3Data {
     fn from(value: S3Opts) -> Self {
-        let addressing_style = value.addressing_style.into();
+        let addressing_style = value.s3_credentials.addressing_style.into();
         let force_path_style = matches!(addressing_style, S3AddressingStyle::Path);
 
         let credentials: Option<S3Credentials> =
-            if let (Some(access_key_id), Some(secret_access_key)) =
-                (value.access_key_id.clone(), value.secret_access_key.clone())
-            {
+            if let (Some(access_key_id), Some(secret_access_key)) = (
+                value.s3_credentials.access_key_id.clone(),
+                value.s3_credentials.secret_access_key.clone(),
+            ) {
                 Some(S3Credentials {
-                    endpoint_url: value.endpoint_url.clone(),
-                    region: Some(value.region.clone()),
+                    endpoint_url: value
+                        .s3_credentials
+                        .endpoint_url
+                        .clone()
+                        .expect("endpoint_url is required"),
+                    region: value.s3_credentials.region.clone(),
                     addressing_style,
                     access_key_id: Some(access_key_id),
                     secret_access_key: Some(secret_access_key),
-                    session_token: value.session_token.clone(),
+                    session_token: value.s3_credentials.session_token.clone(),
                 })
             } else {
                 value.credentials
@@ -512,8 +489,11 @@ impl From<S3Opts> for S3Data {
 
         Self {
             channel: value.channel,
-            endpoint_url: value.endpoint_url,
-            region: Some(value.region),
+            endpoint_url: value
+                .s3_credentials
+                .endpoint_url
+                .expect("endpoint_url is required"),
+            region: value.s3_credentials.region,
             force_path_style,
             credentials,
             force: value.force,
