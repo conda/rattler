@@ -294,6 +294,7 @@ mod tests {
     use insta::assert_yaml_snapshot;
     use itertools::Itertools;
     use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
+    use rattler_networking::LazyClient;
     use transaction::TransactionOperation;
 
     use crate::{
@@ -435,7 +436,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -488,7 +489,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -559,7 +560,7 @@ mod tests {
             execute_transaction(
                 transaction,
                 &prefix_path,
-                &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+                &LazyClient::default(),
                 &cache,
                 &InstallDriver::default(),
                 &InstallOptions::default(),
@@ -644,7 +645,7 @@ mod tests {
             execute_transaction(
                 transaction,
                 &prefix_path,
-                &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+                &LazyClient::default(),
                 &cache,
                 &InstallDriver::default(),
                 &InstallOptions::default(),
@@ -698,7 +699,7 @@ mod tests {
             execute_transaction(
                 transaction,
                 &prefix_path,
-                &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+                &LazyClient::default(),
                 &cache,
                 &install_driver,
                 &InstallOptions::default(),
@@ -753,7 +754,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -806,7 +807,7 @@ mod tests {
         let result = execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -862,7 +863,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -904,7 +905,7 @@ mod tests {
         install_driver
             .pre_process(&transaction, target_prefix.path())
             .unwrap();
-        let dl_client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+        let dl_client = LazyClient::default();
         for op in &transaction.operations {
             execute_operation(
                 &prefix_path,
@@ -948,7 +949,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -1004,7 +1005,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -1038,7 +1039,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -1091,7 +1092,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &install_options,
@@ -1141,7 +1142,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -1170,7 +1171,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -1212,7 +1213,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -1245,7 +1246,7 @@ mod tests {
             .pre_process(&transaction, &prefix_path)
             .unwrap();
 
-        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+        let client = LazyClient::default();
         for op in &transaction.operations {
             execute_operation(
                 &prefix_path,
@@ -1300,7 +1301,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -1330,7 +1331,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -1375,7 +1376,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -1426,7 +1427,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -1474,7 +1475,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),

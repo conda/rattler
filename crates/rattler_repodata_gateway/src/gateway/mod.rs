@@ -15,6 +15,7 @@ mod subdir_builder;
 
 use std::{collections::HashSet, sync::Arc};
 
+use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
@@ -24,15 +25,13 @@ pub use query::{NamesQuery, RepoDataQuery};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, MatchSpec, Platform, RepoDataRecord};
+use rattler_networking::LazyClient;
 pub use repo_data::RepoData;
-use reqwest_middleware::ClientWithMiddleware;
 use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 use subdir::Subdir;
 use tracing::{instrument, Level};
 use url::Url;
-
-use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 
 /// Central access point for high level queries about
 /// [`rattler_conda_types::RepoDataRecord`]s from different channels.
@@ -195,7 +194,7 @@ struct GatewayInner {
     subdirs: CoalescedMap<(Channel, Platform), Arc<Subdir>>,
 
     /// The client to use to fetch repodata.
-    client: ClientWithMiddleware,
+    client: LazyClient,
 
     /// The channel configuration
     channel_config: ChannelConfig,

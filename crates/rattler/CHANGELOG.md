@@ -83,6 +83,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.37.6](https://github.com/conda/rattler/compare/rattler-v0.37.5...rattler-v0.37.6) - 2025-10-03
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.37.5](https://github.com/conda/rattler/compare/rattler-v0.37.4...rattler-v0.37.5) - 2025-09-30
+
+### Fixed
+
+- Rattler not copying back symbolic links from the clobbers directory. ([#1685](https://github.com/conda/rattler/pull/1685))
+
+### Other
+
+- add LazyClient to late initialize the reqwest client ([#1687](https://github.com/conda/rattler/pull/1687))
+- optimize transaction operations ([#1615](https://github.com/conda/rattler/pull/1615))
+
 ## [0.34.11](https://github.com/conda/rattler/compare/rattler-v0.34.10...rattler-v0.34.11) - 2025-07-28
 
 ### Other

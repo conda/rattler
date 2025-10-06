@@ -2,14 +2,6 @@ mod index;
 
 use std::{io::Write, path::PathBuf, sync::Arc};
 
-use fs_err::tokio as tokio_fs;
-use futures::future::OptionFuture;
-use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
-use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata};
-use reqwest_middleware::ClientWithMiddleware;
-use simple_spawn_blocking::tokio::run_blocking_task;
-use url::Url;
-
 use super::{add_trailing_slash, decode_zst_bytes_async, parse_records};
 use crate::{
     fetch::{CacheAction, FetchRepoDataError},
@@ -17,10 +9,17 @@ use crate::{
     reporter::ResponseReporterExt,
     GatewayError, Reporter,
 };
+use fs_err::tokio as tokio_fs;
+use futures::future::OptionFuture;
+use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
+use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata};
+use rattler_networking::LazyClient;
+use simple_spawn_blocking::tokio::run_blocking_task;
+use url::Url;
 
 pub struct ShardedSubdir {
     channel: Channel,
-    client: ClientWithMiddleware,
+    client: LazyClient,
     shards_base_url: Url,
     package_base_url: Url,
     sharded_repodata: ShardedRepodata,
@@ -33,7 +32,7 @@ impl ShardedSubdir {
     pub async fn new(
         channel: Channel,
         subdir: String,
-        client: ClientWithMiddleware,
+        client: LazyClient,
         cache_dir: PathBuf,
         cache_action: CacheAction,
         concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
@@ -160,6 +159,7 @@ impl SubdirClient for ShardedSubdir {
 
         let shard_request = self
             .client
+            .client()
             .get(shard_url.clone())
             .header(CACHE_CONTROL, HeaderValue::from_static("no-store"))
             .build()
@@ -177,6 +177,7 @@ impl SubdirClient for ShardedSubdir {
                 .map(|r| (r, r.on_download_start(&shard_url)));
             let shard_response = self
                 .client
+                .client()
                 .execute(shard_request)
                 .await
                 .and_then(|r| r.error_for_status().map_err(Into::into))

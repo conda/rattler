@@ -235,6 +235,7 @@ impl PrefixRecord {
     }
 
     /// Creates a `PrefixRecord` from a `RepoDataRecord`.
+    #[allow(deprecated)]
     pub fn from_repodata_record(repodata_record: RepoDataRecord, paths: Vec<PathsEntry>) -> Self {
         let files = paths
             .iter()
@@ -248,7 +249,6 @@ impl PrefixRecord {
             files,
             paths_data: paths.into(),
             link: None,
-            #[allow(deprecated)]
             requested_spec: None,
             requested_specs: Vec::new(),
             installed_system_menus: Vec::new(),
