@@ -2,11 +2,16 @@ use std::path::PathBuf;
 
 use miette::IntoDiagnostic;
 use opendal::{services::S3Config, Configurator, ErrorKind, Operator};
+use rattler_digest::{HashingReader, Md5, Sha256};
 use rattler_networking::AuthenticationStorage;
 use rattler_s3::{ResolvedS3Credentials, S3Credentials};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio_util::bytes::BytesMut;
 use url::Url;
 
 use crate::upload::package::ExtractedPackage;
+
+const DESIRED_CHUNK_SIZE: usize = 1024 * 1024 * 10;
 
 /// Uploads a package to a channel in an S3 bucket.
 #[allow(clippy::too_many_arguments)]
@@ -56,26 +61,90 @@ pub async fn upload_package_to_s3(
             .filename()
             .ok_or_else(|| miette::miette!("Failed to get filename"))?;
         let key = format!("{subdir}/{filename}");
-        let body = fs_err::tokio::read(package_file).await.into_diagnostic()?;
-        match op
-            .write_with(&key, body)
+
+        // Compute the hash of the package by streaming its content.
+        let file = tokio::io::BufReader::new(
+            fs_err::tokio::File::open(package_file)
+                .await
+                .into_diagnostic()?,
+        );
+        let sha256_reader = HashingReader::<_, Sha256>::new(file);
+        let mut md5_reader = HashingReader::<_, Md5>::new(sha256_reader);
+        let size = tokio::io::copy(&mut md5_reader, &mut tokio::io::sink())
+            .await
+            .into_diagnostic()?;
+        let (sha256_reader, md5hash) = md5_reader.finalize();
+        let (mut file, sha256hash) = sha256_reader.finalize();
+
+        // Rewind the file to the beginning.
+        file.rewind().await.into_diagnostic()?;
+
+        // Construct a writer for the package.
+        let mut writer = match op
+            .writer_with(&key)
             .content_disposition(&format!("attachment; filename={filename}"))
             .if_not_exists(!force)
+            .user_metadata([
+                (String::from("package-sha256"), format!("{sha256hash:x}")),
+                (String::from("package-md5"), format!("{md5hash:x}")),
+            ])
             .await
         {
             Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
-                tracing::info!(
-                    "Skipped package s3://{bucket}{}/{key}, the package already exists. Use --force to overwrite.",
+                miette::bail!(
+                    "Package s3://{bucket}{}/{key} already exists. Use --force to overwrite.",
                     channel.path().to_string()
                 );
             }
-            Ok(_metadata) => {
+            Ok(writer) => writer,
+            Err(e) => {
+                return Err(e).into_diagnostic();
+            }
+        };
+
+        // Write the contents to the writer. We do this in a more complex way than just
+        // using `io::copy` because some underlying storage providers expect to receive
+        // the data in specifically sized chunks. The code below guarantees chunks of
+        // equal size except for maybe the last chunk.
+        let mut remaining_size = size as usize;
+        loop {
+            // Allocate memory for this chunk
+            let chunk_size = remaining_size.min(DESIRED_CHUNK_SIZE);
+            let mut chunk = BytesMut::with_capacity(chunk_size);
+            // SAFE: because we do not care about the bytes that are currently in the buffer
+            unsafe { chunk.set_len(chunk_size) };
+
+            // Fill the chunk with data. This reads exactly the number of bytes we want. No
+            // more, no less.
+            let bytes_read = file.read_exact(&mut chunk[..]).await.into_diagnostic()?;
+            debug_assert_eq!(bytes_read, chunk.len());
+
+            // Write the writes directly to storage
+            writer.write(chunk.freeze()).await.into_diagnostic()?;
+
+            // Update the number of remaining bytes
+            remaining_size = remaining_size.saturating_sub(bytes_read);
+            if remaining_size == 0 {
+                break;
+            }
+        }
+
+        match writer.close().await {
+            Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
+                miette::bail!(
+                    "Package s3://{bucket}{}/{key} already exists. Use --force to overwrite.",
+                    channel.path().to_string()
+                );
+            }
+            Ok(_) => {
                 tracing::info!(
                     "Uploaded package to s3://{bucket}{}/{key}",
                     channel.path().to_string()
                 );
             }
-            Err(e) => return Err(e).into_diagnostic(),
+            Err(e) => {
+                return Err(e).into_diagnostic();
+            }
         }
     }
 
