@@ -283,20 +283,12 @@ impl PackageCache {
 
                     let err = match result {
                         Ok(result) => {
-                            if let Some(md5) = md5 {
-                                if md5 != result.md5 {
-                                    // Delete the package if the hash does not match
-                                    tokio_fs::remove_dir_all(&destination).await.unwrap();
-                                    return Err(ExtractError::HashMismatch {
-                                        url: url.clone().redact().to_string(),
-                                        destination: destination.display().to_string(),
-                                        expected: format!("{md5:x}"),
-                                        actual: format!("{:x}", result.md5),
-                                        total_size: result.total_size,
-                                    });
-                                }
-                            }
-
+                            // HACK: Only check one hash. Sometimes it occurs that the server
+                            // reports the wrong md5 hash while the Sha256 hash is valid. We used to
+                            // error on this case. However, the Sha256 hash is already secure enough
+                            // that we can ignore this case.
+                            //
+                            // For context, conda itself only checks one hash.
                             if let Some(sha256) = sha256 {
                                 if sha256 != result.sha256 {
                                     // Delete the package if the hash does not match
@@ -306,6 +298,18 @@ impl PackageCache {
                                         destination: destination.display().to_string(),
                                         expected: format!("{sha256:x}"),
                                         actual: format!("{:x}", result.sha256),
+                                        total_size: result.total_size,
+                                    });
+                                }
+                            }  else if let Some(md5) = md5 {
+                                if md5 != result.md5 {
+                                    // Delete the package if the hash does not match
+                                    tokio_fs::remove_dir_all(&destination).await.unwrap();
+                                    return Err(ExtractError::HashMismatch {
+                                        url: url.clone().redact().to_string(),
+                                        destination: destination.display().to_string(),
+                                        expected: format!("{md5:x}"),
+                                        actual: format!("{:x}", result.md5),
                                         total_size: result.total_size,
                                     });
                                 }
