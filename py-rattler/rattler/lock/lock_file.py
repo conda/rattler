@@ -62,7 +62,7 @@ class LockFile:
         --------
         ```python
         >>> lock_file = LockFile.from_path("./pixi.lock")
-        >>> lock_file.environments()
+        >>> sorted(lock_file.environments())
         [('default', Environment()), ('docs', Environment()), ('repl', Environment()), ('test', Environment())]
         >>>
         ```
