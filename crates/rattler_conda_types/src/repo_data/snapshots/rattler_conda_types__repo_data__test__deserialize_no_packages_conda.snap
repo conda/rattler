@@ -6,6 +6,45 @@ info:
   subdir: linux-64
   base_url: "../linux-64"
 packages:
+  foo-3.0.2-py36h1af98f8_1.tar.bz2:
+    build: py36h1af98f8_1
+    build_number: 1
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: d65ab674acf3b7294ebacaec05fc5b54
+    name: foo
+    sha256: 1154fceeb5c4ee9bb97d245713ac21eb1910237c724d2b7103747215663273c2
+    size: 414494
+    subdir: linux-64
+    timestamp: 1605110689658
+    version: 3.0.2
+  foo-3.0.2-py36h1af98f8_1.conda:
+    build: py36h1af98f8_1
+    build_number: 1
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: fb731d9290f0bcbf3a054665f33ec94f
+    name: foo
+    sha256: 67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4
+    size: 414494
+    subdir: linux-64
+    timestamp: 1605110689658
+    version: 3.0.2
+  foo-4.0.2-py36h1af98f8_2.tar.bz2:
+    build: py36h1af98f8_2
+    build_number: 1
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: foo
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1605110689658
+    version: 4.0.2
   bar-1.0-unix_py36h1af98f8_2.tar.bz2:
     build: unix_py36h1af98f8_2
     build_number: 1
@@ -112,45 +151,6 @@ packages:
     subdir: linux-64
     timestamp: 1605110689658
     version: "2.1"
-  foo-3.0.2-py36h1af98f8_1.conda:
-    build: py36h1af98f8_1
-    build_number: 1
-    depends: []
-    license: MIT
-    license_family: MIT
-    md5: fb731d9290f0bcbf3a054665f33ec94f
-    name: foo
-    sha256: 67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4
-    size: 414494
-    subdir: linux-64
-    timestamp: 1605110689658
-    version: 3.0.2
-  foo-3.0.2-py36h1af98f8_1.tar.bz2:
-    build: py36h1af98f8_1
-    build_number: 1
-    depends: []
-    license: MIT
-    license_family: MIT
-    md5: d65ab674acf3b7294ebacaec05fc5b54
-    name: foo
-    sha256: 1154fceeb5c4ee9bb97d245713ac21eb1910237c724d2b7103747215663273c2
-    size: 414494
-    subdir: linux-64
-    timestamp: 1605110689658
-    version: 3.0.2
-  foo-4.0.2-py36h1af98f8_2.tar.bz2:
-    build: py36h1af98f8_2
-    build_number: 1
-    depends: []
-    license: MIT
-    license_family: MIT
-    md5: bc13aa58e2092bcb0b97c561373d3905
-    name: foo
-    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
-    size: 414494
-    subdir: linux-64
-    timestamp: 1605110689658
-    version: 4.0.2
   foobar-2.0-bla_1.tar.bz2:
     build: bla_1
     build_number: 1
@@ -181,4 +181,3 @@ packages:
     version: "2.1"
 packages.conda: {}
 repodata_version: 2
-
