@@ -22,12 +22,7 @@ use url::Url;
 use crate::{
     build_spec::BuildNumber,
     package::{IndexJson, RunExportsJson},
-    utils::{
-        serde::{
-            sort_indexmap_alphabetically, sort_map_alphabetically, DeserializeFromStrUnchecked,
-        },
-        UrlWithTrailingSlash,
-    },
+    utils::{serde::DeserializeFromStrUnchecked, UrlWithTrailingSlash},
     Arch, Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
     ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
 };
@@ -42,17 +37,13 @@ pub struct RepoData {
     pub info: Option<ChannelInfo>,
 
     /// The tar.bz2 packages contained in the repodata.json file
-    #[serde(default, serialize_with = "sort_indexmap_alphabetically")]
+    #[serde(default)]
     pub packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// The conda packages contained in the repodata.json file (under a
     /// different key for backwards compatibility with previous conda
     /// versions)
-    #[serde(
-        default,
-        rename = "packages.conda",
-        serialize_with = "sort_indexmap_alphabetically"
-    )]
+    #[serde(default, rename = "packages.conda")]
     pub conda_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// removed packages (files are still accessible, but they are not
@@ -431,14 +422,10 @@ struct PackageRunExports {
 pub struct SubdirRunExportsJson {
     info: Option<ChannelInfo>,
 
-    #[serde(default, serialize_with = "sort_map_alphabetically")]
+    #[serde(default)]
     packages: ahash::HashMap<String, PackageRunExports>,
 
-    #[serde(
-        default,
-        rename = "packages.conda",
-        serialize_with = "sort_map_alphabetically"
-    )]
+    #[serde(default, rename = "packages.conda")]
     conda_packages: ahash::HashMap<String, PackageRunExports>,
 }
 
