@@ -289,17 +289,31 @@ async fn index_subdir(
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
 ) -> Result<()> {
-    // Read any previous repodata.json files. This file already contains a lot of
-    // information about the packages that we can reuse to avoid recalculating it.
+    // Step 1: Collect ETags/metadata for all critical files upfront
+    let metadata = RepodataMetadataCollection::new(
+        &op,
+        subdir,
+        repodata_patch.is_some(),
+        write_zst,
+        write_shards,
+    )
+    .await?;
+
+    // Step 2: Read any previous repodata.json files with conditional check.
+    // This file already contains a lot of information about the packages that we can reuse.
     let mut registered_packages: FxHashMap<String, PackageRecord> = if force {
         HashMap::default()
     } else {
-        let repodata_path = if repodata_patch.is_some() {
-            format!("{subdir}/{REPODATA_FROM_PACKAGES}")
+        let (repodata_path, read_metadata) = if repodata_patch.is_some() {
+            (
+                format!("{subdir}/{REPODATA_FROM_PACKAGES}"),
+                metadata.repodata_from_packages.as_ref().unwrap(),
+            )
         } else {
-            format!("{subdir}/{REPODATA}")
+            (format!("{subdir}/{REPODATA}"), &metadata.repodata)
         };
-        match op.read(&repodata_path).await {
+
+        match crate::utils::read_with_metadata_check(&op, &repodata_path, read_metadata).await {
             Ok(bytes) => match serde_json::from_slice::<RepoData>(&bytes.to_vec()) {
                 Ok(repodata) => repodata
                     .packages
@@ -486,10 +500,9 @@ async fn index_subdir(
     write_repodata(
         repodata_before_patches,
         repodata_patch,
-        write_zst,
-        write_shards,
         subdir,
         op,
+        &metadata,
     )
     .await
 }
@@ -504,21 +517,25 @@ where
 }
 
 /// Write a `repodata.json` for all packages in the given configurator's root.
+/// Uses conditional writes based on the provided metadata to prevent concurrent modification issues.
 pub async fn write_repodata(
     repodata: RepoData,
     repodata_patch: Option<PatchInstructions>,
-    write_zst: bool,
-    write_shards: bool,
     subdir: Platform,
     op: Operator,
+    metadata: &RepodataMetadataCollection,
 ) -> Result<()> {
-    if repodata_patch.is_some() {
+    if let Some(repodata_from_packages_metadata) = &metadata.repodata_from_packages {
         let unpatched_repodata_path = format!("{subdir}/{REPODATA_FROM_PACKAGES}");
         tracing::info!("Writing unpatched repodata to {unpatched_repodata_path}");
         let unpatched_repodata_bytes = serde_json::to_vec(&repodata)?;
-        op.write_with(&unpatched_repodata_path, unpatched_repodata_bytes)
-            .content_encoding("application/json")
-            .await?;
+        crate::utils::write_with_metadata_check(
+            &op,
+            &unpatched_repodata_path,
+            unpatched_repodata_bytes,
+            repodata_from_packages_metadata,
+        )
+        .await?;
     }
 
     let repodata = if let Some(instructions) = repodata_patch {
@@ -531,22 +548,35 @@ pub async fn write_repodata(
     };
 
     let repodata_bytes = serde_json::to_vec(&repodata)?;
-    if write_zst {
+
+    // Write compressed version if requested
+    if let Some(repodata_zst_metadata) = &metadata.repodata_zst {
         tracing::info!("Compressing repodata bytes");
         let repodata_zst_bytes =
             zstd::stream::encode_all(&repodata_bytes[..], ZSTD_REPODATA_COMPRESSION_LEVEL)?;
         let repodata_zst_path = format!("{subdir}/{REPODATA}.zst");
         tracing::info!("Writing zst repodata to {repodata_zst_path}");
-        op.write(&repodata_zst_path, repodata_zst_bytes).await?;
+        crate::utils::write_with_metadata_check(
+            &op,
+            &repodata_zst_path,
+            repodata_zst_bytes,
+            repodata_zst_metadata,
+        )
+        .await?;
     }
 
+    // Write main repodata.json with conditional check
     let repodata_path = format!("{subdir}/{REPODATA}");
     tracing::info!("Writing repodata to {repodata_path}");
-    op.write_with(&repodata_path, repodata_bytes)
-        .content_encoding("application/json")
-        .await?;
+    crate::utils::write_with_metadata_check(
+        &op,
+        &repodata_path,
+        repodata_bytes,
+        &metadata.repodata,
+    )
+    .await?;
 
-    if write_shards {
+    if metadata.repodata_shards.is_some() {
         // See CEP 16 <https://github.com/conda/ceps/blob/main/cep-0016.md>
         tracing::info!("Creating sharded repodata");
         let mut shards_by_package_names: HashMap<String, Shard> = HashMap::new();
@@ -629,11 +659,19 @@ pub async fn write_repodata(
             }
         }
 
-        let repodata_shards_path = format!("{subdir}/{REPODATA_SHARDS}");
-        tracing::trace!("Writing repodata shards to {repodata_shards_path}");
-        let sharded_repodata_encoded = serialize_msgpack_zst(&sharded_repodata)?;
-        op.write(&repodata_shards_path, sharded_repodata_encoded)
+        // Write sharded repodata index with conditional check
+        if let Some(repodata_shards_metadata) = &metadata.repodata_shards {
+            let repodata_shards_path = format!("{subdir}/{REPODATA_SHARDS}");
+            tracing::trace!("Writing repodata shards to {repodata_shards_path}");
+            let sharded_repodata_encoded = serialize_msgpack_zst(&sharded_repodata)?;
+            crate::utils::write_with_metadata_check(
+                &op,
+                &repodata_shards_path,
+                sharded_repodata_encoded,
+                repodata_shards_metadata,
+            )
             .await?;
+        }
     }
     Ok(())
 }

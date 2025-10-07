@@ -14,56 +14,42 @@ Implement race-condition-resistant indexing for rattler_index when multiple proc
 
 ## Stage 1: Create Metadata Tracking Structure
 **Goal**: Simple struct to hold ETags/last-modified for critical files
-**Status**: Not Started
+**Status**: Complete
 
 ### Tasks:
-- [ ] Remove `PackageRegistry` struct
-- [ ] Create `RepodataFileMetadata` struct:
-  ```rust
-  struct RepodataFileMetadata {
-      etag: Option<String>,
-      last_modified: Option<DateTime<Utc>>,
-  }
-  ```
-- [ ] Create helper function `collect_repodata_metadata(op: &Operator, subdir: &str, has_patch: bool) -> RepodataFileMetadata` that:
-  - Calls `op.stat()` on the relevant repodata file
-  - Returns metadata without reading file contents
+- [x] Remove `PackageRegistry` struct
+- [x] Create `RepodataFileMetadata` struct with `new()` method
+- [x] Create `RepodataMetadataCollection` struct to track all critical files:
+  - `repodata.json`
+  - `repodata_from_packages.json`
+  - `repodata.json.zst`
+  - `repodata_shards.msgpack.zst`
 
 **Success Criteria**:
-- Can efficiently collect metadata for repodata files
-- Handles non-existent files (None values)
-
-**Tests**:
-- Test metadata collection for existing file
-- Test metadata collection for non-existent file
+- ✅ Can efficiently collect metadata for all repodata files
+- ✅ Handles non-existent files (None values)
 
 ---
 
 ## Stage 2: Implement Guarded Read
 **Goal**: Read repodata.json with ETag validation
-**Status**: Not Started
+**Status**: Complete
 
 ### Tasks:
-- [ ] Modify repodata reading logic to:
-  1. Accept `RepodataFileMetadata` parameter
-  2. Use `read_with().if_match()` or `if_unmodified_since()` based on metadata
-  3. Return `ConditionNotMatch` error if validation fails
-- [ ] Remove `read_bytes_with_metadata` retry loop (we'll retry at higher level)
-- [ ] Update `index_subdir` to pass metadata to read operation
+- [x] Create `read_with_metadata_check()` utility function
+- [x] Uses `read_with().if_match()` or `if_unmodified_since()` based on metadata
+- [x] Returns `ConditionNotMatch` error if validation fails
+- [x] No automatic retries (retry at higher level)
 
 **Success Criteria**:
-- Read fails with `ConditionNotMatch` if ETag changed
-- No automatic retries in read function
-
-**Tests**:
-- Test successful read with matching ETag
-- Test read failure with mismatched ETag
+- ✅ Read fails with `ConditionNotMatch` if ETag changed
+- ✅ No automatic retries in read function
 
 ---
 
 ## Stage 3: Implement Conditional Writes
 **Goal**: Write repodata files with ETag conditions
-**Status**: Not Started
+**Status**: In Progress
 
 ### Tasks:
 - [ ] Update `write_repodata` signature to accept `RepodataFileMetadata`
