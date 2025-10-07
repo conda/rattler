@@ -1,0 +1,19 @@
+[package]
+name = "py-rattler-types"
+version = "0.1.0"
+edition = "2021"
+license = "BSD-3-Clause"
+publish = false
+
+[dependencies]
+rattler_conda_types = { workspace = true, default-features = false }
+pyo3 = { version = "0.26.0", features = [
+    "abi3-py38",
+    "extension-module",
+    "multiple-pymethods",
+    "chrono",
+] }
+thiserror = { workspace =  true}
+
+[build-dependencies]
+pyo3-build-config = "0.26.0"
