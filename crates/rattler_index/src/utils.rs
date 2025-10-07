@@ -65,8 +65,9 @@ pub async fn write_with_metadata_check(
     let writer = if let Some(etag) = &metadata.etag {
         writer.if_match(etag)
     } else {
-        // If no metadata (file didn't exist), use if_none_match to ensure we don't overwrite
-        writer.if_none_match("*")
+        // If no metadata available, write without conditions
+        // (backend doesn't support ETags, so no race protection possible)
+        writer
     };
     writer.await?;
     Ok(())
