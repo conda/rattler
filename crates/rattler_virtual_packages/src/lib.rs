@@ -241,7 +241,7 @@ impl VirtualPackages {
     /// some reasonable defaults when cross-compiling.
     ///
     /// Overrides are always respected, even when cross-compiling to a different platform.
-    /// This matches the behavior of conda, where environment variables like CONDA_OVERRIDE_OSX
+    /// This matches the behavior of conda, where environment variables like `CONDA_OVERRIDE_OSX`
     /// are used even when targeting osx-* from a non-macOS machine.
     ///
     /// # Cross-compilation defaults
@@ -252,9 +252,9 @@ impl VirtualPackages {
     /// - **Windows** (`__win`): No version specified
     /// - **Linux** (`__linux`): Version 0
     /// - **OSX** (`__osx`): Version 0
-    /// - **LibC** (`__glibc`): glibc with version 0 (only for Linux platforms)
+    /// - **`LibC`** (`__glibc`): `glibc` with version 0 (only for Linux platforms)
     /// - **CUDA** (`__cuda`): Not included (None)
-    /// - **Archspec**: Platform-specific minimal architecture (e.g., x86_64 for osx-64)
+    /// - **Archspec**: Platform-specific minimal architecture (e.g., `x86_64` for `osx-64`)
     pub fn detect_for_platform(
         platform: Platform,
         overrides: &VirtualPackageOverrides,
