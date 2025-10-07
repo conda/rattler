@@ -49,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.37](https://github.com/conda/rattler/compare/rattler_cache-v0.3.36...rattler_cache-v0.3.37) - 2025-10-07
+
+### Fixed
+
+- ignore md5 hash if sha256 already matches ([#1703](https://github.com/conda/rattler/pull/1703))
+
 ## [0.3.36](https://github.com/conda/rattler/compare/rattler_cache-v0.3.35...rattler_cache-v0.3.36) - 2025-10-03
 
 ### Other

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4](https://github.com/conda/rattler/compare/rattler_upload-v0.3.3...rattler_upload-v0.3.4) - 2025-10-07
+
+### Added
+
+- *(upload)* attach hashes to uploaded packages ([#1705](https://github.com/conda/rattler/pull/1705))
+
 ## [0.3.3](https://github.com/conda/rattler/compare/rattler_upload-v0.3.2...rattler_upload-v0.3.3) - 2025-10-03
 
 ### Other
