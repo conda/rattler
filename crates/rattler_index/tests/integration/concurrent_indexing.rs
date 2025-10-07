@@ -19,6 +19,12 @@ use super::etag_memory_backend::ETagMemoryBuilder;
 
 #[tokio::test]
 async fn test_concurrent_index_with_race_condition_and_retry() {
+    use std::sync::{
+        atomic::{AtomicU8, Ordering},
+        Arc,
+    };
+    use tokio::sync::Barrier;
+
     // Initialize tracing subscriber to see log output
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
@@ -29,8 +35,43 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
         .with_target(false)
         .try_init();
 
-    // Create operator with ETag support
-    let op = Operator::new(ETagMemoryBuilder::default())
+    // Create a state machine to force deterministic race condition:
+    // Block until both processes stat repodata.json (only first 2 stats, not on
+    // retry) The backend's per-file locks ensure writes happen sequentially
+
+    let stat_barrier = Arc::new(Barrier::new(2));
+    let stat_barrier_clone = stat_barrier.clone();
+
+    // Count how many times the stat has been called - only wait at barrier for
+    // first 2
+    let stat_count = Arc::new(AtomicU8::new(0));
+    let stat_count_clone = stat_count.clone();
+
+    let test_hooks = super::etag_memory_backend::TestHooks {
+        on_operation: Arc::new(move |path, op| {
+            let stat_barrier = stat_barrier_clone.clone();
+            let stat_count = stat_count_clone.clone();
+            let path = path.to_string();
+            Box::pin(async move {
+                if path == "noarch/repodata.json"
+                    && op == super::etag_memory_backend::Operation::AfterStat
+                {
+                    let count = stat_count.fetch_add(1, Ordering::SeqCst);
+                    if count < 2 {
+                        // First two stats - wait at barrier
+                        tracing::info!("Process {} reached stat barrier", count + 1);
+                        stat_barrier.wait().await;
+                        tracing::info!("Both processes statted, continuing");
+                    } else {
+                        tracing::info!("Process on retry (stat {}), skipping barrier", count + 1);
+                    }
+                }
+            })
+        }),
+    };
+
+    // Create operator with ETag support and test hooks
+    let op = Operator::new(ETagMemoryBuilder::default().with_test_hooks(test_hooks))
         .unwrap()
         .finish();
 
@@ -48,10 +89,9 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
     let op1 = op.clone();
     let op2 = op.clone();
 
-    // Process 1: will complete first
+    // Process 1: will write first
     let handle1 = tokio::spawn(
         async move {
-            tracing::info!("Starting index");
             let result = index(
                 Some(Platform::NoArch),
                 op1,
@@ -63,7 +103,6 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
                 None,
             )
             .await;
-            tracing::info!("Finished - {:?}", result.is_ok());
             result
         }
         .instrument(tracing::info_span!("Process 1")),
@@ -72,7 +111,6 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
     // Process 2: will encounter race condition and retry
     let handle2 = tokio::spawn(
         async move {
-            tracing::info!("Starting index");
             let result = index(
                 Some(Platform::NoArch),
                 op2,
@@ -84,7 +122,6 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
                 None,
             )
             .await;
-            tracing::info!("Finished - {:?}", result.is_ok());
             result
         }
         .instrument(tracing::info_span!("Process 2")),
@@ -93,17 +130,16 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
     let (result1, result2) = tokio::join!(handle1, handle2);
 
     // Both should succeed
-    let result1 = result1.unwrap();
-    if let Err(e) = &result1 {
-        eprintln!("Process 1 error: {:?}", e);
-    }
-    assert!(result1.is_ok(), "Process 1 should succeed");
+    let stats1 = result1.unwrap().unwrap();
+    let stats2 = result2.unwrap().unwrap();
 
-    let result2 = result2.unwrap();
-    if let Err(e) = &result2 {
-        eprintln!("Process 2 error: {:?}", e);
-    }
-    assert!(result2.is_ok(), "Process 2 should succeed after retry");
+    // Verify that exactly one process had to retry
+    let total_retries = stats1.subdirs.values().map(|s| s.retries).sum::<usize>()
+        + stats2.subdirs.values().map(|s| s.retries).sum::<usize>();
+    assert_eq!(
+        total_retries, 1,
+        "Expected exactly 1 retry due to deterministic race condition, but got {total_retries}"
+    );
 
     // Verify repodata is valid
     let repodata: serde_json::Value =
@@ -113,16 +149,15 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
     // Check that we have exactly one package (either in packages or packages.conda)
     let packages_count = repodata["packages"]
         .as_object()
-        .map(|o| o.len())
-        .unwrap_or(0);
+        .map_or(0, serde_json::Map::len);
     let conda_packages_count = repodata["packages.conda"]
         .as_object()
-        .map(|o| o.len())
-        .unwrap_or(0);
+        .map_or(0, serde_json::Map::len);
     assert_eq!(
         packages_count + conda_packages_count,
         1,
         "Expected 1 package in repodata"
     );
-    println!("Final repodata created successfully");
+
+    tracing::info!("Test completed successfully with exactly 1 retry");
 }

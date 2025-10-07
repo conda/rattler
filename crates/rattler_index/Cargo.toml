@@ -76,5 +76,5 @@ retry-policies = { workspace = true }
 tempfile = { workspace = true }
 tools = { path = "../tools", default-features = false }
 md5 = "0.7"
-parking_lot = { workspace = true }
+parking_lot = { workspace = true, features = ["arc_lock", "send_guard"] }
 tracing-subscriber = { workspace = true, features = ["json"]}

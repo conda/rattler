@@ -5,7 +5,7 @@ use crate::RepodataFileMetadata;
 /// Reads a file with conditional checks based on provided metadata.
 ///
 /// This function reads a file and validates that it hasn't been modified since
-/// the metadata was collected. If the file has been modified (ETag or
+/// the metadata was collected. If the file has been modified (`ETag` or
 /// last-modified doesn't match), it returns a `ConditionNotMatch` error.
 ///
 /// # Parameters
@@ -38,7 +38,7 @@ pub async fn read_with_metadata_check(
 /// Writes a file with conditional checks based on provided metadata.
 ///
 /// This function writes a file and validates that it hasn't been modified since
-/// the metadata was collected. If the file has been modified (ETag doesn't
+/// the metadata was collected. If the file has been modified (`ETag` doesn't
 /// match), it returns a `ConditionNotMatch` error.
 ///
 /// When the file didn't exist during metadata collection (etag is None), this

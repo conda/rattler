@@ -70,7 +70,7 @@ async fn test_index() {
     })
     .await;
     if let Err(e) = &res {
-        eprintln!("Error: {:?}", e);
+        eprintln!("Error: {e:?}");
     }
     assert!(res.is_ok());
 
@@ -126,7 +126,7 @@ async fn test_index_empty_directory_creates_noarch_repodata() {
     .await;
 
     if let Err(e) = &res {
-        eprintln!("Error in empty directory test: {:?}", e);
+        eprintln!("Error in empty directory test: {e:?}");
     }
     assert!(res.is_ok());
     assert!(noarch_path.is_dir());

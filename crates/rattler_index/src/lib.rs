@@ -44,6 +44,24 @@ use tokio::sync::Semaphore;
 use tracing::Instrument;
 use url::Url;
 
+/// Statistics for a single subdir indexing operation
+#[derive(Debug, Clone, Default)]
+pub struct SubdirIndexStats {
+    /// Number of packages added to the index
+    pub packages_added: usize,
+    /// Number of packages removed from the index
+    pub packages_removed: usize,
+    /// Number of retries due to concurrent modifications
+    pub retries: usize,
+}
+
+/// Statistics for the entire indexing operation
+#[derive(Debug, Clone, Default)]
+pub struct IndexStats {
+    /// Statistics per subdir
+    pub subdirs: HashMap<Platform, SubdirIndexStats>,
+}
+
 const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
 const REPODATA: &str = "repodata.json";
 const REPODATA_SHARDS: &str = "repodata_shards.msgpack.zst";
@@ -203,7 +221,7 @@ pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result
 /// modifications.
 #[derive(Debug, Clone)]
 pub struct RepodataFileMetadata {
-    /// The ETag of the file, if available
+    /// The `ETag` of the file, if available
     pub etag: Option<String>,
     /// The last modified timestamp of the file, if available
     pub last_modified: Option<DateTime<Utc>>,
@@ -233,11 +251,11 @@ impl RepodataFileMetadata {
 pub struct RepodataMetadataCollection {
     /// Metadata for repodata.json
     pub repodata: RepodataFileMetadata,
-    /// Metadata for repodata_from_packages.json (only when patches are used)
+    /// Metadata for `repodata_from_packages.json` (only when patches are used)
     pub repodata_from_packages: Option<RepodataFileMetadata>,
     /// Metadata for repodata.json.zst
     pub repodata_zst: Option<RepodataFileMetadata>,
-    /// Metadata for repodata_shards.msgpack.zst
+    /// Metadata for `repodata_shards.msgpack.zst`
     pub repodata_shards: Option<RepodataFileMetadata>,
 }
 
@@ -294,7 +312,7 @@ async fn index_subdir(
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
-) -> Result<()> {
+) -> Result<SubdirIndexStats> {
     let retry_policy = default_retry_policy();
     let mut current_try = 0;
 
@@ -313,13 +331,16 @@ async fn index_subdir(
         )
         .await
         {
-            Ok(()) => return Ok(()),
+            Ok(mut stats) => {
+                stats.retries = current_try;
+                return Ok(stats);
+            }
             Err(e) => {
                 // Check if this is a race condition error
                 if let Some(opendal_err) = e.downcast_ref::<opendal::Error>() {
                     if opendal_err.kind() == opendal::ErrorKind::ConditionNotMatch {
                         // Race condition detected - should we retry?
-                        match retry_policy.should_retry(request_start_time, current_try) {
+                        match retry_policy.should_retry(request_start_time, current_try as u32) {
                             RetryDecision::Retry { execute_after } => {
                                 let duration = execute_after
                                     .duration_since(SystemTime::now())
@@ -360,7 +381,7 @@ async fn index_subdir_inner(
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
-) -> Result<()> {
+) -> Result<SubdirIndexStats> {
     // Step 1: Collect ETags/metadata for all critical files upfront
     let metadata = RepodataMetadataCollection::new(
         &op,
@@ -546,7 +567,7 @@ async fn index_subdir_inner(
 
     let mut packages: FxHashMap<String, PackageRecord> = HashMap::default();
     let mut conda_packages: FxHashMap<String, PackageRecord> = HashMap::default();
-    for (filename, package) in registered_packages.into_iter() {
+    for (filename, package) in registered_packages {
         match ArchiveType::try_from(&filename) {
             Some(ArchiveType::TarBz2) => {
                 packages.insert(filename, package);
@@ -577,7 +598,13 @@ async fn index_subdir_inner(
         op,
         &metadata,
     )
-    .await
+    .await?;
+
+    Ok(SubdirIndexStats {
+        packages_added: packages_to_add.len(),
+        packages_removed: packages_to_delete.len(),
+        retries: 0, // Will be set by index_subdir
+    })
 }
 
 fn serialize_msgpack_zst<T>(val: &T) -> Result<Vec<u8>>
@@ -799,6 +826,7 @@ pub async fn index_fs(
         multi_progress,
     )
     .await
+    .map(|_| ())
 }
 
 /// Configuration for `index_s3`
@@ -868,6 +896,7 @@ pub async fn index_s3(
         multi_progress,
     )
     .await
+    .map(|_| ())
 }
 
 /// Create a new `repodata.json` for all packages in the given configurator's
@@ -892,7 +921,7 @@ pub async fn index(
     force: bool,
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<IndexStats> {
     let entries = op.list_with("").await?;
 
     // If requested `target_platform` subdir does not exist, we create it.
@@ -951,7 +980,7 @@ pub async fn index(
     let semaphore = Semaphore::new(max_parallel);
     let semaphore = Arc::new(semaphore);
 
-    let mut tasks = FuturesUnordered::new();
+    let mut tasks: Vec<(Platform, _)> = Vec::new();
     for subdir in subdirs.iter() {
         let task = index_subdir(
             *subdir,
@@ -966,18 +995,23 @@ pub async fn index(
             semaphore.clone(),
         )
         .instrument(tracing::info_span!("index_subdir", subdir = %subdir));
-        tasks.push(task);
+        tasks.push((*subdir, task));
     }
 
-    while let Some(join_result) = tasks.next().await {
-        match join_result {
-            Ok(_) => {}
+    let mut stats = IndexStats {
+        subdirs: HashMap::new(),
+    };
+
+    for (subdir, task) in tasks {
+        match task.await {
+            Ok(subdir_stats) => {
+                stats.subdirs.insert(subdir, subdir_stats);
+            }
             Err(e) => {
                 tracing::error!("Failed to process subdir: {e}");
-                tasks.clear();
                 return Err(e);
             }
         }
     }
-    Ok(())
+    Ok(stats)
 }
