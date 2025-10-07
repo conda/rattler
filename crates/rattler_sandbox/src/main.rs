@@ -1,38 +1,14 @@
 use clap::Parser;
-use rattler_sandbox::{sandboxed_command, Exception};
-
-/// Command line options for the rattler-sandbox binary
-#[derive(Debug, Parser)]
-#[clap(author, version, about = "Execute commands in a sandbox", long_about = None)]
-struct Opt {
-    /// File system paths with execute and read permissions
-    #[clap(long)]
-    fs_exec_and_read: Vec<String>,
-
-    /// File system paths with write and read permissions
-    #[clap(long)]
-    fs_write_and_read: Vec<String>,
-
-    /// File system paths with read permissions
-    #[clap(long)]
-    fs_read: Vec<String>,
-
-    /// Enable network access
-    #[clap(long)]
-    network: bool,
-
-    /// The command and arguments to execute in the sandbox
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-    args: Vec<String>,
-}
+use rattler_sandbox::{sandboxed_command, Exception, Opts};
 
 fn main() {
     // Initialize the sandbox trampoline - this checks if we're being called
-    // with __sandbox_trampoline__ and if so, sets up the actual sandbox
+    // with __sandbox_trampoline__ and if so, sets up the actual sandbox.
+    // If we're in trampoline mode, this function will handle everything and exit.
     rattler_sandbox::init_sandbox();
 
     // Parse command line arguments (only reached if not in trampoline mode)
-    let opt = Opt::parse();
+    let opt = Opts::parse();
 
     // Validate that a command was provided
     if opt.args.is_empty() {
@@ -43,16 +19,22 @@ fn main() {
     // Build the list of exceptions based on the command line options
     let mut exceptions = Vec::new();
 
-    for path in opt.fs_exec_and_read {
-        exceptions.push(Exception::ExecuteAndRead(path));
+    if let Some(fs_exec_and_read) = opt.fs_exec_and_read {
+        for path in fs_exec_and_read {
+            exceptions.push(Exception::ExecuteAndRead(path));
+        }
     }
 
-    for path in opt.fs_write_and_read {
-        exceptions.push(Exception::ReadAndWrite(path));
+    if let Some(fs_write_and_read) = opt.fs_write_and_read {
+        for path in fs_write_and_read {
+            exceptions.push(Exception::ReadAndWrite(path));
+        }
     }
 
-    for path in opt.fs_read {
-        exceptions.push(Exception::Read(path));
+    if let Some(fs_read) = opt.fs_read {
+        for path in fs_read {
+            exceptions.push(Exception::Read(path));
+        }
     }
 
     if opt.network {
