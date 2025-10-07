@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5](https://github.com/conda/rattler/compare/rattler_s3-v0.1.4...rattler_s3-v0.1.5) - 2025-10-07
+
+### Other
+
+- bump aws dependencies ([#1315](https://github.com/conda/rattler/pull/1315))
+
 ## [0.1.4](https://github.com/conda/rattler/compare/rattler_s3-v0.1.3...rattler_s3-v0.1.4) - 2025-10-03
 
 ### Other
