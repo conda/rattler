@@ -4,7 +4,8 @@ use std::{collections::HashMap, sync::Arc};
 use anyhow::{Context, Error};
 use async_once_cell::OnceCell;
 use async_trait::async_trait;
-use aws_config::{meta::region::RegionProviderChain, BehaviorVersion};
+use aws_config::BehaviorVersion;
+use aws_sdk_s3::config::SharedHttpClient;
 use aws_sdk_s3::presigning::PresigningConfig;
 use http::Method;
 use reqwest::{Request, Response};
@@ -87,6 +88,23 @@ impl S3 {
         }
     }
 
+    /// Returns the default HTTP client.
+    fn default_http_client() -> SharedHttpClient {
+        use aws_smithy_http_client::{
+            tls::{self, rustls_provider::CryptoMode},
+            Builder,
+        };
+
+        static CLIENT: std::sync::OnceLock<SharedHttpClient> = std::sync::OnceLock::new();
+        CLIENT
+            .get_or_init(|| {
+                Builder::new()
+                    .tls_provider(tls::Provider::Rustls(CryptoMode::Ring))
+                    .build_https()
+            })
+            .clone()
+    }
+
     /// Create an S3 client.
     ///
     /// # Arguments
@@ -97,7 +115,11 @@ impl S3 {
     pub async fn create_s3_client(&self, url: Url) -> Result<aws_sdk_s3::Client, Error> {
         let sdk_config = self
             .default_client
-            .get_or_init(aws_config::defaults(BehaviorVersion::latest()).load())
+            .get_or_init(
+                aws_config::defaults(BehaviorVersion::latest())
+                    .http_client(Self::default_http_client())
+                    .load(),
+            )
             .await;
 
         let bucket_name = url
@@ -146,7 +168,7 @@ impl S3 {
             let mut s3_config_builder = aws_sdk_s3::config::Builder::from(sdk_config);
 
             // Set the region from the default provider chain.
-            s3_config_builder.set_region(RegionProviderChain::default_provider().region().await);
+            s3_config_builder.set_region(sdk_config.region().cloned());
 
             // Infer if we expect path-style addressing from the endpoint URL.
             if let Some(endpoint_url) = sdk_config.endpoint_url() {
