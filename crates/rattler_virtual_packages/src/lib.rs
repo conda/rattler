@@ -235,6 +235,111 @@ impl VirtualPackages {
             archspec: Archspec::detect(overrides.archspec.as_ref())?,
         })
     }
+
+    /// Detect the virtual packages for a given platform. This will detect the
+    /// "native" packages for the platform if possible, and otherwise fall back to
+    /// some reasonable defaults when cross-compiling.
+    ///
+    /// Overrides are always respected, even when cross-compiling to a different platform.
+    /// This matches the behavior of conda, where environment variables like CONDA_OVERRIDE_OSX
+    /// are used even when targeting osx-* from a non-macOS machine.
+    ///
+    /// # Cross-compilation defaults
+    ///
+    /// When cross-compiling (targeting a platform different from the current one), the following
+    /// defaults are used if no override is provided:
+    ///
+    /// - **Windows** (`__win`): No version specified
+    /// - **Linux** (`__linux`): Version 0
+    /// - **OSX** (`__osx`): Version 0
+    /// - **LibC** (`__glibc`): glibc with version 0 (only for Linux platforms)
+    /// - **CUDA** (`__cuda`): Not included (None)
+    /// - **Archspec**: Platform-specific minimal architecture (e.g., x86_64 for osx-64)
+    pub fn detect_for_platform(
+        platform: Platform,
+        overrides: &VirtualPackageOverrides,
+    ) -> Result<Self, DetectVirtualPackageError> {
+        if platform == Platform::current() {
+            Self::detect(overrides)
+        } else {
+            // When cross-compiling, respect overrides but fall back to defaults
+            let win = if platform.is_windows() {
+                // Check override first, fall back to default (no version)
+                Windows::detect_with_fallback(
+                    overrides.win.as_ref().unwrap_or(&Override::DefaultEnvVar),
+                    || Ok(Some(Windows { version: None })),
+                )?
+            } else {
+                None
+            };
+
+            let linux = if platform.is_linux() {
+                // Check override first, fall back to version 0
+                Linux::detect_with_fallback(
+                    overrides.linux.as_ref().unwrap_or(&Override::DefaultEnvVar),
+                    || {
+                        Ok(Some(Linux {
+                            version: Version::major(0),
+                        }))
+                    },
+                )?
+            } else {
+                None
+            };
+
+            let osx = if platform.is_osx() {
+                // Check override first, fall back to version 0
+                Osx::detect_with_fallback(
+                    overrides.osx.as_ref().unwrap_or(&Override::DefaultEnvVar),
+                    || {
+                        Ok(Some(Osx {
+                            version: Version::major(0),
+                        }))
+                    },
+                )?
+            } else {
+                None
+            };
+
+            let libc = if platform.is_linux() {
+                // Check override first, fall back to glibc 0
+                LibC::detect_with_fallback(
+                    overrides.libc.as_ref().unwrap_or(&Override::DefaultEnvVar),
+                    || {
+                        Ok(Some(LibC {
+                            family: "glibc".into(),
+                            version: Version::major(0),
+                        }))
+                    },
+                )?
+            } else {
+                None
+            };
+
+            let cuda = Cuda::detect_with_fallback(
+                overrides.cuda.as_ref().unwrap_or(&Override::DefaultEnvVar),
+                || Ok(None),
+            )?;
+
+            let archspec = Archspec::detect_with_fallback(
+                overrides
+                    .archspec
+                    .as_ref()
+                    .unwrap_or(&Override::DefaultEnvVar),
+                || Ok(Archspec::from_platform(platform)),
+            )?;
+
+            Ok(Self {
+                win,
+                unix: platform.is_unix(),
+                linux,
+                osx,
+                libc,
+                cuda,
+                archspec,
+            })
+        }
+    }
 }
 
 impl From<VirtualPackage> for GenericVirtualPackage {
@@ -854,5 +959,45 @@ mod test {
                 .unwrap(),
             res
         );
+    }
+
+    #[test]
+    fn test_cross_platform_virtual_packages() {
+        // Test that cross-platform detection works for different platforms
+        let overrides = VirtualPackageOverrides::default();
+
+        // Test Linux 64-bit
+        let linux_packages =
+            VirtualPackages::detect_for_platform(Platform::Linux64, &overrides).unwrap();
+        let linux_names: Vec<String> = linux_packages
+            .into_generic_virtual_packages()
+            .map(|pkg| pkg.name.as_normalized().to_string())
+            .collect();
+        assert!(linux_names.contains(&"__linux".to_string()));
+        assert!(linux_names.contains(&"__glibc".to_string()));
+        assert!(linux_names.contains(&"__archspec".to_string()));
+        assert!(linux_names.contains(&"__unix".to_string()));
+
+        // Test macOS ARM64
+        let osx_packages =
+            VirtualPackages::detect_for_platform(Platform::OsxArm64, &overrides).unwrap();
+        let osx_names: Vec<String> = osx_packages
+            .into_generic_virtual_packages()
+            .map(|pkg| pkg.name.as_normalized().to_string())
+            .collect();
+        assert!(osx_names.contains(&"__osx".to_string()));
+        assert!(osx_names.contains(&"__archspec".to_string()));
+        assert!(osx_names.contains(&"__unix".to_string()));
+
+        // Test Windows 64-bit
+        let win_packages =
+            VirtualPackages::detect_for_platform(Platform::Win64, &overrides).unwrap();
+        let win_names: Vec<String> = win_packages
+            .into_generic_virtual_packages()
+            .map(|pkg| pkg.name.as_normalized().to_string())
+            .collect();
+        assert!(win_names.contains(&"__win".to_string()));
+        assert!(!win_names.contains(&"__unix".to_string()));
+        assert!(win_names.contains(&"__archspec".to_string()));
     }
 }
