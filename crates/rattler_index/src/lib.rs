@@ -2,6 +2,8 @@
 //! files
 #![deny(missing_docs)]
 
+mod utils;
+
 use std::{
     collections::{HashMap, HashSet},
     io::{BufRead, BufReader, Cursor, Read, Seek},
@@ -12,6 +14,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use bytes::buf::Buf;
+use chrono::{DateTime, Utc};
 use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
 use fxhash::FxHashMap;
@@ -192,6 +195,89 @@ pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result
     read_index_json_from_archive(&bytes, &mut archive)
 }
 
+/// Metadata for a single repodata file, used to detect concurrent modifications.
+#[derive(Debug, Clone)]
+pub struct RepodataFileMetadata {
+    /// The ETag of the file, if available
+    pub etag: Option<String>,
+    /// The last modified timestamp of the file, if available
+    pub last_modified: Option<DateTime<Utc>>,
+}
+
+impl RepodataFileMetadata {
+    /// Collect metadata for a file without reading its contents.
+    /// Returns metadata with None values if the file doesn't exist.
+    pub async fn new(op: &Operator, path: &str) -> opendal::Result<Self> {
+        match op.stat(path).await {
+            Ok(metadata) => Ok(Self {
+                etag: metadata.etag().map(str::to_owned),
+                last_modified: metadata.last_modified(),
+            }),
+            Err(e) if e.kind() == opendal::ErrorKind::NotFound => Ok(Self {
+                etag: None,
+                last_modified: None,
+            }),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+/// Collection of metadata for all critical repodata files that need concurrent access protection.
+#[derive(Debug, Clone)]
+pub struct RepodataMetadataCollection {
+    /// Metadata for repodata.json
+    pub repodata: RepodataFileMetadata,
+    /// Metadata for repodata_from_packages.json (only when patches are used)
+    pub repodata_from_packages: Option<RepodataFileMetadata>,
+    /// Metadata for repodata.json.zst
+    pub repodata_zst: Option<RepodataFileMetadata>,
+    /// Metadata for repodata_shards.msgpack.zst
+    pub repodata_shards: Option<RepodataFileMetadata>,
+}
+
+impl RepodataMetadataCollection {
+    /// Collect metadata for all critical repodata files in a subdir.
+    pub async fn new(
+        op: &Operator,
+        subdir: Platform,
+        has_patch: bool,
+        write_zst: bool,
+        write_shards: bool,
+    ) -> opendal::Result<Self> {
+        // Always track repodata.json
+        let repodata = RepodataFileMetadata::new(op, &format!("{subdir}/{REPODATA}")).await?;
+
+        // Track repodata_from_packages.json if patches are used
+        let repodata_from_packages = if has_patch {
+            Some(
+                RepodataFileMetadata::new(op, &format!("{subdir}/{REPODATA_FROM_PACKAGES}"))
+                    .await?,
+            )
+        } else {
+            None
+        };
+
+        let repodata_zst = if write_zst {
+            Some(RepodataFileMetadata::new(op, &format!("{subdir}/{REPODATA}.zst")).await?)
+        } else {
+            None
+        };
+
+        let repodata_shards = if write_shards {
+            Some(RepodataFileMetadata::new(op, &format!("{subdir}/{REPODATA_SHARDS}")).await?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            repodata,
+            repodata_from_packages,
+            repodata_zst,
+            repodata_shards,
+        })
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn index_subdir(
     subdir: Platform,
@@ -203,40 +289,37 @@ async fn index_subdir(
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
 ) -> Result<()> {
-    let mut registered_packages: FxHashMap<String, PackageRecord> = HashMap::default();
-    if !force {
-        let repodata_bytes = if repodata_patch.is_some() {
-            op.read(&format!("{subdir}/{REPODATA_FROM_PACKAGES}")).await
+    // Read any previous repodata.json files. This file already contains a lot of
+    // information about the packages that we can reuse to avoid recalculating it.
+    let mut registered_packages: FxHashMap<String, PackageRecord> = if force {
+        HashMap::default()
+    } else {
+        let repodata_path = if repodata_patch.is_some() {
+            format!("{subdir}/{REPODATA_FROM_PACKAGES}")
         } else {
-            op.read(&format!("{subdir}/{REPODATA}")).await
+            format!("{subdir}/{REPODATA}")
         };
-        let repodata: RepoData = match repodata_bytes {
-            Ok(bytes) => serde_json::from_slice(&bytes.to_vec())?,
-            Err(e) => {
-                if e.kind() != opendal::ErrorKind::NotFound {
-                    return Err(e.into());
+        match op.read(&repodata_path).await {
+            Ok(bytes) => match serde_json::from_slice::<RepoData>(&bytes.to_vec()) {
+                Ok(repodata) => repodata
+                    .packages
+                    .into_iter()
+                    .chain(repodata.conda_packages)
+                    .collect(),
+                Err(err) => {
+                    tracing::warn!("Failed to parse {repodata_path}: {err}. Not reusing content from this file");
+                    HashMap::default()
                 }
-                tracing::info!("Could not find repodata.json. Creating new one.");
-                RepoData {
-                    info: Some(ChannelInfo {
-                        subdir: Some(subdir.to_string()),
-                        base_url: None,
-                    }),
-                    packages: HashMap::default(),
-                    conda_packages: HashMap::default(),
-                    removed: HashSet::default(),
-                    version: Some(2),
-                }
+            },
+            Err(err) if err.kind() == opendal::ErrorKind::NotFound => {
+                tracing::info!("Could not find {repodata_path}. Creating new one.");
+                HashMap::default()
             }
-        };
-        registered_packages.extend(repodata.packages.into_iter());
-        registered_packages.extend(repodata.conda_packages.into_iter());
-        tracing::debug!(
-            "Found {} already registered packages in {}/repodata.json.",
-            registered_packages.len(),
-            subdir
-        );
-    }
+            Err(err) => return Err(err.into()),
+        }
+    };
+
+    // List all the packages in the subdirectory.
     let uploaded_packages: HashSet<String> = op
         .list_with(&format!("{}/", subdir.as_str()))
         .await?
@@ -258,6 +341,8 @@ async fn index_subdir(
         subdir
     );
 
+    // Find packages that are listed in the previous repodata.json file but have
+    // since been removed.
     let packages_to_delete = registered_packages
         .keys()
         .cloned()
@@ -271,10 +356,6 @@ async fn index_subdir(
         packages_to_delete.len(),
         subdir
     );
-
-    for filename in packages_to_delete {
-        registered_packages.remove(&filename);
-    }
 
     let packages_to_add = uploaded_packages
         .difference(&registered_packages.keys().cloned().collect::<HashSet<_>>())
@@ -378,7 +459,7 @@ async fn index_subdir(
 
     let mut packages: FxHashMap<String, PackageRecord> = HashMap::default();
     let mut conda_packages: FxHashMap<String, PackageRecord> = HashMap::default();
-    for (filename, package) in registered_packages {
+    for (filename, package) in registered_packages.into_iter() {
         match ArchiveType::try_from(&filename) {
             Some(ArchiveType::TarBz2) => {
                 packages.insert(filename, package);
@@ -391,7 +472,7 @@ async fn index_subdir(
     }
 
     // TODO: don't serialize run_exports and purls but in their own files
-    let repodata = RepoData {
+    let repodata_before_patches = RepoData {
         info: Some(ChannelInfo {
             subdir: Some(subdir.to_string()),
             base_url: None,
@@ -403,7 +484,7 @@ async fn index_subdir(
     };
 
     write_repodata(
-        repodata,
+        repodata_before_patches,
         repodata_patch,
         write_zst,
         write_shards,

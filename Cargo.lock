@@ -2156,6 +2156,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "futures-retry-policies"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6deb4087bf085042b95438ac07d98b85976f22549c4ae8dee6b44a1ff094b049"
+dependencies = [
+ "chrono",
+ "futures-retry-policies-core",
+ "retry-policies 0.2.1",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "futures-retry-policies-core"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "222776451f4c0381948cc6ab590f674e0216e99738c436e4f09bc9754d7f9933"
+dependencies = [
+ "pin-project",
+]
+
+[[package]]
 name = "futures-sink"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4493,6 +4515,7 @@ dependencies = [
  "console 0.16.1",
  "fs-err",
  "futures",
+ "futures-retry-policies",
  "fxhash",
  "indicatif",
  "opendal",
@@ -4503,12 +4526,14 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_s3",
  "reqwest",
+ "retry-policies 0.4.0",
  "rmp-serde",
  "serde",
  "serde_json",
  "sha2",
  "tar",
  "tempfile",
+ "thiserror 2.0.17",
  "tokio",
  "tools",
  "tracing",
@@ -4620,7 +4645,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
- "retry-policies",
+ "retry-policies 0.4.0",
  "rstest",
  "serde",
  "serde_json",
@@ -4729,7 +4754,7 @@ dependencies = [
  "rattler_redaction",
  "reqwest",
  "reqwest-middleware",
- "retry-policies",
+ "retry-policies 0.4.0",
  "rmp-serde",
  "rstest",
  "self_cell",
@@ -5129,7 +5154,7 @@ dependencies = [
  "parking_lot 0.11.2",
  "reqwest",
  "reqwest-middleware",
- "retry-policies",
+ "retry-policies 0.4.0",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
@@ -5154,6 +5179,17 @@ dependencies = [
  "serde",
  "tabwriter",
  "tracing",
+]
+
+[[package]]
+name = "retry-policies"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17dd00bff1d737c40dbcd47d4375281bf4c17933f9eef0a185fc7bacca23ecbd"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "rand 0.8.5",
 ]
 
 [[package]]
