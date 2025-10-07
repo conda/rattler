@@ -1,5 +1,5 @@
 use crate::error::PyRattlerError;
-use crate::platform::PyPlatform;
+use py_rattler_types::platform::PyPlatform;
 use pyo3::{
     exceptions::PyValueError, pybacked::PyBackedStr, pyclass, pymethods, types::PyAnyMethods,
     Bound, FromPyObject, PyAny, PyResult,

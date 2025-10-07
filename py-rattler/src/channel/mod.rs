@@ -3,7 +3,9 @@ use rattler_conda_types::{Channel, ChannelConfig};
 use rattler_solve::ChannelPriority;
 use url::Url;
 
-use crate::{error::PyRattlerError, platform::PyPlatform};
+use crate::error::PyRattlerError;
+
+use py_rattler_types::platform::PyPlatform;
 
 #[pyclass]
 #[repr(transparent)]

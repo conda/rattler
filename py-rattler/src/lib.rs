@@ -14,7 +14,6 @@ mod no_arch_type;
 mod package_name;
 mod package_streaming;
 mod paths_json;
-mod platform;
 mod prefix_paths;
 mod record;
 mod repo_data;
@@ -59,8 +58,8 @@ use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
 use package_name::PyPackageName;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
-use platform::{PyArch, PyPlatform};
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
+use py_rattler_types::platform::{PyArch, PyPlatform};
 use pyo3::prelude::*;
 use record::{PyLink, PyRecord};
 use repo_data::{

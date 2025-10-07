@@ -1,5 +1,5 @@
 [package]
-name = "py-rattler-types"
+name = "py_rattler_types"
 version = "0.1.0"
 edition = "2021"
 license = "BSD-3-Clause"

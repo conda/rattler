@@ -5,7 +5,8 @@ use rattler_config::config::concurrency::default_max_concurrent_solves;
 use rattler_index::{index_fs, index_s3, IndexFsConfig, IndexS3Config};
 use url::Url;
 
-use crate::{error::PyRattlerError, platform::PyPlatform};
+use crate::error::PyRattlerError;
+use py_rattler_types::platform::PyPlatform;
 use pyo3::exceptions::PyValueError;
 use pythonize::depythonize;
 use rattler_networking::AuthenticationStorage;

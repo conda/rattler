@@ -23,10 +23,10 @@ rustls-tls = [
 vendored-openssl = ["openssl", "openssl/vendored"]
 
 [dependencies]
-anyhow = "1.0.97"
-chrono = { version = "0.4" }
+anyhow = "1.0.100"
+chrono = { version = "0.4.42" }
 futures = "0.3.31"
-parking_lot = { version = "0.12.3", features = ["arc_lock", "send_guard"] }
+parking_lot = { version = "0.12.5", features = ["arc_lock", "send_guard"] }
 
 rattler_s3 = { path = "../crates/rattler_s3", features = ["serde"]}
 rattler = { path = "../crates/rattler", default-features = false, features = [
@@ -52,29 +52,30 @@ rattler_solve = { path = "../crates/rattler_solve", default-features = false, fe
 rattler_index = { path = "../crates/rattler_index" }
 rattler_lock = { path = "../crates/rattler_lock", default-features = false }
 rattler_package_streaming = { path = "../crates/rattler_package_streaming", default-features = false }
-pyo3 = { version = "0.25.1", features = [
+py_rattler_types = { path = "../crates/py_rattler_types" }
+pyo3 = { version = "0.26.0", features = [
     "abi3-py38",
     "extension-module",
     "multiple-pymethods",
     "chrono",
 ] }
-pyo3-async-runtimes = { version = "0.25.0", features = ["tokio-runtime"] }
-pythonize = "0.25.0"
-tokio = { version = "1.46.1" }
+pyo3-async-runtimes = { version = "0.26.0", features = ["tokio-runtime"] }
+pythonize = "0.26.0"
+tokio = { version = "1.47.1" }
 
 reqwest = { version = "0.12.15", default-features = false }
 reqwest-middleware = "0.4.2"
 
-thiserror = "2.0.12"
+thiserror = "2.0.17"
 url = "2.5.4"
 
 openssl = { version = "0.10", optional = true }
 pep508_rs = "0.9.2"
-serde_json = "1.0.140"
-pyo3-file = "0.13.0"
+serde_json = "1.0.145"
+pyo3-file = "0.14.0"
 
 [build-dependencies]
-pyo3-build-config = "0.25.1"
+pyo3-build-config = "0.26.0"
 
 
 [patch.crates-io]

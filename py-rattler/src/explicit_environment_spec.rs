@@ -3,7 +3,8 @@ use std::{path::PathBuf, str::FromStr};
 use pyo3::{pyclass, pymethods, PyResult};
 use rattler_conda_types::{ExplicitEnvironmentEntry, ExplicitEnvironmentSpec};
 
-use crate::{error::PyRattlerError, platform::PyPlatform};
+use crate::error::PyRattlerError;
+use py_rattler_types::platform::PyPlatform;
 
 /// The explicit environment (e.g. env.txt) file that contains a list of
 /// all URLs in a environment

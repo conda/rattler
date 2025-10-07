@@ -13,11 +13,11 @@ use crate::{
     error::PyRattlerError,
     generic_virtual_package::PyGenericVirtualPackage,
     match_spec::PyMatchSpec,
-    platform::PyPlatform,
     record::PyRecord,
     repo_data::gateway::PyGateway,
     PyPackageFormatSelection, PySparseRepoData, Wrap,
 };
+use py_rattler_types::platform::PyPlatform;
 
 impl<'py> FromPyObject<'py> for Wrap<SolveStrategy> {
     fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {

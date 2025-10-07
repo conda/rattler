@@ -195,7 +195,7 @@ impl PySparseRepoData {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        py.allow_threads(move || {
+        py.detach(move || {
             let package_names = package_names.into_iter().map(Into::into);
             Ok(SparseRepoData::load_records_recursive(
                 repo_data_refs,

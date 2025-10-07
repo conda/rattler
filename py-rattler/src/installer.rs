@@ -10,10 +10,8 @@ use rattler_conda_types::{PackageName, PrefixRecord, RepoDataRecord};
 use std::collections::HashSet;
 
 use crate::match_spec::PyMatchSpec;
-use crate::{
-    error::PyRattlerError, networking::client::PyClientWithMiddleware, platform::PyPlatform,
-    record::PyRecord,
-};
+use crate::{error::PyRattlerError, networking::client::PyClientWithMiddleware, record::PyRecord};
+use py_rattler_types::platform::PyPlatform;
 
 // TODO: Accept functions to report progress
 #[pyfunction]
