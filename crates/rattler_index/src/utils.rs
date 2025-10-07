@@ -41,8 +41,9 @@ pub async fn read_with_metadata_check(
 /// the metadata was collected. If the file has been modified (ETag doesn't
 /// match), it returns a `ConditionNotMatch` error.
 ///
-/// Note: Only ETag-based conditions are supported for writes. If no ETag is
-/// available and the file didn't exist, if_none_match is used.
+/// When the file didn't exist during metadata collection (etag is None), this
+/// function uses `if_not_exists` to ensure the file still doesn't exist,
+/// preventing race conditions where another process creates it first.
 ///
 /// # Parameters
 /// - `op`: A reference to the `Operator`, which facilitates file system
@@ -54,7 +55,7 @@ pub async fn read_with_metadata_check(
 /// # Returns
 /// Returns `Ok(())` if the file is successfully written and conditions match.
 /// Returns `Err` with `ConditionNotMatch` if the file was modified since
-/// metadata collection.
+/// metadata collection or if the file was created when it shouldn't exist.
 pub async fn write_with_metadata_check(
     op: &Operator,
     path: &str,
@@ -63,11 +64,11 @@ pub async fn write_with_metadata_check(
 ) -> opendal::Result<()> {
     let writer = op.write_with(path, data);
     let writer = if let Some(etag) = &metadata.etag {
+        // File existed - verify it hasn't changed
         writer.if_match(etag)
     } else {
-        // If no metadata available, write without conditions
-        // (backend doesn't support ETags, so no race protection possible)
-        writer
+        // File didn't exist - ensure it still doesn't exist
+        writer.if_not_exists(true)
     };
     writer.await?;
     Ok(())

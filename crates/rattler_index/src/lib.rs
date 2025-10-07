@@ -41,6 +41,7 @@ use retry_policies::{RetryDecision, RetryPolicy};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
+use tracing::Instrument;
 use url::Url;
 
 const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
@@ -198,7 +199,8 @@ pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result
     read_index_json_from_archive(&bytes, &mut archive)
 }
 
-/// Metadata for a single repodata file, used to detect concurrent modifications.
+/// Metadata for a single repodata file, used to detect concurrent
+/// modifications.
 #[derive(Debug, Clone)]
 pub struct RepodataFileMetadata {
     /// The ETag of the file, if available
@@ -225,7 +227,8 @@ impl RepodataFileMetadata {
     }
 }
 
-/// Collection of metadata for all critical repodata files that need concurrent access protection.
+/// Collection of metadata for all critical repodata files that need concurrent
+/// access protection.
 #[derive(Debug, Clone)]
 pub struct RepodataMetadataCollection {
     /// Metadata for repodata.json
@@ -369,7 +372,8 @@ async fn index_subdir_inner(
     .await?;
 
     // Step 2: Read any previous repodata.json files with conditional check.
-    // This file already contains a lot of information about the packages that we can reuse.
+    // This file already contains a lot of information about the packages that we
+    // can reuse.
     let mut registered_packages: FxHashMap<String, PackageRecord> = if force {
         HashMap::default()
     } else {
@@ -586,7 +590,8 @@ where
 }
 
 /// Write a `repodata.json` for all packages in the given configurator's root.
-/// Uses conditional writes based on the provided metadata to prevent concurrent modification issues.
+/// Uses conditional writes based on the provided metadata to prevent concurrent
+/// modification issues.
 pub async fn write_repodata(
     repodata: RepoData,
     repodata_patch: Option<PatchInstructions>,
@@ -781,9 +786,11 @@ pub async fn index_fs(
 ) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
     config.root = Some(channel.canonicalize()?.to_string_lossy().to_string());
+    let builder = config.into_builder();
+    let op = Operator::new(builder)?.finish();
     index(
         target_platform,
-        config,
+        op,
         repodata_patch,
         write_zst,
         write_shards,
@@ -847,9 +854,12 @@ pub async fn index_s3(
     s3_config.enable_virtual_host_style =
         credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
 
+    let builder = s3_config.into_builder();
+    let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
+
     index(
         target_platform,
-        s3_config,
+        op,
         repodata_patch,
         write_zst,
         write_shards,
@@ -873,9 +883,9 @@ pub async fn index_s3(
 ///    3. Determine which packages to add to and to delete from `repodata.json`
 ///    4. Write `repodata.json` back
 #[allow(clippy::too_many_arguments)]
-pub async fn index<T: Configurator>(
+pub async fn index(
     target_platform: Option<Platform>,
-    config: T,
+    op: Operator,
     repodata_patch: Option<String>,
     write_zst: bool,
     write_shards: bool,
@@ -883,10 +893,6 @@ pub async fn index<T: Configurator>(
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
 ) -> anyhow::Result<()> {
-    let builder = config.into_builder();
-
-    // Get all subdirs
-    let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
     let entries = op.list_with("").await?;
 
     // If requested `target_platform` subdir does not exist, we create it.
@@ -958,22 +964,18 @@ pub async fn index<T: Configurator>(
                 .and_then(|p| p.subdirs.get(&subdir.to_string()).cloned()),
             multi_progress.clone(),
             semaphore.clone(),
-        );
-        tasks.push(tokio::spawn(task));
+        )
+        .instrument(tracing::info_span!("index_subdir", subdir = %subdir));
+        tasks.push(task);
     }
 
     while let Some(join_result) = tasks.next().await {
         match join_result {
-            Ok(Ok(_)) => {}
-            Ok(Err(e)) => {
+            Ok(_) => {}
+            Err(e) => {
                 tracing::error!("Failed to process subdir: {e}");
                 tasks.clear();
                 return Err(e);
-            }
-            Err(join_err) => {
-                tracing::error!("Task panicked: {join_err}");
-                tasks.clear();
-                return Err(anyhow::anyhow!("Task panicked: {join_err}"));
             }
         }
     }

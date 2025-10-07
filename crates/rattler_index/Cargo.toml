@@ -75,3 +75,6 @@ retry-policies = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 tools = { path = "../tools", default-features = false }
+md5 = "0.7"
+parking_lot = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["json"]}
