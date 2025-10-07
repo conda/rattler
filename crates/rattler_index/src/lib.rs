@@ -10,6 +10,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
+    time::SystemTime,
 };
 
 use anyhow::{Context, Result};
@@ -30,11 +31,13 @@ use rattler_conda_types::{
     ShardedSubdirInfo,
 };
 use rattler_digest::Sha256Hash;
+use rattler_networking::retry_policies::default_retry_policy;
 use rattler_package_streaming::{
     read,
     seek::{self, stream_conda_content},
 };
 use rattler_s3::ResolvedS3Credentials;
+use retry_policies::{RetryDecision, RetryPolicy};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
@@ -280,6 +283,72 @@ impl RepodataMetadataCollection {
 
 #[allow(clippy::too_many_arguments)]
 async fn index_subdir(
+    subdir: Platform,
+    op: Operator,
+    force: bool,
+    write_zst: bool,
+    write_shards: bool,
+    repodata_patch: Option<PatchInstructions>,
+    progress: Option<MultiProgress>,
+    semaphore: Arc<Semaphore>,
+) -> Result<()> {
+    let retry_policy = default_retry_policy();
+    let mut current_try = 0;
+
+    loop {
+        let request_start_time = SystemTime::now();
+
+        match index_subdir_inner(
+            subdir,
+            op.clone(),
+            force,
+            write_zst,
+            write_shards,
+            repodata_patch.clone(),
+            progress.clone(),
+            semaphore.clone(),
+        )
+        .await
+        {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                // Check if this is a race condition error
+                if let Some(opendal_err) = e.downcast_ref::<opendal::Error>() {
+                    if opendal_err.kind() == opendal::ErrorKind::ConditionNotMatch {
+                        // Race condition detected - should we retry?
+                        match retry_policy.should_retry(request_start_time, current_try) {
+                            RetryDecision::Retry { execute_after } => {
+                                let duration = execute_after
+                                    .duration_since(SystemTime::now())
+                                    .unwrap_or_default();
+                                tracing::warn!(
+                                    "Detected concurrent modification of repodata for {}, retrying in {:?}",
+                                    subdir,
+                                    duration
+                                );
+                                tokio::time::sleep(duration).await;
+                                current_try += 1;
+                                continue;
+                            }
+                            RetryDecision::DoNotRetry => {
+                                tracing::error!(
+                                    "Max retries exceeded for {} due to concurrent modifications",
+                                    subdir
+                                );
+                                return Err(e);
+                            }
+                        }
+                    }
+                }
+                // Not a race condition error, or downcast failed - propagate immediately
+                return Err(e);
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn index_subdir_inner(
     subdir: Platform,
     op: Operator,
     force: bool,

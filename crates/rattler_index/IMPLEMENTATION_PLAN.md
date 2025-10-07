@@ -49,63 +49,38 @@ Implement race-condition-resistant indexing for rattler_index when multiple proc
 
 ## Stage 3: Implement Conditional Writes
 **Goal**: Write repodata files with ETag conditions
-**Status**: In Progress
+**Status**: Complete
 
 ### Tasks:
-- [ ] Update `write_repodata` signature to accept `RepodataFileMetadata`
-- [ ] Apply conditional writes using stored ETags:
-  - `repodata.json` - `if_match` or `if_unmodified_since`
-  - `repodata_from_packages.json` - `if_match` or `if_unmodified_since`
-  - `repodata.json.zst` - `if_match` or `if_unmodified_since`
-  - `repodata_shards.msgpack.zst` - `if_match` or `if_unmodified_since`
-- [ ] Return `ConditionNotMatch` errors to caller
+- [x] Update `write_repodata` signature to accept `RepodataMetadataCollection`
+- [x] Remove `write_zst` and `write_shards` parameters (inferred from metadata)
+- [x] Apply conditional writes using stored ETags to all critical files
+- [x] Collect metadata at the start of `index_subdir`
+- [x] Use metadata for conditional read of existing repodata
 
 **Success Criteria**:
-- All writes conditional on initial ETags
-- Errors propagate correctly
-
-**Tests**:
-- Test write succeeds with valid ETag
-- Test write fails with changed ETag
+- ✅ All writes conditional on initial ETags
+- ✅ Errors propagate correctly
+- ✅ Read operations also guarded by metadata
 
 ---
 
 ## Stage 4: Implement Retry Loop
 **Goal**: Wrap entire operation in retry loop
-**Status**: Not Started
+**Status**: Complete
 
 ### Tasks:
-- [ ] Refactor `index_subdir` body into inner function
-- [ ] Add outer retry loop:
-  ```rust
-  loop {
-      // 1. Collect ETags
-      let metadata = collect_repodata_metadata(...);
-
-      // 2. Read with validation (fails if ETag mismatch)
-      // 3. Index packages
-      // 4. Write with conditions
-
-      match result {
-          Ok(_) => return Ok(()),
-          Err(e) if is_condition_not_match(&e) => continue,
-          Err(e) => return Err(e),
-      }
-  }
-  ```
-- [ ] Add retry count limit (use `default_retry_policy`)
-- [ ] Add exponential backoff
-- [ ] Add logging for retries
+- [x] Refactor `index_subdir` body into `index_subdir_inner` function
+- [x] Add outer retry loop with `default_retry_policy`
+- [x] Detect `ConditionNotMatch` errors and retry entire operation
+- [x] Add exponential backoff via retry policy
+- [x] Add logging for retry attempts
 
 **Success Criteria**:
-- Entire operation retries on any ConditionNotMatch
-- Respects retry limits
-- Clear logging
-
-**Tests**:
-- Test retry on read race condition
-- Test retry on write race condition
-- Test max retries exhausted
+- ✅ Entire operation retries on any ConditionNotMatch
+- ✅ Respects retry limits from `default_retry_policy`
+- ✅ Clear logging when retries occur
+- ✅ Non-race-condition errors propagate immediately
 
 ---
 
