@@ -5,7 +5,7 @@ use serde_with::{serde_as, DeserializeAs, SerializeAs};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
 
-use crate::conda::{GitShallowSpec, PackageBuildSource, PackageBuildSourceKind};
+use crate::conda::{GitShallowSpec, PackageBuildSource};
 use crate::source::{
     GitReference, GitSourceLocation, PathSourceLocation, SourceLocation, UrlSourceLocation,
 };
@@ -188,13 +188,21 @@ struct PackageBuildSourceData<'a> {
     pub rev: Option<Cow<'a, str>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<Cow<'a, str>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub subdir: Option<Cow<'a, str>>,
 }
 
 impl<'a> From<&'a PackageBuildSource> for PackageBuildSourceData<'a> {
     fn from(value: &'a PackageBuildSource) -> Self {
-        match &value.kind {
-            PackageBuildSourceKind::Git { url, spec, rev } => {
+        match value {
+            PackageBuildSource::Git {
+                url,
+                spec,
+                rev,
+                subdir,
+            } => {
                 let (branch, tag, explicit_rev) = match spec {
                     Some(GitShallowSpec::Branch(branch)) => {
                         (Some(Cow::Borrowed(branch.as_str())), None, None)
@@ -205,10 +213,7 @@ impl<'a> From<&'a PackageBuildSource> for PackageBuildSourceData<'a> {
                     Some(GitShallowSpec::Rev) => (None, None, Some(true)),
                     None => (None, None, None),
                 };
-                let subdir = value
-                    .subdirectory
-                    .as_ref()
-                    .map(|p| Cow::Borrowed(p.as_str()));
+                let subdir = subdir.as_ref().map(|p| Cow::Borrowed(p.as_str()));
                 Self {
                     url: None,
                     sha256: None,
@@ -216,11 +221,16 @@ impl<'a> From<&'a PackageBuildSource> for PackageBuildSourceData<'a> {
                     branch,
                     tag,
                     explicit_rev,
-                    subdir,
+                    path: None,
                     rev: Some(Cow::Borrowed(rev)),
+                    subdir,
                 }
             }
-            PackageBuildSourceKind::Url { url, sha256 } => Self {
+            PackageBuildSource::Url {
+                url,
+                sha256,
+                subdir,
+            } => Self {
                 url: Some(Cow::Borrowed(url)),
                 sha256: Some(*sha256),
                 git: None,
@@ -228,6 +238,18 @@ impl<'a> From<&'a PackageBuildSource> for PackageBuildSourceData<'a> {
                 tag: None,
                 explicit_rev: None,
                 rev: None,
+                path: None,
+                subdir: subdir.as_ref().map(|p| Cow::Borrowed(p.as_str())),
+            },
+            PackageBuildSource::Path { path } => Self {
+                url: None,
+                sha256: None,
+                git: None,
+                branch: None,
+                tag: None,
+                explicit_rev: None,
+                rev: None,
+                path: Some(Cow::Borrowed(path.as_str())),
                 subdir: None,
             },
         }
@@ -261,10 +283,11 @@ impl<'a> TryFrom<PackageBuildSourceData<'a>> for PackageBuildSource {
             tag,
             rev,
             explicit_rev,
+            path,
             subdir,
         } = value;
 
-        let count = [url.is_some(), git.is_some()]
+        let count = [url.is_some(), git.is_some(), path.is_some()]
             .into_iter()
             .filter(|&x| x)
             .count();
@@ -272,14 +295,16 @@ impl<'a> TryFrom<PackageBuildSourceData<'a>> for PackageBuildSource {
             return Err(PackageBuildSourceError::MissingOrMultipleSourceRoots);
         }
 
-        let subdirectory = subdir.map(|s| Utf8TypedPathBuf::from(&*s));
+        let path = path.map(|s| Utf8TypedPathBuf::from(&*s));
+        let subdir = subdir.map(|s| Utf8TypedPathBuf::from(&*s));
 
         if let Some(url) = url {
             let url = url.into_owned();
             let sha256 = sha256.ok_or(PackageBuildSourceError::MissingSha256ForUrl)?;
-            Ok(PackageBuildSource {
-                kind: PackageBuildSourceKind::Url { url, sha256 },
-                subdirectory,
+            Ok(PackageBuildSource::Url {
+                url,
+                sha256,
+                subdir,
             })
         } else if let Some(git) = git {
             let git = git.into_owned();
@@ -301,14 +326,14 @@ impl<'a> TryFrom<PackageBuildSourceData<'a>> for PackageBuildSource {
                 None
             };
 
-            Ok(PackageBuildSource {
-                kind: PackageBuildSourceKind::Git {
-                    url: git,
-                    spec,
-                    rev,
-                },
-                subdirectory,
+            Ok(PackageBuildSource::Git {
+                url: git,
+                spec,
+                rev,
+                subdir,
             })
+        } else if let Some(path) = path {
+            Ok(PackageBuildSource::Path { path })
         } else {
             unreachable!("we already checked that exactly one of url or git is set")
         }
