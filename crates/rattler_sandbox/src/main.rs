@@ -4,11 +4,10 @@
     all(target_os = "macos", target_arch = "x86_64"),
     all(target_os = "macos", target_arch = "aarch64"),
 ))]
-
-use clap::Parser;
-use rattler_sandbox::{sandboxed_command, Exception, Opts};
-
 fn main() {
+    use clap::Parser;
+    use rattler_sandbox::{sandboxed_command, Exception, Opts};
+
     // Initialize the sandbox trampoline - this checks if we're being called
     // with __sandbox_trampoline__ and if so, sets up the actual sandbox.
     // If we're in trampoline mode, this function will handle everything and exit.
@@ -58,4 +57,15 @@ fn main() {
     let status = command.status().expect("Failed to execute command");
 
     std::process::exit(status.code().unwrap_or(1));
+}
+
+#[cfg(not(any(
+    all(target_os = "linux", target_arch = "x86_64"),
+    all(target_os = "linux", target_arch = "aarch64"),
+    all(target_os = "macos", target_arch = "x86_64"),
+    all(target_os = "macos", target_arch = "aarch64"),
+)))]
+fn main() {
+    eprintln!("rattler-sandbox is not supported on this platform");
+    std::process::exit(1);
 }
