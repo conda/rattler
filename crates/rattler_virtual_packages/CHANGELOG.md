@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.0...rattler_virtual_packages-v2.2.1) - 2025-10-08
+
+### Fixed
+
+- use defaults found on OS even if cross-compiling ([#1713](https://github.com/conda/rattler/pull/1713))
+
 ## [2.2.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.7...rattler_virtual_packages-v2.2.0) - 2025-10-07
 
 ### Added
