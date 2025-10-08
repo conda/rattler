@@ -259,67 +259,53 @@ impl VirtualPackages {
         platform: Platform,
         overrides: &VirtualPackageOverrides,
     ) -> Result<Self, DetectVirtualPackageError> {
+        let virtual_packages = Self::detect(overrides)?;
         if platform == Platform::current() {
-            Self::detect(overrides)
+            // If we're targeting the current platform, just return the detected packages
+            Ok(virtual_packages)
         } else {
             // When cross-compiling, respect overrides but fall back to defaults
             let win = if platform.is_windows() {
                 // Check override first, fall back to default (no version)
-                Windows::detect_with_fallback(
-                    overrides.win.as_ref().unwrap_or(&Override::DefaultEnvVar),
-                    || Ok(Some(Windows { version: None })),
-                )?
+                virtual_packages
+                    .win
+                    .or_else(|| Some(Windows { version: None }))
             } else {
                 None
             };
 
             let linux = if platform.is_linux() {
-                // Check override first, fall back to version 0
-                Linux::detect_with_fallback(
-                    overrides.linux.as_ref().unwrap_or(&Override::DefaultEnvVar),
-                    || {
-                        Ok(Some(Linux {
-                            version: Version::major(0),
-                        }))
-                    },
-                )?
+                virtual_packages.linux.or_else(|| {
+                    Some(Linux {
+                        version: Version::major(0),
+                    })
+                })
             } else {
                 None
             };
 
             let osx = if platform.is_osx() {
                 // Check override first, fall back to version 0
-                Osx::detect_with_fallback(
-                    overrides.osx.as_ref().unwrap_or(&Override::DefaultEnvVar),
-                    || {
-                        Ok(Some(Osx {
-                            version: Version::major(0),
-                        }))
-                    },
-                )?
+                virtual_packages.osx.or_else(|| {
+                    Some(Osx {
+                        version: Version::major(0),
+                    })
+                })
             } else {
                 None
             };
 
             let libc = if platform.is_linux() {
                 // Check override first, fall back to glibc 0
-                LibC::detect_with_fallback(
-                    overrides.libc.as_ref().unwrap_or(&Override::DefaultEnvVar),
-                    || {
-                        Ok(Some(LibC {
-                            family: "glibc".into(),
-                            version: Version::major(0),
-                        }))
-                    },
-                )?
+                virtual_packages.libc.or_else(|| {
+                    Some(LibC {
+                        family: "glibc".into(),
+                        version: Version::major(0),
+                    })
+                })
             } else {
                 None
             };
-
-            let cuda = Cuda::detect_with_fallback(
-                overrides.cuda.as_ref().unwrap_or(&Override::DefaultEnvVar),
-                || Ok(None),
-            )?;
 
             let archspec = Archspec::detect_with_fallback(
                 overrides
@@ -335,7 +321,7 @@ impl VirtualPackages {
                 linux,
                 osx,
                 libc,
-                cuda,
+                cuda: virtual_packages.cuda,
                 archspec,
             })
         }
