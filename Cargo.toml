@@ -200,7 +200,7 @@ rattler_sandbox = { path = "crates/rattler_sandbox", version = "=0.1.11", defaul
 rattler_shell = { path = "crates/rattler_shell", version = "=0.25.2", default-features = false }
 rattler_solve = { path = "crates/rattler_solve", version = "=3.0.5", default-features = false }
 rattler_upload = { path = "crates/rattler_upload", version = "=0.3.4", default-features = false }
-rattler_virtual_packages = { path = "crates/rattler_virtual_packages", version = "=2.2.0", default-features = false }
+rattler_virtual_packages = { path = "crates/rattler_virtual_packages", version = "=2.2.1", default-features = false }
 
 # This is also a rattler crate, but we only pin it to minor version
 simple_spawn_blocking = { path = "crates/simple_spawn_blocking", version = "1.1", default-features = false }
