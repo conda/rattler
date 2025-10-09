@@ -1,4 +1,4 @@
-//! Integration tests for the PackageRecordCache and read_package_with_retry
+//! Integration tests for the `PackageRecordCache` and `read_package_with_retry`
 
 use opendal::Operator;
 use rattler_index::{cache::read_package_with_retry, RepodataFileMetadata};
