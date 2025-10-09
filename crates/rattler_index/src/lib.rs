@@ -313,6 +313,7 @@ async fn index_subdir(
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
+    cache: cache::PackageRecordCache,
 ) -> Result<SubdirIndexStats> {
     let retry_policy = default_retry_policy();
     let mut current_try = 0;
@@ -329,6 +330,7 @@ async fn index_subdir(
             repodata_patch.clone(),
             progress.clone(),
             semaphore.clone(),
+            cache.clone(),
         )
         .await
         {
@@ -382,6 +384,7 @@ async fn index_subdir_inner(
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
+    cache: cache::PackageRecordCache,
 ) -> Result<SubdirIndexStats> {
     // Step 1: Collect ETags/metadata for all critical files upfront
     let metadata = RepodataMetadataCollection::new(
@@ -497,6 +500,7 @@ async fn index_subdir_inner(
             let filename = filename.clone();
             let pb = pb.clone();
             let semaphore = semaphore.clone();
+            let cache = cache.clone();
             {
                 async move {
                     let _permit = semaphore
@@ -509,14 +513,67 @@ async fn index_subdir_inner(
                         console::style(filename.clone()).dim()
                     ));
                     let file_path = format!("{subdir}/{filename}");
-                    let buffer = op.read(&file_path).await?;
-                    let reader = buffer.reader();
-                    // We already know it's not None
-                    let archive_type = ArchiveType::try_from(&filename).unwrap();
-                    let record = match archive_type {
-                        ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
-                        ArchiveType::Conda => package_record_from_conda_reader(reader),
-                    }?;
+
+                    // Try cache or get current metadata
+                    let record = match cache.get_or_stat(&op, &file_path).await {
+                        Ok(cache::CacheResult::Hit(record)) => {
+                            // Cache hit - reuse the record
+                            *record
+                        }
+                        Ok(cache::CacheResult::Miss {
+                            etag,
+                            last_modified,
+                        }) => {
+                            // Cache miss - read file with retry logic
+                            let (buffer, final_metadata) = cache::read_package_with_retry(
+                                &op,
+                                &file_path,
+                                RepodataFileMetadata {
+                                    etag,
+                                    last_modified,
+                                },
+                            )
+                            .await
+                            .map_err(|e| std::io::Error::other(e.to_string()))?;
+
+                            // Parse package
+                            let reader = buffer.reader();
+                            let archive_type = ArchiveType::try_from(&filename).unwrap();
+                            let record = match archive_type {
+                                ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
+                                ArchiveType::Conda => package_record_from_conda_reader(reader),
+                            }?;
+
+                            // Store in cache
+                            cache
+                                .insert(
+                                    &file_path,
+                                    record.clone(),
+                                    final_metadata.etag,
+                                    final_metadata.last_modified,
+                                )
+                                .await;
+
+                            record
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Cache stat failed for {file_path}: {e}, proceeding without cache"
+                            );
+                            // Fall back to current behavior (direct read)
+                            let buffer = op
+                                .read(&file_path)
+                                .await
+                                .map_err(|e| std::io::Error::other(e.to_string()))?;
+                            let reader = buffer.reader();
+                            let archive_type = ArchiveType::try_from(&filename).unwrap();
+                            match archive_type {
+                                ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
+                                ArchiveType::Conda => package_record_from_conda_reader(reader),
+                            }?
+                        }
+                    };
+
                     pb.inc(1);
                     Ok::<(String, PackageRecord), std::io::Error>((filename.clone(), record))
                 }
@@ -985,6 +1042,10 @@ pub async fn index(
     let semaphore = Semaphore::new(max_parallel);
     let semaphore = Arc::new(semaphore);
 
+    // Create a shared cache for all subdir indexing operations.
+    // The cache persists across retry attempts and is shared by all subdirs.
+    let cache = cache::PackageRecordCache::new();
+
     let mut tasks: Vec<(Platform, _)> = Vec::new();
     for subdir in subdirs.iter() {
         let task = index_subdir(
@@ -998,6 +1059,7 @@ pub async fn index(
                 .and_then(|p| p.subdirs.get(&subdir.to_string()).cloned()),
             multi_progress.clone(),
             semaphore.clone(),
+            cache.clone(),
         )
         .instrument(tracing::info_span!("index_subdir", subdir = %subdir));
         tasks.push((*subdir, task));

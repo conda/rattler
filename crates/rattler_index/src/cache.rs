@@ -217,6 +217,16 @@ pub async fn read_package_with_retry(
         // Try to read the file with conditional checks
         match crate::utils::read_with_metadata_check(op, path, &metadata).await {
             Ok(buffer) => return Ok((buffer, metadata)),
+            Err(e) if e.kind() == opendal::ErrorKind::Unsupported => {
+                // Backend doesn't support conditional reads (e.g., filesystem) -
+                // fall back to simple read without retry logic
+                tracing::debug!(
+                    "Conditional reads not supported for {}, using simple read",
+                    path
+                );
+                let buffer = op.read(path).await?;
+                return Ok((buffer, metadata));
+            }
             Err(e) if e.kind() == opendal::ErrorKind::ConditionNotMatch => {
                 // File changed - check if we should retry
                 match retry_policy.should_retry(request_start_time, current_try) {
