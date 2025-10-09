@@ -2156,28 +2156,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "futures-retry-policies"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6deb4087bf085042b95438ac07d98b85976f22549c4ae8dee6b44a1ff094b049"
-dependencies = [
- "chrono",
- "futures-retry-policies-core",
- "retry-policies 0.2.1",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "futures-retry-policies-core"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "222776451f4c0381948cc6ab590f674e0216e99738c436e4f09bc9754d7f9933"
-dependencies = [
- "pin-project",
-]
-
-[[package]]
 name = "futures-sink"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3237,12 +3215,6 @@ dependencies = [
  "cfg-if",
  "digest",
 ]
-
-[[package]]
-name = "md5"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 
 [[package]]
 name = "memchr"
@@ -4521,12 +4493,9 @@ dependencies = [
  "console 0.16.1",
  "fs-err",
  "futures",
- "futures-retry-policies",
  "fxhash",
  "indicatif",
- "md5",
  "opendal",
- "parking_lot 0.12.5",
  "rattler_conda_types",
  "rattler_config",
  "rattler_digest",
@@ -4534,14 +4503,13 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_s3",
  "reqwest",
- "retry-policies 0.4.0",
+ "retry-policies",
  "rmp-serde",
  "serde",
  "serde_json",
  "sha2",
  "tar",
  "tempfile",
- "thiserror 2.0.17",
  "tokio",
  "tools",
  "tracing",
@@ -4653,7 +4621,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
- "retry-policies 0.4.0",
+ "retry-policies",
  "rstest",
  "serde",
  "serde_json",
@@ -4762,7 +4730,7 @@ dependencies = [
  "rattler_redaction",
  "reqwest",
  "reqwest-middleware",
- "retry-policies 0.4.0",
+ "retry-policies",
  "rmp-serde",
  "rstest",
  "self_cell",
@@ -5162,7 +5130,7 @@ dependencies = [
  "parking_lot 0.11.2",
  "reqwest",
  "reqwest-middleware",
- "retry-policies 0.4.0",
+ "retry-policies",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
@@ -5187,17 +5155,6 @@ dependencies = [
  "serde",
  "tabwriter",
  "tracing",
-]
-
-[[package]]
-name = "retry-policies"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17dd00bff1d737c40dbcd47d4375281bf4c17933f9eef0a185fc7bacca23ecbd"
-dependencies = [
- "anyhow",
- "chrono",
- "rand 0.8.5",
 ]
 
 [[package]]
@@ -6505,16 +6462,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-serde"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
-dependencies = [
- "serde",
- "tracing-core",
-]
-
-[[package]]
 name = "tracing-subscriber"
 version = "0.3.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6524,15 +6471,12 @@ dependencies = [
  "nu-ansi-term",
  "once_cell",
  "regex-automata",
- "serde",
- "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
  "tracing",
  "tracing-core",
  "tracing-log",
- "tracing-serde",
 ]
 
 [[package]]
