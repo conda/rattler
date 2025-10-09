@@ -2,6 +2,7 @@
 //! files
 #![deny(missing_docs)]
 
+mod cache;
 mod utils;
 
 use std::{
