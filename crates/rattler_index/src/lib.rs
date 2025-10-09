@@ -248,7 +248,7 @@ fn parse_package_buffer(buffer: opendal::Buffer, filename: &str) -> std::io::Res
 /// # Arguments
 ///
 /// * `op` - The operator to use for file operations
-/// * `cache` - The package record cache
+/// * `cache` - The package record cache (scoped to a single subdir)
 /// * `subdir` - The subdirectory (e.g., "noarch", "linux-64")
 /// * `filename` - The package filename (e.g., "package-1.0.0.tar.bz2")
 ///
@@ -264,6 +264,7 @@ async fn read_and_parse_package(
     let file_path = format!("{subdir}/{filename}");
 
     // Try cache or get current metadata
+    // Cache uses filename as key since it's scoped to a single subdir
     match cache.get_or_stat(op, &file_path).await {
         Ok(cache::CacheResult::Hit(record)) => {
             // Cache hit - reuse the record
@@ -288,7 +289,7 @@ async fn read_and_parse_package(
             // Parse package
             let record = parse_package_buffer(buffer, filename)?;
 
-            // Store in cache
+            // Store in cache using filename as key
             cache
                 .insert(
                     &file_path,
@@ -1075,12 +1076,12 @@ pub async fn index(
     let semaphore = Semaphore::new(max_parallel);
     let semaphore = Arc::new(semaphore);
 
-    // Create a shared cache for all subdir indexing operations.
-    // The cache persists across retry attempts and is shared by all subdirs.
-    let cache = cache::PackageRecordCache::new();
-
     let mut tasks: Vec<(Platform, _)> = Vec::new();
     for subdir in subdirs.iter() {
+        // Create a separate cache for each subdir.
+        // The cache persists across retry attempts for this specific subdir.
+        let cache = cache::PackageRecordCache::new();
+
         let task = index_subdir(
             *subdir,
             op.clone(),
@@ -1092,7 +1093,7 @@ pub async fn index(
                 .and_then(|p| p.subdirs.get(&subdir.to_string()).cloned()),
             multi_progress.clone(),
             semaphore.clone(),
-            cache.clone(),
+            cache,
         )
         .instrument(tracing::info_span!("index_subdir", subdir = %subdir));
         tasks.push((*subdir, task));
