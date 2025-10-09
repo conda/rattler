@@ -32,6 +32,7 @@ use opendal::{
     raw::*, Buffer, Builder, Capability, EntryMode, Error, ErrorKind, Metadata, Operator, Result,
     Scheme,
 };
+use rattler_digest::compute_bytes_digest;
 use tokio::sync::RwLock;
 
 const SCHEME_NAME: &str = "etag-memory";
@@ -119,7 +120,8 @@ impl FileEntry {
     /// Computes an `ETag` as MD5 hex digest (mimics S3 behavior for simple
     /// objects).
     fn compute_etag(data: &[u8]) -> String {
-        format!("\"{:x}\"", md5::compute(data))
+        let digest = compute_bytes_digest::<rattler_digest::Md5>(data);
+        format!("\"{digest:x}\"")
     }
 }
 

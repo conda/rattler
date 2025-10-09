@@ -40,7 +40,6 @@ console = { workspace = true }
 fs-err = { workspace = true }
 fxhash = { workspace = true }
 futures = { workspace = true }
-futures-retry-policies = { workspace = true, features = ["retry-policies"]}
 indicatif = { workspace = true }
 opendal = { workspace = true, features = [
   "services-s3",
@@ -67,7 +66,6 @@ tar = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
-thiserror = { workspace = true }
 url = { workspace = true }
 zstd = { workspace = true }
 retry-policies = { workspace = true }
@@ -75,6 +73,5 @@ retry-policies = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 tools = { path = "../tools", default-features = false }
-md5 = "0.7"
 parking_lot = { workspace = true, features = ["arc_lock", "send_guard"] }
 tracing-subscriber = { workspace = true, features = ["json"]}
