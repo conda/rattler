@@ -218,6 +218,100 @@ pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result
     read_index_json_from_archive(&bytes, &mut archive)
 }
 
+/// Parse a package file buffer based on its filename extension.
+///
+/// # Arguments
+///
+/// * `buffer` - The file contents to parse
+/// * `filename` - The filename (used to determine archive type)
+///
+/// # Returns
+///
+/// Returns the parsed `PackageRecord`.
+fn parse_package_buffer(buffer: opendal::Buffer, filename: &str) -> std::io::Result<PackageRecord> {
+    let reader = buffer.reader();
+    let archive_type = ArchiveType::try_from(filename).unwrap();
+    match archive_type {
+        ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
+        ArchiveType::Conda => package_record_from_conda_reader(reader),
+    }
+}
+
+/// Read and parse a package file with caching and retry logic.
+///
+/// This function encapsulates the logic for reading a package file, including:
+/// - Checking the cache for a previously computed record
+/// - Reading the file with retry logic on cache miss
+/// - Parsing the package content
+/// - Storing the result in the cache
+///
+/// # Arguments
+///
+/// * `op` - The operator to use for file operations
+/// * `cache` - The package record cache
+/// * `subdir` - The subdirectory (e.g., "noarch", "linux-64")
+/// * `filename` - The package filename (e.g., "package-1.0.0.tar.bz2")
+///
+/// # Returns
+///
+/// Returns the parsed `PackageRecord` on success.
+async fn read_and_parse_package(
+    op: &Operator,
+    cache: &cache::PackageRecordCache,
+    subdir: Platform,
+    filename: &str,
+) -> std::io::Result<PackageRecord> {
+    let file_path = format!("{subdir}/{filename}");
+
+    // Try cache or get current metadata
+    match cache.get_or_stat(op, &file_path).await {
+        Ok(cache::CacheResult::Hit(record)) => {
+            // Cache hit - reuse the record
+            Ok(*record)
+        }
+        Ok(cache::CacheResult::Miss {
+            etag,
+            last_modified,
+        }) => {
+            // Cache miss - read file with retry logic
+            let (buffer, final_metadata) = cache::read_package_with_retry(
+                op,
+                &file_path,
+                RepodataFileMetadata {
+                    etag,
+                    last_modified,
+                },
+            )
+            .await
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+
+            // Parse package
+            let record = parse_package_buffer(buffer, filename)?;
+
+            // Store in cache
+            cache
+                .insert(
+                    &file_path,
+                    record.clone(),
+                    final_metadata.etag,
+                    final_metadata.last_modified,
+                )
+                .await;
+
+            Ok(record)
+        }
+        Err(e) => {
+            tracing::warn!("Cache stat failed for {file_path}: {e}, proceeding without cache");
+            // Fall back to direct read without cache
+            let buffer = op
+                .read(&file_path)
+                .await
+                .map_err(|e| std::io::Error::other(e.to_string()))?;
+            parse_package_buffer(buffer, filename)
+        }
+    }
+}
+
 /// Metadata for a single repodata file, used to detect concurrent
 /// modifications.
 #[derive(Debug, Clone)]
@@ -501,82 +595,21 @@ async fn index_subdir_inner(
             let pb = pb.clone();
             let semaphore = semaphore.clone();
             let cache = cache.clone();
-            {
-                async move {
-                    let _permit = semaphore
-                        .acquire()
-                        .await
-                        .expect("Semaphore was unexpectedly closed");
-                    pb.set_message(format!(
-                        "Indexing {} {}",
-                        subdir.as_str(),
-                        console::style(filename.clone()).dim()
-                    ));
-                    let file_path = format!("{subdir}/{filename}");
+            async move {
+                let _permit = semaphore
+                    .acquire()
+                    .await
+                    .expect("Semaphore was unexpectedly closed");
+                pb.set_message(format!(
+                    "Indexing {} {}",
+                    subdir.as_str(),
+                    console::style(&filename).dim()
+                ));
 
-                    // Try cache or get current metadata
-                    let record = match cache.get_or_stat(&op, &file_path).await {
-                        Ok(cache::CacheResult::Hit(record)) => {
-                            // Cache hit - reuse the record
-                            *record
-                        }
-                        Ok(cache::CacheResult::Miss {
-                            etag,
-                            last_modified,
-                        }) => {
-                            // Cache miss - read file with retry logic
-                            let (buffer, final_metadata) = cache::read_package_with_retry(
-                                &op,
-                                &file_path,
-                                RepodataFileMetadata {
-                                    etag,
-                                    last_modified,
-                                },
-                            )
-                            .await
-                            .map_err(|e| std::io::Error::other(e.to_string()))?;
+                let record = read_and_parse_package(&op, &cache, subdir, &filename).await?;
 
-                            // Parse package
-                            let reader = buffer.reader();
-                            let archive_type = ArchiveType::try_from(&filename).unwrap();
-                            let record = match archive_type {
-                                ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
-                                ArchiveType::Conda => package_record_from_conda_reader(reader),
-                            }?;
-
-                            // Store in cache
-                            cache
-                                .insert(
-                                    &file_path,
-                                    record.clone(),
-                                    final_metadata.etag,
-                                    final_metadata.last_modified,
-                                )
-                                .await;
-
-                            record
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Cache stat failed for {file_path}: {e}, proceeding without cache"
-                            );
-                            // Fall back to current behavior (direct read)
-                            let buffer = op
-                                .read(&file_path)
-                                .await
-                                .map_err(|e| std::io::Error::other(e.to_string()))?;
-                            let reader = buffer.reader();
-                            let archive_type = ArchiveType::try_from(&filename).unwrap();
-                            match archive_type {
-                                ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
-                                ArchiveType::Conda => package_record_from_conda_reader(reader),
-                            }?
-                        }
-                    };
-
-                    pb.inc(1);
-                    Ok::<(String, PackageRecord), std::io::Error>((filename.clone(), record))
-                }
+                pb.inc(1);
+                Ok::<(String, PackageRecord), std::io::Error>((filename, record))
             }
         };
         tasks.push(tokio::spawn(task));
