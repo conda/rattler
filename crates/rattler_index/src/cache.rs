@@ -4,13 +4,17 @@
 //! computed `PackageRecords` if the package files themselves haven't changed. This
 //! cache validates entries using `ETags` or `last_modified` timestamps to ensure safety.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::SystemTime};
 
 use chrono::{DateTime, Utc};
 use fxhash::FxHashMap;
 use opendal::Operator;
 use rattler_conda_types::PackageRecord;
+use rattler_networking::retry_policies::default_retry_policy;
+use retry_policies::{RetryDecision, RetryPolicy};
 use tokio::sync::RwLock;
+
+use crate::RepodataFileMetadata;
 
 /// A cached package record with its associated metadata for validation.
 #[derive(Debug, Clone)]
@@ -27,7 +31,7 @@ struct CachedPackage {
 #[derive(Debug)]
 pub enum CacheResult {
     /// Cache hit - the record is still valid
-    Hit(PackageRecord),
+    Hit(Box<PackageRecord>),
     /// Cache miss - need to read and parse the file.
     /// Contains the current file metadata for conditional reading.
     Miss {
@@ -102,7 +106,7 @@ impl PackageRecordCache {
             if let (Some(cached_etag), Some(ref current_etag)) = (&cached.etag, &current_etag) {
                 if cached_etag == current_etag {
                     tracing::debug!("Cache hit for {} (etag validated)", path);
-                    return Ok(CacheResult::Hit(cached.record));
+                    return Ok(CacheResult::Hit(Box::new(cached.record)));
                 } else {
                     tracing::debug!(
                         "Cache entry for {} has mismatched etag, treating as miss",
@@ -121,7 +125,7 @@ impl PackageRecordCache {
             {
                 if cached_modified == current_modified {
                     tracing::debug!("Cache hit for {} (last_modified validated)", path);
-                    return Ok(CacheResult::Hit(cached.record));
+                    return Ok(CacheResult::Hit(Box::new(cached.record)));
                 } else {
                     tracing::debug!(
                         "Cache entry for {} has mismatched last_modified, treating as miss",
@@ -172,6 +176,85 @@ impl PackageRecordCache {
 
         let mut guard = self.inner.write().await;
         guard.insert(path.to_string(), cached);
+    }
+}
+
+/// Read a package file with retry logic for handling concurrent modifications.
+///
+/// This function reads a file using conditional requests (if-match/if-unmodified-since)
+/// to ensure we read the same version that was stat'ed. If a `ConditionNotMatch` error
+/// occurs (file changed between stat and read), it retries with exponential backoff.
+///
+/// # Arguments
+///
+/// * `op` - The operator to use for file operations
+/// * `path` - The file path to read
+/// * `metadata` - The file metadata to use for conditional reading
+///
+/// # Returns
+///
+/// Returns a tuple of (file contents, final metadata) if successful. The final metadata
+/// reflects the actual version of the file that was read (which may differ from the
+/// initial metadata if retries occurred).
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Retries are exhausted due to repeated `ConditionNotMatch` errors
+/// - Any non-retryable error occurs (`NotFound`, `PermissionDenied`, etc.)
+pub async fn read_package_with_retry(
+    op: &Operator,
+    path: &str,
+    initial_metadata: RepodataFileMetadata,
+) -> opendal::Result<(opendal::Buffer, RepodataFileMetadata)> {
+    let retry_policy = default_retry_policy();
+    let mut current_try = 0;
+    let mut metadata = initial_metadata;
+
+    loop {
+        let request_start_time = SystemTime::now();
+
+        // Try to read the file with conditional checks
+        match crate::utils::read_with_metadata_check(op, path, &metadata).await {
+            Ok(buffer) => return Ok((buffer, metadata)),
+            Err(e) if e.kind() == opendal::ErrorKind::ConditionNotMatch => {
+                // File changed - check if we should retry
+                match retry_policy.should_retry(request_start_time, current_try) {
+                    RetryDecision::Retry { execute_after } => {
+                        let duration = execute_after
+                            .duration_since(SystemTime::now())
+                            .unwrap_or_default();
+                        tracing::debug!(
+                            "File {} changed between stat and read (attempt {}), retrying in {:?}",
+                            path,
+                            current_try + 1,
+                            duration
+                        );
+                        tokio::time::sleep(duration).await;
+                        current_try += 1;
+
+                        // Re-stat the file to get fresh metadata for next iteration
+                        let fresh_metadata = op.stat(path).await?;
+                        metadata = RepodataFileMetadata {
+                            etag: fresh_metadata.etag().map(str::to_owned),
+                            last_modified: fresh_metadata.last_modified(),
+                        };
+                        // Loop continues to next iteration with fresh metadata
+                    }
+                    RetryDecision::DoNotRetry => {
+                        tracing::warn!(
+                            "Max retries exceeded for reading {} due to concurrent modifications",
+                            path
+                        );
+                        return Err(e);
+                    }
+                }
+            }
+            Err(e) => {
+                // Not a retryable error - propagate immediately
+                return Err(e);
+            }
+        }
     }
 }
 
