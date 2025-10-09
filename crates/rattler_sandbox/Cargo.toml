@@ -9,6 +9,10 @@ license.workspace = true
 edition.workspace = true
 readme.workspace = true
 
+[[bin]]
+name = "rattler-sandbox"
+path = "src/main.rs"
+
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
 fs-err = { workspace = true }
