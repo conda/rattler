@@ -73,5 +73,3 @@ retry-policies = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 tools = { path = "../tools", default-features = false }
-parking_lot = { workspace = true, features = ["arc_lock", "send_guard"] }
-tracing-subscriber = { workspace = true, features = ["json"]}
