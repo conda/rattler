@@ -899,18 +899,22 @@ pub async fn index_s3(
     .map(|_| ())
 }
 
-/// Create a new `repodata.json` for all packages in the given configurator's
-/// root. If `target_platform` is `Some`, only that specific subdir is indexed.
-/// Otherwise indexes all subdirs and creates a `repodata.json` for each.
+/// Create a new `repodata.json` for all packages in the given operator's root.
 ///
-/// The process is the following:
-/// 1. Get all subdirs and create `noarch` and `target_platform` if they do not
-///    exist.
-/// 2. Iterate subdirs and index each subdir. Therefore, we need to:
+/// If `target_platform` is `Some`, only that specific subdir is indexed.
+/// Otherwise, indexes all subdirs and creates a `repodata.json` for each.
+///
+/// The function takes roughly the following steps:
+///
+/// 1. Get all subdirs and create `noarch` and `target_platform` if they do not exist.
+/// 2. Iterate subdirs and index each subdir:
 ///    1. Collect all uploaded packages in subdir
 ///    2. Collect all registered packages from `repodata.json` (if exists)
 ///    3. Determine which packages to add to and to delete from `repodata.json`
-///    4. Write `repodata.json` back
+///    4. Write `repodata.json` back using conditional writes to prevent race conditions
+///
+/// Returns `IndexStats` containing statistics about the indexing operation,
+/// including the number of packages added/removed and retry counts per subdir.
 #[allow(clippy::too_many_arguments)]
 pub async fn index(
     target_platform: Option<Platform>,

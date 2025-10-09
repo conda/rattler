@@ -17,6 +17,15 @@ use tracing::Instrument;
 
 use super::etag_memory_backend::ETagMemoryBuilder;
 
+/// Validates that concurrent indexing properly handles race conditions with retry logic.
+///
+/// This test creates a deterministic race condition where two processes attempt to
+/// update the same repodata.json simultaneously. It verifies that:
+/// - The first process completes successfully
+/// - The second process detects the race condition (ETag mismatch)
+/// - The second process retries and eventually succeeds
+/// - Exactly one retry occurs (deterministic due to synchronization barriers)
+/// - The final repodata.json is valid and contains the expected package
 #[tokio::test]
 async fn test_concurrent_index_with_race_condition_and_retry() {
     use std::sync::{

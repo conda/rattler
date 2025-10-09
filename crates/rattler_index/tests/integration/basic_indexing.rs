@@ -12,6 +12,12 @@ fn test_data_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
 }
 
+/// Validates that indexing creates correct repodata.json for .conda and .tar.bz2 packages.
+///
+/// This test downloads sample packages, indexes them, and verifies:
+/// - The subdir is correctly set
+/// - Both .tar.bz2 and .conda packages are indexed
+/// - Package records match expected values
 #[tokio::test]
 async fn test_index() {
     let temp_dir = tempfile::tempdir().unwrap();
@@ -105,6 +111,12 @@ async fn test_index() {
     );
 }
 
+/// Validates that indexing an empty directory creates a noarch subdir with repodata files.
+///
+/// This test verifies that:
+/// - A noarch directory is automatically created
+/// - repodata.json is created even with no packages
+/// - Compressed and sharded variants are created when requested
 #[tokio::test]
 async fn test_index_empty_directory_creates_noarch_repodata() {
     let temp_dir = tempfile::tempdir().unwrap();

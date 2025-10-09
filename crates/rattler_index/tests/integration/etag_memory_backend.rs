@@ -1,10 +1,25 @@
-// Custom in-memory opendal backend with ETag and conditional request support
-// for testing
-//
-// This backend provides an in-memory storage system that properly implements
-// ETags and conditional requests (if_match, if_none_match, if_unmodified_since)
-// similar to how S3 behaves. This allows us to test race condition handling
-// without needing actual S3.
+//! Custom in-memory `opendal` backend with `ETag` and conditional request support.
+//!
+//! This module provides a test-only in-memory storage backend that implements
+//! `ETags` and conditional HTTP requests (if-match, if-none-match,
+//! if-unmodified-since) similar to how S3 behaves in production.
+//!
+//! The main indexing code uses conditional writes to prevent race conditions
+//! when multiple processes attempt to update repodata files concurrently.
+//! Testing this behavior requires a backend that:
+//!
+//! 1. Generates and tracks `ETags` for files
+//! 2. Properly enforces conditional request semantics
+//! 3. Returns `ConditionNotMatch` errors when conditions fail
+//! 4. Allows deterministic testing via synchronization hooks
+//!
+//! The standard `opendal` memory backend doesn't support these features, and
+//! using real S3 for tests would be slow, expensive, and non-deterministic.
+//!
+//! This backend includes a hook system (`TestHooks`) that allows tests to
+//! inject synchronization barriers at specific points (before/after stat, read,
+//! write). This enables deterministic race condition testing by coordinating
+//! multiple concurrent indexing operations.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -21,9 +36,11 @@ use tokio::sync::RwLock;
 
 const SCHEME_NAME: &str = "etag-memory";
 
-// Small helpers to reduce duplication in conditional checks
-// Note: ctx is used to disambiguate the operation in error messages (e.g. " on
-// read")
+/// Validates the if-match condition against the current `ETag`.
+///
+/// Returns `ConditionNotMatch` error if the provided `ETag` doesn't match the
+/// current one. The `ctx` parameter adds context to error messages (e.g., " on
+/// read").
 #[inline]
 fn check_if_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<()> {
     if let Some(if_match) = cond {
@@ -37,6 +54,11 @@ fn check_if_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<()> {
     Ok(())
 }
 
+/// Validates the if-none-match condition against the current `ETag`.
+///
+/// Returns `ConditionNotMatch` error if the `ETag` matches (or if "*" is provided
+/// and file exists). Used for create-only semantics. The `ctx` parameter adds
+/// context to error messages.
 #[inline]
 fn check_if_none_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<()> {
     if let Some(if_none_match) = cond {
@@ -50,6 +72,11 @@ fn check_if_none_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<(
     Ok(())
 }
 
+/// Validates the if-unmodified-since condition against the file's last modified
+/// time.
+///
+/// Returns `ConditionNotMatch` error if the file was modified after the
+/// provided timestamp.
 #[inline]
 fn check_if_unmodified_since(
     last_modified: DateTime<Utc>,
@@ -66,7 +93,10 @@ fn check_if_unmodified_since(
     Ok(())
 }
 
-/// Entry stored in the `ETag` memory backend
+/// A file entry stored in the `ETag` memory backend.
+///
+/// Contains the file data along with metadata (`ETag`, last modified time, size)
+/// needed for conditional request validation.
 #[derive(Clone, Debug)]
 struct FileEntry {
     data: Bytes,
@@ -86,7 +116,8 @@ impl FileEntry {
         }
     }
 
-    /// Compute `ETag` as MD5 hex (mimics S3 behavior)
+    /// Computes an `ETag` as MD5 hex digest (mimics S3 behavior for simple
+    /// objects).
     fn compute_etag(data: &[u8]) -> String {
         format!("\"{:x}\"", md5::compute(data))
     }
@@ -94,14 +125,23 @@ impl FileEntry {
 
 use std::{future::Future, pin::Pin};
 
-/// Operations that can be intercepted
+/// Operations that can be intercepted by test hooks.
+///
+/// Each operation represents a point where tests can inject synchronization
+/// logic (e.g., barriers, delays) to create deterministic race conditions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operation {
+    /// Before a stat (metadata check) operation
     BeforeStat,
+    /// After a stat operation completes
     AfterStat,
+    /// Before a read operation
     BeforeRead,
+    /// After a read operation completes
     AfterRead,
+    /// Before a write operation
     BeforeWrite,
+    /// After a write operation completes
     AfterWrite,
 }
 
@@ -110,10 +150,14 @@ pub enum Operation {
 pub type TestCallback =
     Arc<dyn Fn(&str, Operation) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
-/// Test hooks for synchronizing operations in tests
+/// Test hooks for synchronizing operations in concurrent tests.
+///
+/// Allows tests to inject custom async logic at specific points during
+/// backend operations to create deterministic race conditions.
 #[derive(Clone)]
 pub struct TestHooks {
-    /// Callback invoked for operations
+    /// Callback invoked for operations. Receives the file path and operation
+    /// type.
     pub on_operation: TestCallback,
 }
 
@@ -131,7 +175,10 @@ impl Default for TestHooks {
     }
 }
 
-/// In-memory storage with `ETag` support
+/// In-memory storage backend with `ETag` and conditional request support.
+///
+/// Implements `opendal`'s `Access` trait to provide S3-like behavior for testing,
+/// including `ETag` generation and validation of conditional HTTP requests.
 #[derive(Clone, Debug)]
 pub struct ETagMemoryBackend {
     storage: Arc<RwLock<HashMap<String, Arc<RwLock<FileEntry>>>>>,
@@ -157,7 +204,9 @@ impl ETagMemoryBackend {
     }
 }
 
-/// Builder for `ETag` memory backend
+/// Builder for the `ETag` memory backend.
+///
+/// Supports configuring test hooks for synchronization in concurrent tests.
 #[derive(Default, Debug)]
 pub struct ETagMemoryBuilder {
     test_hooks: Option<TestHooks>,
@@ -513,6 +562,7 @@ impl oio::List for ETagMemoryLister {
 mod tests {
     use super::*;
 
+    /// Validates basic read/write operations work correctly.
     #[tokio::test]
     async fn test_basic_read_write() {
         let op = Operator::new(ETagMemoryBuilder::default())
@@ -527,6 +577,7 @@ mod tests {
         assert_eq!(data.to_bytes(), "hello world");
     }
 
+    /// Validates that ETags are generated and change when file content changes.
     #[tokio::test]
     async fn test_etag_generation() {
         let op = Operator::new(ETagMemoryBuilder::default())
@@ -548,6 +599,10 @@ mod tests {
         assert_ne!(etag1, etag2);
     }
 
+    /// Validates that conditional reads with if-match work correctly.
+    ///
+    /// Tests that reads succeed when ETag matches and fail with
+    /// ConditionNotMatch when it doesn't.
     #[tokio::test]
     async fn test_conditional_read_with_if_match() {
         let op = Operator::new(ETagMemoryBuilder::default())
@@ -568,6 +623,10 @@ mod tests {
         assert_eq!(result.unwrap_err().kind(), ErrorKind::ConditionNotMatch);
     }
 
+    /// Validates that conditional writes with if-match work correctly.
+    ///
+    /// Tests that writes succeed when ETag matches and fail with
+    /// ConditionNotMatch when it doesn't.
     #[tokio::test]
     async fn test_conditional_write_with_if_match() {
         let op = Operator::new(ETagMemoryBuilder::default())
@@ -588,6 +647,10 @@ mod tests {
         assert_eq!(result.unwrap_err().kind(), ErrorKind::ConditionNotMatch);
     }
 
+    /// Validates that if-none-match with "*" enforces create-only semantics.
+    ///
+    /// Tests that the first write succeeds but subsequent writes with
+    /// if-none-match="*" fail.
     #[tokio::test]
     async fn test_if_none_match_create_only() {
         let op = Operator::new(ETagMemoryBuilder::default())
