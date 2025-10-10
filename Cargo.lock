@@ -4503,6 +4503,7 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_s3",
  "reqwest",
+ "retry-policies",
  "rmp-serde",
  "serde",
  "serde_json",
