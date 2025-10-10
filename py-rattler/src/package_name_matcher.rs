@@ -1,15 +1,15 @@
 use std::{
     collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher}, str::FromStr,
+    hash::{Hash, Hasher},
+    str::FromStr,
 };
 
 use pyo3::{pyclass, pymethods};
 use rattler_conda_types::{PackageName, PackageNameMatcher};
 
-use crate::error::PyRattlerError;
+use crate::{error::PyRattlerError, package_name::PyPackageName};
 
 #[pyclass]
-#[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPackageNameMatcher {
     pub(crate) inner: PackageNameMatcher,
@@ -33,17 +33,25 @@ impl PyPackageNameMatcher {
     /// valid or normalized conda package name.
     #[new]
     pub fn new(source: String) -> pyo3::PyResult<Self> {
-        Ok(PackageNameMatcher::from_str(&source)
-            .map(Into::into)
-            .map_err(PyRattlerError::from)?)
+        let inner = PackageNameMatcher::from_str(source.as_str()).map_err(PyRattlerError::from)?;
+
+        Ok(Self { inner })
     }
 
-    /// Constructs a new exact `PackageNameMatcher` from a string without checking if the string is actually a
-    /// valid or normalized conda package name. This should only be used if you are sure that the
-    /// input string is valid.
-    #[staticmethod]
-    pub fn new_unchecked(normalized: String) -> Self {
-        PackageNameMatcher::Exact(PackageName::new_unchecked(normalized)).into()
+    fn display_inner(&self) -> String {
+        match self.inner {
+            PackageNameMatcher::Exact(ref name) => {
+                format!("\"{}\", exact", name.as_source())
+            }
+            PackageNameMatcher::Glob(ref glob) => format!("\"{}\", glob", glob),
+            PackageNameMatcher::Regex(ref regex) => {
+                format!("\"{}\", regex", regex)
+            }
+        }
+    }
+
+    fn as_package_name(&self) -> Option<PyPackageName> {
+        Option::<PackageName>::from(self.inner.clone()).map(PyPackageName::from)
     }
 
     /// Compute the hash of the name.

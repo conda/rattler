@@ -203,7 +203,7 @@ class MatchSpec:
         MatchSpec("foo ==3.4")
         >>> MatchSpec.from_nameless(spec, "$foo") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        exceptions.InvalidPackageNameException
+        exceptions.PackageNameMatcherParseException
         >>>
         ```
         """

@@ -35,10 +35,10 @@ use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use error::{
     ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
     EnvironmentCreationException, ExtractException, FetchRepoDataException,
-    InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException, PackageNameMatcherParseException,
-    InvalidUrlException, InvalidVersionException, IoException, LinkException, ParseArchException,
-    ParsePlatformException, PyRattlerError, SolverException, TransactionException,
-    ValidatePackageRecordsException, VersionBumpException,
+    InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
+    InvalidUrlException, InvalidVersionException, IoException, LinkException,
+    PackageNameMatcherParseException, ParseArchException, ParsePlatformException, PyRattlerError,
+    SolverException, TransactionException, ValidatePackageRecordsException, VersionBumpException,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;

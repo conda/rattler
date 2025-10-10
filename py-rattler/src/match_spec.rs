@@ -1,5 +1,5 @@
-use std::{borrow::Borrow, str::FromStr};
 use std::sync::Arc;
+use std::{borrow::Borrow, str::FromStr};
 
 use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
 use rattler_conda_types::{Channel, MatchSpec, Matches, PackageNameMatcher, ParseStrictness};
