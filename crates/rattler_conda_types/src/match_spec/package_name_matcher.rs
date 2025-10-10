@@ -60,20 +60,13 @@ impl PackageNameMatcher {
             PackageNameMatcher::Regex(regex) => regex.is_match(other.as_normalized()),
         }
     }
+}
 
-    /// Convert [`PackageNameMatcher`] to [`PackageName`].
-    pub fn unwrap_into_exact(self) -> PackageName {
-        match self {
-            PackageNameMatcher::Exact(s) => s,
-            _ => panic!("PackageNameMatcher is not Exact"),
-        }
-    }
-
-    /// Convert [`PackageNameMatcher`] to [`PackageName`].
-    pub fn unwrap_as_exact(&self) -> &PackageName {
-        match self {
-            PackageNameMatcher::Exact(s) => s,
-            _ => panic!("PackageNameMatcher is not Exact"),
+impl From<PackageNameMatcher> for Option<PackageName> {
+    fn from(value: PackageNameMatcher) -> Self {
+        match value {
+            PackageNameMatcher::Exact(s) => Some(s),
+            _ => None,
         }
     }
 }
