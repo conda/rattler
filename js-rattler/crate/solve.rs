@@ -174,10 +174,15 @@ pub async fn simple_solve(
             repo_name: r.channel,
             filename: r.file_name,
             version: r.package_record.version.to_string(),
-            md5: r.package_record.md5.as_ref()
+            md5: r
+                .package_record
+                .md5
+                .as_ref()
                 .map(|hash| format!("{hash:x}"))
                 .into(),
-            sha256: r.package_record.sha256
+            sha256: r
+                .package_record
+                .sha256
                 .as_ref()
                 .map(|hash| format!("{hash:x}"))
                 .into(),
