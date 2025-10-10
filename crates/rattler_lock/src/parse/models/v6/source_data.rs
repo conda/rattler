@@ -114,6 +114,9 @@ pub enum SourceLocationError {
 
     #[error("must specify none or exactly one of `branch`, `tag` or `rev`")]
     MultipleGitReferences,
+
+    #[error("`path` can not have `subdir`")]
+    PathSubdir,
 }
 
 impl<'a> TryFrom<SourceLocationData<'a>> for SourceLocation {
@@ -144,6 +147,9 @@ impl<'a> TryFrom<SourceLocationData<'a>> for SourceLocation {
             let url = url.into_owned();
             Ok(SourceLocation::Url(UrlSourceLocation { url, md5, sha256 }))
         } else if let Some(path) = path {
+            if subdirectory.is_some() {
+                return Err(SourceLocationError::PathSubdir);
+            }
             let path = path.into_owned().into();
             Ok(SourceLocation::Path(PathSourceLocation { path }))
         } else if let Some(git) = git {
