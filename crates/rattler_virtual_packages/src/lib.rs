@@ -312,7 +312,7 @@ impl VirtualPackages {
                     .archspec
                     .as_ref()
                     .unwrap_or(&Override::DefaultEnvVar),
-                || Ok(Archspec::from_platform(platform)),
+                || Ok(Archspec::from_platform(platform.clone())),
             )?;
 
             Ok(Self {

@@ -463,14 +463,14 @@ impl<T: Shell + Clone> Activator<T> {
         &self,
         variables: ActivationVariables,
     ) -> Result<ActivationResult<T>, ActivationError> {
-        let mut script = ShellScript::new(self.shell_type.clone(), self.platform);
+        let mut script = ShellScript::new(self.shell_type.clone(), self.platform.clone());
 
         let mut path = variables.path.clone().unwrap_or_default();
         if let Some(conda_prefix) = variables.conda_prefix {
             let deactivate = Activator::from_path(
                 Path::new(&conda_prefix),
                 self.shell_type.clone(),
-                self.platform,
+                self.platform.clone(),
             )?;
 
             for (key, _) in &deactivate.env_vars {
@@ -537,7 +537,7 @@ impl<T: Shell + Clone> Activator<T> {
         &self,
         variables: ActivationVariables,
     ) -> Result<ActivationResult<T>, ActivationError> {
-        let mut script = ShellScript::new(self.shell_type.clone(), self.platform);
+        let mut script = ShellScript::new(self.shell_type.clone(), self.platform.clone());
 
         // Get the current CONDA shell level from passed environment variables
         let current_conda_shlvl = variables
@@ -625,7 +625,7 @@ impl<T: Shell + Clone> Activator<T> {
         // the activation script followed by again emitting all environment
         // variables. Any changes should then become visible.
         let mut activation_detection_script =
-            ShellScript::new(self.shell_type.clone(), self.platform);
+            ShellScript::new(self.shell_type.clone(), self.platform.clone());
         activation_detection_script
             .print_env()?
             .echo(ENV_START_SEPARATOR)?

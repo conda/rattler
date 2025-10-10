@@ -264,7 +264,7 @@ impl<'lock> Environment<'lock> {
 
     /// Returns all the platforms for which we have a locked-down environment.
     pub fn platforms(&self) -> impl ExactSizeIterator<Item = Platform> + '_ {
-        self.data().packages.keys().copied()
+        self.data().packages.keys().cloned()
     }
 
     /// Returns the channels that are used by this environment.
@@ -325,7 +325,7 @@ impl<'lock> Environment<'lock> {
         let env_data = self.data();
         env_data.packages.iter().map(move |(platform, packages)| {
             (
-                *platform,
+                platform.clone(),
                 packages.iter().map(move |package| match package {
                     EnvironmentPackageData::Conda(data) => {
                         LockedPackageRef::Conda(&self.lock_file.inner.conda_packages[*data])
@@ -357,7 +357,7 @@ impl<'lock> Environment<'lock> {
                     &self.lock_file.inner.pypi_environment_package_data[*env_data_idx],
                 )),
             });
-            (*platform, records)
+            (platform.clone(), records)
         })
     }
 
