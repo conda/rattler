@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Union
 
 from rattler.package.package_name import PackageName
@@ -29,6 +31,13 @@ class PackageNameMatcher:
     def __repr__(self) -> str:
         inner = self._package_name_matcher.display_inner()
         return f"{type(self).__name__}({inner})"
+
+    @classmethod
+    def _from_py_package_name_matcher(cls, py_package_name_matcher: PyPackageNameMatcher) -> PackageNameMatcher:
+        """Construct Rattler PackageNameMatcher from FFI PyPackageName object."""
+        package_name_matcher = cls.__new__(cls)
+        package_name_matcher._package_name_matcher = py_package_name_matcher
+        return package_name_matcher
 
     def as_package_name(self) -> Union[PackageName, None]:
         """

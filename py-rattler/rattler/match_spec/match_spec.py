@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 from rattler.channel.channel import Channel
-from rattler.package.package_name import PackageName
+from rattler.package.package_name_matcher import PackageNameMatcher
 from rattler.rattler import PyMatchSpec
 
 if TYPE_CHECKING:
@@ -104,11 +104,11 @@ class MatchSpec:
             )
 
     @property
-    def name(self) -> Optional[PackageName]:
+    def name(self) -> Optional[PackageNameMatcher]:
         """
         The name of the package.
         """
-        return PackageName._from_py_package_name(self._match_spec.name)
+        return PackageNameMatcher._from_py_package_name_matcher(self._match_spec.name)
 
     @property
     def version(self) -> Optional[str]:
