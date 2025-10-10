@@ -118,8 +118,7 @@ impl RepoDataQuery {
                 let name = spec
                     .name
                     .clone()
-                    .map(Option::<PackageName>::from)
-                    .flatten()
+                    .and_then(Option::<PackageName>::from)
                     .ok_or(GatewayError::MatchSpecWithoutExactName(Box::new(
                         spec.clone(),
                     )))?;

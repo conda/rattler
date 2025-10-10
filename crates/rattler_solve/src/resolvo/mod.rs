@@ -407,8 +407,7 @@ impl<'a> CondaDependencyProvider<'a> {
                     if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
                         spec.name
                             .as_ref()
-                            .map(|name| Option::<PackageName>::from(name.clone()))
-                            .flatten()
+                            .and_then(|name| Option::<PackageName>::from(name.clone()))
                             .expect("expecting an exact package name")
                             .as_normalized()
                             == record.package_record.name.as_normalized()
