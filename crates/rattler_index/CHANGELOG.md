@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0](https://github.com/conda/rattler/compare/rattler_index-v0.25.6...rattler_index-v0.26.0) - 2025-10-10
+
+### Added
+
+- detect concurrent s3 indexing ([#1716](https://github.com/conda/rattler/pull/1716))
+
 ## [0.25.6](https://github.com/conda/rattler/compare/rattler_index-v0.25.5...rattler_index-v0.25.6) - 2025-10-09
 
 ### Other
