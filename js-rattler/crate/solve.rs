@@ -178,14 +178,12 @@ pub async fn simple_solve(
                 .package_record
                 .md5
                 .as_ref()
-                .map(|hash| format!("{hash:x}"))
-                .into(),
+                .map(|hash| format!("{hash:x}")),
             sha256: r
                 .package_record
                 .sha256
                 .as_ref()
-                .map(|hash| format!("{hash:x}"))
-                .into(),
+                .map(|hash| format!("{hash:x}")),
             depends: Some(r.package_record.depends.clone()),
             subdir: Some(r.package_record.subdir.clone()),
         })
