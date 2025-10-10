@@ -4,9 +4,9 @@ use std::str::FromStr;
 use crate::{error::JsError, platform::JsPlatform};
 use rattler_conda_types::{
     Channel, ChannelConfig, MatchSpec, NoArchType, PackageName, PackageRecord, ParseChannelError,
-    ParseStrictness::Lenient, RepoDataRecord, Version
+    ParseStrictness::Lenient, RepoDataRecord, Version,
 };
-use rattler_digest::{parse_digest_from_hex, Sha256, Md5};
+use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use rattler_repodata_gateway::{Gateway, SourceConfig};
 use rattler_solve::{SolverImpl, SolverTask};
 use serde::{Deserialize, Serialize};
