@@ -44,7 +44,7 @@ mold = ">=2.33.0,<3.0"
 scripts = ["scripts/activate_linux.sh"]
 
 [feature.lint.dependencies]
-ruff = ">=0.12.3,<0.13"
+ruff = ">=0.13.2,<0.14"
 typos = ">=1.23.1,<2"
 dprint = ">=0.50.0,<0.51"
 lefthook = ">=1.12.2,<2"

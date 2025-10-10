@@ -7,6 +7,7 @@ use rattler_conda_types::{
     ConvertSubdirError, PackageRecord, RepoDataRecord,
 };
 use rattler_digest::{Md5Hash, Sha256Hash};
+use rattler_networking::LazyClient;
 use url::Url;
 
 pub(crate) struct DirectUrlQuery {
@@ -17,7 +18,7 @@ pub(crate) struct DirectUrlQuery {
     /// Optional MD5 of the file
     md5: Option<Md5Hash>,
     /// The client to use for fetching the package
-    client: reqwest_middleware::ClientWithMiddleware,
+    client: LazyClient,
     /// The cache to use for storing the package
     package_cache: PackageCache,
 }
@@ -38,7 +39,7 @@ impl DirectUrlQuery {
     pub(crate) fn new(
         url: Url,
         package_cache: PackageCache,
-        client: reqwest_middleware::ClientWithMiddleware,
+        client: LazyClient,
         sha256: Option<Sha256Hash>,
         md5: Option<Md5Hash>,
     ) -> Self {
@@ -127,8 +128,13 @@ mod test {
         )
         .unwrap();
         let package_cache = PackageCache::new(PathBuf::from("/tmp"));
-        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
-        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None, None);
+        let query = DirectUrlQuery::new(
+            url.clone(),
+            package_cache,
+            LazyClient::default(),
+            None,
+            None,
+        );
 
         assert_eq!(query.url.clone(), url);
 
@@ -169,8 +175,13 @@ mod test {
 
         let url = Url::from_file_path(package_path).unwrap();
         let package_cache = PackageCache::new(temp_dir());
-        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
-        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None, None);
+        let query = DirectUrlQuery::new(
+            url.clone(),
+            package_cache,
+            LazyClient::default(),
+            None,
+            None,
+        );
 
         assert_eq!(query.url.clone(), url);
 

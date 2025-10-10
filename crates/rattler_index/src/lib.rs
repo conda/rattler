@@ -356,7 +356,7 @@ async fn index_subdir(
                     console::style("Failed to index").red(),
                     console::style(subdir.as_str()).dim()
                 ));
-                return Err(anyhow::anyhow!("Task panicked: {}", join_err));
+                return Err(anyhow::anyhow!("Task panicked: {join_err}"));
             }
         }
     }
@@ -741,8 +741,7 @@ pub async fn index<T: Configurator>(
             Some(ArchiveType::Conda) => {}
             Some(ArchiveType::TarBz2) | None => {
                 return Err(anyhow::anyhow!(
-                    "Only .conda packages are supported for repodata patches. Got: {}",
-                    path
+                    "Only .conda packages are supported for repodata patches. Got: {path}",
                 ))
             }
         }
@@ -779,14 +778,14 @@ pub async fn index<T: Configurator>(
         match join_result {
             Ok(Ok(_)) => {}
             Ok(Err(e)) => {
-                tracing::error!("Failed to process subdir: {}", e);
+                tracing::error!("Failed to process subdir: {e}");
                 tasks.clear();
                 return Err(e);
             }
             Err(join_err) => {
-                tracing::error!("Task panicked: {}", join_err);
+                tracing::error!("Task panicked: {join_err}");
                 tasks.clear();
-                return Err(anyhow::anyhow!("Task panicked: {}", join_err));
+                return Err(anyhow::anyhow!("Task panicked: {join_err}"));
             }
         }
     }

@@ -27,6 +27,7 @@ pub mod package;
 mod package_name;
 pub mod prefix;
 pub mod prefix_record;
+mod record_traits;
 
 #[cfg(test)]
 use std::path::{Path, PathBuf};
@@ -54,6 +55,7 @@ pub use package_name::{InvalidPackageNameError, PackageName};
 pub use parse_mode::ParseStrictness;
 pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_record::PrefixRecord;
+pub use record_traits::HasArtifactIdentificationRefs;
 pub use repo_data::{
     compute_package_url,
     patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},

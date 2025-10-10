@@ -12,6 +12,18 @@ use std::{
     sync::Arc,
 };
 
+use super::{
+    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
+};
+use crate::install::installer::result_record::InstallationResultRecord;
+use crate::{
+    default_cache_dir,
+    install::{
+        clobber_registry::ClobberedPath,
+        link_script::{LinkScriptError, PrePostLinkResult},
+    },
+    package_cache::PackageCache,
+};
 pub use error::InstallerError;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
 #[cfg(feature = "indicatif")]
@@ -26,24 +38,11 @@ use rattler_conda_types::{
     MatchSpec, PackageName, Platform, PrefixRecord, RepoDataRecord,
 };
 use rattler_networking::retry_policies::default_retry_policy;
+use rattler_networking::LazyClient;
 use rayon::prelude::*;
 pub use reporter::Reporter;
-use reqwest::Client;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
-
-use super::{
-    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
-};
-use crate::install::installer::result_record::InstallationResultRecord;
-use crate::{
-    default_cache_dir,
-    install::{
-        clobber_registry::ClobberedPath,
-        link_script::{LinkScriptError, PrePostLinkResult},
-    },
-    package_cache::PackageCache,
-};
 
 #[derive(Default)]
 pub struct LinkOptions {
@@ -57,7 +56,7 @@ pub struct LinkOptions {
 pub struct Installer {
     installed: Option<Vec<PrefixRecord>>,
     package_cache: Option<PackageCache>,
-    downloader: Option<reqwest_middleware::ClientWithMiddleware>,
+    downloader: Option<LazyClient>,
     execute_link_scripts: bool,
     io_semaphore: Option<Arc<Semaphore>>,
     reporter: Option<Arc<dyn Reporter>>,
@@ -179,12 +178,9 @@ impl Installer {
 
     /// Sets the download client to use
     #[must_use]
-    pub fn with_download_client(
-        self,
-        downloader: reqwest_middleware::ClientWithMiddleware,
-    ) -> Self {
+    pub fn with_download_client(self, downloader: impl Into<LazyClient>) -> Self {
         Self {
-            downloader: Some(downloader),
+            downloader: Some(downloader.into()),
             ..self
         }
     }
@@ -193,11 +189,8 @@ impl Installer {
     ///
     /// This function is similar to [`Self::with_download_client`], but modifies
     /// an existing instance.
-    pub fn set_download_client(
-        &mut self,
-        downloader: reqwest_middleware::ClientWithMiddleware,
-    ) -> &mut Self {
-        self.downloader = Some(downloader);
+    pub fn set_download_client(&mut self, downloader: impl Into<LazyClient>) -> &mut Self {
+        self.downloader = Some(downloader.into());
         self
     }
 
@@ -449,9 +442,7 @@ impl Installer {
             .into_prefix_record(&prefix)
             .map_err(InstallerError::FailedToDetectInstalledPackages)?;
 
-        let downloader = self
-            .downloader
-            .unwrap_or_else(|| reqwest_middleware::ClientWithMiddleware::from(Client::default()));
+        let downloader = self.downloader.unwrap_or_default();
         let package_cache = self.package_cache.unwrap_or_else(|| {
             PackageCache::new(
                 default_cache_dir()
@@ -734,7 +725,7 @@ async fn link_package(
 /// there.
 async fn populate_cache(
     record: &RepoDataRecord,
-    downloader: reqwest_middleware::ClientWithMiddleware,
+    downloader: LazyClient,
     cache: &PackageCache,
     reporter: Option<(Arc<dyn Reporter>, usize)>,
 ) -> Result<CacheLock, InstallerError> {

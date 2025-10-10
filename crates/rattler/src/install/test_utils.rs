@@ -1,16 +1,16 @@
 use std::{path::PathBuf, str::FromStr};
 
-use futures::TryFutureExt;
-use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
-use rattler_networking::retry_policies::default_retry_policy;
-use transaction::{Transaction, TransactionOperation};
-use url::Url;
-
 use crate::{
     get_repodata_record,
     install::{transaction, unlink_package, InstallDriver, InstallOptions},
     package_cache::PackageCache,
 };
+use futures::TryFutureExt;
+use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
+use rattler_networking::retry_policies::default_retry_policy;
+use rattler_networking::LazyClient;
+use transaction::{Transaction, TransactionOperation};
+use url::Url;
 
 use super::{driver::PostProcessResult, link_package, PythonInfo};
 
@@ -63,7 +63,7 @@ pub async fn install_package_to_environment(
 
 pub async fn execute_operation(
     target_prefix: &Prefix,
-    download_client: &reqwest_middleware::ClientWithMiddleware,
+    download_client: &LazyClient,
     package_cache: &PackageCache,
     install_driver: &InstallDriver,
     op: TransactionOperation<PrefixRecord, RepoDataRecord>,
@@ -119,7 +119,7 @@ pub async fn execute_operation(
 pub async fn execute_transaction(
     transaction: Transaction<PrefixRecord, RepoDataRecord>,
     target_prefix: &Prefix,
-    download_client: &reqwest_middleware::ClientWithMiddleware,
+    download_client: &LazyClient,
     package_cache: &PackageCache,
     install_driver: &InstallDriver,
     install_options: &InstallOptions,
