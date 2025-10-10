@@ -261,9 +261,11 @@ impl SparseRepoData {
         for (package_name, specs) in &spec.into_iter().chunk_by(|spec| spec.borrow().name.clone()) {
             let grouped_specs = specs.into_iter().collect::<Vec<_>>();
             // TODO: support glob/regex package names
-            let package_name = package_name.map(|name| name.unwrap_into_exact());
             let mut parsed_records = parse_records(
-                package_name.as_ref(),
+                package_name
+                    .map(Option::<PackageName>::from)
+                    .flatten()
+                    .as_ref(),
                 &repo_data.packages,
                 &repo_data.conda_packages,
                 variant_consolidation,

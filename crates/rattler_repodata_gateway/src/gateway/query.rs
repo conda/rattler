@@ -6,7 +6,7 @@ use std::{
 
 use futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
-use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, Platform};
+use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform};
 
 use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
 use crate::Reporter;
@@ -118,13 +118,17 @@ impl RepoDataQuery {
                 let name = spec
                     .name
                     .clone()
-                    .ok_or(GatewayError::MatchSpecWithoutName(Box::new(spec.clone())))?;
-                seen.insert(name.clone().unwrap_into_exact());
+                    .map(Option::<PackageName>::from)
+                    .flatten()
+                    .ok_or(GatewayError::MatchSpecWithoutExactName(Box::new(
+                        spec.clone(),
+                    )))?;
+                seen.insert(name.clone());
                 direct_url_specs.push((spec.clone(), url, name.clone()));
-            } else if let Some(name) = &spec.name {
-                seen.insert(name.clone().unwrap_into_exact());
+            } else if let Some(PackageNameMatcher::Exact(name)) = &spec.name {
+                seen.insert(name.clone());
                 let pending = pending_package_specs
-                    .entry(name.clone().unwrap_into_exact())
+                    .entry(name.clone())
                     .or_insert_with(|| SourceSpecs::Input(vec![]));
                 let SourceSpecs::Input(input_specs) = pending else {
                     panic!("RootSpecs::Input was overwritten by RootSpecs::Transitive");
@@ -198,11 +202,11 @@ impl RepoDataQuery {
 
                             // Check if record actually has the same name
                             if let Some(record) = record.first() {
-                                if !name.matches(&record.package_record.name) {
+                                if record.package_record.name != name {
                                     // Using as_source to get the closest to the retrieved input.
                                     return Err(GatewayError::UrlRecordNameMismatch(
                                         record.package_record.name.as_source().to_string(),
-                                        name.to_string(),
+                                        name.as_source().to_string(),
                                     ));
                                 }
                             }
