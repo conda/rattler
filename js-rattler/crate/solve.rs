@@ -81,8 +81,14 @@ pub async fn simple_solve(
                 version: Version::from_str(&pkg.version)?.into(),
                 build: pkg.build.clone(),
                 build_number: pkg.build_number.unwrap_or_default(),
-                md5: pkg.md5.as_ref().and_then(|s| parse_digest_from_hex::<Md5>(s)),
-                sha256: pkg.sha256.as_ref().and_then(|s| parse_digest_from_hex::<Sha256>(s)),
+                md5: pkg
+                    .md5
+                    .as_ref()
+                    .and_then(|s| parse_digest_from_hex::<Md5>(s)),
+                sha256: pkg
+                    .sha256
+                    .as_ref()
+                    .and_then(|s| parse_digest_from_hex::<Sha256>(s)),
                 size: None,
                 arch: None,
                 platform: None,
