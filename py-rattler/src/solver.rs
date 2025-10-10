@@ -4,6 +4,7 @@ use pyo3::{
     FromPyObject, PyAny, PyErr, PyResult, Python,
 };
 use pyo3_async_runtimes::tokio::future_into_py;
+use rattler_conda_types::PackageName;
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{resolvo::Solver, RepoDataIter, SolveStrategy, SolverImpl, SolverTask};
 use tokio::task::JoinError;
@@ -156,9 +157,13 @@ pub fn py_solve_with_sparse_repodata<'py>(
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
-            let package_names = specs
-                .iter()
-                .filter_map(|match_spec| match_spec.inner.name.as_ref().map(|n| Option::<PackageName>::from(n.clone()).flatten()));
+            let package_names = specs.iter().filter_map(|match_spec| {
+                match_spec
+                    .inner
+                    .name
+                    .as_ref()
+                    .and_then(|n| Option::<PackageName>::from(n.clone()))
+            });
 
             let available_packages = SparseRepoData::load_records_recursive(
                 repo_data_refs,
