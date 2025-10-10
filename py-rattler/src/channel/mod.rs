@@ -79,7 +79,7 @@ impl PyChannel {
 
     /// Returns the Urls for the given platform.
     pub fn platform_url(&self, platform: &PyPlatform) -> String {
-        self.inner.platform_url((*platform).into()).into()
+        self.inner.platform_url(&(*platform).into()).into()
     }
 }
 

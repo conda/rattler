@@ -40,7 +40,7 @@ impl<'g> SubdirBuilder<'g> {
     }
 
     pub async fn build(self) -> Result<Subdir, GatewayError> {
-        let url = self.channel.platform_url(self.platform);
+        let url = self.channel.platform_url(&self.platform);
 
         let subdir_data = if url.scheme() == "file" {
             if let Some(path) = url_to_path(&url) {
@@ -119,7 +119,7 @@ impl<'g> SubdirBuilder<'g> {
     ) -> Result<SubdirData, GatewayError> {
         let client = remote_subdir::RemoteSubdirClient::new(
             self.channel.clone(),
-            self.platform,
+            self.platform.clone(),
             self.gateway.client.clone(),
             #[cfg(not(target_arch = "wasm32"))]
             self.gateway.cache.clone(),
@@ -152,7 +152,7 @@ impl<'g> SubdirBuilder<'g> {
 
     async fn build_local(&self, path: &Path) -> Result<SubdirData, GatewayError> {
         let channel = self.channel.clone();
-        let platform = self.platform;
+        let platform = self.platform.clone();
         let path = path.join("repodata.json");
         let build_client =
             move || LocalSubdirClient::from_file(&path, channel.clone(), platform.as_str());
