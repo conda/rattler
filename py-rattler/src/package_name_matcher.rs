@@ -43,9 +43,9 @@ impl PyPackageNameMatcher {
             PackageNameMatcher::Exact(ref name) => {
                 format!("\"{}\", exact", name.as_source())
             }
-            PackageNameMatcher::Glob(ref glob) => format!("\"{}\", glob", glob),
+            PackageNameMatcher::Glob(ref glob) => format!("\"{glob}\", glob"),
             PackageNameMatcher::Regex(ref regex) => {
-                format!("\"{}\", regex", regex)
+                format!("\"{regex}\", regex")
             }
         }
     }
