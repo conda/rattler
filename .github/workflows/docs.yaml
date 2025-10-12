@@ -1,0 +1,85 @@
+name: Deploy Docs
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  RUSTDOCFLAGS: --html-in-header header.html
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    if: github.repository == 'conda/rattler'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+          lfs: false
+
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          profile: minimal
+
+      - uses: prefix-dev/setup-pixi@194d461b21b6c5717c722ffc597fa91ed2ff29fa # v0.9.1
+        with:
+          manifest-path: py-rattler/pixi.toml
+
+      - name: Setup Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+
+      #  This does the following:
+      #   - Replaces the docs icon with one that clearly denotes it's not the released package on crates.io
+      #   - Adds a meta tag that forces Google not to index any page on the site.
+      - name: Pre-docs-build
+        run: |
+          echo "<meta name=\"robots\" content=\"noindex\">" > header.html
+
+      - name: Build Rattler Documentation
+        run: cargo doc --workspace --no-deps --all-features --lib
+
+      - name: Build Py-rattler Documentation
+        run: pixi run --manifest-path py-rattler/pixi.toml build-docs
+
+      #  This adds the following:
+      #   - A top level redirect to the rattler crate documentation
+      #   - A path to the py-rattler documentation
+      #   - A secondary redirect to the rattler crate documentation
+      #   - A robots.txt file to forbid any crawling of the site (to defer to the docs.rs site on search engines).
+      #   - A .nojekyll file to disable Jekyll GitHub Pages builds.
+      - name: Finalize documentation
+        run: |
+          mkdir docs
+          cp target/doc/ docs/rattler -r
+          cp py-rattler/site/  docs/py-rattler -r
+          echo "<meta http-equiv=\"refresh\" content=\"0; url=rattler/index.html\">" > docs/index.html
+          echo "<meta http-equiv=\"refresh\" content=\"0; url=rattler/index.html\">" > docs/rattler/index.html
+          echo "User-Agent: *\nDisallow: /" > docs/robots.txt
+          touch docs/.nojekyll
+
+      # https://github.com/actions/upload-pages-artifact#file-permissions
+      - run: chmod -c -R +rX docs/
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: "docs"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
