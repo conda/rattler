@@ -255,7 +255,7 @@ async fn validate_prefix_dev_token(
     let client = Client::new();
     let response = client
         .post(prefix_url.join("api/graphql").expect("must be valid"))
-        .bearer_auth(&token)
+        .bearer_auth(token)
         .header(CONTENT_TYPE, "application/json")
         .json(&body)
         .send()
