@@ -176,6 +176,7 @@ async fn sign_with_cosign(
     // Build cosign attest command
     let mut cmd = AsyncCommand::new("cosign");
     cmd.arg("attest-blob")
+        .arg(package_path) // the blob (package file) to attest
         .arg("--statement")
         .arg(predicate_path)
         .arg("--type")
@@ -220,9 +221,6 @@ async fn sign_with_cosign(
             }
         }
     }
-
-    // Add the blob (package file) to attest
-    cmd.arg(package_path);
 
     tracing::info!("Running cosign to create attestation...");
 
