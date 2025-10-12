@@ -21,7 +21,7 @@ use super::opt::{
 };
 
 use crate::upload::{
-    attestation::create_conda_attestation,
+    attestation::{create_attestation_with_cosign, AttestationConfig},
     default_bytes_style, get_client_with_retry, get_default_client,
     trusted_publishing::{check_trusted_publishing, get_raw_oidc_token, TrustedPublishResult},
 };
@@ -164,21 +164,29 @@ pub async fn upload_package_to_prefix(
                 .join(&prefix_data.channel)
                 .into_diagnostic()?;
 
-            match create_conda_attestation(
+            // Build attestation configuration. We deliberately avoid providing a GitHub token
+            // so we always return a Sigstore bundle JSON for uploading to prefix.dev.
+            let config = AttestationConfig {
+                repo_owner: None,
+                repo_name: None,
+                github_token: None,
+                use_github_oidc: true,
+                cosign_private_key: std::env::var("COSIGN_KEY_PATH").ok(),
+            };
+
+            match create_attestation_with_cosign(
                 package_file,
                 channel_url.as_str(),
-                oidc_token.as_ref().unwrap(),
+                &config,
                 &client,
             )
             .await
             {
-                Ok(attestation_bundle) => {
-                    // Save attestation to a temporary file
-                    let attestation_json =
-                        serde_json::to_string_pretty(&attestation_bundle).into_diagnostic()?;
-                    tracing::info!("Generated attestation: {}", attestation_json);
+                Ok(attestation_bundle_json) => {
+                    // Save attestation bundle JSON to a file next to the package
+                    tracing::info!("Generated attestation: {}", attestation_bundle_json);
                     let attestation_file = package_file.with_extension("attestation.json");
-                    tokio_fs::write(&attestation_file, attestation_json)
+                    tokio_fs::write(&attestation_file, attestation_bundle_json)
                         .await
                         .into_diagnostic()?;
                     info!("Generated attestation for {}", filename);

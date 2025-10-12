@@ -169,22 +169,22 @@ async fn sign_with_cosign(
         predicate_path.display()
     );
 
+    // Always use a tempfile for the bundle output
+    let bundle_file = NamedTempFile::new().into_diagnostic()?;
+    let bundle_path = bundle_file.path().to_string_lossy().to_string();
+
     // Build cosign attest command
-    // For conda packages, we'll use cosign attest-blob since we don't have an OCI image
     let mut cmd = AsyncCommand::new("cosign");
     cmd.arg("attest-blob")
         .arg("--statement")
         .arg(predicate_path)
         .arg("--type")
-        .arg("https://schemas.conda.org/attestations-publish-1.schema.json");
-
-    // Bundle file for keyless signing (declare here so it's accessible later)
-    let bundle_file: Option<NamedTempFile>;
+        .arg("https://schemas.conda.org/attestations-publish-1.schema.json")
+        .arg("--bundle")
+        .arg(&bundle_path);
 
     // Check if using local key for testing
     if let Some(key_path) = &config.cosign_private_key {
-        bundle_file = None; // Not needed for local key signing
-
         tracing::info!("Using local cosign key for signing: {}", key_path);
         cmd.arg("--key").arg(key_path);
 
@@ -195,8 +195,6 @@ async fn sign_with_cosign(
             );
         }
 
-        // For local key signing, output the bundle to stdout and disable tlog upload
-        cmd.arg("--bundle").arg("-"); // Output bundle to stdout
         cmd.arg("--tlog-upload=false"); // Don't upload to transparency log for local testing
 
         tracing::warn!(
@@ -206,58 +204,23 @@ async fn sign_with_cosign(
     }
     // Configure identity provider for keyless signing
     else if config.use_github_oidc {
-        // Check if we're in GitHub Actions
-        let in_github_actions = std::env::var("GITHUB_ACTIONS").is_ok();
-
-        if !in_github_actions {
-            // For local testing, check if user wants to use keyless signing
+        if std::env::var("GITHUB_ACTIONS").is_err() {
             if std::env::var("COSIGN_EXPERIMENTAL").is_ok() {
                 tracing::info!(
-                    "Local testing mode: Using cosign keyless signing.\n\
-                     This will authenticate via browser OAuth flow (Google, GitHub, Microsoft)."
+                    "Local testing: Using cosign keyless signing via browser OAuth flow."
                 );
             } else {
                 tracing::warn!(
-                    "Not running in GitHub Actions. To test locally, you can:\n\
+                    "Not in GitHub Actions. For local testing:\n\
                      1. Set COSIGN_EXPERIMENTAL=1 for keyless signing via browser\n\
                      2. Use cosign generate-key-pair for local key-based signing"
                 );
             }
         }
 
-        // Use experimental keyless signing
-        cmd.env("COSIGN_EXPERIMENTAL", "1");
-
-        // For keyless signing, we need to output to a temp file to get proper Sigstore bundle format
-        bundle_file = Some(NamedTempFile::new().into_diagnostic()?);
-        let bundle_path = bundle_file
-            .as_ref()
-            .unwrap()
-            .path()
-            .to_string_lossy()
-            .to_string();
-        cmd.arg("--bundle").arg(&bundle_path);
-        cmd.arg("--new-bundle-format=true"); // Use the new Sigstore bundle format (v0.3)
-
-        // Only skip prompts in CI environments
-        if in_github_actions || std::env::var("CI").is_ok() {
-            cmd.env("COSIGN_YES", "true");
-        }
-
-        // Set GitHub-specific environment if available
-        if let Ok(server_url) = std::env::var("GITHUB_SERVER_URL") {
-            if server_url != "https://github.com" {
-                // For GitHub Enterprise, set custom Fulcio URL
-                let url = url::Url::parse(&server_url).into_diagnostic()?;
-                let host = url
-                    .host_str()
-                    .ok_or_else(|| miette::miette!("Invalid GitHub server URL"))?;
-                cmd.env("SIGSTORE_FULCIO_URL", format!("https://fulcio.{host}"));
-                cmd.env("SIGSTORE_REKOR_URL", ""); // GitHub uses TSA, not Rekor
-            }
-        }
-    } else {
-        bundle_file = None;
+        cmd.env("COSIGN_EXPERIMENTAL", "1")
+            .env("COSIGN_YES", "true") // Skip prompts in subprocess
+            .arg("--new-bundle-format=true");
     }
 
     // Add the blob (package file) to attest
@@ -273,10 +236,9 @@ async fn sign_with_cosign(
         .into_diagnostic()
         .map_err(|e| miette::miette!("Failed to run cosign: {}", e))?;
 
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
     if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
         return Err(miette::miette!(
             "cosign attestation failed with exit code {:?}:\n\
              stdout: {}\n\
@@ -286,73 +248,21 @@ async fn sign_with_cosign(
              2. Check that GITHUB_TOKEN is set if uploading to GitHub\n\
              3. For local testing, ensure you have valid credentials configured",
             output.status.code(),
-            if stdout.is_empty() {
-                "(empty)"
-            } else {
-                &stdout
-            },
-            if stderr.is_empty() {
-                "(empty)"
-            } else {
-                &stderr
-            }
+            if stdout.is_empty() { "(empty)" } else { &stdout },
+            if stderr.is_empty() { "(empty)" } else { &stderr }
         ));
     }
 
-    // Get the bundle JSON - either from stdout (local key) or from bundle file (keyless)
-    let bundle_json = if config.cosign_private_key.is_some() {
-        // Local key signing outputs to stdout
-        let result = stdout.to_string();
-        if result.is_empty() {
-            return Err(miette::miette!(
-                "cosign produced empty output for local key signing.\n\
-                 stderr output: {}",
-                if stderr.is_empty() {
-                    "(empty)"
-                } else {
-                    &stderr
-                }
-            ));
-        }
-        result
-    } else if let Some(ref bundle_file) = bundle_file {
-        // Keyless signing may output to both stdout and bundle file
-        // Check if stdout contains the output (happens in some cosign versions)
-        if !stdout.is_empty() {
-            tracing::info!("Cosign output to stdout, checking format...");
+    // Read the bundle from the tempfile
+    let bundle_json = std::fs::read_to_string(bundle_file.path())
+        .into_diagnostic()
+        .map_err(|e| miette::miette!("Failed to read bundle file: {}", e))?;
 
-            // Check if stdout is a proper Sigstore bundle or just DSSE
-            if stdout.contains("\"mediaType\"") || stdout.contains("\"rekorBundle\"") {
-                // This looks like a Sigstore bundle
-                tracing::info!("Using Sigstore bundle from stdout");
-                stdout.to_string()
-            } else {
-                // stdout contains DSSE, try reading the bundle file
-                tracing::info!("Stdout contains DSSE format, reading bundle file instead");
-                let bundle_content = std::fs::read_to_string(bundle_file.path())
-                    .into_diagnostic()
-                    .map_err(|e| miette::miette!("Failed to read bundle file: {}", e))?;
-
-                if !bundle_content.is_empty() {
-                    tracing::info!("Using bundle from file");
-                    bundle_content
-                } else {
-                    // Bundle file is empty, fall back to stdout (DSSE format)
-                    tracing::warn!("Bundle file is empty, using DSSE format from stdout");
-                    stdout.to_string()
-                }
-            }
-        } else {
-            // No stdout, read from bundle file
-            std::fs::read_to_string(bundle_file.path())
-                .into_diagnostic()
-                .map_err(|e| miette::miette!("Failed to read bundle file: {}", e))?
-        }
-    } else {
+    if bundle_json.is_empty() {
         return Err(miette::miette!(
-            "Neither local key nor bundle file available for reading attestation result"
+            "cosign produced empty bundle file. This may indicate cosign failed silently."
         ));
-    };
+    }
 
     tracing::info!("Successfully created attestation with cosign");
 
@@ -390,85 +300,22 @@ async fn store_attestation_to_github(
         .await
         .into_diagnostic()?;
 
-    if !response.status().is_success() {
-        let status = response.status();
+    let status = response.status();
+    if !status.is_success() {
         let body = response.text().await.into_diagnostic()?;
-
         let error_detail = match status.as_u16() {
             401 => "Authentication failed. Check your GitHub token.",
-            403 => "Permission denied. Ensure the token has 'attestations:write' permission and the repository allows attestations.",
-            404 => "Repository not found or attestations API not available. Ensure you're using a supported GitHub plan.",
-            422 => "Invalid attestation bundle format. Check the cosign output.",
-            _ => "Unknown error occurred while storing attestation.",
+            403 => "Permission denied. Ensure token has 'attestations:write' and repository allows attestations.",
+            404 => "Repository not found or attestations API unavailable. Ensure you're on a supported GitHub plan.",
+            422 => "Invalid attestation bundle format.",
+            _ => "Unknown error storing attestation.",
         };
 
-        return Err(miette::miette!(
-            "{}\nStatus: {}\nResponse: {}",
-            error_detail,
-            status,
-            body
-        ));
+        return Err(miette::miette!("{}\nStatus: {}\nResponse: {}", error_detail, status, body));
     }
 
     let response_data: AttestationResponse = response.json().await.into_diagnostic()?;
-    tracing::info!(
-        "Successfully stored attestation with ID: {}",
-        response_data.id
-    );
+    tracing::info!("Successfully stored attestation with ID: {}", response_data.id);
 
     Ok(response_data.id)
-}
-
-// Backward compatibility function
-pub async fn create_conda_attestation(
-    package_path: &Path,
-    channel_url: &str,
-    _oidc_token: &str,
-    client: &ClientWithMiddleware,
-) -> miette::Result<serde_json::Value> {
-    // Try to extract repo info from environment (optional)
-    let (repo_owner, repo_name) = if let Ok(repo) = std::env::var("GITHUB_REPOSITORY") {
-        let parts: Vec<&str> = repo.split('/').collect();
-        if parts.len() == 2 {
-            (Some(parts[0].to_string()), Some(parts[1].to_string()))
-        } else {
-            tracing::warn!(
-                "Invalid GITHUB_REPOSITORY format '{}'. Expected 'owner/repo'. \
-                 GitHub attestation storage will be skipped.",
-                repo
-            );
-            (None, None)
-        }
-    } else {
-        tracing::info!(
-            "GITHUB_REPOSITORY environment variable not set. \
-             GitHub attestation storage will be skipped."
-        );
-        (None, None)
-    };
-
-    // Try to get GitHub token (optional)
-    let github_token = std::env::var("GITHUB_TOKEN").ok();
-
-    if github_token.is_none() {
-        tracing::info!(
-            "GITHUB_TOKEN environment variable not set. \
-             GitHub attestation storage will be skipped."
-        );
-    }
-
-    let config = AttestationConfig {
-        repo_owner,
-        repo_name,
-        github_token,
-        use_github_oidc: true,
-        cosign_private_key: std::env::var("COSIGN_KEY_PATH").ok(),
-    };
-
-    let attestation_result =
-        create_attestation_with_cosign(package_path, channel_url, &config, client).await?;
-
-    serde_json::from_str(&attestation_result)
-        .into_diagnostic()
-        .map_err(|e| miette::miette!("Failed to parse Sigstore bundle: {}", e))
 }
