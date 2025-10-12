@@ -207,14 +207,6 @@ fn xdg_mime(
     Ok(())
 }
 
-/// Update the desktop database by running `update-desktop-database`
-fn update_desktop_database() -> Result<(), MenuInstError> {
-    // We don't care about the output of update-desktop-database
-    let _ = Command::new("update-desktop-database").output();
-
-    Ok(())
-}
-
 impl LinuxMenu {
     fn new(
         menu_name: &str,
@@ -293,7 +285,7 @@ impl LinuxMenu {
         let envs = self
             .command
             .activate
-            .unwrap_or(false)
+            .unwrap_or(true)
             .then(|| {
                 // create a bash activation script and emit it into the script
                 let activator =
@@ -318,7 +310,13 @@ impl LinuxMenu {
             .command
             .iter()
             .map(|s| s.resolve(&self.placeholders))
-            .map(|part| Ok(shlex::try_quote(&part)?.into_owned()))
+            .map(|part| {
+                if part.starts_with("%") {
+                    Ok(part)
+                } else {
+                    Ok(shlex::try_quote(&part)?.into_owned())
+                }
+            })
             .collect::<Result<Vec<_>, MenuInstError>>()?
             .join(" ");
 
@@ -456,8 +454,41 @@ impl LinuxMenu {
         self.pre_create()?;
         self.create_desktop_entry(tracker)?;
         self.register_mime_types(tracker)?;
-        update_desktop_database()?;
+        self.update_desktop_database();
         Ok(())
+    }
+
+    /// Update the desktop database by running `update-desktop-database`
+    pub fn update_desktop_database(&self) {
+        if self.directories.desktop_entries_location.is_dir() {
+            match Command::new("update-desktop-database")
+                .arg(&self.directories.desktop_entries_location)
+                .status()
+            {
+                Ok(status) if status.success() => {
+                    tracing::debug!(
+                        "Updated desktop database at {}",
+                        self.directories.desktop_entries_location.display()
+                    );
+                }
+                Ok(status) => {
+                    tracing::warn!(
+                        "update-desktop-database exited with status {} for {}",
+                        status,
+                        self.directories.desktop_entries_location.display()
+                    );
+                }
+                Err(err) => {
+                    // Command might not exist (desktop-file-utils not installed); don't fail the operation
+                    tracing::warn!("Could not run update-desktop-database: {}", err);
+                }
+            }
+        } else {
+            tracing::warn!(
+                "Desktop entries location does not exist: {} (skipping update-desktop-database)",
+                self.directories.desktop_entries_location.display()
+            );
+        }
     }
 
     fn register_mime_types(&self, tracker: &mut LinuxTracker) -> Result<(), MenuInstError> {
@@ -851,7 +882,7 @@ mod tests {
 
         let result = linux_menu.command().unwrap();
         let normalized_result = result.replace(fake_prefix.prefix().to_str().unwrap(), "<PREFIX>");
-        insta::assert_snapshot!(normalized_result, @"<PREFIX>/bin/spyder '%F'");
+        insta::assert_snapshot!(normalized_result, @"<PREFIX>/bin/spyder %F");
     }
 
     #[test]
@@ -915,7 +946,7 @@ mod tests {
 
         let result = linux_menu.command().unwrap();
         let normalized_result = result.replace(fake_prefix.prefix().to_str().unwrap(), "<PREFIX>");
-        insta::assert_snapshot!(normalized_result, @r#"bash -c "echo 'setup' && <PREFIX>/bin/spyder '%F'""#);
+        insta::assert_snapshot!(normalized_result, @r#"bash -c "echo 'setup' && <PREFIX>/bin/spyder %F""#);
     }
 
     #[test]

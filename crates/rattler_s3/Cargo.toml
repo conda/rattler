@@ -1,0 +1,25 @@
+[package]
+name = "rattler_s3"
+version = "0.1.5"
+description = "A crate to streamline interaction with S3 storage for rattler"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+readme.workspace = true
+
+[dependencies]
+clap = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+
+aws-config = { workspace = true, features = ["sso", "credentials-process", "rt-tokio"] }
+aws-sdk-s3 = { workspace = true, features = ["rt-tokio"] }
+aws-smithy-http-client = { workspace = true, features = ["rustls-ring"] }
+aws-credential-types = { workspace = true }
+
+rattler_networking = { workspace = true }
+
+serde = { workspace = true, optional = true }

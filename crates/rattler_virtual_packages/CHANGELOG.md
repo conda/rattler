@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.5](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.4...rattler_virtual_packages-v2.1.5) - 2025-09-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [2.1.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.3...rattler_virtual_packages-v2.1.4) - 2025-09-02
 
 ### Other
@@ -31,6 +37,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [2.2.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.0...rattler_virtual_packages-v2.2.1) - 2025-10-08
+
+### Fixed
+
+- use defaults found on OS even if cross-compiling ([#1713](https://github.com/conda/rattler/pull/1713))
+
+## [2.2.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.7...rattler_virtual_packages-v2.2.0) - 2025-10-07
+
+### Added
+
+- add cross-platform detection and tests ([#1708](https://github.com/conda/rattler/pull/1708))
+
+## [2.1.7](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.6...rattler_virtual_packages-v2.1.7) - 2025-10-03
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.6](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.5...rattler_virtual_packages-v2.1.6) - 2025-09-30
+
+### Other
+
+- updated the following local packages: rattler_conda_types
 
 ## [2.1.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.0...rattler_virtual_packages-v2.1.1) - 2025-07-23
 

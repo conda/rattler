@@ -55,7 +55,7 @@ impl From<rattler_config::config::repodata_config::RepodataChannelConfig> for So
 }
 
 /// Describes additional information for fetching channels.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ChannelConfig {
     /// The default source configuration. If a channel does not have a specific
     /// source configuration this configuration will be used.

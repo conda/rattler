@@ -23,6 +23,7 @@ url: "https://conda.anaconda.org/conda-forge/win-64/menuinst-1.4.19-py311h1ea47a
 channel: "https://conda.anaconda.org/conda-forge/win-64"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\pkgs\\menuinst-1.4.19-py311h1ea47a8_1.tar.bz2"
 extracted_package_dir: "C:\\Users\\bas\\micromamba\\pkgs\\menuinst-1.4.19-py311h1ea47a8_1"
+requested_specs: []
 files:
   - Lib/site-packages/menuinst-1.4.19.dist-info/INSTALLER
   - Lib/site-packages/menuinst-1.4.19.dist-info/LICENSE.txt
@@ -227,4 +228,3 @@ paths_data:
 link:
   source: "C:\\Users\\bas\\micromamba\\pkgs\\menuinst-1.4.19-py311h1ea47a8_1"
   type: 1
-requested_spec: ""

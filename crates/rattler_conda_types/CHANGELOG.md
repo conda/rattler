@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.1...rattler_conda_types-v0.39.2) - 2025-09-05
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.39.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.0...rattler_conda_types-v0.39.1) - 2025-09-02
 
 ### Fixed
@@ -32,6 +38,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.40.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.3...rattler_conda_types-v0.40.0) - 2025-10-03
+
+### Added
+
+- Add freebsd-64 to platforms, add Platform.all method ([#1701](https://github.com/conda/rattler/pull/1701))
+
+### Other
+
+- *(conda_types)* reduce `MinimalPrefixRecord` read overhead ([#1697](https://github.com/conda/rattler/pull/1697))
+
+## [0.39.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.2...rattler_conda_types-v0.39.3) - 2025-09-30
+
+### Other
+
+- add LazyClient to late initialize the reqwest client ([#1687](https://github.com/conda/rattler/pull/1687))
+- optimize transaction operations ([#1615](https://github.com/conda/rattler/pull/1615))
 
 ## [0.37.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.36.0...rattler_conda_types-v0.37.0) - 2025-07-23
 

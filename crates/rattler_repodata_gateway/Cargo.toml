@@ -1,6 +1,6 @@
 [package]
 name = "rattler_repodata_gateway"
-version = "0.24.2"
+version = "0.24.7"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to interact with Conda repodata"

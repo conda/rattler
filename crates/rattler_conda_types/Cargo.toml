@@ -1,6 +1,6 @@
 [package]
 name = "rattler_conda_types"
-version = "0.39.1"
+version = "0.40.0"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for common types used within the Conda ecosystem"
@@ -54,6 +54,7 @@ indexmap = { workspace = true }
 dirs = { workspace = true }
 rayon = { workspace = true, optional = true }
 fs-err = { workspace = true }
+memmap2 = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = { version = "0.10.0" }

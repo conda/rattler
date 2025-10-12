@@ -1,6 +1,6 @@
 [package]
 name = "rattler_index"
-version = "0.24.12"
+version = "0.26.0"
 edition.workspace = true
 authors = []
 description = "A crate to index conda channels and create a repodata.json file."
@@ -52,6 +52,7 @@ rattler_networking = { workspace = true, default-features = false, features = [
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
+rattler_s3 = { workspace = true, features = ["clap"] }
 reqwest = { workspace = true, default-features = false, features = [
   "http2",
   "macos-system-configuration",
@@ -67,6 +68,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 url = { workspace = true }
 zstd = { workspace = true }
+retry-policies = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

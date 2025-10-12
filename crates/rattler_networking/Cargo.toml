@@ -1,6 +1,6 @@
 [package]
 name = "rattler_networking"
-version = "0.25.11"
+version = "0.25.16"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Authenticated requests in the conda ecosystem"
@@ -15,18 +15,27 @@ default = ["rustls-tls", "system-integration"]
 native-tls = ["reqwest/native-tls"]
 rustls-tls = ["reqwest/rustls-tls"]
 gcs = ["google-cloud-auth"]
-s3 = ["aws-config", "aws-sdk-s3"]
+s3 = ["aws-config", "aws-sdk-s3", "aws-smithy-http-client"]
 system-integration = ["keyring", "netrc-rs", "dirs"]
 
 [dependencies]
 anyhow = { workspace = true }
+async-once-cell = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 dirs = { workspace = true, optional = true }
 fs-err = { workspace = true }
 google-cloud-auth = { workspace = true, optional = true }
-aws-config = { workspace = true, optional = true }
-aws-sdk-s3 = { workspace = true, optional = true }
+aws-config = { workspace = true, optional = true, features = [
+    "rt-tokio",
+    "sso",
+    "credentials-process",
+] }
+aws-sdk-s3 = { workspace = true, optional = true, features = [
+    "rt-tokio",
+    "sigv4a",
+] }
+aws-smithy-http-client = { workspace = true, optional = true, features = ["rustls-ring"] }
 http = { workspace = true }
 itertools = { workspace = true }
 keyring = { workspace = true, optional = true, features = [

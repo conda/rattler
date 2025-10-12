@@ -1,6 +1,6 @@
 [package]
 name = "rattler"
-version = "0.36.1"
+version = "0.37.7"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust library to install conda environments"
@@ -71,3 +71,4 @@ tower = { workspace = true, features = ["util"] }
 walkdir.workspace = true
 mockito = "1.0"
 tempfile = "3.0"
+temp-env = { workspace = true }

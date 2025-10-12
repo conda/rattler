@@ -43,12 +43,12 @@ pub use apple_codesign::AppleCodeSignBehavior;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
+pub use installer::{result_record::InstallationResultRecord, Installer, InstallerError, Reporter};
 #[cfg(feature = "indicatif")]
 pub use installer::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
     ProgressFormatter,
 };
-pub use installer::{Installer, InstallerError, Reporter};
 use itertools::Itertools;
 pub use link::{link_file, LinkFileError, LinkMethod};
 pub use python::PythonInfo;
@@ -1175,19 +1175,19 @@ fn paths_have_same_filesystem_sync(a: &Path, b: &Path) -> bool {
 mod test {
     use std::{env::temp_dir, process::Command, str::FromStr};
 
-    use futures::{stream, StreamExt};
-    use rattler_conda_types::{
-        package::ArchiveIdentifier, ExplicitEnvironmentSpec, Platform, Version,
-    };
-    use rattler_lock::LockFile;
-    use tempfile::tempdir;
-    use url::Url;
-
     use crate::{
         get_test_data_dir,
         install::{link_package, InstallDriver, InstallOptions, Prefix, PythonInfo},
         package_cache::PackageCache,
     };
+    use futures::{stream, StreamExt};
+    use rattler_conda_types::{
+        package::ArchiveIdentifier, ExplicitEnvironmentSpec, Platform, Version,
+    };
+    use rattler_lock::LockFile;
+    use rattler_networking::LazyClient;
+    use tempfile::tempdir;
+    use url::Url;
 
     #[tracing_test::traced_test]
     #[tokio::test]
@@ -1249,7 +1249,7 @@ mod test {
         let package_cache = PackageCache::new(temp_dir().join("rattler").join(cache_name));
 
         // Create an HTTP client we can use to download packages
-        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+        let client = LazyClient::default();
 
         // Specify python version
         let python_version =

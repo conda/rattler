@@ -6,6 +6,7 @@ use rattler_conda_types::{
 use rattler_digest::Sha256Hash;
 use std::collections::BTreeMap;
 use std::{borrow::Cow, cmp::Ordering, hash::Hash};
+use typed_path::Utf8TypedPathBuf;
 use url::Url;
 
 /// A locked conda dependency can be either a binary package or a source
@@ -140,6 +141,68 @@ impl CondaBinaryData {
     }
 }
 
+/// Shallow git specification for tracking the originally requested reference.
+///
+/// This allows detecting when the source specification has changed (e.g., from
+/// branch `main` to branch `dev`) even if the current commit hash is the same.
+/// Without this information, we wouldn't know if the lock file needs to be
+/// updated when the requested branch/tag changes.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum GitShallowSpec {
+    /// A git branch reference (e.g., "main", "develop")
+    Branch(String),
+    /// A git tag reference (e.g., "v1.0.0", "release-2023")
+    Tag(String),
+    /// Revision here means that original manifest explicitly pinned revision.
+    Rev,
+}
+
+/// Package build source kind.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum PackageBuildSourceKind {
+    /// Git repository source with specific revision
+    Git {
+        /// The repository URL
+        url: Url,
+        /// Shallow specification of repository head to use.
+        ///
+        /// Needed to detect if we have to recompute revision.
+        spec: Option<GitShallowSpec>,
+        /// The specific git revision.
+        rev: String,
+    },
+    /// URL-based archive source with content hash
+    Url {
+        /// The URL to the archive
+        url: Url,
+        /// The SHA256 hash of the archive content
+        sha256: Sha256Hash,
+    },
+}
+
+/// Package build source location for reproducible builds.
+///
+/// This stores the exact source location information needed to
+/// reproducibly build a package from source. Used by pixi build
+/// and other package building tools.
+///
+/// There are 3 different types of locations: path, git, url
+/// (archive). We store only git and url sources, since path-based
+/// sources can change over time and would require expensive
+/// computation of directory file hashes for reproducibility.
+///
+/// For git sources we store the repository url and exact revision.
+/// For url sources we store the archive url and its content hash.
+///
+/// For both kinds we store subdirectory.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PackageBuildSource {
+    /// Kind of source we fetch.
+    pub kind: PackageBuildSourceKind,
+    /// Subdirectory of the source from which build starts.
+    pub subdirectory: Option<Utf8TypedPathBuf>,
+}
+
 /// Information about a source package stored in the lock-file.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CondaSourceData {
@@ -148,6 +211,9 @@ pub struct CondaSourceData {
 
     /// The location of the package. This can be a URL or a local path.
     pub location: UrlOrPath,
+
+    /// Package build source location for reproducible builds
+    pub package_build_source: Option<PackageBuildSource>,
 
     /// The input hash of the package
     pub input: Option<InputHash>,
@@ -166,11 +232,18 @@ impl From<CondaSourceData> for CondaPackageData {
 impl CondaSourceData {
     pub(crate) fn merge(&self, other: &Self) -> Cow<'_, Self> {
         if self.location == other.location {
-            if let Cow::Owned(merged) =
-                merge_package_record(&self.package_record, &other.package_record)
+            let package_record_merge =
+                merge_package_record(&self.package_record, &other.package_record);
+            let package_build_source_merge =
+                merge_package_build_source(&self.package_build_source, &other.package_build_source);
+
+            // Return an owned version if either merge produced an owned result
+            if matches!(package_record_merge, Cow::Owned(_))
+                || matches!(package_build_source_merge, Cow::Owned(_))
             {
                 return Cow::Owned(Self {
-                    package_record: merged,
+                    package_record: package_record_merge.into_owned(),
+                    package_build_source: package_build_source_merge.into_owned(),
                     ..self.clone()
                 });
             }
@@ -368,4 +441,19 @@ fn merge_package_record<'a>(
     }
 
     result
+}
+
+fn merge_package_build_source<'a>(
+    left: &'a Option<PackageBuildSource>,
+    right: &Option<PackageBuildSource>,
+) -> Cow<'a, Option<PackageBuildSource>> {
+    if left == right {
+        Cow::Borrowed(left)
+    } else if let Some(right_source) = right {
+        // New data takes precedence
+        Cow::Owned(Some(right_source.clone()))
+    } else {
+        // Right is None, keep left unchanged
+        Cow::Borrowed(left)
+    }
 }

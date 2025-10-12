@@ -26,6 +26,7 @@ anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 console = { workspace = true, features = ["windows-console-colors"] }
 indicatif = { workspace = true }
+miette = { workspace = true }
 once_cell = { workspace = true }
 rattler = { workspace = true, features = ["indicatif", "cli-tools"] }
 rattler_conda_types = { workspace = true, default-features = false }
@@ -35,7 +36,7 @@ rattler_solve = { workspace = true, default-features = false, features = ["resol
 rattler_virtual_packages = { workspace = true, default-features = false }
 rattler_cache = { workspace = true, default-features = false }
 rattler_menuinst = { workspace = true, default-features = false }
-rattler_upload = { workspace = true, default-features = false }
+rattler_upload = { workspace = true, features = ["s3"]}
 reqwest = { workspace = true, features = ["stream"] }
 reqwest-middleware = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
