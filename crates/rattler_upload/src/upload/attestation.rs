@@ -246,8 +246,16 @@ async fn sign_with_cosign(
              2. Check that GITHUB_TOKEN is set if uploading to GitHub\n\
              3. For local testing, ensure you have valid credentials configured",
             output.status.code(),
-            if stdout.is_empty() { "(empty)" } else { &stdout },
-            if stderr.is_empty() { "(empty)" } else { &stderr }
+            if stdout.is_empty() {
+                "(empty)"
+            } else {
+                &stdout
+            },
+            if stderr.is_empty() {
+                "(empty)"
+            } else {
+                &stderr
+            }
         ));
     }
 
@@ -309,11 +317,19 @@ async fn store_attestation_to_github(
             _ => "Unknown error storing attestation.",
         };
 
-        return Err(miette::miette!("{}\nStatus: {}\nResponse: {}", error_detail, status, body));
+        return Err(miette::miette!(
+            "{}\nStatus: {}\nResponse: {}",
+            error_detail,
+            status,
+            body
+        ));
     }
 
     let response_data: AttestationResponse = response.json().await.into_diagnostic()?;
-    tracing::info!("Successfully stored attestation with ID: {}", response_data.id);
+    tracing::info!(
+        "Successfully stored attestation with ID: {}",
+        response_data.id
+    );
 
     Ok(response_data.id)
 }
