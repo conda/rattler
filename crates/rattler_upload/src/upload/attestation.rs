@@ -181,7 +181,9 @@ async fn sign_with_cosign(
         .arg("--type")
         .arg("https://schemas.conda.org/attestations-publish-1.schema.json")
         .arg("--bundle")
-        .arg(&bundle_path);
+        .arg(&bundle_path)
+        .arg("--new-bundle-format=true")
+        .env("COSIGN_YES", "true"); // Skip prompts in subprocess
 
     // Check if using local key for testing
     if let Some(key_path) = &config.cosign_private_key {
@@ -217,10 +219,6 @@ async fn sign_with_cosign(
                 );
             }
         }
-
-        cmd.env("COSIGN_EXPERIMENTAL", "1")
-            .env("COSIGN_YES", "true") // Skip prompts in subprocess
-            .arg("--new-bundle-format=true");
     }
 
     // Add the blob (package file) to attest
