@@ -3,15 +3,10 @@ use clap::Parser;
 use rattler_networking::{
     authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
 };
-<<<<<<< HEAD
-use reqwest::blocking::Client;
-use reqwest::header::CONTENT_TYPE;
-=======
 use reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     Client,
 };
->>>>>>> origin/main
 use serde_json::json;
 use thiserror;
 use url::Url;
@@ -262,13 +257,8 @@ async fn validate_prefix_dev_token(
 
     let client = Client::new();
     let response = client
-<<<<<<< HEAD
-        .post(prefix_url)
-        .bearer_auth(token)
-=======
         .post(prefix_url.join("api/graphql").expect("must be valid"))
         .header(AUTHORIZATION, format!("Bearer {token}"))
->>>>>>> origin/main
         .header(CONTENT_TYPE, "application/json")
         .json(&body)
         .send()

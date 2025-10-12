@@ -23,9 +23,6 @@ enum OciMiddlewareError {
     #[error("URL parse error: {0}")]
     ParseError(#[from] ParseError),
 
-    #[error("Invalid header value: {0}")]
-    InvalidHeaderValue(#[from] reqwest::header::InvalidHeaderValue),
-
     #[error("Layer not found")]
     LayerNotFound,
 }
@@ -179,10 +176,12 @@ impl OCIUrl {
         let oci_url = OCIUrl::new(req.url())?;
         let token = get_token(&oci_url, OciAction::Pull).await?;
 
-        let mut header = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}"))?;
-        header.set_sensitive(true);
-
-        req.headers_mut().insert(AUTHORIZATION, header);
+        req.headers_mut().insert(
+            AUTHORIZATION,
+            format!("Bearer {token}")
+                .parse()
+                .expect("Could not parse token header"),
+        );
 
         // if we know the hash, we can pull the artifact directly
         // if we don't, we need to pull the manifest and then pull the artifact
@@ -198,7 +197,7 @@ impl OCIUrl {
 
             let manifest = reqwest::Client::new()
                 .get(manifest_url)
-                .bearer_auth(&token)
+                .header(AUTHORIZATION, format!("Bearer {token}"))
                 .header(ACCEPT, "application/vnd.oci.image.manifest.v1+json")
                 .send()
                 .await?;
