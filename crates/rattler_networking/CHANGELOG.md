@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.17](https://github.com/conda/rattler/compare/rattler_networking-v0.25.16...rattler_networking-v0.25.17) - 2025-10-13
+
+### Other
+
+- small bearer token improvements ([#1727](https://github.com/conda/rattler/pull/1727))
+
 ## [0.25.16](https://github.com/conda/rattler/compare/rattler_networking-v0.25.15...rattler_networking-v0.25.16) - 2025-10-07
 
 ### Other
