@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.8](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.7...rattler_repodata_gateway-v0.24.8) - 2025-10-13
+
+### Added
+
+- read index.json directly from local files ([#1729](https://github.com/conda/rattler/pull/1729))
+
 ## [0.24.7](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.6...rattler_repodata_gateway-v0.24.7) - 2025-10-07
 
 ### Other
