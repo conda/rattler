@@ -477,7 +477,11 @@ impl From<S3Opts> for S3Data {
                         .endpoint_url
                         .clone()
                         .expect("endpoint_url is required"),
-                    region: value.s3_credentials.region.clone(),
+                    region: value
+                        .s3_credentials
+                        .region
+                        .clone()
+                        .expect("region is required"),
                     addressing_style,
                     access_key_id: Some(access_key_id),
                     secret_access_key: Some(secret_access_key),

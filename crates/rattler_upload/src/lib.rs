@@ -173,7 +173,6 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
                 s3_data.channel,
                 s3_data.credentials,
                 &args.package_files,
-                s3_data.region,
                 s3_data.force, // force parameter - using false as default
             )
             .await

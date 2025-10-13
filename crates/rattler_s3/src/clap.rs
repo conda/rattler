@@ -71,7 +71,8 @@ impl From<S3CredentialsOpts> for Option<S3Credentials> {
             tracing::warn!("The `--force-path-style` option is deprecated, please use `--addressing-style=path` instead.");
             value.addressing_style = S3AddressingStyleOpts::Path;
         }
-        if let (Some(endpoint_url), Some(region)) = (value.endpoint_url, Some(value.region)) {
+
+        if let (Some(endpoint_url), Some(region)) = (value.endpoint_url, value.region) {
             Some(S3Credentials {
                 endpoint_url,
                 region,
