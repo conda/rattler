@@ -1404,7 +1404,10 @@ mod tests {
 
         match result {
             Err(InstallerError::PlatformSpecificPackagesWithNoarchPlatform(packages)) => {
-                assert!(!packages.is_empty(), "Error should list the problematic packages");
+                assert!(
+                    !packages.is_empty(),
+                    "Error should list the problematic packages"
+                );
                 assert!(
                     packages[0].contains("osx-arm64"),
                     "Error message should include the subdir of the platform-specific package"
