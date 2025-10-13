@@ -1413,10 +1413,9 @@ mod tests {
                     "Error message should include the subdir of the platform-specific package"
                 );
             }
-            _ => panic!(
-                "Expected PlatformSpecificPackagesWithNoarchPlatform error, got: {:?}",
-                result
-            ),
+            _ => {
+                panic!("Expected PlatformSpecificPackagesWithNoarchPlatform error, got: {result:?}")
+            }
         }
     }
 
