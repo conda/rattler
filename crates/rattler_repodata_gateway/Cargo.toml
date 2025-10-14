@@ -30,6 +30,7 @@ http = { workspace = true, optional = true }
 http-cache-semantics = { workspace = true, optional = true, features = ["reqwest", "serde"] }
 humansize = { workspace = true }
 humantime = { workspace = true }
+indicatif = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 json-patch = { workspace = true }
 self_cell = { workspace = true, optional = true }
@@ -96,6 +97,7 @@ native-tls = ['reqwest/native-tls', 'reqwest/native-tls-alpn', 'rattler_networki
 rustls-tls = ['reqwest/rustls-tls', 'rattler_networking/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_redaction/rustls-tls']
 sparse = ["rattler_conda_types", "memmap2", "self_cell", "superslice", "itertools", "serde_json/raw_value"]
 gateway = ["sparse", "http", "http-cache-semantics", "parking_lot", "async-trait", "rattler_package_streaming"]
+indicatif = ["dep:indicatif", "gateway"]
 
 [package.metadata.docs.rs]
 features = ["sparse", "gateway"]

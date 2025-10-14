@@ -3780,7 +3780,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.37.7"
+version = "0.37.8"
 dependencies = [
  "anyhow",
  "console",
@@ -3822,7 +3822,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.37"
+version = "0.3.38"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -3924,7 +3924,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3944,6 +3944,7 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_s3",
  "reqwest",
+ "retry-policies",
  "rmp-serde",
  "serde",
  "serde_json",
@@ -4018,7 +4019,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.16"
+version = "0.25.17"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4048,7 +4049,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.7"
+version = "0.23.8"
 dependencies = [
  "bzip2",
  "chrono",
@@ -4094,7 +4095,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.7"
+version = "0.24.8"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4116,6 +4117,7 @@ dependencies = [
  "http-cache-semantics",
  "humansize",
  "humantime",
+ "indicatif",
  "itertools 0.14.0",
  "json-patch",
  "libc",
@@ -4152,7 +4154,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "aws-config",
  "aws-credential-types",

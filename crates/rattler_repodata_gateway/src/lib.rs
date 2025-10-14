@@ -76,5 +76,7 @@ pub use gateway::{
     ChannelConfig, Gateway, GatewayBuilder, GatewayError, MaxConcurrency, RepoData, SourceConfig,
     SubdirSelection,
 };
+#[cfg(feature = "indicatif")]
+pub use gateway::{IndicatifReporter, IndicatifReporterBuilder};
 #[cfg(all(not(target_arch = "wasm32"), feature = "gateway"))]
 pub use gateway::{RunExportExtractorError, RunExportsReporter};

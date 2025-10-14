@@ -4715,6 +4715,7 @@ dependencies = [
  "http-cache-semantics",
  "humansize",
  "humantime",
+ "indicatif",
  "insta",
  "itertools 0.14.0",
  "json-patch",

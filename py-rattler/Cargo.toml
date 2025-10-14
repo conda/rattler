@@ -35,6 +35,7 @@ rattler = { path = "../crates/rattler", default-features = false, features = [
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false, features = [
     "sparse",
     "gateway",
+    "indicatif",
 ] }
 rattler_conda_types = { path = "../crates/rattler_conda_types", default-features = false }
 rattler_config = { path = "../crates/rattler_config", default-features = false }
