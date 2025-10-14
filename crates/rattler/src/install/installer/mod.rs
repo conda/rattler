@@ -421,11 +421,11 @@ impl Installer {
                 .filter(|record| record.package_record.subdir != "noarch")
                 .map(|record| {
                     format!(
-                        "{}-{}-{} (subdir: {})",
+                        "{}/{}-{}-{}",
+                        record.package_record.subdir,
                         record.package_record.name.as_normalized(),
                         record.package_record.version,
-                        record.package_record.build,
-                        record.package_record.subdir
+                        record.package_record.build
                     )
                 })
                 .collect();
