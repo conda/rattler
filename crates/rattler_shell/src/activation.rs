@@ -1097,6 +1097,7 @@ mod tests {
         insta::assert_yaml_snapshot!("after_activation", env_diff);
     }
 
+    #[allow(dead_code)]
     fn test_run_activation_fast_path(shell: ShellEnum, with_unicode: bool) {
         let environment_dir = tempfile::TempDir::new().unwrap();
 
