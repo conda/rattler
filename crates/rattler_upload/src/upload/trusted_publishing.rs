@@ -3,7 +3,7 @@
 
 //! Trusted publishing (via OIDC) with GitHub actions.
 
-use reqwest::{header, StatusCode};
+use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -135,10 +135,9 @@ async fn get_oidc_token(
         .query_pairs_mut()
         .append_pair("audience", "prefix.dev");
     tracing::info!("Querying the trusted publishing OIDC token from {oidc_token_url}");
-    let authorization = format!("bearer {oidc_token_request_token}");
     let response = client
         .get(oidc_token_url.clone())
-        .header(header::AUTHORIZATION, authorization)
+        .bearer_auth(oidc_token_request_token)
         .send()
         .await
         .map_err(|err| TrustedPublishingError::ReqwestMiddleware(oidc_token_url.clone(), err))?;

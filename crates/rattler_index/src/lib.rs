@@ -2,16 +2,21 @@
 //! files
 #![deny(missing_docs)]
 
+pub mod cache;
+mod utils;
+
 use std::{
     collections::{HashMap, HashSet},
     io::{BufRead, BufReader, Cursor, Read, Seek},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
+    time::SystemTime,
 };
 
 use anyhow::{Context, Result};
 use bytes::buf::Buf;
+use chrono::{DateTime, Utc};
 use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
 use fxhash::FxHashMap;
@@ -27,15 +32,36 @@ use rattler_conda_types::{
     ShardedSubdirInfo,
 };
 use rattler_digest::Sha256Hash;
+use rattler_networking::retry_policies::default_retry_policy;
 use rattler_package_streaming::{
     read,
     seek::{self, stream_conda_content},
 };
 use rattler_s3::ResolvedS3Credentials;
+use retry_policies::{RetryDecision, RetryPolicy};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
+use tracing::Instrument;
 use url::Url;
+
+/// Statistics for a single subdir indexing operation
+#[derive(Debug, Clone, Default)]
+pub struct SubdirIndexStats {
+    /// Number of packages added to the index
+    pub packages_added: usize,
+    /// Number of packages removed from the index
+    pub packages_removed: usize,
+    /// Number of retries due to concurrent modifications
+    pub retries: usize,
+}
+
+/// Statistics for the entire indexing operation
+#[derive(Debug, Clone, Default)]
+pub struct IndexStats {
+    /// Statistics per subdir
+    pub subdirs: HashMap<Platform, SubdirIndexStats>,
+}
 
 const REPODATA_FROM_PACKAGES: &str = "repodata_from_packages.json";
 const REPODATA: &str = "repodata.json";
@@ -192,6 +218,186 @@ pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result
     read_index_json_from_archive(&bytes, &mut archive)
 }
 
+/// Parse a package file buffer based on its filename extension.
+///
+/// # Arguments
+///
+/// * `buffer` - The file contents to parse
+/// * `filename` - The filename (used to determine archive type)
+///
+/// # Returns
+///
+/// Returns the parsed `PackageRecord`.
+fn parse_package_buffer(buffer: opendal::Buffer, filename: &str) -> std::io::Result<PackageRecord> {
+    let reader = buffer.reader();
+    let archive_type = ArchiveType::try_from(filename).unwrap();
+    match archive_type {
+        ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
+        ArchiveType::Conda => package_record_from_conda_reader(reader),
+    }
+}
+
+/// Read and parse a package file with caching and retry logic.
+///
+/// This function encapsulates the logic for reading a package file, including:
+/// - Checking the cache for a previously computed record
+/// - Reading the file with retry logic on cache miss
+/// - Parsing the package content
+/// - Storing the result in the cache
+///
+/// # Arguments
+///
+/// * `op` - The operator to use for file operations
+/// * `cache` - The package record cache (scoped to a single subdir)
+/// * `subdir` - The subdirectory (e.g., "noarch", "linux-64")
+/// * `filename` - The package filename (e.g., "package-1.0.0.tar.bz2")
+///
+/// # Returns
+///
+/// Returns the parsed `PackageRecord` on success.
+async fn read_and_parse_package(
+    op: &Operator,
+    cache: &cache::PackageRecordCache,
+    subdir: Platform,
+    filename: &str,
+) -> std::io::Result<PackageRecord> {
+    let file_path = format!("{subdir}/{filename}");
+
+    // Try cache or get current metadata
+    // Cache uses filename as key since it's scoped to a single subdir
+    match cache.get_or_stat(op, &file_path).await {
+        Ok(cache::CacheResult::Hit(record)) => {
+            // Cache hit - reuse the record
+            Ok(*record)
+        }
+        Ok(cache::CacheResult::Miss {
+            etag,
+            last_modified,
+        }) => {
+            // Cache miss - read file with retry logic
+            let (buffer, final_metadata) = cache::read_package_with_retry(
+                op,
+                &file_path,
+                RepodataFileMetadata {
+                    etag,
+                    last_modified,
+                },
+            )
+            .await
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+
+            // Parse package
+            let record = parse_package_buffer(buffer, filename)?;
+
+            // Store in cache using filename as key
+            cache
+                .insert(
+                    &file_path,
+                    record.clone(),
+                    final_metadata.etag,
+                    final_metadata.last_modified,
+                )
+                .await;
+
+            Ok(record)
+        }
+        Err(e) => {
+            tracing::warn!("Cache stat failed for {file_path}: {e}, proceeding without cache");
+            // Fall back to direct read without cache
+            let buffer = op
+                .read(&file_path)
+                .await
+                .map_err(|e| std::io::Error::other(e.to_string()))?;
+            parse_package_buffer(buffer, filename)
+        }
+    }
+}
+
+/// Metadata for a single repodata file, used to detect concurrent
+/// modifications.
+#[derive(Debug, Clone)]
+pub struct RepodataFileMetadata {
+    /// The `ETag` of the file, if available
+    pub etag: Option<String>,
+    /// The last modified timestamp of the file, if available
+    pub last_modified: Option<DateTime<Utc>>,
+}
+
+impl RepodataFileMetadata {
+    /// Collect metadata for a file without reading its contents.
+    /// Returns metadata with None values if the file doesn't exist.
+    pub async fn new(op: &Operator, path: &str) -> opendal::Result<Self> {
+        match op.stat(path).await {
+            Ok(metadata) => Ok(Self {
+                etag: metadata.etag().map(str::to_owned),
+                last_modified: metadata.last_modified(),
+            }),
+            Err(e) if e.kind() == opendal::ErrorKind::NotFound => Ok(Self {
+                etag: None,
+                last_modified: None,
+            }),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+/// Collection of metadata for all critical repodata files that need concurrent
+/// access protection.
+#[derive(Debug, Clone)]
+pub struct RepodataMetadataCollection {
+    /// Metadata for repodata.json
+    pub repodata: RepodataFileMetadata,
+    /// Metadata for `repodata_from_packages.json` (only when patches are used)
+    pub repodata_from_packages: Option<RepodataFileMetadata>,
+    /// Metadata for repodata.json.zst
+    pub repodata_zst: Option<RepodataFileMetadata>,
+    /// Metadata for `repodata_shards.msgpack.zst`
+    pub repodata_shards: Option<RepodataFileMetadata>,
+}
+
+impl RepodataMetadataCollection {
+    /// Collect metadata for all critical repodata files in a subdir.
+    pub async fn new(
+        op: &Operator,
+        subdir: Platform,
+        has_patch: bool,
+        write_zst: bool,
+        write_shards: bool,
+    ) -> opendal::Result<Self> {
+        // Always track repodata.json
+        let repodata = RepodataFileMetadata::new(op, &format!("{subdir}/{REPODATA}")).await?;
+
+        // Track repodata_from_packages.json if patches are used
+        let repodata_from_packages = if has_patch {
+            Some(
+                RepodataFileMetadata::new(op, &format!("{subdir}/{REPODATA_FROM_PACKAGES}"))
+                    .await?,
+            )
+        } else {
+            None
+        };
+
+        let repodata_zst = if write_zst {
+            Some(RepodataFileMetadata::new(op, &format!("{subdir}/{REPODATA}.zst")).await?)
+        } else {
+            None
+        };
+
+        let repodata_shards = if write_shards {
+            Some(RepodataFileMetadata::new(op, &format!("{subdir}/{REPODATA_SHARDS}")).await?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            repodata,
+            repodata_from_packages,
+            repodata_zst,
+            repodata_shards,
+        })
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn index_subdir(
     subdir: Platform,
@@ -202,41 +408,125 @@ async fn index_subdir(
     repodata_patch: Option<PatchInstructions>,
     progress: Option<MultiProgress>,
     semaphore: Arc<Semaphore>,
-) -> Result<()> {
-    let mut registered_packages: FxHashMap<String, PackageRecord> = HashMap::default();
-    if !force {
-        let repodata_bytes = if repodata_patch.is_some() {
-            op.read(&format!("{subdir}/{REPODATA_FROM_PACKAGES}")).await
-        } else {
-            op.read(&format!("{subdir}/{REPODATA}")).await
-        };
-        let repodata: RepoData = match repodata_bytes {
-            Ok(bytes) => serde_json::from_slice(&bytes.to_vec())?,
-            Err(e) => {
-                if e.kind() != opendal::ErrorKind::NotFound {
-                    return Err(e.into());
-                }
-                tracing::info!("Could not find repodata.json. Creating new one.");
-                RepoData {
-                    info: Some(ChannelInfo {
-                        subdir: Some(subdir.to_string()),
-                        base_url: None,
-                    }),
-                    packages: HashMap::default(),
-                    conda_packages: HashMap::default(),
-                    removed: HashSet::default(),
-                    version: Some(2),
-                }
+    cache: cache::PackageRecordCache,
+) -> Result<SubdirIndexStats> {
+    let retry_policy = default_retry_policy();
+    let mut current_try = 0;
+
+    loop {
+        let request_start_time = SystemTime::now();
+
+        match index_subdir_inner(
+            subdir,
+            op.clone(),
+            force,
+            write_zst,
+            write_shards,
+            repodata_patch.clone(),
+            progress.clone(),
+            semaphore.clone(),
+            cache.clone(),
+        )
+        .await
+        {
+            Ok(mut stats) => {
+                stats.retries = current_try;
+                return Ok(stats);
             }
-        };
-        registered_packages.extend(repodata.packages.into_iter());
-        registered_packages.extend(repodata.conda_packages.into_iter());
-        tracing::debug!(
-            "Found {} already registered packages in {}/repodata.json.",
-            registered_packages.len(),
-            subdir
-        );
+            Err(e) => {
+                // Check if this is a race condition error
+                if let Some(opendal_err) = e.downcast_ref::<opendal::Error>() {
+                    if opendal_err.kind() == opendal::ErrorKind::ConditionNotMatch {
+                        // Race condition detected - should we retry?
+                        match retry_policy.should_retry(request_start_time, current_try as u32) {
+                            RetryDecision::Retry { execute_after } => {
+                                let duration = execute_after
+                                    .duration_since(SystemTime::now())
+                                    .unwrap_or_default();
+                                tracing::warn!(
+                                    "Detected concurrent modification of repodata for {}, retrying in {:?}",
+                                    subdir,
+                                    duration
+                                );
+                                tokio::time::sleep(duration).await;
+                                current_try += 1;
+                                continue;
+                            }
+                            RetryDecision::DoNotRetry => {
+                                tracing::error!(
+                                    "Max retries exceeded for {} due to concurrent modifications",
+                                    subdir
+                                );
+                                return Err(e);
+                            }
+                        }
+                    }
+                }
+                // Not a race condition error, or downcast failed - propagate immediately
+                return Err(e);
+            }
+        }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn index_subdir_inner(
+    subdir: Platform,
+    op: Operator,
+    force: bool,
+    write_zst: bool,
+    write_shards: bool,
+    repodata_patch: Option<PatchInstructions>,
+    progress: Option<MultiProgress>,
+    semaphore: Arc<Semaphore>,
+    cache: cache::PackageRecordCache,
+) -> Result<SubdirIndexStats> {
+    // Step 1: Collect ETags/metadata for all critical files upfront
+    let metadata = RepodataMetadataCollection::new(
+        &op,
+        subdir,
+        repodata_patch.is_some(),
+        write_zst,
+        write_shards,
+    )
+    .await?;
+
+    // Step 2: Read any previous repodata.json files with conditional check.
+    // This file already contains a lot of information about the packages that we
+    // can reuse.
+    let mut registered_packages: FxHashMap<String, PackageRecord> = if force {
+        HashMap::default()
+    } else {
+        let (repodata_path, read_metadata) = if repodata_patch.is_some() {
+            (
+                format!("{subdir}/{REPODATA_FROM_PACKAGES}"),
+                metadata.repodata_from_packages.as_ref().unwrap(),
+            )
+        } else {
+            (format!("{subdir}/{REPODATA}"), &metadata.repodata)
+        };
+
+        match crate::utils::read_with_metadata_check(&op, &repodata_path, read_metadata).await {
+            Ok(bytes) => match serde_json::from_slice::<RepoData>(&bytes.to_vec()) {
+                Ok(repodata) => repodata
+                    .packages
+                    .into_iter()
+                    .chain(repodata.conda_packages)
+                    .collect(),
+                Err(err) => {
+                    tracing::warn!("Failed to parse {repodata_path}: {err}. Not reusing content from this file");
+                    HashMap::default()
+                }
+            },
+            Err(err) if err.kind() == opendal::ErrorKind::NotFound => {
+                tracing::info!("Could not find {repodata_path}. Creating new one.");
+                HashMap::default()
+            }
+            Err(err) => return Err(err.into()),
+        }
+    };
+
+    // List all the packages in the subdirectory.
     let uploaded_packages: HashSet<String> = op
         .list_with(&format!("{}/", subdir.as_str()))
         .await?
@@ -258,6 +548,8 @@ async fn index_subdir(
         subdir
     );
 
+    // Find packages that are listed in the previous repodata.json file but have
+    // since been removed.
     let packages_to_delete = registered_packages
         .keys()
         .cloned()
@@ -271,10 +563,6 @@ async fn index_subdir(
         packages_to_delete.len(),
         subdir
     );
-
-    for filename in packages_to_delete {
-        registered_packages.remove(&filename);
-    }
 
     let packages_to_add = uploaded_packages
         .difference(&registered_packages.keys().cloned().collect::<HashSet<_>>())
@@ -307,29 +595,22 @@ async fn index_subdir(
             let filename = filename.clone();
             let pb = pb.clone();
             let semaphore = semaphore.clone();
-            {
-                async move {
-                    let _permit = semaphore
-                        .acquire()
-                        .await
-                        .expect("Semaphore was unexpectedly closed");
-                    pb.set_message(format!(
-                        "Indexing {} {}",
-                        subdir.as_str(),
-                        console::style(filename.clone()).dim()
-                    ));
-                    let file_path = format!("{subdir}/{filename}");
-                    let buffer = op.read(&file_path).await?;
-                    let reader = buffer.reader();
-                    // We already know it's not None
-                    let archive_type = ArchiveType::try_from(&filename).unwrap();
-                    let record = match archive_type {
-                        ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
-                        ArchiveType::Conda => package_record_from_conda_reader(reader),
-                    }?;
-                    pb.inc(1);
-                    Ok::<(String, PackageRecord), std::io::Error>((filename.clone(), record))
-                }
+            let cache = cache.clone();
+            async move {
+                let _permit = semaphore
+                    .acquire()
+                    .await
+                    .expect("Semaphore was unexpectedly closed");
+                pb.set_message(format!(
+                    "Indexing {} {}",
+                    subdir.as_str(),
+                    console::style(&filename).dim()
+                ));
+
+                let record = read_and_parse_package(&op, &cache, subdir, &filename).await?;
+
+                pb.inc(1);
+                Ok::<(String, PackageRecord), std::io::Error>((filename, record))
             }
         };
         tasks.push(tokio::spawn(task));
@@ -391,7 +672,7 @@ async fn index_subdir(
     }
 
     // TODO: don't serialize run_exports and purls but in their own files
-    let repodata = RepoData {
+    let repodata_before_patches = RepoData {
         info: Some(ChannelInfo {
             subdir: Some(subdir.to_string()),
             base_url: None,
@@ -403,14 +684,19 @@ async fn index_subdir(
     };
 
     write_repodata(
-        repodata,
+        repodata_before_patches,
         repodata_patch,
-        write_zst,
-        write_shards,
         subdir,
         op,
+        &metadata,
     )
-    .await
+    .await?;
+
+    Ok(SubdirIndexStats {
+        packages_added: packages_to_add.len(),
+        packages_removed: packages_to_delete.len(),
+        retries: 0, // Will be set by index_subdir
+    })
 }
 
 fn serialize_msgpack_zst<T>(val: &T) -> Result<Vec<u8>>
@@ -423,21 +709,26 @@ where
 }
 
 /// Write a `repodata.json` for all packages in the given configurator's root.
+/// Uses conditional writes based on the provided metadata to prevent concurrent
+/// modification issues.
 pub async fn write_repodata(
     repodata: RepoData,
     repodata_patch: Option<PatchInstructions>,
-    write_zst: bool,
-    write_shards: bool,
     subdir: Platform,
     op: Operator,
+    metadata: &RepodataMetadataCollection,
 ) -> Result<()> {
-    if repodata_patch.is_some() {
+    if let Some(repodata_from_packages_metadata) = &metadata.repodata_from_packages {
         let unpatched_repodata_path = format!("{subdir}/{REPODATA_FROM_PACKAGES}");
         tracing::info!("Writing unpatched repodata to {unpatched_repodata_path}");
         let unpatched_repodata_bytes = serde_json::to_vec(&repodata)?;
-        op.write_with(&unpatched_repodata_path, unpatched_repodata_bytes)
-            .content_encoding("application/json")
-            .await?;
+        crate::utils::write_with_metadata_check(
+            &op,
+            &unpatched_repodata_path,
+            unpatched_repodata_bytes,
+            repodata_from_packages_metadata,
+        )
+        .await?;
     }
 
     let repodata = if let Some(instructions) = repodata_patch {
@@ -450,22 +741,35 @@ pub async fn write_repodata(
     };
 
     let repodata_bytes = serde_json::to_vec(&repodata)?;
-    if write_zst {
+
+    // Write compressed version if requested
+    if let Some(repodata_zst_metadata) = &metadata.repodata_zst {
         tracing::info!("Compressing repodata bytes");
         let repodata_zst_bytes =
             zstd::stream::encode_all(&repodata_bytes[..], ZSTD_REPODATA_COMPRESSION_LEVEL)?;
         let repodata_zst_path = format!("{subdir}/{REPODATA}.zst");
         tracing::info!("Writing zst repodata to {repodata_zst_path}");
-        op.write(&repodata_zst_path, repodata_zst_bytes).await?;
+        crate::utils::write_with_metadata_check(
+            &op,
+            &repodata_zst_path,
+            repodata_zst_bytes,
+            repodata_zst_metadata,
+        )
+        .await?;
     }
 
+    // Write main repodata.json with conditional check
     let repodata_path = format!("{subdir}/{REPODATA}");
     tracing::info!("Writing repodata to {repodata_path}");
-    op.write_with(&repodata_path, repodata_bytes)
-        .content_encoding("application/json")
-        .await?;
+    crate::utils::write_with_metadata_check(
+        &op,
+        &repodata_path,
+        repodata_bytes,
+        &metadata.repodata,
+    )
+    .await?;
 
-    if write_shards {
+    if metadata.repodata_shards.is_some() {
         // See CEP 16 <https://github.com/conda/ceps/blob/main/cep-0016.md>
         tracing::info!("Creating sharded repodata");
         let mut shards_by_package_names: HashMap<String, Shard> = HashMap::new();
@@ -548,11 +852,19 @@ pub async fn write_repodata(
             }
         }
 
-        let repodata_shards_path = format!("{subdir}/{REPODATA_SHARDS}");
-        tracing::trace!("Writing repodata shards to {repodata_shards_path}");
-        let sharded_repodata_encoded = serialize_msgpack_zst(&sharded_repodata)?;
-        op.write(&repodata_shards_path, sharded_repodata_encoded)
+        // Write sharded repodata index with conditional check
+        if let Some(repodata_shards_metadata) = &metadata.repodata_shards {
+            let repodata_shards_path = format!("{subdir}/{REPODATA_SHARDS}");
+            tracing::trace!("Writing repodata shards to {repodata_shards_path}");
+            let sharded_repodata_encoded = serialize_msgpack_zst(&sharded_repodata)?;
+            crate::utils::write_with_metadata_check(
+                &op,
+                &repodata_shards_path,
+                sharded_repodata_encoded,
+                repodata_shards_metadata,
+            )
             .await?;
+        }
     }
     Ok(())
 }
@@ -593,9 +905,11 @@ pub async fn index_fs(
 ) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
     config.root = Some(channel.canonicalize()?.to_string_lossy().to_string());
+    let builder = config.into_builder();
+    let op = Operator::new(builder)?.finish();
     index(
         target_platform,
-        config,
+        op,
         repodata_patch,
         write_zst,
         write_shards,
@@ -604,6 +918,7 @@ pub async fn index_fs(
         multi_progress,
     )
     .await
+    .map(|_| ())
 }
 
 /// Configuration for `index_s3`
@@ -659,9 +974,12 @@ pub async fn index_s3(
     s3_config.enable_virtual_host_style =
         credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
 
+    let builder = s3_config.into_builder();
+    let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
+
     index(
         target_platform,
-        s3_config,
+        op,
         repodata_patch,
         write_zst,
         write_shards,
@@ -670,35 +988,36 @@ pub async fn index_s3(
         multi_progress,
     )
     .await
+    .map(|_| ())
 }
 
-/// Create a new `repodata.json` for all packages in the given configurator's
-/// root. If `target_platform` is `Some`, only that specific subdir is indexed.
-/// Otherwise indexes all subdirs and creates a `repodata.json` for each.
+/// Create a new `repodata.json` for all packages in the given operator's root.
 ///
-/// The process is the following:
-/// 1. Get all subdirs and create `noarch` and `target_platform` if they do not
-///    exist.
-/// 2. Iterate subdirs and index each subdir. Therefore, we need to:
+/// If `target_platform` is `Some`, only that specific subdir is indexed.
+/// Otherwise, indexes all subdirs and creates a `repodata.json` for each.
+///
+/// The function takes roughly the following steps:
+///
+/// 1. Get all subdirs and create `noarch` and `target_platform` if they do not exist.
+/// 2. Iterate subdirs and index each subdir:
 ///    1. Collect all uploaded packages in subdir
 ///    2. Collect all registered packages from `repodata.json` (if exists)
 ///    3. Determine which packages to add to and to delete from `repodata.json`
-///    4. Write `repodata.json` back
+///    4. Write `repodata.json` back using conditional writes to prevent race conditions
+///
+/// Returns `IndexStats` containing statistics about the indexing operation,
+/// including the number of packages added/removed and retry counts per subdir.
 #[allow(clippy::too_many_arguments)]
-pub async fn index<T: Configurator>(
+pub async fn index(
     target_platform: Option<Platform>,
-    config: T,
+    op: Operator,
     repodata_patch: Option<String>,
     write_zst: bool,
     write_shards: bool,
     force: bool,
     max_parallel: usize,
     multi_progress: Option<MultiProgress>,
-) -> anyhow::Result<()> {
-    let builder = config.into_builder();
-
-    // Get all subdirs
-    let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
+) -> anyhow::Result<IndexStats> {
     let entries = op.list_with("").await?;
 
     // If requested `target_platform` subdir does not exist, we create it.
@@ -757,8 +1076,12 @@ pub async fn index<T: Configurator>(
     let semaphore = Semaphore::new(max_parallel);
     let semaphore = Arc::new(semaphore);
 
-    let mut tasks = FuturesUnordered::new();
+    let mut tasks: Vec<(Platform, _)> = Vec::new();
     for subdir in subdirs.iter() {
+        // Create a separate cache for each subdir.
+        // The cache persists across retry attempts for this specific subdir.
+        let cache = cache::PackageRecordCache::new();
+
         let task = index_subdir(
             *subdir,
             op.clone(),
@@ -770,24 +1093,26 @@ pub async fn index<T: Configurator>(
                 .and_then(|p| p.subdirs.get(&subdir.to_string()).cloned()),
             multi_progress.clone(),
             semaphore.clone(),
-        );
-        tasks.push(tokio::spawn(task));
+            cache,
+        )
+        .instrument(tracing::info_span!("index_subdir", subdir = %subdir));
+        tasks.push((*subdir, task));
     }
 
-    while let Some(join_result) = tasks.next().await {
-        match join_result {
-            Ok(Ok(_)) => {}
-            Ok(Err(e)) => {
-                tracing::error!("Failed to process subdir: {e}");
-                tasks.clear();
-                return Err(e);
+    let mut stats = IndexStats {
+        subdirs: HashMap::new(),
+    };
+
+    for (subdir, task) in tasks {
+        match task.await {
+            Ok(subdir_stats) => {
+                stats.subdirs.insert(subdir, subdir_stats);
             }
-            Err(join_err) => {
-                tracing::error!("Task panicked: {join_err}");
-                tasks.clear();
-                return Err(anyhow::anyhow!("Task panicked: {join_err}"));
+            Err(e) => {
+                tracing::error!("Failed to process subdir: {e}");
+                return Err(e);
             }
         }
     }
-    Ok(())
+    Ok(stats)
 }

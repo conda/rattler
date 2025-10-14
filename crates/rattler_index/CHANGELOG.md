@@ -62,6 +62,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.1](https://github.com/conda/rattler/compare/rattler_index-v0.26.0...rattler_index-v0.26.1) - 2025-10-13
+
+### Other
+
+- updated the following local packages: rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.26.0](https://github.com/conda/rattler/compare/rattler_index-v0.25.6...rattler_index-v0.26.0) - 2025-10-10
+
+### Added
+
+- detect concurrent s3 indexing ([#1716](https://github.com/conda/rattler/pull/1716))
+
+## [0.25.6](https://github.com/conda/rattler/compare/rattler_index-v0.25.5...rattler_index-v0.25.6) - 2025-10-09
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.25.5](https://github.com/conda/rattler/compare/rattler_index-v0.25.4...rattler_index-v0.25.5) - 2025-10-07
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.25.4](https://github.com/conda/rattler/compare/rattler_index-v0.25.3...rattler_index-v0.25.4) - 2025-10-03
 
 ### Other

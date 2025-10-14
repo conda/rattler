@@ -1,6 +1,6 @@
 [package]
 name = "rattler_s3"
-version = "0.1.4"
+version = "0.1.6"
 description = "A crate to streamline interaction with S3 storage for rattler"
 categories.workspace = true
 homepage.workspace = true
@@ -15,8 +15,9 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 
-aws-config = { workspace = true, features = ["sso", "credentials-process", "rt-tokio", "rustls"] }
-aws-sdk-s3 = { workspace = true, features = ["rustls", "rt-tokio"] }
+aws-config = { workspace = true, features = ["sso", "credentials-process", "rt-tokio"] }
+aws-sdk-s3 = { workspace = true, features = ["rt-tokio"] }
+aws-smithy-http-client = { workspace = true, features = ["rustls-ring"] }
 aws-credential-types = { workspace = true }
 
 rattler_networking = { workspace = true }

@@ -1,6 +1,6 @@
 [package]
 name = "rattler_index"
-version = "0.25.4"
+version = "0.26.1"
 edition.workspace = true
 authors = []
 description = "A crate to index conda channels and create a repodata.json file."
@@ -68,6 +68,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 url = { workspace = true }
 zstd = { workspace = true }
+retry-policies = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
