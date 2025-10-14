@@ -97,7 +97,6 @@ native-tls = ['reqwest/native-tls', 'reqwest/native-tls-alpn', 'rattler_networki
 rustls-tls = ['reqwest/rustls-tls', 'rattler_networking/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_redaction/rustls-tls']
 sparse = ["rattler_conda_types", "memmap2", "self_cell", "superslice", "itertools", "serde_json/raw_value"]
 gateway = ["sparse", "http", "http-cache-semantics", "parking_lot", "async-trait", "rattler_package_streaming"]
-indicatif = ["dep:indicatif", "gateway"]
 
 [package.metadata.docs.rs]
 features = ["sparse", "gateway"]
