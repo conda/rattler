@@ -32,13 +32,12 @@ use rattler_conda_types::{
     ShardedSubdirInfo,
 };
 use rattler_digest::Sha256Hash;
-use rattler_networking::retry_policies::default_retry_policy;
 use rattler_package_streaming::{
     read,
     seek::{self, stream_conda_content},
 };
 use rattler_s3::ResolvedS3Credentials;
-use retry_policies::{RetryDecision, RetryPolicy};
+use retry_policies::{policies::ExponentialBackoff, Jitter, RetryDecision, RetryPolicy};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
@@ -68,6 +67,26 @@ const REPODATA: &str = "repodata.json";
 const REPODATA_SHARDS: &str = "repodata_shards.msgpack.zst";
 const ZSTD_REPODATA_COMPRESSION_LEVEL: i32 = 19;
 const CACHE_CONTROL_IMMUTABLE: &str = "public, max-age=31536000, immutable";
+
+/// Returns a retry policy optimized for write operations with potential lock contention.
+///
+/// This policy retries for approximately 5 minutes with longer backoff durations compared
+/// to the default policy. The backoff progression is:
+/// Retries for up to 10 minutes total, with delays between retries starting at 10 seconds and
+/// capping at 90 seconds, and applying bounded jitter to avoid thundering herd issues.
+///
+/// This is designed for scenarios where multiple processes may be writing to the same
+/// resource and need to wait for locks to be released, such as concurrent repodata
+/// indexing operations.
+pub fn write_retry_policy() -> impl RetryPolicy {
+    ExponentialBackoff::builder()
+        .retry_bounds(
+            std::time::Duration::from_secs(10), // min delay: 10 seconds
+            std::time::Duration::from_secs(90), // max delay: 90 seconds
+        )
+        .jitter(Jitter::Bounded)
+        .build_with_total_retry_duration(std::time::Duration::from_secs(600)) // Retry for up to 10 minutes total
+}
 
 /// Extract the package record from an `index.json` file.
 pub fn package_record_from_index_json<T: Read>(
@@ -410,7 +429,9 @@ async fn index_subdir(
     semaphore: Arc<Semaphore>,
     cache: cache::PackageRecordCache,
 ) -> Result<SubdirIndexStats> {
-    let retry_policy = default_retry_policy();
+    // Use write_retry_policy for handling lock contention during repodata writes
+    // This will retry for ~5 minutes with longer backoff durations (10s, 30s, 60s, etc.)
+    let retry_policy = write_retry_policy();
     let mut current_try = 0;
 
     loop {
