@@ -39,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.40.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.0...rattler_conda_types-v0.40.1) - 2025-10-14
+
+### Added
+
+- derive `PartialEq`, `Eq` and `Hash` for `EntryPoint` ([#1731](https://github.com/conda/rattler/pull/1731))
+
 ## [0.40.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.3...rattler_conda_types-v0.40.0) - 2025-10-03
 
 ### Added
