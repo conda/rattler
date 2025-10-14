@@ -16,7 +16,7 @@ impl RetryPolicy for DoNotRetryPolicy {
     }
 }
 
-/// Returns the default retry policy that can be used .
+/// Returns the default retry policy that can be used.
 ///
 /// This is useful if you just do not care about a retry policy and you just want something
 /// sensible. Note that the behavior of what is "sensible" might change over time.
