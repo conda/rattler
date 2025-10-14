@@ -430,7 +430,7 @@ async fn index_subdir(
     cache: cache::PackageRecordCache,
 ) -> Result<SubdirIndexStats> {
     // Use write_retry_policy for handling lock contention during repodata writes
-    // This will retry for ~5 minutes with longer backoff durations (10s, 30s, 60s, etc.)
+    // This will retry for 10 minutes with longer backoff durations (10s, 30s, 60s, etc.)
     let retry_policy = write_retry_policy();
     let mut current_try = 0;
 
