@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.2](https://github.com/conda/rattler/compare/rattler_index-v0.26.1...rattler_index-v0.26.2) - 2025-10-14
+
+### Fixed
+
+- retry policy for indexing operations ([#1745](https://github.com/conda/rattler/pull/1745))
+
 ## [0.26.1](https://github.com/conda/rattler/compare/rattler_index-v0.26.0...rattler_index-v0.26.1) - 2025-10-13
 
 ### Other
