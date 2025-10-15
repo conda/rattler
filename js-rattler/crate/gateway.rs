@@ -109,6 +109,8 @@ impl From<JsSourceConfig> for SourceConfig {
 impl JsGateway {
     #[wasm_bindgen(constructor)]
     pub fn new(input: JsValue) -> JsResult<Self> {
+        // Creating the Gateway with a default client to avoid adding a user-agent header
+        // (Not supported from the browser)
         let mut builder = Gateway::builder().with_client(ClientWithMiddleware::from(Client::new()));
         let options: Option<JsGatewayOptions> = serde_wasm_bindgen::from_value(input)?;
         if let Some(options) = options {
