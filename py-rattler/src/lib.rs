@@ -16,6 +16,8 @@ mod package_streaming;
 mod paths_json;
 mod platform;
 mod prefix_paths;
+#[cfg(feature = "pty")]
+mod pty;
 mod record;
 mod repo_data;
 mod shell;
@@ -75,6 +77,9 @@ use solver::{py_solve, py_solve_with_sparse_repodata};
 use version::PyVersion;
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
 
+#[cfg(feature = "pty")]
+use pty::{PyPtyProcess, PyPtyProcessOptions, PyPtySession};
+
 use crate::error::GatewayException;
 
 /// A struct to make it easy to wrap a type as a python type.
@@ -117,6 +122,14 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyActivationResult>()?;
     m.add_class::<PyShellEnum>()?;
     m.add_class::<PyActivator>()?;
+
+    // PTY (pseudoterminal) support - optional feature, Unix only
+    #[cfg(feature = "pty")]
+    {
+        m.add_class::<PyPtyProcess>()?;
+        m.add_class::<PyPtyProcessOptions>()?;
+        m.add_class::<PyPtySession>()?;
+    }
 
     m.add_class::<PySparseRepoData>()?;
     m.add_class::<PyPackageFormatSelection>()?;

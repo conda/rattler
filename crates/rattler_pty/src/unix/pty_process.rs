@@ -55,7 +55,7 @@ fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct PtyProcessOptions {
     pub echo: bool,
     pub window_size: Option<Winsize>,
