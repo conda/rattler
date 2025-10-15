@@ -208,7 +208,8 @@ impl PyPtyProcess {
     pub fn exit(&mut self) -> PyResult<String> {
         use nix::sys::wait::WaitStatus;
 
-        let status = self.inner
+        let status = self
+            .inner
             .exit()
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to exit process: {}", e)))?;
 
@@ -246,7 +247,8 @@ impl PyPtyProcess {
     /// >>> print(output)
     /// ```
     pub fn get_file_handle(&self) -> PyResult<i32> {
-        let file = self.inner
+        let file = self
+            .inner
             .get_file_handle()
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to get file handle: {}", e)))?;
 
@@ -287,7 +289,8 @@ impl PyPtyProcess {
     /// ```
     pub fn set_kill_timeout(&mut self, timeout: Option<f64>) {
         use std::time::Duration;
-        self.inner.set_kill_timeout(timeout.map(Duration::from_secs_f64));
+        self.inner
+            .set_kill_timeout(timeout.map(Duration::from_secs_f64));
     }
 
     /// Read from the PTY asynchronously.
@@ -331,9 +334,10 @@ impl PyPtyProcess {
             let mut file = unsafe { tokio::fs::File::from_raw_fd(fd.into_raw_fd()) };
 
             let mut buf = vec![0u8; size];
-            let n = file.read(&mut buf).await.map_err(|e| {
-                PyRuntimeError::new_err(format!("Failed to read from PTY: {}", e))
-            })?;
+            let n = file
+                .read(&mut buf)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to read from PTY: {}", e)))?;
 
             buf.truncate(n);
             Ok(buf)
@@ -379,9 +383,10 @@ impl PyPtyProcess {
 
             let mut file = unsafe { tokio::fs::File::from_raw_fd(fd.into_raw_fd()) };
 
-            let n = file.write(&data).await.map_err(|e| {
-                PyRuntimeError::new_err(format!("Failed to write to PTY: {}", e))
-            })?;
+            let n = file
+                .write(&data)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to write to PTY: {}", e)))?;
 
             Ok(n)
         })
@@ -430,7 +435,10 @@ impl PyPtyProcess {
                         });
                     }
                     Err(e) => {
-                        return Err(PyRuntimeError::new_err(format!("Failed to wait for process: {}", e)));
+                        return Err(PyRuntimeError::new_err(format!(
+                            "Failed to wait for process: {}",
+                            e
+                        )));
                     }
                 }
             }
@@ -464,7 +472,10 @@ impl PyPtyProcess {
         let kill_timeout = self.inner.kill_timeout();
 
         future_into_py(py, async move {
-            use nix::sys::{signal, wait::{waitpid, WaitPidFlag, WaitStatus}};
+            use nix::sys::{
+                signal,
+                wait::{waitpid, WaitPidFlag, WaitStatus},
+            };
             use tokio::time::{sleep, Duration, Instant};
 
             let sig = Signal::SIGTERM;
@@ -478,7 +489,10 @@ impl PyPtyProcess {
                         return Ok("Exited(0)".to_string());
                     }
                     Err(e) => {
-                        return Err(PyRuntimeError::new_err(format!("Failed to kill process: {}", e)));
+                        return Err(PyRuntimeError::new_err(format!(
+                            "Failed to kill process: {}",
+                            e
+                        )));
                     }
                 }
 
@@ -494,15 +508,19 @@ impl PyPtyProcess {
                         });
                     }
                     Err(e) => {
-                        return Err(PyRuntimeError::new_err(format!("Failed to wait for process: {}", e)));
+                        return Err(PyRuntimeError::new_err(format!(
+                            "Failed to wait for process: {}",
+                            e
+                        )));
                     }
                 }
 
                 // Kill -9 if timeout is reached
                 if let Some(timeout) = kill_timeout {
                     if start.elapsed() > timeout {
-                        signal::kill(child_pid, signal::Signal::SIGKILL)
-                            .map_err(|e| PyRuntimeError::new_err(format!("Failed to SIGKILL process: {}", e)))?;
+                        signal::kill(child_pid, signal::Signal::SIGKILL).map_err(|e| {
+                            PyRuntimeError::new_err(format!("Failed to SIGKILL process: {}", e))
+                        })?;
                     }
                 }
             }
