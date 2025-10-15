@@ -135,7 +135,7 @@ impl GatewayBuilder {
 
     /// Finish the construction of the gateway returning a constructed gateway.
     pub fn finish(self) -> Gateway {
-        self.finish_with_user_agent(true);
+        self.finish_with_user_agent(true)
     }
 
     /// Finish the construction of the gateway returning a constructed gateway.
