@@ -143,15 +143,13 @@ impl GatewayBuilder {
     pub fn finish_with_user_agent(self, set_user_agent: bool) -> Gateway {
         let client = self.client.unwrap_or_else(|| {
             if set_user_agent {
-                LazyClient::new(|| {ClientWithMiddleware::from(
-                    Client::builder()
-                        .user_agent(USER_AGENT)
-                        .build()
-                        .unwrap()
+                LazyClient::new(|| {
+                    ClientWithMiddleware::from(
+                        Client::builder().user_agent(USER_AGENT).build().unwrap(),
                     )
                 })
             } else {
-                LazyClient::new(|| {ClientWithMiddleware::from(Client::new())})
+                LazyClient::new(|| ClientWithMiddleware::from(Client::new()))
             }
         });
 
