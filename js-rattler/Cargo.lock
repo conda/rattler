@@ -1212,6 +1212,8 @@ dependencies = [
  "rattler_digest",
  "rattler_repodata_gateway",
  "rattler_solve",
+ "reqwest",
+ "reqwest-middleware",
  "serde",
  "serde-wasm-bindgen",
  "thiserror 2.0.16",
@@ -1674,7 +1676,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1759,7 +1761,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.38"
+version = "0.3.39"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -1790,7 +1792,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.40.0"
+version = "0.40.1"
 dependencies = [
  "chrono",
  "core-foundation",
@@ -1830,7 +1832,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "blake2",
  "digest",
@@ -1854,7 +1856,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.17"
+version = "0.25.18"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -1877,7 +1879,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.8"
+version = "0.23.9"
 dependencies = [
  "bzip2",
  "chrono",
@@ -1914,7 +1916,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.8"
+version = "0.24.9"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -1972,7 +1974,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "3.0.5"
+version = "3.0.6"
 dependencies = [
  "chrono",
  "futures",
@@ -2076,9 +2078,9 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
 name = "reqwest"
-version = "0.12.20"
+version = "0.12.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eabf4c97d9130e2bf606614eb937e86edac8292eaa6f422f995d7e8de1eb1813"
+checksum = "9d0946410b9f7b082a427e4ef5c8ff541a88b357bc6c637c40db3a68ac70a36f"
 dependencies = [
  "base64",
  "bytes",
@@ -2216,7 +2218,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2229,7 +2231,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.9.4",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2667,7 +2669,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix 1.0.7",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3190,7 +3192,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

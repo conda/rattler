@@ -2,6 +2,8 @@ use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use rattler_conda_types::{Channel, Platform};
 use rattler_repodata_gateway::{fetch::CacheAction, ChannelConfig, Gateway, SourceConfig};
+use reqwest::Client;
+use reqwest_middleware::ClientWithMiddleware;
 use serde::Deserialize;
 use url::Url;
 use wasm_bindgen::prelude::*;
@@ -107,7 +109,9 @@ impl From<JsSourceConfig> for SourceConfig {
 impl JsGateway {
     #[wasm_bindgen(constructor)]
     pub fn new(input: JsValue) -> JsResult<Self> {
-        let mut builder = Gateway::builder();
+        // Creating the Gateway with a default client to avoid adding a user-agent header
+        // (Not supported from the browser)
+        let mut builder = Gateway::builder().with_client(ClientWithMiddleware::from(Client::new()));
         let options: Option<JsGatewayOptions> = serde_wasm_bindgen::from_value(input)?;
         if let Some(options) = options {
             if let Some(max_concurrent_requests) = options.max_concurrent_requests {
