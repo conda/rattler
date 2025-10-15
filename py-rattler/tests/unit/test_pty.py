@@ -2,14 +2,23 @@ import sys
 import time
 import select
 import pytest
+import os
 
 from rattler import PtySession, PtyProcess, PtyProcessOptions
 
 # PTY functionality is only available on Unix platforms
 skip_on_windows = pytest.mark.skipif(sys.platform == "win32", reason="PTY is Unix-only")
 
+# Skip PTY tests in CI environments without a real TTY (e.g., GitHub Actions)
+# PTY tests require an actual terminal to function properly
+skip_without_tty = pytest.mark.skipif(
+    not sys.stdin.isatty() or os.environ.get("CI") == "true",
+    reason="PTY tests require a real TTY (not available in CI)",
+)
+
 
 @skip_on_windows
+@skip_without_tty
 def test_pty_process_options() -> None:
     """Test PtyProcessOptions creation and properties."""
     opts = PtyProcessOptions()
@@ -23,6 +32,7 @@ def test_pty_process_options() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 def test_pty_session_creation() -> None:
     """Test PtySession can be created with a simple command."""
     session = PtySession(["true"])
@@ -31,6 +41,7 @@ def test_pty_session_creation() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 def test_pty_session_closed_pty_error() -> None:
     """Test that sending to a closed PTY raises an error or succeeds silently."""
     # Use bash -c with exit so it exits immediately
@@ -52,6 +63,7 @@ def test_pty_session_closed_pty_error() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 def test_pty_process_creation() -> None:
     """Test PtyProcess can be created with options."""
     # Create with default options
@@ -71,6 +83,7 @@ def test_pty_process_creation() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 def test_pty_process_run_command_with_args() -> None:
     """Test running a command with arguments like subprocess."""
     # Run echo with arguments
@@ -97,6 +110,7 @@ def test_pty_process_run_command_with_args() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 def test_pty_process_bash_command() -> None:
     """Test running bash -c with a command."""
     # Run a command via bash -c
@@ -122,6 +136,7 @@ def test_pty_process_bash_command() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 def test_pty_process_status() -> None:
     """Test checking process status."""
     # Start a very short process
@@ -142,6 +157,7 @@ def test_pty_process_status() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 def test_pty_process_exit() -> None:
     """Test gracefully exiting a process."""
     # Start a process that would run for a while
@@ -155,6 +171,7 @@ def test_pty_process_exit() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 def test_pty_session_empty_command() -> None:
     """Test that empty command raises an error."""
     with pytest.raises(Exception):
@@ -162,6 +179,7 @@ def test_pty_session_empty_command() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 def test_pty_process_empty_command() -> None:
     """Test that empty command raises an error."""
     with pytest.raises(Exception):
@@ -169,6 +187,7 @@ def test_pty_process_empty_command() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 def test_pty_child_pid_property() -> None:
     """Test that child_pid property returns a valid PID."""
     process = PtyProcess(["sleep", "0.01"])
@@ -181,6 +200,7 @@ def test_pty_child_pid_property() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 def test_pty_process_get_file_handle() -> None:
     """Test reading and writing using get_file_handle()."""
     # Start a simple echo process
@@ -213,6 +233,7 @@ def test_pty_process_get_file_handle() -> None:
 
 # Async tests
 @skip_on_windows
+@skip_without_tty
 @pytest.mark.asyncio
 async def test_pty_process_async_read_write() -> None:
     """Test async read and write operations."""
@@ -230,6 +251,7 @@ async def test_pty_process_async_read_write() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 @pytest.mark.asyncio
 async def test_pty_process_async_wait() -> None:
     """Test async waiting for process to exit."""
@@ -247,6 +269,7 @@ async def test_pty_process_async_wait() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 @pytest.mark.asyncio
 async def test_pty_process_async_exit() -> None:
     """Test async process termination."""
@@ -265,6 +288,7 @@ async def test_pty_process_async_exit() -> None:
 
 
 @skip_on_windows
+@skip_without_tty
 @pytest.mark.asyncio
 async def test_pty_process_multiple_async_operations() -> None:
     """Test multiple concurrent async operations."""
