@@ -413,6 +413,30 @@ impl Installer {
 
         let transaction = transaction.to_owned();
 
+        // Validate that if the target platform is NoArch, all packages to be installed
+        // must also be noarch (subdir == "noarch")
+        if target_platform == Platform::NoArch {
+            let non_noarch_packages: Vec<String> = transaction
+                .installed_packages()
+                .filter(|record| record.package_record.subdir != "noarch")
+                .map(|record| {
+                    format!(
+                        "{}/{}-{}-{}",
+                        record.package_record.subdir,
+                        record.package_record.name.as_normalized(),
+                        record.package_record.version,
+                        record.package_record.build
+                    )
+                })
+                .collect();
+
+            if !non_noarch_packages.is_empty() {
+                return Err(InstallerError::PlatformSpecificPackagesWithNoarchPlatform(
+                    non_noarch_packages,
+                ));
+            }
+        }
+
         // Create a mapping from package names to requested specs
         let spec_mapping = self
             .requested_specs
@@ -1353,6 +1377,70 @@ mod tests {
             migrated_record.requested_specs.first().unwrap(),
             "empty >=0.1.0",
             "Migrated specs should match the original spec"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_noarch_platform_rejects_platform_specific_packages() {
+        use rattler_conda_types::Platform;
+
+        let (_temp_dir, target_prefix) = create_test_environment();
+
+        // Create a platform-specific package (with subdir != "noarch")
+        let mut platform_specific_package = create_dummy_repo_record();
+        platform_specific_package.package_record.subdir = "osx-arm64".to_string();
+
+        // Try to install this platform-specific package with Platform::NoArch
+        let installer = Installer::new().with_target_platform(Platform::NoArch);
+        let result = installer
+            .install(&target_prefix, vec![platform_specific_package.clone()])
+            .await;
+
+        // Should fail with PlatformSpecificPackagesWithNoarchPlatform error
+        assert!(
+            result.is_err(),
+            "Installation should fail when installing platform-specific packages with noarch platform"
+        );
+
+        match result {
+            Err(InstallerError::PlatformSpecificPackagesWithNoarchPlatform(packages)) => {
+                assert!(
+                    !packages.is_empty(),
+                    "Error should list the problematic packages"
+                );
+                assert!(
+                    packages[0].contains("osx-arm64"),
+                    "Error message should include the subdir of the platform-specific package"
+                );
+            }
+            _ => {
+                panic!("Expected PlatformSpecificPackagesWithNoarchPlatform error, got: {result:?}")
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_noarch_platform_accepts_noarch_packages() {
+        use rattler_conda_types::{NoArchType, Platform};
+
+        let (_temp_dir, target_prefix) = create_test_environment();
+
+        // Create a noarch package (with subdir == "noarch")
+        let mut noarch_package = create_dummy_repo_record();
+        noarch_package.package_record.subdir = "noarch".to_string();
+        noarch_package.package_record.noarch = NoArchType::generic();
+
+        // Try to install this noarch package with Platform::NoArch
+        let installer = Installer::new().with_target_platform(Platform::NoArch);
+        let result = installer
+            .install(&target_prefix, vec![noarch_package.clone()])
+            .await;
+
+        // Should succeed
+        assert!(
+            result.is_ok(),
+            "Installation should succeed when installing noarch packages with noarch platform: {:?}",
+            result.err()
         );
     }
 }
