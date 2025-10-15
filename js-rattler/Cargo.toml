@@ -42,6 +42,8 @@ rattler_solve = { path = "../crates/rattler_solve", default-features = false, fe
 url = "2.5.4"
 
 chrono = { version = "0.4.40", features = ["wasmbind"] }
+reqwest = "0.12.24"
+reqwest-middleware = "0.4.2"
 
 # We have transient dependency on getrandom 0.2.16 which needs to have the `js` feature
 # enabled.

@@ -4,6 +4,8 @@ use rattler_conda_types::{Channel, Platform};
 use rattler_repodata_gateway::{fetch::CacheAction, ChannelConfig, Gateway, SourceConfig};
 use serde::Deserialize;
 use url::Url;
+use reqwest::Client;
+use reqwest_middleware::ClientWithMiddleware;
 use wasm_bindgen::prelude::*;
 
 use crate::JsResult;
@@ -107,7 +109,8 @@ impl From<JsSourceConfig> for SourceConfig {
 impl JsGateway {
     #[wasm_bindgen(constructor)]
     pub fn new(input: JsValue) -> JsResult<Self> {
-        let mut builder = Gateway::builder();
+        let mut builder = Gateway::builder()
+            .with_client(ClientWithMiddleware::from(Client::new()));
         let options: Option<JsGatewayOptions> = serde_wasm_bindgen::from_value(input)?;
         if let Some(options) = options {
             if let Some(max_concurrent_requests) = options.max_concurrent_requests {
