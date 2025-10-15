@@ -122,6 +122,8 @@ pub async fn simple_solve(
 
     // Fetch the repodata
     let gateway = Gateway::builder()
+        // Creating the Gateway with a default client to avoid adding a user-agent header
+        // (Not supported from the browser)
         .with_client(ClientWithMiddleware::from(Client::new()))
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
             default: SourceConfig {
