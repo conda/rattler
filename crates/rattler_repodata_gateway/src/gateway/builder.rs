@@ -135,12 +135,24 @@ impl GatewayBuilder {
 
     /// Finish the construction of the gateway returning a constructed gateway.
     pub fn finish(self) -> Gateway {
+        return self.finish_with_user_agent(true);
+    }
+
+    /// Finish the construction of the gateway returning a constructed gateway.
+    /// Takes an argument whether you want to set the user_agent or not.
+    pub fn finish_with_user_agent(self, set_user_agent: bool) -> Gateway {
         let client = self.client.unwrap_or_else(|| {
-            LazyClient::new(|| {
-                ClientWithMiddleware::from(
-                    Client::builder().user_agent(USER_AGENT).build().unwrap(),
-                )
-            })
+            if set_user_agent {
+                LazyClient::new(|| {ClientWithMiddleware::from(
+                    Client::builder()
+                        .user_agent(USER_AGENT)
+                        .build()
+                        .unwrap()
+                    )
+                })
+            } else {
+                LazyClient::new(|| {ClientWithMiddleware::from(Client::new())})
+            }
         });
 
         #[cfg(not(target_arch = "wasm32"))]

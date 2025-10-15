@@ -121,7 +121,7 @@ impl JsGateway {
         };
 
         Ok(Self {
-            inner: builder.finish(),
+            inner: builder.finish_with_user_agent(false),
         })
     }
 
