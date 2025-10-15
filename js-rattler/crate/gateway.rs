@@ -2,10 +2,10 @@ use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use rattler_conda_types::{Channel, Platform};
 use rattler_repodata_gateway::{fetch::CacheAction, ChannelConfig, Gateway, SourceConfig};
-use serde::Deserialize;
-use url::Url;
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
+use serde::Deserialize;
+use url::Url;
 use wasm_bindgen::prelude::*;
 
 use crate::JsResult;
