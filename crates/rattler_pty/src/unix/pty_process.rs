@@ -213,6 +213,107 @@ impl PtyProcess {
     pub fn set_window_size(&self, window_size: Winsize) -> nix::Result<()> {
         set_window_size(self.pty.as_raw_fd(), window_size)
     }
+
+    /// Get the kill timeout duration.
+    pub fn kill_timeout(&self) -> Option<time::Duration> {
+        self.kill_timeout
+    }
+
+    /// Set the kill timeout duration.
+    ///
+    /// When calling `kill()` or `async_kill()`, if the process doesn't respond to
+    /// the signal within this timeout, it will be forcefully killed with SIGKILL.
+    pub fn set_kill_timeout(&mut self, timeout: Option<time::Duration>) {
+        self.kill_timeout = timeout;
+    }
+
+    /// Read from the PTY asynchronously.
+    ///
+    /// This method performs non-blocking I/O using tokio, allowing you to read
+    /// from the PTY without blocking the async runtime.
+    pub async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        use std::os::unix::io::{FromRawFd, IntoRawFd};
+        use tokio::io::AsyncReadExt;
+
+        // Duplicate the fd so we don't affect the original
+        let fd = dup(&self.pty).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+
+        // Convert to tokio File for async operations
+        // SAFETY: We just duplicated the fd, so we own it
+        let mut file = unsafe { tokio::fs::File::from_raw_fd(fd.into_raw_fd()) };
+
+        file.read(buf).await
+    }
+
+    /// Write to the PTY asynchronously.
+    ///
+    /// This method performs non-blocking I/O using tokio, allowing you to write
+    /// to the PTY without blocking the async runtime.
+    pub async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
+        use std::os::unix::io::{FromRawFd, IntoRawFd};
+        use tokio::io::AsyncWriteExt;
+
+        // Duplicate the fd so we don't affect the original
+        let fd = dup(&self.pty).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+
+        // Convert to tokio File for async operations
+        // SAFETY: We just duplicated the fd, so we own it
+        let mut file = unsafe { tokio::fs::File::from_raw_fd(fd.into_raw_fd()) };
+
+        file.write(buf).await
+    }
+
+    /// Wait for the process to exit asynchronously.
+    ///
+    /// This is a non-blocking alternative to the synchronous wait methods.
+    /// It polls the process status periodically without blocking the async runtime.
+    pub async fn async_wait(&mut self) -> nix::Result<wait::WaitStatus> {
+        use tokio::time::{sleep, Duration};
+
+        loop {
+            match self.status() {
+                Some(status) if status != wait::WaitStatus::StillAlive => return Ok(status),
+                Some(_) | None => sleep(Duration::from_millis(100)).await,
+            }
+        }
+    }
+
+    /// Exit the process gracefully asynchronously by sending SIGTERM.
+    pub async fn async_exit(&mut self) -> nix::Result<wait::WaitStatus> {
+        self.async_kill(signal::SIGTERM).await
+    }
+
+    /// Kill the process with a specific signal asynchronously.
+    ///
+    /// This is the async version of `kill()`, which sends signals and waits
+    /// for the process to exit without blocking the async runtime.
+    pub async fn async_kill(&mut self, sig: signal::Signal) -> nix::Result<wait::WaitStatus> {
+        use tokio::time::{sleep, Duration, Instant};
+
+        let start = Instant::now();
+        loop {
+            match signal::kill(self.child_pid, sig) {
+                Ok(_) => {}
+                // process was already killed before -> ignore
+                Err(nix::errno::Errno::ESRCH) => {
+                    return Ok(wait::WaitStatus::Exited(Pid::from_raw(0), 0));
+                }
+                Err(e) => return Err(e),
+            }
+
+            match self.status() {
+                Some(status) if status != wait::WaitStatus::StillAlive => return Ok(status),
+                Some(_) | None => sleep(Duration::from_millis(100)).await,
+            }
+
+            // kill -9 if timeout is reached
+            if let Some(timeout) = self.kill_timeout {
+                if start.elapsed() > timeout {
+                    signal::kill(self.child_pid, signal::Signal::SIGKILL)?;
+                }
+            }
+        }
+    }
 }
 
 pub fn set_window_size(raw_fd: i32, window_size: Winsize) -> nix::Result<()> {

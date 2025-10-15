@@ -2,8 +2,9 @@
 //!
 //! This module provides the lower-level PTY process control API.
 
-use pyo3::{exceptions::PyRuntimeError, pyclass, pymethods, PyResult};
-use std::os::fd::IntoRawFd;
+use pyo3::{exceptions::PyRuntimeError, pyclass, pymethods, Bound, PyAny, PyResult, Python};
+use pyo3_async_runtimes::tokio::future_into_py;
+use std::os::fd::{AsRawFd, IntoRawFd};
 use std::process::Command;
 
 /// Options for creating a PTY process.
@@ -250,5 +251,261 @@ impl PyPtyProcess {
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to get file handle: {}", e)))?;
 
         Ok(file.into_raw_fd())
+    }
+
+    /// Get the kill timeout in seconds.
+    ///
+    /// Returns:
+    ///     The timeout in seconds as a float, or None if no timeout is set.
+    ///
+    /// Examples
+    /// --------
+    /// ```python
+    /// >>> process = PtyProcess(["bash"])
+    /// >>> timeout = process.get_kill_timeout()
+    /// >>> print(timeout)
+    /// None
+    /// ```
+    pub fn get_kill_timeout(&self) -> Option<f64> {
+        self.inner.kill_timeout().map(|d| d.as_secs_f64())
+    }
+
+    /// Set the kill timeout in seconds.
+    ///
+    /// When calling exit() or async_exit(), if the process doesn't respond to
+    /// SIGTERM within this timeout, it will be forcefully killed with SIGKILL.
+    ///
+    /// Arguments:
+    ///     timeout: Timeout in seconds, or None to disable timeout.
+    ///
+    /// Examples
+    /// --------
+    /// ```python
+    /// >>> process = PtyProcess(["bash"])
+    /// >>> process.set_kill_timeout(5.0)  # 5 second timeout
+    /// >>> process.set_kill_timeout(None)  # Disable timeout
+    /// ```
+    pub fn set_kill_timeout(&mut self, timeout: Option<f64>) {
+        use std::time::Duration;
+        self.inner.set_kill_timeout(timeout.map(Duration::from_secs_f64));
+    }
+
+    /// Read from the PTY asynchronously.
+    ///
+    /// This is the async version of reading via get_file_handle(). It performs
+    /// non-blocking I/O using tokio, which is bridged to Python's asyncio.
+    ///
+    /// Arguments:
+    ///     size: Maximum number of bytes to read. Defaults to 8192.
+    ///
+    /// Returns:
+    ///     A coroutine that resolves to bytes read from the PTY.
+    ///
+    /// Raises:
+    ///     RuntimeError: If the read operation fails.
+    ///
+    /// Examples
+    /// --------
+    /// ```python
+    /// >>> import asyncio
+    /// >>> async def main():
+    /// ...     process = PtyProcess(["bash", "-c", "echo hello"])
+    /// ...     data = await process.async_read(1024)
+    /// ...     print(data)
+    /// >>> asyncio.run(main())
+    /// ```
+    #[pyo3(signature = (size=8192))]
+    pub fn async_read<'py>(&self, py: Python<'py>, size: usize) -> PyResult<Bound<'py, PyAny>> {
+        let pty_fd = self.inner.pty.as_raw_fd();
+
+        future_into_py(py, async move {
+            use nix::unistd::dup;
+            use std::os::fd::{BorrowedFd, FromRawFd};
+            use tokio::io::AsyncReadExt;
+
+            let borrowed_fd = unsafe { BorrowedFd::borrow_raw(pty_fd) };
+            let fd = dup(borrowed_fd).map_err(|e| {
+                PyRuntimeError::new_err(format!("Failed to duplicate file descriptor: {}", e))
+            })?;
+
+            let mut file = unsafe { tokio::fs::File::from_raw_fd(fd.into_raw_fd()) };
+
+            let mut buf = vec![0u8; size];
+            let n = file.read(&mut buf).await.map_err(|e| {
+                PyRuntimeError::new_err(format!("Failed to read from PTY: {}", e))
+            })?;
+
+            buf.truncate(n);
+            Ok(buf)
+        })
+    }
+
+    /// Write to the PTY asynchronously.
+    ///
+    /// This is the async version of writing via get_file_handle(). It performs
+    /// non-blocking I/O using tokio.
+    ///
+    /// Arguments:
+    ///     data: Bytes to write to the PTY.
+    ///
+    /// Returns:
+    ///     A coroutine that resolves to the number of bytes written.
+    ///
+    /// Raises:
+    ///     RuntimeError: If the write operation fails.
+    ///
+    /// Examples
+    /// --------
+    /// ```python
+    /// >>> import asyncio
+    /// >>> async def main():
+    /// ...     process = PtyProcess(["cat"])
+    /// ...     n = await process.async_write(b"hello\\n")
+    /// ...     print(f"Wrote {n} bytes")
+    /// >>> asyncio.run(main())
+    /// ```
+    pub fn async_write<'py>(&self, py: Python<'py>, data: Vec<u8>) -> PyResult<Bound<'py, PyAny>> {
+        let pty_fd = self.inner.pty.as_raw_fd();
+
+        future_into_py(py, async move {
+            use nix::unistd::dup;
+            use std::os::fd::{BorrowedFd, FromRawFd};
+            use tokio::io::AsyncWriteExt;
+
+            let borrowed_fd = unsafe { BorrowedFd::borrow_raw(pty_fd) };
+            let fd = dup(borrowed_fd).map_err(|e| {
+                PyRuntimeError::new_err(format!("Failed to duplicate file descriptor: {}", e))
+            })?;
+
+            let mut file = unsafe { tokio::fs::File::from_raw_fd(fd.into_raw_fd()) };
+
+            let n = file.write(&data).await.map_err(|e| {
+                PyRuntimeError::new_err(format!("Failed to write to PTY: {}", e))
+            })?;
+
+            Ok(n)
+        })
+    }
+
+    /// Wait for the process to exit asynchronously.
+    ///
+    /// This is the async version of polling status() in a loop. It polls the
+    /// process status periodically without blocking the async runtime.
+    ///
+    /// Returns:
+    ///     A coroutine that resolves to a string describing the exit status.
+    ///
+    /// Raises:
+    ///     RuntimeError: If waiting fails.
+    ///
+    /// Examples
+    /// --------
+    /// ```python
+    /// >>> import asyncio
+    /// >>> async def main():
+    /// ...     process = PtyProcess(["sleep", "1"])
+    /// ...     status = await process.async_wait()
+    /// ...     print(status)
+    /// >>> asyncio.run(main())
+    /// Exited(0)
+    /// ```
+    pub fn async_wait<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let child_pid = self.inner.child_pid;
+
+        future_into_py(py, async move {
+            use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
+            use tokio::time::{sleep, Duration};
+
+            loop {
+                match waitpid(child_pid, Some(WaitPidFlag::WNOHANG)) {
+                    Ok(WaitStatus::StillAlive) | Ok(WaitStatus::Continued(_)) => {
+                        sleep(Duration::from_millis(100)).await;
+                    }
+                    Ok(status) => {
+                        return Ok(match status {
+                            WaitStatus::Exited(_, code) => format!("Exited({})", code),
+                            WaitStatus::Signaled(_, signal, _) => format!("Signaled({:?})", signal),
+                            WaitStatus::Stopped(_, _) => "Stopped".to_string(),
+                            _ => "Unknown".to_string(),
+                        });
+                    }
+                    Err(e) => {
+                        return Err(PyRuntimeError::new_err(format!("Failed to wait for process: {}", e)));
+                    }
+                }
+            }
+        })
+    }
+
+    /// Exit the process gracefully asynchronously by sending SIGTERM.
+    ///
+    /// This is the async version of exit(). It sends SIGTERM and waits for
+    /// the process to terminate without blocking the async runtime.
+    ///
+    /// Returns:
+    ///     A coroutine that resolves to a string describing the exit status.
+    ///
+    /// Raises:
+    ///     RuntimeError: If the process could not be terminated.
+    ///
+    /// Examples
+    /// --------
+    /// ```python
+    /// >>> import asyncio
+    /// >>> async def main():
+    /// ...     process = PtyProcess(["bash"])
+    /// ...     status = await process.async_exit()
+    /// ...     print(status)
+    /// >>> asyncio.run(main())
+    /// ```
+    pub fn async_exit<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use nix::sys::signal::Signal;
+        let child_pid = self.inner.child_pid;
+        let kill_timeout = self.inner.kill_timeout();
+
+        future_into_py(py, async move {
+            use nix::sys::{signal, wait::{waitpid, WaitPidFlag, WaitStatus}};
+            use tokio::time::{sleep, Duration, Instant};
+
+            let sig = Signal::SIGTERM;
+            let start = Instant::now();
+
+            loop {
+                match signal::kill(child_pid, sig) {
+                    Ok(_) => {}
+                    // Process was already killed
+                    Err(nix::errno::Errno::ESRCH) => {
+                        return Ok("Exited(0)".to_string());
+                    }
+                    Err(e) => {
+                        return Err(PyRuntimeError::new_err(format!("Failed to kill process: {}", e)));
+                    }
+                }
+
+                match waitpid(child_pid, Some(WaitPidFlag::WNOHANG)) {
+                    Ok(WaitStatus::StillAlive) | Ok(WaitStatus::Continued(_)) => {
+                        sleep(Duration::from_millis(100)).await;
+                    }
+                    Ok(status) => {
+                        return Ok(match status {
+                            WaitStatus::Exited(_, code) => format!("Exited({})", code),
+                            WaitStatus::Signaled(_, signal, _) => format!("Signaled({:?})", signal),
+                            _ => format!("Unknown({:?})", status),
+                        });
+                    }
+                    Err(e) => {
+                        return Err(PyRuntimeError::new_err(format!("Failed to wait for process: {}", e)));
+                    }
+                }
+
+                // Kill -9 if timeout is reached
+                if let Some(timeout) = kill_timeout {
+                    if start.elapsed() > timeout {
+                        signal::kill(child_pid, signal::Signal::SIGKILL)
+                            .map_err(|e| PyRuntimeError::new_err(format!("Failed to SIGKILL process: {}", e)))?;
+                    }
+                }
+            }
+        })
     }
 }

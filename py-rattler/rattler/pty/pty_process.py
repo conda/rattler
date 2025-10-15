@@ -230,5 +230,162 @@ class PtyProcess:
         fd = self._inner.get_file_handle()
         return os.fdopen(fd, "r+b", buffering=0)
 
+    @property
+    def kill_timeout(self) -> Optional[float]:
+        """
+        Get the kill timeout in seconds.
+
+        When calling exit() or async_exit(), if the process doesn't respond to
+        SIGTERM within this timeout, it will be forcefully killed with SIGKILL.
+
+        Returns:
+            The timeout in seconds, or None if no timeout is set.
+
+        Examples
+        --------
+        ```python
+        >>> process = PtyProcess(["bash"])
+        >>> print(process.kill_timeout)
+        None
+        >>>
+        ```
+        """
+        return self._inner.get_kill_timeout()
+
+    @kill_timeout.setter
+    def kill_timeout(self, timeout: Optional[float]) -> None:
+        """
+        Set the kill timeout in seconds.
+
+        Arguments:
+            timeout: Timeout in seconds, or None to disable timeout.
+
+        Examples
+        --------
+        ```python
+        >>> process = PtyProcess(["bash"])
+        >>> process.kill_timeout = 5.0  # 5 second timeout
+        >>> process.kill_timeout = None  # Disable timeout
+        >>>
+        ```
+        """
+        self._inner.set_kill_timeout(timeout)
+
+    async def async_read(self, size: int = 8192) -> bytes:
+        """
+        Read from the PTY asynchronously.
+
+        This is the async version of reading via get_file_handle(). It performs
+        non-blocking I/O using tokio on the Rust side, bridged to Python's asyncio.
+
+        Arguments:
+            size: Maximum number of bytes to read. Defaults to 8192.
+
+        Returns:
+            Bytes read from the PTY.
+
+        Raises:
+            RuntimeError: If the read operation fails.
+
+        Examples
+        --------
+        ```python
+        >>> import asyncio
+        >>> async def main():
+        ...     process = PtyProcess(["bash", "-c", "echo hello"])
+        ...     data = await process.async_read(1024)
+        ...     print(data)
+        >>> asyncio.run(main())
+        >>>
+        ```
+        """
+        return await self._inner.async_read(size)
+
+    async def async_write(self, data: bytes) -> int:
+        """
+        Write to the PTY asynchronously.
+
+        This is the async version of writing via get_file_handle(). It performs
+        non-blocking I/O using tokio on the Rust side.
+
+        Arguments:
+            data: Bytes to write to the PTY.
+
+        Returns:
+            The number of bytes written.
+
+        Raises:
+            RuntimeError: If the write operation fails.
+
+        Examples
+        --------
+        ```python
+        >>> import asyncio
+        >>> async def main():
+        ...     process = PtyProcess(["cat"])
+        ...     n = await process.async_write(b"hello\\n")
+        ...     print(f"Wrote {n} bytes")
+        ...     process.exit()
+        >>> asyncio.run(main())
+        >>>
+        ```
+        """
+        return await self._inner.async_write(data)
+
+    async def async_wait(self) -> str:
+        """
+        Wait for the process to exit asynchronously.
+
+        This is the async version of polling status() in a loop. It polls the
+        process status periodically without blocking the async runtime.
+
+        Returns:
+            A string describing the exit status.
+
+        Raises:
+            RuntimeError: If waiting fails.
+
+        Examples
+        --------
+        ```python
+        >>> import asyncio
+        >>> async def main():
+        ...     process = PtyProcess(["sleep", "1"])
+        ...     status = await process.async_wait()
+        ...     print(status)
+        >>> asyncio.run(main())
+        Exited(0)
+        >>>
+        ```
+        """
+        return await self._inner.async_wait()
+
+    async def async_exit(self) -> str:
+        """
+        Exit the process gracefully asynchronously by sending SIGTERM.
+
+        This is the async version of exit(). It sends SIGTERM and waits for
+        the process to terminate without blocking the async runtime.
+
+        Returns:
+            A string describing the exit status.
+
+        Raises:
+            RuntimeError: If the process could not be terminated.
+
+        Examples
+        --------
+        ```python
+        >>> import asyncio
+        >>> async def main():
+        ...     process = PtyProcess(["bash"])
+        ...     status = await process.async_exit()
+        ...     print(status)
+        >>> asyncio.run(main())
+        >>>
+        ```
+        """
+        return await self._inner.async_exit()
+
     def __repr__(self) -> str:
         return f"PtyProcess(child_pid={self.child_pid})"

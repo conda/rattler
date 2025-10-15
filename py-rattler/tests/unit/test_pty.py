@@ -209,3 +209,72 @@ def test_pty_process_get_file_handle() -> None:
 
     # Clean up
     process.exit()
+
+
+# Async tests
+@skip_on_windows
+@pytest.mark.asyncio
+async def test_pty_process_async_read_write() -> None:
+    """Test async read and write operations."""
+    process = PtyProcess(["bash", "-c", "echo 'hello async world'"])
+
+    # Read the output asynchronously
+    data = await process.async_read(1024)
+    assert b"hello async world" in data
+
+    # Wait for process to exit
+    status = await process.async_wait()
+    assert "Exited(0)" in status
+
+
+@skip_on_windows
+@pytest.mark.asyncio
+async def test_pty_process_async_wait() -> None:
+    """Test async waiting for process to exit."""
+    process = PtyProcess(["sleep", "0.1"])
+
+    # Check it's alive
+    status = process.status()
+    assert status is None or "StillAlive" in status
+
+    # Wait for it to finish asynchronously
+    exit_status = await process.async_wait()
+    assert "Exited(0)" in exit_status
+
+
+@skip_on_windows
+@pytest.mark.asyncio
+async def test_pty_process_async_exit() -> None:
+    """Test async process termination."""
+    process = PtyProcess(["sleep", "100"])
+
+    # Exit the process asynchronously
+    status = await process.async_exit()
+    assert "Exited" in status or "Signaled" in status
+
+    # Verify it's no longer alive
+    final_status = process.status()
+    if final_status:
+        assert "StillAlive" not in final_status
+
+
+@skip_on_windows
+@pytest.mark.asyncio
+async def test_pty_process_multiple_async_operations() -> None:
+    """Test multiple concurrent async operations."""
+    import asyncio
+
+    # Create multiple processes
+    processes = [PtyProcess(["bash", "-c", f"echo 'process {i}'"]) for i in range(3)]
+
+    # Read from all concurrently
+    results = await asyncio.gather(*[proc.async_read(1024) for proc in processes])
+
+    # Verify each got its output
+    for i, data in enumerate(results):
+        assert f"process {i}".encode() in data
+
+    # Wait for all to exit
+    statuses = await asyncio.gather(*[proc.async_wait() for proc in processes])
+
+    assert all("Exited(0)" in status for status in statuses)
