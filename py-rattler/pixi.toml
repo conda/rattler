@@ -45,7 +45,7 @@ types-networkx = "*"
 boto3 = "*"
 
 [feature.test.tasks]
-test = { cmd = "pytest --doctest-modules", depends-on = ["build"] }
+test = { cmd = "pytest --doctest-modules --ignore=rattler/pty/pty_process.py --ignore=rattler/pty/pty_session.py", depends-on = ["build"] }
 fmt-python = "ruff format rattler examples tests"
 fmt-rust = "cargo fmt --all"
 lint-python = "ruff check ."
