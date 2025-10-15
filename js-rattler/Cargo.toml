@@ -43,7 +43,7 @@ url = "2.5.4"
 
 chrono = { version = "0.4.40", features = ["wasmbind"] }
 reqwest = { version = "0.12.24", default-features = false }
-reqwest-middleware = "0.4.2"
+reqwest-middleware = { version = "0.4.2", default-features = false }
 
 # We have transient dependency on getrandom 0.2.16 which needs to have the `js` feature
 # enabled.
