@@ -4,6 +4,8 @@ mod channel_config;
 #[cfg(not(target_arch = "wasm32"))]
 mod direct_url_query;
 mod error;
+#[cfg(feature = "indicatif")]
+mod indicatif;
 mod local_subdir;
 mod query;
 mod remote_subdir;
@@ -21,6 +23,8 @@ pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
 use coalesced_map::{CoalescedGetError, CoalescedMap};
 pub use error::GatewayError;
+#[cfg(feature = "indicatif")]
+pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
 pub use query::{NamesQuery, RepoDataQuery};
 #[cfg(not(target_arch = "wasm32"))]
 use rattler_cache::package_cache::PackageCache;
