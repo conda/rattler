@@ -46,6 +46,7 @@ jobs:
           pixi run -e test fmt-check
       - name: Run tests
         env:
+          CI: true
           RATTLER_TEST_R2_READWRITE_ACCESS_KEY_ID: ${{ secrets.RATTLER_TEST_R2_READWRITE_ACCESS_KEY_ID }}
           RATTLER_TEST_R2_READWRITE_SECRET_ACCESS_KEY: ${{ secrets.RATTLER_TEST_R2_READWRITE_SECRET_ACCESS_KEY }}
         run: |
