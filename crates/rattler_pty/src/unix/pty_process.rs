@@ -218,13 +218,10 @@ impl PtyProcess {
         set_window_size(self.pty.as_raw_fd(), window_size)
     }
 
-    /// Get the kill timeout duration.
     pub fn kill_timeout(&self) -> Option<time::Duration> {
         self.kill_timeout
     }
 
-    /// Set the kill timeout duration.
-    ///
     /// When calling `kill()` or `async_kill()`, if the process doesn't respond to
     /// the signal within this timeout, it will be forcefully killed with SIGKILL.
     pub fn set_kill_timeout(&mut self, timeout: Option<time::Duration>) {
