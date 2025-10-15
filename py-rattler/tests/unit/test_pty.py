@@ -12,15 +12,12 @@ skip_on_windows = pytest.mark.skipif(sys.platform == "win32", reason="PTY is Uni
 @skip_on_windows
 def test_pty_process_options() -> None:
     """Test PtyProcessOptions creation and properties."""
-    # Default options
     opts = PtyProcessOptions()
     assert opts.echo is True
 
-    # Custom options
     opts_no_echo = PtyProcessOptions(echo=False)
     assert opts_no_echo.echo is False
 
-    # Test repr
     assert "PtyProcessOptions" in repr(opts)
     assert "echo=True" in repr(opts)
 
@@ -28,7 +25,6 @@ def test_pty_process_options() -> None:
 @skip_on_windows
 def test_pty_session_creation() -> None:
     """Test PtySession can be created with a simple command."""
-    # Just verify we can create a session - don't interact with it
     session = PtySession(["true"])
     assert session is not None
     assert "PtySession" in repr(session)

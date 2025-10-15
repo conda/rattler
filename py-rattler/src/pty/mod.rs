@@ -15,6 +15,5 @@
 mod pty_process;
 mod pty_session;
 
-// Re-export the Python classes
 pub use pty_process::{PyPtyProcess, PyPtyProcessOptions};
 pub use pty_session::PyPtySession;

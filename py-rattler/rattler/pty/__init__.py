@@ -14,7 +14,6 @@ module will raise an ImportError.
 
 from __future__ import annotations
 
-# Try to import PTY classes - they won't be available on Windows
 try:
     from rattler.pty.pty_process import PtyProcess, PtyProcessOptions
     from rattler.pty.pty_session import PtySession

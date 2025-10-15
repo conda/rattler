@@ -10,7 +10,7 @@ use nix::{
     },
     unistd::{close, dup, dup2_stderr, dup2_stdin, dup2_stdout, fork, setsid, ForkResult, Pid},
 };
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, FromRawFd, IntoRawFd};
 use std::{
     self,
     fs::File,
@@ -18,6 +18,10 @@ use std::{
     os::unix::{io::AsRawFd, process::CommandExt},
     process::Command,
     thread, time,
+};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    time::{sleep, Duration, Instant},
 };
 
 #[cfg(target_os = "linux")]
@@ -227,49 +231,19 @@ impl PtyProcess {
         self.kill_timeout = timeout;
     }
 
-    /// Read from the PTY asynchronously.
-    ///
-    /// This method performs non-blocking I/O using tokio, allowing you to read
-    /// from the PTY without blocking the async runtime.
     pub async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        use std::os::unix::io::{FromRawFd, IntoRawFd};
-        use tokio::io::AsyncReadExt;
-
-        // Duplicate the fd so we don't affect the original
         let fd = dup(&self.pty).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-
-        // Convert to tokio File for async operations
-        // SAFETY: We just duplicated the fd, so we own it
         let mut file = unsafe { tokio::fs::File::from_raw_fd(fd.into_raw_fd()) };
-
         file.read(buf).await
     }
 
-    /// Write to the PTY asynchronously.
-    ///
-    /// This method performs non-blocking I/O using tokio, allowing you to write
-    /// to the PTY without blocking the async runtime.
     pub async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
-        use std::os::unix::io::{FromRawFd, IntoRawFd};
-        use tokio::io::AsyncWriteExt;
-
-        // Duplicate the fd so we don't affect the original
         let fd = dup(&self.pty).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-
-        // Convert to tokio File for async operations
-        // SAFETY: We just duplicated the fd, so we own it
         let mut file = unsafe { tokio::fs::File::from_raw_fd(fd.into_raw_fd()) };
-
         file.write(buf).await
     }
 
-    /// Wait for the process to exit asynchronously.
-    ///
-    /// This is a non-blocking alternative to the synchronous wait methods.
-    /// It polls the process status periodically without blocking the async runtime.
     pub async fn async_wait(&mut self) -> nix::Result<wait::WaitStatus> {
-        use tokio::time::{sleep, Duration};
-
         loop {
             match self.status() {
                 Some(status) if status != wait::WaitStatus::StillAlive => return Ok(status),
@@ -278,18 +252,11 @@ impl PtyProcess {
         }
     }
 
-    /// Exit the process gracefully asynchronously by sending SIGTERM.
     pub async fn async_exit(&mut self) -> nix::Result<wait::WaitStatus> {
         self.async_kill(signal::SIGTERM).await
     }
 
-    /// Kill the process with a specific signal asynchronously.
-    ///
-    /// This is the async version of `kill()`, which sends signals and waits
-    /// for the process to exit without blocking the async runtime.
     pub async fn async_kill(&mut self, sig: signal::Signal) -> nix::Result<wait::WaitStatus> {
-        use tokio::time::{sleep, Duration, Instant};
-
         let start = Instant::now();
         loop {
             match signal::kill(self.child_pid, sig) {
