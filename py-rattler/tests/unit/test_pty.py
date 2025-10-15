@@ -4,7 +4,6 @@ import select
 import pytest
 import os
 
-from rattler import PtySession, PtyProcess, PtyProcessOptions
 
 # PTY functionality is only available on Unix platforms
 skip_on_windows = pytest.mark.skipif(sys.platform == "win32", reason="PTY is Unix-only")
@@ -20,6 +19,8 @@ skip_without_tty = pytest.mark.skipif(
 @skip_on_windows
 @skip_without_tty
 def test_pty_process_options() -> None:
+    from rattler import PtyProcessOptions
+
     """Test PtyProcessOptions creation and properties."""
     opts = PtyProcessOptions()
     assert opts.echo is True
@@ -34,6 +35,8 @@ def test_pty_process_options() -> None:
 @skip_on_windows
 @skip_without_tty
 def test_pty_session_creation() -> None:
+    from rattler import PtySession
+
     """Test PtySession can be created with a simple command."""
     session = PtySession(["true"])
     assert session is not None
@@ -43,6 +46,8 @@ def test_pty_session_creation() -> None:
 @skip_on_windows
 @skip_without_tty
 def test_pty_session_closed_pty_error() -> None:
+    from rattler import PtySession
+
     """Test that sending to a closed PTY raises an error or succeeds silently."""
     # Use bash -c with exit so it exits immediately
     session = PtySession(["bash", "-c", "exit 0"])
@@ -54,7 +59,7 @@ def test_pty_session_closed_pty_error() -> None:
     # On Linux, it may succeed or fail depending on timing and buffering
     # We just verify that the operation completes without hanging
     try:
-        session.send_line("test")
+        _ = session.send_line("test")
     except RuntimeError:
         pass
 
@@ -65,6 +70,8 @@ def test_pty_session_closed_pty_error() -> None:
 @skip_on_windows
 @skip_without_tty
 def test_pty_process_creation() -> None:
+    from rattler import PtyProcess, PtyProcessOptions
+
     """Test PtyProcess can be created with options."""
     # Create with default options
     process = PtyProcess(["true"])
@@ -85,6 +92,8 @@ def test_pty_process_creation() -> None:
 @skip_on_windows
 @skip_without_tty
 def test_pty_process_run_command_with_args() -> None:
+    from rattler import PtyProcess
+
     """Test running a command with arguments like subprocess."""
     # Run echo with arguments
     process = PtyProcess(["echo", "hello", "world"])
@@ -112,6 +121,8 @@ def test_pty_process_run_command_with_args() -> None:
 @skip_on_windows
 @skip_without_tty
 def test_pty_process_bash_command() -> None:
+    from rattler import PtyProcess
+
     """Test running bash -c with a command."""
     # Run a command via bash -c
     process = PtyProcess(["bash", "-c", "echo 'test output' && exit 0"])
@@ -138,6 +149,8 @@ def test_pty_process_bash_command() -> None:
 @skip_on_windows
 @skip_without_tty
 def test_pty_process_status() -> None:
+    from rattler import PtyProcess
+
     """Test checking process status."""
     # Start a very short process
     process = PtyProcess(["sleep", "0.01"])
@@ -159,6 +172,8 @@ def test_pty_process_status() -> None:
 @skip_on_windows
 @skip_without_tty
 def test_pty_process_exit() -> None:
+    from rattler import PtyProcess
+
     """Test gracefully exiting a process."""
     # Start a process that would run for a while
     process = PtyProcess(["sleep", "100"])
@@ -173,22 +188,28 @@ def test_pty_process_exit() -> None:
 @skip_on_windows
 @skip_without_tty
 def test_pty_session_empty_command() -> None:
+    from rattler import PtySession
+
     """Test that empty command raises an error."""
     with pytest.raises(Exception):
-        PtySession([])
+        _ = PtySession([])
 
 
 @skip_on_windows
 @skip_without_tty
 def test_pty_process_empty_command() -> None:
+    from rattler import PtyProcess
+
     """Test that empty command raises an error."""
     with pytest.raises(Exception):
-        PtyProcess([])
+        _ = PtyProcess([])
 
 
 @skip_on_windows
 @skip_without_tty
 def test_pty_child_pid_property() -> None:
+    from rattler import PtyProcess
+
     """Test that child_pid property returns a valid PID."""
     process = PtyProcess(["sleep", "0.01"])
     pid = process.child_pid
@@ -202,6 +223,8 @@ def test_pty_child_pid_property() -> None:
 @skip_on_windows
 @skip_without_tty
 def test_pty_process_get_file_handle() -> None:
+    from rattler import PtyProcess
+
     """Test reading and writing using get_file_handle()."""
     # Start a simple echo process
     process = PtyProcess(["cat"])
@@ -228,7 +251,7 @@ def test_pty_process_get_file_handle() -> None:
         assert b"hello" in output
 
     # Clean up
-    process.exit()
+    _ = process.exit()
 
 
 # Async tests
@@ -238,6 +261,7 @@ def test_pty_process_get_file_handle() -> None:
 async def test_pty_process_async_read_write() -> None:
     """Test async read and write operations."""
     import asyncio
+    from rattler import PtyProcess
 
     process = PtyProcess(["bash", "-c", "echo 'hello async world'"])
 
@@ -256,6 +280,7 @@ async def test_pty_process_async_read_write() -> None:
 async def test_pty_process_async_wait() -> None:
     """Test async waiting for process to exit."""
     import asyncio
+    from rattler import PtyProcess
 
     process = PtyProcess(["sleep", "0.1"])
 
@@ -274,6 +299,7 @@ async def test_pty_process_async_wait() -> None:
 async def test_pty_process_async_exit() -> None:
     """Test async process termination."""
     import asyncio
+    from rattler import PtyProcess
 
     process = PtyProcess(["sleep", "100"])
 
@@ -293,6 +319,7 @@ async def test_pty_process_async_exit() -> None:
 async def test_pty_process_multiple_async_operations() -> None:
     """Test multiple concurrent async operations."""
     import asyncio
+    from rattler import PtyProcess
 
     # Create multiple processes
     processes = [PtyProcess(["bash", "-c", f"echo 'process {i}'"]) for i in range(3)]

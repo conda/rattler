@@ -17,10 +17,6 @@ pip = "~=23.2.1"
 rust = "~=1.88.0"
 
 [feature.build.tasks]
-build = "PIP_REQUIRE_VIRTUALENV=false maturin develop --features pty"
-build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release --features pty"
-
-[feature.build.target.win-64.tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
 build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release"
 
