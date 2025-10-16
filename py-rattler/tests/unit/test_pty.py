@@ -2,7 +2,6 @@ import sys
 import time
 import select
 import pytest
-import os
 
 
 # PTY functionality is only available on Unix platforms
@@ -10,14 +9,13 @@ skip_on_windows = pytest.mark.skipif(sys.platform == "win32", reason="PTY is Uni
 
 # Skip PTY tests in CI environments without a real TTY (e.g., GitHub Actions)
 # PTY tests require an actual terminal to function properly
-skip_without_tty = pytest.mark.skipif(
-    not sys.stdin.isatty() or os.environ.get("CI") == "true",
-    reason="PTY tests require a real TTY (not available in CI)",
-)
+# skip_without_tty = pytest.mark.skipif(
+#     not sys.stdin.isatty() or os.environ.get("CI") == "true",
+#     reason="PTY tests require a real TTY (not available in CI)",
+# )
 
 
 @skip_on_windows
-@skip_without_tty
 def test_pty_process_options() -> None:
     from rattler import PtyProcessOptions
 
@@ -33,7 +31,6 @@ def test_pty_process_options() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 def test_pty_session_creation() -> None:
     from rattler import PtySession
 
@@ -44,7 +41,6 @@ def test_pty_session_creation() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 def test_pty_session_closed_pty_error() -> None:
     from rattler import PtySession
 
@@ -68,7 +64,6 @@ def test_pty_session_closed_pty_error() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 def test_pty_process_creation() -> None:
     from rattler import PtyProcess, PtyProcessOptions
 
@@ -90,7 +85,6 @@ def test_pty_process_creation() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 def test_pty_process_run_command_with_args() -> None:
     from rattler import PtyProcess
 
@@ -119,7 +113,6 @@ def test_pty_process_run_command_with_args() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 def test_pty_process_bash_command() -> None:
     from rattler import PtyProcess
 
@@ -147,7 +140,6 @@ def test_pty_process_bash_command() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 def test_pty_process_status() -> None:
     from rattler import PtyProcess
 
@@ -170,7 +162,6 @@ def test_pty_process_status() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 def test_pty_process_exit() -> None:
     from rattler import PtyProcess
 
@@ -186,7 +177,6 @@ def test_pty_process_exit() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 def test_pty_session_empty_command() -> None:
     from rattler import PtySession
 
@@ -196,7 +186,6 @@ def test_pty_session_empty_command() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 def test_pty_process_empty_command() -> None:
     from rattler import PtyProcess
 
@@ -206,7 +195,6 @@ def test_pty_process_empty_command() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 def test_pty_child_pid_property() -> None:
     from rattler import PtyProcess
 
@@ -221,7 +209,6 @@ def test_pty_child_pid_property() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 def test_pty_process_get_file_handle() -> None:
     from rattler import PtyProcess
 
@@ -256,7 +243,6 @@ def test_pty_process_get_file_handle() -> None:
 
 # Async tests
 @skip_on_windows
-@skip_without_tty
 @pytest.mark.asyncio
 async def test_pty_process_async_read_write() -> None:
     """Test async read and write operations."""
@@ -275,7 +261,6 @@ async def test_pty_process_async_read_write() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 @pytest.mark.asyncio
 async def test_pty_process_async_wait() -> None:
     """Test async waiting for process to exit."""
@@ -294,7 +279,6 @@ async def test_pty_process_async_wait() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 @pytest.mark.asyncio
 async def test_pty_process_async_exit() -> None:
     """Test async process termination."""
@@ -314,7 +298,6 @@ async def test_pty_process_async_exit() -> None:
 
 
 @skip_on_windows
-@skip_without_tty
 @pytest.mark.asyncio
 async def test_pty_process_multiple_async_operations() -> None:
     """Test multiple concurrent async operations."""
