@@ -1,11 +1,11 @@
 use std::borrow::Cow;
 
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{PackageName, Requirement};
+use pep508_rs::PackageName;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
-use crate::{PackageHashes, PypiPackageData, UrlOrPath};
+use crate::{parse::deserialize::PypiPackageDataRaw, PackageHashes, PypiPackageData, UrlOrPath};
 
 /// A helper struct that wraps all fields of a [`crate::PypiPackageData`] and
 /// allows for easy conversion between the two.
@@ -34,8 +34,8 @@ pub(crate) struct PypiPackageDataModel<'a> {
     pub version: Cow<'a, pep440_rs::Version>,
     #[serde(default, skip_serializing_if = "Option::is_none", flatten)]
     pub hash: Cow<'a, Option<PackageHashes>>,
-    #[serde(default, skip_serializing_if = "<[Requirement]>::is_empty")]
-    pub requires_dist: Cow<'a, [Requirement]>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub requires_dist: Cow<'a, [String]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requires_python: Cow<'a, Option<VersionSpecifiers>>,
     #[serde(default, skip_serializing_if = "should_skip_serializing_editable")]
@@ -48,7 +48,7 @@ fn should_skip_serializing_editable(editable: &bool) -> bool {
     !*editable
 }
 
-impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageData {
+impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
     fn from(value: PypiPackageDataModel<'a>) -> Self {
         Self {
             name: value.name.into_owned(),
@@ -64,12 +64,17 @@ impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageData {
 
 impl<'a> From<&'a PypiPackageData> for PypiPackageDataModel<'a> {
     fn from(value: &'a PypiPackageData) -> Self {
+        let requires_dist = value
+            .requires_dist
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect::<Vec<_>>();
         Self {
             name: Cow::Borrowed(&value.name),
             version: Cow::Borrowed(&value.version),
             location: Cow::Borrowed(&value.location),
             hash: Cow::Borrowed(&value.hash),
-            requires_dist: Cow::Borrowed(&value.requires_dist),
+            requires_dist: requires_dist.into(),
             requires_python: Cow::Borrowed(&value.requires_python),
             editable: value.editable,
         }
