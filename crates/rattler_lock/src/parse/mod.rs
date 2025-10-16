@@ -3,7 +3,7 @@ mod models;
 mod serialize;
 mod v3;
 
-use std::str::FromStr;
+use std::path::Path;
 
 use rattler_conda_types::Platform;
 use serde::de::Error;
@@ -31,6 +31,9 @@ pub enum ParseCondaLockError {
     #[error("environment {0} and platform {1} refers to a package that does not exist: {2}")]
     MissingPackage(String, Platform, UrlOrPath),
 
+    #[error("Python requirement parsing failed")]
+    Pep508Error(#[from] pep508_rs::Pep508Error),
+
     #[error(transparent)]
     InvalidPypiPackageName(#[from] pep508_rs::InvalidNameError),
 
@@ -42,38 +45,37 @@ pub enum ParseCondaLockError {
     LocationToUrlConversionError(#[from] file_url::FileURLParseError),
 }
 
-impl FromStr for LockFile {
-    type Err = ParseCondaLockError;
+pub(crate) fn from_str_with_base_directory(
+    s: &str,
+    base_dir: Option<&Path>,
+) -> Result<LockFile, ParseCondaLockError> {
+    // First parse the document to a `serde_yaml::Value`.
+    let document: Value = serde_yaml::from_str(s).map_err(ParseCondaLockError::ParseError)?;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // First parse the document to a `serde_yaml::Value`.
-        let document: Value = serde_yaml::from_str(s).map_err(ParseCondaLockError::ParseError)?;
-
-        // Read the version number from the document
-        let version: FileFormatVersion = document
-            .get("version")
-            .ok_or_else(|| {
+    // Read the version number from the document
+    let version: FileFormatVersion = document
+        .get("version")
+        .ok_or_else(|| {
+            ParseCondaLockError::ParseError(serde_yaml::Error::custom(
+                "missing `version` field in lock file",
+            ))
+        })
+        .and_then(|v| {
+            let v = v.as_u64().ok_or_else(|| {
                 ParseCondaLockError::ParseError(serde_yaml::Error::custom(
-                    "missing `version` field in lock file",
+                    "`version` field in lock file is not an integer",
                 ))
-            })
-            .and_then(|v| {
-                let v = v.as_u64().ok_or_else(|| {
-                    ParseCondaLockError::ParseError(serde_yaml::Error::custom(
-                        "`version` field in lock file is not an integer",
-                    ))
-                })?;
-
-                FileFormatVersion::try_from(v)
             })?;
 
-        if version <= FileFormatVersion::V3 {
-            parse_v3_or_lower(document, version)
-        } else if version <= FileFormatVersion::V5 {
-            parse_from_document_v5(document, version)
-        } else {
-            deserialize::parse_from_document_v6(document, version)
-        }
+            FileFormatVersion::try_from(v)
+        })?;
+
+    if version <= FileFormatVersion::V3 {
+        parse_v3_or_lower(document, version)
+    } else if version <= FileFormatVersion::V5 {
+        parse_from_document_v5(document, version)
+    } else {
+        deserialize::parse_from_document_v6_and_v7(document, version, base_dir)
     }
 }
 

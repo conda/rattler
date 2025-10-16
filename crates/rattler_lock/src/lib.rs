@@ -76,7 +76,7 @@
 //! for different platforms and with different channels in a single lock-file.
 //! This allows storing production- and test environments in a single file.
 
-use std::{collections::HashMap, io::Read, path::Path, str::FromStr, sync::Arc};
+use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 
 use indexmap::IndexSet;
 use rattler_conda_types::{Platform, RepoDataRecord};
@@ -178,16 +178,28 @@ impl LockFile {
     }
 
     /// Parses an conda-lock file from a reader.
-    pub fn from_reader(mut reader: impl Read) -> Result<Self, ParseCondaLockError> {
+    pub fn from_reader(
+        mut reader: impl Read,
+        base_dir: Option<&Path>,
+    ) -> Result<Self, ParseCondaLockError> {
         let mut str = String::new();
         reader.read_to_string(&mut str)?;
-        Self::from_str(&str)
+        parse::from_str_with_base_directory(&str, base_dir)
     }
 
     /// Parses an conda-lock file from a file.
     pub fn from_path(path: &Path) -> Result<Self, ParseCondaLockError> {
+        let base_dir = path.parent();
         let source = std::fs::read_to_string(path)?;
-        Self::from_str(&source)
+        parse::from_str_with_base_directory(&source, base_dir)
+    }
+
+    /// Parses an conda-lock file from a file.
+    pub fn from_str_with_base_directory(
+        source: &str,
+        base_dir: Option<&Path>,
+    ) -> Result<Self, ParseCondaLockError> {
+        parse::from_str_with_base_directory(source, base_dir)
     }
 
     /// Writes the conda lock to a file
@@ -540,10 +552,7 @@ impl<'lock> LockedPackageRef<'lock> {
 
 #[cfg(test)]
 mod test {
-    use std::{
-        path::{Path, PathBuf},
-        str::FromStr,
-    };
+    use std::path::{Path, PathBuf};
 
     use rattler_conda_types::{Platform, RepoDataRecord};
     use rstest::*;
@@ -587,6 +596,9 @@ mod test {
     #[case::v7_multiple_source_packages_with_variants(
         "v7/multiple-source-packages-with-variants-lock.yml"
     )]
+    #[case::v7_pypi_absolute_url("v7/pypi_absolute_url.yml")]
+    #[case::v7_pypi_relative_url("v7/pypi_relative_url.yml")]
+    #[case::v7_pypi_relative_outside_url("v7/pypi_relative_outside_url.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
@@ -608,7 +620,13 @@ mod test {
         let rendered_lock_file = conda_lock.render_to_string().unwrap();
 
         // Parse the rendered lock-file again
-        let parsed_lock_file = LockFile::from_str(&rendered_lock_file).unwrap();
+        #[cfg(not(target_os = "windows"))]
+        let source_path = PathBuf::from("/tmp/some/test/path");
+        #[cfg(target_os = "windows")]
+        let source_path = PathBuf::from("C:\\tmp\\some\\test\\path");
+        let parsed_lock_file =
+            LockFile::from_str_with_base_directory(&rendered_lock_file, Some(&source_path))
+                .unwrap();
 
         // And re-render again
         let rerendered_lock_file = parsed_lock_file.render_to_string().unwrap();
@@ -727,7 +745,8 @@ mod test {
         let rendered_lock_file = lock_file.render_to_string().unwrap();
 
         // parse the lockfile
-        let parsed_lock_file = LockFile::from_str(&rendered_lock_file).unwrap();
+        let parsed_lock_file =
+            LockFile::from_str_with_base_directory(&rendered_lock_file, None).unwrap();
         // get repodata record from parsed lockfile
         let repodata_records = parsed_lock_file
             .environment(DEFAULT_ENVIRONMENT_NAME)

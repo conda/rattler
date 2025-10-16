@@ -2,11 +2,13 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     marker::PhantomData,
+    path::Path,
     sync::Arc,
 };
 
 use indexmap::IndexSet;
 use itertools::Either;
+use pep440_rs::VersionSpecifiers;
 use pep508_rs::ExtraName;
 use rattler_conda_types::{PackageName, Platform, VersionWithSource};
 use serde::{de::Error, Deserialize, Deserializer};
@@ -15,10 +17,13 @@ use serde_yaml::Value;
 
 use crate::{
     file_format_version::FileFormatVersion,
-    parse::{models, models::v6, V5, V6},
+    parse::{
+        models::{self, v6},
+        V5, V6,
+    },
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
-    UrlOrPath,
+    PackageHashes, ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData,
+    SolveOptions, UrlOrPath,
 };
 
 #[serde_as]
@@ -32,10 +37,55 @@ struct DeserializableLockFile<P> {
     _data: PhantomData<P>,
 }
 
+/// A pinned Pypi package
+#[derive(Eq, PartialEq, Clone, Debug, Hash)]
+pub struct PypiPackageDataRaw {
+    /// The name of the package.
+    pub name: pep508_rs::PackageName,
+
+    /// The version of the package.
+    pub version: pep440_rs::Version,
+
+    /// The location of the package. This can be a URL or a path.
+    pub location: UrlOrPath,
+
+    /// Hashes of the file pointed to by `url`.
+    pub hash: Option<PackageHashes>,
+
+    /// A list of (unparsed!) dependencies on other packages.
+    pub requires_dist: Vec<String>,
+
+    /// The python version that this package requires.
+    pub requires_python: Option<VersionSpecifiers>,
+
+    /// Whether the projects should be installed in editable mode or not.
+    pub editable: bool,
+}
+
+impl From<PypiPackageData> for PypiPackageDataRaw {
+    fn from(value: PypiPackageData) -> Self {
+        let requires_dist = value
+            .requires_dist
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect::<Vec<_>>();
+
+        Self {
+            name: value.name.clone(),
+            version: value.version.clone(),
+            location: value.location.clone(),
+            hash: value.hash.clone(),
+            requires_dist,
+            requires_python: value.requires_python.clone(),
+            editable: value.editable,
+        }
+    }
+}
+
 #[allow(clippy::large_enum_variant)]
 enum PackageData {
     Conda(CondaPackageData),
-    Pypi(PypiPackageData),
+    Pypi(PypiPackageDataRaw),
 }
 
 #[derive(Deserialize)]
@@ -148,21 +198,53 @@ pub fn parse_from_document_v5(
 ) -> Result<LockFile, ParseCondaLockError> {
     let raw: DeserializableLockFile<V5> =
         serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
-    parse_from_lock(version, raw)
+    parse_from_lock(version, raw, None)
 }
 
-pub fn parse_from_document_v6(
+pub fn parse_from_document_v6_and_v7(
     document: Value,
     version: FileFormatVersion,
+    base_dir: Option<&Path>,
 ) -> Result<LockFile, ParseCondaLockError> {
     let raw: DeserializableLockFile<V6> =
-        serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
-    parse_from_lock(version, raw)
+        serde_yaml::from_value::<DeserializableLockFile<V6>>(document)
+            .map_err(ParseCondaLockError::ParseError)?;
+    parse_from_lock(version, raw, base_dir)
+}
+
+fn convert_raw_pypi_package(
+    raw_package: PypiPackageDataRaw,
+    base_dir: Option<&Path>,
+) -> Result<PypiPackageData, ParseCondaLockError> {
+    let requires_dist = raw_package
+        .requires_dist
+        .iter()
+        .map(|input| {
+            if let Some(base_dir) = base_dir {
+                pep508_rs::Requirement::parse(input, base_dir)
+            } else {
+                use std::str::FromStr as _;
+
+                pep508_rs::Requirement::from_str(input)
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(PypiPackageData {
+        name: raw_package.name,
+        version: raw_package.version,
+        location: raw_package.location,
+        hash: raw_package.hash,
+        requires_dist,
+        requires_python: raw_package.requires_python,
+        editable: raw_package.editable,
+    })
 }
 
 fn parse_from_lock<P>(
     file_version: FileFormatVersion,
     raw: DeserializableLockFile<P>,
+    base_dir: Option<&Path>,
 ) -> Result<LockFile, ParseCondaLockError> {
     // Split the packages into conda and pypi packages.
     let mut conda_packages = Vec::new();
@@ -170,7 +252,9 @@ fn parse_from_lock<P>(
     for package in raw.packages {
         match package {
             PackageData::Conda(p) => conda_packages.push(p),
-            PackageData::Pypi(p) => pypi_packages.push(p),
+            PackageData::Pypi(p) => {
+                pypi_packages.push(convert_raw_pypi_package(p, base_dir)?);
+            }
         }
     }
 
