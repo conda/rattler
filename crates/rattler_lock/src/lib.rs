@@ -565,6 +565,14 @@ mod test {
     #[case::v6_pixi_build_url_source("v6/pixi-build-url-source-lock.yml")]
     #[case::v6_pixi_build_git_tag_source("v6/pixi-build-git-tag-source-lock.yml")]
     #[case::v6_pixi_build_git_rev_only_source("v6/pixi-build-git-rev-only-source-lock.yml")]
+    #[case::v7_conda_source_path("v7/conda-path-lock.yml")]
+    #[case::v7_derived_channel("v7/derived-channel-lock.yml")]
+    #[case::v7_sources("v7/sources-lock.yml")]
+    #[case::v7_options("v7/options-lock.yml")]
+    #[case::v7_pixi_build_pinned_source("v7/pixi-build-pinned-source-lock.yml")]
+    #[case::v7_pixi_build_url_source("v7/pixi-build-url-source-lock.yml")]
+    #[case::v7_pixi_build_git_tag_source("v7/pixi-build-git-tag-source-lock.yml")]
+    #[case::v7_pixi_build_git_rev_only_source("v7/pixi-build-git-rev-only-source-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
