@@ -83,6 +83,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.0](https://github.com/conda/rattler/compare/rattler-v0.37.9...rattler-v0.38.0) - 2025-10-16
+
+### Fixed
+
+- sign dylibs even if they don't have the executable bit set ([#1753](https://github.com/conda/rattler/pull/1753))
+- Prevent noarch installer from installing non-noarch packages ([#1732](https://github.com/conda/rattler/pull/1732))
+
 ## [0.37.9](https://github.com/conda/rattler/compare/rattler-v0.37.8...rattler-v0.37.9) - 2025-10-14
 
 ### Other
