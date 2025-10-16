@@ -147,6 +147,34 @@ impl PyPtySession {
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to flush PTY: {}", e)))
     }
 
+    /// Exit the process gracefully by sending SIGTERM.
+    ///
+    /// This method blocks until the process has exited. Useful for cleaning up
+    /// PTY sessions when you're done sending commands but don't want to use interact().
+    ///
+    /// Returns:
+    ///     A string describing the exit status.
+    ///
+    /// Raises:
+    ///     RuntimeError: If the process could not be terminated.
+    ///
+    /// Examples
+    /// --------
+    /// ```python
+    /// >>> session = PtySession(["bash"])
+    /// >>> session.send_line("echo hello")
+    /// >>> status = session.exit()
+    /// >>> print(status)
+    /// Exited(0)
+    /// ```
+    pub fn exit(&mut self) -> PyResult<String> {
+        let status = self
+            .inner
+            .exit()
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to exit PTY session: {}", e)))?;
+        Ok(format!("{:?}", status))
+    }
+
     /// Start an interactive session, optionally waiting for a pattern first.
     ///
     /// This method:

@@ -45,12 +45,22 @@ class PtySession:
         --------
         ```python
         >>> from rattler.pty import PtySession
-        >>> # Start bash
+        >>> # Start an interactive bash session
         >>> session = PtySession(["bash"])
-        >>> # Start bash with specific arguments
-        >>> session = PtySession(["bash", "-l"])
-        >>> # Start a different shell
-        >>> session = PtySession(["zsh"])
+        >>> session.send_line("export MY_VAR=hello")
+        >>> # Hand over control to the user (blocks until shell exits)
+        >>> exit_code = session.interact()
+        >>>
+        ```
+
+        If you want to send commands without using interact() (which blocks),
+        use exit() to clean up when done:
+
+        ```python
+        >>> from rattler.pty import PtySession
+        >>> session = PtySession(["bash"])
+        >>> session.send_line("echo hello")
+        >>> status = session.exit()  # Clean up the session
         >>>
         ```
         """
@@ -84,11 +94,14 @@ class PtySession:
         Examples
         --------
         ```python
+        >>> from rattler.pty import PtySession
         >>> session = PtySession(["bash"])
         >>> session.send_line("export MY_VAR=hello")
         22
         >>> session.send_line("echo $MY_VAR")
         13
+        >>> session.exit()  # Clean up when done
+        'Signaled(SIGTERM)'
         >>>
         ```
         """
@@ -112,14 +125,15 @@ class PtySession:
         Examples
         --------
         ```python
+        >>> from rattler.pty import PtySession
         >>> session = PtySession(["bash"])
         >>> session.send("echo")
         4
-        >>> session.send(" hello")
-        6
-        >>> session.send("\\n")
-        1
+        >>> session.send(" hello\\n")
+        7
         >>> session.flush()
+        >>> session.exit()  # Clean up when done
+        'Signaled(SIGTERM)'
         >>>
         ```
         """
@@ -138,14 +152,45 @@ class PtySession:
         Examples
         --------
         ```python
+        >>> from rattler.pty import PtySession
         >>> session = PtySession(["bash"])
         >>> session.send("echo hello\\n")
         11
         >>> session.flush()  # Make sure the command is sent
+        >>> session.exit()  # Clean up when done
+        'Signaled(SIGTERM)'
         >>>
         ```
         """
         self._inner.flush()
+
+    def exit(self) -> str:
+        """
+        Exit the process gracefully by sending SIGTERM.
+
+        This method blocks until the process has exited. Useful for cleaning up
+        PTY sessions when you're done sending commands but don't want to use interact().
+
+        Returns:
+            A string describing the exit status.
+
+        Raises:
+            RuntimeError: If the process could not be terminated.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler.pty import PtySession
+        >>> session = PtySession(["bash"])
+        >>> session.send_line("echo hello")
+        11
+        >>> status = session.exit()
+        >>> print(status)
+        Signaled(SIGTERM)
+        >>>
+        ```
+        """
+        return self._inner.exit()
 
     def interact(self, wait_until: Optional[str] = None) -> Optional[int]:
         """

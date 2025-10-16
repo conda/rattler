@@ -7,13 +7,6 @@ import pytest
 # PTY functionality is only available on Unix platforms
 skip_on_windows = pytest.mark.skipif(sys.platform == "win32", reason="PTY is Unix-only")
 
-# Skip PTY tests in CI environments without a real TTY (e.g., GitHub Actions)
-# PTY tests require an actual terminal to function properly
-# skip_without_tty = pytest.mark.skipif(
-#     not sys.stdin.isatty() or os.environ.get("CI") == "true",
-#     reason="PTY tests require a real TTY (not available in CI)",
-# )
-
 
 @skip_on_windows
 def test_pty_process_options() -> None:
