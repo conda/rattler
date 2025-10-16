@@ -4119,6 +4119,7 @@ dependencies = [
  "http-cache-semantics",
  "humansize",
  "humantime",
+ "indicatif",
  "itertools 0.14.0",
  "json-patch",
  "libc",
