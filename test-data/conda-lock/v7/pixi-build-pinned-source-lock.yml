@@ -1,12 +1,8 @@
----
-source: crates/rattler_lock/src/lib.rs
-expression: conda_lock
----
 version: 7
 environments:
   default:
     channels:
-      - url: "https://conda.anaconda.org/conda-forge/"
+      - url: https://conda.anaconda.org/conda-forge/
     packages:
       linux-64:
         - conda: pixi-build-package
@@ -17,6 +13,6 @@ packages:
     build: pyhbf21a9e_0
     subdir: noarch
     package_build_source:
-      git: "https://github.com/example/pixi-package.git"
+      git: https://github.com/example/pixi-package.git
       branch: main
       rev: abcdef123456789
