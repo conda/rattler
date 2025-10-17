@@ -94,6 +94,7 @@ mod pypi_indexes;
 pub mod source;
 mod url_or_path;
 mod utils;
+mod verbatim;
 
 pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
@@ -109,6 +110,7 @@ pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashab
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
 pub use rattler_conda_types::Matches;
 pub use url_or_path::UrlOrPath;
+pub use verbatim::Verbatim;
 
 /// The name of the default environment in a [`LockFile`]. This is the
 /// environment name that is used when no explicit environment name is

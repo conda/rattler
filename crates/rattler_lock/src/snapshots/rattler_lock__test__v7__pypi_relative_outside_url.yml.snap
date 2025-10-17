@@ -32,5 +32,5 @@ packages:
     version: 0.1.0
     sha256: 0c8c8ad3d4764ea68d2b5951866ba0ca61d2bfbc49c1af1d53ae7b8f3d841039
     requires_dist:
-      - "my-subdir @ file:///var/home/tobias/src/rattler/test-data/conda-lock/my_subdir"
+      - "my-subdir @ file:../my_subdir"
     editable: true
