@@ -17,6 +17,10 @@ pip = "~=23.2.1"
 rust = "~=1.88.0"
 
 [feature.build.tasks]
+build = "PIP_REQUIRE_VIRTUALENV=false maturin develop --features pty"
+build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release --features pty"
+
+[feature.build.target.win-64.tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
 build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release"
 
@@ -45,7 +49,7 @@ types-networkx = "*"
 boto3 = "*"
 
 [feature.test.tasks]
-test = { cmd = "pytest --doctest-modules", depends-on = ["build"] }
+test = { cmd = "pytest --doctest-modules --ignore=rattler/pty/pty_process.py --ignore=rattler/pty/pty_session.py", depends-on = ["build"] }
 fmt-python = "ruff format rattler examples tests"
 fmt-rust = "cargo fmt --all"
 lint-python = "ruff check ."

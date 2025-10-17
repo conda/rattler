@@ -10,6 +10,7 @@ edition.workspace = true
 readme.workspace = true
 
 [dependencies]
+tokio = { workspace = true, features = ["io-util", "fs"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

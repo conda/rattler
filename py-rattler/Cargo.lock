@@ -3482,6 +3482,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "futures",
+ "nix 0.30.1",
  "openssl",
  "parking_lot",
  "pep508_rs",
@@ -3498,6 +3499,7 @@ dependencies = [
  "rattler_lock",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_pty",
  "rattler_repodata_gateway",
  "rattler_s3",
  "rattler_shell",
@@ -3779,7 +3781,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.37.8"
+version = "0.37.9"
 dependencies = [
  "anyhow",
  "console",
@@ -3821,7 +3823,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.38"
+version = "0.3.39"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -3852,7 +3854,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.40.0"
+version = "0.40.1"
 dependencies = [
  "chrono",
  "core-foundation 0.10.1",
@@ -3891,7 +3893,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
  "console",
  "fs-err",
@@ -3907,7 +3909,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "blake2",
  "digest",
@@ -3923,7 +3925,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.26.1"
+version = "0.26.2"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3958,7 +3960,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.25.0"
+version = "0.25.1"
 dependencies = [
  "chrono",
  "file_url",
@@ -3990,7 +3992,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.29"
+version = "0.2.30"
 dependencies = [
  "chrono",
  "configparser",
@@ -4018,7 +4020,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.17"
+version = "0.25.18"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4048,7 +4050,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.8"
+version = "0.23.9"
 dependencies = [
  "bzip2",
  "chrono",
@@ -4081,6 +4083,7 @@ dependencies = [
  "libc",
  "nix 0.30.1",
  "signal-hook",
+ "tokio",
 ]
 
 [[package]]
@@ -4094,7 +4097,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.8"
+version = "0.24.9"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4153,7 +4156,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4169,7 +4172,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.2"
+version = "0.25.3"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4187,7 +4190,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "3.0.5"
+version = "3.0.6"
 dependencies = [
  "chrono",
  "futures",
@@ -4203,7 +4206,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.2.1"
+version = "2.2.2"
 dependencies = [
  "archspec",
  "libloading",
