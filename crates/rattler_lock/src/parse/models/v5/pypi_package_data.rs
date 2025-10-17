@@ -4,7 +4,7 @@ use pep440_rs::VersionSpecifiers;
 use pep508_rs::PackageName;
 use serde::{Deserialize, Serialize};
 
-use crate::{parse::deserialize::PypiPackageDataRaw, PackageHashes, PypiPackageData, UrlOrPath};
+use crate::{parse::deserialize::PypiPackageDataRaw, PackageHashes, UrlOrPath, Verbatim};
 
 /// This struct is similar to [`crate::parse::models::v6::PypiPackageDataModel`] but used for
 /// the V5 version of the lock file format.
@@ -29,7 +29,7 @@ impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
         Self {
             name: value.name.into_owned(),
             version: value.version.into_owned(),
-            location: value.location,
+            location: Verbatim::new(value.location),
             hash: value.hash.into_owned(),
             requires_dist: value.requires_dist.into_owned(),
             requires_python: value.requires_python.into_owned(),

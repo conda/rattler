@@ -23,7 +23,7 @@ use crate::{
     },
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     PackageHashes, ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData,
-    SolveOptions, UrlOrPath,
+    SolveOptions, UrlOrPath, Verbatim,
 };
 
 #[serde_as]
@@ -47,7 +47,7 @@ pub struct PypiPackageDataRaw {
     pub version: pep440_rs::Version,
 
     /// The location of the package. This can be a URL or a path.
-    pub location: UrlOrPath,
+    pub location: Verbatim<UrlOrPath>,
 
     /// Hashes of the file pointed to by `url`.
     pub hash: Option<PackageHashes>,
@@ -171,7 +171,7 @@ enum DeserializablePackageSelector {
         subdir: Option<String>,
     },
     Pypi {
-        pypi: UrlOrPath,
+        pypi: Verbatim<UrlOrPath>,
         #[serde(flatten)]
         runtime: DeserializablePypiPackageEnvironmentData,
     },
@@ -213,6 +213,7 @@ pub fn parse_from_document_v6_and_v7(
 }
 
 fn convert_raw_pypi_package(
+    file_version: FileFormatVersion,
     raw_package: PypiPackageDataRaw,
     base_dir: Option<&Path>,
 ) -> Result<PypiPackageData, ParseCondaLockError> {
@@ -230,10 +231,16 @@ fn convert_raw_pypi_package(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    let location = if file_version < FileFormatVersion::V7 {
+        Verbatim::new(raw_package.location.take())
+    } else {
+        raw_package.location
+    };
+
     Ok(PypiPackageData {
         name: raw_package.name,
         version: raw_package.version,
-        location: raw_package.location,
+        location,
         hash: raw_package.hash,
         requires_dist,
         requires_python: raw_package.requires_python,
@@ -249,11 +256,12 @@ fn parse_from_lock<P>(
     // Split the packages into conda and pypi packages.
     let mut conda_packages = Vec::new();
     let mut pypi_packages = Vec::new();
+
     for package in raw.packages {
         match package {
             PackageData::Conda(p) => conda_packages.push(p),
             PackageData::Pypi(p) => {
-                pypi_packages.push(convert_raw_pypi_package(p, base_dir)?);
+                pypi_packages.push(convert_raw_pypi_package(file_version, p, base_dir)?);
             }
         }
     }
@@ -401,7 +409,7 @@ fn parse_from_lock<P>(
                                                     ParseCondaLockError::MissingPackage(
                                                         environment_name.clone(),
                                                         platform,
-                                                        pypi,
+                                                        pypi.inner().clone(),
                                                     )
                                                 })?,
                                                 pypi_runtime_lookup.insert_full(runtime).0,
