@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use fxhash::{FxHashMap, FxHashSet};
-use rattler_digest::Sha256Hash;
+use rattler_digest::{serde::SerializableHash, Sha256, Sha256Hash};
 use serde::{Deserialize, Serialize};
 
 use crate::PackageRecord;
@@ -10,12 +10,14 @@ use crate::PackageRecord;
 /// The sharded repodata holds a hashmap of package name -> shard (hash).
 /// This index file is stored under
 /// `<channel>/<subdir>/repodata_shards.msgpack.zst`
+#[serde_with::serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShardedRepodata {
     /// Additional information about the sharded subdirectory such as the base
     /// url.
     pub info: ShardedSubdirInfo,
     /// The individual shards indexed by package name.
+    #[serde_as(as = "FxHashMap<_, SerializableHash<Sha256>>")]
     pub shards: FxHashMap<String, Sha256Hash>,
 }
 
