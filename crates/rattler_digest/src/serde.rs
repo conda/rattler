@@ -4,7 +4,9 @@
 //! automatically handles both human-readable formats (like JSON) and binary formats
 //! (like MessagePack). See [`SerializableHash`] for detailed documentation on the
 //! serialization behavior.
-//!
+
+#![allow(clippy::doc_markdown)]
+
 use digest::{Digest, Output, OutputSizeUser};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -228,7 +230,7 @@ mod test {
 
         // Test 1: MessagePack binary format (bin 8, bin 16, or bin 32)
         let mut msgpack_bin = Vec::new();
-        encode::write_bin(&mut msgpack_bin, &hash_bytes).unwrap();
+        encode::write_bin(&mut msgpack_bin, hash_bytes).unwrap();
 
         let deserialized_bin: SerializableHash<sha2::Sha256> =
             rmp_serde::from_slice(&msgpack_bin).unwrap();
@@ -238,7 +240,7 @@ mod test {
         let mut msgpack_array = Vec::new();
         encode::write_array_len(&mut msgpack_array, hash_bytes.len() as u32).unwrap();
         for byte in hash_bytes {
-            encode::write_uint(&mut msgpack_array, *byte as u64).unwrap();
+            encode::write_uint(&mut msgpack_array, u64::from(*byte)).unwrap();
         }
 
         let deserialized_array: SerializableHash<sha2::Sha256> =
