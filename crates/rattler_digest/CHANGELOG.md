@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.7](https://github.com/conda/rattler/compare/rattler_digest-v1.1.6...rattler_digest-v1.1.7) - 2025-10-17
+
+### Fixed
+
+- use byte string instead of array for hash encoding ([#1755](https://github.com/conda/rattler/pull/1755))
+
 ## [1.1.6](https://github.com/conda/rattler/compare/rattler_digest-v1.1.5...rattler_digest-v1.1.6) - 2025-10-14
 
 ### Other

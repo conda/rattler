@@ -1050,9 +1050,9 @@ dependencies = [
 
 [[package]]
 name = "bzip2"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bea8dcd42434048e4f7a304411d9273a411f647446c1234a65ce0554923f4cff"
+checksum = "f3a53fac24f34a81bc9954b5d6cfce0c21e18ec6959f44f56e8e90e4bb7c346c"
 dependencies = [
  "libbz2-rs-sys",
 ]
@@ -3293,13 +3293,13 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "1.0.4"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78bed444cc8a2160f01cbcf811ef18cac863ad68ae8ca62092e8db51d51c761c"
+checksum = "69d83b0086dc8ecf3ce9ae2874b2d1290252e2a30720bea58a5c6639b0092873"
 dependencies = [
  "libc",
  "wasi",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4265,7 +4265,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.38.0"
+version = "0.38.1"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4347,7 +4347,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.39"
+version = "0.3.40"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4386,7 +4386,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.40.1"
+version = "0.40.2"
 dependencies = [
  "assert_matches",
  "chrono",
@@ -4436,7 +4436,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.12"
+version = "0.2.13"
 dependencies = [
  "console 0.16.1",
  "fs-err",
@@ -4454,7 +4454,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.1.6"
+version = "1.1.7"
 dependencies = [
  "blake2",
  "digest",
@@ -4476,7 +4476,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.26.2"
+version = "0.26.3"
 dependencies = [
  "anyhow",
  "bytes",
@@ -4525,7 +4525,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.25.1"
+version = "0.25.2"
 dependencies = [
  "chrono",
  "file_url",
@@ -4562,7 +4562,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.30"
+version = "0.2.31"
 dependencies = [
  "chrono",
  "configparser",
@@ -4591,7 +4591,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.18"
+version = "0.25.19"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4629,7 +4629,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.9"
+version = "0.23.10"
 dependencies = [
  "assert_matches",
  "bzip2",
@@ -4663,7 +4663,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_pty"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "libc",
  "nix 0.30.1",
@@ -4682,7 +4682,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.10"
+version = "0.24.11"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4751,7 +4751,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4778,7 +4778,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.3"
+version = "0.25.4"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4800,7 +4800,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "3.0.6"
+version = "3.0.7"
 dependencies = [
  "chrono",
  "criterion",
@@ -4826,7 +4826,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "base64",
  "clap",
@@ -4860,7 +4860,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.2.2"
+version = "2.2.3"
 dependencies = [
  "archspec",
  "libloading",
@@ -5308,9 +5308,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.32"
+version = "0.23.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd3c25631629d034ce7cd9940adc9d45762d46de2b0f57193c4443b92c6d4d40"
+checksum = "751e04a496ca00bb97a5e043158d23d66b5aabf2e1d5aa2a0aaebb1aafe6f82c"
 dependencies = [
  "log",
  "once_cell",

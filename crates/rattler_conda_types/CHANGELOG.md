@@ -39,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.40.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.1...rattler_conda_types-v0.40.2) - 2025-10-17
+
+### Fixed
+
+- use byte string instead of array for hash encoding ([#1755](https://github.com/conda/rattler/pull/1755))
+
 ## [0.40.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.0...rattler_conda_types-v0.40.1) - 2025-10-14
 
 ### Added
