@@ -86,12 +86,12 @@ fn get_file_from_archive(
 }
 
 /// Read a package file content from archive based on the path
-fn read_package_file_content<'a>(
+pub fn read_package_file_content<'a>(
     file: impl Read + Seek + 'a,
-    path: impl AsRef<Path>,
+    archive_type: ArchiveType,
     package_path: impl AsRef<Path>,
 ) -> Result<Vec<u8>, ExtractError> {
-    match ArchiveType::try_from(&path).ok_or(ExtractError::UnsupportedArchiveType)? {
+    match archive_type {
         ArchiveType::TarBz2 => {
             let mut archive = stream_tar_bz2(file);
             let buf = get_file_from_archive(&mut archive, package_path.as_ref())?;
@@ -121,7 +121,11 @@ fn read_package_file_content<'a>(
 pub fn read_package_file<P: PackageFile>(path: impl AsRef<Path>) -> Result<P, ExtractError> {
     // stream extract the file from a package
     let file = File::open(&path)?;
-    let content = read_package_file_content(&file, &path, P::package_path())?;
+    let content = read_package_file_content(
+        &file,
+        ArchiveType::try_from(&path).ok_or(ExtractError::UnsupportedArchiveType)?,
+        P::package_path(),
+    )?;
 
     P::from_str(&String::from_utf8_lossy(&content))
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
@@ -133,7 +137,11 @@ pub fn extract_package_file<'a, P: PackageFile>(
     location: &Path,
     writer: &mut impl Write,
 ) -> Result<(), ExtractError> {
-    let content = read_package_file_content(reader, location, P::package_path())?;
+    let content = read_package_file_content(
+        reader,
+        ArchiveType::try_from(location).ok_or(ExtractError::UnsupportedArchiveType)?,
+        P::package_path(),
+    )?;
 
     writer.write_all(&content)?;
 
