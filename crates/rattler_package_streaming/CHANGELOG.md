@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.11](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.10...rattler_package_streaming-v0.23.11) - 2025-10-18
+
+### Added
+
+- make read_package_file_content public, add try_from_magic_bytes ([#1757](https://github.com/conda/rattler/pull/1757))
+
 ## [0.23.10](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.9...rattler_package_streaming-v0.23.10) - 2025-10-17
 
 ### Other

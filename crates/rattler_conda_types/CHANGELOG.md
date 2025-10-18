@@ -39,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.40.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.2...rattler_conda_types-v0.40.3) - 2025-10-18
+
+### Added
+
+- make read_package_file_content public, add try_from_magic_bytes ([#1757](https://github.com/conda/rattler/pull/1757))
+
 ## [0.40.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.1...rattler_conda_types-v0.40.2) - 2025-10-17
 
 ### Fixed
