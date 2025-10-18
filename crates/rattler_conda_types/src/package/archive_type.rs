@@ -21,8 +21,9 @@ impl ArchiveType {
     }
 
     /// Tries to determine the type of a Conda archive from its magic bytes.
-    pub fn try_from_magic_bytes(bytes: &[u8]) -> Option<ArchiveType> {
+    pub fn try_from_magic_bytes<T: AsRef<[u8]>>(bytes: T) -> Option<ArchiveType> {
         // https://en.wikipedia.org/wiki/List_of_file_signatures
+        let bytes = bytes.as_ref();
         if bytes.len() >= 4 {
             match bytes[0..4] {
                 // zip magic number
@@ -88,8 +89,8 @@ mod test {
         );
         assert_eq!(
             None,
-            ArchiveType::try_from_magic_bytes(&[0x11, 0x11, 0x11, 0x11])
+            ArchiveType::try_from_magic_bytes(vec![0x11, 0x11, 0x11, 0x11])
         );
-        assert_eq!(None, ArchiveType::try_from_magic_bytes(&[0x11]));
+        assert_eq!(None, ArchiveType::try_from_magic_bytes(vec![]));
     }
 }
