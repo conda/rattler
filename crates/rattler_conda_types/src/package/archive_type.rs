@@ -22,6 +22,7 @@ impl ArchiveType {
 
     /// Tries to determine the type of a Conda archive from its magic bytes.
     pub fn try_from_magic_bytes(magic_bytes: &[u8; 4]) -> Option<ArchiveType> {
+        // https://en.wikipedia.org/wiki/List_of_file_signatures
         match magic_bytes {
             // zip magic number
             [0x50, 0x4B, 0x03, 0x04] | [0x50, 0x4B, 0x05, 0x06] | [0x50, 0x4B, 0x07, 0x08] => {
