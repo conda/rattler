@@ -81,16 +81,16 @@ mod test {
     fn test_try_from_magic_bytes() {
         assert_eq!(
             ArchiveType::Conda,
-            ArchiveType::try_from_magic_bytes(&[0x50, 0x4B, 0x03, 0x04, 0x01]).unwrap()
+            ArchiveType::try_from_magic_bytes([0x50, 0x4B, 0x03, 0x04, 0x01]).unwrap()
         );
         assert_eq!(
             ArchiveType::TarBz2,
-            ArchiveType::try_from_magic_bytes(&[0x42, 0x5a, 0x68, 0x12]).unwrap()
+            ArchiveType::try_from_magic_bytes([0x42, 0x5a, 0x68, 0x12]).unwrap()
         );
         assert_eq!(
             None,
-            ArchiveType::try_from_magic_bytes(vec![0x11, 0x11, 0x11, 0x11])
+            ArchiveType::try_from_magic_bytes([0x11, 0x11, 0x11, 0x11])
         );
-        assert_eq!(None, ArchiveType::try_from_magic_bytes(vec![]));
+        assert_eq!(None, ArchiveType::try_from_magic_bytes([]));
     }
 }
