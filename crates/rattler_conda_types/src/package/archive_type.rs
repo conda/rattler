@@ -20,6 +20,19 @@ impl ArchiveType {
             .map(|(_, archive_type)| archive_type)
     }
 
+    /// Tries to determine the type of a Conda archive from its magic bytes.
+    pub fn try_from_magic_bytes(magic_bytes: &[u8; 4]) -> Option<ArchiveType> {
+        match magic_bytes {
+            // zip magic number
+            [0x50, 0x4B, 0x03, 0x04] | [0x50, 0x4B, 0x05, 0x06] | [0x50, 0x4B, 0x07, 0x08] => {
+                Some(ArchiveType::Conda)
+            }
+            // bz2 magic number
+            [0x42, 0x5a, 0x68, _] => Some(ArchiveType::TarBz2),
+            _ => None,
+        }
+    }
+
     /// Returns the file extension for this archive type.
     pub fn extension(self) -> &'static str {
         match self {
