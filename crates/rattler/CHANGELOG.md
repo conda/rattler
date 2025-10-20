@@ -83,6 +83,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.2](https://github.com/conda/rattler/compare/rattler-v0.38.1...rattler-v0.38.2) - 2025-10-18
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_networking, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.38.1](https://github.com/conda/rattler/compare/rattler-v0.38.0...rattler-v0.38.1) - 2025-10-17
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.38.0](https://github.com/conda/rattler/compare/rattler-v0.37.9...rattler-v0.38.0) - 2025-10-16
+
+### Fixed
+
+- sign dylibs even if they don't have the executable bit set ([#1753](https://github.com/conda/rattler/pull/1753))
+- Prevent noarch installer from installing non-noarch packages ([#1732](https://github.com/conda/rattler/pull/1732))
+
+## [0.37.9](https://github.com/conda/rattler/compare/rattler-v0.37.8...rattler-v0.37.9) - 2025-10-14
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.37.8](https://github.com/conda/rattler/compare/rattler-v0.37.7...rattler-v0.37.8) - 2025-10-13
+
+### Other
+
+- small bearer token improvements ([#1727](https://github.com/conda/rattler/pull/1727))
+
 ## [0.37.7](https://github.com/conda/rattler/compare/rattler-v0.37.6...rattler-v0.37.7) - 2025-10-07
 
 ### Other

@@ -17,10 +17,10 @@ use std::path::PathBuf;
 use url::Url;
 
 #[pyclass]
-#[repr(transparent)]
 #[derive(Clone)]
 pub struct PyGateway {
     pub(crate) inner: Gateway,
+    show_progress: bool,
 }
 
 impl From<PyGateway> for Gateway {
@@ -31,7 +31,10 @@ impl From<PyGateway> for Gateway {
 
 impl From<Gateway> for PyGateway {
     fn from(value: Gateway) -> Self {
-        Self { inner: value }
+        Self {
+            inner: value,
+            show_progress: false,
+        }
     }
 }
 
@@ -53,7 +56,7 @@ impl<'source> FromPyObject<'source> for Wrap<SubdirSelection> {
 #[pymethods]
 impl PyGateway {
     #[new]
-    #[pyo3(signature = (max_concurrent_requests, default_config, per_channel_config, cache_dir=None, client=None)
+    #[pyo3(signature = (max_concurrent_requests, default_config, per_channel_config, cache_dir=None, client=None, show_progress=false)
     )]
     pub fn new(
         max_concurrent_requests: usize,
@@ -61,6 +64,7 @@ impl PyGateway {
         per_channel_config: HashMap<String, PySourceConfig>,
         cache_dir: Option<PathBuf>,
         client: Option<PyClientWithMiddleware>,
+        show_progress: bool,
     ) -> PyResult<Self> {
         let channel_config = ChannelConfig {
             default: default_config.into(),
@@ -91,6 +95,7 @@ impl PyGateway {
 
         Ok(Self {
             inner: gateway.finish(),
+            show_progress,
         })
     }
 
@@ -107,13 +112,18 @@ impl PyGateway {
         recursive: bool,
     ) -> PyResult<Bound<'a, PyAny>> {
         let gateway = self.inner.clone();
+        let show_progress = self.show_progress;
         future_into_py(py, async move {
-            let repodatas = gateway
+            let mut query = gateway
                 .query(channels, platforms.into_iter().map(|p| p.inner), specs)
-                .recursive(recursive)
-                .execute()
-                .await
-                .map_err(PyRattlerError::from)?;
+                .recursive(recursive);
+
+            if show_progress {
+                query = query
+                    .with_reporter(rattler_repodata_gateway::IndicatifReporter::builder().finish());
+            }
+
+            let repodatas = query.execute().await.map_err(PyRattlerError::from)?;
 
             // Convert the records into a list of lists
             Ok(repodatas
@@ -135,12 +145,16 @@ impl PyGateway {
         platforms: Vec<PyPlatform>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let gateway = self.inner.clone();
+        let show_progress = self.show_progress;
         future_into_py(py, async move {
-            let names = gateway
-                .names(channels, platforms.into_iter().map(|p| p.inner))
-                .execute()
-                .await
-                .map_err(PyRattlerError::from)?;
+            let mut query = gateway.names(channels, platforms.into_iter().map(|p| p.inner));
+
+            if show_progress {
+                query = query
+                    .with_reporter(rattler_repodata_gateway::IndicatifReporter::builder().finish());
+            }
+
+            let names = query.execute().await.map_err(PyRattlerError::from)?;
 
             // Convert the records into a list of lists
             Ok(names

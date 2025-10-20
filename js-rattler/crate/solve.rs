@@ -9,6 +9,8 @@ use rattler_conda_types::{
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use rattler_repodata_gateway::{Gateway, SourceConfig};
 use rattler_solve::{SolverImpl, SolverTask};
+use reqwest::Client;
+use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -120,6 +122,9 @@ pub async fn simple_solve(
 
     // Fetch the repodata
     let gateway = Gateway::builder()
+        // Creating the Gateway with a default client to avoid adding a user-agent header
+        // (Not supported from the browser)
+        .with_client(ClientWithMiddleware::from(Client::new()))
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
             default: SourceConfig {
                 sharded_enabled: true,

@@ -1,4 +1,5 @@
-//! Custom in-memory `opendal` backend with `ETag` and conditional request support.
+//! Custom in-memory `opendal` backend with `ETag` and conditional request
+//! support.
 //!
 //! This module provides a test-only in-memory storage backend that implements
 //! `ETags` and conditional HTTP requests (if-match, if-none-match,
@@ -30,7 +31,6 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use opendal::{
     raw::*, Buffer, Builder, Capability, EntryMode, Error, ErrorKind, Metadata, Operator, Result,
-    Scheme,
 };
 use rattler_digest::compute_bytes_digest;
 use tokio::sync::RwLock;
@@ -57,9 +57,9 @@ fn check_if_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<()> {
 
 /// Validates the if-none-match condition against the current `ETag`.
 ///
-/// Returns `ConditionNotMatch` error if the `ETag` matches (or if "*" is provided
-/// and file exists). Used for create-only semantics. The `ctx` parameter adds
-/// context to error messages.
+/// Returns `ConditionNotMatch` error if the `ETag` matches (or if "*" is
+/// provided and file exists). Used for create-only semantics. The `ctx`
+/// parameter adds context to error messages.
 #[inline]
 fn check_if_none_match(current: &str, cond: Option<&str>, ctx: &str) -> Result<()> {
     if let Some(if_none_match) = cond {
@@ -96,8 +96,8 @@ fn check_if_unmodified_since(
 
 /// A file entry stored in the `ETag` memory backend.
 ///
-/// Contains the file data along with metadata (`ETag`, last modified time, size)
-/// needed for conditional request validation.
+/// Contains the file data along with metadata (`ETag`, last modified time,
+/// size) needed for conditional request validation.
 #[derive(Clone, Debug)]
 struct FileEntry {
     data: Bytes,
@@ -179,8 +179,9 @@ impl Default for TestHooks {
 
 /// In-memory storage backend with `ETag` and conditional request support.
 ///
-/// Implements `opendal`'s `Access` trait to provide S3-like behavior for testing,
-/// including `ETag` generation and validation of conditional HTTP requests.
+/// Implements `opendal`'s `Access` trait to provide S3-like behavior for
+/// testing, including `ETag` generation and validation of conditional HTTP
+/// requests.
 #[derive(Clone, Debug)]
 pub struct ETagMemoryBackend {
     storage: Arc<RwLock<HashMap<String, Arc<RwLock<FileEntry>>>>>,
@@ -222,7 +223,6 @@ impl ETagMemoryBuilder {
 }
 
 impl Builder for ETagMemoryBuilder {
-    const SCHEME: Scheme = Scheme::Custom(SCHEME_NAME);
     type Config = ();
 
     fn build(self) -> Result<impl Access> {
@@ -242,7 +242,7 @@ impl Access for ETagMemoryBackend {
 
     fn info(&self) -> Arc<AccessorInfo> {
         let info = AccessorInfo::default();
-        info.set_scheme(Scheme::Custom(SCHEME_NAME))
+        info.set_scheme(SCHEME_NAME)
             .set_root("/")
             .set_native_capability(Capability {
                 stat: true,

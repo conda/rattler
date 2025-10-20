@@ -167,6 +167,9 @@ pub fn link_file(
         // bytes which makes it easier to search for the placeholder prefix.
         let source = map_or_read_source_file(&source_path)?;
 
+        // Detect file type from the content
+        let file_type = FileType::detect(source.as_ref());
+
         // Open the destination file
         let destination = BufWriter::with_capacity(
             50 * 1024,
@@ -224,8 +227,9 @@ pub fn link_file(
         fs::set_permissions(&destination_path, metadata.permissions())
             .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
 
-        // (re)sign the binary if the file is executable
-        if has_executable_permissions(&metadata.permissions())
+        // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
+        if (has_executable_permissions(&metadata.permissions())
+            || file_type == Some(FileType::MachO))
             && target_platform == Platform::OsxArm64
             && *file_mode == FileMode::Binary
         {
@@ -757,6 +761,43 @@ fn has_executable_permissions(permissions: &Permissions) -> bool {
     return std::os::unix::fs::PermissionsExt::mode(permissions) & 0o111 != 0;
 }
 
+/// Represents the type of file detected from its content
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum FileType {
+    /// A Mach-O binary (executable, dylib, bundle, etc.)
+    MachO,
+}
+
+impl FileType {
+    // Mach-O magic bytes constants
+    const MACHO_FAT_MAGIC: u32 = 0xcafebabe; // Fat/Universal binary (big-endian)
+    const MACHO_FAT_CIGAM: u32 = 0xbebafeca; // Fat/Universal binary (little-endian)
+    const MACHO_MAGIC_32: u32 = 0xfeedface; // Mach-O 32-bit (big-endian)
+    const MACHO_CIGAM_32: u32 = 0xcefaedfe; // Mach-O 32-bit (little-endian)
+    const MACHO_MAGIC_64: u32 = 0xfeedfacf; // Mach-O 64-bit (big-endian)
+    const MACHO_CIGAM_64: u32 = 0xcffaedfe; // Mach-O 64-bit (little-endian)
+
+    /// Detects the file type by checking its magic bytes.
+    /// Returns `Some(FileType)` if a known file type is detected, `None` otherwise.
+    fn detect(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < 4 {
+            return None;
+        }
+
+        let magic = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+
+        match magic {
+            Self::MACHO_FAT_MAGIC
+            | Self::MACHO_FAT_CIGAM
+            | Self::MACHO_MAGIC_32
+            | Self::MACHO_CIGAM_32
+            | Self::MACHO_MAGIC_64
+            | Self::MACHO_CIGAM_64 => Some(FileType::MachO),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::PYTHON_REGEX;
@@ -952,5 +993,46 @@ mod test {
         for s in no_match_strings {
             assert!(!PYTHON_REGEX.is_match(s));
         }
+    }
+
+    #[test]
+    fn test_detect_file_type() {
+        use super::FileType;
+
+        // Test Mach-O 64-bit magic (big-endian)
+        let macho_64_be = [0xfe, 0xed, 0xfa, 0xcf, 0x00, 0x00];
+        assert_eq!(FileType::detect(&macho_64_be), Some(FileType::MachO));
+
+        // Test Mach-O 64-bit magic (little-endian)
+        let macho_64_le = [0xcf, 0xfa, 0xed, 0xfe, 0x00, 0x00];
+        assert_eq!(FileType::detect(&macho_64_le), Some(FileType::MachO));
+
+        // Test Mach-O 32-bit magic (big-endian)
+        let macho_32_be = [0xfe, 0xed, 0xfa, 0xce, 0x00, 0x00];
+        assert_eq!(FileType::detect(&macho_32_be), Some(FileType::MachO));
+
+        // Test Mach-O 32-bit magic (little-endian)
+        let macho_32_le = [0xce, 0xfa, 0xed, 0xfe, 0x00, 0x00];
+        assert_eq!(FileType::detect(&macho_32_le), Some(FileType::MachO));
+
+        // Test Fat/Universal binary magic (big-endian)
+        let fat_be = [0xca, 0xfe, 0xba, 0xbe, 0x00, 0x00];
+        assert_eq!(FileType::detect(&fat_be), Some(FileType::MachO));
+
+        // Test Fat/Universal binary magic (little-endian)
+        let fat_le = [0xbe, 0xba, 0xfe, 0xca, 0x00, 0x00];
+        assert_eq!(FileType::detect(&fat_le), Some(FileType::MachO));
+
+        // Test non-Mach-O file
+        let not_macho = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05];
+        assert_eq!(FileType::detect(&not_macho), None);
+
+        // Test short file
+        let short = [0xfe, 0xed];
+        assert_eq!(FileType::detect(&short), None);
+
+        // Test empty file
+        let empty: [u8; 0] = [];
+        assert_eq!(FileType::detect(&empty), None);
     }
 }
