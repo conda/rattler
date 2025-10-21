@@ -42,38 +42,42 @@ pub enum ParseCondaLockError {
     LocationToUrlConversionError(#[from] file_url::FileURLParseError),
 }
 
+pub fn parse_from_str(s: &str) -> Result<(LockFile, FileFormatVersion), ParseCondaLockError> {
+    // First parse the document to a `serde_yaml::Value`.
+    let document: Value = serde_yaml::from_str(s).map_err(ParseCondaLockError::ParseError)?;
+
+    // Read the version number from the document
+    let version: FileFormatVersion = document
+        .get("version")
+        .ok_or_else(|| {
+            ParseCondaLockError::ParseError(serde_yaml::Error::custom(
+                "missing `version` field in lock file",
+            ))
+        })
+        .and_then(|v| {
+            let v = v.as_u64().ok_or_else(|| {
+                ParseCondaLockError::ParseError(serde_yaml::Error::custom(
+                    "`version` field in lock file is not an integer",
+                ))
+            })?;
+
+            FileFormatVersion::try_from(v)
+        })?;
+
+    if version <= FileFormatVersion::V3 {
+        parse_v3_or_lower(document, version)
+    } else if version <= FileFormatVersion::V5 {
+        parse_from_document_v5(document, version)
+    } else {
+        deserialize::parse_from_document_v6(document, version)
+    }
+}
+
 impl FromStr for LockFile {
     type Err = ParseCondaLockError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // First parse the document to a `serde_yaml::Value`.
-        let document: Value = serde_yaml::from_str(s).map_err(ParseCondaLockError::ParseError)?;
-
-        // Read the version number from the document
-        let version: FileFormatVersion = document
-            .get("version")
-            .ok_or_else(|| {
-                ParseCondaLockError::ParseError(serde_yaml::Error::custom(
-                    "missing `version` field in lock file",
-                ))
-            })
-            .and_then(|v| {
-                let v = v.as_u64().ok_or_else(|| {
-                    ParseCondaLockError::ParseError(serde_yaml::Error::custom(
-                        "`version` field in lock file is not an integer",
-                    ))
-                })?;
-
-                FileFormatVersion::try_from(v)
-            })?;
-
-        if version <= FileFormatVersion::V3 {
-            parse_v3_or_lower(document, version)
-        } else if version <= FileFormatVersion::V5 {
-            parse_from_document_v5(document, version)
-        } else {
-            deserialize::parse_from_document_v6(document, version)
-        }
+        parse_from_str(s).map(|(lock_file, _version)| lock_file)
     }
 }
 
@@ -110,12 +114,12 @@ mod test {
     // results in identical YAML strings.
     #[test]
     fn test_deterministic_lock_file_ordering() {
-        let lock_file_original = LockFile::from_path(
+        let (lock_file_original, _) = LockFile::from_path(
             &Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../test-data/conda-lock/v5/stability-original.yml"),
         )
         .unwrap();
-        let lock_file_shuffled = LockFile::from_path(
+        let (lock_file_shuffled, _) = LockFile::from_path(
             &Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../test-data/conda-lock/v5/stability-shuffled.yml"),
         )

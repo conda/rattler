@@ -76,7 +76,7 @@
 //! for different platforms and with different channels in a single lock-file.
 //! This allows storing production- and test environments in a single file.
 
-use std::{collections::HashMap, io::Read, path::Path, str::FromStr, sync::Arc};
+use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 
 use fxhash::FxHashMap;
 use indexmap::IndexSet;
@@ -178,17 +178,27 @@ impl LockFile {
         LockFileBuilder::new()
     }
 
-    /// Parses an conda-lock file from a reader.
-    pub fn from_reader(mut reader: impl Read) -> Result<Self, ParseCondaLockError> {
+    /// Parses a conda-lock file from a reader and returns the lock-file together
+    /// with the version that was parsed.
+    pub fn from_reader(
+        mut reader: impl Read,
+    ) -> Result<(Self, FileFormatVersion), ParseCondaLockError> {
         let mut str = String::new();
         reader.read_to_string(&mut str)?;
-        Self::from_str(&str)
+        Self::parse_str(&str)
     }
 
-    /// Parses an conda-lock file from a file.
-    pub fn from_path(path: &Path) -> Result<Self, ParseCondaLockError> {
+    /// Parses a conda-lock file from a file and returns the lock-file together
+    /// with the version that was parsed.
+    pub fn from_path(path: &Path) -> Result<(Self, FileFormatVersion), ParseCondaLockError> {
         let source = std::fs::read_to_string(path)?;
-        Self::from_str(&source)
+        Self::parse_str(&source)
+    }
+
+    /// Parses a conda-lock file from a string and returns the lock-file
+    /// together with the version that was parsed.
+    pub fn parse_str(source: &str) -> Result<(Self, FileFormatVersion), ParseCondaLockError> {
+        crate::parse::parse_from_str(source)
     }
 
     /// Writes the conda lock to a file
@@ -569,7 +579,7 @@ mod test {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
             .join(file_name);
-        let conda_lock = LockFile::from_path(&path).unwrap();
+        let (conda_lock, _) = LockFile::from_path(&path).unwrap();
         insta::assert_yaml_snapshot!(file_name, conda_lock);
     }
 
@@ -580,7 +590,7 @@ mod test {
         path: PathBuf,
     ) {
         // Load the lock-file
-        let conda_lock = LockFile::from_path(&path).unwrap();
+        let (conda_lock, _) = LockFile::from_path(&path).unwrap();
 
         // Serialize the lock-file
         let rendered_lock_file = conda_lock.render_to_string().unwrap();
@@ -611,7 +621,7 @@ mod test {
             .join("v0/numpy-conda-lock.yml");
 
         // Try to read conda_lock
-        let conda_lock = LockFile::from_path(&path).unwrap();
+        let (conda_lock, _) = LockFile::from_path(&path).unwrap();
 
         insta::assert_yaml_snapshot!(conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
@@ -636,7 +646,7 @@ mod test {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
             .join("v4/pypi-matplotlib-lock.yml");
-        let conda_lock = LockFile::from_path(&path).unwrap();
+        let (conda_lock, _) = LockFile::from_path(&path).unwrap();
 
         assert!(conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
@@ -647,7 +657,7 @@ mod test {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
             .join("v6/numpy-as-pypi-lock.yml");
-        let conda_lock = LockFile::from_path(&path).unwrap();
+        let (conda_lock, _) = LockFile::from_path(&path).unwrap();
 
         assert!(conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
@@ -657,7 +667,7 @@ mod test {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
             .join("v6/python-from-conda-only-lock.yml");
-        let conda_lock = LockFile::from_path(&path).unwrap();
+        let (conda_lock, _) = LockFile::from_path(&path).unwrap();
 
         assert!(!conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
@@ -670,13 +680,13 @@ mod test {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
             .join("v6/empty-lock.yml");
-        let conda_lock = LockFile::from_path(&path).unwrap();
+        let (conda_lock, _) = LockFile::from_path(&path).unwrap();
         assert!(conda_lock.is_empty());
 
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
             .join("v6/python-from-conda-only-lock.yml");
-        let conda_lock = LockFile::from_path(&path).unwrap();
+        let (conda_lock, _) = LockFile::from_path(&path).unwrap();
         assert!(!conda_lock.is_empty());
     }
 

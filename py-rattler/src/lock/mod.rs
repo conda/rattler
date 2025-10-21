@@ -73,9 +73,8 @@ impl PyLockFile {
     /// Parses an rattler-lock file from a file.
     #[staticmethod]
     pub fn from_path(path: PathBuf) -> PyResult<Self> {
-        Ok(LockFile::from_path(&path)
-            .map(Into::into)
-            .map_err(PyRattlerError::from)?)
+        let (lock_file, _version) = LockFile::from_path(&path).map_err(PyRattlerError::from)?;
+        Ok(lock_file.into())
     }
 
     /// Returns the environment with the given name.

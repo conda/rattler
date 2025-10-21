@@ -7,7 +7,6 @@ use std::{
 
 use fxhash::FxHashMap;
 use indexmap::IndexSet;
-use itertools::Either;
 use pep508_rs::ExtraName;
 use rattler_conda_types::{PackageName, Platform, VersionWithSource};
 use serde::{de::Error, Deserialize, Deserializer};
@@ -22,15 +21,20 @@ use crate::{
     UrlOrPath,
 };
 
+/// Schema-agnostic lock-file representation used during deserialization.
+///
+/// `P` controls how individual package entries are mapped (it picks the
+/// version-specific model, e.g. v5 vs v6), while `S` defines the selector type
+/// that environments emit for those packages in this file format.
 #[serde_as]
 #[derive(Deserialize)]
-#[serde(bound(deserialize = "P: DeserializeAs<'de, PackageData>"))]
-struct DeserializableLockFile<P> {
-    environments: BTreeMap<String, DeserializableEnvironment>,
+#[serde(bound(deserialize = "P: DeserializeAs<'de, PackageData>, S: Deserialize<'de>"))]
+struct DeserializableLockFile<P, S> {
+    environments: BTreeMap<String, DeserializableEnvironment<S>>,
     #[serde_as(as = "Vec<P>")]
     packages: Vec<PackageData>,
     #[serde(skip)]
-    _data: PhantomData<P>,
+    _marker: PhantomData<(P, S)>,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -39,14 +43,19 @@ enum PackageData {
     Pypi(PypiPackageData),
 }
 
+/// Environment payload as stored on disk for a specific format version.
+///
+/// `S` is the selector representation for that version (used later to resolve
+/// actual package indices inside `parse_from_lock`).
 #[derive(Deserialize)]
-struct DeserializableEnvironment {
+#[serde(bound(deserialize = "S: Deserialize<'de>"))]
+struct DeserializableEnvironment<S> {
     channels: Vec<Channel>,
     #[serde(flatten)]
     indexes: Option<PypiIndexes>,
     #[serde(default)]
     options: SolveOptions,
-    packages: BTreeMap<Platform, Vec<DeserializablePackageSelector>>,
+    packages: BTreeMap<Platform, Vec<S>>,
 }
 
 impl<'de> DeserializeAs<'de, PackageData> for V5 {
@@ -111,22 +120,32 @@ impl<'de> DeserializeAs<'de, PackageData> for V6 {
 }
 
 #[derive(Deserialize)]
-#[serde(untagged, rename_all = "snake_case")]
-#[allow(clippy::large_enum_variant)]
-enum DeserializablePackageSelector {
-    Conda {
-        conda: UrlOrPath,
-        name: Option<PackageName>,
-        version: Option<VersionWithSource>,
-        build: Option<String>,
-        subdir: Option<String>,
-    },
-    Pypi {
-        pypi: UrlOrPath,
-        #[serde(flatten)]
-        runtime: DeserializablePypiPackageEnvironmentData,
-    },
+struct CondaSelectorV6 {
+    #[serde(rename = "conda")]
+    conda: UrlOrPath,
+    name: Option<PackageName>,
+    version: Option<VersionWithSource>,
+    build: Option<String>,
+    subdir: Option<String>,
 }
+
+#[derive(Deserialize)]
+struct PypiSelector {
+    #[serde(rename = "pypi")]
+    pypi: UrlOrPath,
+    #[serde(flatten)]
+    runtime: DeserializablePypiPackageEnvironmentData,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
+enum DeserializablePackageSelectorV6 {
+    Conda(CondaSelectorV6),
+    Pypi(PypiSelector),
+}
+
+type DeserializablePackageSelectorV5 = DeserializablePackageSelectorV6;
 
 #[derive(Hash, Deserialize, Eq, PartialEq)]
 struct DeserializablePypiPackageEnvironmentData {
@@ -142,33 +161,208 @@ impl From<DeserializablePypiPackageEnvironmentData> for PypiPackageEnvironmentDa
     }
 }
 
+/// Shared context used while resolving selectors into concrete package indices.
+struct ResolveCtx<'a> {
+    file_version: FileFormatVersion,
+    environment_name: &'a str,
+    platform: Platform,
+    conda_packages: &'a mut Vec<CondaPackageData>,
+    conda_url_lookup: &'a FxHashMap<UrlOrPath, Vec<usize>>,
+    pypi_url_lookup: &'a FxHashMap<UrlOrPath, usize>,
+    pypi_runtime_lookup: &'a mut IndexSet<DeserializablePypiPackageEnvironmentData>,
+}
+
+/// Trait implemented by version-specific selector enums so they can resolve
+/// themselves into canonical `EnvironmentPackageData` entries.
+trait PackageSelector {
+    fn resolve(
+        self,
+        ctx: &mut ResolveCtx<'_>,
+    ) -> Result<EnvironmentPackageData, ParseCondaLockError>;
+}
+
+impl PackageSelector for DeserializablePackageSelectorV6 {
+    fn resolve(
+        self,
+        ctx: &mut ResolveCtx<'_>,
+    ) -> Result<EnvironmentPackageData, ParseCondaLockError> {
+        match self {
+            DeserializablePackageSelectorV6::Conda(selector) => {
+                resolve_conda_selector(selector, ctx)
+            }
+            DeserializablePackageSelectorV6::Pypi(selector) => resolve_pypi_selector(selector, ctx),
+        }
+    }
+}
+
+/// Resolve a v6+ conda selector into the correct package index, using either
+/// legacy merge behaviour or strict field matching depending on the file version.
+fn resolve_conda_selector(
+    selector: CondaSelectorV6,
+    ctx: &mut ResolveCtx<'_>,
+) -> Result<EnvironmentPackageData, ParseCondaLockError> {
+    let CondaSelectorV6 {
+        conda,
+        name,
+        version,
+        build,
+        subdir,
+    } = selector;
+
+    let candidates = ctx
+        .conda_url_lookup
+        .get(&conda)
+        .map_or(&[] as &[usize], Vec::as_slice);
+
+    let package_index = if ctx.file_version < FileFormatVersion::V6 {
+        resolve_conda_selector_pre_v6(ctx.conda_packages, candidates, ctx.platform)
+    } else {
+        resolve_conda_selector_v6(
+            ctx.conda_packages.as_slice(),
+            candidates,
+            name.as_ref(),
+            version.as_ref(),
+            build.as_deref(),
+            subdir.as_deref(),
+        )
+    };
+
+    let package_index = package_index.ok_or_else(|| {
+        ParseCondaLockError::MissingPackage(
+            ctx.environment_name.to_string(),
+            ctx.platform,
+            conda.clone(),
+        )
+    })?;
+
+    Ok(EnvironmentPackageData::Conda(package_index))
+}
+
+/// Legacy (pre-v6) selector resolution that merges duplicate records when only
+/// location information is available.
+fn resolve_conda_selector_pre_v6(
+    conda_packages: &mut Vec<CondaPackageData>,
+    candidates: &[usize],
+    platform: Platform,
+) -> Option<usize> {
+    let mut indices: Vec<usize> = candidates
+        .iter()
+        .copied()
+        .filter(|&idx| conda_packages[idx].record().subdir.as_str() == platform.as_str())
+        .collect();
+
+    if indices.is_empty() {
+        indices.extend_from_slice(candidates);
+    }
+
+    let mut iter = indices.into_iter();
+    let first_package_idx = iter.next()?;
+
+    let merged_package = iter.fold(
+        Cow::Borrowed(&conda_packages[first_package_idx]),
+        |acc, next_package_idx| {
+            if let Cow::Owned(merged) = acc.merge(&conda_packages[next_package_idx]) {
+                Cow::Owned(merged)
+            } else {
+                acc
+            }
+        },
+    );
+
+    Some(match merged_package {
+        Cow::Borrowed(_) => first_package_idx,
+        Cow::Owned(package) => {
+            conda_packages.push(package);
+            conda_packages.len() - 1
+        }
+    })
+}
+
+/// Modern selector resolution relying on explicit metadata (name/version/build/subdir).
+fn resolve_conda_selector_v6(
+    conda_packages: &[CondaPackageData],
+    candidates: &[usize],
+    name: Option<&PackageName>,
+    version: Option<&VersionWithSource>,
+    build: Option<&str>,
+    subdir: Option<&str>,
+) -> Option<usize> {
+    candidates
+        .iter()
+        .find(|&&idx| {
+            let conda_package = &conda_packages[idx];
+            let record = conda_package.record();
+            let record_name = &record.name;
+            let record_version = &record.version;
+            let record_build = record.build.as_str();
+            let record_subdir = record.subdir.as_str();
+            name.as_ref()
+                .is_none_or(|expected| *expected == record_name)
+                && version
+                    .as_ref()
+                    .is_none_or(|expected| *expected == record_version)
+                && build.is_none_or(|expected| expected == record_build)
+                && subdir.is_none_or(|expected| expected == record_subdir)
+        })
+        .copied()
+}
+
+/// Resolve a PyPI selector into the shared package index while deduplicating
+/// environment runtime configurations.
+fn resolve_pypi_selector(
+    selector: PypiSelector,
+    ctx: &mut ResolveCtx<'_>,
+) -> Result<EnvironmentPackageData, ParseCondaLockError> {
+    let index = *ctx.pypi_url_lookup.get(&selector.pypi).ok_or_else(|| {
+        ParseCondaLockError::MissingPackage(
+            ctx.environment_name.to_string(),
+            ctx.platform,
+            selector.pypi.clone(),
+        )
+    })?;
+
+    let runtime_idx = ctx.pypi_runtime_lookup.insert_full(selector.runtime).0;
+
+    Ok(EnvironmentPackageData::Pypi(index, runtime_idx))
+}
+
 /// Parses a [`LockFile`] from a [`serde_yaml::Value`].
 pub fn parse_from_document_v5(
     document: Value,
     version: FileFormatVersion,
-) -> Result<LockFile, ParseCondaLockError> {
-    let raw: DeserializableLockFile<V5> =
+) -> Result<(LockFile, FileFormatVersion), ParseCondaLockError> {
+    let raw: DeserializableLockFile<V5, DeserializablePackageSelectorV5> =
         serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
-    parse_from_lock(version, raw)
+    parse_from_lock(version, raw).map(|lock_file| (lock_file, version))
 }
 
 pub fn parse_from_document_v6(
     document: Value,
     version: FileFormatVersion,
-) -> Result<LockFile, ParseCondaLockError> {
-    let raw: DeserializableLockFile<V6> =
+) -> Result<(LockFile, FileFormatVersion), ParseCondaLockError> {
+    let raw: DeserializableLockFile<V6, DeserializablePackageSelectorV6> =
         serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
-    parse_from_lock(version, raw)
+    parse_from_lock(version, raw).map(|lock_file| (lock_file, version))
 }
 
-fn parse_from_lock<P>(
+/// Convert the intermediate lock-file representation into the canonical in-memory model.
+fn parse_from_lock<P, S>(
     file_version: FileFormatVersion,
-    raw: DeserializableLockFile<P>,
-) -> Result<LockFile, ParseCondaLockError> {
+    raw: DeserializableLockFile<P, S>,
+) -> Result<LockFile, ParseCondaLockError>
+where
+    S: PackageSelector,
+{
+    let DeserializableLockFile {
+        environments: raw_environments,
+        packages: raw_packages,
+        ..
+    } = raw;
+
     // Split the packages into conda and pypi packages.
     let mut conda_packages = Vec::new();
     let mut pypi_packages = Vec::new();
-    for package in raw.packages {
+    for package in raw_packages {
         match package {
             PackageData::Conda(p) => conda_packages.push(p),
             PackageData::Pypi(p) => pypi_packages.push(p),
@@ -187,150 +381,48 @@ fn parse_from_lock<P>(
     let pypi_url_lookup = pypi_packages
         .iter()
         .enumerate()
-        .map(|(idx, p)| (&p.location, idx))
+        .map(|(idx, package)| (package.location.clone(), idx))
         .collect::<FxHashMap<_, _>>();
     let mut pypi_runtime_lookup = IndexSet::new();
 
-    let environments = raw
-        .environments
+    let environments = raw_environments
         .into_iter()
         .map(|(environment_name, env)| {
+            let DeserializableEnvironment {
+                channels,
+                indexes,
+                options,
+                packages,
+            } = env;
+
+            let mut packages_by_platform = FxHashMap::default();
+            for (platform, selectors) in packages {
+                let mut ctx = ResolveCtx {
+                    file_version,
+                    environment_name: &environment_name,
+                    platform,
+                    conda_packages: &mut conda_packages,
+                    conda_url_lookup: &conda_url_lookup,
+                    pypi_url_lookup: &pypi_url_lookup,
+                    pypi_runtime_lookup: &mut pypi_runtime_lookup,
+                };
+
+                let mut platform_packages = IndexSet::new();
+                for selector in selectors {
+                    let package = selector.resolve(&mut ctx)?;
+                    platform_packages.insert(package);
+                }
+
+                packages_by_platform.insert(platform, platform_packages);
+            }
+
             Ok((
                 environment_name.clone(),
                 EnvironmentData {
-                    channels: env.channels,
-                    indexes: env.indexes,
-                    options: env.options,
-                    packages: env
-                        .packages
-                        .into_iter()
-                        .map(|(platform, packages)| {
-                            let packages = packages
-                                .into_iter()
-                                .map(|p| {
-                                    Ok(match p {
-                                        DeserializablePackageSelector::Conda {
-                                            conda,
-                                            name,
-                                            version,
-                                            build,
-                                            subdir,
-                                        } => {
-                                            let all_packages = conda_url_lookup
-                                                .get(&conda)
-                                                .map_or(&[] as &[usize], Vec::as_slice);
-
-                                            // Before V6 the package was selected by the first
-                                            // match. This is actually a bug because when parsing an
-                                            // older lock-file there can be more than one package
-                                            // with the same url. Instead, we should look at the
-                                            // subdir to disambiguate.
-                                            let package_index: Option<usize> = if file_version
-                                                < FileFormatVersion::V6
-                                            {
-                                                // Find the packages that match the subdir of
-                                                // this environment
-                                                let mut all_packages_with_subdir = all_packages
-                                                    .iter()
-                                                    .filter(|&idx| {
-                                                        let conda_package = &conda_packages[*idx];
-                                                        conda_package.record().subdir.as_str()
-                                                            == platform.as_str()
-                                                    })
-                                                    .peekable();
-
-                                                // If there are no packages for the subdir, use all
-                                                // packages.
-                                                let mut matching_packages =
-                                                    if all_packages_with_subdir.peek().is_some() {
-                                                        Either::Left(all_packages_with_subdir)
-                                                    } else {
-                                                        Either::Right(all_packages.iter())
-                                                    };
-
-                                                // Merge all matching packages.
-                                                if let Some(&first_package_idx) =
-                                                    matching_packages.next()
-                                                {
-                                                    let merged_package = Cow::Borrowed(
-                                                        &conda_packages[first_package_idx],
-                                                    );
-                                                    let package = matching_packages.fold(
-                                                        merged_package,
-                                                        |acc, &next_package_idx| {
-                                                            if let Cow::Owned(merged) = acc.merge(
-                                                                &conda_packages[next_package_idx],
-                                                            ) {
-                                                                Cow::Owned(merged)
-                                                            } else {
-                                                                acc
-                                                            }
-                                                        },
-                                                    );
-                                                    Some(match package {
-                                                        Cow::Borrowed(_) => first_package_idx,
-                                                        Cow::Owned(package) => {
-                                                            conda_packages.push(package);
-                                                            conda_packages.len() - 1
-                                                        }
-                                                    })
-                                                } else {
-                                                    None
-                                                }
-                                            } else {
-                                                // Find the package that matches all the fields from
-                                                // the selector.
-                                                all_packages
-                                                    .iter()
-                                                    .find(|&idx| {
-                                                        let conda_package = &conda_packages[*idx];
-                                                        name.as_ref().is_none_or(|name| {
-                                                            name == &conda_package.record().name
-                                                        }) && version.as_ref().is_none_or(
-                                                            |version| {
-                                                                version
-                                                                    == &conda_package
-                                                                        .record()
-                                                                        .version
-                                                            },
-                                                        ) && build.as_ref().is_none_or(|build| {
-                                                            build == &conda_package.record().build
-                                                        }) && subdir.as_ref().is_none_or(|subdir| {
-                                                            subdir == &conda_package.record().subdir
-                                                        })
-                                                    })
-                                                    .copied()
-                                            };
-
-                                            EnvironmentPackageData::Conda(
-                                                package_index.ok_or_else(|| {
-                                                    ParseCondaLockError::MissingPackage(
-                                                        environment_name.clone(),
-                                                        platform,
-                                                        conda,
-                                                    )
-                                                })?,
-                                            )
-                                        }
-                                        DeserializablePackageSelector::Pypi { pypi, runtime } => {
-                                            EnvironmentPackageData::Pypi(
-                                                *pypi_url_lookup.get(&pypi).ok_or_else(|| {
-                                                    ParseCondaLockError::MissingPackage(
-                                                        environment_name.clone(),
-                                                        platform,
-                                                        pypi,
-                                                    )
-                                                })?,
-                                                pypi_runtime_lookup.insert_full(runtime).0,
-                                            )
-                                        }
-                                    })
-                                })
-                                .collect::<Result<_, ParseCondaLockError>>()?;
-
-                            Ok((platform, packages))
-                        })
-                        .collect::<Result<_, ParseCondaLockError>>()?,
+                    channels,
+                    indexes,
+                    options,
+                    packages: packages_by_platform,
                 },
             ))
         })
