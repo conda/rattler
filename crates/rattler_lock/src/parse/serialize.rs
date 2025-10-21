@@ -6,7 +6,7 @@ use std::{
 
 use itertools::Itertools;
 use pep508_rs::ExtraName;
-use rattler_conda_types::{PackageName, Platform, VersionWithSource};
+use rattler_conda_types::{PackageName, Platform};
 use serde::{Serialize, Serializer};
 use serde_with::{serde_as, SerializeAs};
 use url::Url;
@@ -41,38 +41,36 @@ struct SerializableEnvironment<'a> {
 }
 
 impl<'a> SerializableEnvironment<'a> {
-    fn from_environment(
+    fn from_environment<E: serde::ser::Error>(
         inner: &'a LockFileInner,
         env_data: &'a EnvironmentData,
         used_conda_packages: &HashSet<usize>,
         used_pypi_packages: &HashSet<usize>,
-    ) -> Self {
-        SerializableEnvironment {
+    ) -> Result<Self, E> {
+        let mut packages = BTreeMap::new();
+
+        for (platform, platform_packages) in &env_data.packages {
+            let mut selectors = Vec::new();
+            for &package_data in platform_packages {
+                let selector = SerializablePackageSelector::from_lock_file(
+                    inner,
+                    package_data,
+                    *platform,
+                    used_conda_packages,
+                    used_pypi_packages,
+                )?;
+                selectors.push(selector);
+            }
+            selectors.sort();
+            packages.insert(*platform, selectors);
+        }
+
+        Ok(SerializableEnvironment {
             channels: &env_data.channels,
             indexes: env_data.indexes.as_ref(),
             options: env_data.options.clone(),
-            packages: env_data
-                .packages
-                .iter()
-                .map(|(platform, packages)| {
-                    (
-                        *platform,
-                        packages
-                            .iter()
-                            .map(|&package_data| {
-                                SerializablePackageSelector::from_lock_file(
-                                    inner,
-                                    package_data,
-                                    used_conda_packages,
-                                    used_pypi_packages,
-                                )
-                            })
-                            .sorted()
-                            .collect(),
-                    )
-                })
-                .collect(),
-        }
+            packages,
+        })
     }
 }
 
@@ -117,12 +115,10 @@ enum SerializablePackageSelector<'a> {
         conda: &'a UrlOrPath,
         #[serde(skip_serializing_if = "Option::is_none")]
         name: Option<&'a PackageName>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        version: Option<&'a VersionWithSource>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        build: Option<&'a str>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        subdir: Option<&'a str>,
+        // V7: variants for source package disambiguation
+        // Binary packages have empty variants map
+        #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+        variants: BTreeMap<String, crate::VariantValue>,
     },
     Pypi {
         pypi: &'a UrlOrPath,
@@ -134,51 +130,51 @@ enum SerializablePackageSelector<'a> {
 #[derive(Copy, Clone)]
 enum CondaDisambiguityFilter {
     Name,
-    Version,
-    Build,
-    Subdir,
+    // V7: TODO - add Variants filter for source packages
 }
 
 impl CondaDisambiguityFilter {
-    fn all() -> [CondaDisambiguityFilter; 4] {
-        [Self::Name, Self::Version, Self::Build, Self::Subdir]
+    fn all() -> [CondaDisambiguityFilter; 1] {
+        [Self::Name]
     }
 
     fn filter(&self, package: &CondaPackageData, other: &CondaPackageData) -> bool {
         match self {
             Self::Name => package.record().name == other.record().name,
-            Self::Version => package.record().version == other.record().version,
-            Self::Build => package.record().build == other.record().build,
-            Self::Subdir => package.record().subdir == other.record().subdir,
         }
     }
 }
 
 impl<'a> SerializablePackageSelector<'a> {
-    fn from_lock_file(
+    fn from_lock_file<E: serde::ser::Error>(
         inner: &'a LockFileInner,
         package: EnvironmentPackageData,
+        platform: Platform,
         used_conda_packages: &HashSet<usize>,
         used_pypi_packages: &HashSet<usize>,
-    ) -> Self {
+    ) -> Result<Self, E> {
         match package {
-            EnvironmentPackageData::Conda(idx) => {
-                Self::from_conda(inner, &inner.conda_packages[idx], used_conda_packages)
-            }
-            EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Self::from_pypi(
+            EnvironmentPackageData::Conda(idx) => Self::from_conda(
+                inner,
+                &inner.conda_packages[idx],
+                platform,
+                used_conda_packages,
+            ),
+            EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Ok(Self::from_pypi(
                 inner,
                 &inner.pypi_packages[pkg_data_idx],
                 &inner.pypi_environment_package_data[env_data_idx],
                 used_pypi_packages,
-            ),
+            )),
         }
     }
 
-    fn from_conda(
+    fn from_conda<E: serde::ser::Error>(
         inner: &'a LockFileInner,
         package: &'a CondaPackageData,
+        platform: Platform,
         used_conda_packages: &HashSet<usize>,
-    ) -> Self {
+    ) -> Result<Self, E> {
         // Find all packages that share the same location
         let mut similar_packages = inner
             .conda_packages
@@ -188,12 +184,24 @@ impl<'a> SerializablePackageSelector<'a> {
             .filter(|p| p.location() == package.location())
             .collect::<Vec<_>>();
 
-        // Iterate over other distinguishing factors and reduce the set of possible
-        // packages to a minimum with the least number of keys added.
+        // If there are multiple packages at the same location, filter by subdir for binary packages
+        // Source packages don't have subdirs (they're platform-independent)
+        if similar_packages.len() > 1 {
+            similar_packages.retain(|p| {
+                // Binary packages: must match the platform's subdir OR be noarch
+                if let Some(binary) = p.as_binary() {
+                    return binary.package_record.subdir == platform.as_str()
+                        || binary.package_record.subdir == "noarch";
+                }
+
+                // Source packages: keep all
+                true
+            });
+        }
+
+        // V7: For disambiguation, we only use name (and variants for source packages in the future)
+        // Binary packages are unique by location + subdir, so we only add name if needed
         let mut name = None;
-        let mut version = None;
-        let mut build = None;
-        let mut subdir = None;
         while similar_packages.len() > 1 {
             let (filter, similar) = CondaDisambiguityFilter::all()
                 .into_iter()
@@ -220,25 +228,27 @@ impl<'a> SerializablePackageSelector<'a> {
                 CondaDisambiguityFilter::Name => {
                     name = Some(&package.record().name);
                 }
-                CondaDisambiguityFilter::Version => {
-                    version = Some(&package.record().version);
-                }
-                CondaDisambiguityFilter::Build => {
-                    build = Some(package.record().build.as_str());
-                }
-                CondaDisambiguityFilter::Subdir => {
-                    subdir = Some(package.record().subdir.as_str());
-                }
             }
         }
 
-        Self::Conda {
+        // V7: Check if we have multiple source packages that couldn't be disambiguated
+        // This happens when deserializing V6 files which lack variant information
+        if similar_packages.len() > 1 && package.as_source().is_some() {
+            return Err(E::custom(format!(
+                "Failed to disambiguate source packages at location '{}'. \
+                 Multiple source packages exist but cannot be distinguished without variant information. \
+                 This typically occurs when converting from lock file format V6 to V7.",
+                package.location()
+            )));
+        }
+
+        Ok(Self::Conda {
             conda: package.location(),
             name,
-            version,
-            build,
-            subdir,
-        }
+            // TODO: For V7 source packages, populate variants from CondaSourceData
+            // For now, always empty
+            variants: BTreeMap::new(),
+        })
     }
 
     fn from_pypi(
@@ -281,22 +291,16 @@ impl Ord for SerializablePackageSelector<'_> {
                 SerializablePackageSelector::Conda {
                     conda: a,
                     name: name_a,
-                    build: build_a,
-                    version: version_a,
-                    subdir: subdir_a,
+                    variants: variants_a,
                 },
                 SerializablePackageSelector::Conda {
                     conda: b,
                     name: name_b,
-                    build: build_b,
-                    version: version_b,
-                    subdir: subdir_b,
+                    variants: variants_b,
                 },
             ) => compare_url_by_location(a, b)
                 .then_with(|| name_a.cmp(name_b))
-                .then_with(|| version_a.cmp(version_b))
-                .then_with(|| build_a.cmp(build_b))
-                .then_with(|| subdir_a.cmp(subdir_b)),
+                .then_with(|| variants_a.cmp(variants_b)),
             (
                 SerializablePackageSelector::Pypi { pypi: a, .. },
                 SerializablePackageSelector::Pypi { pypi: b, .. },
@@ -380,21 +384,16 @@ impl Serialize for LockFile {
         }
 
         // Collect all environments
-        let environments = inner
-            .environment_lookup
-            .iter()
-            .map(|(name, env_idx)| {
-                (
-                    name,
-                    SerializableEnvironment::from_environment(
-                        inner,
-                        &inner.environments[*env_idx],
-                        &used_conda_packages,
-                        &used_pypi_packages,
-                    ),
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
+        let mut environments = BTreeMap::new();
+        for (name, env_idx) in &inner.environment_lookup {
+            let env = SerializableEnvironment::from_environment(
+                inner,
+                &inner.environments[*env_idx],
+                &used_conda_packages,
+                &used_pypi_packages,
+            )?;
+            environments.insert(name, env);
+        }
 
         // Get all packages.
         let conda_packages = inner

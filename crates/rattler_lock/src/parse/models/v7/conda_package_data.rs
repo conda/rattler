@@ -126,6 +126,10 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
+
+    // V7-specific: variants for source package disambiguation
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub variants: BTreeMap<String, crate::VariantValue>,
 }
 
 #[serde_as]
@@ -309,6 +313,8 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             }),
             package_build_source: package_build_source.cloned(),
             sources,
+            // TODO: Extract variants from CondaSourceData when it has variants field
+            variants: BTreeMap::new(),
         }
     }
 }

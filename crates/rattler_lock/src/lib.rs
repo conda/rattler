@@ -99,7 +99,7 @@ pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
 pub use conda::{
     CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
-    PackageBuildSource, PackageBuildSourceKind,
+    PackageBuildSource, PackageBuildSourceKind, VariantValue,
 };
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
@@ -562,7 +562,6 @@ mod test {
     #[case::v4_pypi_absolute_path("v4/absolute-path-lock.yml")]
     #[case::v5_pypi_flat_index("v5/flat-index-lock.yml")]
     #[case::v5_with_and_without_purl("v5/similar-with-and-without-purl.yml")]
-    #[case::v6_conda_source_path("v6/conda-path-lock.yml")]
     #[case::v6_derived_channel("v6/derived-channel-lock.yml")]
     #[case::v6_sources("v6/sources-lock.yml")]
     #[case::v6_options("v6/options-lock.yml")]
@@ -578,10 +577,41 @@ mod test {
         insta::assert_yaml_snapshot!(file_name, conda_lock);
     }
 
+    /// Test that V6 lock files with ambiguous source packages fail to serialize to V7
+    /// because they cannot be disambiguated without variant information.
+    #[rstest]
+    #[case::v6_conda_source_path("v6/conda-path-lock.yml")]
+    fn test_v6_ambiguous_source_packages_error(#[case] file_name: &str) {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join(file_name);
+
+        // Parsing should succeed
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        // But serialization should fail with a clear error about ambiguous source packages
+        let result = conda_lock.render_to_string();
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("Failed to disambiguate source packages"),
+            "Expected error about ambiguous source packages, got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("cannot be distinguished without variant information"),
+            "Expected error to mention variant information, got: {}",
+            err_msg
+        );
+    }
+
     #[rstest]
     fn test_roundtrip(
         #[files("../../test-data/conda-lock/**/*.yml")]
         #[exclude("forward-compatible-lock")]
+        #[exclude("conda-path-lock")]
         path: PathBuf,
     ) {
         // Load the lock-file

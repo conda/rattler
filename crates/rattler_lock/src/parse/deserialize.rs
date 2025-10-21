@@ -188,16 +188,16 @@ enum DeserializablePackageSelectorV6 {
 
 type DeserializablePackageSelectorV5 = DeserializablePackageSelectorV6;
 
-// V7 selectors - initially identical to V6, will support variants later
+// V7 selectors - simplified, use variants for source package disambiguation
+// Binary packages are unique by location, so no version/build/subdir needed
 #[derive(Deserialize)]
 struct CondaSelectorV7 {
     #[serde(rename = "conda")]
     conda: UrlOrPath,
     name: Option<PackageName>,
-    version: Option<VersionWithSource>,
-    build: Option<String>,
-    subdir: Option<String>,
-    // TODO: Add variants field in later steps for V7-specific disambiguation
+    // For source packages: variants-based disambiguation
+    #[serde(default)]
+    variants: BTreeMap<String, crate::VariantValue>,
 }
 
 #[derive(Deserialize)]
@@ -263,19 +263,77 @@ impl PackageSelector for DeserializablePackageSelectorV7 {
     ) -> Result<EnvironmentPackageData, ParseCondaLockError> {
         match self {
             DeserializablePackageSelectorV7::Conda(selector) => {
-                // Convert V7 selector to V6 selector format
-                let v6_selector = CondaSelectorV6 {
-                    conda: selector.conda,
-                    name: selector.name,
-                    version: selector.version,
-                    build: selector.build,
-                    subdir: selector.subdir,
-                };
-                resolve_conda_selector(v6_selector, ctx)
+                resolve_conda_selector_v7(selector, ctx)
             }
             DeserializablePackageSelectorV7::Pypi(selector) => resolve_pypi_selector(selector, ctx),
         }
     }
+}
+
+/// Resolve a V7 conda selector using simplified logic:
+/// - Binary packages are unique by location (no disambiguation needed)
+/// - Source packages use variants for disambiguation
+fn resolve_conda_selector_v7(
+    selector: CondaSelectorV7,
+    ctx: &mut ResolveCtx<'_>,
+) -> Result<EnvironmentPackageData, ParseCondaLockError> {
+    let CondaSelectorV7 {
+        conda,
+        name,
+        variants,
+    } = selector;
+
+    let candidates = ctx
+        .conda_url_lookup
+        .get(&conda)
+        .map_or(&[] as &[usize], Vec::as_slice);
+
+    // Find matching package
+    // Binary packages: must match by location + subdir (or be noarch)
+    // Source packages: match by location + name + variants
+    let package_index = candidates
+        .iter()
+        .find(|&&idx| {
+            let conda_package = &ctx.conda_packages[idx];
+
+            // Name must match if specified
+            if let Some(expected_name) = &name {
+                if &conda_package.record().name != expected_name {
+                    return false;
+                }
+            }
+
+            // For source packages, variants must match
+            // For binary packages, must match subdir and have empty variants
+            match conda_package {
+                CondaPackageData::Source(_source) => {
+                    // TODO: Match variants when CondaSourceData has variants field
+                    // For now, just match by name
+                    true
+                }
+                CondaPackageData::Binary(binary) => {
+                    // Binary packages don't use variants
+                    if !variants.is_empty() {
+                        return false;
+                    }
+
+                    // Must match the current platform's subdir OR be noarch
+                    binary.package_record.subdir == ctx.platform.as_str()
+                        || binary.package_record.subdir == "noarch"
+                }
+            }
+        })
+        .copied();
+
+    let package_index = package_index.ok_or_else(|| {
+        ParseCondaLockError::MissingPackage(
+            ctx.environment_name.to_string(),
+            ctx.platform,
+            conda.clone(),
+        )
+    })?;
+
+    Ok(EnvironmentPackageData::Conda(package_index))
 }
 
 /// Resolve a v6+ conda selector into the correct package index, using either
