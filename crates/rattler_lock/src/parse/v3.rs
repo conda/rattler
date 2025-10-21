@@ -129,7 +129,7 @@ pub struct CondaLockedPackageV3 {
 pub fn parse_v3_or_lower(
     document: serde_yaml::Value,
     version: FileFormatVersion,
-) -> Result<(LockFile, FileFormatVersion), ParseCondaLockError> {
+) -> Result<LockFile, ParseCondaLockError> {
     let lock_file: LockFileV3 =
         serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
 
@@ -261,23 +261,20 @@ pub fn parse_v3_or_lower(
         options: SolveOptions::default(),
     };
 
-    Ok((
-        LockFile {
-            inner: Arc::new(LockFileInner {
-                version,
-                conda_packages: conda_packages.into_iter().collect(),
-                pypi_packages: pypi_packages.into_iter().collect(),
-                pypi_environment_package_data: pypi_runtime_configs
-                    .into_iter()
-                    .map(Into::into)
-                    .collect(),
+    Ok(LockFile {
+        inner: Arc::new(LockFileInner {
+            version,
+            conda_packages: conda_packages.into_iter().collect(),
+            pypi_packages: pypi_packages.into_iter().collect(),
+            pypi_environment_package_data: pypi_runtime_configs
+                .into_iter()
+                .map(Into::into)
+                .collect(),
 
-                environment_lookup: [(DEFAULT_ENVIRONMENT_NAME.to_string(), 0)]
-                    .into_iter()
-                    .collect(),
-                environments: vec![default_environment],
-            }),
-        },
-        version,
-    ))
+            environment_lookup: [(DEFAULT_ENVIRONMENT_NAME.to_string(), 0)]
+                .into_iter()
+                .collect(),
+            environments: vec![default_environment],
+        }),
+    })
 }

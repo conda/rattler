@@ -13,7 +13,7 @@ use url::Url;
 
 use crate::{
     file_format_version::FileFormatVersion,
-    parse::{models::v6, V6},
+    parse::{models, models::v6, V6, V7},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
 };
@@ -85,6 +85,23 @@ enum SerializablePackageDataV6<'a> {
 }
 
 impl<'a> From<PackageData<'a>> for SerializablePackageDataV6<'a> {
+    fn from(package: PackageData<'a>) -> Self {
+        match package {
+            PackageData::Conda(p) => Self::Conda(p.into()),
+            PackageData::Pypi(p) => Self::Pypi(p.into()),
+        }
+    }
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Serialize, Eq, PartialEq)]
+#[serde(untagged)]
+enum SerializablePackageDataV7<'a> {
+    Conda(models::v7::CondaPackageDataModel<'a>),
+    Pypi(models::v7::PypiPackageDataModel<'a>),
+}
+
+impl<'a> From<PackageData<'a>> for SerializablePackageDataV7<'a> {
     fn from(package: PackageData<'a>) -> Self {
         match package {
             PackageData::Conda(p) => Self::Conda(p.into()),
@@ -328,6 +345,15 @@ impl<'a> SerializeAs<PackageData<'a>> for V6 {
     }
 }
 
+impl<'a> SerializeAs<PackageData<'a>> for V7 {
+    fn serialize_as<S>(source: &PackageData<'a>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        SerializablePackageDataV7::from(*source).serialize(serializer)
+    }
+}
+
 impl Serialize for LockFile {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -389,11 +415,12 @@ impl Serialize for LockFile {
         // for more information.
         let packages = itertools::chain!(conda_packages, pypi_packages).sorted();
 
+        // Always serialize using the LATEST version
         let raw = SerializableLockFile {
             version: FileFormatVersion::LATEST,
             environments,
             packages: packages.collect(),
-            _version: PhantomData::<V6>,
+            _version: PhantomData::<V7>,
         };
 
         raw.serialize(serializer)

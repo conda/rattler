@@ -15,7 +15,7 @@ use serde_yaml::Value;
 
 use crate::{
     file_format_version::FileFormatVersion,
-    parse::{models, models::v6, V5, V6},
+    parse::{models, models::v6, V5, V6, V7},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
     UrlOrPath,
@@ -119,6 +119,47 @@ impl<'de> DeserializeAs<'de, PackageData> for V6 {
     }
 }
 
+impl<'de> DeserializeAs<'de, PackageData> for V7 {
+    fn deserialize_as<D>(deserializer: D) -> Result<PackageData, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Discriminant {
+            Conda {
+                #[serde(rename = "conda")]
+                _conda: String,
+            },
+            Pypi {
+                #[serde(rename = "pypi")]
+                _pypi: String,
+            },
+        }
+
+        let value = serde_value::Value::deserialize(deserializer)?;
+        let Ok(discriminant) = Discriminant::deserialize(
+            serde_value::ValueDeserializer::<D::Error>::new(value.clone()),
+        ) else {
+            return Err(D::Error::custom(
+                "expected at least `conda` or `pypi` field",
+            ));
+        };
+
+        let deserializer = serde_value::ValueDeserializer::<D::Error>::new(value);
+        Ok(match discriminant {
+            Discriminant::Conda { .. } => PackageData::Conda(
+                models::v7::CondaPackageDataModel::deserialize(deserializer)?
+                    .try_into()
+                    .map_err(D::Error::custom)?,
+            ),
+            Discriminant::Pypi { .. } => PackageData::Pypi(
+                models::v7::PypiPackageDataModel::deserialize(deserializer)?.into(),
+            ),
+        })
+    }
+}
+
 #[derive(Deserialize)]
 struct CondaSelectorV6 {
     #[serde(rename = "conda")]
@@ -146,6 +187,26 @@ enum DeserializablePackageSelectorV6 {
 }
 
 type DeserializablePackageSelectorV5 = DeserializablePackageSelectorV6;
+
+// V7 selectors - initially identical to V6, will support variants later
+#[derive(Deserialize)]
+struct CondaSelectorV7 {
+    #[serde(rename = "conda")]
+    conda: UrlOrPath,
+    name: Option<PackageName>,
+    version: Option<VersionWithSource>,
+    build: Option<String>,
+    subdir: Option<String>,
+    // TODO: Add variants field in later steps for V7-specific disambiguation
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
+enum DeserializablePackageSelectorV7 {
+    Conda(CondaSelectorV7),
+    Pypi(PypiSelector),
+}
 
 #[derive(Hash, Deserialize, Eq, PartialEq)]
 struct DeserializablePypiPackageEnvironmentData {
@@ -191,6 +252,28 @@ impl PackageSelector for DeserializablePackageSelectorV6 {
                 resolve_conda_selector(selector, ctx)
             }
             DeserializablePackageSelectorV6::Pypi(selector) => resolve_pypi_selector(selector, ctx),
+        }
+    }
+}
+
+impl PackageSelector for DeserializablePackageSelectorV7 {
+    fn resolve(
+        self,
+        ctx: &mut ResolveCtx<'_>,
+    ) -> Result<EnvironmentPackageData, ParseCondaLockError> {
+        match self {
+            DeserializablePackageSelectorV7::Conda(selector) => {
+                // Convert V7 selector to V6 selector format
+                let v6_selector = CondaSelectorV6 {
+                    conda: selector.conda,
+                    name: selector.name,
+                    version: selector.version,
+                    build: selector.build,
+                    subdir: selector.subdir,
+                };
+                resolve_conda_selector(v6_selector, ctx)
+            }
+            DeserializablePackageSelectorV7::Pypi(selector) => resolve_pypi_selector(selector, ctx),
         }
     }
 }
@@ -330,19 +413,29 @@ fn resolve_pypi_selector(
 pub fn parse_from_document_v5(
     document: Value,
     version: FileFormatVersion,
-) -> Result<(LockFile, FileFormatVersion), ParseCondaLockError> {
+) -> Result<LockFile, ParseCondaLockError> {
     let raw: DeserializableLockFile<V5, DeserializablePackageSelectorV5> =
         serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
-    parse_from_lock(version, raw).map(|lock_file| (lock_file, version))
+    parse_from_lock(version, raw)
 }
 
 pub fn parse_from_document_v6(
     document: Value,
     version: FileFormatVersion,
-) -> Result<(LockFile, FileFormatVersion), ParseCondaLockError> {
+) -> Result<LockFile, ParseCondaLockError> {
     let raw: DeserializableLockFile<V6, DeserializablePackageSelectorV6> =
         serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
-    parse_from_lock(version, raw).map(|lock_file| (lock_file, version))
+    parse_from_lock(version, raw)
+}
+
+pub fn parse_from_document_v7(
+    document: Value,
+    version: FileFormatVersion,
+) -> Result<LockFile, ParseCondaLockError> {
+    // V7 uses its own models and selectors (currently identical to V6 but can evolve independently)
+    let raw: DeserializableLockFile<V7, DeserializablePackageSelectorV7> =
+        serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
+    parse_from_lock(version, raw)
 }
 
 /// Convert the intermediate lock-file representation into the canonical in-memory model.

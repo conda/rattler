@@ -11,7 +11,10 @@ use serde_yaml::Value;
 use v3::parse_v3_or_lower;
 
 use super::{LockFile, UrlOrPath};
-use crate::{file_format_version::FileFormatVersion, parse::deserialize::parse_from_document_v5};
+use crate::{
+    file_format_version::FileFormatVersion,
+    parse::deserialize::{parse_from_document_v5, parse_from_document_v7},
+};
 
 #[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
@@ -42,7 +45,7 @@ pub enum ParseCondaLockError {
     LocationToUrlConversionError(#[from] file_url::FileURLParseError),
 }
 
-pub fn parse_from_str(s: &str) -> Result<(LockFile, FileFormatVersion), ParseCondaLockError> {
+pub fn parse_from_str(s: &str) -> Result<LockFile, ParseCondaLockError> {
     // First parse the document to a `serde_yaml::Value`.
     let document: Value = serde_yaml::from_str(s).map_err(ParseCondaLockError::ParseError)?;
 
@@ -68,8 +71,10 @@ pub fn parse_from_str(s: &str) -> Result<(LockFile, FileFormatVersion), ParseCon
         parse_v3_or_lower(document, version)
     } else if version <= FileFormatVersion::V5 {
         parse_from_document_v5(document, version)
-    } else {
+    } else if version == FileFormatVersion::V6 {
         deserialize::parse_from_document_v6(document, version)
+    } else {
+        parse_from_document_v7(document, version)
     }
 }
 
@@ -77,7 +82,7 @@ impl FromStr for LockFile {
     type Err = ParseCondaLockError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parse_from_str(s).map(|(lock_file, _version)| lock_file)
+        parse_from_str(s)
     }
 }
 
@@ -88,6 +93,10 @@ struct V5;
 /// A helper struct to differentiate between the serde code paths for different
 /// versions.
 struct V6;
+
+/// A helper struct to differentiate between the serde code paths for different
+/// versions.
+struct V7;
 
 #[cfg(test)]
 mod test {
@@ -114,12 +123,12 @@ mod test {
     // results in identical YAML strings.
     #[test]
     fn test_deterministic_lock_file_ordering() {
-        let (lock_file_original, _) = LockFile::from_path(
+        let lock_file_original = LockFile::from_path(
             &Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../test-data/conda-lock/v5/stability-original.yml"),
         )
         .unwrap();
-        let (lock_file_shuffled, _) = LockFile::from_path(
+        let lock_file_shuffled = LockFile::from_path(
             &Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../test-data/conda-lock/v5/stability-shuffled.yml"),
         )
