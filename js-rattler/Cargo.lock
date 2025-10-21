@@ -548,7 +548,7 @@ version = "0.2.6"
 dependencies = [
  "itertools",
  "percent-encoding",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "typed-path",
  "url",
 ]
@@ -1216,7 +1216,7 @@ dependencies = [
  "reqwest-middleware",
  "serde",
  "serde-wasm-bindgen",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1621,7 +1621,7 @@ dependencies = [
  "hex",
  "percent-encoding",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -1638,7 +1638,7 @@ dependencies = [
  "rustc-hash",
  "rustls",
  "socket2",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
  "web-time",
@@ -1659,7 +1659,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tinyvec",
  "tracing",
  "web-time",
@@ -1761,7 +1761,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.39"
+version = "0.3.41"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -1784,7 +1784,7 @@ dependencies = [
  "serde_json",
  "simple_spawn_blocking",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
  "url",
@@ -1792,7 +1792,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.40.1"
+version = "0.40.3"
 dependencies = [
  "chrono",
  "core-foundation",
@@ -1824,7 +1824,7 @@ dependencies = [
  "smallvec",
  "strum",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tracing",
  "typed-path",
  "url",
@@ -1832,7 +1832,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.1.6"
+version = "1.1.7"
 dependencies = [
  "blake2",
  "digest",
@@ -1840,6 +1840,7 @@ dependencies = [
  "hex",
  "md-5",
  "serde",
+ "serde_bytes",
  "serde_with",
  "sha2",
  "tokio",
@@ -1856,7 +1857,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.18"
+version = "0.25.20"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -1872,14 +1873,14 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tracing",
  "url",
 ]
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.9"
+version = "0.23.11"
 dependencies = [
  "bzip2",
  "chrono",
@@ -1896,7 +1897,7 @@ dependencies = [
  "simple_spawn_blocking",
  "tar",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1916,7 +1917,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.9"
+version = "0.24.12"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -1962,7 +1963,7 @@ dependencies = [
  "strum",
  "superslice",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1974,7 +1975,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "3.0.6"
+version = "3.0.8"
 dependencies = [
  "chrono",
  "futures",
@@ -1983,7 +1984,7 @@ dependencies = [
  "rattler_digest",
  "resolvo",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tracing",
 ]
 
@@ -2024,7 +2025,7 @@ checksum = "dd6f9d3d47bdd2ad6945c5015a226ec6155d0bcdfd8f7cd29f86b71f8de99d2b"
 dependencies = [
  "getrandom 0.2.16",
  "libredox",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -2391,6 +2392,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_bytes"
+version = "0.11.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5d440709e79d88e51ac01c4b72fc6cb7314017bb7da9eeff678aa94c10e3ea8"
+dependencies = [
+ "serde",
+ "serde_core",
+]
+
+[[package]]
 name = "serde_core"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2683,11 +2694,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.16"
+version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3467d614147380f2e4e374161426ff399c91084acd2363eaf549172b3d5e60c0"
+checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
 dependencies = [
- "thiserror-impl 2.0.16",
+ "thiserror-impl 2.0.17",
 ]
 
 [[package]]
@@ -2703,9 +2714,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.16"
+version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c5e1be1c48b9172ee610da68fd9cd2770e7a4056cb3fc98710ee6906f0c7960"
+checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
 dependencies = [
  "proc-macro2",
  "quote",
