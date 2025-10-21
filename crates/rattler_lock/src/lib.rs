@@ -495,7 +495,7 @@ impl<'lock> LockedPackageRef<'lock> {
     /// might not be the normalized name.
     pub fn name(self) -> &'lock str {
         match self {
-            LockedPackageRef::Conda(data) => data.record().name.as_source(),
+            LockedPackageRef::Conda(data) => data.name().as_source(),
             LockedPackageRef::Pypi(data, _) => data.name.as_ref(),
         }
     }

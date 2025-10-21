@@ -1,11 +1,12 @@
 use crate::source::SourceLocation;
 use crate::UrlOrPath;
 use rattler_conda_types::{
-    ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, RepoDataRecord,
+    ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageRecord, PackageUrl,
+    RepoDataRecord,
 };
 use rattler_digest::Sha256Hash;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::{borrow::Cow, cmp::Ordering, hash::Hash};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
@@ -76,11 +77,11 @@ impl CondaPackageData {
         }
     }
 
-    /// Returns the dependency information of the package.
-    pub fn record(&self) -> &PackageRecord {
+    /// Returns the name of the package (works for both binary and source packages).
+    pub fn name(&self) -> &PackageName {
         match self {
-            CondaPackageData::Binary(data) => &data.package_record,
-            CondaPackageData::Source(data) => &data.package_record,
+            CondaPackageData::Binary(data) => &data.package_record.name,
+            CondaPackageData::Source(data) => &data.name,
         }
     }
 
@@ -244,21 +245,45 @@ pub struct PackageBuildSource {
 /// Information about a source package stored in the lock-file.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CondaSourceData {
-    /// The package record.
-    pub package_record: PackageRecord,
+    /// The name of the package
+    pub name: PackageName,
 
     /// The location of the package. This can be a URL or a local path.
     pub location: UrlOrPath,
 
-    /// Package build source location for reproducible builds
-    pub package_build_source: Option<PackageBuildSource>,
+    /// Conda-build variants used to disambiguate between multiple source packages
+    /// at the same location. This is a map from variant name to variant value.
+    /// Used in lock file format V7 and later.
+    pub variants: BTreeMap<String, VariantValue>,
 
-    /// The input hash of the package
-    pub input: Option<InputHash>,
+    /// Specification of packages this package depends on
+    pub depends: Vec<String>,
+
+    /// Additional constraints on packages
+    pub constrains: Vec<String>,
+
+    /// Experimental: additional dependencies grouped by feature name
+    pub experimental_extra_depends: BTreeMap<String, Vec<String>>,
+
+    /// The specific license of the package
+    pub license: Option<String>,
+
+    /// Package identifiers of packages that are equivalent to this package but
+    /// from other ecosystems (e.g., PyPI)
+    pub purls: Option<BTreeSet<PackageUrl>>,
 
     /// Information about packages that should be built from source instead of binary.
     /// This maps from a normalized package name to location of the source.
     pub sources: BTreeMap<String, SourceLocation>,
+
+    /// The input hash of the package
+    pub input: Option<InputHash>,
+
+    /// Package build source location for reproducible builds
+    pub package_build_source: Option<PackageBuildSource>,
+
+    /// Python site-packages path if this is a Python package
+    pub python_site_packages_path: Option<String>,
 }
 
 impl From<CondaSourceData> for CondaPackageData {
@@ -269,18 +294,13 @@ impl From<CondaSourceData> for CondaPackageData {
 
 impl CondaSourceData {
     pub(crate) fn merge(&self, other: &Self) -> Cow<'_, Self> {
-        if self.location == other.location {
-            let package_record_merge =
-                merge_package_record(&self.package_record, &other.package_record);
+        if self.location == other.location && self.name == other.name {
             let package_build_source_merge =
                 merge_package_build_source(&self.package_build_source, &other.package_build_source);
 
-            // Return an owned version if either merge produced an owned result
-            if matches!(package_record_merge, Cow::Owned(_))
-                || matches!(package_build_source_merge, Cow::Owned(_))
-            {
+            // Return an owned version if merge produced an owned result
+            if matches!(package_build_source_merge, Cow::Owned(_)) {
                 return Cow::Owned(Self {
-                    package_record: package_record_merge.into_owned(),
                     package_build_source: package_build_source_merge.into_owned(),
                     ..self.clone()
                 });
@@ -302,15 +322,6 @@ pub struct InputHash {
     pub globs: Vec<String>,
 }
 
-impl AsRef<PackageRecord> for CondaPackageData {
-    fn as_ref(&self) -> &PackageRecord {
-        match self {
-            Self::Binary(data) => &data.package_record,
-            Self::Source(data) => &data.package_record,
-        }
-    }
-}
-
 impl PartialOrd<Self> for CondaPackageData {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -319,17 +330,36 @@ impl PartialOrd<Self> for CondaPackageData {
 
 impl Ord for CondaPackageData {
     fn cmp(&self, other: &Self) -> Ordering {
-        let pkg_a: &PackageRecord = self.as_ref();
-        let pkg_b: &PackageRecord = other.as_ref();
         let location_a = self.location();
         let location_b = other.location();
 
-        location_a
-            .cmp(location_b)
-            .then_with(|| pkg_a.name.cmp(&pkg_b.name))
-            .then_with(|| pkg_a.version.cmp(&pkg_b.version))
-            .then_with(|| pkg_a.build.cmp(&pkg_b.build))
-            .then_with(|| pkg_a.subdir.cmp(&pkg_b.subdir))
+        // First compare by location
+        location_a.cmp(location_b).then_with(|| {
+            // Then compare by name
+            self.name().cmp(other.name()).then_with(|| {
+                // For binary packages, also compare version, build, and subdir
+                match (self.as_binary(), other.as_binary()) {
+                    (Some(a), Some(b)) => a
+                        .package_record
+                        .version
+                        .cmp(&b.package_record.version)
+                        .then_with(|| a.package_record.build.cmp(&b.package_record.build))
+                        .then_with(|| a.package_record.subdir.cmp(&b.package_record.subdir)),
+                    // Source packages only compare by location and name
+                    // If one is source and one is binary, sort source first
+                    (None, Some(_)) => Ordering::Less,
+                    (Some(_), None) => Ordering::Greater,
+                    (None, None) => {
+                        // Both are source packages, compare by variants
+                        if let (Some(a), Some(b)) = (self.as_source(), other.as_source()) {
+                            a.variants.cmp(&b.variants)
+                        } else {
+                            Ordering::Equal
+                        }
+                    }
+                }
+            })
+        })
     }
 }
 
@@ -392,7 +422,7 @@ impl Matches<MatchSpec> for CondaPackageData {
     fn matches(&self, spec: &MatchSpec) -> bool {
         // Check if the name matches
         if let Some(name) = &spec.name {
-            if name != &self.record().name {
+            if name != self.name() {
                 return false;
             }
         }
@@ -413,8 +443,12 @@ impl Matches<MatchSpec> for CondaPackageData {
             }
         }
 
-        // Check if the record matches
-        spec.matches(self.record())
+        // Check if the record matches (only for binary packages)
+        // Source packages don't have version/build/subdir so they can't match full specs
+        match self.as_binary() {
+            Some(binary) => spec.matches(&binary.package_record),
+            None => false, // Source packages can only match by name (checked above)
+        }
     }
 }
 
@@ -436,8 +470,11 @@ impl Matches<NamelessMatchSpec> for CondaPackageData {
             }
         }
 
-        // Check if the record matches
-        spec.matches(self.record())
+        // Check if the record matches (only for binary packages)
+        match self.as_binary() {
+            Some(binary) => spec.matches(&binary.package_record),
+            None => false,
+        }
     }
 }
 

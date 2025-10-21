@@ -54,7 +54,7 @@ impl LockedPackage {
     /// might not be the normalized name.
     pub fn name(&self) -> &str {
         match self {
-            LockedPackage::Conda(data) => data.record().name.as_source(),
+            LockedPackage::Conda(data) => data.name().as_source(),
             LockedPackage::Pypi(data, _) => data.name.as_ref(),
         }
     }
@@ -137,12 +137,16 @@ struct UniqueCondaIdentifier {
 
 impl<'a> From<&'a CondaPackageData> for UniqueCondaIdentifier {
     fn from(value: &'a CondaPackageData) -> Self {
+        // Only binary packages have version/build/subdir
+        let binary = value
+            .as_binary()
+            .expect("UniqueCondaIdentifier only works for binary packages");
         Self {
             location: value.location().clone(),
-            normalized_name: value.record().name.as_normalized().to_string(),
-            version: value.record().version.version().clone(),
-            build: value.record().build.clone(),
-            subdir: value.record().subdir.clone(),
+            normalized_name: binary.package_record.name.as_normalized().to_string(),
+            version: binary.package_record.version.version().clone(),
+            build: binary.package_record.build.clone(),
+            subdir: binary.package_record.subdir.clone(),
         }
     }
 }

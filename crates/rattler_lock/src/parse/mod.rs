@@ -45,6 +45,29 @@ pub enum ParseCondaLockError {
     LocationToUrlConversionError(#[from] file_url::FileURLParseError),
 }
 
+impl From<crate::ConversionError> for ParseCondaLockError {
+    fn from(err: crate::ConversionError) -> Self {
+        match err {
+            crate::ConversionError::Missing(field) => {
+                // We don't have the package URL context here, so use a placeholder
+                ParseCondaLockError::MissingField(
+                    field,
+                    UrlOrPath::Url(url::Url::parse("unknown://").unwrap()),
+                )
+            }
+            crate::ConversionError::LocationToUrlConversionError(e) => {
+                ParseCondaLockError::LocationToUrlConversionError(e)
+            }
+        }
+    }
+}
+
+impl From<std::convert::Infallible> for ParseCondaLockError {
+    fn from(err: std::convert::Infallible) -> Self {
+        match err {}
+    }
+}
+
 pub fn parse_from_str(s: &str) -> Result<LockFile, ParseCondaLockError> {
     // First parse the document to a `serde_yaml::Value`.
     let document: Value = serde_yaml::from_str(s).map_err(ParseCondaLockError::ParseError)?;

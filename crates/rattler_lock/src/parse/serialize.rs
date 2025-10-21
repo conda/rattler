@@ -140,7 +140,7 @@ impl CondaDisambiguityFilter {
 
     fn filter(&self, package: &CondaPackageData, other: &CondaPackageData) -> bool {
         match self {
-            Self::Name => package.record().name == other.record().name,
+            Self::Name => package.name() == other.name(),
         }
     }
 }
@@ -226,7 +226,7 @@ impl<'a> SerializablePackageSelector<'a> {
             similar_packages = similar;
             match filter {
                 CondaDisambiguityFilter::Name => {
-                    name = Some(&package.record().name);
+                    name = Some(package.name());
                 }
             }
         }
@@ -435,7 +435,7 @@ pub enum PackageData<'a> {
 impl PackageData<'_> {
     fn source_name(&self) -> &str {
         match self {
-            PackageData::Conda(p) => p.record().name.as_source(),
+            PackageData::Conda(p) => p.name().as_source(),
             PackageData::Pypi(p) => p.name.as_ref(),
         }
     }
