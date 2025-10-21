@@ -31,7 +31,7 @@ patchelf = "~=0.17.2"
 # Python 3.8 is the minimum supported version, so we use that for testing
 python = "3.9.*"
 
-ruff = ">=0.13.2,<0.14"
+ruff = ">=0.14.1,<0.15"
 mypy = "~=1.17.0"
 
 pytest = ">=8.4.1,<9"
@@ -71,7 +71,7 @@ mkdocs-material = ">=9.5.20"
 mdx_truly_sane_lists = ">=1.3,<2"
 cairosvg = "2.8.2.*"
 pillow = ">=9.4.0"
-ruff = ">=0.13.2,<0.14"
+ruff = ">=0.14.1,<0.15"
 
 [feature.docs.tasks]
 docs = { cmd = "mkdocs serve" }
