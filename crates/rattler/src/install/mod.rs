@@ -396,6 +396,7 @@ pub async fn link_package(
         let package_dir = package_dir.to_owned();
         let target_dir = target_dir.to_owned();
         let target_prefix = target_prefix.clone();
+        let platform_clone = platform.clone();
 
         let install_future = async move {
             let _permit = driver.acquire_io_permit().await;
@@ -415,7 +416,7 @@ pub async fn link_package(
                     allow_symbolic_links && !cloned_entry.no_link,
                     allow_hard_links && !cloned_entry.no_link,
                     allow_ref_links && !cloned_entry.no_link,
-                    platform,
+                    platform_clone,
                     options.apple_codesign_behavior,
                 )
             })
@@ -482,22 +483,24 @@ pub async fn link_package(
         // Create entry points for each listed item. This is different between Windows
         // and unix because on Windows, two PathEntry's are created whereas on
         // Linux only one is created.
+        let is_windows = platform.is_windows();
         for entry_point in entry_points {
             let python_info = python_info.clone();
             let target_dir = target_dir.to_owned();
             let target_prefix = target_prefix.clone();
+            let platform_clone = platform.clone();
 
             let entry_point_fut = async move {
                 // Acquire an IO permit
                 let _permit = driver.acquire_io_permit().await;
 
-                let entries = if platform.is_windows() {
+                let entries = if platform_clone.is_windows() {
                     match create_windows_python_entry_point(
                         &target_dir,
                         &target_prefix,
                         &entry_point,
                         &python_info,
-                        &platform,
+                        &platform_clone,
                     ) {
                         Ok([a, b]) => vec![
                             (number_of_paths_entries, a),
@@ -521,7 +524,7 @@ pub async fn link_package(
             };
 
             pending_futures.push(entry_point_fut.boxed());
-            number_of_paths_entries += if platform.is_windows() { 2 } else { 1 };
+            number_of_paths_entries += if is_windows { 2 } else { 1 };
         }
     }
 
@@ -810,6 +813,7 @@ pub fn link_package_sync(
     // Link the individual files in parallel
     let link_target_prefix = target_prefix.clone();
     let package_dir = package_dir.to_path_buf();
+    let platform_clone = platform.clone();
     let mut paths = paths_by_directory
         .into_values()
         .collect_vec()
@@ -832,7 +836,7 @@ pub fn link_package_sync(
                     allow_symbolic_links && !entry.no_link,
                     allow_hard_links && !entry.no_link,
                     allow_ref_links && !entry.no_link,
-                    platform,
+                    platform_clone.clone(),
                     options.apple_codesign_behavior,
                 );
 
@@ -900,7 +904,8 @@ pub fn link_package_sync(
         // Create entry points for each listed item. This is different between Windows
         // and unix because on Windows, two PathEntry's are created whereas on
         // Linux only one is created.
-        let mut entry_point_paths = if platform.is_windows() {
+        let is_windows = platform.is_windows();
+        let mut entry_point_paths = if is_windows {
             entry_points
                 .into_iter()
                 // .into_par_iter()
@@ -1200,7 +1205,7 @@ mod test {
 
         assert_eq!(
             env.platform,
-            Some(current_platform),
+            Some(current_platform.clone()),
             "the platform for which the explicit lock file was created does not match the current platform"
         );
 
@@ -1224,7 +1229,7 @@ mod test {
             .default_environment()
             .expect("no default environment in lock file");
 
-        let Some(packages) = lock_env.packages(current_platform) else {
+        let Some(packages) = lock_env.packages(current_platform.clone()) else {
             panic!(
                 "the platform for which the explicit lock file was created does not match the current platform"
             )

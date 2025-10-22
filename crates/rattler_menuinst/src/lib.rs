@@ -93,7 +93,7 @@ pub fn install_menuitems_for_record(
             &full_path,
             target_prefix,
             target_prefix,
-            platform,
+            platform.clone(),
             menu_mode,
         )?;
 
@@ -121,7 +121,7 @@ pub fn install_menuitems(
 ) -> Result<Vec<Tracker>, MenuInstError> {
     let text = std::fs::read_to_string(file)?;
     let menu_inst: MenuInstSchema = serde_json::from_str(&text)?;
-    let placeholders = BaseMenuItemPlaceholders::new(base_prefix, prefix, platform);
+    let placeholders = BaseMenuItemPlaceholders::new(base_prefix, prefix, platform.clone());
 
     let mut trackers = Vec::new();
     for item in menu_inst.menu_items {

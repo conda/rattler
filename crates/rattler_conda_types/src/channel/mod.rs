@@ -349,7 +349,7 @@ impl Channel {
     }
 
     /// Returns the Urls for the given platform
-    pub fn platform_url(&self, platform: Platform) -> Url {
+    pub fn platform_url(&self, platform: &Platform) -> Url {
         self.base_url.platform_url(platform)
     }
 
@@ -357,7 +357,7 @@ impl Channel {
     pub fn platforms_url(&self) -> Vec<(Platform, Url)> {
         self.platforms_or_default()
             .iter()
-            .map(|&platform| (platform, self.platform_url(platform)))
+            .map(|platform| (platform.clone(), self.platform_url(platform)))
             .collect()
     }
 
@@ -443,9 +443,11 @@ fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), Parse
 
 /// Returns the default platforms. These are based on the platform this binary
 /// was build for as well as platform agnostic platforms.
-pub(crate) const fn default_platforms() -> &'static [Platform] {
-    const CURRENT_PLATFORMS: [Platform; 2] = [Platform::current(), Platform::NoArch];
-    &CURRENT_PLATFORMS
+pub(crate) fn default_platforms() -> &'static [Platform] {
+    use std::sync::LazyLock;
+    static CURRENT_PLATFORMS: LazyLock<[Platform; 2]> =
+        LazyLock::new(|| [Platform::current(), Platform::NoArch]);
+    &*CURRENT_PLATFORMS
 }
 
 /// Returns the specified path as an absolute path
@@ -653,7 +655,7 @@ mod tests {
         assert_eq!(channel.platforms, None);
         assert_eq!(channel.name(), "http://localhost:1234/");
 
-        let noarch_url = channel.platform_url(Platform::NoArch);
+        let noarch_url = channel.platform_url(&Platform::NoArch);
         assert_eq!(noarch_url.to_string(), "http://localhost:1234/noarch/");
 
         assert!(matches!(
@@ -677,7 +679,7 @@ mod tests {
             "https://conda.anaconda.org/conda-forge/".parse().unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
-        assert_eq!(channel.platforms, Some(vec![platform]));
+        assert_eq!(channel.platforms, Some(vec![platform.clone()]));
 
         let channel = Channel::from_str(
             format!("https://conda.anaconda.org/pkgs/main[{platform}]"),

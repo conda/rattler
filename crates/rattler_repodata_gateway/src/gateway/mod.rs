@@ -234,7 +234,7 @@ impl GatewayInner {
         platform: Platform,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Arc<Subdir>, GatewayError> {
-        let key = (channel.clone(), platform);
+        let key = (channel.clone(), platform.clone());
         let channel = channel.clone();
 
         self.subdirs

@@ -56,7 +56,7 @@ impl<'a> SerializableEnvironment<'a> {
                 .iter()
                 .map(|(platform, packages)| {
                     (
-                        *platform,
+                        platform.clone(),
                         packages
                             .iter()
                             .map(|&package_data| {
