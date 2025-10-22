@@ -183,7 +183,7 @@ pub enum PackageBuildSource {
         url: Url,
         /// The SHA256 hash of the archive content.
         sha256: Sha256Hash,
-        /// Subdirectory on which focus on.
+        /// Subdirectory to use.
         subdir: Option<Utf8TypedPathBuf>,
     },
     /// Source is some local path.
