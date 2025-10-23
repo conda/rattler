@@ -434,4 +434,3 @@ impl Ord for PackageData<'_> {
             })
     }
 }
-

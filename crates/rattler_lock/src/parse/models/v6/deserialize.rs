@@ -45,6 +45,18 @@ pub(crate) struct CondaSelectorV6 {
     pub(crate) subdir: Option<String>,
 }
 
+/// Check if an expected field value matches the model's field or a derived value.
+fn field_matches<T: PartialEq>(
+    expected: T,
+    model_field: Option<T>,
+    derived_field: Option<T>,
+) -> bool {
+    match model_field {
+        Some(model_value) => expected == model_value,
+        None => derived_field.as_ref().is_some_and(|d| expected == *d),
+    }
+}
+
 impl CondaSelectorV6 {
     /// Resolve this selector to a package index by matching against V6 models.
     ///
@@ -75,42 +87,33 @@ impl CondaSelectorV6 {
 
                 // Check version - model's version field or derive from URL
                 if let Some(expected_version) = &self.version {
-                    let version_matches = match &model.version {
-                        Some(v) => expected_version == v.as_ref(),
-                        None => derived_fields
-                            .version
-                            .as_ref()
-                            .is_some_and(|v| expected_version == v),
-                    };
-                    if !version_matches {
+                    if !field_matches(
+                        expected_version,
+                        model.version.as_deref(),
+                        derived_fields.version.as_ref(),
+                    ) {
                         return false;
                     }
                 }
 
                 // Check build - model's build field or derive from URL
                 if let Some(expected_build) = &self.build {
-                    let build_matches = match &model.build {
-                        Some(b) => expected_build == &**b,
-                        None => derived_fields
-                            .build
-                            .as_deref()
-                            .is_some_and(|b| expected_build == b),
-                    };
-                    if !build_matches {
+                    if !field_matches(
+                        expected_build.as_str(),
+                        model.build.as_deref(),
+                        derived_fields.build.as_deref(),
+                    ) {
                         return false;
                     }
                 }
 
                 // Check subdir - model's subdir field or derive from URL
                 if let Some(expected_subdir) = &self.subdir {
-                    let subdir_matches = match &model.subdir {
-                        Some(s) => expected_subdir == &**s,
-                        None => derived_fields
-                            .subdir
-                            .as_deref()
-                            .is_some_and(|s| expected_subdir == s),
-                    };
-                    if !subdir_matches {
+                    if !field_matches(
+                        expected_subdir.as_str(),
+                        model.subdir.as_deref(),
+                        derived_fields.subdir.as_deref(),
+                    ) {
                         return false;
                     }
                 }

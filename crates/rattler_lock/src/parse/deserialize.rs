@@ -178,7 +178,13 @@ fn process_environment_packages<V>(
     conda_url_lookup: &FxHashMap<UrlOrPath, Vec<usize>>,
     pypi_url_lookup: &FxHashMap<UrlOrPath, usize>,
     pypi_runtime_lookup: &mut IndexSet<DeserializablePypiPackageEnvironmentData>,
-) -> Result<(String, FxHashMap<Platform, IndexSet<EnvironmentPackageData>>), ParseCondaLockError>
+) -> Result<
+    (
+        String,
+        FxHashMap<Platform, IndexSet<EnvironmentPackageData>>,
+    ),
+    ParseCondaLockError,
+>
 where
     V: LockFileVersion,
     <V::CondaPackage as TryInto<CondaPackageData>>::Error: Into<ParseCondaLockError>,
