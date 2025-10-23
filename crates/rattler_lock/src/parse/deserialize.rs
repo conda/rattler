@@ -165,6 +165,47 @@ pub fn parse_from_document_v7(
     parse_from_lock::<V7>(version, raw)
 }
 
+/// Resolve all packages for a single environment across all platforms.
+///
+/// This function resolves version-specific package selectors into canonical
+/// `EnvironmentPackageData` entries, handling disambiguation and PyPI runtime
+/// configuration lookup.
+#[allow(clippy::doc_markdown)]
+fn process_environment_packages<V>(
+    environment_name: String,
+    packages: BTreeMap<Platform, Vec<V::Selector>>,
+    conda_packages: &mut Vec<V::CondaPackage>,
+    conda_url_lookup: &FxHashMap<UrlOrPath, Vec<usize>>,
+    pypi_url_lookup: &FxHashMap<UrlOrPath, usize>,
+    pypi_runtime_lookup: &mut IndexSet<DeserializablePypiPackageEnvironmentData>,
+) -> Result<(String, FxHashMap<Platform, IndexSet<EnvironmentPackageData>>), ParseCondaLockError>
+where
+    V: LockFileVersion,
+    <V::CondaPackage as TryInto<CondaPackageData>>::Error: Into<ParseCondaLockError>,
+{
+    let mut packages_by_platform = FxHashMap::default();
+
+    for (platform, selectors) in packages {
+        let mut ctx = ResolveCtx {
+            environment_name: &environment_name,
+            platform,
+            conda_packages,
+            conda_url_lookup,
+            pypi_url_lookup,
+            pypi_runtime_lookup,
+        };
+
+        let platform_packages = selectors
+            .into_iter()
+            .map(|selector| selector.resolve(&mut ctx))
+            .collect::<Result<IndexSet<_>, _>>()?;
+
+        packages_by_platform.insert(platform, platform_packages);
+    }
+
+    Ok((environment_name, packages_by_platform))
+}
+
 /// Convert the lock-file representation into the canonical in-memory model.
 fn parse_from_lock<V>(
     file_version: FileFormatVersion,
@@ -209,28 +250,17 @@ where
                 packages,
             } = env;
 
-            let mut packages_by_platform = FxHashMap::default();
-            for (platform, selectors) in packages {
-                let mut ctx = ResolveCtx {
-                    environment_name: &environment_name,
-                    platform,
-                    conda_packages: &mut conda_packages,
-                    conda_url_lookup: &conda_url_lookup,
-                    pypi_url_lookup: &pypi_url_lookup,
-                    pypi_runtime_lookup: &mut pypi_runtime_lookup,
-                };
-
-                let mut platform_packages = IndexSet::new();
-                for selector in selectors {
-                    let package = selector.resolve(&mut ctx)?;
-                    platform_packages.insert(package);
-                }
-
-                packages_by_platform.insert(platform, platform_packages);
-            }
+            let (env_name, packages_by_platform) = process_environment_packages::<V>(
+                environment_name,
+                packages,
+                &mut conda_packages,
+                &conda_url_lookup,
+                &pypi_url_lookup,
+                &mut pypi_runtime_lookup,
+            )?;
 
             Ok((
-                environment_name.clone(),
+                env_name,
                 EnvironmentData {
                     channels,
                     indexes,

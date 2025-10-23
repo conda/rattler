@@ -13,7 +13,7 @@ use url::Url;
 
 use crate::{
     file_format_version::FileFormatVersion,
-    parse::{models, models::v6, V6, V7},
+    parse::{models, V7},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
 };
@@ -71,23 +71,6 @@ impl<'a> SerializableEnvironment<'a> {
             options: env_data.options.clone(),
             packages,
         })
-    }
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Serialize, Eq, PartialEq)]
-#[serde(untagged)]
-enum SerializablePackageDataV6<'a> {
-    Conda(v6::CondaPackageDataModel<'a>),
-    Pypi(v6::PypiPackageDataModel<'a>),
-}
-
-impl<'a> From<PackageData<'a>> for SerializablePackageDataV6<'a> {
-    fn from(package: PackageData<'a>) -> Self {
-        match package {
-            PackageData::Conda(p) => Self::Conda(p.into()),
-            PackageData::Pypi(p) => Self::Pypi(p.into()),
-        }
     }
 }
 
@@ -340,15 +323,6 @@ fn compare_url_by_location(a: &UrlOrPath, b: &UrlOrPath) -> Ordering {
     }
 }
 
-impl<'a> SerializeAs<PackageData<'a>> for V6 {
-    fn serialize_as<S>(source: &PackageData<'a>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        SerializablePackageDataV6::from(*source).serialize(serializer)
-    }
-}
-
 impl<'a> SerializeAs<PackageData<'a>> for V7 {
     fn serialize_as<S>(source: &PackageData<'a>, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -461,21 +435,3 @@ impl Ord for PackageData<'_> {
     }
 }
 
-impl Serialize for CondaPackageData {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        SerializablePackageDataV6::Conda(v6::CondaPackageDataModel::from(self))
-            .serialize(serializer)
-    }
-}
-
-impl Serialize for PypiPackageData {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        SerializablePackageDataV6::Pypi(v6::PypiPackageDataModel::from(self)).serialize(serializer)
-    }
-}

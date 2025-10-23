@@ -1,3 +1,5 @@
+//! Deserialization helpers specific to V6 lock file contents.
+
 use itertools::Itertools;
 use rattler_conda_types::{PackageName, VersionWithSource};
 use serde::Deserialize;
@@ -27,13 +29,19 @@ pub(crate) enum PackageDataV6<'a> {
     Pypi(v6::PypiPackageDataModel<'a>),
 }
 
+/// Conda selector representation stored in V6 lock files.
 #[derive(Deserialize)]
 pub(crate) struct CondaSelectorV6 {
+    /// URL or path to the conda artifact referenced by the selector.
     #[serde(rename = "conda")]
     pub(crate) conda: UrlOrPath,
+    /// Optional package name used to disambiguate multiple artifacts with the same location.
     pub(crate) name: Option<PackageName>,
+    /// Optional version (with source) hint supplied by the lock file.
     pub(crate) version: Option<VersionWithSource>,
+    /// Optional build string recorded in the lock file.
     pub(crate) build: Option<String>,
+    /// Optional platform-specific subdirectory for the package.
     pub(crate) subdir: Option<String>,
 }
 
@@ -113,6 +121,8 @@ impl CondaSelectorV6 {
     }
 }
 
+/// Selector used in V6 lock files to reference either a conda or PyPI package.
+#[allow(clippy::doc_markdown)]
 #[derive(Deserialize)]
 #[serde(untagged)]
 #[allow(clippy::large_enum_variant)]

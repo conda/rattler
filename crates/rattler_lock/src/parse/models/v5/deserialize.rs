@@ -1,3 +1,5 @@
+//! Deserialization helpers specific to V5 lock file contents.
+
 use std::borrow::Cow;
 
 use itertools::Itertools;
@@ -47,6 +49,8 @@ impl<'de> Deserialize<'de> for PackageDataV5 {
 }
 
 // V5 selectors - only have location, no disambiguation fields
+/// Selector used in V5 lock files to reference either a conda or PyPI package.
+#[allow(clippy::doc_markdown)]
 #[derive(Deserialize)]
 #[serde(untagged)]
 pub(crate) enum DeserializablePackageSelectorV5 {
@@ -54,6 +58,7 @@ pub(crate) enum DeserializablePackageSelectorV5 {
     Pypi(PypiSelector),
 }
 
+/// Minimal conda selector available in V5 lock files (location only).
 #[derive(Deserialize)]
 pub(crate) struct CondaSelectorV5 {
     #[serde(rename = "conda")]

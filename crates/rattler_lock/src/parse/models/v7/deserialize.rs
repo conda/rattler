@@ -1,3 +1,5 @@
+//! Deserialization helpers specific to V7 lock file contents.
+
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
@@ -31,16 +33,21 @@ pub(crate) enum PackageDataV7<'a> {
 
 // V7 selectors - simplified, use variants for source package disambiguation
 // Binary packages are unique by location, so no version/build/subdir needed
+/// Conda selector representation stored in V7 lock files.
 #[derive(Deserialize)]
 pub(crate) struct CondaSelectorV7 {
+    /// URL or path to the conda artifact referenced by the selector.
     #[serde(rename = "conda")]
     pub(crate) conda: UrlOrPath,
+    /// Optional package name used to disambiguate source artifacts.
     pub(crate) name: Option<PackageName>,
-    // For source packages: variants-based disambiguation
+    /// Variants recorded in the lock file to disambiguate source packages.
     #[serde(default)]
     pub(crate) variants: BTreeMap<String, crate::VariantValue>,
 }
 
+/// Selector used in V7 lock files to reference either a conda or PyPI package.
+#[allow(clippy::doc_markdown)]
 #[derive(Deserialize)]
 #[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
