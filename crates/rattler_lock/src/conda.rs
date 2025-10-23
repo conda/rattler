@@ -7,6 +7,7 @@ use rattler_conda_types::{
 use rattler_digest::Sha256Hash;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Display;
 use std::{borrow::Cow, cmp::Ordering, hash::Hash};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
@@ -45,6 +46,16 @@ impl Ord for VariantValue {
             (_, VariantValue::String(_)) => Ordering::Greater,
             (VariantValue::Int(_), VariantValue::Bool(_)) => Ordering::Less,
             (VariantValue::Bool(_), VariantValue::Int(_)) => Ordering::Greater,
+        }
+    }
+}
+
+impl Display for VariantValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VariantValue::String(s) => write!(f, "{}", s),
+            VariantValue::Int(i) => write!(f, "{}", i),
+            VariantValue::Bool(b) => write!(f, "{}", b),
         }
     }
 }
