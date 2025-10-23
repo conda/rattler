@@ -22,6 +22,7 @@ use url::Url;
 use crate::upload::package::{sha256_sum, ExtractedPackage};
 
 mod anaconda;
+pub mod attestation;
 pub mod conda_forge;
 pub mod opt;
 mod package;
