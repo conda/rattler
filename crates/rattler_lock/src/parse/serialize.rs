@@ -540,9 +540,9 @@ mod tests {
         }
     }
 
+    /// Only one variant key differs (python version), so a single key should be selected.
     #[test]
     fn selects_single_variant_key() {
-        // Only one variant key differs (python version), so a single key should be selected.
         let mut target_variants = BTreeMap::new();
         target_variants.insert(
             "python".to_string(),
@@ -566,9 +566,9 @@ mod tests {
         );
     }
 
+    /// Two variants (cuda + blas_impl) are necessary to eliminate all conflicts.
     #[test]
     fn selects_multiple_variant_keys_when_needed() {
-        // Two variants (cuda + blas_impl) are necessary to eliminate all conflicts.
         let mut target_variants = BTreeMap::new();
         target_variants.insert(
             "python".to_string(),
@@ -618,9 +618,9 @@ mod tests {
         );
     }
 
+    /// Identical variant maps cannot be distinguished, so the helper must fail.
     #[test]
     fn returns_none_when_variants_insufficient() {
-        // Identical variant maps cannot be distinguished, so the helper must fail.
         let mut target_variants = BTreeMap::new();
         target_variants.insert(
             "python".to_string(),

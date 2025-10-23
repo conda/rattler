@@ -1,0 +1,34 @@
+# Multiple source package with different variants
+#
+# Packages need to be disambiguated by name since they share the same source location and name.
+
+version: 7
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        - conda: my-package
+          variants:
+            target_platform: linux-64
+      win-64:
+        - conda: my-package
+          variants:
+            target_platform: win-64
+
+packages:
+  - conda: my-package
+    name: my-package
+    variants:
+      target_platform: linux-64
+    depends:
+      - python >=3.8
+    license: MIT
+  - conda: my-package
+    name: my-package
+    variants:
+      target_platform: win-64
+    depends:
+      - python >=3.8
+    license: MIT

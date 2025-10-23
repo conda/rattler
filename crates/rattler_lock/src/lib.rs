@@ -569,6 +569,15 @@ mod test {
     #[case::v6_pixi_build_url_source("v6/pixi-build-url-source-lock.yml")]
     #[case::v6_pixi_build_git_tag_source("v6/pixi-build-git-tag-source-lock.yml")]
     #[case::v6_pixi_build_git_rev_only_source("v6/pixi-build-git-rev-only-source-lock.yml")]
+    #[case::v7_single_binary_package("v7/single_binary_package.lock.yml")]
+    #[case::v7_single_source_package("v7/single_source_package.lock.yml")]
+    #[case::v7_multiple_source_packages_different_name(
+        "v7/multiple_source_package_different_name.lock.yml"
+    )]
+    #[case::v7_multiple_source_packages_different_variants(
+        "v7/multiple_source_package_different_variants.lock.yml"
+    )]
+    #[case::v7_complex_multi_environment("v7/complex_multi_environment.lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")

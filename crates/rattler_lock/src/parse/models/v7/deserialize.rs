@@ -4,7 +4,8 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use rattler_conda_types::PackageName;
-use serde::Deserialize;
+use serde::{de::Error, Deserialize};
+use serde_value::Value;
 
 use crate::{
     parse::{models::v7, ParseCondaLockError, V7},
@@ -23,12 +24,53 @@ impl HasLocation for v7::CondaPackageDataModel<'static> {
 }
 
 /// V7-specific package data (stores models before conversion)
-#[derive(Deserialize)]
-#[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum PackageDataV7<'a> {
     Conda(v7::CondaPackageDataModel<'a>),
     Pypi(v7::PypiPackageDataModel<'a>),
+}
+
+impl<'de> Deserialize<'de> for PackageDataV7<'static> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[allow(clippy::large_enum_variant)]
+        #[serde(untagged)]
+        enum RawRecord {
+            Conda {
+                conda: String,
+                #[serde(flatten)]
+                extra: BTreeMap<Value, Value>,
+            },
+            Pypi {
+                pypi: String,
+                #[serde(flatten)]
+                extra: BTreeMap<Value, Value>,
+            },
+        }
+
+        let record = RawRecord::deserialize(deserializer)?;
+        Ok(match record {
+            RawRecord::Conda { conda, mut extra } => {
+                extra.insert(Value::String(String::from("conda")), Value::String(conda));
+                Self::Conda(
+                    Value::Map(extra)
+                        .deserialize_into()
+                        .map_err(D::Error::custom)?,
+                )
+            }
+            RawRecord::Pypi { pypi, mut extra } => {
+                extra.insert(Value::String(String::from("pypi")), Value::String(pypi));
+                Self::Pypi(
+                    Value::Map(extra)
+                        .deserialize_into()
+                        .map_err(D::Error::custom)?,
+                )
+            }
+        })
+    }
 }
 
 // V7 selectors - simplified, use variants for source package disambiguation

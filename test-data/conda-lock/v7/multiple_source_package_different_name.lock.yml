@@ -1,0 +1,29 @@
+# Multiple source package only by name
+#
+# Packages need to be disambiguated by name since they share the same source location.
+
+version: 7
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        - conda: my-package
+          name: my-package
+        - conda: my-package
+          name: my-package-dev
+
+packages:
+  - conda: my-package
+    name: my-package
+    variants: {}
+    depends:
+      - python >=3.8
+    license: MIT
+  - conda: my-package
+    name: my-package-dev
+    variants: {}
+    depends:
+      - python >=3.8
+    license: MIT
