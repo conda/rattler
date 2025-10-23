@@ -72,6 +72,50 @@ impl PackageSelector<v7::CondaPackageDataModel<'static>> for DeserializablePacka
     }
 }
 
+/// Check if a binary package candidate matches the selector criteria.
+fn matches_binary_candidate(
+    model: &v7::CondaPackageDataModel<'static>,
+    platform: rattler_conda_types::Platform,
+) -> bool {
+    // Get the subdir - either from the model or derive from the URL
+    let derived_fields = LocationDerivedFields::new(&model.location);
+    let subdir = model.subdir.as_deref().or(derived_fields.subdir.as_deref());
+
+    // Must match the current platform's subdir OR be noarch
+    match subdir {
+        Some(subdir) => subdir == platform.as_str() || subdir == "noarch",
+        None => false,
+    }
+}
+
+/// Check if a source package candidate matches the selector criteria.
+fn matches_source_candidate(
+    model: &v7::CondaPackageDataModel<'static>,
+    expected_variants: &std::collections::BTreeMap<String, crate::VariantValue>,
+) -> bool {
+    // Source package - all expected variants must match
+    expected_variants
+        .iter()
+        .all(|(expected_key, expected_value)| {
+            model
+                .variants
+                .get(expected_key)
+                .is_some_and(|v| v == expected_value)
+        })
+}
+
+/// Check if the package name matches the selector criteria.
+fn matches_name(
+    model: &v7::CondaPackageDataModel<'static>,
+    expected_name: &Option<rattler_conda_types::PackageName>,
+) -> bool {
+    match (expected_name, &model.name) {
+        (Some(expected), Some(model_name)) => expected == model_name.as_ref(),
+        (None, _) => true,
+        _ => false,
+    }
+}
+
 /// Resolve a V7 conda selector using simplified logic with models:
 /// - Binary packages: match by location + subdir (using model's subdir field)
 /// - Source packages: match by location + name + variants (using model's variants field)
@@ -97,12 +141,8 @@ fn resolve_conda_selector_v7(
             let model = &ctx.conda_packages[idx];
 
             // Name must match if specified
-            if let Some(expected_name) = &name {
-                if let Some(model_name) = &model.name {
-                    if expected_name != model_name.as_ref() {
-                        return false;
-                    }
-                }
+            if !matches_name(model, &name) {
+                return false;
             }
 
             // Check if this is a binary or source package
@@ -112,28 +152,9 @@ fn resolve_conda_selector_v7(
             });
 
             if is_binary {
-                // Get the subdir - either from the model or derive from the URL
-                let derived_fields = LocationDerivedFields::new(&model.location);
-                let subdir = model.subdir.as_deref().or(derived_fields.subdir.as_deref());
-
-                // Must match the current platform's subdir OR be noarch
-                if let Some(subdir) = subdir {
-                    subdir == ctx.platform.as_str() || subdir == "noarch"
-                } else {
-                    false
-                }
+                matches_binary_candidate(model, ctx.platform)
             } else {
-                // Source package - match listed variants
-                for (expected_key, expected_value) in &variants {
-                    if model
-                        .variants
-                        .get(expected_key)
-                        .is_none_or(|v| v != expected_value)
-                    {
-                        return false;
-                    }
-                }
-                true
+                matches_source_candidate(model, &variants)
             }
         })
         .copied();
