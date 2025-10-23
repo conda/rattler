@@ -619,6 +619,54 @@ impl<T: Shell + Clone> Activator<T> {
         variables: ActivationVariables,
         environment: Option<HashMap<&OsStr, &OsStr>>,
     ) -> Result<HashMap<String, String>, ActivationError> {
+        if variables.conda_prefix.is_none() && self.activation_scripts.is_empty() {
+            let mut env_diff = variables.current_env.clone();
+
+            let shlvl = variables
+                .current_env
+                .get("CONDA_SHLVL")
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(0);
+            let new_shlvl = shlvl + 1;
+            env_diff.insert("CONDA_SHLVL".to_string(), new_shlvl.to_string());
+
+            env_diff.insert(
+                "CONDA_PREFIX".to_string(),
+                self.target_prefix.to_string_lossy().to_string(),
+            );
+
+            let mut new_path = self.paths.clone();
+            if let Some(paths) = &variables.path {
+                new_path.extend(paths.clone());
+            }
+            env_diff.insert(
+                "PATH".to_string(),
+                std::env::join_paths(new_path)
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string(),
+            );
+
+            for (key, value) in &self.env_vars {
+                env_diff.insert(key.clone(), value.clone());
+            }
+
+            for (key, value) in &self.post_activation_env_vars {
+                env_diff.insert(key.clone(), value.clone());
+            }
+
+            if let Some(env_overrides) = environment {
+                for (k, v) in env_overrides {
+                    env_diff.insert(
+                        k.to_string_lossy().to_string(),
+                        v.to_string_lossy().to_string(),
+                    );
+                }
+            }
+
+            return Ok(env_diff);
+        }
+
         let activation_script = self.activation(variables)?.script;
 
         // Create a script that starts by emitting all environment variables, then runs
@@ -1049,6 +1097,55 @@ mod tests {
         insta::assert_yaml_snapshot!("after_activation", env_diff);
     }
 
+    #[allow(dead_code)]
+    fn test_run_activation_fast_path(shell: ShellEnum, with_unicode: bool) {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+
+        let env = if with_unicode {
+            environment_dir.path().join("🦀")
+        } else {
+            environment_dir.path().to_path_buf()
+        };
+
+        let state_path = env.join("conda-meta/state");
+        fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+        let quotes = r#"{"env_vars": {"STATE": "Hello, world!"}}"#;
+        fs::write(&state_path, quotes).unwrap();
+
+        let content_pkg_1 = r#"{"PKG1": "Hello, world!"}"#;
+        let content_pkg_2 = r#"{"PKG2": "Hello, world!"}"#;
+
+        let env_var_d = env.join("etc/conda/env_vars.d");
+        fs::create_dir_all(&env_var_d).unwrap();
+
+        let pkg1 = env_var_d.join("pkg1.json");
+        let pkg2 = env_var_d.join("pkg2.json");
+
+        fs::write(pkg1, content_pkg_1).unwrap();
+        fs::write(pkg2, content_pkg_2).unwrap();
+
+        let activator = Activator::from_path(&env, shell.clone(), Platform::current()).unwrap();
+        assert!(activator.activation_scripts.is_empty());
+
+        let activation_env = activator
+            .run_activation(ActivationVariables::default(), None)
+            .unwrap();
+
+        let current_env = std::env::vars().collect::<HashMap<_, _>>();
+
+        let mut env_diff = activation_env
+            .into_iter()
+            .filter(|(key, value)| current_env.get(key) != Some(value))
+            .collect::<BTreeMap<_, _>>();
+
+        env_diff.remove("CONDA_PREFIX");
+        env_diff.remove("Path");
+        env_diff.remove("PATH");
+        env_diff.remove("LINENO");
+
+        insta::assert_yaml_snapshot!("after_activation_fast_path", env_diff);
+    }
+
     #[test]
     #[cfg(windows)]
     fn test_run_activation_powershell() {
@@ -1067,6 +1164,12 @@ mod tests {
     #[cfg(unix)]
     fn test_run_activation_bash() {
         test_run_activation(crate::shell::Bash.into(), false);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_run_activation_bash_fast() {
+        test_run_activation_fast_path(crate::shell::Bash.into(), false);
     }
 
     #[test]
