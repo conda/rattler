@@ -196,12 +196,16 @@ pub enum GitShallowSpec {
     Rev,
 }
 
-/// Package build source kind.
+/// Package build source location for reproducible builds.
+///
+/// This stores the exact source location information needed to
+/// reproducibly build a package from source. Used by pixi build
+/// and other package building tools.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum PackageBuildSourceKind {
-    /// Git repository source with specific revision
+pub enum PackageBuildSource {
+    /// Git repository source with specific revision.
     Git {
-        /// The repository URL
+        /// The repository URL.
         url: Url,
         /// Shallow specification of repository head to use.
         ///
@@ -209,37 +213,23 @@ pub enum PackageBuildSourceKind {
         spec: Option<GitShallowSpec>,
         /// The specific git revision.
         rev: String,
+        /// Subdirectory on which focus on.
+        subdir: Option<Utf8TypedPathBuf>,
     },
-    /// URL-based archive source with content hash
+    /// URL-based archive source with content hash.
     Url {
-        /// The URL to the archive
+        /// The URL to the archive.
         url: Url,
-        /// The SHA256 hash of the archive content
+        /// The SHA256 hash of the archive content.
         sha256: Sha256Hash,
+        /// Subdirectory to use.
+        subdir: Option<Utf8TypedPathBuf>,
     },
-}
-
-/// Package build source location for reproducible builds.
-///
-/// This stores the exact source location information needed to
-/// reproducibly build a package from source. Used by pixi build
-/// and other package building tools.
-///
-/// There are 3 different types of locations: path, git, url
-/// (archive). We store only git and url sources, since path-based
-/// sources can change over time and would require expensive
-/// computation of directory file hashes for reproducibility.
-///
-/// For git sources we store the repository url and exact revision.
-/// For url sources we store the archive url and its content hash.
-///
-/// For both kinds we store subdirectory.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct PackageBuildSource {
-    /// Kind of source we fetch.
-    pub kind: PackageBuildSourceKind,
-    /// Subdirectory of the source from which build starts.
-    pub subdirectory: Option<Utf8TypedPathBuf>,
+    /// Source is some local path.
+    Path {
+        /// Actual path.
+        path: Utf8TypedPathBuf,
+    },
 }
 
 /// Information about a source package stored in the lock-file.
