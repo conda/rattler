@@ -42,7 +42,7 @@ where
 /// Serializes the [`Output`] of a [`Digest`].
 ///
 /// If the serializer is human-readable, it will write the digest as a hex
-/// string. Otherwise, it will deserialize raw bytes.
+/// string. Otherwise, it will serialize raw bytes.
 pub fn serialize<'a, S: Serializer, Dig: Digest>(
     digest: &'a Output<Dig>,
     s: S,

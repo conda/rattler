@@ -1,3 +1,8 @@
+#[allow(deprecated)]
+use digest::generic_array::GenericArray;
+use fs4::fs_std::FileExt;
+use parking_lot::Mutex;
+use rattler_digest::Sha256Hash;
 use std::{
     fmt::{Debug, Formatter},
     io::{Read, Seek, SeekFrom, Write},
@@ -5,11 +10,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-
-use digest::generic_array::GenericArray;
-use fs4::fs_std::FileExt;
-use parking_lot::Mutex;
-use rattler_digest::Sha256Hash;
 
 use crate::package_cache::PackageCacheError;
 
@@ -273,6 +273,7 @@ impl CacheRwLock {
                 ));
             }
         }
+        #[allow(deprecated)]
         Ok(Some(GenericArray::clone_from_slice(&buf)))
     }
 }
