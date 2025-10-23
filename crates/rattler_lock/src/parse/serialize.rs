@@ -510,6 +510,26 @@ impl Ord for PackageData<'_> {
     }
 }
 
+impl Serialize for CondaPackageData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        SerializablePackageDataV7::Conda(models::v7::CondaPackageDataModel::from(self))
+            .serialize(serializer)
+    }
+}
+
+impl Serialize for PypiPackageData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        SerializablePackageDataV7::Pypi(models::v7::PypiPackageDataModel::from(self))
+            .serialize(serializer)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::select_minimal_variant_keys;
