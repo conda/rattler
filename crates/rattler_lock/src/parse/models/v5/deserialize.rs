@@ -160,3 +160,125 @@ impl LockFileVersion for V5 {
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rattler_conda_types::Platform;
+    use url::Url;
+
+    /// Helper to create a test binary package
+    fn test_binary_package(location: UrlOrPath, subdir: &str) -> CondaPackageData {
+        use crate::conda::CondaBinaryData;
+        use rattler_conda_types::{PackageRecord, Version};
+        use std::str::FromStr;
+
+        CondaPackageData::Binary(CondaBinaryData {
+            package_record: PackageRecord {
+                subdir: subdir.to_string(),
+                ..PackageRecord::new(
+                    "test-package".parse().unwrap(),
+                    Version::from_str("1.0.0").unwrap(),
+                    "0".to_string(),
+                )
+            },
+            location,
+            file_name: "package.tar.bz2".to_string(),
+            channel: None,
+        })
+    }
+
+    /// Tests that V5 selectors correctly filter packages by platform subdir.
+    ///
+    /// V5 selectors only contain location information, so they must match by
+    /// comparing the package's subdir field against the target platform.
+    #[test]
+    fn test_conda_selector_v5_matches_platform_subdir() {
+        let location = UrlOrPath::Url(Url::parse("https://example.com/package.tar.bz2").unwrap());
+        let selector = CondaSelectorV5 {
+            conda: location.clone(),
+        };
+
+        let linux64_pkg = test_binary_package(location.clone(), "linux-64");
+        let win64_pkg = test_binary_package(location.clone(), "win-64");
+
+        let mut packages = vec![linux64_pkg, win64_pkg];
+        let mut lookup = fxhash::FxHashMap::default();
+        lookup.insert(location.clone(), vec![0, 1]);
+
+        let mut ctx = ResolveCtx {
+            environment_name: "test",
+            platform: Platform::Linux64,
+            conda_packages: &mut packages,
+            conda_url_lookup: &lookup,
+            pypi_url_lookup: &fxhash::FxHashMap::default(),
+            pypi_runtime_lookup: &mut indexmap::IndexSet::new(),
+        };
+
+        let result = resolve_conda_selector_v5(selector, &mut ctx);
+        assert!(result.is_ok());
+        // Should resolve to the linux-64 package (index 0)
+        assert_eq!(result.unwrap(), EnvironmentPackageData::Conda(0));
+    }
+
+    /// Tests that V5 selectors can match noarch packages when platform-specific is unavailable.
+    ///
+    /// When no packages match the target platform's subdir, V5 falls back to
+    /// matching any available packages at the location, including noarch.
+    #[test]
+    fn test_conda_selector_v5_noarch_fallback() {
+        let location = UrlOrPath::Url(Url::parse("https://example.com/package.tar.bz2").unwrap());
+        let selector = CondaSelectorV5 {
+            conda: location.clone(),
+        };
+
+        let noarch_pkg = test_binary_package(location.clone(), "noarch");
+
+        let mut packages = vec![noarch_pkg];
+        let mut lookup = fxhash::FxHashMap::default();
+        lookup.insert(location.clone(), vec![0]);
+
+        let mut ctx = ResolveCtx {
+            environment_name: "test",
+            platform: Platform::Linux64,
+            conda_packages: &mut packages,
+            conda_url_lookup: &lookup,
+            pypi_url_lookup: &fxhash::FxHashMap::default(),
+            pypi_runtime_lookup: &mut indexmap::IndexSet::new(),
+        };
+
+        let result = resolve_conda_selector_v5(selector, &mut ctx);
+        assert!(result.is_ok());
+    }
+
+    /// Tests that V5 selectors return an error when the package location is not found.
+    ///
+    /// When a selector references a package location that doesn't exist in the
+    /// lock file's package lookup, the resolution must fail with a clear error.
+    #[test]
+    fn test_conda_selector_v5_missing_package() {
+        let location = UrlOrPath::Url(Url::parse("https://example.com/missing.tar.bz2").unwrap());
+        let selector = CondaSelectorV5 {
+            conda: location.clone(),
+        };
+
+        let mut packages = vec![];
+        let lookup = fxhash::FxHashMap::default();
+
+        let mut ctx = ResolveCtx {
+            environment_name: "test",
+            platform: Platform::Linux64,
+            conda_packages: &mut packages,
+            conda_url_lookup: &lookup,
+            pypi_url_lookup: &fxhash::FxHashMap::default(),
+            pypi_runtime_lookup: &mut indexmap::IndexSet::new(),
+        };
+
+        let result = resolve_conda_selector_v5(selector, &mut ctx);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.err(),
+            Some(ParseCondaLockError::MissingPackage(_, _, _))
+        ));
+    }
+}
