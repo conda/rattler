@@ -405,68 +405,57 @@ pub enum ConversionError {
 
 impl CondaPackageData {
     /// Returns true if this package satisfies the given `spec`.
+    ///
+    /// Only binary packages can be matched against specs. Source packages
+    /// don't have version/build/subdir information and cannot satisfy specs.
     pub fn satisfies(&self, spec: &MatchSpec) -> bool {
-        self.matches(spec)
+        match self {
+            Self::Binary(binary) => binary.matches(spec),
+            Self::Source(_) => false,
+        }
     }
 }
 
-impl Matches<MatchSpec> for CondaPackageData {
+impl Matches<MatchSpec> for CondaBinaryData {
     fn matches(&self, spec: &MatchSpec) -> bool {
         // Check if the name matches
         if let Some(name) = &spec.name {
-            if name != self.name() {
+            if name != &self.package_record.name {
                 return false;
             }
         }
 
         // Check if the channel matches
         if let Some(channel) = &spec.channel {
-            match self {
-                CondaPackageData::Binary(binary) => {
-                    if let Some(record_channel) = &binary.channel {
-                        if &channel.base_url != record_channel {
-                            return false;
-                        }
-                    }
-                }
-                CondaPackageData::Source(_) => {
+            if let Some(record_channel) = &self.channel {
+                if &channel.base_url != record_channel {
                     return false;
                 }
+            } else {
+                return false;
             }
         }
 
-        // Check if the record matches (only for binary packages)
-        // Source packages don't have version/build/subdir so they can't match full specs
-        match self.as_binary() {
-            Some(binary) => spec.matches(&binary.package_record),
-            None => false, // Source packages can only match by name (checked above)
-        }
+        // Check if the record matches
+        spec.matches(&self.package_record)
     }
 }
 
-impl Matches<NamelessMatchSpec> for CondaPackageData {
+impl Matches<NamelessMatchSpec> for CondaBinaryData {
     fn matches(&self, spec: &NamelessMatchSpec) -> bool {
         // Check if the channel matches
         if let Some(channel) = &spec.channel {
-            match self {
-                CondaPackageData::Binary(binary) => {
-                    if let Some(record_channel) = &binary.channel {
-                        if &channel.base_url != record_channel {
-                            return false;
-                        }
-                    }
-                }
-                CondaPackageData::Source(_) => {
+            if let Some(record_channel) = &self.channel {
+                if &channel.base_url != record_channel {
                     return false;
                 }
+            } else {
+                return false;
             }
         }
 
-        // Check if the record matches (only for binary packages)
-        match self.as_binary() {
-            Some(binary) => spec.matches(&binary.package_record),
-            None => false,
-        }
+        // Check if the record matches
+        spec.matches(&self.package_record)
     }
 }
 

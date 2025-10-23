@@ -14,8 +14,9 @@ use url::Url;
 use crate::{
     file_format_version::FileFormatVersion,
     parse::{models, V7},
-    Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
+    Channel, CondaBinaryData, CondaPackageData, CondaSourceData, EnvironmentData,
+    EnvironmentPackageData, LockFile, LockFileInner, PypiIndexes, PypiPackageData,
+    PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
 };
 
 #[serde_as]
@@ -110,24 +111,6 @@ enum SerializablePackageSelector<'a> {
     },
 }
 
-#[derive(Copy, Clone)]
-enum CondaDisambiguityFilter {
-    Name,
-    // V7: TODO - add Variants filter for source packages
-}
-
-impl CondaDisambiguityFilter {
-    fn all() -> [CondaDisambiguityFilter; 1] {
-        [Self::Name]
-    }
-
-    fn filter(&self, package: &CondaPackageData, other: &CondaPackageData) -> bool {
-        match self {
-            Self::Name => package.name() == other.name(),
-        }
-    }
-}
-
 impl<'a> SerializablePackageSelector<'a> {
     fn from_lock_file<E: serde::ser::Error>(
         inner: &'a LockFileInner,
@@ -158,80 +141,14 @@ impl<'a> SerializablePackageSelector<'a> {
         platform: Platform,
         used_conda_packages: &HashSet<usize>,
     ) -> Result<Self, E> {
-        // Find all packages that share the same location
-        let mut similar_packages = inner
-            .conda_packages
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, p)| used_conda_packages.contains(&idx).then_some(p))
-            .filter(|p| p.location() == package.location())
-            .collect::<Vec<_>>();
-
-        // If there are multiple packages at the same location, filter by subdir for binary packages
-        // Source packages don't have subdirs (they're platform-independent)
-        if similar_packages.len() > 1 {
-            similar_packages.retain(|p| {
-                // Binary packages: must match the platform's subdir OR be noarch
-                if let Some(binary) = p.as_binary() {
-                    return binary.package_record.subdir == platform.as_str()
-                        || binary.package_record.subdir == "noarch";
-                }
-
-                // Source packages: keep all
-                true
-            });
-        }
-
-        // V7: For disambiguation, we only use name (and variants for source packages in the future)
-        // Binary packages are unique by location + subdir, so we only add name if needed
-        let mut name = None;
-        while similar_packages.len() > 1 {
-            let (filter, similar) = CondaDisambiguityFilter::all()
-                .into_iter()
-                .map(|filter| {
-                    (
-                        filter,
-                        similar_packages
-                            .iter()
-                            .copied()
-                            .filter(|p| filter.filter(package, p))
-                            .collect_vec(),
-                    )
-                })
-                .min_by_key(|(_filter, set)| set.len())
-                .expect("cannot be empty because the set should always contain `package`");
-
-            if similar.len() == similar_packages.len() {
-                // No further disambiguation possible. Assume that the package is a duplicate.
-                break;
+        match package {
+            CondaPackageData::Binary(_) => {
+                Self::build_binary_selector(inner, package, platform, used_conda_packages)
             }
-
-            similar_packages = similar;
-            match filter {
-                CondaDisambiguityFilter::Name => {
-                    name = Some(package.name());
-                }
+            CondaPackageData::Source(_) => {
+                Self::build_source_selector(inner, package, used_conda_packages)
             }
         }
-
-        // V7: Check if we have multiple source packages that couldn't be disambiguated
-        // This happens when deserializing V6 files which lack variant information
-        if similar_packages.len() > 1 && package.as_source().is_some() {
-            return Err(E::custom(format!(
-                "Failed to disambiguate source packages at location '{}'. \
-                 Multiple source packages exist but cannot be distinguished without variant information. \
-                 This typically occurs when converting from lock file format V6 to V7.",
-                package.location()
-            )));
-        }
-
-        Ok(Self::Conda {
-            conda: package.location(),
-            name,
-            // TODO: For V7 source packages, populate variants from CondaSourceData
-            // For now, always empty
-            variants: BTreeMap::new(),
-        })
     }
 
     fn from_pypi(
@@ -244,6 +161,164 @@ impl<'a> SerializablePackageSelector<'a> {
             pypi: &package.location,
             extras: &env.extras,
         }
+    }
+}
+
+/// Determine the smallest set of variant key/value pairs that uniquely identify
+/// `target` among the remaining conflicting source packages.
+fn select_minimal_variant_keys<'a>(
+    target: &'a CondaSourceData,
+    mut conflicts: Vec<&'a CondaSourceData>,
+) -> Option<BTreeMap<String, crate::VariantValue>> {
+    let mut selected = BTreeMap::new();
+
+    // Keep picking discriminating keys until no conflicting packages remain.
+    while !conflicts.is_empty() {
+        let mut best: Option<(String, crate::VariantValue, Vec<&CondaSourceData>)> = None;
+
+        for (key, value) in &target.variants {
+            if selected.contains_key(key) {
+                continue;
+            }
+
+            // Restrict conflicts to those that share the current key/value combo.
+            let matching: Vec<&CondaSourceData> = conflicts
+                .iter()
+                .copied()
+                .filter(|candidate| candidate.variants.get(key) == Some(value))
+                .collect();
+
+            if matching.len() == conflicts.len() {
+                continue;
+            }
+
+            match &best {
+                Some((best_key, _best_value, best_matching)) => {
+                    if matching.len() < best_matching.len()
+                        || (matching.len() == best_matching.len() && key < best_key)
+                    {
+                        best = Some((key.clone(), value.clone(), matching));
+                    }
+                }
+                None => best = Some((key.clone(), value.clone(), matching)),
+            }
+        }
+
+        // If no new key can reduce the conflict set, disambiguation fails.
+        let (key, value, reduced) = best?;
+        selected.insert(key, value);
+        conflicts = reduced;
+    }
+
+    Some(selected)
+}
+
+impl<'a> SerializablePackageSelector<'a> {
+    /// Serialize a binary package selector, erroring if multiple binaries remain.
+    fn build_binary_selector<E: serde::ser::Error>(
+        inner: &'a LockFileInner,
+        package: &'a CondaPackageData,
+        platform: Platform,
+        used_conda_packages: &HashSet<usize>,
+    ) -> Result<Self, E> {
+        let binary = package
+            .as_binary()
+            .expect("build_binary_selector should only be called for binary packages");
+
+        // Gather all binary packages at the same location that apply to the platform.
+        let candidates: Vec<&CondaBinaryData> = inner
+            .conda_packages
+            .iter()
+            .enumerate()
+            .filter(|(idx, p)| {
+                used_conda_packages.contains(idx) && p.location() == package.location()
+            })
+            .filter_map(|(_, p)| p.as_binary())
+            .filter(|candidate| {
+                candidate.package_record.subdir == platform.as_str()
+                    || candidate.package_record.subdir == "noarch"
+            })
+            .collect();
+
+        // The target binary must still be present after filtering.
+        if candidates.is_empty()
+            || !candidates
+                .iter()
+                .any(|candidate| std::ptr::eq(*candidate, binary))
+        {
+            return Err(E::custom(format!(
+                "Failed to locate binary package '{}' for platform '{}'.",
+                package.location(),
+                platform.as_str()
+            )));
+        }
+
+        // If more than one candidate survives, we cannot serialize an unambiguous selector.
+        if candidates.len() > 1 {
+            return Err(E::custom(format!(
+                "Failed to disambiguate binary packages at location '{}' for platform '{}'. \
+                 Multiple packages share the same location and subdir.",
+                package.location(),
+                platform.as_str()
+            )));
+        }
+
+        Ok(Self::Conda {
+            conda: package.location(),
+            name: None,
+            variants: BTreeMap::new(),
+        })
+    }
+
+    /// Serialize a source selector, emitting the minimal variant subset needed.
+    fn build_source_selector<E: serde::ser::Error>(
+        inner: &'a LockFileInner,
+        package: &'a CondaPackageData,
+        used_conda_packages: &HashSet<usize>,
+    ) -> Result<Self, E> {
+        let source = package
+            .as_source()
+            .expect("build_source_selector should only be called for source packages");
+
+        // Collect every source package referenced from the same location.
+        let similar_sources: Vec<&CondaSourceData> = inner
+            .conda_packages
+            .iter()
+            .enumerate()
+            .filter(|(idx, p)| {
+                used_conda_packages.contains(idx) && p.location() == package.location()
+            })
+            .filter_map(|(_, p)| p.as_source())
+            .collect();
+
+        // Include the package name if multiple names exist at this location.
+        let include_name = similar_sources
+            .iter()
+            .any(|candidate| !std::ptr::eq(*candidate, source) && candidate.name != source.name);
+
+        let mut conflicts: Vec<&CondaSourceData> = similar_sources
+            .into_iter()
+            .filter(|candidate| !std::ptr::eq(*candidate, source))
+            .collect();
+
+        if include_name {
+            conflicts.retain(|candidate| candidate.name == source.name);
+        }
+
+        let variants = select_minimal_variant_keys(source, conflicts).ok_or_else(|| {
+            E::custom(format!(
+                "Failed to disambiguate source packages at location '{}'. \
+                 Multiple source packages exist but cannot be distinguished without variant information. \
+                 This typically occurs when converting from lock file format V6 to V7.",
+                package.location()
+            ))
+        })?;
+
+        Ok(Self::Conda {
+            conda: package.location(),
+            name: include_name.then_some(package.name()),
+            variants,
+        })
     }
 }
 
@@ -432,5 +507,131 @@ impl Ord for PackageData<'_> {
                 (Pypi(_), _) => Ordering::Less,
                 (_, Pypi(_)) => Ordering::Greater,
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::select_minimal_variant_keys;
+    use crate::{CondaSourceData, UrlOrPath, VariantValue};
+    use rattler_conda_types::PackageName;
+    use std::collections::BTreeMap;
+    use std::str::FromStr;
+    use url::Url;
+
+    fn make_source(
+        name: &str,
+        location: &str,
+        variants: BTreeMap<String, VariantValue>,
+    ) -> CondaSourceData {
+        CondaSourceData {
+            name: PackageName::from_str(name).unwrap(),
+            location: UrlOrPath::from(Url::parse(location).unwrap()),
+            variants,
+            depends: Vec::new(),
+            constrains: Vec::new(),
+            experimental_extra_depends: BTreeMap::new(),
+            license: None,
+            purls: None,
+            sources: BTreeMap::new(),
+            input: None,
+            package_build_source: None,
+            python_site_packages_path: None,
+        }
+    }
+
+    #[test]
+    fn selects_single_variant_key() {
+        // Only one variant key differs (python version), so a single key should be selected.
+        let mut target_variants = BTreeMap::new();
+        target_variants.insert(
+            "python".to_string(),
+            VariantValue::String("3.10".to_string()),
+        );
+        let target = make_source("foo", "https://example.org/pkg", target_variants);
+
+        let mut other_variants = BTreeMap::new();
+        other_variants.insert(
+            "python".to_string(),
+            VariantValue::String("3.11".to_string()),
+        );
+        let other = make_source("foo", "https://example.org/pkg", other_variants);
+
+        let selected =
+            select_minimal_variant_keys(&target, vec![&other]).expect("should disambiguate");
+        assert_eq!(selected.len(), 1);
+        assert_eq!(
+            selected.get("python"),
+            Some(&VariantValue::String("3.10".to_string()))
+        );
+    }
+
+    #[test]
+    fn selects_multiple_variant_keys_when_needed() {
+        // Two variants (cuda + blas_impl) are necessary to eliminate all conflicts.
+        let mut target_variants = BTreeMap::new();
+        target_variants.insert(
+            "python".to_string(),
+            VariantValue::String("3.10".to_string()),
+        );
+        target_variants.insert("cuda".to_string(), VariantValue::String("11.8".to_string()));
+        target_variants.insert(
+            "blas_impl".to_string(),
+            VariantValue::String("openblas".to_string()),
+        );
+        let target = make_source("foo", "https://example.org/pkg", target_variants);
+
+        let mut other1_variants = BTreeMap::new();
+        other1_variants.insert(
+            "python".to_string(),
+            VariantValue::String("3.10".to_string()),
+        );
+        other1_variants.insert("cuda".to_string(), VariantValue::String("11.2".to_string()));
+        other1_variants.insert(
+            "blas_impl".to_string(),
+            VariantValue::String("openblas".to_string()),
+        );
+        let other1 = make_source("foo", "https://example.org/pkg", other1_variants);
+
+        let mut other2_variants = BTreeMap::new();
+        other2_variants.insert(
+            "python".to_string(),
+            VariantValue::String("3.10".to_string()),
+        );
+        other2_variants.insert("cuda".to_string(), VariantValue::String("11.8".to_string()));
+        other2_variants.insert(
+            "blas_impl".to_string(),
+            VariantValue::String("mkl".to_string()),
+        );
+        let other2 = make_source("foo", "https://example.org/pkg", other2_variants);
+
+        let selected = select_minimal_variant_keys(&target, vec![&other1, &other2])
+            .expect("should disambiguate");
+        assert_eq!(selected.len(), 2);
+        assert_eq!(
+            selected.get("cuda"),
+            Some(&VariantValue::String("11.8".to_string()))
+        );
+        assert_eq!(
+            selected.get("blas_impl"),
+            Some(&VariantValue::String("openblas".to_string()))
+        );
+    }
+
+    #[test]
+    fn returns_none_when_variants_insufficient() {
+        // Identical variant maps cannot be distinguished, so the helper must fail.
+        let mut target_variants = BTreeMap::new();
+        target_variants.insert(
+            "python".to_string(),
+            VariantValue::String("3.10".to_string()),
+        );
+        let target = make_source("foo", "https://example.org/pkg", target_variants.clone());
+        let other = make_source("foo", "https://example.org/pkg", target_variants);
+
+        assert!(
+            select_minimal_variant_keys(&target, vec![&other]).is_none(),
+            "expected disambiguation failure"
+        );
     }
 }
