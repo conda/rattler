@@ -597,13 +597,11 @@ mod test {
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("Failed to disambiguate source packages"),
-            "Expected error about ambiguous source packages, got: {}",
-            err_msg
+            "Expected error about ambiguous source packages, got: {err_msg}"
         );
         assert!(
             err_msg.contains("cannot be distinguished without variant information"),
-            "Expected error to mention variant information, got: {}",
-            err_msg
+            "Expected error to mention variant information, got: {err_msg}"
         );
     }
 

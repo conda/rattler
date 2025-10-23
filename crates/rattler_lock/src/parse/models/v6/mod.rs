@@ -1,4 +1,5 @@
 mod conda_package_data;
+pub(crate) mod deserialize;
 pub(in crate::parse::models) mod pypi_package_data;
 pub(in crate::parse::models) mod source_data;
 

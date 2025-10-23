@@ -1217,7 +1217,7 @@ mod test {
     pub async fn test_conda_lock() {
         // Load a prepared explicit environment file for the current platform.
         let lock_path = get_test_data_dir().join("conda-lock/v4/python-lock.yml");
-        let (lock, _) = LockFile::from_path(&lock_path).unwrap();
+        let lock = LockFile::from_path(&lock_path).unwrap();
 
         let current_platform = Platform::current();
         let lock_env = lock

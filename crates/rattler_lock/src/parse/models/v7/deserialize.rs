@@ -1,0 +1,159 @@
+use std::collections::BTreeMap;
+
+use itertools::Itertools;
+use rattler_conda_types::PackageName;
+use serde::Deserialize;
+
+use crate::{
+    parse::{models::v7, ParseCondaLockError, V7},
+    utils::derived_fields::LocationDerivedFields,
+    EnvironmentPackageData, PypiPackageData, UrlOrPath,
+};
+
+use super::super::super::deserialize::{
+    HasLocation, LockFileVersion, PackageSelector, PypiSelector, ResolveCtx,
+};
+
+impl HasLocation for v7::CondaPackageDataModel<'static> {
+    fn location(&self) -> &UrlOrPath {
+        &self.location
+    }
+}
+
+/// V7-specific package data (stores models before conversion)
+#[derive(Deserialize)]
+#[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum PackageDataV7<'a> {
+    Conda(v7::CondaPackageDataModel<'a>),
+    Pypi(v7::PypiPackageDataModel<'a>),
+}
+
+// V7 selectors - simplified, use variants for source package disambiguation
+// Binary packages are unique by location, so no version/build/subdir needed
+#[derive(Deserialize)]
+pub(crate) struct CondaSelectorV7 {
+    #[serde(rename = "conda")]
+    pub(crate) conda: UrlOrPath,
+    pub(crate) name: Option<PackageName>,
+    // For source packages: variants-based disambiguation
+    #[serde(default)]
+    pub(crate) variants: BTreeMap<String, crate::VariantValue>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum DeserializablePackageSelectorV7 {
+    Conda(CondaSelectorV7),
+    Pypi(PypiSelector),
+}
+
+impl PackageSelector<v7::CondaPackageDataModel<'static>> for DeserializablePackageSelectorV7 {
+    fn resolve(
+        self,
+        ctx: &mut ResolveCtx<'_, v7::CondaPackageDataModel<'static>>,
+    ) -> Result<EnvironmentPackageData, ParseCondaLockError> {
+        match self {
+            DeserializablePackageSelectorV7::Conda(selector) => {
+                resolve_conda_selector_v7(selector, ctx)
+            }
+            DeserializablePackageSelectorV7::Pypi(selector) => {
+                super::super::super::deserialize::resolve_pypi_selector(selector, ctx)
+            }
+        }
+    }
+}
+
+/// Resolve a V7 conda selector using simplified logic with models:
+/// - Binary packages: match by location + subdir (using model's subdir field)
+/// - Source packages: match by location + name + variants (using model's variants field)
+fn resolve_conda_selector_v7(
+    selector: CondaSelectorV7,
+    ctx: &mut ResolveCtx<'_, v7::CondaPackageDataModel<'static>>,
+) -> Result<EnvironmentPackageData, ParseCondaLockError> {
+    let CondaSelectorV7 {
+        conda,
+        name,
+        variants,
+    } = selector;
+
+    let candidates = ctx
+        .conda_url_lookup
+        .get(&conda)
+        .map_or(&[] as &[usize], Vec::as_slice);
+
+    // Find matching package using model fields
+    let package_index = candidates
+        .iter()
+        .find(|&&idx| {
+            let model = &ctx.conda_packages[idx];
+
+            // Name must match if specified
+            if let Some(expected_name) = &name {
+                if let Some(model_name) = &model.name {
+                    if expected_name != model_name.as_ref() {
+                        return false;
+                    }
+                }
+            }
+
+            // Check if this is a binary or source package
+            // Binary packages have a filename that has an archive extension.
+            let is_binary = model.location.file_name().is_some_and(|name| {
+                rattler_conda_types::package::ArchiveType::try_from(name).is_some()
+            });
+
+            if is_binary {
+                // Get the subdir - either from the model or derive from the URL
+                let derived_fields = LocationDerivedFields::new(&model.location);
+                let subdir = model.subdir.as_deref().or(derived_fields.subdir.as_deref());
+
+                // Must match the current platform's subdir OR be noarch
+                if let Some(subdir) = subdir {
+                    subdir == ctx.platform.as_str() || subdir == "noarch"
+                } else {
+                    false
+                }
+            } else {
+                // Source package - match listed variants
+                for (expected_key, expected_value) in &variants {
+                    if model
+                        .variants
+                        .get(expected_key)
+                        .is_none_or(|v| v != expected_value)
+                    {
+                        return false;
+                    }
+                }
+                true
+            }
+        })
+        .copied();
+
+    let package_index = package_index.ok_or_else(|| {
+        ParseCondaLockError::MissingPackage(
+            ctx.environment_name.to_string(),
+            ctx.platform,
+            conda.clone(),
+        )
+    })?;
+
+    Ok(EnvironmentPackageData::Conda(package_index))
+}
+
+// Implement LockFileVersion for V7
+impl LockFileVersion for V7 {
+    type PackageData = PackageDataV7<'static>;
+    type Selector = DeserializablePackageSelectorV7;
+    type CondaPackage = v7::CondaPackageDataModel<'static>;
+
+    fn extract_packages(
+        packages: Vec<Self::PackageData>,
+    ) -> Result<(Vec<Self::CondaPackage>, Vec<PypiPackageData>), ParseCondaLockError> {
+        Ok(packages.into_iter().partition_map(|package| match package {
+            PackageDataV7::Conda(model) => itertools::Either::Left(model),
+            PackageDataV7::Pypi(model) => itertools::Either::Right(model.into()),
+        }))
+    }
+}

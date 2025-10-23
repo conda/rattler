@@ -35,6 +35,7 @@ impl PartialOrd for VariantValue {
 
 impl Ord for VariantValue {
     fn cmp(&self, other: &Self) -> Ordering {
+        #[allow(clippy::match_same_arms)]
         match (self, other) {
             (VariantValue::String(a), VariantValue::String(b)) => a.cmp(b),
             (VariantValue::Int(a), VariantValue::Int(b)) => a.cmp(b),
@@ -58,6 +59,7 @@ impl Ord for VariantValue {
 /// be installed. Although the source package is not built, it does contain
 /// dependency information through the [`PackageRecord`] struct.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[allow(clippy::large_enum_variant)]
 pub enum CondaPackageData {
     /// A binary package. A binary package is identified by looking at the
     /// location or filename of the package file and seeing if it represents a
@@ -259,7 +261,7 @@ pub struct CondaSourceData {
     pub license: Option<String>,
 
     /// Package identifiers of packages that are equivalent to this package but
-    /// from other ecosystems (e.g., PyPI)
+    /// from other ecosystems (e.g., `PyPI`)
     pub purls: Option<BTreeSet<PackageUrl>>,
 
     /// Information about packages that should be built from source instead of binary.

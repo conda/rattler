@@ -45,6 +45,7 @@ pub enum ParseCondaLockError {
     LocationToUrlConversionError(#[from] file_url::FileURLParseError),
 }
 
+#[allow(clippy::fallible_impl_from)]
 impl From<crate::ConversionError> for ParseCondaLockError {
     fn from(err: crate::ConversionError) -> Self {
         match err {
