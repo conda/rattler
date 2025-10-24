@@ -11,7 +11,6 @@
 use std::{sync::Arc, time::SystemTime};
 
 use chrono::{DateTime, Utc};
-use fxhash::FxHashMap;
 use opendal::Operator;
 use rattler_conda_types::PackageRecord;
 use rattler_networking::retry_policies::default_retry_policy;
@@ -58,7 +57,7 @@ pub enum CacheResult {
 /// [`get_or_stat`]: PackageRecordCache::get_or_stat
 #[derive(Debug, Clone, Default)]
 pub struct PackageRecordCache {
-    inner: Arc<RwLock<FxHashMap<String, CachedPackage>>>,
+    inner: Arc<RwLock<ahash::HashMap<String, CachedPackage>>>,
 }
 
 impl PackageRecordCache {

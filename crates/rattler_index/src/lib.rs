@@ -515,7 +515,7 @@ async fn index_subdir_inner(
     // Step 2: Read any previous repodata.json files with conditional check.
     // This file already contains a lot of information about the packages that we
     // can reuse.
-    let mut registered_packages: FxHashMap<String, PackageRecord> = if force {
+    let mut registered_packages: ahash::HashMap<String, PackageRecord> = if force {
         HashMap::default()
     } else {
         let (repodata_path, read_metadata) = if repodata_patch.is_some() {
