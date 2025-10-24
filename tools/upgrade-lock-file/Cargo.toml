@@ -1,0 +1,14 @@
+[package]
+name = "upgrade-lock-file"
+version = "0.1.0"
+description = "Upgrade rattler lock files to the latest format version"
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+rattler_lock = { path = "../../crates/rattler_lock" }

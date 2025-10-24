@@ -86,6 +86,9 @@ pub(crate) struct CondaSelectorV7 {
     /// Variants recorded in the lock file to disambiguate source packages.
     #[serde(default)]
     pub(crate) variants: BTreeMap<String, crate::VariantValue>,
+    /// Whether this is a dev package (only for source packages).
+    #[serde(default)]
+    pub(crate) dev: bool,
 }
 
 /// Selector used in V7 lock files to reference either a conda or PyPI package.
@@ -134,7 +137,13 @@ fn matches_binary_candidate(
 fn matches_source_candidate(
     model: &v7::CondaPackageDataModel<'static>,
     expected_variants: &std::collections::BTreeMap<String, crate::VariantValue>,
+    expected_dev: bool,
 ) -> bool {
+    // Dev field must match
+    if model.dev != expected_dev {
+        return false;
+    }
+
     // Source package - all expected variants must match
     expected_variants
         .iter()
@@ -169,6 +178,7 @@ fn resolve_conda_selector_v7(
         conda,
         name,
         variants,
+        dev,
     } = selector;
 
     let candidates = ctx
@@ -194,9 +204,10 @@ fn resolve_conda_selector_v7(
             });
 
             if is_binary {
+                // Binary packages ignore the dev field (they're never dev)
                 matches_binary_candidate(model, ctx.platform)
             } else {
-                matches_source_candidate(model, &variants)
+                matches_source_candidate(model, &variants, dev)
             }
         })
         .copied();

@@ -138,6 +138,15 @@ impl CondaPackageData {
         }
     }
 
+    /// Returns whether this is a dev package (only contributes dependencies, not installed).
+    /// Only source packages can be dev packages; binary packages always return false.
+    pub fn is_dev(&self) -> bool {
+        match self {
+            CondaPackageData::Binary(_) => false,
+            CondaPackageData::Source(data) => data.dev,
+        }
+    }
+
     /// Returns a reference to the binary representation of this instance if it
     /// exists.
     pub fn as_binary(&self) -> Option<&CondaBinaryData> {
@@ -330,6 +339,9 @@ pub struct CondaSourceData {
 
     /// Python site-packages path if this is a Python package
     pub python_site_packages_path: Option<String>,
+
+    /// Whether this is a dev package (only contributes dependencies, not installed).
+    pub dev: bool,
 }
 
 impl From<CondaSourceData> for CondaPackageData {
@@ -340,7 +352,7 @@ impl From<CondaSourceData> for CondaPackageData {
 
 impl CondaSourceData {
     pub(crate) fn merge(&self, other: &Self) -> Cow<'_, Self> {
-        if self.location == other.location && self.name == other.name {
+        if self.location == other.location && self.name == other.name && self.dev == other.dev {
             let package_build_source_merge =
                 merge_package_build_source(&self.package_build_source, &other.package_build_source);
 

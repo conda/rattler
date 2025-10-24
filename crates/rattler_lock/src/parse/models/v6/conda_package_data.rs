@@ -250,6 +250,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                 }),
                 package_build_source: value.package_build_source,
                 python_site_packages_path: value.python_site_packages_path.into_owned(),
+                dev: false, // V6 doesn't have dev field
             }))
         }
     }

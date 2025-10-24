@@ -65,6 +65,10 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub noarch: Option<Cow<'a, NoArchType>>,
 
+    // Dev field for source packages (only contributes dependencies, not installed)
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub dev: bool,
+
     // Then the hashes
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
@@ -257,6 +261,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                 }),
                 package_build_source: value.package_build_source,
                 python_site_packages_path: value.python_site_packages_path.into_owned(),
+                dev: value.dev,
             }))
         }
     }
@@ -327,6 +332,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                     package_build_source: None,
                     sources: BTreeMap::new(),
                     variants: BTreeMap::new(),
+                    dev: false, // Binary packages are never dev packages
                 }
             }
             CondaPackageData::Source(source_data) => {
@@ -374,6 +380,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                     package_build_source: source_data.package_build_source.clone(),
                     sources: source_data.sources.clone(),
                     variants: source_data.variants.clone(),
+                    dev: source_data.dev,
                 }
             }
         }
@@ -389,4 +396,9 @@ fn strip_trailing_slash(url: &Url) -> Cow<'_, Url> {
     } else {
         Cow::Borrowed(url)
     }
+}
+
+/// Helper function to check if a boolean is false (for serde `skip_serializing_if`)
+fn is_false(value: &bool) -> bool {
+    !*value
 }

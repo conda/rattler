@@ -103,6 +103,9 @@ enum SerializablePackageSelector<'a> {
         // Binary packages have empty variants map
         #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
         variants: BTreeMap<String, crate::VariantValue>,
+        // Dev field for source packages (skip serializing if false)
+        #[serde(skip_serializing_if = "is_false", default)]
+        dev: bool,
     },
     Pypi {
         pypi: &'a UrlOrPath,
@@ -267,6 +270,7 @@ impl<'a> SerializablePackageSelector<'a> {
             conda: package.location(),
             name: None,
             variants: BTreeMap::new(),
+            dev: false, // Binary packages are never dev
         })
     }
 
@@ -305,6 +309,9 @@ impl<'a> SerializablePackageSelector<'a> {
             conflicts.retain(|candidate| candidate.name == source.name);
         }
 
+        // Filter out packages with different dev status - they're already disambiguated
+        conflicts.retain(|candidate| candidate.dev == source.dev);
+
         let variants = select_minimal_variant_keys(source, conflicts.clone()).ok_or_else(|| {
             // Build a list of all conflicting packages for the error message
             let mut all_packages = vec![source];
@@ -315,14 +322,14 @@ impl<'a> SerializablePackageSelector<'a> {
                 .map(|pkg| {
                     let version_str = pkg.version
                         .as_ref()
-                        .map(|v| format!(" (version: {})", v))
+                        .map(|v| format!(" (version: {v})"))
                         .unwrap_or_default();
                     let variants_str = if pkg.variants.is_empty() {
                         String::new()
                     } else {
                         let variant_pairs: Vec<String> = pkg.variants
                             .iter()
-                            .map(|(k, v)| format!("{}={}", k, v))
+                            .map(|(k, v)| format!("{k}={v}"))
                             .collect();
                         format!(" [variants: {}]", variant_pairs.join(", "))
                     };
@@ -344,6 +351,7 @@ impl<'a> SerializablePackageSelector<'a> {
             conda: package.location(),
             name: include_name.then_some(package.name()),
             variants,
+            dev: source.dev,
         })
     }
 }
@@ -376,15 +384,18 @@ impl Ord for SerializablePackageSelector<'_> {
                     conda: a,
                     name: name_a,
                     variants: variants_a,
+                    dev: dev_a,
                 },
                 SerializablePackageSelector::Conda {
                     conda: b,
                     name: name_b,
                     variants: variants_b,
+                    dev: dev_b,
                 },
             ) => compare_url_by_location(a, b)
                 .then_with(|| name_a.cmp(name_b))
-                .then_with(|| variants_a.cmp(variants_b)),
+                .then_with(|| variants_a.cmp(variants_b))
+                .then_with(|| dev_a.cmp(dev_b)),
             (
                 SerializablePackageSelector::Pypi { pypi: a, .. },
                 SerializablePackageSelector::Pypi { pypi: b, .. },
@@ -556,6 +567,11 @@ impl Serialize for PypiPackageData {
     }
 }
 
+/// Helper function to check if a boolean is false (for serde `skip_serializing_if`)
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 #[cfg(test)]
 mod tests {
     use super::select_minimal_variant_keys;
@@ -584,6 +600,7 @@ mod tests {
             input: None,
             package_build_source: None,
             python_site_packages_path: None,
+            dev: false,
         }
     }
 

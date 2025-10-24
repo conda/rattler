@@ -135,6 +135,7 @@ enum UniqueCondaIdentifier {
         location: UrlOrPath,
         name: rattler_conda_types::PackageName,
         variants: BTreeMap<String, VariantValue>,
+        dev: bool,
     },
 }
 
@@ -148,6 +149,7 @@ impl<'a> From<&'a CondaPackageData> for UniqueCondaIdentifier {
                 location: pkg.location.clone(),
                 name: pkg.name.clone(),
                 variants: pkg.variants.clone(),
+                dev: pkg.dev,
             },
         }
     }
