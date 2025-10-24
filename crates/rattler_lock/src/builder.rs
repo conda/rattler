@@ -2,19 +2,19 @@
 
 use std::{
     borrow::Cow,
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     sync::Arc,
 };
 
 use indexmap::{IndexMap, IndexSet};
 use pep508_rs::ExtraName;
-use rattler_conda_types::{Platform, Version};
+use rattler_conda_types::Platform;
 
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
     CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
-    UrlOrPath,
+    UrlOrPath, VariantValue,
 };
 
 /// Information about a single locked package in an environment.
@@ -54,7 +54,7 @@ impl LockedPackage {
     /// might not be the normalized name.
     pub fn name(&self) -> &str {
         match self {
-            LockedPackage::Conda(data) => data.record().name.as_source(),
+            LockedPackage::Conda(data) => data.name().as_source(),
             LockedPackage::Pypi(data, _) => data.name.as_ref(),
         }
     }
@@ -127,22 +127,30 @@ pub struct LockFileBuilder {
 /// A unique identifier for a conda package. This is used to deduplicate
 /// packages. This only includes the unique identifying aspects of a package.
 #[derive(Debug, Hash, Eq, PartialEq)]
-struct UniqueCondaIdentifier {
-    location: UrlOrPath,
-    normalized_name: String,
-    version: Version,
-    build: String,
-    subdir: String,
+enum UniqueCondaIdentifier {
+    Binary {
+        location: UrlOrPath,
+    },
+    Source {
+        location: UrlOrPath,
+        name: rattler_conda_types::PackageName,
+        variants: BTreeMap<String, VariantValue>,
+        dev: bool,
+    },
 }
 
 impl<'a> From<&'a CondaPackageData> for UniqueCondaIdentifier {
     fn from(value: &'a CondaPackageData) -> Self {
-        Self {
-            location: value.location().clone(),
-            normalized_name: value.record().name.as_normalized().to_string(),
-            version: value.record().version.version().clone(),
-            build: value.record().build.clone(),
-            subdir: value.record().subdir.clone(),
+        match value {
+            CondaPackageData::Binary(pkg) => UniqueCondaIdentifier::Binary {
+                location: pkg.location.clone(),
+            },
+            CondaPackageData::Source(pkg) => UniqueCondaIdentifier::Source {
+                location: pkg.location.clone(),
+                name: pkg.name.clone(),
+                variants: pkg.variants.clone(),
+                dev: pkg.dev,
+            },
         }
     }
 }

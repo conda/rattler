@@ -1,13 +1,64 @@
 use crate::source::SourceLocation;
 use crate::UrlOrPath;
 use rattler_conda_types::{
-    ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, RepoDataRecord,
+    ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageRecord, PackageUrl,
+    RepoDataRecord, VersionWithSource,
 };
 use rattler_digest::Sha256Hash;
-use std::collections::BTreeMap;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Display;
 use std::{borrow::Cow, cmp::Ordering, hash::Hash};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
+
+/// Represents a conda-build variant value.
+///
+/// Variants are used in conda-build to specify different build configurations.
+/// They can be strings (e.g., "3.11" for python version), integers (e.g., 1 for feature flags),
+/// or booleans (e.g., true/false for optional features).
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum VariantValue {
+    /// String variant value (most common, e.g., python version "3.11")
+    String(String),
+    /// Integer variant value (e.g., for numeric feature flags)
+    Int(i64),
+    /// Boolean variant value (e.g., for on/off features)
+    Bool(bool),
+}
+
+impl PartialOrd for VariantValue {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for VariantValue {
+    fn cmp(&self, other: &Self) -> Ordering {
+        #[allow(clippy::match_same_arms)]
+        match (self, other) {
+            (VariantValue::String(a), VariantValue::String(b)) => a.cmp(b),
+            (VariantValue::Int(a), VariantValue::Int(b)) => a.cmp(b),
+            (VariantValue::Bool(a), VariantValue::Bool(b)) => a.cmp(b),
+            // Define ordering between different types for deterministic sorting
+            (VariantValue::String(_), _) => Ordering::Less,
+            (_, VariantValue::String(_)) => Ordering::Greater,
+            (VariantValue::Int(_), VariantValue::Bool(_)) => Ordering::Less,
+            (VariantValue::Bool(_), VariantValue::Int(_)) => Ordering::Greater,
+        }
+    }
+}
+
+impl Display for VariantValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VariantValue::String(s) => write!(f, "{s}"),
+            VariantValue::Int(i) => write!(f, "{i}"),
+            VariantValue::Bool(b) => write!(f, "{b}"),
+        }
+    }
+}
 
 /// A locked conda dependency can be either a binary package or a source
 /// package.
@@ -19,6 +70,7 @@ use url::Url;
 /// be installed. Although the source package is not built, it does contain
 /// dependency information through the [`PackageRecord`] struct.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[allow(clippy::large_enum_variant)]
 pub enum CondaPackageData {
     /// A binary package. A binary package is identified by looking at the
     /// location or filename of the package file and seeing if it represents a
@@ -38,11 +90,60 @@ impl CondaPackageData {
         }
     }
 
-    /// Returns the dependency information of the package.
-    pub fn record(&self) -> &PackageRecord {
+    /// Returns the name of the package (works for both binary and source packages).
+    pub fn name(&self) -> &PackageName {
         match self {
-            CondaPackageData::Binary(data) => &data.package_record,
-            CondaPackageData::Source(data) => &data.package_record,
+            CondaPackageData::Binary(data) => &data.package_record.name,
+            CondaPackageData::Source(data) => &data.name,
+        }
+    }
+
+    /// Returns the version of the package (if available).
+    pub fn version(&self) -> Option<&VersionWithSource> {
+        match self {
+            CondaPackageData::Binary(data) => Some(&data.package_record.version),
+            CondaPackageData::Source(data) => data.version.as_ref(),
+        }
+    }
+
+    /// Returns the build string of the package (if available).
+    pub fn build(&self) -> Option<&str> {
+        match self {
+            CondaPackageData::Binary(data) => Some(&data.package_record.build),
+            CondaPackageData::Source(_data) => None,
+        }
+    }
+
+    /// Returns the build number of the package (if available).
+    pub fn build_number(&self) -> Option<u64> {
+        match self {
+            CondaPackageData::Binary(data) => Some(data.package_record.build_number),
+            CondaPackageData::Source(_data) => None,
+        }
+    }
+
+    /// Returns the listed dependencies of the package
+    pub fn depends(&self) -> &[String] {
+        match self {
+            CondaPackageData::Binary(data) => &data.package_record.depends,
+            CondaPackageData::Source(data) => &data.depends,
+        }
+    }
+
+    /// Returns the listed dependencies of the package
+    pub fn purls(&self) -> Option<&BTreeSet<PackageUrl>> {
+        match self {
+            CondaPackageData::Binary(data) => data.package_record.purls.as_ref(),
+            CondaPackageData::Source(data) => data.purls.as_ref(),
+        }
+    }
+
+    /// Returns whether this is a dev package (only contributes dependencies, not installed).
+    /// Only source packages can be dev packages; binary packages always return false.
+    pub fn is_dev(&self) -> bool {
+        match self {
+            CondaPackageData::Binary(_) => false,
+            CondaPackageData::Source(data) => data.dev,
         }
     }
 
@@ -196,21 +297,51 @@ pub enum PackageBuildSource {
 /// Information about a source package stored in the lock-file.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CondaSourceData {
-    /// The package record.
-    pub package_record: PackageRecord,
+    /// The name of the package
+    pub name: PackageName,
+
+    /// The version of the package (optional)
+    pub version: Option<VersionWithSource>,
 
     /// The location of the package. This can be a URL or a local path.
     pub location: UrlOrPath,
 
-    /// Package build source location for reproducible builds
-    pub package_build_source: Option<PackageBuildSource>,
+    /// Conda-build variants used to disambiguate between multiple source packages
+    /// at the same location. This is a map from variant name to variant value.
+    /// Used in lock file format V7 and later.
+    pub variants: BTreeMap<String, VariantValue>,
 
-    /// The input hash of the package
-    pub input: Option<InputHash>,
+    /// Specification of packages this package depends on
+    pub depends: Vec<String>,
+
+    /// Additional constraints on packages
+    pub constrains: Vec<String>,
+
+    /// Experimental: additional dependencies grouped by feature name
+    pub experimental_extra_depends: BTreeMap<String, Vec<String>>,
+
+    /// The specific license of the package
+    pub license: Option<String>,
+
+    /// Package identifiers of packages that are equivalent to this package but
+    /// from other ecosystems (e.g., `PyPI`)
+    pub purls: Option<BTreeSet<PackageUrl>>,
 
     /// Information about packages that should be built from source instead of binary.
     /// This maps from a normalized package name to location of the source.
     pub sources: BTreeMap<String, SourceLocation>,
+
+    /// The input hash of the package
+    pub input: Option<InputHash>,
+
+    /// Package build source location for reproducible builds
+    pub package_build_source: Option<PackageBuildSource>,
+
+    /// Python site-packages path if this is a Python package
+    pub python_site_packages_path: Option<String>,
+
+    /// Whether this is a dev package (only contributes dependencies, not installed).
+    pub dev: bool,
 }
 
 impl From<CondaSourceData> for CondaPackageData {
@@ -221,18 +352,13 @@ impl From<CondaSourceData> for CondaPackageData {
 
 impl CondaSourceData {
     pub(crate) fn merge(&self, other: &Self) -> Cow<'_, Self> {
-        if self.location == other.location {
-            let package_record_merge =
-                merge_package_record(&self.package_record, &other.package_record);
+        if self.location == other.location && self.name == other.name && self.dev == other.dev {
             let package_build_source_merge =
                 merge_package_build_source(&self.package_build_source, &other.package_build_source);
 
-            // Return an owned version if either merge produced an owned result
-            if matches!(package_record_merge, Cow::Owned(_))
-                || matches!(package_build_source_merge, Cow::Owned(_))
-            {
+            // Return an owned version if merge produced an owned result
+            if matches!(package_build_source_merge, Cow::Owned(_)) {
                 return Cow::Owned(Self {
-                    package_record: package_record_merge.into_owned(),
                     package_build_source: package_build_source_merge.into_owned(),
                     ..self.clone()
                 });
@@ -254,15 +380,6 @@ pub struct InputHash {
     pub globs: Vec<String>,
 }
 
-impl AsRef<PackageRecord> for CondaPackageData {
-    fn as_ref(&self) -> &PackageRecord {
-        match self {
-            Self::Binary(data) => &data.package_record,
-            Self::Source(data) => &data.package_record,
-        }
-    }
-}
-
 impl PartialOrd<Self> for CondaPackageData {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -271,17 +388,36 @@ impl PartialOrd<Self> for CondaPackageData {
 
 impl Ord for CondaPackageData {
     fn cmp(&self, other: &Self) -> Ordering {
-        let pkg_a: &PackageRecord = self.as_ref();
-        let pkg_b: &PackageRecord = other.as_ref();
         let location_a = self.location();
         let location_b = other.location();
 
-        location_a
-            .cmp(location_b)
-            .then_with(|| pkg_a.name.cmp(&pkg_b.name))
-            .then_with(|| pkg_a.version.cmp(&pkg_b.version))
-            .then_with(|| pkg_a.build.cmp(&pkg_b.build))
-            .then_with(|| pkg_a.subdir.cmp(&pkg_b.subdir))
+        // First compare by location
+        location_a.cmp(location_b).then_with(|| {
+            // Then compare by name
+            self.name().cmp(other.name()).then_with(|| {
+                // For binary packages, also compare version, build, and subdir
+                match (self.as_binary(), other.as_binary()) {
+                    (Some(a), Some(b)) => a
+                        .package_record
+                        .version
+                        .cmp(&b.package_record.version)
+                        .then_with(|| a.package_record.build.cmp(&b.package_record.build))
+                        .then_with(|| a.package_record.subdir.cmp(&b.package_record.subdir)),
+                    // Source packages only compare by location and name
+                    // If one is source and one is binary, sort source first
+                    (None, Some(_)) => Ordering::Less,
+                    (Some(_), None) => Ordering::Greater,
+                    (None, None) => {
+                        // Both are source packages, compare by variants
+                        if let (Some(a), Some(b)) = (self.as_source(), other.as_source()) {
+                            a.variants.cmp(&b.variants)
+                        } else {
+                            Ordering::Equal
+                        }
+                    }
+                }
+            })
+        })
     }
 }
 
@@ -335,61 +471,57 @@ pub enum ConversionError {
 
 impl CondaPackageData {
     /// Returns true if this package satisfies the given `spec`.
+    ///
+    /// Only binary packages can be matched against specs. Source packages
+    /// don't have version/build/subdir information and cannot satisfy specs.
     pub fn satisfies(&self, spec: &MatchSpec) -> bool {
-        self.matches(spec)
+        match self {
+            Self::Binary(binary) => binary.matches(spec),
+            Self::Source(_) => false,
+        }
     }
 }
 
-impl Matches<MatchSpec> for CondaPackageData {
+impl Matches<MatchSpec> for CondaBinaryData {
     fn matches(&self, spec: &MatchSpec) -> bool {
         // Check if the name matches
         if let Some(name) = &spec.name {
-            if name != &self.record().name {
+            if name != &self.package_record.name {
                 return false;
             }
         }
 
         // Check if the channel matches
         if let Some(channel) = &spec.channel {
-            match self {
-                CondaPackageData::Binary(binary) => {
-                    if let Some(record_channel) = &binary.channel {
-                        if &channel.base_url != record_channel {
-                            return false;
-                        }
-                    }
-                }
-                CondaPackageData::Source(_) => {
+            if let Some(record_channel) = &self.channel {
+                if &channel.base_url != record_channel {
                     return false;
                 }
+            } else {
+                return false;
             }
         }
 
         // Check if the record matches
-        spec.matches(self.record())
+        spec.matches(&self.package_record)
     }
 }
 
-impl Matches<NamelessMatchSpec> for CondaPackageData {
+impl Matches<NamelessMatchSpec> for CondaBinaryData {
     fn matches(&self, spec: &NamelessMatchSpec) -> bool {
         // Check if the channel matches
         if let Some(channel) = &spec.channel {
-            match self {
-                CondaPackageData::Binary(binary) => {
-                    if let Some(record_channel) = &binary.channel {
-                        if &channel.base_url != record_channel {
-                            return false;
-                        }
-                    }
-                }
-                CondaPackageData::Source(_) => {
+            if let Some(record_channel) = &self.channel {
+                if &channel.base_url != record_channel {
                     return false;
                 }
+            } else {
+                return false;
             }
         }
 
         // Check if the record matches
-        spec.matches(self.record())
+        spec.matches(&self.package_record)
     }
 }
 

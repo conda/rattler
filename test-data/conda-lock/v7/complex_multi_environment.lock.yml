@@ -1,0 +1,134 @@
+# Complex Multi-Environment with Edge Cases
+#
+# This test combines multiple disambiguation scenarios:
+# - Two environments (linux-64 and win-64)
+# - Mix of binary and source packages
+# - Multiple packages at the same location
+# - Disambiguation by both name and variants
+# - Tests the full serialization/deserialization round-trip
+
+version: 7
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        # Binary package - unique by location
+        - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.12.0-h2628c8c_0_cpython.conda
+        # Source package with variant-based disambiguation
+        - conda: my-monorepo
+          name: core-library
+          variants:
+            python_version: "3.12"
+        - conda: my-monorepo
+          name: utils-library
+          variants:
+            python_version: "3.12"
+      win-64:
+        # Binary package - different platform
+        - conda: https://conda.anaconda.org/conda-forge/win-64/python-3.12.0-h2628c8c_0_cpython.conda
+        # Same source packages but for windows
+        - conda: my-monorepo
+          name: core-library
+          variants:
+            python_version: "3.12"
+        - conda: my-monorepo
+          name: utils-library
+          variants:
+            python_version: "3.12"
+
+  test:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        # Binary package - same as default but in different environment
+        - conda: https://conda.anaconda.org/conda-forge/linux-64/pytest-7.4.3-pyhd8ed1ab_0.conda
+        # Source package with different variant
+        - conda: my-monorepo
+          name: core-library
+          variants:
+            python_version: "3.11"
+
+packages:
+  # Binary packages
+  - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.12.0-h2628c8c_0_cpython.conda
+    name: python
+    version: 3.12.0
+    build: h2628c8c_0_cpython
+    build_number: 0
+    subdir: linux-64
+    sha256: 90553586879bf328f2f9efb8d8faa958ecba822faf379f0a20c3461467b9b955
+    md5: defd5d375853a2caff36a19d2d81a28e
+    license: Python-2.0
+    size: 16140836
+    timestamp: 1696321871976
+
+  - conda: https://conda.anaconda.org/conda-forge/win-64/python-3.12.0-h2628c8c_0_cpython.conda
+    name: python
+    version: 3.12.0
+    build: h2628c8c_0_cpython
+    build_number: 0
+    subdir: win-64
+    sha256: 90553586879bf328f2f9efb8d8faa958ecba822faf379f0a20c3461467b9b955
+    md5: defd5d375853a2caff36a19d2d81a28e
+    license: Python-2.0
+    size: 16140836
+    timestamp: 1696321871976
+
+  - conda: https://conda.anaconda.org/conda-forge/linux-64/pytest-7.4.3-pyhd8ed1ab_0.conda
+    name: pytest
+    version: 7.4.3
+    build: pyhd8ed1ab_0
+    build_number: 0
+    subdir: linux-64
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    md5: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    depends:
+      - python >=3.8
+    license: MIT
+    size: 1000000
+    timestamp: 1696321871976
+
+  # Source packages - same location, different names (monorepo pattern)
+  - conda: my-monorepo
+    name: core-library
+    variants:
+      python_version: "3.12"
+    package_build_source:
+      url: https://github.com/user/my-monorepo/archive/refs/tags/v1.0.0.tar.gz
+      sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    depends:
+      - python =3.12
+    license: MIT
+    size: 5000000
+    timestamp: 1696321871976
+
+  - conda: my-monorepo
+    name: utils-library
+    variants:
+      python_version: "3.12"
+    package_build_source:
+      url: https://github.com/user/my-monorepo/archive/refs/tags/v1.0.0.tar.gz
+      sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    depends:
+      - python =3.12
+      - core-library
+    license: MIT
+    size: 5000000
+    timestamp: 1696321871976
+
+  # Same source packages but with different variant
+  - conda: my-monorepo
+    name: core-library
+    variants:
+      python_version: "3.11"
+    package_build_source:
+      url: https://github.com/user/my-monorepo/archive/refs/tags/v1.0.0.tar.gz
+      sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    depends:
+      - python =3.11
+    license: MIT
+    size: 5000000
+    timestamp: 1696321871976

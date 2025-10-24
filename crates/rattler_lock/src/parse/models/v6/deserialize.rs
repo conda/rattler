@@ -1,0 +1,190 @@
+//! Deserialization helpers specific to V6 lock file contents.
+
+use itertools::Itertools;
+use rattler_conda_types::{PackageName, VersionWithSource};
+use serde::Deserialize;
+
+use crate::{
+    parse::{models::v6, ParseCondaLockError, V6},
+    utils::derived_fields::LocationDerivedFields,
+    EnvironmentPackageData, PypiPackageData, UrlOrPath,
+};
+
+use super::super::super::deserialize::{
+    HasLocation, LockFileVersion, PackageSelector, PypiSelector, ResolveCtx,
+};
+
+impl HasLocation for v6::CondaPackageDataModel<'static> {
+    fn location(&self) -> &UrlOrPath {
+        &self.location
+    }
+}
+
+/// V6-specific package data (stores models before conversion)
+#[derive(Deserialize)]
+#[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum PackageDataV6<'a> {
+    Conda(v6::CondaPackageDataModel<'a>),
+    Pypi(v6::PypiPackageDataModel<'a>),
+}
+
+/// Conda selector representation stored in V6 lock files.
+#[derive(Deserialize)]
+pub(crate) struct CondaSelectorV6 {
+    /// URL or path to the conda artifact referenced by the selector.
+    #[serde(rename = "conda")]
+    pub(crate) conda: UrlOrPath,
+    /// Optional package name used to disambiguate multiple artifacts with the same location.
+    pub(crate) name: Option<PackageName>,
+    /// Optional version (with source) hint supplied by the lock file.
+    pub(crate) version: Option<VersionWithSource>,
+    /// Optional build string recorded in the lock file.
+    pub(crate) build: Option<String>,
+    /// Optional platform-specific subdirectory for the package.
+    pub(crate) subdir: Option<String>,
+}
+
+/// Check if an expected field value matches the model's field or a derived value.
+fn field_matches<T: PartialEq>(
+    expected: T,
+    model_field: Option<T>,
+    derived_field: Option<T>,
+) -> bool {
+    match model_field {
+        Some(model_value) => expected == model_value,
+        None => derived_field.as_ref().is_some_and(|d| expected == *d),
+    }
+}
+
+impl CondaSelectorV6 {
+    /// Resolve this selector to a package index by matching against V6 models.
+    ///
+    /// This works with `CondaPackageDataModel` which has the selector fields available,
+    /// and will derive missing fields (version, build, subdir) from the package URL
+    /// when they are not explicitly present in the model.
+    pub(crate) fn resolve(
+        &self,
+        conda_packages: &[v6::CondaPackageDataModel<'_>],
+        candidates: &[usize],
+    ) -> Option<usize> {
+        candidates
+            .iter()
+            .find(|&&idx| {
+                let model = &conda_packages[idx];
+
+                // Check name - compare with model's name field if present
+                if let Some(expected_name) = &self.name {
+                    if let Some(model_name) = &model.name {
+                        if expected_name != model_name.as_ref() {
+                            return false;
+                        }
+                    }
+                }
+
+                // Derive fields from URL if needed
+                let derived_fields = LocationDerivedFields::new(&model.location);
+
+                // Check version - model's version field or derive from URL
+                if let Some(expected_version) = &self.version {
+                    if !field_matches(
+                        expected_version,
+                        model.version.as_deref(),
+                        derived_fields.version.as_ref(),
+                    ) {
+                        return false;
+                    }
+                }
+
+                // Check build - model's build field or derive from URL
+                if let Some(expected_build) = &self.build {
+                    if !field_matches(
+                        expected_build.as_str(),
+                        model.build.as_deref(),
+                        derived_fields.build.as_deref(),
+                    ) {
+                        return false;
+                    }
+                }
+
+                // Check subdir - model's subdir field or derive from URL
+                if let Some(expected_subdir) = &self.subdir {
+                    if !field_matches(
+                        expected_subdir.as_str(),
+                        model.subdir.as_deref(),
+                        derived_fields.subdir.as_deref(),
+                    ) {
+                        return false;
+                    }
+                }
+
+                true
+            })
+            .copied()
+    }
+}
+
+/// Selector used in V6 lock files to reference either a conda or PyPI package.
+#[allow(clippy::doc_markdown)]
+#[derive(Deserialize)]
+#[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum DeserializablePackageSelectorV6 {
+    Conda(CondaSelectorV6),
+    Pypi(PypiSelector),
+}
+
+impl PackageSelector<v6::CondaPackageDataModel<'static>> for DeserializablePackageSelectorV6 {
+    fn resolve(
+        self,
+        ctx: &mut ResolveCtx<'_, v6::CondaPackageDataModel<'static>>,
+    ) -> Result<EnvironmentPackageData, ParseCondaLockError> {
+        match self {
+            DeserializablePackageSelectorV6::Conda(selector) => {
+                resolve_conda_selector_v6_models(selector, ctx)
+            }
+            DeserializablePackageSelectorV6::Pypi(selector) => {
+                super::super::super::deserialize::resolve_pypi_selector(selector, ctx)
+            }
+        }
+    }
+}
+
+/// Resolve conda selector for V6 (works with models)
+fn resolve_conda_selector_v6_models(
+    selector: CondaSelectorV6,
+    ctx: &mut ResolveCtx<'_, v6::CondaPackageDataModel<'static>>,
+) -> Result<EnvironmentPackageData, ParseCondaLockError> {
+    let candidates = ctx
+        .conda_url_lookup
+        .get(&selector.conda)
+        .map_or(&[] as &[usize], Vec::as_slice);
+
+    let package_index = selector.resolve(ctx.conda_packages.as_slice(), candidates);
+
+    let package_index = package_index.ok_or_else(|| {
+        ParseCondaLockError::MissingPackage(
+            ctx.environment_name.to_string(),
+            ctx.platform,
+            selector.conda.clone(),
+        )
+    })?;
+
+    Ok(EnvironmentPackageData::Conda(package_index))
+}
+
+// Implement LockFileVersion for V6
+impl LockFileVersion for V6 {
+    type PackageData = PackageDataV6<'static>;
+    type Selector = DeserializablePackageSelectorV6;
+    type CondaPackage = v6::CondaPackageDataModel<'static>;
+
+    fn extract_packages(
+        packages: Vec<Self::PackageData>,
+    ) -> Result<(Vec<Self::CondaPackage>, Vec<PypiPackageData>), ParseCondaLockError> {
+        Ok(packages.into_iter().partition_map(|package| match package {
+            PackageDataV6::Conda(model) => itertools::Either::Left(model),
+            PackageDataV6::Pypi(model) => itertools::Either::Right(model.into()),
+        }))
+    }
+}

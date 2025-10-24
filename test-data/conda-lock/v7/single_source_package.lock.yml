@@ -1,0 +1,24 @@
+# Single source package (No Disambiguation Needed)
+#
+# Tests serialization of a single binary package where no disambiguation is needed.
+#
+# This represents the "happy path" for binary packages.
+
+version: 7
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        # Single source package and no variants to disambiguate
+        - conda: my-package
+
+packages:
+  # Source package without variant information
+  - conda: my-package
+    name: my-package
+    variants: {}
+    depends:
+      - python >=3.8
+    license: MIT

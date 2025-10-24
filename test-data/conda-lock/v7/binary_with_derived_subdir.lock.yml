@@ -1,0 +1,51 @@
+# Binary packages with derived subdir
+#
+# This test case verifies that the V7 format correctly handles binary packages
+# where the 'subdir' field is OMITTED from the lock file but can be DERIVED
+# from the package URL.
+#
+# Key points:
+# - Package URLs like "...linux-64/python-3.12.tar.bz2" contain the subdir "linux-64"
+# - The V7 format omits redundant fields when they can be derived
+# - Deserialization must re-derive these fields from URLs during parsing
+# - This tests the LocationDerivedFields logic in action
+
+version: 7
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        # Note: no 'subdir' field specified in selector
+        # It will be derived from the URL path: "...linux-64/..."
+        - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.12.0-h2628c8c_0_cpython.conda
+      win-64:
+        # Same package but for Windows
+        # Subdir will be derived from: "...win-64/..."
+        - conda: https://conda.anaconda.org/conda-forge/win-64/python-3.12.0-h2628c8c_0_cpython.conda
+
+packages:
+  - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.12.0-h2628c8c_0_cpython.conda
+    name: python
+    version: 3.12.0
+    build: h2628c8c_0_cpython
+    build_number: 0
+    subdir: linux-64
+    sha256: 90553586879bf328f2f9efb8d8faa958ecba822faf379f0a20c3461467b9b955
+    md5: defd5d375853a2caff36a19d2d81a28e
+    license: Python-2.0
+    size: 16140836
+    timestamp: 1696321871976
+
+  - conda: https://conda.anaconda.org/conda-forge/win-64/python-3.12.0-h2628c8c_0_cpython.conda
+    name: python
+    version: 3.12.0
+    build: h2628c8c_0_cpython
+    build_number: 0
+    subdir: win-64
+    sha256: 90553586879bf328f2f9efb8d8faa958ecba822faf379f0a20c3461467b9b955
+    md5: defd5d375853a2caff36a19d2d81a28e
+    license: Python-2.0
+    size: 16140836
+    timestamp: 1696321871976

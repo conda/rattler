@@ -1,3 +1,6 @@
+// V7 conda package data models - initially identical to V6 but can evolve independently
+// TODO: Will be modified to support variants-based disambiguation in later steps
+
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
@@ -62,6 +65,10 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub noarch: Option<Cow<'a, NoArchType>>,
 
+    // Dev field for source packages (only contributes dependencies, not installed)
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub dev: bool,
+
     // Then the hashes
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
@@ -123,6 +130,10 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
+
+    // V7-specific: variants for source package disambiguation
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub variants: BTreeMap<String, crate::VariantValue>,
 }
 
 #[serde_as]
@@ -237,7 +248,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                     .ok_or_else(|| ConversionError::Missing("name".to_string()))?,
                 version: value.version.map(Cow::into_owned).or(derived.version),
                 location: value.location,
-                variants: BTreeMap::new(), // V6 doesn't have variants
+                variants: value.variants, // V7 supports variants
                 depends: value.depends.into_owned(),
                 constrains: value.constrains.into_owned(),
                 experimental_extra_depends: value.experimental_extra_depends.into_owned(),
@@ -250,7 +261,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                 }),
                 package_build_source: value.package_build_source,
                 python_site_packages_path: value.python_site_packages_path.into_owned(),
-                dev: false, // V6 doesn't have dev field
+                dev: value.dev,
             }))
         }
     }
@@ -320,6 +331,8 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                     input: None,
                     package_build_source: None,
                     sources: BTreeMap::new(),
+                    variants: BTreeMap::new(),
+                    dev: false, // Binary packages are never dev packages
                 }
             }
             CondaPackageData::Source(source_data) => {
@@ -366,6 +379,8 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                     }),
                     package_build_source: source_data.package_build_source.clone(),
                     sources: source_data.sources.clone(),
+                    variants: source_data.variants.clone(),
+                    dev: source_data.dev,
                 }
             }
         }
@@ -381,4 +396,9 @@ fn strip_trailing_slash(url: &Url) -> Cow<'_, Url> {
     } else {
         Cow::Borrowed(url)
     }
+}
+
+/// Helper function to check if a boolean is false (for serde `skip_serializing_if`)
+fn is_false(value: &bool) -> bool {
+    !*value
 }

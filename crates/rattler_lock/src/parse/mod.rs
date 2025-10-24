@@ -11,7 +11,10 @@ use serde_yaml::Value;
 use v3::parse_v3_or_lower;
 
 use super::{LockFile, UrlOrPath};
-use crate::{file_format_version::FileFormatVersion, parse::deserialize::parse_from_document_v5};
+use crate::{
+    file_format_version::FileFormatVersion,
+    parse::deserialize::{parse_from_document_v5, parse_from_document_v7},
+};
 
 #[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
@@ -42,38 +45,68 @@ pub enum ParseCondaLockError {
     LocationToUrlConversionError(#[from] file_url::FileURLParseError),
 }
 
+#[allow(clippy::fallible_impl_from)]
+impl From<crate::ConversionError> for ParseCondaLockError {
+    fn from(err: crate::ConversionError) -> Self {
+        match err {
+            crate::ConversionError::Missing(field) => {
+                // We don't have the package URL context here, so use a placeholder
+                ParseCondaLockError::MissingField(
+                    field,
+                    UrlOrPath::Url(url::Url::parse("unknown://").unwrap()),
+                )
+            }
+            crate::ConversionError::LocationToUrlConversionError(e) => {
+                ParseCondaLockError::LocationToUrlConversionError(e)
+            }
+        }
+    }
+}
+
+impl From<std::convert::Infallible> for ParseCondaLockError {
+    fn from(err: std::convert::Infallible) -> Self {
+        match err {}
+    }
+}
+
+pub fn parse_from_str(s: &str) -> Result<LockFile, ParseCondaLockError> {
+    // First parse the document to a `serde_yaml::Value`.
+    let document: Value = serde_yaml::from_str(s).map_err(ParseCondaLockError::ParseError)?;
+
+    // Read the version number from the document
+    let version: FileFormatVersion = document
+        .get("version")
+        .ok_or_else(|| {
+            ParseCondaLockError::ParseError(serde_yaml::Error::custom(
+                "missing `version` field in lock file",
+            ))
+        })
+        .and_then(|v| {
+            let v = v.as_u64().ok_or_else(|| {
+                ParseCondaLockError::ParseError(serde_yaml::Error::custom(
+                    "`version` field in lock file is not an integer",
+                ))
+            })?;
+
+            FileFormatVersion::try_from(v)
+        })?;
+
+    if version <= FileFormatVersion::V3 {
+        parse_v3_or_lower(document, version)
+    } else if version <= FileFormatVersion::V5 {
+        parse_from_document_v5(document, version)
+    } else if version == FileFormatVersion::V6 {
+        deserialize::parse_from_document_v6(document, version)
+    } else {
+        parse_from_document_v7(document, version)
+    }
+}
+
 impl FromStr for LockFile {
     type Err = ParseCondaLockError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // First parse the document to a `serde_yaml::Value`.
-        let document: Value = serde_yaml::from_str(s).map_err(ParseCondaLockError::ParseError)?;
-
-        // Read the version number from the document
-        let version: FileFormatVersion = document
-            .get("version")
-            .ok_or_else(|| {
-                ParseCondaLockError::ParseError(serde_yaml::Error::custom(
-                    "missing `version` field in lock file",
-                ))
-            })
-            .and_then(|v| {
-                let v = v.as_u64().ok_or_else(|| {
-                    ParseCondaLockError::ParseError(serde_yaml::Error::custom(
-                        "`version` field in lock file is not an integer",
-                    ))
-                })?;
-
-                FileFormatVersion::try_from(v)
-            })?;
-
-        if version <= FileFormatVersion::V3 {
-            parse_v3_or_lower(document, version)
-        } else if version <= FileFormatVersion::V5 {
-            parse_from_document_v5(document, version)
-        } else {
-            deserialize::parse_from_document_v6(document, version)
-        }
+        parse_from_str(s)
     }
 }
 
@@ -84,6 +117,10 @@ struct V5;
 /// A helper struct to differentiate between the serde code paths for different
 /// versions.
 struct V6;
+
+/// A helper struct to differentiate between the serde code paths for different
+/// versions.
+struct V7;
 
 #[cfg(test)]
 mod test {
@@ -100,7 +137,7 @@ mod test {
         .err()
         .unwrap();
 
-        insta::assert_snapshot!(format!("{}", err), @"found newer lockfile format version 1000, but only up to including version 6 is supported");
+        insta::assert_snapshot!(format!("{}", err), @"found newer lockfile format version 1000, but only up to including version 7 is supported");
     }
 
     // This test verifies the deterministic ordering of lock files. It does so by
