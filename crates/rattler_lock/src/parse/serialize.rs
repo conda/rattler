@@ -305,12 +305,38 @@ impl<'a> SerializablePackageSelector<'a> {
             conflicts.retain(|candidate| candidate.name == source.name);
         }
 
-        let variants = select_minimal_variant_keys(source, conflicts).ok_or_else(|| {
+        let variants = select_minimal_variant_keys(source, conflicts.clone()).ok_or_else(|| {
+            // Build a list of all conflicting packages for the error message
+            let mut all_packages = vec![source];
+            all_packages.extend(conflicts.iter().copied());
+
+            let package_details: Vec<String> = all_packages
+                .iter()
+                .map(|pkg| {
+                    let version_str = pkg.version
+                        .as_ref()
+                        .map(|v| format!(" (version: {})", v))
+                        .unwrap_or_default();
+                    let variants_str = if pkg.variants.is_empty() {
+                        String::new()
+                    } else {
+                        let variant_pairs: Vec<String> = pkg.variants
+                            .iter()
+                            .map(|(k, v)| format!("{}={}", k, v))
+                            .collect();
+                        format!(" [variants: {}]", variant_pairs.join(", "))
+                    };
+                    format!("  - {}{}{}", pkg.name.as_normalized(), version_str, variants_str)
+                })
+                .collect();
+
             E::custom(format!(
                 "Failed to disambiguate source packages at location '{}'. \
                  Multiple source packages exist but cannot be distinguished without variant information. \
-                 This typically occurs when converting from lock file format V6 to V7.",
-                package.location()
+                 This typically occurs when converting from lock file format V6 to V7.\n\
+                 Conflicting packages:\n{}",
+                package.location(),
+                package_details.join("\n")
             ))
         })?;
 
