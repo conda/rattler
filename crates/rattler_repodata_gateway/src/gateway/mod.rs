@@ -581,7 +581,7 @@ mod test {
             .await
             .unwrap_err();
 
-        assert_matches!(gateway_error, GatewayError::MatchSpecWithoutName(_));
+        assert_matches!(gateway_error, GatewayError::MatchSpecWithoutExactName(_));
     }
 
     #[rstest]
