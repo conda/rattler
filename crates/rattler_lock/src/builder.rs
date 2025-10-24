@@ -2,19 +2,19 @@
 
 use std::{
     borrow::Cow,
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     sync::Arc,
 };
 
 use indexmap::{IndexMap, IndexSet};
 use pep508_rs::ExtraName;
-use rattler_conda_types::{Platform, Version};
+use rattler_conda_types::Platform;
 
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
     CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
-    UrlOrPath,
+    UrlOrPath, VariantValue,
 };
 
 /// Information about a single locked package in an environment.
@@ -127,26 +127,28 @@ pub struct LockFileBuilder {
 /// A unique identifier for a conda package. This is used to deduplicate
 /// packages. This only includes the unique identifying aspects of a package.
 #[derive(Debug, Hash, Eq, PartialEq)]
-struct UniqueCondaIdentifier {
-    location: UrlOrPath,
-    normalized_name: String,
-    version: Version,
-    build: String,
-    subdir: String,
+enum UniqueCondaIdentifier {
+    Binary {
+        location: UrlOrPath,
+    },
+    Source {
+        location: UrlOrPath,
+        name: rattler_conda_types::PackageName,
+        variants: BTreeMap<String, VariantValue>,
+    },
 }
 
 impl<'a> From<&'a CondaPackageData> for UniqueCondaIdentifier {
     fn from(value: &'a CondaPackageData) -> Self {
-        // Only binary packages have version/build/subdir
-        let binary = value
-            .as_binary()
-            .expect("UniqueCondaIdentifier only works for binary packages");
-        Self {
-            location: value.location().clone(),
-            normalized_name: binary.package_record.name.as_normalized().to_string(),
-            version: binary.package_record.version.version().clone(),
-            build: binary.package_record.build.clone(),
-            subdir: binary.package_record.subdir.clone(),
+        match value {
+            CondaPackageData::Binary(pkg) => UniqueCondaIdentifier::Binary {
+                location: pkg.location.clone(),
+            },
+            CondaPackageData::Source(pkg) => UniqueCondaIdentifier::Source {
+                location: pkg.location.clone(),
+                name: pkg.name.clone(),
+                variants: pkg.variants.clone(),
+            },
         }
     }
 }

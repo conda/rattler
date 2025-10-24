@@ -242,6 +242,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                     .map(Cow::into_owned)
                     .or(derived.name)
                     .ok_or_else(|| ConversionError::Missing("name".to_string()))?,
+                version: value.version.map(Cow::into_owned).or(derived.version),
                 location: value.location,
                 variants: value.variants, // V7 supports variants
                 depends: value.depends.into_owned(),
@@ -336,7 +337,11 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                     name: (Some(source_data.name.as_source())
                         != derived.name.as_ref().map(PackageName::as_source))
                     .then_some(Cow::Borrowed(&source_data.name)),
-                    version: None,
+                    version: source_data.version.as_ref().and_then(|version| {
+                        (Some(version.as_str())
+                            != derived.version.as_ref().map(VersionWithSource::as_str))
+                        .then_some(Cow::Borrowed(version))
+                    }),
                     build: None,
                     build_number: None,
                     subdir: None,

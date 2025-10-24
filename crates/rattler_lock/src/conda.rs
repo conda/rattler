@@ -2,7 +2,7 @@ use crate::source::SourceLocation;
 use crate::UrlOrPath;
 use rattler_conda_types::{
     ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageRecord, PackageUrl,
-    RepoDataRecord,
+    RepoDataRecord, VersionWithSource,
 };
 use rattler_digest::Sha256Hash;
 use serde::{Deserialize, Serialize};
@@ -53,9 +53,9 @@ impl Ord for VariantValue {
 impl Display for VariantValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VariantValue::String(s) => write!(f, "{}", s),
-            VariantValue::Int(i) => write!(f, "{}", i),
-            VariantValue::Bool(b) => write!(f, "{}", b),
+            VariantValue::String(s) => write!(f, "{s}"),
+            VariantValue::Int(i) => write!(f, "{i}"),
+            VariantValue::Bool(b) => write!(f, "{b}"),
         }
     }
 }
@@ -95,6 +95,46 @@ impl CondaPackageData {
         match self {
             CondaPackageData::Binary(data) => &data.package_record.name,
             CondaPackageData::Source(data) => &data.name,
+        }
+    }
+
+    /// Returns the version of the package (if available).
+    pub fn version(&self) -> Option<&VersionWithSource> {
+        match self {
+            CondaPackageData::Binary(data) => Some(&data.package_record.version),
+            CondaPackageData::Source(data) => data.version.as_ref(),
+        }
+    }
+
+    /// Returns the build string of the package (if available).
+    pub fn build(&self) -> Option<&str> {
+        match self {
+            CondaPackageData::Binary(data) => Some(&data.package_record.build),
+            CondaPackageData::Source(_data) => None,
+        }
+    }
+
+    /// Returns the build number of the package (if available).
+    pub fn build_number(&self) -> Option<u64> {
+        match self {
+            CondaPackageData::Binary(data) => Some(data.package_record.build_number),
+            CondaPackageData::Source(_data) => None,
+        }
+    }
+
+    /// Returns the listed dependencies of the package
+    pub fn depends(&self) -> &[String] {
+        match self {
+            CondaPackageData::Binary(data) => &data.package_record.depends,
+            CondaPackageData::Source(data) => &data.depends,
+        }
+    }
+
+    /// Returns the listed dependencies of the package
+    pub fn purls(&self) -> Option<&BTreeSet<PackageUrl>> {
+        match self {
+            CondaPackageData::Binary(data) => data.package_record.purls.as_ref(),
+            CondaPackageData::Source(data) => data.purls.as_ref(),
         }
     }
 
@@ -250,6 +290,9 @@ pub enum PackageBuildSource {
 pub struct CondaSourceData {
     /// The name of the package
     pub name: PackageName,
+
+    /// The version of the package (optional)
+    pub version: Option<VersionWithSource>,
 
     /// The location of the package. This can be a URL or a local path.
     pub location: UrlOrPath,

@@ -13,6 +13,7 @@ environments:
 packages:
   - conda: pixi-rev-package
     name: pixi-rev-package
+    version: 0.5.0
     package_build_source:
       git: "https://github.com/example/pixi-package.git"
       rev: 123abc456def789012345678

@@ -13,6 +13,7 @@ environments:
 packages:
   - conda: pixi-tag-package
     name: pixi-tag-package
+    version: 1.2.0
     package_build_source:
       git: "https://github.com/example/pixi-package.git"
       tag: v1.2.0

@@ -546,6 +546,7 @@ mod tests {
     ) -> CondaSourceData {
         CondaSourceData {
             name: PackageName::from_str(name).unwrap(),
+            version: None,
             location: UrlOrPath::from(Url::parse(location).unwrap()),
             variants,
             depends: Vec::new(),
@@ -586,7 +587,7 @@ mod tests {
         );
     }
 
-    /// Two variants (cuda + blas_impl) are necessary to eliminate all conflicts.
+    /// Two variants (`cuda` + `blas_impl`) are necessary to eliminate all conflicts.
     #[test]
     fn selects_multiple_variant_keys_when_needed() {
         let mut target_variants = BTreeMap::new();

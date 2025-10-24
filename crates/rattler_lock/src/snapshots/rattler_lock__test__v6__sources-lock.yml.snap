@@ -13,6 +13,7 @@ environments:
 packages:
   - conda: child-package
     name: child-package
+    version: 0.1.0
     depends:
       - path
       - git_tag

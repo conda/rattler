@@ -13,6 +13,7 @@ environments:
 packages:
   - conda: pixi-build-package
     name: pixi-build-package
+    version: 1.0.0
     package_build_source:
       git: "https://github.com/example/pixi-package.git"
       branch: main
