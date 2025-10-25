@@ -10,7 +10,7 @@ use nix::{
     },
     unistd::{close, dup, dup2_stderr, dup2_stdin, dup2_stdout, fork, setsid, ForkResult, Pid},
 };
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, FromRawFd, IntoRawFd};
 use std::{
     self,
     fs::File,
@@ -18,6 +18,10 @@ use std::{
     os::unix::{io::AsRawFd, process::CommandExt},
     process::Command,
     thread, time,
+};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    time::{sleep, Duration, Instant},
 };
 
 #[cfg(target_os = "linux")]
@@ -55,7 +59,7 @@ fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct PtyProcessOptions {
     pub echo: bool,
     pub window_size: Option<Winsize>,
@@ -212,6 +216,67 @@ impl PtyProcess {
 
     pub fn set_window_size(&self, window_size: Winsize) -> nix::Result<()> {
         set_window_size(self.pty.as_raw_fd(), window_size)
+    }
+
+    pub fn kill_timeout(&self) -> Option<time::Duration> {
+        self.kill_timeout
+    }
+
+    /// When calling `kill()` or `async_kill()`, if the process doesn't respond to
+    /// the signal within this timeout, it will be forcefully killed with SIGKILL.
+    pub fn set_kill_timeout(&mut self, timeout: Option<time::Duration>) {
+        self.kill_timeout = timeout;
+    }
+
+    pub async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        let fd = dup(&self.pty).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        let mut file = unsafe { tokio::fs::File::from_raw_fd(fd.into_raw_fd()) };
+        file.read(buf).await
+    }
+
+    pub async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
+        let fd = dup(&self.pty).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        let mut file = unsafe { tokio::fs::File::from_raw_fd(fd.into_raw_fd()) };
+        file.write(buf).await
+    }
+
+    pub async fn async_wait(&mut self) -> nix::Result<wait::WaitStatus> {
+        loop {
+            match self.status() {
+                Some(status) if status != wait::WaitStatus::StillAlive => return Ok(status),
+                Some(_) | None => sleep(Duration::from_millis(100)).await,
+            }
+        }
+    }
+
+    pub async fn async_exit(&mut self) -> nix::Result<wait::WaitStatus> {
+        self.async_kill(signal::SIGTERM).await
+    }
+
+    pub async fn async_kill(&mut self, sig: signal::Signal) -> nix::Result<wait::WaitStatus> {
+        let start = Instant::now();
+        loop {
+            match signal::kill(self.child_pid, sig) {
+                Ok(_) => {}
+                // process was already killed before -> ignore
+                Err(nix::errno::Errno::ESRCH) => {
+                    return Ok(wait::WaitStatus::Exited(Pid::from_raw(0), 0));
+                }
+                Err(e) => return Err(e),
+            }
+
+            match self.status() {
+                Some(status) if status != wait::WaitStatus::StillAlive => return Ok(status),
+                Some(_) | None => sleep(Duration::from_millis(100)).await,
+            }
+
+            // kill -9 if timeout is reached
+            if let Some(timeout) = self.kill_timeout {
+                if start.elapsed() > timeout {
+                    signal::kill(self.child_pid, signal::Signal::SIGKILL)?;
+                }
+            }
+        }
     }
 }
 

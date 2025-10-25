@@ -101,3 +101,11 @@ __all__ = [
     "Link",
     "LinkType",
 ]
+
+# PTY support - only available on Unix platforms
+try:
+    from rattler.pty import PtySession, PtyProcess, PtyProcessOptions  # noqa: F401
+
+    __all__.extend(["PtySession", "PtyProcess", "PtyProcessOptions"])
+except ImportError:
+    pass

@@ -1,6 +1,6 @@
 [package]
 name = "rattler_package_streaming"
-version = "0.23.8"
+version = "0.23.12"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Extract and stream of Conda package archives"

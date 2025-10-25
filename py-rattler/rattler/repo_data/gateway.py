@@ -90,6 +90,7 @@ class Gateway:
         per_channel_config: Optional[dict[str, SourceConfig]] = None,
         max_concurrent_requests: int = 100,
         client: Optional[Client] = None,
+        show_progress: bool = False,
     ) -> None:
         """
         Arguments:
@@ -102,6 +103,7 @@ class Gateway:
             max_concurrent_requests: The maximum number of concurrent requests that can be made.
             client: An authenticated client to use for acquiring repodata. If not specified a default
                     client will be used.
+            show_progress: Whether to show progress bars when fetching repodata.
 
         Examples
         --------
@@ -119,6 +121,7 @@ class Gateway:
             per_channel_config={channel: config._into_py() for channel, config in (per_channel_config or {}).items()},
             max_concurrent_requests=max_concurrent_requests,
             client=client._client if client is not None else None,
+            show_progress=show_progress,
         )
 
     async def query(

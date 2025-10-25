@@ -11,7 +11,7 @@ use fs4::fs_std::FileExt;
 use parking_lot::Mutex;
 use rattler_digest::Sha256Hash;
 
-use crate::package_cache::PackageCacheError;
+use crate::package_cache::PackageCacheLayerError;
 
 /// A lock on the cache entry. As long as this lock is held, no other process is
 /// allowed to modify the cache entry. This however, does not guarantee that the
@@ -60,7 +60,7 @@ impl Drop for CacheRwLock {
 }
 
 impl CacheRwLock {
-    pub async fn acquire_read(path: &Path) -> Result<Self, PackageCacheError> {
+    pub async fn acquire_read(path: &Path) -> Result<Self, PackageCacheLayerError> {
         let lock_file_path = path.to_path_buf();
 
         let acquire_lock_fut = simple_spawn_blocking::tokio::run_blocking_task(move || {
@@ -71,7 +71,7 @@ impl CacheRwLock {
                 .write(true)
                 .open(&lock_file_path)
                 .map_err(|e| {
-                    PackageCacheError::LockError(
+                    PackageCacheLayerError::LockError(
                         format!(
                             "failed to open cache lock for reading: '{}'",
                             lock_file_path.display()
@@ -81,7 +81,7 @@ impl CacheRwLock {
                 })?;
 
             fs4::fs_std::FileExt::lock_shared(&file).map_err(move |e| {
-                PackageCacheError::LockError(
+                PackageCacheLayerError::LockError(
                     format!(
                         "failed to acquire read lock on cache lock file: '{}'",
                         lock_file_path.display()
@@ -108,7 +108,7 @@ impl CacheRwLock {
 }
 
 impl CacheRwLock {
-    pub async fn acquire_write(path: &Path) -> Result<Self, PackageCacheError> {
+    pub async fn acquire_write(path: &Path) -> Result<Self, PackageCacheLayerError> {
         let lock_file_path = path.to_path_buf();
         let acquire_lock_fut = simple_spawn_blocking::tokio::run_blocking_task(move || {
             let file = std::fs::OpenOptions::new()
@@ -118,7 +118,7 @@ impl CacheRwLock {
                 .read(true)
                 .open(&lock_file_path)
                 .map_err(|e| {
-                    PackageCacheError::LockError(
+                    PackageCacheLayerError::LockError(
                         format!(
                             "failed to open cache lock for writing: '{}",
                             lock_file_path.display()
@@ -128,7 +128,7 @@ impl CacheRwLock {
                 })?;
 
             file.lock_exclusive().map_err(move |e| {
-                PackageCacheError::LockError(
+                PackageCacheLayerError::LockError(
                     format!(
                         "failed to acquire write lock on cache lock file: '{}'",
                         lock_file_path.display()
@@ -159,7 +159,7 @@ impl CacheRwLock {
         &mut self,
         revision: u64,
         sha256: Option<&Sha256Hash>,
-    ) -> Result<(), PackageCacheError> {
+    ) -> Result<(), PackageCacheLayerError> {
         let file = self.file.clone();
         let sha256 = sha256.cloned();
         simple_spawn_blocking::tokio::run_blocking_task(move || {
@@ -167,7 +167,7 @@ impl CacheRwLock {
 
             // Ensure we write from the start of the file
             file.rewind().map_err(|e| {
-                PackageCacheError::LockError(
+                PackageCacheLayerError::LockError(
                     "failed to rewind cache lock for reading revision".to_string(),
                     e,
                 )
@@ -176,7 +176,7 @@ impl CacheRwLock {
             // Write the bytes of the revision
             let revision_bytes = revision.to_be_bytes();
             file.write_all(&revision_bytes).map_err(|e| {
-                PackageCacheError::LockError(
+                PackageCacheLayerError::LockError(
                     "failed to write revision from cache lock".to_string(),
                     e,
                 )
@@ -187,7 +187,7 @@ impl CacheRwLock {
                 let len = sha.len();
                 let sha = &sha[..];
                 file.write_all(sha).map_err(|e| {
-                    PackageCacheError::LockError(
+                    PackageCacheLayerError::LockError(
                         "failed to write sha256 from cache lock".to_string(),
                         e,
                     )
@@ -199,7 +199,7 @@ impl CacheRwLock {
 
             // Ensure all bytes are written to disk
             file.flush().map_err(|e| {
-                PackageCacheError::LockError(
+                PackageCacheLayerError::LockError(
                     "failed to flush cache lock after writing revision".to_string(),
                     e,
                 )
@@ -208,7 +208,7 @@ impl CacheRwLock {
             // Update the length of the file
             let file_length = revision_bytes.len() + sha_bytes;
             file.set_len(file_length as u64).map_err(|e| {
-                PackageCacheError::LockError(
+                PackageCacheLayerError::LockError(
                     "failed to truncate cache lock after writing revision".to_string(),
                     e,
                 )
@@ -222,10 +222,10 @@ impl CacheRwLock {
 
 impl CacheRwLock {
     /// Reads the revision from the cache lock file.
-    pub fn read_revision(&mut self) -> Result<u64, PackageCacheError> {
+    pub fn read_revision(&mut self) -> Result<u64, PackageCacheLayerError> {
         let mut file = self.file.lock();
         file.rewind().map_err(|e| {
-            PackageCacheError::LockError(
+            PackageCacheLayerError::LockError(
                 "failed to rewind cache lock for reading revision".to_string(),
                 e,
             )
@@ -237,7 +237,7 @@ impl CacheRwLock {
                 return Ok(0);
             }
             Err(e) => {
-                return Err(PackageCacheError::LockError(
+                return Err(PackageCacheLayerError::LockError(
                     "failed to read revision from cache lock".to_string(),
                     e,
                 ));
@@ -247,19 +247,22 @@ impl CacheRwLock {
     }
 
     /// Reads the sha256 hash from the cache lock file.
-    pub fn read_sha256(&mut self) -> Result<Option<Sha256Hash>, PackageCacheError> {
+    pub fn read_sha256(&mut self) -> Result<Option<Sha256Hash>, PackageCacheLayerError> {
         const SHA256_LEN: usize = 32;
         const REVISION_LEN: u64 = 8;
         let mut file = self.file.lock();
         file.rewind().map_err(|e| {
-            PackageCacheError::LockError(
+            PackageCacheLayerError::LockError(
                 "failed to rewind cache lock for reading sha256".to_string(),
                 e,
             )
         })?;
         let mut buf = [0; SHA256_LEN];
         let _ = file.seek(SeekFrom::Start(REVISION_LEN)).map_err(|e| {
-            PackageCacheError::LockError("failed to seek to sha256 in cache lock".to_string(), e)
+            PackageCacheLayerError::LockError(
+                "failed to seek to sha256 in cache lock".to_string(),
+                e,
+            )
         })?;
         match file.read_exact(&mut buf) {
             Ok(_) => {}
@@ -267,7 +270,7 @@ impl CacheRwLock {
                 return Ok(None);
             }
             Err(e) => {
-                return Err(PackageCacheError::LockError(
+                return Err(PackageCacheLayerError::LockError(
                     "failed to read sha256 from cache lock".to_string(),
                     e,
                 ));

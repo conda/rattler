@@ -44,6 +44,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.12](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.11...rattler_package_streaming-v0.23.12) - 2025-10-25
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.23.11](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.10...rattler_package_streaming-v0.23.11) - 2025-10-18
+
+### Added
+
+- make read_package_file_content public, add try_from_magic_bytes ([#1757](https://github.com/conda/rattler/pull/1757))
+
+## [0.23.10](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.9...rattler_package_streaming-v0.23.10) - 2025-10-17
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_networking
+
+## [0.23.9](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.8...rattler_package_streaming-v0.23.9) - 2025-10-14
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_networking
+
 ## [0.23.8](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.7...rattler_package_streaming-v0.23.8) - 2025-10-13
 
 ### Other
