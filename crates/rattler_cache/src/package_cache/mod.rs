@@ -99,8 +99,8 @@ pub enum PackageCacheError {
     #[error("failed to interact with the package cache layer.")]
     LayerError(#[source] Box<dyn std::error::Error + Send + Sync>), // Wraps layer-specific errors
 
-    /// there are no writable errors to install package to
-    #[error("no writable layers to install package to")]
+    /// There are no writable layers to cache package to
+    #[error("no writable layers to cache package to")]
     NoWritableLayers,
 }
 
@@ -291,6 +291,13 @@ impl PackageCache {
     /// the package was not previously fetch the filesystem is checked to
     /// see if a directory with valid package content exists. Otherwise, the
     /// user provided `fetch` function is called to populate the cache.
+    ///
+    /// ## Layer Priority
+    ///
+    /// Layers are checked in the order they were provided to [`PackageCache::new_layered`].
+    /// If a valid package is found in any layer, it is returned immediately. If no valid
+    /// package is found in any layer, the package is fetched and written to the first
+    /// writable layer.
     ///
     /// If the package is already being fetched by another task/thread the
     /// request is coalesced. No duplicate fetch is performed.
