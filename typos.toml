@@ -6,7 +6,8 @@ extend-exclude = [
   "**/*.txt",
   "crates/rattler_libsolv_c",
   "test-data",
-  "crates/rattler_index/tests/test_index.rs"
+  "crates/rattler_index/tests/test_index.rs",
+  "js-rattler/src/PackageName.test.ts", # complains about valid test names in strings
 ]
 ignore-hidden = false
 

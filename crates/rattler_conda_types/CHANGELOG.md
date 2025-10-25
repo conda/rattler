@@ -1,10 +1,78 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.39.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.1...rattler_conda_types-v0.39.2) - 2025-09-05
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.39.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.0...rattler_conda_types-v0.39.1) - 2025-09-02
+
+### Fixed
+
+- compatibility with older Artifactory repodata format ([#1599](https://github.com/conda/rattler/pull/1599))
+
+## [0.39.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.38.0...rattler_conda_types-v0.39.0) - 2025-08-15
+
+### Added
+
+- populate `requested_spec` ([#1596](https://github.com/conda/rattler/pull/1596))
+
+## [0.38.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.37.0...rattler_conda_types-v0.38.0) - 2025-08-12
+
+### Added
+
+- *(gateway)* add method to ensure `run_exports.json` ([#1540](https://github.com/conda/rattler/pull/1540))
+- implement extras with conditional dependencies ([#1542](https://github.com/conda/rattler/pull/1542))
+# Changelog
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.40.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.2...rattler_conda_types-v0.40.3) - 2025-10-18
+
+### Added
+
+- make read_package_file_content public, add try_from_magic_bytes ([#1757](https://github.com/conda/rattler/pull/1757))
+
+## [0.40.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.1...rattler_conda_types-v0.40.2) - 2025-10-17
+
+### Fixed
+
+- use byte string instead of array for hash encoding ([#1755](https://github.com/conda/rattler/pull/1755))
+
+## [0.40.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.0...rattler_conda_types-v0.40.1) - 2025-10-14
+
+### Added
+
+- derive `PartialEq`, `Eq` and `Hash` for `EntryPoint` ([#1731](https://github.com/conda/rattler/pull/1731))
+
+## [0.40.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.3...rattler_conda_types-v0.40.0) - 2025-10-03
+
+### Added
+
+- Add freebsd-64 to platforms, add Platform.all method ([#1701](https://github.com/conda/rattler/pull/1701))
+
+### Other
+
+- *(conda_types)* reduce `MinimalPrefixRecord` read overhead ([#1697](https://github.com/conda/rattler/pull/1697))
+
+## [0.39.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.2...rattler_conda_types-v0.39.3) - 2025-09-30
+
+### Other
+
+- add LazyClient to late initialize the reqwest client ([#1687](https://github.com/conda/rattler/pull/1687))
+- optimize transaction operations ([#1615](https://github.com/conda/rattler/pull/1615))
 
 ## [0.37.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.36.0...rattler_conda_types-v0.37.0) - 2025-07-23
 

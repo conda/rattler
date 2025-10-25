@@ -1,0 +1,32 @@
+recipe:
+  name: clobber-with-symlink
+  version: 0.1.0
+
+outputs:
+  - package:
+      name: clobber-with-symlink-b
+      version: 0.1.0
+
+    build:
+      noarch: generic
+      script:
+        - mkdir $PREFIX/lib
+        - echo "clobber-1" > $PREFIX/lib/clobber-1.txt
+        - ln -s $PREFIX/lib/clobber-1.txt $PREFIX/lib/clobber.so
+
+    # We have to define an explicit dependency between the packages to force the
+    # reprioritization in the test where this package is used
+    requirements:
+      run:
+        - clobber-with-symlink-a
+
+  - package:
+      name: clobber-with-symlink-a
+      version: 0.1.0
+
+    build:
+      noarch: generic
+      script:
+        - mkdir $PREFIX/lib
+        - echo "clobber-2" > $PREFIX/lib/clobber-2.txt
+        - ln -s $PREFIX/lib/clobber-2.txt $PREFIX/lib/clobber.so

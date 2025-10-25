@@ -28,4 +28,4 @@ pub mod sandbox;
     all(target_os = "macos", target_arch = "x86_64"),
     all(target_os = "macos", target_arch = "aarch64"),
 ))]
-pub use sandbox::*;
+pub use sandbox::{init_sandbox, sandboxed_command, Exception, Opts};

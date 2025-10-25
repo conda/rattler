@@ -1,6 +1,6 @@
 [package]
 name = "rattler_repodata_gateway"
-version = "0.23.10"
+version = "0.24.12"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to interact with Conda repodata"
@@ -12,6 +12,7 @@ readme.workspace = true
 
 [dependencies]
 cfg-if = { workspace = true }
+coalesced_map = { workspace = true }
 fs-err = { workspace = true }
 anyhow = { workspace = true }
 async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
@@ -29,6 +30,7 @@ http = { workspace = true, optional = true }
 http-cache-semantics = { workspace = true, optional = true, features = ["reqwest", "serde"] }
 humansize = { workspace = true }
 humantime = { workspace = true }
+indicatif = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 json-patch = { workspace = true }
 self_cell = { workspace = true, optional = true }
@@ -68,6 +70,7 @@ windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem", "Win32
 async-fd-lock = { workspace = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 tokio = { workspace = true, features = ["rt", "io-util"] }
+rattler_package_streaming = { workspace = true, default-features = false, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasmtimer = { workspace = true }
@@ -93,7 +96,7 @@ default = ['rustls-tls']
 native-tls = ['reqwest/native-tls', 'reqwest/native-tls-alpn', 'rattler_networking/native-tls', 'rattler_cache/native-tls', 'rattler_redaction/native-tls']
 rustls-tls = ['reqwest/rustls-tls', 'rattler_networking/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_redaction/rustls-tls']
 sparse = ["rattler_conda_types", "memmap2", "self_cell", "superslice", "itertools", "serde_json/raw_value"]
-gateway = ["sparse", "http", "http-cache-semantics", "parking_lot", "async-trait"]
+gateway = ["sparse", "http", "http-cache-semantics", "parking_lot", "async-trait", "rattler_package_streaming"]
 
 [package.metadata.docs.rs]
 features = ["sparse", "gateway"]

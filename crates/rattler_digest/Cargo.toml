@@ -1,6 +1,6 @@
 [package]
 name = "rattler_digest"
-version = "1.1.5"
+version = "1.1.7"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "An simple crate used by rattler crates to compute different hashes from different sources"
@@ -16,6 +16,7 @@ digest = { workspace = true }
 hex = { workspace = true }
 md-5 = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
+serde_bytes = { workspace = true }
 serde_with = { workspace = true }
 sha2 = { workspace = true }
 tokio = { workspace = true, features = ["io-util"], optional = true }
@@ -31,3 +32,5 @@ rstest = { workspace = true }
 tempfile = { workspace = true }
 md-5 = { workspace = true }
 serde_json = { workspace = true }
+rmp = { workspace = true }
+rmp-serde = { workspace = true }

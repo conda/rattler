@@ -9,10 +9,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::Context;
 use clap::ValueEnum;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
+use miette::{Context, IntoDiagnostic};
 use rattler::{
     default_cache_dir,
     install::{IndicatifReporter, Installer, Transaction, TransactionOperation},
@@ -28,7 +28,7 @@ use rattler_solve::{
     libsolv_c::{self},
     resolvo, SolverImpl, SolverTask,
 };
-use reqwest::{Client, Url};
+use reqwest::Client;
 
 use crate::global_multi_progress;
 
@@ -98,20 +98,21 @@ impl From<SolveStrategy> for rattler_solve::SolveStrategy {
     }
 }
 
-pub async fn create(opt: Opt) -> anyhow::Result<()> {
-    let channel_config = ChannelConfig::default_with_root_dir(env::current_dir()?);
-    let current_dir = env::current_dir()?;
+pub async fn create(opt: Opt) -> miette::Result<()> {
+    let channel_config =
+        ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
+    let current_dir = env::current_dir().into_diagnostic()?;
     let target_prefix = opt
         .target_prefix
         .unwrap_or_else(|| current_dir.join(".prefix"));
 
     // Make the target prefix absolute
-    let target_prefix = std::path::absolute(target_prefix)?;
+    let target_prefix = std::path::absolute(target_prefix).into_diagnostic()?;
     println!("Target prefix: {}", target_prefix.display());
 
     // Determine the platform we're going to install for
     let install_platform = if let Some(platform) = opt.platform {
-        Platform::from_str(&platform)?
+        Platform::from_str(&platform).into_diagnostic()?
     } else {
         Platform::current()
     };
@@ -125,12 +126,14 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .specs
         .iter()
         .map(|spec| MatchSpec::from_str(spec, ParseStrictness::Strict))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()
+        .into_diagnostic()?;
 
     // Find the default cache directory. Create it if it doesnt exist yet.
-    let cache_dir = default_cache_dir()?;
+    let cache_dir = default_cache_dir()
+        .map_err(|e| miette::miette!("could not determine default cache directory: {}", e))?;
     std::fs::create_dir_all(&cache_dir)
-        .map_err(|e| anyhow::anyhow!("could not create cache directory: {}", e))?;
+        .map_err(|e| miette::miette!("could not create cache directory: {}", e))?;
 
     // Determine the channels to use from the command line or select the default.
     // Like matchspecs this also requires the use of the `channel_config` so we
@@ -140,10 +143,12 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .unwrap_or_else(|| vec![String::from("conda-forge")])
         .into_iter()
         .map(|channel_str| Channel::from_str(channel_str, &channel_config))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()
+        .into_diagnostic()?;
 
     // Determine the packages that are currently installed in the environment.
-    let installed_packages = PrefixRecord::collect_from_prefix::<PrefixRecord>(&target_prefix)?;
+    let installed_packages =
+        PrefixRecord::collect_from_prefix::<PrefixRecord>(&target_prefix).into_diagnostic()?;
 
     // For each channel/subdirectory combination, download and cache the
     // `repodata.json` that should be available from the corresponding Url. The
@@ -155,11 +160,13 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .expect("failed to create client");
 
     let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::from_env_and_defaults()?))
+        .with_arc(Arc::new(
+            AuthenticationMiddleware::from_env_and_defaults().into_diagnostic()?,
+        ))
         .with(rattler_networking::OciMiddleware)
         .with(rattler_networking::S3Middleware::new(
             HashMap::new(),
-            AuthenticationStorage::from_env_and_defaults()?,
+            AuthenticationStorage::from_env_and_defaults().into_diagnostic()?,
         ))
         .with(rattler_networking::GCSMiddleware)
         .build();
@@ -173,16 +180,11 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         ))
         .with_client(download_client.clone())
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
-            default: SourceConfig::default(),
-            per_channel: [(
-                Url::parse("https://prefix.dev")?,
-                SourceConfig {
-                    sharded_enabled: true,
-                    ..SourceConfig::default()
-                },
-            )]
-            .into_iter()
-            .collect(),
+            default: SourceConfig {
+                sharded_enabled: true,
+                ..SourceConfig::default()
+            },
+            per_channel: HashMap::new(),
         })
         .finish();
 
@@ -198,6 +200,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
             .recursive(true),
     )
     .await
+    .into_diagnostic()
     .context("failed to load repodata")?;
 
     // Determine the number of records
@@ -218,7 +221,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
                 .map(|virt_pkg| {
                     let elems = virt_pkg.split('=').collect::<Vec<&str>>();
                     Ok(GenericVirtualPackage {
-                        name: elems[0].try_into()?,
+                        name: elems[0].try_into().into_diagnostic()?,
                         version: elems
                             .get(1)
                             .map_or(Version::from_str("0"), |s| Version::from_str(s))
@@ -226,7 +229,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
                         build_string: (*elems.get(2).unwrap_or(&"")).to_string(),
                     })
                 })
-                .collect::<anyhow::Result<Vec<_>>>()?)
+                .collect::<miette::Result<Vec<_>>>()?)
         } else {
             rattler_virtual_packages::VirtualPackage::detect(
                 &rattler_virtual_packages::VirtualPackageOverrides::default(),
@@ -237,7 +240,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
                     .map(|vpkg| GenericVirtualPackage::from(vpkg.clone()))
                     .collect::<Vec<_>>()
             })
-            .map_err(anyhow::Error::from)
+            .into_diagnostic()
         }
     })?;
 
@@ -269,11 +272,11 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     // Next, use a solver to solve this specific problem. This provides us with all
     // the operations we need to apply to our environment to bring it up to
     // date.
-    let solver_result =
-        wrap_in_progress("solving", move || match opt.solver.unwrap_or_default() {
-            Solver::Resolvo => resolvo::Solver.solve(solver_task),
-            Solver::LibSolv => libsolv_c::Solver.solve(solver_task),
-        })?;
+    let solver_result = wrap_in_progress("solving", move || match opt.solver.unwrap_or_default() {
+        Solver::Resolvo => resolvo::Solver.solve(solver_task),
+        Solver::LibSolv => libsolv_c::Solver.solve(solver_task),
+    })
+    .into_diagnostic()?;
 
     let mut required_packages: Vec<RepoDataRecord> = solver_result.records;
 
@@ -289,13 +292,15 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
             installed_packages,
             required_packages,
             None,
+            None, // ignored packages
             install_platform,
-        )?;
+        )
+        .into_diagnostic()?;
 
         if transaction.operations.is_empty() {
             println!("No operations necessary");
         } else {
-            print_transaction(&transaction, solver_result.features);
+            print_transaction(&transaction, solver_result.extras);
         }
 
         return Ok(());
@@ -307,13 +312,15 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .with_target_platform(install_platform)
         .with_installed_packages(installed_packages)
         .with_execute_link_scripts(true)
+        .with_requested_specs(specs)
         .with_reporter(
             IndicatifReporter::builder()
                 .with_multi_progress(global_multi_progress())
                 .finish(),
         )
         .install(&target_prefix, required_packages)
-        .await?;
+        .await
+        .into_diagnostic()?;
 
     if result.transaction.operations.is_empty() {
         println!(
@@ -326,7 +333,12 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
             console::style(console::Emoji("✔", "")).green(),
             install_start.elapsed()
         );
-        print_transaction(&result.transaction, solver_result.features);
+        // Since operations are nonempty we can safely unwrap.
+        let transaction = result
+            .transaction
+            .into_prefix_record(target_prefix)
+            .unwrap();
+        print_transaction(&transaction, solver_result.extras);
     }
 
     Ok(())

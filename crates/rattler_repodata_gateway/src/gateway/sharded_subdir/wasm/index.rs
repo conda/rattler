@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use futures::future::OptionFuture;
-use reqwest_middleware::ClientWithMiddleware;
+use rattler_networking::LazyClient;
 use url::Url;
 
 use super::ShardedRepodata;
@@ -15,7 +15,7 @@ const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
 
 // Fetches the shard index from the url or read it from the cache.
 pub async fn fetch_index(
-    client: ClientWithMiddleware,
+    client: LazyClient,
     channel_base_url: &Url,
     concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
     reporter: Option<&dyn Reporter>,
@@ -27,6 +27,7 @@ pub async fn fetch_index(
 
     // Construct the actual request that we will send
     let request = client
+        .client()
         .get(shards_url.clone())
         .build()
         .expect("failed to build request for shard index");
@@ -38,8 +39,11 @@ pub async fn fetch_index(
     .await;
 
     // Do a fresh requests
-    let reporter = reporter.map(|r| (r, r.on_download_start(&shards_url)));
+    let reporter = reporter
+        .and_then(Reporter::download_reporter)
+        .map(|r| (r, r.on_download_start(&shards_url)));
     let response = client
+        .client()
         .execute(
             request
                 .try_clone()

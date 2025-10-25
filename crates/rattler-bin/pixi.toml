@@ -1,0 +1,10 @@
+[package]
+name = "rattler"
+
+[package.build.backend]
+name = "pixi-build-rust"
+version = "0.4.*"
+channels = [
+    "https://prefix.dev/pixi-build-backends",
+    "https://prefix.dev/conda-forge"
+]

@@ -49,13 +49,13 @@ impl From<rattler_config::config::repodata_config::RepodataChannelConfig> for So
             zstd_enabled: !value.disable_zstd.unwrap_or(false),
             bz2_enabled: !value.disable_bzip2.unwrap_or(false),
             sharded_enabled: !value.disable_sharded.unwrap_or(false),
-            cache_action: Default::default(),
+            cache_action: CacheAction::default(),
         }
     }
 }
 
 /// Describes additional information for fetching channels.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ChannelConfig {
     /// The default source configuration. If a channel does not have a specific
     /// source configuration this configuration will be used.

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections.abc import Iterator
 from typing import Any, Dict, Literal, Tuple, Optional
 
 from rattler.rattler import PyPlatform
@@ -6,22 +7,28 @@ from rattler.platform.arch import Arch
 
 PlatformLiteral = Literal[
     "noarch",
+    "unknown",
     "linux-32",
     "linux-64",
     "linux-aarch64",
     "linux-armv6l",
     "linux-armv7l",
+    "linux-loong64",
     "linux-ppc64le",
     "linux-ppc64",
+    "linux-ppc",
     "linux-s390x",
     "linux-riscv32",
     "linux-riscv64",
+    "freebsd-64",
     "osx-64",
     "osx-arm64",
     "win-32",
     "win-64",
     "win-arm64",
-    "emscripten-32",
+    "emscripten-wasm32",
+    "wasi-wasm32",
+    "zos-z",
 ]
 
 
@@ -73,7 +80,7 @@ class Platform(metaclass=PlatformSingleton):
 
     def __repr__(self) -> str:
         """
-        Returnrs a representation of the platform.
+        Returns a representation of the platform.
 
         Examples
         --------
@@ -90,7 +97,23 @@ class Platform(metaclass=PlatformSingleton):
         """
         Returns the current platform.
         """
-        return Platform._from_py_platform(PyPlatform.current())
+        return cls._from_py_platform(PyPlatform.current())
+
+    @classmethod
+    def all(cls) -> Iterator[Platform]:
+        """
+        Returns all supported platforms.
+
+        Examples
+        --------
+        ```python
+        >>> next(Platform.all())
+        Platform(noarch)
+        >>> len(list(Platform.all()))
+        23
+        >>>
+        """
+        return (cls._from_py_platform(p) for p in PyPlatform.all())
 
     @property
     def is_linux(self) -> bool:

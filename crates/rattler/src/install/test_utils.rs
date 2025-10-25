@@ -1,16 +1,16 @@
 use std::{path::PathBuf, str::FromStr};
 
-use futures::TryFutureExt;
-use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
-use rattler_networking::retry_policies::default_retry_policy;
-use transaction::{Transaction, TransactionOperation};
-use url::Url;
-
 use crate::{
     get_repodata_record,
     install::{transaction, unlink_package, InstallDriver, InstallOptions},
     package_cache::PackageCache,
 };
+use futures::TryFutureExt;
+use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
+use rattler_networking::retry_policies::default_retry_policy;
+use rattler_networking::LazyClient;
+use transaction::{Transaction, TransactionOperation};
+use url::Url;
 
 use super::{driver::PostProcessResult, link_package, PythonInfo};
 
@@ -34,17 +34,8 @@ pub async fn install_package_to_environment(
 
     // Construct a PrefixRecord for the package
     let prefix_record = PrefixRecord {
-        repodata_record,
-        package_tarball_full_path: None,
         extracted_package_dir: Some(package_dir),
-        files: paths
-            .iter()
-            .map(|entry| entry.relative_path.clone())
-            .collect(),
-        paths_data: paths.into(),
-        requested_spec: None,
-        link: None,
-        installed_system_menus: Vec::new(),
+        ..PrefixRecord::from_repodata_record(repodata_record, paths)
     };
 
     // Create the conda-meta directory if it doesnt exist yet.
@@ -72,7 +63,7 @@ pub async fn install_package_to_environment(
 
 pub async fn execute_operation(
     target_prefix: &Prefix,
-    download_client: &reqwest_middleware::ClientWithMiddleware,
+    download_client: &LazyClient,
     package_cache: &PackageCache,
     install_driver: &InstallDriver,
     op: TransactionOperation<PrefixRecord, RepoDataRecord>,
@@ -128,7 +119,7 @@ pub async fn execute_operation(
 pub async fn execute_transaction(
     transaction: Transaction<PrefixRecord, RepoDataRecord>,
     target_prefix: &Prefix,
-    download_client: &reqwest_middleware::ClientWithMiddleware,
+    download_client: &LazyClient,
     package_cache: &PackageCache,
     install_driver: &InstallDriver,
     install_options: &InstallOptions,
@@ -199,5 +190,5 @@ pub async fn download_and_get_prefix_record(
     let repodata_record = get_repodata_record(&package_path);
     // Construct a PrefixRecord for the package
 
-    PrefixRecord::from_repodata_record(repodata_record, None, None, paths, None, None)
+    PrefixRecord::from_repodata_record(repodata_record, paths)
 }

@@ -1,6 +1,6 @@
 [package]
 name = "rattler_solve"
-version = "2.1.8"
+version = "3.0.8"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to solve conda environments"
@@ -41,7 +41,7 @@ default = ["resolvo"]
 libsolv_c = ["dep:rattler_libsolv_c", "dep:libc"]
 resolvo_diagnostics = ["resolvo?/diagnostics"]
 resolvo = ["dep:resolvo", "dep:futures"]
-experimental_extras = []
+experimental_extras = ["rattler_conda_types/experimental_extras"]
 
 [[bench]]
 name = "bench"

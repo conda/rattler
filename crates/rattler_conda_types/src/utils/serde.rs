@@ -197,3 +197,7 @@ impl<'de> DeserializeAs<'de, Vec<String>> for Features {
             .deserialize(deserializer)
     }
 }
+
+pub fn is_none_or_empty_string(opt: &Option<String>) -> bool {
+    opt.as_ref().is_none_or(String::is_empty)
+}

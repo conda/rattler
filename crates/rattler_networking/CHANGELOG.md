@@ -1,10 +1,90 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.25.13](https://github.com/conda/rattler/compare/rattler_networking-v0.25.12...rattler_networking-v0.25.13) - 2025-09-05
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.12](https://github.com/conda/rattler/compare/rattler_networking-v0.25.11...rattler_networking-v0.25.12) - 2025-09-04
+
+### Added
+
+- derive default credentials from aws sdk ([#1629](https://github.com/conda/rattler/pull/1629))
+
+## [0.25.11](https://github.com/conda/rattler/compare/rattler_networking-v0.25.10...rattler_networking-v0.25.11) - 2025-09-02
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.10](https://github.com/conda/rattler/compare/rattler_networking-v0.25.9...rattler_networking-v0.25.10) - 2025-08-15
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.9](https://github.com/conda/rattler/compare/rattler_networking-v0.25.8...rattler_networking-v0.25.9) - 2025-08-12
+
+### Other
+
+- update Cargo.toml dependencies
+# Changelog
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.25.20](https://github.com/conda/rattler/compare/rattler_networking-v0.25.19...rattler_networking-v0.25.20) - 2025-10-18
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.19](https://github.com/conda/rattler/compare/rattler_networking-v0.25.18...rattler_networking-v0.25.19) - 2025-10-17
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.18](https://github.com/conda/rattler/compare/rattler_networking-v0.25.17...rattler_networking-v0.25.18) - 2025-10-14
+
+### Fixed
+
+- retry policy for indexing operations ([#1745](https://github.com/conda/rattler/pull/1745))
+
+## [0.25.17](https://github.com/conda/rattler/compare/rattler_networking-v0.25.16...rattler_networking-v0.25.17) - 2025-10-13
+
+### Other
+
+- small bearer token improvements ([#1727](https://github.com/conda/rattler/pull/1727))
+
+## [0.25.16](https://github.com/conda/rattler/compare/rattler_networking-v0.25.15...rattler_networking-v0.25.16) - 2025-10-07
+
+### Other
+
+- bump aws dependencies ([#1315](https://github.com/conda/rattler/pull/1315))
+
+## [0.25.15](https://github.com/conda/rattler/compare/rattler_networking-v0.25.14...rattler_networking-v0.25.15) - 2025-10-03
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.14](https://github.com/conda/rattler/compare/rattler_networking-v0.25.13...rattler_networking-v0.25.14) - 2025-09-30
+
+### Other
+
+- add LazyClient to late initialize the reqwest client ([#1687](https://github.com/conda/rattler/pull/1687))
 
 ## [0.25.8](https://github.com/conda/rattler/compare/rattler_networking-v0.25.7...rattler_networking-v0.25.8) - 2025-07-23
 
