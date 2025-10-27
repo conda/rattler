@@ -864,8 +864,7 @@ mod test {
         }
 
         // Check that packages.conda are in alphabetical order
-        if let Some(conda_packages) = json_value.get("packages.conda").and_then(|p| p.as_object())
-        {
+        if let Some(conda_packages) = json_value.get("packages.conda").and_then(|p| p.as_object()) {
             let keys: Vec<&String> = conda_packages.keys().collect();
             let mut sorted_keys = keys.clone();
             sorted_keys.sort();
