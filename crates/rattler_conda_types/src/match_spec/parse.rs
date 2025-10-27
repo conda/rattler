@@ -32,7 +32,7 @@ use crate::{
     Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
     ParseChannelError, ParseStrictness,
     ParseStrictness::{Lenient, Strict},
-    ParseVersionError, Platform, VersionSpec,
+    ParseVersionError, VersionSpec,
 };
 
 /// The type of parse error that occurred when parsing match spec.
@@ -594,15 +594,44 @@ fn parse_channel_and_subdir(
         std::env::current_dir().expect("Could not get current directory"),
     );
 
+    // Try to parse as URL first to get proper structure
+    if let Ok(url) = url::Url::parse(input) {
+        // It's a valid URL - check if it has a path with segments
+        let path_segments: Vec<_> = url
+            .path_segments()
+            .map(|segments| segments.collect())
+            .unwrap_or_default();
+
+        if path_segments.len() > 1 {
+            // URL has multiple path segments, e.g., "https://a.b.c/conda-forge/linux-64"
+            // Check if the last segment looks like a platform
+            if let Some(last_segment) = path_segments.last() {
+                if crate::Platform::from_str(last_segment).is_ok() {
+                    // Split off the last segment as platform
+                    if let Some((channel, _)) = input.rsplit_once('/') {
+                        return Ok((
+                            Some(Channel::from_str(channel, &channel_config)?),
+                            Some(last_segment.to_string()),
+                        ));
+                    }
+                }
+            }
+        }
+        // URL with 0 or 1 path segments, or last segment is not a platform - treat as channel
+        return Ok((Some(Channel::from_str(input, &channel_config)?), None));
+    }
+
+    // Not a URL - handle simple channel/platform patterns like "conda-forge/linux-64"
     if let Some((channel, subdir)) = input.rsplit_once('/') {
-        // If the subdir is a platform, we assume the channel has a subdir
-        if Platform::from_str(subdir).is_ok() {
+        if crate::Platform::from_str(subdir).is_ok() {
             return Ok((
                 Some(Channel::from_str(channel, &channel_config)?),
                 Some(subdir.to_string()),
             ));
         }
     }
+
+    // No split - treat entire input as channel
     Ok((Some(Channel::from_str(input, &channel_config)?), None))
 }
 

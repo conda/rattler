@@ -90,11 +90,7 @@ async fn main() {
         format!(
             "snapshot-{}-{}.json",
             channel.name(),
-            subdirs
-                .iter()
-                .map(|p| p.as_str())
-                .sorted()
-                .join("-")
+            subdirs.iter().map(|p| p.as_str()).sorted().join("-")
         )
     });
     eprintln!("serializing snapshot to {}", &output_file);

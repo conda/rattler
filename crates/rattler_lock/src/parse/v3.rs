@@ -247,10 +247,7 @@ pub fn parse_v3_or_lower(
             }
         };
 
-        per_platform
-            .entry(platform)
-            .or_default()
-            .insert(pkg);
+        per_platform.entry(platform).or_default().insert(pkg);
     }
 
     // Construct the default environment

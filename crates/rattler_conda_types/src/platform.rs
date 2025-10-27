@@ -72,7 +72,7 @@ impl Ord for Platform {
 /// Known architectures supported by Conda.
 #[allow(missing_docs)]
 #[non_exhaustive] // The `Arch` enum is non-exhaustive to allow for future extensions without breaking changes.
-#[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(EnumIter, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Arch {
     X86,
     X86_64,
@@ -91,6 +91,10 @@ pub enum Arch {
     Riscv64,
     Wasm32,
     Z,
+
+    /// A custom architecture string not in the predefined list.
+    #[strum(disabled)]
+    Custom(Box<str>),
 }
 
 impl Platform {
@@ -359,12 +363,27 @@ impl FromStr for Platform {
             "emscripten-wasm32" => Platform::EmscriptenWasm32,
             "wasi-wasm32" => Platform::WasiWasm32,
             "zos-z" => Platform::ZosZ,
-            // Accept any other string as a custom platform
-            string => Platform::Custom(string.into()),
+            // Accept any other string as a custom platform if it follows the format <string>-<arch>
+            string => {
+                // Custom platforms must follow the format <os>-<arch>
+                if let Some(hyphen_pos) = string.rfind('-') {
+                    // Ensure there's content before and after the hyphen
+                    if hyphen_pos > 0 && hyphen_pos < string.len() - 1 {
+                        Platform::Custom(string.into())
+                    } else {
+                        return Err(ParsePlatformError {
+                            string: string.to_owned(),
+                        });
+                    }
+                } else {
+                    return Err(ParsePlatformError {
+                        string: string.to_owned(),
+                    });
+                }
+            }
         })
     }
 }
-
 
 impl Platform {
     /// Return the arch string for the platform
@@ -392,9 +411,12 @@ impl Platform {
             Platform::EmscriptenWasm32 | Platform::WasiWasm32 => Some(Arch::Wasm32),
             Platform::ZosZ => Some(Arch::Z),
             // For custom platforms, try to parse the architecture part (after the hyphen)
-            Platform::Custom(s) => {
-                s.split('-').nth(1).and_then(|arch| arch.parse::<Arch>().ok())
-            }
+            Platform::Custom(s) => s.split('-').nth(1).map(|arch_str| {
+                // Try to parse as known arch, otherwise create a custom arch
+                arch_str
+                    .parse::<Arch>()
+                    .unwrap_or_else(|_| Arch::Custom(arch_str.into()))
+            }),
         }
     }
 }
@@ -433,8 +455,34 @@ impl Arch {
     }
 
     /// Returns a string representation of the arch.
-    pub fn as_str(self) -> &'static str {
-        self.into()
+    pub fn as_str(&self) -> &str {
+        match self {
+            Arch::Custom(s) => s.as_ref(),
+            _ => self.static_str(),
+        }
+    }
+
+    /// Returns a static string representation of the arch.
+    /// Returns None for custom architectures.
+    const fn static_str(&self) -> &'static str {
+        match self {
+            Arch::X86 => "x86",
+            Arch::X86_64 => "x86_64",
+            Arch::Arm64 => "arm64",
+            Arch::Aarch64 => "aarch64",
+            Arch::ArmV6l => "armv6l",
+            Arch::ArmV7l => "armv7l",
+            Arch::Loong64 => "loong64",
+            Arch::Ppc64le => "ppc64le",
+            Arch::Ppc64 => "ppc64",
+            Arch::Ppc => "ppc",
+            Arch::S390X => "s390x",
+            Arch::Riscv32 => "riscv32",
+            Arch::Riscv64 => "riscv64",
+            Arch::Wasm32 => "wasm32",
+            Arch::Z => "z",
+            Arch::Custom(_) => "custom",
+        }
     }
 }
 
@@ -466,34 +514,13 @@ impl FromStr for Arch {
             "riscv64" => Arch::Riscv64,
             "wasm32" => Arch::Wasm32,
             "z" => Arch::Z,
+            // Unknown architectures return an error (should be wrapped in Custom by the caller)
             string => {
                 return Err(ParseArchError {
                     string: string.to_owned(),
                 });
             }
         })
-    }
-}
-
-impl From<Arch> for &'static str {
-    fn from(arch: Arch) -> Self {
-        match arch {
-            Arch::X86 => "x86",
-            Arch::X86_64 => "x86_64",
-            Arch::Arm64 => "arm64",
-            Arch::Aarch64 => "aarch64",
-            Arch::ArmV6l => "armv6l",
-            Arch::ArmV7l => "armv7l",
-            Arch::Loong64 => "loong64",
-            Arch::Ppc64le => "ppc64le",
-            Arch::Ppc64 => "ppc64",
-            Arch::Ppc => "ppc",
-            Arch::S390X => "s390x",
-            Arch::Riscv32 => "riscv32",
-            Arch::Riscv64 => "riscv64",
-            Arch::Wasm32 => "wasm32",
-            Arch::Z => "z",
-        }
     }
 }
 
@@ -557,11 +584,17 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_platform_unknown_becomes_custom() {
-        // Unknown platforms are now parsed as custom platforms
-        let platform = "foo".parse::<Platform>().unwrap();
-        assert!(matches!(platform, Platform::Custom(_)));
-        assert_eq!(platform.as_str(), "foo");
+    fn test_parse_platform_invalid() {
+        // Platforms without hyphen should fail
+        assert!("foo".parse::<Platform>().is_err());
+        assert!("notaplatform".parse::<Platform>().is_err());
+
+        // Platforms with only hyphen at start or end should fail
+        assert!("-foo".parse::<Platform>().is_err());
+        assert!("foo-".parse::<Platform>().is_err());
+
+        // Empty string should fail
+        assert!("".parse::<Platform>().is_err());
     }
 
     #[test]
@@ -622,9 +655,13 @@ mod tests {
         let custom_with_arm64: Platform = "myos-arm64".parse().unwrap();
         assert_eq!(custom_with_arm64.arch(), Some(Arch::Arm64));
 
-        // Custom platform with unknown arch should return None
+        // Custom platform with unknown arch should return Custom arch
         let custom_unknown_arch: Platform = "myos-unknownarch".parse().unwrap();
-        assert_eq!(custom_unknown_arch.arch(), None);
+        let arch = custom_unknown_arch.arch().unwrap();
+        assert!(matches!(arch, Arch::Custom(_)));
+        if let Arch::Custom(arch_str) = arch {
+            assert_eq!(arch_str.as_ref(), "unknownarch");
+        }
     }
 
     #[test]
@@ -659,5 +696,23 @@ mod tests {
 
         assert!(platform1 < platform2);
         assert!(platform1 < platform3);
+    }
+
+    #[test]
+    fn test_custom_arch() {
+        // Test custom architecture display
+        let platform: Platform = "myos-customarch".parse().unwrap();
+        let arch = platform.arch().unwrap();
+        assert!(matches!(arch, Arch::Custom(_)));
+        assert_eq!(arch.as_str(), "customarch");
+        assert_eq!(arch.to_string(), "customarch");
+
+        // Test serialization of custom arch
+        let serialized = serde_json::to_string(&arch).unwrap();
+        assert_eq!(serialized, "\"customarch\"");
+
+        // Test deserialization of custom arch (note: this will fail with ParseArchError
+        // because FromStr for Arch doesn't accept arbitrary strings)
+        // Custom archs should only be created internally by Platform parsing
     }
 }

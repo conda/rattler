@@ -644,9 +644,7 @@ impl DebugData {
             output_dir: opts.output.unwrap_or_else(|| PathBuf::from("./output")),
             build_platform: opts.build_platform.unwrap_or(Platform::current()),
             target_platform: target_platform.clone(),
-            host_platform: opts
-                .host_platform
-                .unwrap_or_else(|| target_platform),
+            host_platform: opts.host_platform.unwrap_or_else(|| target_platform),
             channels: opts.channels,
             common: CommonData::from_opts_and_config(opts.common, config.unwrap_or_default()),
             output_name: opts.output_name,
