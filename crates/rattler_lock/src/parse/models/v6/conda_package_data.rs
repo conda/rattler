@@ -4,7 +4,8 @@ use std::{
 };
 
 use rattler_conda_types::{
-    BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource, package::ArchiveIdentifier, utils::TimestampMs
+    package::ArchiveIdentifier, utils::TimestampMs, BuildNumber, ChannelUrl, NoArchType,
+    PackageName, PackageRecord, PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
