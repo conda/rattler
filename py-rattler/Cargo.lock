@@ -1912,15 +1912,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fxhash"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2731,7 +2722,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.53.2",
 ]
 
 [[package]]
@@ -3226,8 +3217,8 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 name = "path_resolver"
 version = "0.2.1"
 dependencies = [
+ "ahash",
  "fs-err",
- "fxhash",
  "indexmap 2.10.0",
  "itertools 0.14.0",
  "proptest",
@@ -3781,7 +3772,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.37.9"
+version = "0.38.3"
 dependencies = [
  "anyhow",
  "console",
@@ -3823,8 +3814,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.39"
+version = "0.4.0"
 dependencies = [
+ "ahash",
  "anyhow",
  "dashmap",
  "digest",
@@ -3832,7 +3824,6 @@ dependencies = [
  "fs-err",
  "fs4",
  "futures",
- "fxhash",
  "itertools 0.14.0",
  "parking_lot",
  "rattler_conda_types",
@@ -3854,14 +3845,14 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.40.1"
+version = "0.40.3"
 dependencies = [
+ "ahash",
  "chrono",
  "core-foundation 0.10.1",
  "dirs",
  "file_url",
  "fs-err",
- "fxhash",
  "glob",
  "hex",
  "indexmap 2.10.0",
@@ -3893,7 +3884,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.12"
+version = "0.2.14"
 dependencies = [
  "console",
  "fs-err",
@@ -3909,7 +3900,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.1.6"
+version = "1.1.7"
 dependencies = [
  "blake2",
  "digest",
@@ -3917,6 +3908,7 @@ dependencies = [
  "hex",
  "md-5",
  "serde",
+ "serde_bytes",
  "serde_with",
  "sha2",
  "tokio",
@@ -3925,8 +3917,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.26.2"
+version = "0.26.5"
 dependencies = [
+ "ahash",
  "anyhow",
  "bytes",
  "chrono",
@@ -3935,7 +3928,7 @@ dependencies = [
  "console",
  "fs-err",
  "futures",
- "fxhash",
+ "indexmap 2.10.0",
  "indicatif",
  "opendal",
  "rattler_conda_types",
@@ -3960,11 +3953,11 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.25.1"
+version = "0.26.0"
 dependencies = [
+ "ahash",
  "chrono",
  "file_url",
- "fxhash",
  "indexmap 2.10.0",
  "itertools 0.14.0",
  "pep440_rs",
@@ -3992,7 +3985,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.30"
+version = "0.2.33"
 dependencies = [
  "chrono",
  "configparser",
@@ -4020,7 +4013,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.18"
+version = "0.25.20"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4050,7 +4043,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.9"
+version = "0.23.12"
 dependencies = [
  "bzip2",
  "chrono",
@@ -4078,7 +4071,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_pty"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "libc",
  "nix 0.30.1",
@@ -4097,7 +4090,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.9"
+version = "0.24.13"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4156,7 +4149,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.7"
+version = "0.1.9"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4172,7 +4165,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.3"
+version = "0.25.6"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4190,7 +4183,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "3.0.6"
+version = "3.0.8"
 dependencies = [
  "chrono",
  "futures",
@@ -4206,7 +4199,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.2.2"
+version = "2.2.4"
 dependencies = [
  "archspec",
  "libloading",
@@ -4808,6 +4801,16 @@ checksum = "f3a1a3341211875ef120e117ea7fd5228530ae7e7036a779fdc9117be6b3282c"
 dependencies = [
  "ordered-float",
  "serde",
+]
+
+[[package]]
+name = "serde_bytes"
+version = "0.11.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5d440709e79d88e51ac01c4b72fc6cb7314017bb7da9eeff678aa94c10e3ea8"
+dependencies = [
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -6538,9 +6541,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "4.0.0"
+version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "153a6fff49d264c4babdcfa6b4d534747f520e56e8f0f384f3b808c4b64cc1fd"
+checksum = "eb2a05c7c36fde6c09b08576c9f7fb4cda705990f73b58fe011abf7dfb24168b"
 dependencies = [
  "arbitrary",
  "crc32fast",
