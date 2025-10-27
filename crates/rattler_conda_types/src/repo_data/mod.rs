@@ -11,7 +11,7 @@ use std::{
     path::Path,
 };
 
-use fxhash::{FxHashMap, FxHashSet};
+use indexmap::IndexMap;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
@@ -22,10 +22,7 @@ use url::Url;
 use crate::{
     build_spec::BuildNumber,
     package::{IndexJson, RunExportsJson},
-    utils::{
-        serde::{sort_map_alphabetically, DeserializeFromStrUnchecked},
-        UrlWithTrailingSlash,
-    },
+    utils::{serde::DeserializeFromStrUnchecked, UrlWithTrailingSlash},
     Arch, Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
     ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
 };
@@ -40,27 +37,23 @@ pub struct RepoData {
     pub info: Option<ChannelInfo>,
 
     /// The tar.bz2 packages contained in the repodata.json file
-    #[serde(default, serialize_with = "sort_map_alphabetically")]
-    pub packages: FxHashMap<String, PackageRecord>,
+    #[serde(default)]
+    pub packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// The conda packages contained in the repodata.json file (under a
     /// different key for backwards compatibility with previous conda
     /// versions)
-    #[serde(
-        default,
-        rename = "packages.conda",
-        serialize_with = "sort_map_alphabetically"
-    )]
-    pub conda_packages: FxHashMap<String, PackageRecord>,
+    #[serde(default, rename = "packages.conda")]
+    pub conda_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// removed packages (files are still accessible, but they are not
     /// installable like regular packages)
     #[serde(
         default,
         serialize_with = "sort_set_alphabetically",
-        skip_serializing_if = "FxHashSet::is_empty"
+        skip_serializing_if = "ahash::HashSet::is_empty"
     )]
-    pub removed: FxHashSet<String>,
+    pub removed: ahash::HashSet<String>,
 
     /// The version of the repodata format
     #[serde(rename = "repodata_version")]
@@ -429,15 +422,11 @@ struct PackageRunExports {
 pub struct SubdirRunExportsJson {
     info: Option<ChannelInfo>,
 
-    #[serde(default, serialize_with = "sort_map_alphabetically")]
-    packages: FxHashMap<String, PackageRunExports>,
+    #[serde(default)]
+    packages: ahash::HashMap<String, PackageRunExports>,
 
-    #[serde(
-        default,
-        rename = "packages.conda",
-        serialize_with = "sort_map_alphabetically"
-    )]
-    conda_packages: FxHashMap<String, PackageRunExports>,
+    #[serde(default, rename = "packages.conda")]
+    conda_packages: ahash::HashMap<String, PackageRunExports>,
 }
 
 impl SubdirRunExportsJson {
@@ -578,7 +567,7 @@ impl PackageRecord {
 }
 
 fn sort_set_alphabetically<S: serde::Serializer>(
-    value: &FxHashSet<String>,
+    value: &ahash::HashSet<String>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     value.iter().collect::<BTreeSet<_>>().serialize(serializer)
@@ -586,7 +575,7 @@ fn sort_set_alphabetically<S: serde::Serializer>(
 
 #[cfg(test)]
 mod test {
-    use fxhash::FxHashMap;
+    use indexmap::IndexMap;
 
     use crate::{
         repo_data::{compute_package_url, determine_subdir},
@@ -610,8 +599,8 @@ mod test {
         let repodata = RepoData {
             version: Some(2),
             info: None,
-            packages: FxHashMap::default(),
-            conda_packages: FxHashMap::default(),
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
             removed: ["xyz", "foo", "bar", "baz", "qux", "aux", "quux"]
                 .iter()
                 .map(|s| (*s).to_string())

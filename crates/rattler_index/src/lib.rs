@@ -19,7 +19,7 @@ use bytes::buf::Buf;
 use chrono::{DateTime, Utc};
 use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
-use fxhash::FxHashMap;
+use indexmap::IndexMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use opendal::{
     layers::RetryLayer,
@@ -156,7 +156,7 @@ pub fn package_record_from_index_json<T: Read>(
 fn repodata_patch_from_conda_package_stream<'a>(
     package: impl Read + Seek + 'a,
 ) -> anyhow::Result<rattler_conda_types::RepoDataPatch> {
-    let mut subdirs = FxHashMap::default();
+    let mut subdirs = HashMap::default();
 
     let mut content_reader = stream_conda_content(package)?;
     let entries = content_reader.entries()?;
@@ -611,7 +611,7 @@ async fn index_subdir_inner(
     // Step 2: Read any previous repodata.json files with conditional check.
     // This file already contains a lot of information about the packages that we
     // can reuse.
-    let mut registered_packages: FxHashMap<String, PackageRecord> = if force {
+    let mut registered_packages: ahash::HashMap<String, PackageRecord> = if force {
         HashMap::default()
     } else {
         let (repodata_path, read_metadata) = if repodata_patch.is_some() {
@@ -774,8 +774,9 @@ async fn index_subdir_inner(
         registered_packages.insert(filename, record);
     }
 
-    let mut packages: FxHashMap<String, PackageRecord> = HashMap::default();
-    let mut conda_packages: FxHashMap<String, PackageRecord> = HashMap::default();
+    let mut packages: IndexMap<String, PackageRecord, ahash::RandomState> = IndexMap::default();
+    let mut conda_packages: IndexMap<String, PackageRecord, ahash::RandomState> =
+        IndexMap::default();
     for (filename, package) in registered_packages {
         match ArchiveType::try_from(&filename) {
             Some(ArchiveType::TarBz2) => {
