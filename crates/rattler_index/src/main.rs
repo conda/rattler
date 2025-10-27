@@ -5,7 +5,7 @@ use clap::{arg, Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Platform;
 use rattler_config::config::concurrency::default_max_concurrent_solves;
-use rattler_index::{index_fs, index_s3, IndexFsConfig, IndexS3Config};
+use rattler_index::{index_fs, index_s3, IndexFsConfig, IndexS3Config, PreconditionChecks};
 use rattler_networking::AuthenticationStorage;
 use rattler_s3::S3Credentials;
 use url::Url;
@@ -59,6 +59,13 @@ struct Cli {
     /// that should be used for repodata patching. For more information, see `https://prefix.dev/blog/repodata_patching`.
     #[arg(long, global = true)]
     repodata_patch: Option<String>,
+
+    /// Disable precondition checks (ETags, timestamps) during file operations.
+    /// Use this flag if your S3 backend doesn't fully support conditional requests,
+    /// or if you're certain no concurrent indexing processes are running.
+    /// Warning: Disabling this removes protection against concurrent modifications.
+    #[arg(long, default_value = "false", global = true)]
+    disable_precondition_checks: bool,
 
     /// The path to the config file to use to configure rattler-index.
     /// Uses the same configuration format as pixi, see `https://pixi.sh/latest/reference/pixi_configuration`.
@@ -115,6 +122,12 @@ async fn main() -> anyhow::Result<()> {
         .or(config.as_ref().map(|c| c.concurrency.downloads))
         .unwrap_or_else(default_max_concurrent_solves);
 
+    let precondition_checks = if cli.disable_precondition_checks {
+        PreconditionChecks::Disabled
+    } else {
+        PreconditionChecks::Enabled
+    };
+
     match cli.command {
         Commands::FileSystem { channel } => {
             index_fs(IndexFsConfig {
@@ -126,6 +139,7 @@ async fn main() -> anyhow::Result<()> {
                 force: cli.force,
                 max_parallel,
                 multi_progress: Some(multi_progress),
+                precondition_checks,
             })
             .await
         }
@@ -163,6 +177,7 @@ async fn main() -> anyhow::Result<()> {
                 force: cli.force,
                 max_parallel,
                 multi_progress: Some(multi_progress),
+                precondition_checks,
             })
             .await
         }

@@ -8,6 +8,10 @@ use crate::RepodataFileMetadata;
 /// the metadata was collected. If the file has been modified (`ETag` or
 /// last-modified doesn't match), it returns a `ConditionNotMatch` error.
 ///
+/// If metadata has no etag or last_modified (either because the file didn't exist,
+/// precondition checks are disabled, or the backend doesn't support it), the file
+/// is read without conditional checks.
+///
 /// # Parameters
 /// - `op`: A reference to the `Operator`, which facilitates file system
 ///   operations.
@@ -24,12 +28,17 @@ pub async fn read_with_metadata_check(
     metadata: &RepodataFileMetadata,
 ) -> opendal::Result<opendal::Buffer> {
     let reader = op.read_with(path);
-    let reader = if let Some(etag) = &metadata.etag {
+    let reader = if !metadata.precondition_checks.is_enabled() {
+        // Precondition checks are disabled - read without conditions
+        reader
+    } else if let Some(etag) = &metadata.etag {
+        // Use ETag if available
         reader.if_match(etag)
     } else if let Some(last_modified) = metadata.last_modified {
+        // Fall back to timestamp if no ETag
         reader.if_unmodified_since(last_modified)
     } else {
-        // If no metadata available, just read without conditions
+        // File didn't exist or backend doesn't support metadata - read without conditions
         reader
     };
     reader.await
@@ -44,6 +53,10 @@ pub async fn read_with_metadata_check(
 /// When the file didn't exist during metadata collection (etag is None), this
 /// function uses `if_not_exists` to ensure the file still doesn't exist,
 /// preventing race conditions where another process creates it first.
+///
+/// If metadata has no etag (either because the file didn't exist, precondition
+/// checks are disabled, or the backend doesn't support it), the file is written
+/// without conditional checks.
 ///
 /// # Parameters
 /// - `op`: A reference to the `Operator`, which facilitates file system
@@ -63,12 +76,19 @@ pub async fn write_with_metadata_check(
     metadata: &RepodataFileMetadata,
 ) -> opendal::Result<()> {
     let writer = op.write_with(path, data);
-    let writer = if let Some(etag) = &metadata.etag {
-        // File existed - verify it hasn't changed
+    let writer = if !metadata.precondition_checks.is_enabled() {
+        // Precondition checks are disabled - write without conditions
+        writer
+    } else if let Some(etag) = &metadata.etag {
+        // File existed - verify it hasn't changed (if-match)
         writer.if_match(etag)
-    } else {
-        // File didn't exist - ensure it still doesn't exist
+    } else if !metadata.file_existed {
+        // File didn't exist - ensure it still doesn't exist (if-not-exists)
+        // This prevents race conditions where another process creates it first
         writer.if_not_exists(true)
+    } else {
+        // File existed but no etag (backend doesn't support ETags) - write without conditions
+        writer
     };
     writer.await?;
     Ok(())
