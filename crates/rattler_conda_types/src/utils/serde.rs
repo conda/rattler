@@ -1,7 +1,9 @@
 use chrono::{DateTime, Utc};
+use indexmap::IndexMap;
 use serde::{de::Error as _, ser::Error, Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, SerializeAs};
 use std::borrow::Cow;
+use std::collections::{BTreeMap, HashMap};
 use std::{
     marker::PhantomData,
     path::{Path, PathBuf},
@@ -142,6 +144,28 @@ impl SerializeAs<chrono::DateTime<chrono::Utc>> for Timestamp {
 /// A helper struct to deserialize types from a string without checking the
 /// string.
 pub struct DeserializeFromStrUnchecked;
+
+/// A helper function used to sort map alphabetically when serializing.
+pub(crate) fn sort_map_alphabetically<T: Serialize, H, S: serde::Serializer>(
+    value: &HashMap<String, T, H>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    value
+        .iter()
+        .collect::<BTreeMap<_, _>>()
+        .serialize(serializer)
+}
+
+/// A helper function used to sort map alphabetically when serializing.
+pub(crate) fn sort_index_map_alphabetically<T: Serialize, H, S: serde::Serializer>(
+    value: &IndexMap<String, T, H>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    value
+        .iter()
+        .collect::<BTreeMap<_, _>>()
+        .serialize(serializer)
+}
 
 /// A helper to serialize and deserialize `track_features` in repodata. Track
 /// features are expected to be a space separated list. However, in the past we
