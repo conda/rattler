@@ -39,6 +39,7 @@ async def index_fs(
     write_shards: bool = True,
     force: bool = False,
     max_parallel: int | None = None,
+    precondition_checks: bool = True,
 ) -> None:
     """
     Indexes dependencies in the `channel_directory` for one or more subdirectories within said directory.
@@ -56,6 +57,7 @@ async def index_fs(
         write_shards: Whether to write sharded repodata.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
+        precondition_checks: Whether to perform precondition checks before indexing on S3 buckets.  Defaults to True.
     """
     await py_index_fs(
         channel_directory,
@@ -65,6 +67,7 @@ async def index_fs(
         write_shards,
         force,
         max_parallel,
+        precondition_checks,
     )
 
 

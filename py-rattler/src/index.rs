@@ -14,7 +14,7 @@ use std::path::PathBuf;
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-#[pyo3(signature = (channel_directory, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=None))]
+#[pyo3(signature = (channel_directory, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=None, precondition_checks=true))]
 pub fn py_index_fs(
     py: Python<'_>,
     channel_directory: PathBuf,
@@ -24,6 +24,7 @@ pub fn py_index_fs(
     write_shards: bool,
     force: bool,
     max_parallel: Option<usize>,
+    precondition_checks: bool,
 ) -> PyResult<Bound<'_, PyAny>> {
     future_into_py(py, async move {
         let target_platform = target_platform.map(Platform::from);
@@ -36,6 +37,11 @@ pub fn py_index_fs(
             force,
             max_parallel: max_parallel.unwrap_or_else(default_max_concurrent_solves),
             multi_progress: None,
+            precondition_checks: if precondition_checks {
+                rattler_index::PreconditionChecks::Enabled
+            } else {
+                rattler_index::PreconditionChecks::Disabled
+            },
         })
         .await
         .map_err(|e| PyRattlerError::from(e).into())
