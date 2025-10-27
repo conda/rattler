@@ -769,4 +769,110 @@ mod test {
             "package 'foo=3.0.2=py36h1af98f8_3' has constraint 'bors <2.0', which is not satisfied by 'bors=2.1=bla_1' in the environment"
         ));
     }
+
+    #[test]
+    fn test_packages_serialized_alphabetically() {
+        use crate::{PackageName, Version};
+
+        // Create a RepoData with packages inserted in NON-alphabetical order
+        let mut packages = IndexMap::default();
+        let mut conda_packages = IndexMap::default();
+
+        // Insert packages in deliberately non-alphabetical order: z, a, m, b
+        packages.insert(
+            "zebra-1.0-h123.tar.bz2".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("zebra"),
+                Version::major(1),
+                "h123".to_string(),
+            ),
+        );
+        packages.insert(
+            "apple-2.0-h456.tar.bz2".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("apple"),
+                Version::major(2),
+                "h456".to_string(),
+            ),
+        );
+        packages.insert(
+            "mango-1.5-h789.tar.bz2".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("mango"),
+                Version::major(1),
+                "h789".to_string(),
+            ),
+        );
+        packages.insert(
+            "banana-3.0-habc.tar.bz2".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("banana"),
+                Version::major(3),
+                "habc".to_string(),
+            ),
+        );
+
+        // Insert conda packages in non-alphabetical order too
+        conda_packages.insert(
+            "xray-1.0-h111.conda".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("xray"),
+                Version::major(1),
+                "h111".to_string(),
+            ),
+        );
+        conda_packages.insert(
+            "alpha-2.0-h222.conda".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("alpha"),
+                Version::major(2),
+                "h222".to_string(),
+            ),
+        );
+        conda_packages.insert(
+            "omega-3.0-h333.conda".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("omega"),
+                Version::major(3),
+                "h333".to_string(),
+            ),
+        );
+
+        let repodata = RepoData {
+            version: Some(2),
+            info: None,
+            packages,
+            conda_packages,
+            removed: Default::default(),
+        };
+
+        // Serialize to JSON string
+        let json = serde_json::to_string(&repodata).unwrap();
+
+        // Parse the JSON to extract the package keys
+        let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        // Check that packages are in alphabetical order
+        if let Some(packages) = json_value.get("packages").and_then(|p| p.as_object()) {
+            let keys: Vec<&String> = packages.keys().collect();
+            let mut sorted_keys = keys.clone();
+            sorted_keys.sort();
+            assert_eq!(
+                keys, sorted_keys,
+                "packages should be serialized in alphabetical order"
+            );
+        }
+
+        // Check that packages.conda are in alphabetical order
+        if let Some(conda_packages) = json_value.get("packages.conda").and_then(|p| p.as_object())
+        {
+            let keys: Vec<&String> = conda_packages.keys().collect();
+            let mut sorted_keys = keys.clone();
+            sorted_keys.sort();
+            assert_eq!(
+                keys, sorted_keys,
+                "packages.conda should be serialized in alphabetical order"
+            );
+        }
+    }
 }
