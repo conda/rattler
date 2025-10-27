@@ -46,7 +46,7 @@ use url::Url;
 
 /// Configuration for precondition checks during file operations.
 ///
-/// Precondition checks use ETags and timestamps to detect concurrent modifications
+/// Precondition checks use `ETags` and timestamps to detect concurrent modifications
 /// and prevent race conditions when multiple processes are indexing simultaneously.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PreconditionChecks {
@@ -532,7 +532,7 @@ async fn index_subdir(
                         opendal::ErrorKind::ConditionNotMatch | opendal::ErrorKind::Unexpected
                     ) && {
                         // For Unexpected errors, check if it's the HTTP 409 ConditionalRequestConflict
-                        let error_str = format!("{:?}", opendal_err);
+                        let error_str = format!("{opendal_err:?}");
                         error_str.contains("ConditionalRequestConflict")
                             || error_str.contains("status: 409")
                             || opendal_err.kind() == opendal::ErrorKind::ConditionNotMatch

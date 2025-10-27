@@ -60,7 +60,7 @@ struct Cli {
     #[arg(long, global = true)]
     repodata_patch: Option<String>,
 
-    /// Disable precondition checks (ETags, timestamps) during file operations.
+    /// Disable precondition checks (`ETags`, timestamps) during file operations.
     /// Use this flag if your S3 backend doesn't fully support conditional requests,
     /// or if you're certain no concurrent indexing processes are running.
     /// Warning: Disabling this removes protection against concurrent modifications.

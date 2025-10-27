@@ -6,9 +6,9 @@ use crate::RepodataFileMetadata;
 ///
 /// This function reads a file and validates that it hasn't been modified since
 /// the metadata was collected. If the file has been modified (`ETag` or
-/// last-modified doesn't match), it returns a `ConditionNotMatch` error.
+/// `last_modified` doesn't match), it returns a `ConditionNotMatch` error.
 ///
-/// If metadata has no etag or last_modified (either because the file didn't exist,
+/// If metadata has no `ETag` or `last_modified` (either because the file didn't exist,
 /// precondition checks are disabled, or the backend doesn't support it), the file
 /// is read without conditional checks.
 ///
