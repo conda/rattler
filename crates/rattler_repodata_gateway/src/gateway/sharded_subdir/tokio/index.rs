@@ -28,7 +28,7 @@ use url::Url;
 
 const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
 
-/// Creates a SubdirNotFoundError for when sharded repodata is not available.
+/// Creates a `SubdirNotFoundError` for when sharded repodata is not available.
 fn create_subdir_not_found_error(channel_base_url: &Url) -> GatewayError {
     GatewayError::SubdirNotFoundError(Box::new(SubdirNotFoundError {
         channel: Channel::from_url(channel_base_url.clone()),
