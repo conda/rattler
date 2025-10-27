@@ -3729,7 +3729,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.38.2"
+version = "0.38.3"
 dependencies = [
  "anyhow",
  "console",
@@ -3771,7 +3771,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.41"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -3874,7 +3874,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.26.4"
+version = "0.26.5"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3909,7 +3909,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.25.3"
+version = "0.26.0"
 dependencies = [
  "chrono",
  "file_url",
@@ -3941,7 +3941,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.32"
+version = "0.2.33"
 dependencies = [
  "chrono",
  "configparser",
@@ -3999,7 +3999,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.11"
+version = "0.23.12"
 dependencies = [
  "bzip2",
  "chrono",
@@ -4046,7 +4046,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.12"
+version = "0.24.13"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4121,7 +4121,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.5"
+version = "0.25.6"
 dependencies = [
  "anyhow",
  "enum_dispatch",

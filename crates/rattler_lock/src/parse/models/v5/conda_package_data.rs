@@ -130,7 +130,7 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
                 sha256: value.sha256,
                 size: value.size.into_owned(),
                 subdir,
-                timestamp: value.timestamp,
+                timestamp: value.timestamp.map(Into::into),
                 track_features: value.track_features.into_owned(),
                 version: value.version.into_owned(),
                 run_exports: None,

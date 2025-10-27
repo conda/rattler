@@ -2,6 +2,10 @@
 extend-exclude = [
   ".git/",
   ".pixi/",
+  "*.html",
+  "*.json",
+  "*.jlap",
+  "*.svg",
   "**/*.snap",
   "**/*.txt",
   "crates/rattler_libsolv_c",

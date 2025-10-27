@@ -433,8 +433,7 @@ macro_rules! impl_package_record {
             pub fn timestamp(&self) -> Option<js_sys::Date> {
                 AsRef::<PackageRecord>::as_ref(self)
                     .timestamp
-                    .clone()
-                    .map(Into::into)
+                    .map(|ts| ts.into_datetime().into())
             }
 
             #[wasm_bindgen::prelude::wasm_bindgen(setter)]
@@ -443,7 +442,10 @@ macro_rules! impl_package_record {
                 #[wasm_bindgen::prelude::wasm_bindgen(unchecked_param_type = "Date | undefined")]
                 timestamp: Option<js_sys::Date>,
             ) {
-                AsMut::<PackageRecord>::as_mut(self).timestamp = timestamp.map(Into::into);
+                AsMut::<PackageRecord>::as_mut(self).timestamp = timestamp.map(|date| {
+                    let datetime: chrono::DateTime<chrono::Utc> = date.into();
+                    datetime.into()
+                });
             }
 
             /// Track features are nowadays only used to downweight packages (ie. give
