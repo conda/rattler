@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use pyo3::{exceptions::PyValueError, pyclass, pymethods, PyResult};
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
+    utils::TimestampMs,
     VersionWithSource,
 };
 use rattler_package_streaming::seek::read_package_file;
@@ -215,8 +216,10 @@ impl PyIndexJson {
     pub fn set_timestamp(&mut self, timestamp: Option<i64>) -> PyResult<()> {
         if let Some(ts) = timestamp {
             self.inner.timestamp = Some(
-                chrono::DateTime::from_timestamp_millis(ts)
-                    .ok_or_else(|| PyValueError::new_err("Invalid timestamp"))?,
+                TimestampMs::from_datetime_millis(
+                    chrono::DateTime::from_timestamp_millis(ts)
+                        .ok_or_else(|| PyValueError::new_err("Invalid timestamp"))?,
+                ),
             );
         } else {
             self.inner.timestamp = None;
