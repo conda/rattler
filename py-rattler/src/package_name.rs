@@ -10,7 +10,7 @@ use crate::error::PyRattlerError;
 
 #[pyclass]
 #[repr(transparent)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PyPackageName {
     pub(crate) inner: PackageName,
 }

@@ -6,7 +6,7 @@ use std::{
 
 use futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
-use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, Platform};
+use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform};
 
 use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
 use crate::Reporter;
@@ -112,15 +112,19 @@ impl RepoDataQuery {
         let mut seen = HashSet::new();
         let mut pending_package_specs = HashMap::new();
         let mut direct_url_specs = vec![];
+        // TODO: allow glob/regex package names as well
         for spec in self.specs {
             if let Some(url) = spec.url.clone() {
                 let name = spec
                     .name
                     .clone()
-                    .ok_or(GatewayError::MatchSpecWithoutName(Box::new(spec.clone())))?;
+                    .and_then(Option::<PackageName>::from)
+                    .ok_or(GatewayError::MatchSpecWithoutExactName(Box::new(
+                        spec.clone(),
+                    )))?;
                 seen.insert(name.clone());
-                direct_url_specs.push((spec.clone(), url, name));
-            } else if let Some(name) = &spec.name {
+                direct_url_specs.push((spec.clone(), url, name.clone()));
+            } else if let Some(PackageNameMatcher::Exact(name)) = &spec.name {
                 seen.insert(name.clone());
                 let pending = pending_package_specs
                     .entry(name.clone())

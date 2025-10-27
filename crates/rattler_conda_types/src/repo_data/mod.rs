@@ -397,9 +397,10 @@ impl PackageRecord {
             for constraint in package.constrains.iter() {
                 let constraint_spec = MatchSpec::from_str(constraint, ParseStrictness::Lenient)
                     .map_err(ValidatePackageRecordsError::ParseMatchSpec)?;
-                let matching_package = records
-                    .iter()
-                    .find(|record| Some(record.as_ref().name.clone()) == constraint_spec.name);
+                let matching_package = records.iter().find(|record| match &constraint_spec.name {
+                    Some(matcher) => matcher.matches(&record.as_ref().name),
+                    None => false,
+                });
                 if matching_package.is_some_and(|p| !constraint_spec.matches(p.as_ref())) {
                     return Err(Box::new(
                         ValidatePackageRecordsError::PackageConstraintNotSatisfied {
