@@ -11,8 +11,8 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+ahash = { workspace = true }
 chrono = { workspace = true }
-fxhash = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
