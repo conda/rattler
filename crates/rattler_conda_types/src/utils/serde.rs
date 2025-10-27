@@ -204,7 +204,10 @@ impl<'de> Deserialize<'de> for TimestampMs {
             (dt, false)
         };
 
-        Ok(Self { datetime, is_millis })
+        Ok(Self {
+            datetime,
+            is_millis,
+        })
     }
 }
 
