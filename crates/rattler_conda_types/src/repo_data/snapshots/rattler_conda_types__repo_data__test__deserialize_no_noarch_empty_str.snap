@@ -6,16 +6,6 @@ info:
   subdir: noarch
   base_url: "../linux-64"
 packages:
-  foo-1-xxx.tar.bz2:
-    build: xxx
-    build_number: 0
-    depends: []
-    extra_depends:
-      with-bar:
-        - bar <2
-    name: foo
-    subdir: linux-64
-    version: "1"
   bar-1-xxx.tar.bz2:
     build: xxx
     build_number: 0
@@ -30,5 +20,15 @@ packages:
     name: bar
     subdir: linux-64
     version: "2"
+  foo-1-xxx.tar.bz2:
+    build: xxx
+    build_number: 0
+    depends: []
+    extra_depends:
+      with-bar:
+        - bar <2
+    name: foo
+    subdir: linux-64
+    version: "1"
 packages.conda: {}
 repodata_version: 2

@@ -6,88 +6,6 @@ info:
   subdir: linux-64
   base_url: "../linux-64"
 packages:
-  cuda-version-12.5-hd4f0392_3.conda:
-    build: hd4f0392_3
-    build_number: 3
-    constrains:
-      - __cuda >=12.1
-    depends: []
-    license: LicenseRef-NVIDIA-End-User-License-Agreement
-    license_family: LicenseRef-NVIDIA-End-User-License-Agreement
-    md5: 6ae1a563a4aa61e55e8ae8260f0d021b
-    name: cuda-version
-    sha256: e45a5d14909296abd0784a073da9ee5c420fa58671fbc999f8a9ec898cf3486b
-    size: 21151
-    subdir: noarch
-    timestamp: 1716314536803
-    version: "12.5"
-  foo-3.0.2-py36h1af98f8_1.tar.bz2:
-    build: py36h1af98f8_1
-    build_number: 1
-    depends: []
-    license: MIT
-    license_family: MIT
-    md5: d65ab674acf3b7294ebacaec05fc5b54
-    name: foo
-    sha256: 1154fceeb5c4ee9bb97d245713ac21eb1910237c724d2b7103747215663273c2
-    size: 414494
-    subdir: linux-64
-    timestamp: 1605110689658
-    version: 3.0.2
-  foo-3.0.2-py36h1af98f8_1.conda:
-    build: py36h1af98f8_1
-    build_number: 1
-    depends: []
-    license: MIT
-    license_family: MIT
-    md5: fb731d9290f0bcbf3a054665f33ec94f
-    name: foo
-    sha256: 67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4
-    size: 414494
-    subdir: linux-64
-    timestamp: 1715610974000
-    version: 3.0.2
-  foo-3.0.2-py36h1af98f8_2.conda:
-    build: py36h1af98f8_2
-    build_number: 2
-    depends: []
-    license: MIT
-    license_family: MIT
-    md5: fb731d9290f0bcbf3a054665f33ec94f
-    name: foo
-    sha256: 67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4
-    size: 414494
-    subdir: linux-64
-    timestamp: 1715610974000
-    version: 3.0.2
-  foo-3.0.2-py36h1af98f8_3.conda:
-    build: py36h1af98f8_3
-    build_number: 3
-    constrains:
-      - bors <2.0
-    depends: []
-    license: MIT
-    license_family: MIT
-    md5: fb731d9290f0bcbf3a054665f33ec94f
-    name: foo
-    sha256: 67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4
-    size: 414494
-    subdir: linux-64
-    timestamp: 1715610974000
-    version: 3.0.2
-  foo-4.0.2-py36h1af98f8_2.tar.bz2:
-    build: py36h1af98f8_2
-    build_number: 1
-    depends: []
-    license: MIT
-    license_family: MIT
-    md5: bc13aa58e2092bcb0b97c561373d3905
-    name: foo
-    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
-    size: 414494
-    subdir: linux-64
-    timestamp: 1715610974000
-    version: 4.0.2
   bar-1.0-unix_py36h1af98f8_2.tar.bz2:
     build: unix_py36h1af98f8_2
     build_number: 1
@@ -194,6 +112,88 @@ packages:
     subdir: linux-64
     timestamp: 1715610974000
     version: "2.1"
+  cuda-version-12.5-hd4f0392_3.conda:
+    build: hd4f0392_3
+    build_number: 3
+    constrains:
+      - __cuda >=12.1
+    depends: []
+    license: LicenseRef-NVIDIA-End-User-License-Agreement
+    license_family: LicenseRef-NVIDIA-End-User-License-Agreement
+    md5: 6ae1a563a4aa61e55e8ae8260f0d021b
+    name: cuda-version
+    sha256: e45a5d14909296abd0784a073da9ee5c420fa58671fbc999f8a9ec898cf3486b
+    size: 21151
+    subdir: noarch
+    timestamp: 1716314536803
+    version: "12.5"
+  foo-3.0.2-py36h1af98f8_1.conda:
+    build: py36h1af98f8_1
+    build_number: 1
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: fb731d9290f0bcbf3a054665f33ec94f
+    name: foo
+    sha256: 67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4
+    size: 414494
+    subdir: linux-64
+    timestamp: 1715610974000
+    version: 3.0.2
+  foo-3.0.2-py36h1af98f8_1.tar.bz2:
+    build: py36h1af98f8_1
+    build_number: 1
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: d65ab674acf3b7294ebacaec05fc5b54
+    name: foo
+    sha256: 1154fceeb5c4ee9bb97d245713ac21eb1910237c724d2b7103747215663273c2
+    size: 414494
+    subdir: linux-64
+    timestamp: 1605110689658
+    version: 3.0.2
+  foo-3.0.2-py36h1af98f8_2.conda:
+    build: py36h1af98f8_2
+    build_number: 2
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: fb731d9290f0bcbf3a054665f33ec94f
+    name: foo
+    sha256: 67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4
+    size: 414494
+    subdir: linux-64
+    timestamp: 1715610974000
+    version: 3.0.2
+  foo-3.0.2-py36h1af98f8_3.conda:
+    build: py36h1af98f8_3
+    build_number: 3
+    constrains:
+      - bors <2.0
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: fb731d9290f0bcbf3a054665f33ec94f
+    name: foo
+    sha256: 67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4
+    size: 414494
+    subdir: linux-64
+    timestamp: 1715610974000
+    version: 3.0.2
+  foo-4.0.2-py36h1af98f8_2.tar.bz2:
+    build: py36h1af98f8_2
+    build_number: 1
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: foo
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1715610974000
+    version: 4.0.2
   foobar-2.0-bla_1.tar.bz2:
     build: bla_1
     build_number: 1
@@ -237,46 +237,6 @@ packages:
     subdir: linux-64
     timestamp: 1715610974000
     version: "2.1"
-  xfoo-1-xxx.tar.bz2:
-    build: xxx
-    build_number: 0
-    depends: []
-    license: MIT
-    license_family: MIT
-    md5: bc13aa58e2092bcb0b97c561373d3905
-    name: xfoo
-    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
-    size: 414494
-    subdir: linux-64
-    timestamp: 1715610974000
-    version: "1"
-  xfoo-2-xxx.tar.bz2:
-    build: xxx
-    build_number: 0
-    depends: []
-    license: MIT
-    license_family: MIT
-    md5: bc13aa58e2092bcb0b97c561373d3905
-    name: xfoo
-    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
-    size: 414494
-    subdir: linux-64
-    timestamp: 1715610974000
-    version: "2"
-  xbar-1-xxx.tar.bz2:
-    build: xxx
-    build_number: 0
-    depends:
-      - xfoo >=2
-    license: MIT
-    license_family: MIT
-    md5: bc13aa58e2092bcb0b97c561373d3905
-    name: xbar
-    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
-    size: 414494
-    subdir: linux-64
-    timestamp: 1715610974000
-    version: "1"
   track-features-1-xxx.tar.bz2:
     build: xxx
     build_number: 0
@@ -333,21 +293,47 @@ packages:
     timestamp: 1715610974000
     track_features: foo bar
     version: "4"
-packages.conda:
-  foobar-2.0-bla_1.conda:
-    build: bla_1
-    build_number: 1
+  xbar-1-xxx.tar.bz2:
+    build: xxx
+    build_number: 0
     depends:
-      - bors <2.0
+      - xfoo >=2
     license: MIT
     license_family: MIT
     md5: bc13aa58e2092bcb0b97c561373d3905
-    name: foobar
+    name: xbar
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1605110689658
-    version: "2.0"
+    timestamp: 1715610974000
+    version: "1"
+  xfoo-1-xxx.tar.bz2:
+    build: xxx
+    build_number: 0
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: xfoo
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1715610974000
+    version: "1"
+  xfoo-2-xxx.tar.bz2:
+    build: xxx
+    build_number: 0
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: xfoo
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1715610974000
+    version: "2"
+packages.conda:
   bors-1.1-bla_1.conda:
     build: bla_1
     build_number: 1
@@ -374,6 +360,31 @@ packages.conda:
     subdir: linux-64
     timestamp: 1715610974000
     version: "2.1"
+  conda-only-0.1.0-foobar_0.conda:
+    build: foobar
+    build_number: 0
+    depends: []
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: conda-only
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1715610974000
+    version: 0.1.0
+  foobar-2.0-bla_1.conda:
+    build: bla_1
+    build_number: 1
+    depends:
+      - bors <2.0
+    license: MIT
+    license_family: MIT
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: foobar
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1605110689658
+    version: "2.0"
   issue_717-2.1-bla_1.conda:
     build: issue_717
     build_number: 0
@@ -389,15 +400,4 @@ packages.conda:
     subdir: linux-64
     timestamp: 1715610974000
     version: "2.1"
-  conda-only-0.1.0-foobar_0.conda:
-    build: foobar
-    build_number: 0
-    depends: []
-    md5: bc13aa58e2092bcb0b97c561373d3905
-    name: conda-only
-    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
-    size: 414494
-    subdir: linux-64
-    timestamp: 1715610974000
-    version: 0.1.0
 repodata_version: 2
