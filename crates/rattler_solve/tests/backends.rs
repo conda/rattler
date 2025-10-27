@@ -646,7 +646,7 @@ mod libsolv_c {
                 &ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap()),
             )
             .unwrap()
-            .platform_url(rattler_conda_types::Platform::Linux64)
+            .platform_url(&rattler_conda_types::Platform::Linux64)
             .to_string(),
             &repo_data,
             None,

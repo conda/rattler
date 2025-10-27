@@ -42,7 +42,7 @@ async fn main() {
 
     let client = LazyClient::default();
     let mut records = Vec::new();
-    for &subdir in &subdirs {
+    for subdir in &subdirs {
         eprintln!("fetching repodata for {subdir:?}..");
         let repodata = rattler_repodata_gateway::fetch::fetch_repo_data(
             channel.platform_url(subdir),
@@ -90,12 +90,7 @@ async fn main() {
         format!(
             "snapshot-{}-{}.json",
             channel.name(),
-            subdirs
-                .iter()
-                .copied()
-                .map(Platform::as_str)
-                .sorted()
-                .join("-")
+            subdirs.iter().map(|p| p.as_str()).sorted().join("-")
         )
     });
     eprintln!("serializing snapshot to {}", &output_file);

@@ -438,7 +438,7 @@ async fn index_subdir(
         let request_start_time = SystemTime::now();
 
         match index_subdir_inner(
-            subdir,
+            subdir.clone(),
             op.clone(),
             force,
             write_zst,
@@ -505,7 +505,7 @@ async fn index_subdir_inner(
     // Step 1: Collect ETags/metadata for all critical files upfront
     let metadata = RepodataMetadataCollection::new(
         &op,
-        subdir,
+        subdir.clone(),
         repodata_patch.is_some(),
         write_zst,
         write_shards,
@@ -617,6 +617,7 @@ async fn index_subdir_inner(
             let pb = pb.clone();
             let semaphore = semaphore.clone();
             let cache = cache.clone();
+            let subdir_clone = subdir.clone();
             async move {
                 let _permit = semaphore
                     .acquire()
@@ -624,11 +625,11 @@ async fn index_subdir_inner(
                     .expect("Semaphore was unexpectedly closed");
                 pb.set_message(format!(
                     "Indexing {} {}",
-                    subdir.as_str(),
+                    subdir_clone.as_str(),
                     console::style(&filename).dim()
                 ));
 
-                let record = read_and_parse_package(&op, &cache, subdir, &filename).await?;
+                let record = read_and_parse_package(&op, &cache, subdir_clone, &filename).await?;
 
                 pb.inc(1);
                 Ok::<(String, PackageRecord), std::io::Error>((filename, record))
@@ -707,7 +708,7 @@ async fn index_subdir_inner(
     write_repodata(
         repodata_before_patches,
         repodata_patch,
-        subdir,
+        subdir.clone(),
         op,
         &metadata,
     )
@@ -793,6 +794,7 @@ pub async fn write_repodata(
     if metadata.repodata_shards.is_some() {
         // See CEP 16 <https://github.com/conda/ceps/blob/main/cep-0016.md>
         tracing::info!("Creating sharded repodata");
+        let subdir_str = subdir.as_str();
         let mut shards_by_package_names: HashMap<String, Shard> = HashMap::new();
         for (k, package_record) in repodata.conda_packages {
             let package_name = package_record.name.as_normalized();
@@ -831,7 +833,7 @@ pub async fn write_repodata(
 
         let sharded_repodata = ShardedRepodata {
             info: ShardedSubdirInfo {
-                subdir: subdir.to_string(),
+                subdir: subdir_str.to_string(),
                 base_url: "".into(),
                 shards_base_url: "./shards/".into(),
                 created_at: Some(chrono::Utc::now()),
@@ -846,8 +848,9 @@ pub async fn write_repodata(
         // todo max parallel
         for (_, (digest, encoded_shard)) in shards {
             let op = op.clone();
+            let subdir_owned = subdir_str.to_string();
             let future = async move || {
-                let shard_path = format!("{subdir}/shards/{digest:x}.msgpack.zst");
+                let shard_path = format!("{subdir_owned}/shards/{digest:x}.msgpack.zst");
                 tracing::trace!("Writing repodata shard to {shard_path}");
                 match op
                     .write_with(&shard_path, encoded_shard)
@@ -875,7 +878,7 @@ pub async fn write_repodata(
 
         // Write sharded repodata index with conditional check
         if let Some(repodata_shards_metadata) = &metadata.repodata_shards {
-            let repodata_shards_path = format!("{subdir}/{REPODATA_SHARDS}");
+            let repodata_shards_path = format!("{}/{}", subdir_str, REPODATA_SHARDS);
             tracing::trace!("Writing repodata shards to {repodata_shards_path}");
             let sharded_repodata_encoded = serialize_msgpack_zst(&sharded_repodata)?;
             crate::utils::write_with_metadata_check(
@@ -1104,7 +1107,7 @@ pub async fn index(
         let cache = cache::PackageRecordCache::new();
 
         let task = index_subdir(
-            *subdir,
+            subdir.clone(),
             op.clone(),
             force,
             write_zst,
@@ -1117,7 +1120,7 @@ pub async fn index(
             cache,
         )
         .instrument(tracing::info_span!("index_subdir", subdir = %subdir));
-        tasks.push((*subdir, task));
+        tasks.push((subdir.clone(), task));
     }
 
     let mut stats = IndexStats {

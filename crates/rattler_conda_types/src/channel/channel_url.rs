@@ -27,7 +27,7 @@ impl ChannelUrl {
     }
 
     /// Append the platform to the base url.
-    pub fn platform_url(&self, platform: Platform) -> Url {
+    pub fn platform_url(&self, platform: &Platform) -> Url {
         self.0
             .join(&format!("{}/", platform.as_str())) // trailing slash is important here as this signifies a directory
             .expect("platform is a valid url fragment")

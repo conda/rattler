@@ -26,7 +26,7 @@ impl RemoteSubdirClient {
         source_config: SourceConfig,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Self, GatewayError> {
-        let subdir_url = channel.platform_url(platform);
+        let subdir_url = channel.platform_url(&platform);
 
         // Fetch the repodata from the remote server
         let repodata_bytes = fetch_repo_data(

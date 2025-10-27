@@ -14,7 +14,7 @@ use thiserror::Error;
 /// A platform supported by Conda.
 #[allow(missing_docs)]
 #[non_exhaustive] // The `Platform` enum is non-exhaustive to allow for future extensions without breaking changes.
-#[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(EnumIter, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Platform {
     NoArch,
     Unknown,
@@ -45,6 +45,11 @@ pub enum Platform {
     WasiWasm32,
 
     ZosZ,
+
+    /// A custom platform string not in the predefined list.
+    /// This allows users to define arbitrary platforms like "foobar-64".
+    #[strum(disabled)]
+    Custom(Box<str>),
 }
 
 impl PartialOrd for Platform {
@@ -55,14 +60,19 @@ impl PartialOrd for Platform {
 
 impl Ord for Platform {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.as_str().cmp(other.as_str())
+        match (self, other) {
+            (Platform::Custom(a), Platform::Custom(b)) => a.cmp(b),
+            (Platform::Custom(a), other) => a.as_ref().cmp(other.as_str()),
+            (this, Platform::Custom(b)) => this.as_str().cmp(b.as_ref()),
+            (a, b) => a.as_str().cmp(b.as_str()),
+        }
     }
 }
 
 /// Known architectures supported by Conda.
 #[allow(missing_docs)]
 #[non_exhaustive] // The `Arch` enum is non-exhaustive to allow for future extensions without breaking changes.
-#[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(EnumIter, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Arch {
     X86,
     X86_64,
@@ -81,6 +91,10 @@ pub enum Arch {
     Riscv64,
     Wasm32,
     Z,
+
+    /// A custom architecture string not in the predefined list.
+    #[strum(disabled)]
+    Custom(Box<str>),
 }
 
 impl Platform {
@@ -197,8 +211,42 @@ impl Platform {
     }
 
     /// Returns a string representation of the platform.
-    pub fn as_str(self) -> &'static str {
-        self.into()
+    pub fn as_str(&self) -> &str {
+        match self {
+            Platform::Custom(s) => s.as_ref(),
+            _ => self.static_str(),
+        }
+    }
+
+    /// Returns a static string representation of the platform.
+    /// Returns None for custom platforms.
+    const fn static_str(&self) -> &'static str {
+        match self {
+            Platform::NoArch => "noarch",
+            Platform::Linux32 => "linux-32",
+            Platform::Linux64 => "linux-64",
+            Platform::LinuxAarch64 => "linux-aarch64",
+            Platform::LinuxArmV6l => "linux-armv6l",
+            Platform::LinuxArmV7l => "linux-armv7l",
+            Platform::LinuxLoong64 => "linux-loong64",
+            Platform::LinuxPpc64le => "linux-ppc64le",
+            Platform::LinuxPpc64 => "linux-ppc64",
+            Platform::LinuxPpc => "linux-ppc",
+            Platform::LinuxS390X => "linux-s390x",
+            Platform::LinuxRiscv32 => "linux-riscv32",
+            Platform::LinuxRiscv64 => "linux-riscv64",
+            Platform::FreeBsd64 => "freebsd-64",
+            Platform::Osx64 => "osx-64",
+            Platform::OsxArm64 => "osx-arm64",
+            Platform::Win32 => "win-32",
+            Platform::Win64 => "win-64",
+            Platform::WinArm64 => "win-arm64",
+            Platform::EmscriptenWasm32 => "emscripten-wasm32",
+            Platform::WasiWasm32 => "wasi-wasm32",
+            Platform::ZosZ => "zos-z",
+            Platform::Unknown => "unknown",
+            Platform::Custom(_) => "custom",
+        }
     }
 
     /// Iterate over all Platform variants
@@ -207,19 +255,19 @@ impl Platform {
     }
 
     /// Returns true if the platform is a windows based platform.
-    pub const fn is_windows(self) -> bool {
+    pub fn is_windows(&self) -> bool {
         matches!(self, Platform::Win32 | Platform::Win64 | Platform::WinArm64)
     }
 
     /// Returns true if the platform is a unix based platform.
-    pub const fn is_unix(self) -> bool {
+    pub fn is_unix(&self) -> bool {
         self.is_linux()
             || self.is_osx()
             || matches!(self, Platform::EmscriptenWasm32 | Platform::FreeBsd64)
     }
 
     /// Returns true if the platform is a linux based platform.
-    pub const fn is_linux(self) -> bool {
+    pub fn is_linux(&self) -> bool {
         matches!(
             self,
             Platform::Linux32
@@ -238,7 +286,7 @@ impl Platform {
     }
 
     /// Returns true if the platform is an macOS based platform.
-    pub const fn is_osx(self) -> bool {
+    pub fn is_osx(&self) -> bool {
         matches!(self, Platform::Osx64 | Platform::OsxArm64)
     }
 
@@ -264,6 +312,8 @@ impl Platform {
             Platform::EmscriptenWasm32 => Some("emscripten"),
             Platform::WasiWasm32 => Some("wasi"),
             Platform::ZosZ => Some("zos"),
+            // For custom platforms, try to extract the OS part (before the hyphen)
+            Platform::Custom(s) => s.split('-').next(),
         }
     }
 }
@@ -313,42 +363,25 @@ impl FromStr for Platform {
             "emscripten-wasm32" => Platform::EmscriptenWasm32,
             "wasi-wasm32" => Platform::WasiWasm32,
             "zos-z" => Platform::ZosZ,
+            // Accept any other string as a custom platform if it follows the format <string>-<arch>
             string => {
-                return Err(ParsePlatformError {
-                    string: string.to_owned(),
-                });
+                // Custom platforms must follow the format <os>-<arch>
+                if let Some(hyphen_pos) = string.rfind('-') {
+                    // Ensure there's content before and after the hyphen
+                    if hyphen_pos > 0 && hyphen_pos < string.len() - 1 {
+                        Platform::Custom(string.into())
+                    } else {
+                        return Err(ParsePlatformError {
+                            string: string.to_owned(),
+                        });
+                    }
+                } else {
+                    return Err(ParsePlatformError {
+                        string: string.to_owned(),
+                    });
+                }
             }
         })
-    }
-}
-
-impl From<Platform> for &'static str {
-    fn from(platform: Platform) -> Self {
-        match platform {
-            Platform::NoArch => "noarch",
-            Platform::Linux32 => "linux-32",
-            Platform::Linux64 => "linux-64",
-            Platform::LinuxAarch64 => "linux-aarch64",
-            Platform::LinuxArmV6l => "linux-armv6l",
-            Platform::LinuxArmV7l => "linux-armv7l",
-            Platform::LinuxLoong64 => "linux-loong64",
-            Platform::LinuxPpc64le => "linux-ppc64le",
-            Platform::LinuxPpc64 => "linux-ppc64",
-            Platform::LinuxPpc => "linux-ppc",
-            Platform::LinuxS390X => "linux-s390x",
-            Platform::LinuxRiscv32 => "linux-riscv32",
-            Platform::LinuxRiscv64 => "linux-riscv64",
-            Platform::FreeBsd64 => "freebsd-64",
-            Platform::Osx64 => "osx-64",
-            Platform::OsxArm64 => "osx-arm64",
-            Platform::Win32 => "win-32",
-            Platform::Win64 => "win-64",
-            Platform::WinArm64 => "win-arm64",
-            Platform::EmscriptenWasm32 => "emscripten-wasm32",
-            Platform::WasiWasm32 => "wasi-wasm32",
-            Platform::ZosZ => "zos-z",
-            Platform::Unknown => "unknown",
-        }
     }
 }
 
@@ -377,6 +410,13 @@ impl Platform {
             Platform::WinArm64 | Platform::OsxArm64 => Some(Arch::Arm64),
             Platform::EmscriptenWasm32 | Platform::WasiWasm32 => Some(Arch::Wasm32),
             Platform::ZosZ => Some(Arch::Z),
+            // For custom platforms, try to parse the architecture part (after the hyphen)
+            Platform::Custom(s) => s.split('-').nth(1).map(|arch_str| {
+                // Try to parse as known arch, otherwise create a custom arch
+                arch_str
+                    .parse::<Arch>()
+                    .unwrap_or_else(|_| Arch::Custom(arch_str.into()))
+            }),
         }
     }
 }
@@ -415,8 +455,34 @@ impl Arch {
     }
 
     /// Returns a string representation of the arch.
-    pub fn as_str(self) -> &'static str {
-        self.into()
+    pub fn as_str(&self) -> &str {
+        match self {
+            Arch::Custom(s) => s.as_ref(),
+            _ => self.static_str(),
+        }
+    }
+
+    /// Returns a static string representation of the arch.
+    /// Returns None for custom architectures.
+    const fn static_str(&self) -> &'static str {
+        match self {
+            Arch::X86 => "x86",
+            Arch::X86_64 => "x86_64",
+            Arch::Arm64 => "arm64",
+            Arch::Aarch64 => "aarch64",
+            Arch::ArmV6l => "armv6l",
+            Arch::ArmV7l => "armv7l",
+            Arch::Loong64 => "loong64",
+            Arch::Ppc64le => "ppc64le",
+            Arch::Ppc64 => "ppc64",
+            Arch::Ppc => "ppc",
+            Arch::S390X => "s390x",
+            Arch::Riscv32 => "riscv32",
+            Arch::Riscv64 => "riscv64",
+            Arch::Wasm32 => "wasm32",
+            Arch::Z => "z",
+            Arch::Custom(_) => "custom",
+        }
     }
 }
 
@@ -448,34 +514,13 @@ impl FromStr for Arch {
             "riscv64" => Arch::Riscv64,
             "wasm32" => Arch::Wasm32,
             "z" => Arch::Z,
+            // Unknown architectures return an error (should be wrapped in Custom by the caller)
             string => {
                 return Err(ParseArchError {
                     string: string.to_owned(),
                 });
             }
         })
-    }
-}
-
-impl From<Arch> for &'static str {
-    fn from(arch: Arch) -> Self {
-        match arch {
-            Arch::X86 => "x86",
-            Arch::X86_64 => "x86_64",
-            Arch::Arm64 => "arm64",
-            Arch::Aarch64 => "aarch64",
-            Arch::ArmV6l => "armv6l",
-            Arch::ArmV7l => "armv7l",
-            Arch::Loong64 => "loong64",
-            Arch::Ppc64le => "ppc64le",
-            Arch::Ppc64 => "ppc64",
-            Arch::Ppc => "ppc",
-            Arch::S390X => "s390x",
-            Arch::Riscv32 => "riscv32",
-            Arch::Riscv64 => "riscv64",
-            Arch::Wasm32 => "wasm32",
-            Arch::Z => "z",
-        }
     }
 }
 
@@ -539,9 +584,17 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_platform_error() {
-        let err = "foo".parse::<Platform>().unwrap_err();
-        println!("{err}");
+    fn test_parse_platform_invalid() {
+        // Platforms without hyphen should fail
+        assert!("foo".parse::<Platform>().is_err());
+        assert!("notaplatform".parse::<Platform>().is_err());
+
+        // Platforms with only hyphen at start or end should fail
+        assert!("-foo".parse::<Platform>().is_err());
+        assert!("foo-".parse::<Platform>().is_err());
+
+        // Empty string should fail
+        assert!("".parse::<Platform>().is_err());
     }
 
     #[test]
@@ -576,5 +629,90 @@ mod tests {
         assert_eq!(Platform::WasiWasm32.arch(), Some(Arch::Wasm32));
         assert_eq!(Platform::NoArch.arch(), None);
         assert_eq!(Platform::ZosZ.arch(), Some(Arch::Z));
+    }
+
+    #[test]
+    fn test_custom_platform() {
+        // Parse a custom platform
+        let platform: Platform = "foobar-64".parse().unwrap();
+        assert!(matches!(platform, Platform::Custom(_)));
+        assert_eq!(platform.as_str(), "foobar-64");
+        assert_eq!(platform.to_string(), "foobar-64");
+
+        // Test with another custom platform
+        let platform2: Platform = "myos-arm64".parse().unwrap();
+        assert!(matches!(platform2, Platform::Custom(_)));
+        assert_eq!(platform2.as_str(), "myos-arm64");
+
+        // Test only_platform extraction
+        assert_eq!(platform.only_platform(), Some("foobar"));
+        assert_eq!(platform2.only_platform(), Some("myos"));
+
+        // Test arch extraction for custom platforms
+        let custom_with_known_arch: Platform = "myos-x86_64".parse().unwrap();
+        assert_eq!(custom_with_known_arch.arch(), Some(Arch::X86_64));
+
+        let custom_with_arm64: Platform = "myos-arm64".parse().unwrap();
+        assert_eq!(custom_with_arm64.arch(), Some(Arch::Arm64));
+
+        // Custom platform with unknown arch should return Custom arch
+        let custom_unknown_arch: Platform = "myos-unknownarch".parse().unwrap();
+        let arch = custom_unknown_arch.arch().unwrap();
+        assert!(matches!(arch, Arch::Custom(_)));
+        if let Arch::Custom(arch_str) = arch {
+            assert_eq!(arch_str.as_ref(), "unknownarch");
+        }
+    }
+
+    #[test]
+    fn test_custom_platform_helpers() {
+        let platform: Platform = "foobar-64".parse().unwrap();
+
+        // Custom platforms should return false for all helper methods
+        assert!(!platform.is_windows());
+        assert!(!platform.is_unix());
+        assert!(!platform.is_linux());
+        assert!(!platform.is_osx());
+    }
+
+    #[test]
+    fn test_custom_platform_serde() {
+        // Test serialization
+        let platform: Platform = "foobar-64".parse().unwrap();
+        let serialized = serde_json::to_string(&platform).unwrap();
+        assert_eq!(serialized, "\"foobar-64\"");
+
+        // Test deserialization
+        let deserialized: Platform = serde_json::from_str("\"foobar-64\"").unwrap();
+        assert_eq!(deserialized, platform);
+        assert_eq!(deserialized.as_str(), "foobar-64");
+    }
+
+    #[test]
+    fn test_custom_platform_ordering() {
+        let platform1: Platform = "aaa-64".parse().unwrap();
+        let platform2: Platform = "bbb-64".parse().unwrap();
+        let platform3: Platform = Platform::Linux64;
+
+        assert!(platform1 < platform2);
+        assert!(platform1 < platform3);
+    }
+
+    #[test]
+    fn test_custom_arch() {
+        // Test custom architecture display
+        let platform: Platform = "myos-customarch".parse().unwrap();
+        let arch = platform.arch().unwrap();
+        assert!(matches!(arch, Arch::Custom(_)));
+        assert_eq!(arch.as_str(), "customarch");
+        assert_eq!(arch.to_string(), "customarch");
+
+        // Test serialization of custom arch
+        let serialized = serde_json::to_string(&arch).unwrap();
+        assert_eq!(serialized, "\"customarch\"");
+
+        // Test deserialization of custom arch (note: this will fail with ParseArchError
+        // because FromStr for Arch doesn't accept arbitrary strings)
+        // Custom archs should only be created internally by Platform parsing
     }
 }

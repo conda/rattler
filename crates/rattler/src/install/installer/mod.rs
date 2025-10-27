@@ -386,7 +386,7 @@ impl Installer {
             desired_records.iter(),
             self.reinstall_packages.as_ref(),
             self.ignored_packages.as_ref(),
-            target_platform,
+            target_platform.clone(),
         )?;
         // If transaction is non-empty, we need full prefix records for file operations
         // Reload them and reconstruct the transaction with full records
@@ -407,7 +407,7 @@ impl Installer {
                 desired_records.iter(),
                 self.reinstall_packages.as_ref(),
                 self.ignored_packages.as_ref(),
-                target_platform,
+                target_platform.clone(),
             )?;
         }
 

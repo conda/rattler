@@ -167,7 +167,7 @@ pub fn parse_v3_or_lower(
                             .and_then(|split| split.rev().nth(1))
                     })
                     .and_then(|subdir_str| Platform::from_str(subdir_str).ok())
-                    .unwrap_or(platform);
+                    .unwrap_or(platform.clone());
 
                 let location = UrlOrPath::Url(value.url).normalize().into_owned();
                 let derived = LocationDerivedFields::new(&location);
@@ -247,10 +247,7 @@ pub fn parse_v3_or_lower(
             }
         };
 
-        per_platform
-            .entry(package.platform)
-            .or_default()
-            .insert(pkg);
+        per_platform.entry(platform).or_default().insert(pkg);
     }
 
     // Construct the default environment

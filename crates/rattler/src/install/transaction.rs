@@ -197,8 +197,8 @@ where
         let desired_packages = desired.into_iter().collect::<Vec<_>>();
 
         // Determine the python version used in the current situation.
-        let current_python_info = find_python_info(&current_packages, platform)?;
-        let desired_python_info = find_python_info(&desired_packages, platform)?;
+        let current_python_info = find_python_info(&current_packages, &platform)?;
+        let desired_python_info = find_python_info(&desired_packages, &platform)?;
         let needs_python_relink = match (&current_python_info, &desired_python_info) {
             (Some(current), Some(desired)) => desired.is_relink_required(current),
             _ => false,
@@ -393,7 +393,7 @@ impl<New> Transaction<PrefixRecord, New> {
 /// none of the packages refers to a Python installation.
 fn find_python_info(
     records: impl IntoIterator<Item = impl ContentComparable>,
-    platform: Platform,
+    platform: &Platform,
 ) -> Result<Option<PythonInfo>, PythonInfoError> {
     records
         .into_iter()
@@ -402,7 +402,7 @@ fn find_python_info(
             PythonInfo::from_version(
                 record.version(),
                 record.python_site_packages_path(),
-                platform,
+                platform.clone(),
             )
         })
         .map_or(Ok(None), |info| info.map(Some))

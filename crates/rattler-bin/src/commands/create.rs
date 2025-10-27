@@ -194,7 +194,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
         gateway
             .query(
                 channels,
-                [install_platform, Platform::NoArch],
+                [install_platform.clone(), Platform::NoArch],
                 specs.clone(),
             )
             .recursive(true),

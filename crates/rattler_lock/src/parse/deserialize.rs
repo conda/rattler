@@ -205,6 +205,7 @@ fn parse_from_lock<P>(
                         .packages
                         .into_iter()
                         .map(|(platform, packages)| {
+                            let platform_clone = platform.clone();
                             let packages = packages
                                 .into_iter()
                                 .map(|p| {
@@ -235,7 +236,7 @@ fn parse_from_lock<P>(
                                                     .filter(|&idx| {
                                                         let conda_package = &conda_packages[*idx];
                                                         conda_package.record().subdir.as_str()
-                                                            == platform.as_str()
+                                                            == platform_clone.as_str()
                                                     })
                                                     .peekable();
 
@@ -306,7 +307,7 @@ fn parse_from_lock<P>(
                                                 package_index.ok_or_else(|| {
                                                     ParseCondaLockError::MissingPackage(
                                                         environment_name.clone(),
-                                                        platform,
+                                                        platform_clone.clone(),
                                                         conda,
                                                     )
                                                 })?,
@@ -317,7 +318,7 @@ fn parse_from_lock<P>(
                                                 *pypi_url_lookup.get(&pypi).ok_or_else(|| {
                                                     ParseCondaLockError::MissingPackage(
                                                         environment_name.clone(),
-                                                        platform,
+                                                        platform_clone.clone(),
                                                         pypi,
                                                     )
                                                 })?,
