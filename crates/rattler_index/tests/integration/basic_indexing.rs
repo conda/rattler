@@ -5,7 +5,7 @@ use std::{
 };
 
 use rattler_conda_types::Platform;
-use rattler_index::{index_fs, IndexFsConfig, PreconditionChecks};
+use rattler_index::{index_fs, IndexFsConfig};
 use serde_json::Value;
 
 fn test_data_dir() -> PathBuf {
