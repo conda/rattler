@@ -1,6 +1,6 @@
 [package]
 name = "rattler_lock"
-version = "0.25.3"
+version = "0.26.0"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for conda lock"
@@ -11,8 +11,8 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+ahash = { workspace = true }
 chrono = { workspace = true }
-fxhash = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }

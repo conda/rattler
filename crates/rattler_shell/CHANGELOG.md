@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.6](https://github.com/conda/rattler/compare/rattler_shell-v0.25.5...rattler_shell-v0.25.6) - 2025-10-25
+
+### Other
+
+- Improve performance of bash shell activation on Windows ([#1758](https://github.com/conda/rattler/pull/1758))
+
 ## [0.25.5](https://github.com/conda/rattler/compare/rattler_shell-v0.25.4...rattler_shell-v0.25.5) - 2025-10-18
 
 ### Other

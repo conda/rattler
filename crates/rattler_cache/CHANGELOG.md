@@ -49,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/conda/rattler/compare/rattler_cache-v0.3.41...rattler_cache-v0.4.0) - 2025-10-25
+
+### Added
+
+- add support for layered package cache ([#1003](https://github.com/conda/rattler/pull/1003))
+
 ## [0.3.41](https://github.com/conda/rattler/compare/rattler_cache-v0.3.40...rattler_cache-v0.3.41) - 2025-10-18
 
 ### Other
