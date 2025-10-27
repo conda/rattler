@@ -843,7 +843,7 @@ mod test {
             info: None,
             packages,
             conda_packages,
-            removed: Default::default(),
+            removed: ahash::HashSet::default(),
         };
 
         // Serialize to JSON string
