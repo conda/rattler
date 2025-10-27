@@ -87,7 +87,7 @@ pub fn add_repodata_records<'a>(
     for (repo_data_index, repo_data) in repo_data.into_iter().enumerate() {
         // Skip packages that are newer than the specified timestamp
         match (exclude_newer, repo_data.package_record.timestamp.as_ref()) {
-            (Some(exclude_newer), Some(timestamp)) if *timestamp > *exclude_newer => continue,
+            (Some(exclude_newer), Some(timestamp)) if *timestamp.datetime() > *exclude_newer => continue,
             _ => {}
         }
 

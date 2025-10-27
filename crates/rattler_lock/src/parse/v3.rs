@@ -214,7 +214,7 @@ pub fn parse_v3_or_lower(
                             sha256,
                             size: value.size,
                             subdir: subdir.to_string(),
-                            timestamp: value.timestamp,
+                            timestamp: value.timestamp.map(Into::into),
                             track_features: value.track_features,
                             version: value.version,
                             purls: value.purls.is_empty().not().then_some(value.purls),

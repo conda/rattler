@@ -164,7 +164,7 @@ impl SolverPackageRecord<'_> {
 
     fn timestamp(&self) -> Option<&chrono::DateTime<chrono::Utc>> {
         match self {
-            SolverPackageRecord::Record(rec) => rec.package_record.timestamp.as_ref(),
+            SolverPackageRecord::Record(rec) => rec.package_record.timestamp.as_ref().map(|ts| ts.datetime()),
             SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(..) => None,
         }
     }

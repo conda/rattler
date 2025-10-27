@@ -189,8 +189,7 @@ pub struct PackageRecord {
     pub subdir: String,
 
     /// The date this entry was created.
-    #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
-    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    pub timestamp: Option<crate::utils::TimestampMs>,
 
     /// Track features are nowadays only used to downweight packages (ie. give
     /// them less priority). To that effect, the package is downweighted
