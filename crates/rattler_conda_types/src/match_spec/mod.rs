@@ -986,6 +986,20 @@ mod tests {
         let spec =
             MatchSpec::from_nameless(NamelessMatchSpec::from_str(">=12", Strict).unwrap(), None);
         assert!(!spec.is_virtual());
+
+        let spec = MatchSpec::from_str("__virtual_glob*", Strict).unwrap();
+        assert!(spec.is_virtual());
+
+        let spec = MatchSpec::from_str("^__virtual_regex.*$", Strict).unwrap();
+        assert!(spec.is_virtual());
+
+        // technically, these can also match virtual packages like `__spec_with_glob`
+        // but as this also matches packages that are not virtual, `is_virtual` should be `false`
+        let spec = MatchSpec::from_str("*spec_with_glob", Strict).unwrap();
+        assert!(!spec.is_virtual());
+
+        let spec = MatchSpec::from_str("^.*spec_with_regex$", Strict).unwrap();
+        assert!(!spec.is_virtual());
     }
 
     #[test]

@@ -12,9 +12,9 @@ use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::{
-    package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
-    PackageName, PackageNameMatcher, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
-    SolverResult,
+    package::ArchiveType, utils::TimestampMs, GenericVirtualPackage, MatchSpec, Matches,
+    NamelessMatchSpec, PackageName, PackageNameMatcher, ParseMatchSpecError, ParseStrictness,
+    RepoDataRecord, SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},

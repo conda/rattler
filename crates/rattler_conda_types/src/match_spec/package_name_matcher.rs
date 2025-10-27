@@ -89,7 +89,7 @@ pub enum PackageNameMatcherParseError {
     },
 
     /// Could not parse the string as a package name
-    #[error("invalid package name {name}: {source}")]
+    #[error("invalid package name '{name}': {source}")]
     PackageName {
         /// The invalid package name
         name: String,
