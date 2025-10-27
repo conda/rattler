@@ -1005,8 +1005,6 @@ pub struct IndexFsConfig {
     pub max_parallel: usize,
     /// The multi-progress bar to use for the index.
     pub multi_progress: Option<MultiProgress>,
-    /// Configuration for precondition checks during file operations.
-    pub precondition_checks: PreconditionChecks,
 }
 
 /// Create a new `repodata.json` for all packages in the channel at the given
@@ -1021,7 +1019,6 @@ pub async fn index_fs(
         force,
         max_parallel,
         multi_progress,
-        precondition_checks,
     }: IndexFsConfig,
 ) -> anyhow::Result<()> {
     let mut config = FsConfig::default();
@@ -1037,7 +1034,7 @@ pub async fn index_fs(
         force,
         max_parallel,
         multi_progress,
-        precondition_checks,
+        PreconditionChecks::Disabled,
     )
     .await
     .map(|_| ())

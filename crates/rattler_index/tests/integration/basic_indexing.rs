@@ -73,7 +73,6 @@ async fn test_index() {
         force: true,
         max_parallel: 32,
         multi_progress: None,
-        precondition_checks: PreconditionChecks::Enabled,
     })
     .await;
     if let Err(e) = &res {
@@ -135,7 +134,6 @@ async fn test_index_empty_directory_creates_noarch_repodata() {
         force: true,
         max_parallel: 100,
         multi_progress: None,
-        precondition_checks: PreconditionChecks::Enabled,
     })
     .await;
 

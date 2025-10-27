@@ -139,7 +139,6 @@ async fn main() -> anyhow::Result<()> {
                 force: cli.force,
                 max_parallel,
                 multi_progress: Some(multi_progress),
-                precondition_checks,
             })
             .await
         }
