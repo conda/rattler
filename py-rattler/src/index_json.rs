@@ -215,12 +215,10 @@ impl PyIndexJson {
     #[setter]
     pub fn set_timestamp(&mut self, timestamp: Option<i64>) -> PyResult<()> {
         if let Some(ts) = timestamp {
-            self.inner.timestamp = Some(
-                TimestampMs::from_datetime_millis(
-                    chrono::DateTime::from_timestamp_millis(ts)
-                        .ok_or_else(|| PyValueError::new_err("Invalid timestamp"))?,
-                ),
-            );
+            self.inner.timestamp = Some(TimestampMs::from_datetime_millis(
+                chrono::DateTime::from_timestamp_millis(ts)
+                    .ok_or_else(|| PyValueError::new_err("Invalid timestamp"))?,
+            ));
         } else {
             self.inner.timestamp = None;
         }

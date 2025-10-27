@@ -4,8 +4,7 @@ use std::{
 };
 
 use rattler_conda_types::{
-    package::ArchiveIdentifier, BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord,
-    PackageUrl, VersionWithSource,
+    BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource, package::ArchiveIdentifier, utils::TimestampMs
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
@@ -294,7 +293,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             sha256: package_record.sha256,
             size: Cow::Borrowed(&package_record.size),
             legacy_bz2_size: Cow::Borrowed(&package_record.legacy_bz2_size),
-            timestamp: package_record.timestamp.map(|ts| ts.into_datetime()),
+            timestamp: package_record.timestamp.map(TimestampMs::into_datetime),
             features: Cow::Borrowed(&package_record.features),
             track_features: Cow::Borrowed(&package_record.track_features),
             license: Cow::Borrowed(&package_record.license),

@@ -12,8 +12,7 @@ use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::{
-    package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
-    PackageName, ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult,
+    GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName, ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult, package::ArchiveType, utils::TimestampMs
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -168,7 +167,7 @@ impl SolverPackageRecord<'_> {
                 .package_record
                 .timestamp
                 .as_ref()
-                .map(|ts| ts.datetime()),
+                .map(TimestampMs::datetime),
             SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(..) => None,
         }
     }
