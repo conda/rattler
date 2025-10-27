@@ -18,7 +18,7 @@ use std::str::FromStr;
 /// The entry point is parsed from a string using the [`FromStr`] trait. The
 /// [`Display`] trait is implemented for the entry point to convert it back to a
 /// string.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EntryPoint {
     /// The name of the command that will be available on the command line.
     pub command: String,

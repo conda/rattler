@@ -44,6 +44,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.13](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.12...rattler_repodata_gateway-v0.24.13) - 2025-10-25
+
+### Other
+
+- updated the following local packages: rattler_package_streaming, rattler_cache
+
+## [0.24.12](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.11...rattler_repodata_gateway-v0.24.12) - 2025-10-18
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_config, rattler_networking, rattler_cache
+
+## [0.24.11](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.10...rattler_repodata_gateway-v0.24.11) - 2025-10-17
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_cache
+
+## [0.24.10](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.9...rattler_repodata_gateway-v0.24.10) - 2025-10-16
+
+### Added
+
+- Add progress bar for gateway query/names ([#1743](https://github.com/conda/rattler/pull/1743))
+
+## [0.24.9](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.8...rattler_repodata_gateway-v0.24.9) - 2025-10-14
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_networking, rattler_config, rattler_package_streaming, rattler_cache
+
+## [0.24.8](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.7...rattler_repodata_gateway-v0.24.8) - 2025-10-13
+
+### Added
+
+- read index.json directly from local files ([#1729](https://github.com/conda/rattler/pull/1729))
+
 ## [0.24.7](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.6...rattler_repodata_gateway-v0.24.7) - 2025-10-07
 
 ### Other

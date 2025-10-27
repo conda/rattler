@@ -55,6 +55,10 @@ pub enum InstallerError {
     /// Failed to create the prefix
     #[error("failed to create the prefix")]
     FailedToCreatePrefix(PathBuf, #[source] std::io::Error),
+
+    /// Attempted to install platform-specific packages when target platform is noarch
+    #[error("cannot install platform-specific packages with noarch as the target platform. The following packages have non-noarch subdirs: {}", .0.join(", "))]
+    PlatformSpecificPackagesWithNoarchPlatform(Vec<String>),
 }
 
 impl From<Cancelled> for InstallerError {

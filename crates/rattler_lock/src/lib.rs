@@ -99,7 +99,7 @@ pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
 pub use conda::{
     CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
-    PackageBuildSource, PackageBuildSourceKind,
+    PackageBuildSource,
 };
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;

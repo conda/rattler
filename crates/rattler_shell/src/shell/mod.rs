@@ -198,7 +198,10 @@ pub trait Shell {
     }
 }
 
-/// Convert a native PATH on Windows to a Unix style path using cygpath.
+/// Convert a native PATH on Windows to a Unix style path using cygpath. This uses
+/// the `--path` option of cygpath, which converts a search PATH like
+/// "C:\path1;D:\path2" to "/c/path1:/d/path2" or the equivalent for the specific
+/// build of cygpath. Batching multiple paths together is better for performance.
 pub(crate) fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
     // call cygpath on Windows to convert paths to Unix style
     let output = Command::new("cygpath")
@@ -304,49 +307,42 @@ impl Shell for Bash {
         platform: &Platform,
     ) -> ShellResult {
         // Put paths in a vector of the correct format.
-        let mut paths_vec = paths
+        let paths_vec = paths
             .iter()
-            .map(|path| {
-                // check if we are on Windows, and if yes, convert native path to unix for (Git)
-                // Bash
-                if cfg!(windows) {
-                    match native_path_to_unix(path.to_string_lossy().as_ref()) {
-                        Ok(path) => path,
-                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                            // This indicates that the cygpath executable could not be found. In
-                            // that case we just ignore any conversion
-                            // and use the windows path directly.
-                            path.to_string_lossy().to_string()
-                        }
-                        Err(e) => panic!("{e}"),
-                    }
-                } else {
-                    path.to_string_lossy().into_owned()
-                }
-            })
+            .map(|path| path.to_string_lossy().into_owned())
             .collect_vec();
 
+        // Create the shell specific list of paths.
+        let paths_string = if cfg!(windows) {
+            // Use cygpath to convert the paths joined with the Windows ";" separator.
+            match native_path_to_unix(&paths_vec.join(";")) {
+                Ok(path) => path,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    // When cygpath isn't found, join the paths with the posix separator.
+                    paths_vec.join(":")
+                }
+                Err(e) => panic!("{e}"),
+            }
+        } else {
+            paths_vec.join(":")
+        };
         // Replace, Append, or Prepend the path variable to the paths.
         let path_var = self.path_var(platform);
-        match modification_behavior {
-            PathModificationBehavior::Replace => (),
-            PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var(path_var)),
-            PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var(path_var)),
-        }
-        // Create the shell specific list of paths.
-        let paths_string = paths_vec.join(self.path_separator(platform));
-
-        let path_var = self.path_var(platform);
-        let paths_str = paths_string.as_str();
+        let combined_paths_string: String = match modification_behavior {
+            PathModificationBehavior::Replace => paths_string,
+            PathModificationBehavior::Prepend => {
+                format!("{paths_string}:{}", &self.format_env_var(path_var))
+            }
+            PathModificationBehavior::Append => {
+                format!("{}:{paths_string}", self.format_env_var(path_var))
+            }
+        };
         // Use double quotes "" so that ${PATH} is substituted. Calling set_env_var
         // would correctly escape ${PATH} so that it literally is in the result.
-        Ok(writeln!(f, "export {path_var}=\"{paths_str}\"")?)
-    }
-
-    /// For Bash, the separator in the path variable is always ":", even on
-    /// Windows
-    fn path_separator(&self, _platform: &Platform) -> &str {
-        ":"
+        Ok(writeln!(
+            f,
+            "export {path_var}=\"{combined_paths_string}\""
+        )?)
     }
 
     /// For Bash, the path variable is always all capital PATH, even on Windows.
