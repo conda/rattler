@@ -1871,15 +1871,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fxhash"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3173,8 +3164,8 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 name = "path_resolver"
 version = "0.2.1"
 dependencies = [
+ "ahash",
  "fs-err",
- "fxhash",
  "indexmap 2.12.0",
  "itertools 0.14.0",
  "proptest",
@@ -3773,6 +3764,7 @@ dependencies = [
 name = "rattler_cache"
 version = "0.4.0"
 dependencies = [
+ "ahash",
  "anyhow",
  "dashmap",
  "digest",
@@ -3780,7 +3772,6 @@ dependencies = [
  "fs-err",
  "fs4",
  "futures",
- "fxhash",
  "itertools 0.14.0",
  "parking_lot",
  "rattler_conda_types",
@@ -3804,12 +3795,12 @@ dependencies = [
 name = "rattler_conda_types"
 version = "0.40.3"
 dependencies = [
+ "ahash",
  "chrono",
  "core-foundation 0.10.1",
  "dirs",
  "file_url",
  "fs-err",
- "fxhash",
  "glob",
  "hex",
  "indexmap 2.12.0",
@@ -3876,6 +3867,7 @@ dependencies = [
 name = "rattler_index"
 version = "0.26.5"
 dependencies = [
+ "ahash",
  "anyhow",
  "bytes",
  "chrono",
@@ -3884,7 +3876,7 @@ dependencies = [
  "console",
  "fs-err",
  "futures",
- "fxhash",
+ "indexmap 2.12.0",
  "indicatif",
  "opendal",
  "rattler_conda_types",
@@ -3911,9 +3903,9 @@ dependencies = [
 name = "rattler_lock"
 version = "0.26.0"
 dependencies = [
+ "ahash",
  "chrono",
  "file_url",
- "fxhash",
  "indexmap 2.12.0",
  "itertools 0.14.0",
  "pep440_rs",
