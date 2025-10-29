@@ -87,6 +87,7 @@ pub(crate) struct CondaSelectorV7 {
     #[serde(default)]
     pub(crate) variants: BTreeMap<String, crate::VariantValue>,
     /// Whether this is a dev package (only for source packages).
+    /// These are intented to be only used for its metadata.
     #[serde(default)]
     pub(crate) dev: bool,
 }
