@@ -533,9 +533,10 @@ fn segments_starts_with<
     B: Iterator<Item = SegmentIter<'b>> + 'b,
 >(
     a: A,
-    b: B,
+    b: B, // the prefix we're looking for in 'a'
 ) -> bool {
-    for ranges in a.zip_longest(b) {
+    let mut zipped = a.zip_longest(b).peekable();
+    while let Some(ranges) = zipped.next() {
         let (left, right) = match ranges {
             EitherOrBoth::Both(left, right) => (left, right),
             EitherOrBoth::Left(_) => return true,
@@ -552,8 +553,15 @@ fn segments_starts_with<
         for values in left.components().zip_longest(right.components()) {
             if !match values {
                 EitherOrBoth::Both(a, b) => a == b,
-                EitherOrBoth::Left(_) => return true,
-                EitherOrBoth::Right(_) => return false,
+                // 'a' is allowed to have extra components at the end of a segment
+                // if the corresponding 'b' segment is the last one
+                EitherOrBoth::Left(_) => {
+                    let next_ranges = zipped.peek();
+                    return matches!(next_ranges, None | Some(EitherOrBoth::Left(_)));
+                }
+                // Both segments' components must fully match for the segments to match
+                // if both 'a' and 'b' have further segments
+                EitherOrBoth::Right(_) => false,
             } {
                 return false;
             }
@@ -1266,6 +1274,17 @@ mod test {
         assert!(Version::from_str("1.2.3")
             .unwrap()
             .starts_with(&Version::from_str("1.2").unwrap()));
+    }
+
+    #[test]
+    fn starts_with_differing_component_sizes() {
+        // segments: [2, 0, 1, [version, 2]]
+        let version = Version::from_str("2.0.1.version2").unwrap();
+        // segments: [2, 0, 1, version, 3]
+        let other_version = Version::from_str("2.0.1.version.3").unwrap();
+
+        assert!(!version.starts_with(&other_version));
+        assert!(!other_version.starts_with(&version));
     }
 
     fn get_hash(spec: &impl Hash) -> u64 {
