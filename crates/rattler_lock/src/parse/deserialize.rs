@@ -4,7 +4,6 @@ use std::{
     sync::Arc,
 };
 
-use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use pep508_rs::ExtraName;
 use rattler_conda_types::Platform;
@@ -104,8 +103,8 @@ pub(crate) struct ResolveCtx<'a, CP> {
     pub(crate) environment_name: &'a str,
     pub(crate) platform: Platform,
     pub(crate) conda_packages: &'a mut Vec<CP>,
-    pub(crate) conda_url_lookup: &'a FxHashMap<UrlOrPath, Vec<usize>>,
-    pub(crate) pypi_url_lookup: &'a FxHashMap<UrlOrPath, usize>,
+    pub(crate) conda_url_lookup: &'a ahash::HashMap<UrlOrPath, Vec<usize>>,
+    pub(crate) pypi_url_lookup: &'a ahash::HashMap<UrlOrPath, usize>,
     pub(crate) pypi_runtime_lookup: &'a mut IndexSet<DeserializablePypiPackageEnvironmentData>,
 }
 
@@ -175,13 +174,13 @@ fn process_environment_packages<V>(
     environment_name: String,
     packages: BTreeMap<Platform, Vec<V::Selector>>,
     conda_packages: &mut Vec<V::CondaPackage>,
-    conda_url_lookup: &FxHashMap<UrlOrPath, Vec<usize>>,
-    pypi_url_lookup: &FxHashMap<UrlOrPath, usize>,
+    conda_url_lookup: &ahash::HashMap<UrlOrPath, Vec<usize>>,
+    pypi_url_lookup: &ahash::HashMap<UrlOrPath, usize>,
     pypi_runtime_lookup: &mut IndexSet<DeserializablePypiPackageEnvironmentData>,
 ) -> Result<
     (
         String,
-        FxHashMap<Platform, IndexSet<EnvironmentPackageData>>,
+        ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>>,
     ),
     ParseCondaLockError,
 >
@@ -189,7 +188,7 @@ where
     V: LockFileVersion,
     <V::CondaPackage as TryInto<CondaPackageData>>::Error: Into<ParseCondaLockError>,
 {
-    let mut packages_by_platform = FxHashMap::default();
+    let mut packages_by_platform = ahash::HashMap::default();
 
     for (platform, selectors) in packages {
         let mut ctx = ResolveCtx {
@@ -231,7 +230,7 @@ where
     let (mut conda_packages, pypi_packages) = V::extract_packages(raw_packages)?;
 
     // Determine the indices of the packages by url
-    let mut conda_url_lookup: FxHashMap<UrlOrPath, Vec<_>> = FxHashMap::default();
+    let mut conda_url_lookup: ahash::HashMap<UrlOrPath, Vec<_>> = ahash::HashMap::default();
     for (idx, conda_package) in conda_packages.iter().enumerate() {
         conda_url_lookup
             .entry(conda_package.location().clone())
@@ -242,8 +241,8 @@ where
     let pypi_url_lookup = pypi_packages
         .iter()
         .enumerate()
-        .map(|(idx, package)| (package.location.clone(), idx))
-        .collect::<FxHashMap<_, _>>();
+        .map(|(idx, p)| (p.location.clone(), idx))
+        .collect::<ahash::HashMap<_, _>>();
     let mut pypi_runtime_lookup = IndexSet::new();
 
     let environments = raw_environments

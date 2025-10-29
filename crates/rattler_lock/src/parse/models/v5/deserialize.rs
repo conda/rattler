@@ -203,7 +203,7 @@ mod tests {
         let win64_pkg = test_binary_package(location.clone(), "win-64");
 
         let mut packages = vec![linux64_pkg, win64_pkg];
-        let mut lookup = fxhash::FxHashMap::default();
+        let mut lookup = ahash::AHashMap::default();
         lookup.insert(location.clone(), vec![0, 1]);
 
         let mut ctx = ResolveCtx {
@@ -211,7 +211,7 @@ mod tests {
             platform: Platform::Linux64,
             conda_packages: &mut packages,
             conda_url_lookup: &lookup,
-            pypi_url_lookup: &fxhash::FxHashMap::default(),
+            pypi_url_lookup: &ahash::AHashMap::default(),
             pypi_runtime_lookup: &mut indexmap::IndexSet::new(),
         };
 
@@ -235,7 +235,7 @@ mod tests {
         let noarch_pkg = test_binary_package(location.clone(), "noarch");
 
         let mut packages = vec![noarch_pkg];
-        let mut lookup = fxhash::FxHashMap::default();
+        let mut lookup = ahash::HashMap::default();
         lookup.insert(location.clone(), vec![0]);
 
         let mut ctx = ResolveCtx {
@@ -243,7 +243,7 @@ mod tests {
             platform: Platform::Linux64,
             conda_packages: &mut packages,
             conda_url_lookup: &lookup,
-            pypi_url_lookup: &fxhash::FxHashMap::default(),
+            pypi_url_lookup: &ahash::HashMap::default(),
             pypi_runtime_lookup: &mut indexmap::IndexSet::new(),
         };
 
@@ -263,14 +263,14 @@ mod tests {
         };
 
         let mut packages = vec![];
-        let lookup = fxhash::FxHashMap::default();
+        let lookup = ahash::HashMap::default();
 
         let mut ctx = ResolveCtx {
             environment_name: "test",
             platform: Platform::Linux64,
             conda_packages: &mut packages,
             conda_url_lookup: &lookup,
-            pypi_url_lookup: &fxhash::FxHashMap::default(),
+            pypi_url_lookup: &ahash::HashMap::default(),
             pypi_runtime_lookup: &mut indexmap::IndexSet::new(),
         };
 

@@ -77,6 +77,7 @@ async def index_s3(
     write_shards: bool = True,
     force: bool = False,
     max_parallel: int | None = None,
+    precondition_checks: bool = True,
 ) -> None:
     """
     Indexes dependencies in the `channel_url` for one or more subdirectories in the S3 directory.
@@ -96,6 +97,7 @@ async def index_s3(
         write_shards: Whether to write sharded repodata.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
+        precondition_checks: Whether to perform precondition checks before indexing on S3 buckets which helps to prevent data corruption when indexing with multiple processes at the same time.  Defaults to True.
     """
     await py_index_s3(
         channel_url,
@@ -106,4 +108,5 @@ async def index_s3(
         write_shards,
         force,
         max_parallel,
+        precondition_checks,
     )

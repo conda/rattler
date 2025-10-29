@@ -162,7 +162,7 @@ pub async fn simple_solve(
 
         if records.package_record.depends.is_empty() {
             if let Some(deps) = repodata_keys.get(&key) {
-                records.package_record.depends = deps.to_vec();
+                records.package_record.depends = (*deps).clone();
             }
         }
     }

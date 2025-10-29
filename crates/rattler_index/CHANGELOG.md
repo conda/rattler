@@ -62,6 +62,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0](https://github.com/conda/rattler/compare/rattler_index-v0.26.5...rattler_index-v0.27.0) - 2025-10-28
+
+### Added
+
+- make precondition checks configurable ([#1777](https://github.com/conda/rattler/pull/1777))
+
+### Other
+
+- Replace fxhash with ahash ([#1674](https://github.com/conda/rattler/pull/1674))
+
+## [0.26.5](https://github.com/conda/rattler/compare/rattler_index-v0.26.4...rattler_index-v0.26.5) - 2025-10-25
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.26.4](https://github.com/conda/rattler/compare/rattler_index-v0.26.3...rattler_index-v0.26.4) - 2025-10-18
 
 ### Other

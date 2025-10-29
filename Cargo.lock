@@ -2192,15 +2192,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fxhash"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3747,11 +3738,11 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "path_resolver"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
+ "ahash",
  "divan",
  "fs-err",
- "fxhash",
  "indexmap 2.12.0",
  "itertools 0.14.0",
  "proptest",
@@ -4265,7 +4256,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.38.2"
+version = "0.38.4"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4347,8 +4338,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.41"
+version = "0.4.1"
 dependencies = [
+ "ahash",
  "anyhow",
  "assert_matches",
  "axum",
@@ -4359,7 +4351,6 @@ dependencies = [
  "fs-err",
  "fs4",
  "futures",
- "fxhash",
  "itertools 0.14.0",
  "parking_lot 0.12.5",
  "rattler_conda_types",
@@ -4386,8 +4377,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.40.3"
+version = "0.40.4"
 dependencies = [
+ "ahash",
  "assert_matches",
  "chrono",
  "core-foundation 0.10.1",
@@ -4396,7 +4388,6 @@ dependencies = [
  "dunce",
  "file_url",
  "fs-err",
- "fxhash",
  "glob",
  "hex",
  "hex-literal",
@@ -4436,7 +4427,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.14"
+version = "0.2.15"
 dependencies = [
  "console 0.16.1",
  "fs-err",
@@ -4476,8 +4467,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.26.4"
+version = "0.27.0"
 dependencies = [
+ "ahash",
  "anyhow",
  "bytes",
  "chrono",
@@ -4486,7 +4478,7 @@ dependencies = [
  "console 0.16.1",
  "fs-err",
  "futures",
- "fxhash",
+ "indexmap 2.12.0",
  "indicatif",
  "opendal",
  "rattler_conda_types",
@@ -4525,11 +4517,11 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.25.3"
+version = "0.26.1"
 dependencies = [
+ "ahash",
  "chrono",
  "file_url",
- "fxhash",
  "indexmap 2.12.0",
  "insta",
  "itertools 0.14.0",
@@ -4562,7 +4554,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.32"
+version = "0.2.34"
 dependencies = [
  "chrono",
  "configparser",
@@ -4591,7 +4583,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.20"
+version = "0.25.21"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4629,7 +4621,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.11"
+version = "0.23.13"
 dependencies = [
  "assert_matches",
  "bzip2",
@@ -4682,7 +4674,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.12"
+version = "0.24.14"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4751,7 +4743,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4767,7 +4759,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_sandbox"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "birdcage",
  "clap",
@@ -4778,7 +4770,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.5"
+version = "0.25.7"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4800,7 +4792,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "3.0.8"
+version = "3.0.9"
 dependencies = [
  "chrono",
  "criterion",
@@ -4826,7 +4818,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.3.8"
+version = "0.3.10"
 dependencies = [
  "base64",
  "clap",
@@ -4860,7 +4852,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.2.4"
+version = "2.2.5"
 dependencies = [
  "archspec",
  "libloading",

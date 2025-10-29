@@ -1749,7 +1749,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.3.41"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -1868,7 +1868,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.11"
+version = "0.23.12"
 dependencies = [
  "bzip2",
  "chrono",
@@ -1905,7 +1905,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.12"
+version = "0.24.13"
 dependencies = [
  "anyhow",
  "async-compression",
