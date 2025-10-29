@@ -73,7 +73,7 @@ impl PyLockFile {
     /// Parses an rattler-lock file from a file.
     #[staticmethod]
     pub fn from_path(path: PathBuf) -> PyResult<Self> {
-        let (lock_file, _version) = LockFile::from_path(&path).map_err(PyRattlerError::from)?;
+        let lock_file = LockFile::from_path(&path).map_err(PyRattlerError::from)?;
         Ok(lock_file.into())
     }
 
@@ -353,14 +353,19 @@ impl PyLockedPackage {
     }
 
     #[getter]
-    pub fn package_record(&self) -> PyRecord {
-        self.as_conda().record().clone().into()
+    pub fn package_record(&self) -> Option<PyRecord> {
+        match self.as_conda() {
+            CondaPackageData::Binary(conda_binary_data) => {
+                Some(conda_binary_data.package_record.clone().into())
+            }
+            CondaPackageData::Source(_) => None,
+        }
     }
 
     #[getter]
     pub fn name(&self) -> String {
         match &self.inner {
-            LockedPackage::Conda(data) => data.record().name.as_source().to_string(),
+            LockedPackage::Conda(data) => data.name().as_source().to_string(),
             LockedPackage::Pypi(data, _) => data.name.to_string(),
         }
     }
@@ -374,8 +379,10 @@ impl PyLockedPackage {
     }
 
     #[getter]
-    pub fn conda_version(&self) -> PyVersion {
-        self.as_conda().record().version.version().clone().into()
+    pub fn conda_version(&self) -> Option<PyVersion> {
+        self.as_conda()
+            .version()
+            .map(|version_with_source| version_with_source.version().clone().into())
     }
 
     #[getter]
@@ -393,15 +400,15 @@ impl PyLockedPackage {
     #[getter]
     pub fn hashes(&self) -> Option<PyPackageHashes> {
         let hash = match &self.inner {
-            LockedPackage::Conda(pkg) => {
-                let record = pkg.record();
+            LockedPackage::Conda(pkg) => pkg.as_binary().and_then(|binary| {
+                let record = &binary.package_record;
                 match (record.md5, record.sha256) {
                     (Some(md5), Some(sha256)) => Some(PackageHashes::Md5Sha256(md5, sha256)),
                     (Some(md5), None) => Some(PackageHashes::Md5(md5)),
                     (None, Some(sha256)) => Some(PackageHashes::Sha256(sha256)),
                     (None, None) => None,
                 }
-            }
+            }),
             LockedPackage::Pypi(data, _) => data.hash.clone(),
         };
         hash.map(Into::into)
