@@ -35,5 +35,5 @@ packages:
     variants: {}
     depends:
       - python >=3.8
-      - pytest  # Dev packages often add test dependencies
+      - pytest # Dev packages often add test dependencies
     license: MIT
