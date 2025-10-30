@@ -1,0 +1,88 @@
+---
+source: crates/rattler_lock/src/lib.rs
+expression: conda_lock
+---
+version: 7
+environments:
+  default:
+    channels:
+      - url: "https://conda.anaconda.org/conda-forge/"
+    packages:
+      linux-64:
+        - conda: "https://conda.anaconda.org/conda-forge/linux-64/python-3.12.0-h2628c8c_0_cpython.conda"
+        - conda: my-monorepo
+          name: core-library
+          variants:
+            python_version: "3.12"
+        - conda: my-monorepo
+          name: utils-library
+      win-64:
+        - conda: "https://conda.anaconda.org/conda-forge/win-64/python-3.12.0-h2628c8c_0_cpython.conda"
+        - conda: my-monorepo
+          name: core-library
+          variants:
+            python_version: "3.12"
+        - conda: my-monorepo
+          name: utils-library
+  test:
+    channels:
+      - url: "https://conda.anaconda.org/conda-forge/"
+    packages:
+      linux-64:
+        - conda: "https://conda.anaconda.org/conda-forge/linux-64/pytest-7.4.3-pyhd8ed1ab_0.conda"
+        - conda: my-monorepo
+          name: core-library
+          variants:
+            python_version: "3.11"
+packages:
+  - conda: my-monorepo
+    name: core-library
+    depends:
+      - python =3.11
+    license: MIT
+    package_build_source:
+      url: "https://github.com/user/my-monorepo/archive/refs/tags/v1.0.0.tar.gz"
+      sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    variants:
+      python_version: "3.11"
+  - conda: my-monorepo
+    name: core-library
+    depends:
+      - python =3.12
+    license: MIT
+    package_build_source:
+      url: "https://github.com/user/my-monorepo/archive/refs/tags/v1.0.0.tar.gz"
+      sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    variants:
+      python_version: "3.12"
+  - conda: "https://conda.anaconda.org/conda-forge/linux-64/pytest-7.4.3-pyhd8ed1ab_0.conda"
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    md5: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    depends:
+      - python >=3.8
+    license: MIT
+    size: 1000000
+    timestamp: 1696321871976
+  - conda: "https://conda.anaconda.org/conda-forge/linux-64/python-3.12.0-h2628c8c_0_cpython.conda"
+    sha256: 90553586879bf328f2f9efb8d8faa958ecba822faf379f0a20c3461467b9b955
+    md5: defd5d375853a2caff36a19d2d81a28e
+    license: Python-2.0
+    size: 16140836
+    timestamp: 1696321871976
+  - conda: "https://conda.anaconda.org/conda-forge/win-64/python-3.12.0-h2628c8c_0_cpython.conda"
+    sha256: 90553586879bf328f2f9efb8d8faa958ecba822faf379f0a20c3461467b9b955
+    md5: defd5d375853a2caff36a19d2d81a28e
+    license: Python-2.0
+    size: 16140836
+    timestamp: 1696321871976
+  - conda: my-monorepo
+    name: utils-library
+    depends:
+      - python =3.12
+      - core-library
+    license: MIT
+    package_build_source:
+      url: "https://github.com/user/my-monorepo/archive/refs/tags/v1.0.0.tar.gz"
+      sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    variants:
+      python_version: "3.12"

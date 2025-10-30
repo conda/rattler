@@ -1,0 +1,39 @@
+# Dev and Non-Dev Variants of Same Package
+#
+# Tests that both dev and non-dev variants of the same source package
+# can coexist in the lock file. The dev field is part of the uniqueness
+# identifier for source packages.
+#
+# This demonstrates that package names are no longer unique when dev field differs.
+
+version: 7
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        # Regular (non-dev) version of the package
+        - conda: my-package
+        # Dev version of the same package - only adds dependencies
+        - conda: my-package
+          dev: true
+
+packages:
+  # Non-dev source package (regular installation)
+  - conda: my-package
+    name: my-package
+    variants: {}
+    depends:
+      - python >=3.8
+    license: MIT
+
+  # Dev source package (only contributes dependencies, not installed)
+  - conda: my-package
+    name: my-package
+    dev: true
+    variants: {}
+    depends:
+      - python >=3.8
+      - pytest # Dev packages often add test dependencies
+    license: MIT

@@ -76,7 +76,7 @@
 //! for different platforms and with different channels in a single lock-file.
 //! This allows storing production- and test environments in a single file.
 
-use std::{collections::HashMap, io::Read, path::Path, str::FromStr, sync::Arc};
+use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 
 use indexmap::IndexSet;
 use rattler_conda_types::{Platform, RepoDataRecord};
@@ -98,7 +98,7 @@ pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
 pub use conda::{
     CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
-    PackageBuildSource,
+    PackageBuildSource, VariantValue,
 };
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
@@ -177,17 +177,22 @@ impl LockFile {
         LockFileBuilder::new()
     }
 
-    /// Parses an conda-lock file from a reader.
+    /// Parses a conda-lock file from a reader.
     pub fn from_reader(mut reader: impl Read) -> Result<Self, ParseCondaLockError> {
         let mut str = String::new();
         reader.read_to_string(&mut str)?;
-        Self::from_str(&str)
+        Self::parse_str(&str)
     }
 
-    /// Parses an conda-lock file from a file.
+    /// Parses a conda-lock file from a file.
     pub fn from_path(path: &Path) -> Result<Self, ParseCondaLockError> {
         let source = std::fs::read_to_string(path)?;
-        Self::from_str(&source)
+        Self::parse_str(&source)
+    }
+
+    /// Parses a conda-lock file from a string.
+    pub fn parse_str(source: &str) -> Result<Self, ParseCondaLockError> {
+        crate::parse::parse_from_str(source)
     }
 
     /// Writes the conda lock to a file
@@ -489,7 +494,7 @@ impl<'lock> LockedPackageRef<'lock> {
     /// might not be the normalized name.
     pub fn name(self) -> &'lock str {
         match self {
-            LockedPackageRef::Conda(data) => data.record().name.as_source(),
+            LockedPackageRef::Conda(data) => data.name().as_source(),
             LockedPackageRef::Pypi(data, _) => data.name.as_ref(),
         }
     }
@@ -556,7 +561,6 @@ mod test {
     #[case::v4_pypi_absolute_path("v4/absolute-path-lock.yml")]
     #[case::v5_pypi_flat_index("v5/flat-index-lock.yml")]
     #[case::v5_with_and_without_purl("v5/similar-with-and-without-purl.yml")]
-    #[case::v6_conda_source_path("v6/conda-path-lock.yml")]
     #[case::v6_derived_channel("v6/derived-channel-lock.yml")]
     #[case::v6_sources("v6/sources-lock.yml")]
     #[case::v6_options("v6/options-lock.yml")]
@@ -564,6 +568,15 @@ mod test {
     #[case::v6_pixi_build_url_source("v6/pixi-build-url-source-lock.yml")]
     #[case::v6_pixi_build_git_tag_source("v6/pixi-build-git-tag-source-lock.yml")]
     #[case::v6_pixi_build_git_rev_only_source("v6/pixi-build-git-rev-only-source-lock.yml")]
+    #[case::v7_single_binary_package("v7/single_binary_package.lock.yml")]
+    #[case::v7_single_source_package("v7/single_source_package.lock.yml")]
+    #[case::v7_multiple_source_packages_different_name(
+        "v7/multiple_source_package_different_name.lock.yml"
+    )]
+    #[case::v7_multiple_source_packages_different_variants(
+        "v7/multiple_source_package_different_variants.lock.yml"
+    )]
+    #[case::v7_complex_multi_environment("v7/complex_multi_environment.lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
@@ -572,10 +585,39 @@ mod test {
         insta::assert_yaml_snapshot!(file_name, conda_lock);
     }
 
+    /// Test that V6 lock files with ambiguous source packages fail to serialize to V7
+    /// because they cannot be disambiguated without variant information.
+    #[rstest]
+    #[case::v6_conda_source_path("v6/conda-path-lock.yml")]
+    fn test_v6_ambiguous_source_packages_error(#[case] file_name: &str) {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock")
+            .join(file_name);
+
+        // Parsing should succeed
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        // But serialization should fail with a clear error about ambiguous source packages
+        let result = conda_lock.render_to_string();
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("Failed to disambiguate source packages"),
+            "Expected error about ambiguous source packages, got: {err_msg}"
+        );
+        assert!(
+            err_msg.contains("cannot be distinguished without variant information"),
+            "Expected error to mention variant information, got: {err_msg}"
+        );
+    }
+
     #[rstest]
     fn test_roundtrip(
         #[files("../../test-data/conda-lock/**/*.yml")]
         #[exclude("forward-compatible-lock")]
+        #[exclude("conda-path-lock")]
         path: PathBuf,
     ) {
         // Load the lock-file

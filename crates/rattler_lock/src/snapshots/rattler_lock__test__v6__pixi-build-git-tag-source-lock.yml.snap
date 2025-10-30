@@ -2,7 +2,7 @@
 source: crates/rattler_lock/src/lib.rs
 expression: conda_lock
 ---
-version: 6
+version: 7
 environments:
   default:
     channels:
@@ -14,8 +14,6 @@ packages:
   - conda: pixi-tag-package
     name: pixi-tag-package
     version: 1.2.0
-    build: pyhbf21a9e_0
-    subdir: noarch
     package_build_source:
       git: "https://github.com/example/pixi-package.git"
       tag: v1.2.0

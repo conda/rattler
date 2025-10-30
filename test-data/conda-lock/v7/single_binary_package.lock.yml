@@ -1,0 +1,30 @@
+# Single Binary Package (No Disambiguation Needed)
+#
+# Tests serialization of a single binary package where no disambiguation is needed.
+#
+# This represents the "happy path" for binary packages.
+
+version: 7
+environments:
+  default:
+    channels:
+      - url: https://prefix.dev/conda-forge/
+    packages:
+      linux-64:
+        # This package uniquely identifies itself by location alone
+        # No name field needed in selector because there's only one package at this location
+        - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.12.0-h2628c8c_0_cpython.conda
+
+packages:
+  # Single binary package - the only package in the lock file
+  - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.12.0-h2628c8c_0_cpython.conda
+    name: python
+    version: 3.12.0
+    build: h2628c8c_0_cpython
+    build_number: 0
+    subdir: linux-64
+    sha256: 90553586879bf328f2f9efb8d8faa958ecba822faf379f0a20c3461467b9b955
+    md5: defd5d375853a2caff36a19d2d81a28e
+    license: Python-2.0
+    size: 16140836
+    timestamp: 1696321871976
