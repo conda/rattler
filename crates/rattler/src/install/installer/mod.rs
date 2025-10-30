@@ -503,7 +503,7 @@ impl Installer {
 
         // Preprocess the transaction
         let pre_process_result = driver
-            .pre_process(&transaction, &prefix)
+            .pre_process(&transaction, &prefix, self.reporter.as_deref())
             .map_err(InstallerError::PreProcessingFailed)?;
 
         if let Some(reporter) = &self.reporter {
@@ -659,7 +659,8 @@ impl Installer {
         drop(pending_link_futures);
 
         // Post process the transaction
-        let post_process_result = driver.post_process(&transaction, &prefix)?;
+        let post_process_result =
+            driver.post_process(&transaction, &prefix, self.reporter.as_deref())?;
 
         if let Some(reporter) = &self.reporter {
             reporter.on_transaction_complete();

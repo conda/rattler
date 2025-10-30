@@ -10,7 +10,7 @@ use rattler_conda_types::{PackageName, PackageRecord, Platform, PrefixRecord};
 use rattler_shell::shell::{Bash, CmdExe, ShellEnum};
 use thiserror::Error;
 
-use super::{InstallDriver, Transaction};
+use super::{installer::Reporter, InstallDriver, Transaction};
 
 /// Error type for link script errors
 #[derive(Debug, thiserror::Error)]
@@ -91,6 +91,7 @@ pub fn run_link_scripts<'a>(
     prefix_records: impl Iterator<Item = &'a PrefixRecord>,
     target_prefix: &Path,
     platform: &Platform,
+    reporter: Option<&dyn Reporter>,
 ) -> Result<PrePostLinkResult, LinkScriptError> {
     let mut env = HashMap::new();
     env.insert(
@@ -126,17 +127,42 @@ pub fn run_link_scripts<'a>(
                 prec.name.as_normalized()
             );
 
-            match rattler_shell::run_in_environment(target_prefix, &link_file, shell, &env) {
-                Ok(o) if o.status.success() => {}
-                Ok(o) => {
-                    failed_packages.push(prec.name.clone());
-                    tracing::warn!("Error running post-link script. Status: {:?}", o.status);
-                    tracing::warn!("  stdout: {}", String::from_utf8_lossy(&o.stdout));
-                    tracing::warn!("  stderr: {}", String::from_utf8_lossy(&o.stderr));
+            // Get the script path relative to target_prefix for reporting
+            let script_path = link_script_type.get_path(prec, platform);
+
+            // Report the start of the script execution
+            let reporter_idx = match (&reporter, &link_script_type) {
+                (Some(r), LinkScriptType::PostLink) => {
+                    Some(r.on_post_link_start(prec.name.as_normalized(), &script_path))
                 }
-                Err(e) => {
-                    failed_packages.push(prec.name.clone());
-                    tracing::error!("Error running post-link script: {:?}", e);
+                (Some(r), LinkScriptType::PreUnlink) => {
+                    Some(r.on_pre_unlink_start(prec.name.as_normalized(), &script_path))
+                }
+                _ => None,
+            };
+
+            let success =
+                match rattler_shell::run_in_environment(target_prefix, &link_file, shell, &env) {
+                    Ok(o) if o.status.success() => true,
+                    Ok(o) => {
+                        failed_packages.push(prec.name.clone());
+                        tracing::warn!("Error running post-link script. Status: {:?}", o.status);
+                        tracing::warn!("  stdout: {}", String::from_utf8_lossy(&o.stdout));
+                        tracing::warn!("  stderr: {}", String::from_utf8_lossy(&o.stderr));
+                        false
+                    }
+                    Err(e) => {
+                        failed_packages.push(prec.name.clone());
+                        tracing::error!("Error running post-link script: {:?}", e);
+                        false
+                    }
+                };
+
+            // Report the completion of the script execution
+            if let (Some(r), Some(idx)) = (reporter, reporter_idx) {
+                match link_script_type {
+                    LinkScriptType::PostLink => r.on_post_link_complete(idx, success),
+                    LinkScriptType::PreUnlink => r.on_pre_unlink_complete(idx, success),
                 }
             }
 
@@ -188,6 +214,7 @@ impl InstallDriver {
         transaction: &Transaction<Old, New>,
         prefix_records: &[&PrefixRecord],
         target_prefix: &Path,
+        reporter: Option<&dyn Reporter>,
     ) -> Result<PrePostLinkResult, LinkScriptError>
     where
         Old: AsRef<New>,
@@ -208,15 +235,17 @@ impl InstallDriver {
             filter_iter,
             target_prefix,
             &transaction.platform,
+            reporter,
         )
     }
 
-    /// Run any post-link scripts that are part of the packages that are being
-    /// installed.
+    /// Run any pre-unlink scripts that are part of the packages that are being
+    /// removed.
     pub fn run_pre_unlink_scripts<Old, New>(
         &self,
         transaction: &Transaction<Old, New>,
         target_prefix: &Path,
+        reporter: Option<&dyn Reporter>,
     ) -> Result<PrePostLinkResult, LinkScriptError>
     where
         Old: Borrow<PrefixRecord>,
@@ -226,6 +255,7 @@ impl InstallDriver {
             transaction.removed_packages().map(Borrow::borrow),
             target_prefix,
             &transaction.platform,
+            reporter,
         )
     }
 }

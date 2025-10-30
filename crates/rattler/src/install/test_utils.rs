@@ -125,7 +125,7 @@ pub async fn execute_transaction(
     install_options: &InstallOptions,
 ) -> PostProcessResult {
     install_driver
-        .pre_process(&transaction, target_prefix.path())
+        .pre_process(&transaction, target_prefix.path(), None)
         .unwrap();
 
     for op in &transaction.operations {
@@ -141,7 +141,7 @@ pub async fn execute_transaction(
     }
 
     install_driver
-        .post_process(&transaction, target_prefix)
+        .post_process(&transaction, target_prefix, None)
         .unwrap()
 }
 

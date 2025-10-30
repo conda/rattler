@@ -903,7 +903,7 @@ mod tests {
             .finish();
 
         install_driver
-            .pre_process(&transaction, target_prefix.path())
+            .pre_process(&transaction, target_prefix.path(), None)
             .unwrap();
         let dl_client = LazyClient::default();
         for op in &transaction.operations {
@@ -1243,7 +1243,7 @@ mod tests {
             .finish();
 
         install_driver
-            .pre_process(&transaction, &prefix_path)
+            .pre_process(&transaction, &prefix_path, None)
             .unwrap();
 
         let client = LazyClient::default();
@@ -1268,7 +1268,7 @@ mod tests {
         );
 
         install_driver
-            .post_process(&transaction, &prefix_path)
+            .post_process(&transaction, &prefix_path, None)
             .unwrap();
 
         assert_check_files!(&target_prefix.path(), &["bin/python"]);
