@@ -18,3 +18,4 @@ ignore-hidden = false
 [default.extend-words]
 strat = "strat"
 haa = "haa"
+intoto = "intoto"
