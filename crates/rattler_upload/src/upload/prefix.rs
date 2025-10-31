@@ -15,6 +15,8 @@ use tokio_util::io::ReaderStream;
 use tracing::{info, warn};
 use url::Url;
 
+use crate::attestation;
+
 use super::opt::{
     // ← Import from sibling module
     PrefixData,
@@ -81,8 +83,50 @@ async fn create_upload_form(
 pub async fn upload_package_to_prefix(
     storage: &AuthenticationStorage,
     package_files: &Vec<PathBuf>,
-    prefix_data: PrefixData,
+    mut prefix_data: PrefixData,
 ) -> miette::Result<()> {
+    // Validate attestation requirements
+    if prefix_data.create_attestation && package_files.len() > 1 {
+        return Err(miette::miette!(
+            "Automatic attestation creation is only supported for single package uploads. \
+             You are trying to upload {} packages.",
+            package_files.len()
+        ));
+    }
+
+    if prefix_data.create_attestation && prefix_data.attestation.is_some() {
+        return Err(miette::miette!(
+            "Cannot use both --create-attestation and --attestation at the same time"
+        ));
+    }
+
+    // Create attestation if requested
+    if prefix_data.create_attestation {
+        let package_file = &package_files[0];
+        info!("Creating Sigstore attestation for package...");
+
+        let channel_url = prefix_data
+            .url
+            .join(&format!("{}", prefix_data.channel))
+            .into_diagnostic()?;
+
+        let attestation_json =
+            attestation::create_attestation(package_file, channel_url.as_str()).await?;
+
+        // Write attestation to a temporary file
+        let temp_dir = tempfile::tempdir().into_diagnostic()?;
+        let attestation_path = temp_dir.path().join("attestation.sigstore.json");
+        tokio_fs::write(&attestation_path, attestation_json)
+            .await
+            .into_diagnostic()?;
+
+        info!("Attestation created at: {}", attestation_path.display());
+        prefix_data.attestation = Some(attestation_path);
+
+        // Keep temp_dir alive by leaking it - the OS will clean it up
+        std::mem::forget(temp_dir);
+    }
+
     let check_storage = || {
         match storage.get_by_url(Url::from(prefix_data.url.clone())) {
             Ok((_, Some(Authentication::BearerToken(token)))) => Ok(token),

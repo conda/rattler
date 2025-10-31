@@ -42,6 +42,16 @@ reqwest-middleware = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
+sigstore = { git = "https://github.com/wolfv/sigstore-rs", branch = "experiments" }
+sigstore_protobuf_specs = "0.5"
+serde_json = { workspace = true }
+chrono = { workspace = true }
+x509-cert = "0.2"
+const-oid = "0.9"
+base64 = { workspace = true }
+url = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
 
 [package.metadata.release]
 # Dont publish the binary
