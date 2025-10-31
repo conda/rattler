@@ -12,7 +12,8 @@ readme.workspace = true
 
 [features]
 default = ["rayon"]
-experimental_extras = []
+experimental_extras = ["experimental_conditionals"]
+experimental_conditionals = []
 
 [dependencies]
 ahash = { workspace = true }

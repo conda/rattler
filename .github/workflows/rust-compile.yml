@@ -22,7 +22,7 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
-  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,experimental_extras,edit,rattler_config
+  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,experimental_extras,experimental_conditionals,edit,rattler_config
 
 jobs:
   check-rustdoc-links:

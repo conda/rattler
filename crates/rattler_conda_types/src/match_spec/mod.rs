@@ -1,3 +1,5 @@
+#[cfg(feature = "experimental_conditionals")]
+use crate::match_spec::condition::MatchSpecCondition;
 use crate::package::ArchiveIdentifier;
 use crate::{
     build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
@@ -17,6 +19,8 @@ use url::Url;
 use crate::Channel;
 use crate::ChannelConfig;
 
+#[cfg(feature = "experimental_conditionals")]
+pub mod condition;
 pub mod matcher;
 pub mod parse;
 
@@ -127,7 +131,7 @@ use matcher::StringMatcher;
 /// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Debug, Default, Clone, Serialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct MatchSpec {
     /// The name of the package
     pub name: Option<PackageName>,
@@ -157,6 +161,9 @@ pub struct MatchSpec {
     pub url: Option<Url>,
     /// The license of the package
     pub license: Option<String>,
+    /// The condition under which this match spec applies.
+    #[cfg(feature = "experimental_conditionals")]
+    pub condition: Option<MatchSpecCondition>,
 }
 
 impl Display for MatchSpec {
@@ -223,6 +230,11 @@ impl Display for MatchSpec {
             write!(f, "[{}]", keys.join(", "))?;
         }
 
+        #[cfg(feature = "experimental_conditionals")]
+        if let Some(condition) = &self.condition {
+            write!(f, "; if {condition}")?;
+        }
+
         Ok(())
     }
 }
@@ -245,6 +257,8 @@ impl MatchSpec {
                 sha256: self.sha256,
                 url: self.url,
                 license: self.license,
+                #[cfg(feature = "experimental_conditionals")]
+                condition: self.condition,
             },
         )
     }
@@ -302,6 +316,9 @@ pub struct NamelessMatchSpec {
     pub url: Option<Url>,
     /// The license of the package
     pub license: Option<String>,
+    /// The condition under which this match spec applies.
+    #[cfg(feature = "experimental_conditionals")]
+    pub condition: Option<MatchSpecCondition>,
 }
 
 impl Display for NamelessMatchSpec {
@@ -329,6 +346,11 @@ impl Display for NamelessMatchSpec {
             write!(f, "[{}]", keys.join(", "))?;
         }
 
+        #[cfg(feature = "experimental_conditionals")]
+        if let Some(condition) = &self.condition {
+            write!(f, "; if {condition}")?;
+        }
+
         Ok(())
     }
 }
@@ -348,6 +370,8 @@ impl From<MatchSpec> for NamelessMatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            #[cfg(feature = "experimental_conditionals")]
+            condition: spec.condition,
         }
     }
 }
@@ -369,6 +393,8 @@ impl MatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            #[cfg(feature = "experimental_conditionals")]
+            condition: spec.condition,
         }
     }
 }
