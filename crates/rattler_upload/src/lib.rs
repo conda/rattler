@@ -1,3 +1,4 @@
+pub mod attestation;
 pub mod upload;
 pub(crate) mod utils;
 

@@ -338,6 +338,11 @@ pub struct PrefixOpts {
     #[arg(long, required = false)]
     pub attestation: Option<PathBuf>,
 
+    /// Automatically create a Sigstore attestation for the package
+    /// This will use GitHub Actions OIDC or interactive OAuth for signing
+    #[arg(long, env = "PREFIX_CREATE_ATTESTATION")]
+    pub create_attestation: bool,
+
     /// Skip upload if package is existed.
     #[arg(short, long)]
     pub skip_existing: bool,
@@ -350,6 +355,7 @@ pub struct PrefixData {
     pub channel: String,
     pub api_key: Option<String>,
     pub attestation: Option<PathBuf>,
+    pub create_attestation: bool,
     pub skip_existing: bool,
 }
 
@@ -360,6 +366,7 @@ impl From<PrefixOpts> for PrefixData {
             value.channel,
             value.api_key,
             value.attestation,
+            value.create_attestation,
             value.skip_existing,
         )
     }
@@ -372,6 +379,7 @@ impl PrefixData {
         channel: String,
         api_key: Option<String>,
         attestation: Option<PathBuf>,
+        create_attestation: bool,
         skip_existing: bool,
     ) -> Self {
         Self {
@@ -379,6 +387,7 @@ impl PrefixData {
             channel,
             api_key,
             attestation,
+            create_attestation,
             skip_existing,
         }
     }
