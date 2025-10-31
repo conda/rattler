@@ -11,7 +11,7 @@ use std::{
 use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
-#[cfg(feature = "conditional_dependencies")]
+#[cfg(feature = "experimental_conditionals")]
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
     package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
@@ -925,14 +925,14 @@ fn parse_match_spec(
 
     // Parse the match spec and extract the name of the package it depends on.
     let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient)?;
-    #[cfg(feature = "conditional_dependencies")]
+    #[cfg(feature = "experimental_conditionals")]
     let condition_id = if let Some(condition) = match_spec.condition.as_ref() {
         let condition_id = parse_condition(condition, pool, parse_match_spec_cache);
         Some(condition_id)
     } else {
         None
     };
-    #[cfg(not(feature = "conditional_dependencies"))]
+    #[cfg(not(feature = "experimental_conditionals"))]
     let condition_id = None;
 
     // Get the version sets for the match spec.
@@ -1006,7 +1006,7 @@ pub fn extra_version_set(
 }
 
 /// Parses a condition from a `MatchSpecCondition` and returns the corresponding `ConditionId`.
-#[cfg(feature = "conditional_dependencies")]
+#[cfg(feature = "experimental_conditionals")]
 fn parse_condition(
     condition: &MatchSpecCondition,
     pool: &Pool<SolverMatchSpec<'_>, NameType>,

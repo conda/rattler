@@ -20,7 +20,7 @@ use super::{
     matcher::{StringMatcher, StringMatcherParseError},
     MatchSpec,
 };
-#[cfg(feature = "conditional_dependencies")]
+#[cfg(feature = "experimental_conditionals")]
 use crate::match_spec::condition::parse_condition;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
@@ -651,7 +651,11 @@ pub(crate) fn matchspec_parser(
 ) -> Result<MatchSpec, ParseMatchSpecError> {
     // Step 1. Strip '#' and `if` statement
     let (input, _comment) = strip_comment(input);
+
+    #[cfg(feature = "experimental_conditionals")]
     let (input, condition) = strip_if(input)?;
+    #[cfg(not(feature = "experimental_conditionals"))]
+    let (input, _condition) = strip_if(input)?;
 
     // 2. Strip off brackets portion
     let (input, brackets) = strip_brackets(input.trim())?;
@@ -726,7 +730,7 @@ pub(crate) fn matchspec_parser(
         match_spec.build = match_spec.build.or(build);
     }
 
-    #[cfg(feature = "conditional_dependencies")]
+    #[cfg(feature = "experimental_conditionals")]
     if let Some(condition) = condition {
         let (remainder, condition) = parse_condition(condition).map_err(|e| {
             ParseMatchSpecError::InvalidCondition(condition.to_string(), e.to_string())
@@ -740,11 +744,6 @@ pub(crate) fn matchspec_parser(
         }
 
         match_spec.condition = Some(condition);
-    }
-    #[cfg(not(feature = "conditional_dependencies"))]
-    {
-        let _ = condition; // Avoid unused variable warning
-        match_spec.condition = None;
     }
 
     Ok(match_spec)
@@ -1517,7 +1516,7 @@ mod tests {
                 .unwrap(),
             ),
             license: Some("MIT".into()),
-            condition: None,
+            ..MatchSpec::default()
         });
 
         // insta check all the strings
@@ -1545,7 +1544,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "conditional_dependencies")]
+    #[cfg(feature = "experimental_conditionals")]
     fn test_conditional_parsing() {
         let spec = MatchSpec::from_str("foo; if python >=3.6", Strict).unwrap();
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
@@ -1556,11 +1555,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "conditional_dependencies"))]
+    #[cfg(not(feature = "experimental_conditionals"))]
     fn test_conditional_parsing_disabled() {
         let spec = MatchSpec::from_str("foo; if python >=3.6", Strict).unwrap();
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
-        assert!(spec.condition.is_none());
     }
 
     #[cfg(feature = "experimental_extras")]

@@ -7,18 +7,12 @@ use nom::{
     sequence::{delimited, preceded},
     IResult, Parser,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::match_spec::parse::matchspec_parser;
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct Statement {
-    pub prefix: String,
-    pub condition: Option<MatchSpecCondition>,
-}
-
 /// Represents a condition in a match spec, which can be a match spec itself or a logical combination
-#[derive(Debug, Clone, PartialEq, Serialize, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 pub enum MatchSpecCondition {
     /// A condition on a certain match spec (e.g. `python >=3.12`)
     MatchSpec(Box<crate::MatchSpec>),
@@ -156,6 +150,12 @@ mod tests {
     use super::*;
     use insta::assert_yaml_snapshot;
     use nom::{bytes::complete::take_while1, character::complete::multispace1, combinator::opt};
+
+    #[derive(Debug, Clone)]
+    pub struct Statement {
+        pub prefix: String,
+        pub condition: Option<MatchSpecCondition>,
+    }
 
     fn parse_and_extract(input: &str) -> Statement {
         let result = parse_statement(input).unwrap();

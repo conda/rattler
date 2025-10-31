@@ -39,7 +39,7 @@ pub use explicit_environment_spec::{
     ParseExplicitEnvironmentSpecError, ParsePackageArchiveHashError,
 };
 pub use generic_virtual_package::GenericVirtualPackage;
-#[cfg(feature = "conditional_dependencies")]
+#[cfg(feature = "experimental_conditionals")]
 pub use match_spec::condition::MatchSpecCondition;
 pub use match_spec::{
     matcher::{StringMatcher, StringMatcherParseError},
