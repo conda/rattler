@@ -19,9 +19,6 @@ use url::Url;
 #[cfg(target_arch = "wasm32")]
 use wasmtimer::std::SystemTime;
 
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::SystemTime;
-
 use crate::reporter::DownloadReporter;
 use crate::{
     fetch::{FetchRepoDataError, RepoDataNotFoundError, Variant},
@@ -29,6 +26,9 @@ use crate::{
     utils::{AsyncEncoding, Encoding},
     Reporter,
 };
+use rattler_networking::LazyClient;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::SystemTime;
 
 /// Additional knobs that allow you to tweak the behavior of
 /// [`fetch_repo_data`].
@@ -201,10 +201,12 @@ async fn execute_with_best_compression(
 #[instrument(err(level = Level::INFO), skip_all, fields(subdir_url))]
 pub async fn fetch_repo_data(
     subdir_url: Url,
-    client: reqwest_middleware::ClientWithMiddleware,
+    client: LazyClient,
     options: FetchRepoDataOptions,
     reporter: Option<Arc<dyn Reporter>>,
 ) -> Result<Bytes, FetchRepoDataError> {
+    let client = client.client();
+
     // Try to download the repodata with the best compression method available.
     let (request, response, request_time, compression) =
         execute_with_best_compression(&subdir_url, &options, client.clone()).await?;

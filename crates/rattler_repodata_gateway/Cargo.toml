@@ -1,6 +1,6 @@
 [package]
 name = "rattler_repodata_gateway"
-version = "0.24.1"
+version = "0.24.14"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to interact with Conda repodata"
@@ -30,6 +30,7 @@ http = { workspace = true, optional = true }
 http-cache-semantics = { workspace = true, optional = true, features = ["reqwest", "serde"] }
 humansize = { workspace = true }
 humantime = { workspace = true }
+indicatif = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 json-patch = { workspace = true }
 self_cell = { workspace = true, optional = true }

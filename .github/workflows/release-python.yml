@@ -68,10 +68,10 @@ jobs:
             arch: x64
           - target: i686-pc-windows-msvc
             arch: x86
-#         There are a number of issues with cross compiling ring to windows on aarch64.
-#         For now, we just won't build a wheel, we will revisit this in the future.
-#          - target: aarch64-pc-windows-msvc
-#            arch: x64
+    #     There are a number of issues with cross compiling ring to windows on aarch64.
+    #     For now, we just won't build a wheel, we will revisit this in the future.
+    #      - target: aarch64-pc-windows-msvc
+    #        arch: x64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -121,7 +121,7 @@ jobs:
           working-directory: py-rattler
           target: ${{ matrix.target }}
           manylinux: auto
-          args: --release --out dist --no-default-features --features rustls-tls
+          args: --release --out dist --no-default-features --features rustls-tls,pty
       - name: "Test wheel"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
@@ -157,9 +157,8 @@ jobs:
         with:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
-          manylinux: '2_28'
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
-          args: --release --out dist  --no-default-features --features rustls-tls
+          manylinux: "2_28"
+          args: --release --out dist  --no-default-features --features rustls-tls,pty
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
@@ -187,8 +186,8 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-#          - target: s390x-unknown-linux-gnu
-#            arch: s390x
+          # - target: s390x-unknown-linux-gnu
+          #   arch: s390x
           - target: powerpc64le-unknown-linux-gnu
             arch: ppc64le
           - target: powerpc64-unknown-linux-gnu
@@ -207,8 +206,7 @@ jobs:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
           manylinux: auto
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
-          args: --release --out dist --no-default-features --features native-tls,vendored-openssl
+          args: --release --out dist --no-default-features --features native-tls,vendored-openssl,pty
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
@@ -253,7 +251,7 @@ jobs:
           working-directory: py-rattler
           target: ${{ matrix.target }}
           manylinux: musllinux_1_2
-          args: --release --out dist --no-default-features --features rustls-tls
+          args: --release --out dist --no-default-features --features rustls-tls,pty
       - name: "Build wheels (native-tls)"
         if: matrix.target != 'x86_64-unknown-linux-musl'
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
@@ -261,7 +259,7 @@ jobs:
           working-directory: py-rattler
           target: ${{ matrix.target }}
           manylinux: musllinux_1_2
-          args: --release --out dist --no-default-features --features native-tls,vendored-openssl
+          args: --release --out dist --no-default-features --features native-tls,vendored-openssl,pty
       - name: "Test wheel"
         if: matrix.target == 'x86_64-unknown-linux-musl'
         uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
@@ -303,8 +301,7 @@ jobs:
           working-directory: py-rattler
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_2
-          args: --release --out dist --no-default-features --features rustls-tls
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          args: --release --out dist --no-default-features --features rustls-tls,pty
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: Test wheel
         with:
@@ -323,7 +320,7 @@ jobs:
           path: py-rattler/dist
 
   macos-x86_64:
-    runs-on: macos-13   # x86_64 runner
+    runs-on: macos-15-intel # x86_64 runner
     name: Build x86_64-macos
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -338,7 +335,7 @@ jobs:
         with:
           working-directory: py-rattler
           target: x86_64
-          args: --release --out dist --no-default-features --features rustls-tls
+          args: --release --out dist --no-default-features --features rustls-tls,pty
       - name: "Test wheel - x86_64"
         run: |
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
@@ -363,7 +360,7 @@ jobs:
       - name: "Build wheels - universal2"
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
-          args: --release --target universal2-apple-darwin --out dist --no-default-features --features rustls-tls
+          args: --release --target universal2-apple-darwin --out dist --no-default-features --features rustls-tls,pty
           working-directory: py-rattler
       - name: "Test wheel - universal2"
         run: |

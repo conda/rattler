@@ -5,9 +5,12 @@ use rattler_config::config::concurrency::default_max_concurrent_solves;
 use rattler_index::{index_fs, index_s3, IndexFsConfig, IndexS3Config};
 use url::Url;
 
-use std::path::PathBuf;
-
 use crate::{error::PyRattlerError, platform::PyPlatform};
+use pyo3::exceptions::PyValueError;
+use pythonize::depythonize;
+use rattler_networking::AuthenticationStorage;
+use rattler_s3::{ResolvedS3Credentials, S3Credentials};
+use std::path::PathBuf;
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
@@ -41,35 +44,45 @@ pub fn py_index_fs(
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-#[pyo3(signature = (channel_url, region, endpoint_url, force_path_style, access_key_id=None,secret_access_key=None, session_token=None, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=None))]
-pub fn py_index_s3(
-    py: Python<'_>,
+#[pyo3(signature = (channel_url, credentials=None, target_platform=None, repodata_patch=None, write_zst=true, write_shards=true, force=false, max_parallel=None, precondition_checks=true))]
+pub fn py_index_s3<'py>(
+    py: Python<'py>,
     channel_url: String,
-    region: String,
-    endpoint_url: String,
-    force_path_style: bool,
-    access_key_id: Option<String>,
-    secret_access_key: Option<String>,
-    session_token: Option<String>,
+    credentials: Option<Bound<'py, PyAny>>,
     target_platform: Option<PyPlatform>,
     repodata_patch: Option<String>,
     write_zst: bool,
     write_shards: bool,
     force: bool,
     max_parallel: Option<usize>,
-) -> PyResult<Bound<'_, PyAny>> {
+    precondition_checks: bool,
+) -> PyResult<Bound<'py, PyAny>> {
     let channel_url = Url::parse(&channel_url).map_err(PyRattlerError::from)?;
-    let endpoint_url = Url::parse(&endpoint_url).map_err(PyRattlerError::from)?;
+    let credentials = match credentials {
+        Some(dict) => {
+            let credentials: S3Credentials = depythonize(&dict)?;
+            let auth_storage =
+                AuthenticationStorage::from_env_and_defaults().map_err(PyRattlerError::from)?;
+            Some((credentials, auth_storage))
+        }
+        None => None,
+    };
     let target_platform = target_platform.map(Platform::from);
     future_into_py(py, async move {
+        // Resolve the credentials
+        let credentials =
+            match credentials {
+                Some((credentials, auth_storage)) => credentials
+                    .resolve(&channel_url, &auth_storage)
+                    .ok_or_else(|| PyValueError::new_err("could not resolve s3 credentials"))?,
+                None => ResolvedS3Credentials::from_sdk()
+                    .await
+                    .map_err(PyRattlerError::from)?,
+            };
+
         index_s3(IndexS3Config {
             channel: channel_url,
-            region,
-            endpoint_url,
-            force_path_style,
-            access_key_id,
-            secret_access_key,
-            session_token,
+            credentials,
             target_platform,
             repodata_patch,
             write_zst,
@@ -77,6 +90,11 @@ pub fn py_index_s3(
             force,
             max_parallel: max_parallel.unwrap_or_else(default_max_concurrent_solves),
             multi_progress: None,
+            precondition_checks: if precondition_checks {
+                rattler_index::PreconditionChecks::Enabled
+            } else {
+                rattler_index::PreconditionChecks::Disabled
+            },
         })
         .await
         .map_err(|e| PyRattlerError::from(e).into())

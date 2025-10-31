@@ -2,13 +2,28 @@ mod error;
 #[cfg(feature = "indicatif")]
 mod indicatif;
 mod reporter;
+pub(crate) mod result_record;
+
 use std::{
     collections::{HashMap, HashSet},
     future::ready,
+    io,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
+use super::{
+    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
+};
+use crate::install::installer::result_record::InstallationResultRecord;
+use crate::{
+    default_cache_dir,
+    install::{
+        clobber_registry::ClobberedPath,
+        link_script::{LinkScriptError, PrePostLinkResult},
+    },
+    package_cache::PackageCache,
+};
 pub use error::InstallerError;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
 #[cfg(feature = "indicatif")]
@@ -23,23 +38,11 @@ use rattler_conda_types::{
     MatchSpec, PackageName, Platform, PrefixRecord, RepoDataRecord,
 };
 use rattler_networking::retry_policies::default_retry_policy;
+use rattler_networking::LazyClient;
 use rayon::prelude::*;
 pub use reporter::Reporter;
-use reqwest::Client;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
-
-use super::{
-    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
-};
-use crate::{
-    default_cache_dir,
-    install::{
-        clobber_registry::ClobberedPath,
-        link_script::{LinkScriptError, PrePostLinkResult},
-    },
-    package_cache::PackageCache,
-};
 
 #[derive(Default)]
 pub struct LinkOptions {
@@ -53,7 +56,7 @@ pub struct LinkOptions {
 pub struct Installer {
     installed: Option<Vec<PrefixRecord>>,
     package_cache: Option<PackageCache>,
-    downloader: Option<reqwest_middleware::ClientWithMiddleware>,
+    downloader: Option<LazyClient>,
     execute_link_scripts: bool,
     io_semaphore: Option<Arc<Semaphore>>,
     reporter: Option<Arc<dyn Reporter>>,
@@ -70,7 +73,7 @@ pub struct Installer {
 #[derive(Debug)]
 pub struct InstallationResult {
     /// The transaction that was applied
-    pub transaction: Transaction<PrefixRecord, RepoDataRecord>,
+    pub transaction: Transaction<InstallationResultRecord, RepoDataRecord>,
 
     /// The result of running pre link scripts. `None` if no
     /// pre-processing was performed, possibly because link scripts were
@@ -175,12 +178,9 @@ impl Installer {
 
     /// Sets the download client to use
     #[must_use]
-    pub fn with_download_client(
-        self,
-        downloader: reqwest_middleware::ClientWithMiddleware,
-    ) -> Self {
+    pub fn with_download_client(self, downloader: impl Into<LazyClient>) -> Self {
         Self {
-            downloader: Some(downloader),
+            downloader: Some(downloader.into()),
             ..self
         }
     }
@@ -189,11 +189,8 @@ impl Installer {
     ///
     /// This function is similar to [`Self::with_download_client`], but modifies
     /// an existing instance.
-    pub fn set_download_client(
-        &mut self,
-        downloader: reqwest_middleware::ClientWithMiddleware,
-    ) -> &mut Self {
-        self.downloader = Some(downloader);
+    pub fn set_download_client(&mut self, downloader: impl Into<LazyClient>) -> &mut Self {
+        self.downloader = Some(downloader.into());
         self
     }
 
@@ -361,27 +358,84 @@ impl Installer {
         // Create a future to determine the currently installed packages. We
         // can start this in parallel with the other operations and resolve it
         // when we need it.
-        let installed: Vec<PrefixRecord> = if let Some(installed) = self.installed {
+        let installed_provided = self.installed.is_some();
+        let mut installed: Vec<InstallationResultRecord> = if let Some(installed) = self.installed {
             installed
+                .into_iter()
+                .map(InstallationResultRecord::Max)
+                .collect()
         } else {
             let prefix = prefix.clone();
-            // TODO: Should we add progress reporting here?
+            // Use sparse collection for much faster reading when checking if packages changed
             run_blocking_task(move || {
-                PrefixRecord::collect_from_prefix(&prefix)
+                use rattler_conda_types::MinimalPrefixCollection;
+                PrefixRecord::collect_minimal_from_prefix(&prefix)
                     .map_err(InstallerError::FailedToDetectInstalledPackages)
             })
             .await?
+            .into_iter()
+            .map(InstallationResultRecord::Min)
+            .collect()
         };
 
         // Construct a transaction from the current and desired situation.
         let target_platform = self.target_platform.unwrap_or_else(Platform::current);
-        let transaction = Transaction::from_current_and_desired(
-            installed,
-            records.into_iter().collect::<Vec<_>>(),
-            self.reinstall_packages,
-            self.ignored_packages,
+        let desired_records: Vec<_> = records.into_iter().collect();
+        let mut transaction = Transaction::from_current_and_desired(
+            installed.iter(),
+            desired_records.iter(),
+            self.reinstall_packages.as_ref(),
+            self.ignored_packages.as_ref(),
             target_platform,
         )?;
+        // If transaction is non-empty, we need full prefix records for file operations
+        // Reload them and reconstruct the transaction with full records
+        if !transaction.operations.is_empty() && !installed_provided {
+            let prefix = prefix.clone();
+            installed = run_blocking_task(move || {
+                PrefixRecord::collect_from_prefix(&prefix)
+                    .map_err(InstallerError::FailedToDetectInstalledPackages)
+            })
+            .await?
+            .into_iter()
+            .map(InstallationResultRecord::Max)
+            .collect();
+
+            // Reconstruct transaction with full records to maintain consistency
+            transaction = Transaction::from_current_and_desired(
+                installed.iter(),
+                desired_records.iter(),
+                self.reinstall_packages.as_ref(),
+                self.ignored_packages.as_ref(),
+                target_platform,
+            )?;
+        }
+
+        let transaction = transaction.to_owned();
+
+        // Validate that if the target platform is NoArch, all packages to be installed
+        // must also be noarch (subdir == "noarch")
+        if target_platform == Platform::NoArch {
+            let non_noarch_packages: Vec<String> = transaction
+                .installed_packages()
+                .filter(|record| record.package_record.subdir != "noarch")
+                .map(|record| {
+                    format!(
+                        "{}/{}-{}-{}",
+                        record.package_record.subdir,
+                        record.package_record.name.as_normalized(),
+                        record.package_record.version,
+                        record.package_record.build
+                    )
+                })
+                .collect();
+
+            if !non_noarch_packages.is_empty() {
+                return Err(InstallerError::PlatformSpecificPackagesWithNoarchPlatform(
+                    non_noarch_packages,
+                ));
+            }
+        }
 
         // Create a mapping from package names to requested specs
         let spec_mapping = self
@@ -407,9 +461,12 @@ impl Installer {
             });
         }
 
-        let downloader = self
-            .downloader
-            .unwrap_or_else(|| reqwest_middleware::ClientWithMiddleware::from(Client::default()));
+        // At this point we can't have any minimal prefix records, so force them to be prefix records.
+        let transaction = transaction
+            .into_prefix_record(&prefix)
+            .map_err(InstallerError::FailedToDetectInstalledPackages)?;
+
+        let downloader = self.downloader.unwrap_or_default();
         let package_cache = self.package_cache.unwrap_or_else(|| {
             PackageCache::new(
                 default_cache_dir()
@@ -608,6 +665,8 @@ impl Installer {
             reporter.on_transaction_complete();
         }
 
+        let transaction = transaction.into_installation_result_record();
+
         Ok(InstallationResult {
             transaction,
             pre_link_script_result: pre_process_result,
@@ -690,7 +749,7 @@ async fn link_package(
 /// there.
 async fn populate_cache(
     record: &RepoDataRecord,
-    downloader: reqwest_middleware::ClientWithMiddleware,
+    downloader: LazyClient,
     cache: &PackageCache,
     reporter: Option<(Arc<dyn Reporter>, usize)>,
 ) -> Result<CacheLock, InstallerError> {
@@ -738,6 +797,56 @@ async fn populate_cache(
         .map_err(|e| InstallerError::FailedToFetch(record.file_name.clone(), e))
 }
 
+/// Updates only the `requested_specs` fields in a conda-meta JSON file.
+/// This performs a targeted update without overwriting other
+/// metadata.
+///
+/// This method is needed as we're initially loading
+/// `MinimalPrefixRecord`, which doesn't contain most of the fields.
+/// Therefore direct writing could overwrite data we want to preserve.
+///
+/// Currently we're loading full json, but we could do that inplace without parsing whole file.
+fn update_requested_specs_in_json(
+    path: &Path,
+    requested_specs: &[String],
+    requested_spec: Option<&String>,
+) -> io::Result<()> {
+    use serde_json::Value;
+
+    // Read the existing JSON file
+    let content = fs_err::read_to_string(path)?;
+    let mut json: Value = serde_json::from_str(&content)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+    // Update only the requested_specs fields
+    if let Some(obj) = json.as_object_mut() {
+        // Update requested_specs (plural)
+        obj.insert(
+            "requested_specs".to_string(),
+            Value::Array(
+                requested_specs
+                    .iter()
+                    .map(|s| Value::String(s.clone()))
+                    .collect(),
+            ),
+        );
+
+        // Update or remove requested_spec (singular, deprecated)
+        if let Some(spec) = requested_spec {
+            obj.insert("requested_spec".to_string(), Value::String(spec.clone()));
+        } else {
+            obj.remove("requested_spec");
+        }
+    }
+
+    // Write the updated JSON back to file
+    let updated_content = serde_json::to_string_pretty(&json)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    fs_err::write(path, updated_content)?;
+
+    Ok(())
+}
+
 /// Creates a mapping from package names to their requested spec strings.
 ///
 /// This function takes a list of `MatchSpecs` and creates a mapping where:
@@ -770,22 +879,22 @@ fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<Package
 /// to disk.
 #[allow(deprecated)]
 fn update_existing_records<'p>(
-    existing_records: impl IntoParallelIterator<Item = &'p PrefixRecord>,
+    existing_records: impl IntoParallelIterator<Item = &'p InstallationResultRecord>,
     spec_mapping: &HashMap<PackageName, Vec<String>>,
     prefix: &Prefix,
 ) -> Result<(), InstallerError> {
     existing_records
         .into_par_iter()
         .map(|record| -> Result<(), InstallerError> {
-            let package_name = &record.repodata_record.package_record.name;
+            let package_name = record.name();
             let mut updated_record = None;
 
             // First, check if we need to migrate from deprecated requested_spec to
             // requested_specs
-            let current_specs = if !record.requested_specs.is_empty() {
+            let current_specs = if !record.requested_specs().is_empty() {
                 // Use the new field if it has data
-                record.requested_specs.clone()
-            } else if let Some(ref spec) = record.requested_spec {
+                record.requested_specs().clone()
+            } else if let Some(spec) = record.requested_spec() {
                 // Migrate from deprecated field
                 vec![spec.clone()]
             } else {
@@ -794,7 +903,7 @@ fn update_existing_records<'p>(
             };
 
             // Check if we need to migrate from the deprecated field
-            let needs_migration = record.requested_spec.is_some();
+            let needs_migration = record.requested_spec().is_some();
 
             // Check if we have requested specs for this package
             if let Some(requested_specs) = spec_mapping.get(package_name) {
@@ -802,20 +911,20 @@ fn update_existing_records<'p>(
                 if needs_migration || &current_specs != requested_specs {
                     // Create an updated record with the new requested specs
                     let mut new_record = record.clone();
-                    new_record.requested_specs = requested_specs.clone();
-                    new_record.requested_spec = None; // Clear deprecated field
+                    *new_record.requested_specs_mut() = requested_specs.clone();
+                    *new_record.requested_spec_mut() = None; // Clear deprecated field
                     updated_record = Some(new_record);
                 }
             } else if !current_specs.is_empty() {
                 // Clear the requested_specs if it's not in the mapping
                 let mut new_record = record.clone();
-                new_record.requested_specs = Vec::new();
-                new_record.requested_spec = None; // Clear deprecated field
+                *new_record.requested_specs_mut() = Vec::new();
+                *new_record.requested_spec_mut() = None; // Clear deprecated field
                 updated_record = Some(new_record);
             } else if needs_migration {
                 // Even if current_specs is empty, we still need to clear the deprecated field
                 let mut new_record = record.clone();
-                new_record.requested_spec = None;
+                *new_record.requested_spec_mut() = None;
                 updated_record = Some(new_record);
             }
 
@@ -824,23 +933,25 @@ fn update_existing_records<'p>(
                 let conda_meta_path = prefix.path().join("conda-meta");
                 let pkg_meta_path = format!(
                     "{}-{}-{}.json",
-                    new_record
-                        .repodata_record
-                        .package_record
-                        .name
-                        .as_normalized(),
-                    new_record.repodata_record.package_record.version,
-                    new_record.repodata_record.package_record.build
+                    new_record.name().as_normalized(),
+                    new_record.version(),
+                    new_record.build()
                 );
+                let full_path = conda_meta_path.join(&pkg_meta_path);
 
-                new_record
-                    .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
-                    .map_err(|e| {
-                        InstallerError::IoError(
-                            format!("failed to update requested_specs for {pkg_meta_path}"),
-                            e,
-                        )
-                    })?;
+                // We need to do a targeted update of just the requested_specs fields
+                // to avoid overwriting other metadata when using minimal records
+                update_requested_specs_in_json(
+                    &full_path,
+                    new_record.requested_specs(),
+                    new_record.requested_spec(),
+                )
+                .map_err(|e| {
+                    InstallerError::IoError(
+                        format!("failed to update requested_specs for {pkg_meta_path}"),
+                        e,
+                    )
+                })?;
             }
 
             Ok(())
@@ -920,7 +1031,10 @@ mod tests {
         repo_record: rattler_conda_types::RepoDataRecord,
     ) {
         let result = installer.install(prefix, vec![repo_record]).await;
-        assert!(result.is_ok(), "Installation should succeed");
+        assert!(
+            result.is_ok(),
+            "Installation should succeed, but got error: {result:#?}"
+        );
     }
 
     #[test]
@@ -1155,7 +1269,7 @@ mod tests {
         // The package should now have the requested_specs cleared (set to empty)
         assert!(
             updated_record.requested_specs.is_empty(),
-            "Updated installation without specs should clear requested_specs"
+            "Updated installation without specs should clear requested_specs, got nonempty record requested_specs: {:#?}", updated_record.requested_specs
         );
     }
 
@@ -1263,6 +1377,70 @@ mod tests {
             migrated_record.requested_specs.first().unwrap(),
             "empty >=0.1.0",
             "Migrated specs should match the original spec"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_noarch_platform_rejects_platform_specific_packages() {
+        use rattler_conda_types::Platform;
+
+        let (_temp_dir, target_prefix) = create_test_environment();
+
+        // Create a platform-specific package (with subdir != "noarch")
+        let mut platform_specific_package = create_dummy_repo_record();
+        platform_specific_package.package_record.subdir = "osx-arm64".to_string();
+
+        // Try to install this platform-specific package with Platform::NoArch
+        let installer = Installer::new().with_target_platform(Platform::NoArch);
+        let result = installer
+            .install(&target_prefix, vec![platform_specific_package.clone()])
+            .await;
+
+        // Should fail with PlatformSpecificPackagesWithNoarchPlatform error
+        assert!(
+            result.is_err(),
+            "Installation should fail when installing platform-specific packages with noarch platform"
+        );
+
+        match result {
+            Err(InstallerError::PlatformSpecificPackagesWithNoarchPlatform(packages)) => {
+                assert!(
+                    !packages.is_empty(),
+                    "Error should list the problematic packages"
+                );
+                assert!(
+                    packages[0].contains("osx-arm64"),
+                    "Error message should include the subdir of the platform-specific package"
+                );
+            }
+            _ => {
+                panic!("Expected PlatformSpecificPackagesWithNoarchPlatform error, got: {result:?}")
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_noarch_platform_accepts_noarch_packages() {
+        use rattler_conda_types::{NoArchType, Platform};
+
+        let (_temp_dir, target_prefix) = create_test_environment();
+
+        // Create a noarch package (with subdir == "noarch")
+        let mut noarch_package = create_dummy_repo_record();
+        noarch_package.package_record.subdir = "noarch".to_string();
+        noarch_package.package_record.noarch = NoArchType::generic();
+
+        // Try to install this noarch package with Platform::NoArch
+        let installer = Installer::new().with_target_platform(Platform::NoArch);
+        let result = installer
+            .install(&target_prefix, vec![noarch_package.clone()])
+            .await;
+
+        // Should succeed
+        assert!(
+            result.is_ok(),
+            "Installation should succeed when installing noarch packages with noarch platform: {:?}",
+            result.err()
         );
     }
 }

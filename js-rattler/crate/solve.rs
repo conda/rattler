@@ -6,8 +6,11 @@ use rattler_conda_types::{
     Channel, ChannelConfig, MatchSpec, NoArchType, PackageName, PackageRecord, ParseChannelError,
     ParseStrictness::Lenient, RepoDataRecord, Version,
 };
+use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use rattler_repodata_gateway::{Gateway, SourceConfig};
 use rattler_solve::{SolverImpl, SolverTask};
+use reqwest::Client;
+use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -27,6 +30,8 @@ pub struct SolvedPackage {
     #[wasm_bindgen(js_name = "repoName")]
     pub repo_name: Option<String>,
     pub filename: String,
+    pub md5: Option<String>,
+    pub sha256: Option<String>,
     pub version: String,
     pub depends: Option<Vec<String>>,
     pub subdir: Option<String>,
@@ -78,8 +83,14 @@ pub async fn simple_solve(
                 version: Version::from_str(&pkg.version)?.into(),
                 build: pkg.build.clone(),
                 build_number: pkg.build_number.unwrap_or_default(),
-                md5: None,
-                sha256: None,
+                md5: pkg
+                    .md5
+                    .as_ref()
+                    .and_then(|s| parse_digest_from_hex::<Md5>(s)),
+                sha256: pkg
+                    .sha256
+                    .as_ref()
+                    .and_then(|s| parse_digest_from_hex::<Sha256>(s)),
                 size: None,
                 arch: None,
                 platform: None,
@@ -111,6 +122,9 @@ pub async fn simple_solve(
 
     // Fetch the repodata
     let gateway = Gateway::builder()
+        // Creating the Gateway with a default client to avoid adding a user-agent header
+        // (Not supported from the browser)
+        .with_client(ClientWithMiddleware::from(Client::new()))
         .with_channel_config(rattler_repodata_gateway::ChannelConfig {
             default: SourceConfig {
                 sharded_enabled: true,
@@ -148,7 +162,7 @@ pub async fn simple_solve(
 
         if records.package_record.depends.is_empty() {
             if let Some(deps) = repodata_keys.get(&key) {
-                records.package_record.depends = deps.to_vec();
+                records.package_record.depends = (*deps).clone();
             }
         }
     }
@@ -172,6 +186,16 @@ pub async fn simple_solve(
             repo_name: r.channel,
             filename: r.file_name,
             version: r.package_record.version.to_string(),
+            md5: r
+                .package_record
+                .md5
+                .as_ref()
+                .map(|hash| format!("{hash:x}")),
+            sha256: r
+                .package_record
+                .sha256
+                .as_ref()
+                .map(|hash| format!("{hash:x}")),
             depends: Some(r.package_record.depends.clone()),
             subdir: Some(r.package_record.subdir.clone()),
         })

@@ -4,18 +4,18 @@ use std::{
 };
 
 use rattler_conda_types::{
-    package::ArchiveIdentifier, BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord,
-    PackageUrl, VersionWithSource,
+    package::ArchiveIdentifier, utils::TimestampMs, BuildNumber, ChannelUrl, NoArchType,
+    PackageName, PackageRecord, PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use url::Url;
 
-use super::source_data::SourceLocationSerializer;
+use super::source_data::{PackageBuildSourceSerializer, SourceLocationSerializer};
 use crate::{
     conda,
-    conda::{CondaBinaryData, CondaSourceData},
+    conda::{CondaBinaryData, CondaSourceData, PackageBuildSource},
     source::SourceLocation,
     utils::{derived_fields, derived_fields::LocationDerivedFields},
     CondaPackageData, ConversionError, UrlOrPath,
@@ -113,6 +113,10 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<InputHash<'a>>,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<PackageBuildSourceSerializer>")]
+    pub package_build_source: Option<PackageBuildSource>,
+
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[serde_as(as = "BTreeMap<_, SourceLocationSerializer>")]
     pub sources: BTreeMap<String, SourceLocation>,
@@ -183,7 +187,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             sha256: value.sha256,
             size: value.size.into_owned(),
             subdir,
-            timestamp: value.timestamp,
+            timestamp: value.timestamp.map(Into::into),
             track_features: value.track_features.into_owned(),
             version: value
                 .version
@@ -224,6 +228,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             Ok(CondaPackageData::Source(CondaSourceData {
                 package_record,
                 location: value.location,
+                package_build_source: value.package_build_source,
                 input: value.input.map(|input| conda::InputHash {
                     hash: input.hash,
                     globs: input.globs.into_owned(),
@@ -248,6 +253,9 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
         let channel = value.as_binary().and_then(|binary| binary.channel.as_ref());
         let file_name = value.as_binary().map(|binary| binary.file_name.as_str());
         let input = value.as_source().and_then(|source| source.input.as_ref());
+        let package_build_source = value
+            .as_source()
+            .and_then(|source| source.package_build_source.as_ref());
         let sources = value
             .as_source()
             .map_or_else(BTreeMap::new, |source| source.sources.clone());
@@ -286,7 +294,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             sha256: package_record.sha256,
             size: Cow::Borrowed(&package_record.size),
             legacy_bz2_size: Cow::Borrowed(&package_record.legacy_bz2_size),
-            timestamp: package_record.timestamp,
+            timestamp: package_record.timestamp.map(TimestampMs::into_datetime),
             features: Cow::Borrowed(&package_record.features),
             track_features: Cow::Borrowed(&package_record.track_features),
             license: Cow::Borrowed(&package_record.license),
@@ -296,6 +304,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                 hash: input.hash,
                 globs: Cow::Borrowed(&input.globs),
             }),
+            package_build_source: package_build_source.cloned(),
             sources,
         }
     }

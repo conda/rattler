@@ -7,6 +7,8 @@ use rattler_conda_types::{
     ConvertSubdirError, PackageRecord, RepoDataRecord,
 };
 use rattler_digest::{Md5Hash, Sha256Hash};
+use rattler_networking::LazyClient;
+use rattler_package_streaming::ExtractError;
 use url::Url;
 
 pub(crate) struct DirectUrlQuery {
@@ -17,7 +19,7 @@ pub(crate) struct DirectUrlQuery {
     /// Optional MD5 of the file
     md5: Option<Md5Hash>,
     /// The client to use for fetching the package
-    client: reqwest_middleware::ClientWithMiddleware,
+    client: LazyClient,
     /// The cache to use for storing the package
     package_cache: PackageCache,
 }
@@ -38,7 +40,7 @@ impl DirectUrlQuery {
     pub(crate) fn new(
         url: Url,
         package_cache: PackageCache,
-        client: reqwest_middleware::ClientWithMiddleware,
+        client: LazyClient,
         sha256: Option<Sha256Hash>,
         md5: Option<Md5Hash>,
     ) -> Self {
@@ -54,34 +56,52 @@ impl DirectUrlQuery {
     /// Execute the Repodata query using the cache as a source for the
     /// index.json
     pub async fn execute(self) -> Result<Arc<[RepoDataRecord]>, DirectUrlQueryError> {
-        // Convert the url to an archive identifier.
-        let Some(archive_identifier) = ArchiveIdentifier::try_from_url(&self.url) else {
-            let filename = self.url.path_segments().and_then(Iterator::last);
-            return Err(DirectUrlQueryError::InvalidFilename(
-                filename.unwrap_or("").to_string(),
-            ));
+        let index_json: IndexJson = if let Ok(file_path) = self.url.to_file_path() {
+            match rattler_package_streaming::seek::read_package_file(&file_path) {
+                Ok(index_json) => index_json,
+                Err(ExtractError::IoError(io)) => return Err(DirectUrlQueryError::IndexJson(io)),
+                Err(ExtractError::UnsupportedArchiveType) => {
+                    return Err(DirectUrlQueryError::InvalidFilename(
+                        file_path.display().to_string(),
+                    ))
+                }
+                Err(e) => {
+                    return Err(DirectUrlQueryError::IndexJson(std::io::Error::other(
+                        e.to_string(),
+                    )))
+                }
+            }
+        } else {
+            // Convert the url to an archive identifier.
+            let Some(archive_identifier) = ArchiveIdentifier::try_from_url(&self.url) else {
+                let filename = self.url.path_segments().and_then(Iterator::last);
+                return Err(DirectUrlQueryError::InvalidFilename(
+                    filename.unwrap_or("").to_string(),
+                ));
+            };
+
+            // Construct a cache key
+            let cache_key = CacheKey::from(archive_identifier)
+                .with_opt_sha256(self.sha256)
+                .with_opt_md5(self.md5);
+
+            // TODO: Optimize this by only parsing the index json from stream.
+            // Get package on system
+            let cache_lock = self
+                .package_cache
+                .get_or_fetch_from_url(
+                    cache_key,
+                    self.url.clone(),
+                    self.client.clone(),
+                    // Should we add a reporter?
+                    None,
+                )
+                .await?;
+
+            // Extract package record from index json
+            IndexJson::from_package_directory(cache_lock.path())?
         };
 
-        // Construct a cache key
-        let cache_key = CacheKey::from(archive_identifier)
-            .with_opt_sha256(self.sha256)
-            .with_opt_md5(self.md5);
-
-        // TODO: Optimize this by only parsing the index json from stream.
-        // Get package on system
-        let cache_lock = self
-            .package_cache
-            .get_or_fetch_from_url(
-                cache_key,
-                self.url.clone(),
-                self.client.clone(),
-                // Should we add a reporter?
-                None,
-            )
-            .await?;
-
-        // Extract package record from index json
-        let index_json = IndexJson::from_package_directory(cache_lock.path())?;
         let package_record = PackageRecord::from_index_json(
             index_json,
             None, // size is unknown for direct urls
@@ -127,8 +147,13 @@ mod test {
         )
         .unwrap();
         let package_cache = PackageCache::new(PathBuf::from("/tmp"));
-        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
-        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None, None);
+        let query = DirectUrlQuery::new(
+            url.clone(),
+            package_cache,
+            LazyClient::default(),
+            None,
+            None,
+        );
 
         assert_eq!(query.url.clone(), url);
 
@@ -169,8 +194,13 @@ mod test {
 
         let url = Url::from_file_path(package_path).unwrap();
         let package_cache = PackageCache::new(temp_dir());
-        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
-        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None, None);
+        let query = DirectUrlQuery::new(
+            url.clone(),
+            package_cache,
+            LazyClient::default(),
+            None,
+            None,
+        );
 
         assert_eq!(query.url.clone(), url);
 
@@ -194,6 +224,102 @@ mod test {
                 .version
                 .as_str(),
             "1.2.8"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_direct_url_local_file_with_invalid_filename() {
+        // Copy a test package and rename it to something that isn't a valid ArchiveIdentifier
+        let temp_dir_path = tempfile::tempdir().unwrap();
+
+        let original_package = tools::project_root()
+            .join("test-data")
+            .join("packages")
+            .join("empty-0.1.0-h4616a5c_0.conda");
+
+        // Rename to a filename that is NOT a valid ArchiveIdentifier
+        let renamed_package = temp_dir_path.path().join("my-renamed-package.conda");
+        std::fs::copy(&original_package, &renamed_package).unwrap();
+
+        let url = Url::from_file_path(&renamed_package).unwrap();
+        let package_cache = PackageCache::new(temp_dir());
+        let query = DirectUrlQuery::new(
+            url.clone(),
+            package_cache,
+            LazyClient::default(),
+            None,
+            None,
+        );
+
+        let repodata_record = query.await.unwrap();
+        assert_eq!(
+            repodata_record
+                .as_ref()
+                .first()
+                .unwrap()
+                .package_record
+                .name
+                .as_normalized(),
+            "empty"
+        );
+        assert_eq!(
+            repodata_record
+                .as_ref()
+                .first()
+                .unwrap()
+                .package_record
+                .version
+                .as_str(),
+            "0.1.0"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_direct_url_local_file_tar_bz2() {
+        // Copy a test package and rename it to something that isn't a valid ArchiveIdentifier
+        let temp_dir_path = tempfile::tempdir().unwrap();
+
+        let original_package = tools::project_root()
+            .join("test-data")
+            .join("test-server")
+            .join("repo")
+            .join("noarch")
+            .join("test-package-0.1-0.tar.bz2");
+
+        // Rename to a filename that is NOT a valid ArchiveIdentifier
+        let renamed_package = temp_dir_path.path().join("another-package.tar.bz2");
+        std::fs::copy(&original_package, &renamed_package).unwrap();
+
+        let url = Url::from_file_path(&renamed_package).unwrap();
+        let package_cache = PackageCache::new(temp_dir());
+        let query = DirectUrlQuery::new(
+            url.clone(),
+            package_cache,
+            LazyClient::default(),
+            None,
+            None,
+        );
+
+        let repodata_record = query.await.unwrap();
+        assert_eq!(
+            repodata_record
+                .as_ref()
+                .first()
+                .unwrap()
+                .package_record
+                .name
+                .as_normalized(),
+            "test-package"
+        );
+        assert_eq!(
+            repodata_record
+                .as_ref()
+                .first()
+                .unwrap()
+                .package_record
+                .version
+                .as_str(),
+            "0.1"
         );
     }
 }

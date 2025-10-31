@@ -1,10 +1,34 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import os
-from typing import Optional
+from typing import Optional, Literal
 
 from rattler.platform import Platform
 from rattler.rattler import py_index_fs, py_index_s3
+
+
+@dataclass
+class S3Credentials:
+    """Credentials for accessing an S3 backend."""
+
+    # The endpoint URL of the S3 backend
+    endpoint_url: str
+
+    # The region of the S3 backend
+    region: str
+
+    # The access key ID for the S3 bucket.
+    access_key_id: Optional[str] = None
+
+    # The secret access key for the S3 bucket.
+    secret_access_key: Optional[str] = None
+
+    # The session token for the S3 bucket.
+    session_token: Optional[str] = None
+
+    # Defines how to address the bucket, either using virtual-hosted-style or path-style.
+    addressing_style: Literal["path", "virtual-host"] = "virtual-host"
 
 
 async def index_fs(
@@ -46,18 +70,14 @@ async def index_fs(
 
 async def index_s3(
     channel_url: str,
-    region: str,
-    endpoint_url: str,
-    force_path_style: bool = False,
-    access_key_id: Optional[str] = None,
-    secret_access_key: Optional[str] = None,
-    session_token: Optional[str] = None,
+    credentials: Optional[S3Credentials] = None,
     target_platform: Optional[Platform] = None,
     repodata_patch: Optional[str] = None,
     write_zst: bool = True,
     write_shards: bool = True,
     force: bool = False,
     max_parallel: int | None = None,
+    precondition_checks: bool = True,
 ) -> None:
     """
     Indexes dependencies in the `channel_url` for one or more subdirectories in the S3 directory.
@@ -69,31 +89,24 @@ async def index_s3(
     Arguments:
         channel_url: An S3 URL (e.g., s3://my-bucket/my-channel that containins the subdirectories
                      of dependencies to index.
-        region: The region of the S3 bucket.
-        endpoint_url: The endpoint URL of the S3 bucket.
-        force_path_style: Whether to use path-style addressing for S3.
-        access_key_id: The access key ID to use for authentication.
-        secret_access_key: The secret access key to use for authentication.
-        session_token: The session token to use for authentication.
+        credentials: The credentials to use for accessing the S3 bucket. If not provided, will use the default
+                     credentials from the environment.
         target_platform: A `Platform` to index dependencies for.
         repodata_patch: The name of the conda package (expected to be in the `noarch` subdir) that should be used for repodata patching.
         write_zst: Whether to write repodata.json.zst.
         write_shards: Whether to write sharded repodata.
         force: Whether to forcefully re-index all subdirs.
         max_parallel: The maximum number of packages to process in-memory simultaneously.
+        precondition_checks: Whether to perform precondition checks before indexing on S3 buckets which helps to prevent data corruption when indexing with multiple processes at the same time.  Defaults to True.
     """
     await py_index_s3(
         channel_url,
-        region,
-        endpoint_url,
-        force_path_style,
-        access_key_id,
-        secret_access_key,
-        session_token,
+        credentials,
         target_platform._inner if target_platform else target_platform,
         repodata_patch,
         write_zst,
         write_shards,
         force,
         max_parallel,
+        precondition_checks,
     )

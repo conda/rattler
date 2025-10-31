@@ -1,8 +1,5 @@
 use std::{path::PathBuf, sync::Arc};
 
-use rattler_conda_types::{Channel, Platform};
-use reqwest_middleware::ClientWithMiddleware;
-
 use crate::{
     fetch::{fetch_repo_data, FetchRepoDataError, FetchRepoDataOptions},
     gateway::{
@@ -10,6 +7,8 @@ use crate::{
     },
     Reporter,
 };
+use rattler_conda_types::{Channel, Platform};
+use rattler_networking::LazyClient;
 
 pub struct RemoteSubdirClient {
     pub(super) sparse: LocalSubdirClient,
@@ -19,7 +18,7 @@ impl RemoteSubdirClient {
     pub async fn new(
         channel: Channel,
         platform: Platform,
-        client: ClientWithMiddleware,
+        client: LazyClient,
         cache_dir: PathBuf,
         source_config: SourceConfig,
         reporter: Option<Arc<dyn Reporter>>,

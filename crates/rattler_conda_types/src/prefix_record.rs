@@ -14,6 +14,7 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::serde_as;
 use tempfile::NamedTempFile;
 
+use crate::utils::serde::is_none_or_empty_string;
 use crate::{
     menuinst, package::FileMode, repo_data::RecordFromPath, repo_data_record::RepoDataRecord,
     PackageName, PackageRecord,
@@ -165,6 +166,12 @@ impl RecordFromPath for PrefixRecord {
     }
 }
 
+impl RecordFromPath for Box<PrefixRecord> {
+    fn from_path(path: &Path) -> Result<Self, std::io::Error> {
+        PrefixRecord::from_path(path).map(Box::new)
+    }
+}
+
 /// A record of a single package installed within an environment. The struct
 /// includes the [`RepoDataRecord`] which specifies information about where the
 /// original package comes from.
@@ -183,6 +190,20 @@ pub struct PrefixRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extracted_package_dir: Option<PathBuf>,
 
+    /// The spec that was used when this package was installed. Note that this
+    /// field is not updated if the currently another spec was used. Note:
+    /// conda seems to serialize a "None" string value instead of `null`.
+    ///
+    /// This field is deprecated. Use `requested_specs` instead.
+    #[deprecated(note = "Use `requested_specs` instead")]
+    #[serde(default, skip_serializing_if = "is_none_or_empty_string")]
+    pub requested_spec: Option<String>,
+
+    /// Multiple specs that were used when this package was installed.
+    /// This field replaces the deprecated `requested_spec` field.
+    #[serde(default)]
+    pub requested_specs: Vec<String>,
+
     /// A sorted list of all files included in this package
     #[serde(default)]
     #[serde_as(as = "Vec<crate::utils::serde::NormalizedPath>")]
@@ -197,20 +218,6 @@ pub struct PrefixRecord {
     /// package was linked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<Link>,
-
-    /// The spec that was used when this package was installed. Note that this
-    /// field is not updated if the currently another spec was used. Note:
-    /// conda seems to serialize a "None" string value instead of `null`.
-    ///
-    /// This field is deprecated. Use `requested_specs` instead.
-    #[deprecated(note = "Use `requested_specs` instead")]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub requested_spec: Option<String>,
-
-    /// Multiple specs that were used when this package was installed.
-    /// This field replaces the deprecated `requested_spec` field.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub requested_specs: Vec<String>,
 
     /// If menuinst is enabled and added menu items, this field contains the
     /// menuinst tracker data. This data is used to remove the menu items
@@ -228,6 +235,7 @@ impl PrefixRecord {
     }
 
     /// Creates a `PrefixRecord` from a `RepoDataRecord`.
+    #[allow(deprecated)]
     pub fn from_repodata_record(repodata_record: RepoDataRecord, paths: Vec<PathsEntry>) -> Self {
         let files = paths
             .iter()
@@ -241,7 +249,6 @@ impl PrefixRecord {
             files,
             paths_data: paths.into(),
             link: None,
-            #[allow(deprecated)]
             requested_spec: None,
             requested_specs: Vec::new(),
             installed_system_menus: Vec::new(),

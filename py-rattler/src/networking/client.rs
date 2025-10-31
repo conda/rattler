@@ -1,7 +1,7 @@
 use crate::{error::PyRattlerError, networking::middleware::PyMiddleware};
 use pyo3::{pyclass, pymethods, PyResult};
 use rattler_networking::{
-    AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, MirrorMiddleware,
+    AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, LazyClient, MirrorMiddleware,
     OciMiddleware, S3Middleware,
 };
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -83,5 +83,11 @@ impl PyClientWithMiddleware {
 impl From<PyClientWithMiddleware> for ClientWithMiddleware {
     fn from(value: PyClientWithMiddleware) -> Self {
         value.inner
+    }
+}
+
+impl From<PyClientWithMiddleware> for LazyClient {
+    fn from(value: PyClientWithMiddleware) -> Self {
+        LazyClient::from(value.inner)
     }
 }
