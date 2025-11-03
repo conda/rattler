@@ -95,4 +95,36 @@ pub trait Reporter: Send + Sync {
     /// Called when the transaction completes. Unless an error occurs, this is
     /// the last function that is called.
     fn on_transaction_complete(&self);
+
+    /// Called when a post-link script starts execution.
+    ///
+    /// The `package_name` is the name of the package whose post-link script is
+    /// being executed.
+    /// The `script_path` is the relative path to the script within the prefix.
+    ///
+    /// Returns an index that will be passed to `on_post_link_complete`.
+    fn on_post_link_start(&self, package_name: &str, script_path: &str) -> usize;
+
+    /// Called when a post-link script completes execution.
+    ///
+    /// The `index` is the value returned by `on_post_link_start` for the
+    /// corresponding script.
+    /// The `success` parameter indicates whether the script executed successfully.
+    fn on_post_link_complete(&self, index: usize, success: bool);
+
+    /// Called when a pre-unlink script starts execution.
+    ///
+    /// The `package_name` is the name of the package whose pre-unlink script is
+    /// being executed.
+    /// The `script_path` is the relative path to the script within the prefix.
+    ///
+    /// Returns an index that will be passed to `on_pre_unlink_complete`.
+    fn on_pre_unlink_start(&self, package_name: &str, script_path: &str) -> usize;
+
+    /// Called when a pre-unlink script completes execution.
+    ///
+    /// The `index` is the value returned by `on_pre_unlink_start` for the
+    /// corresponding script.
+    /// The `success` parameter indicates whether the script executed successfully.
+    fn on_pre_unlink_complete(&self, index: usize, success: bool);
 }
