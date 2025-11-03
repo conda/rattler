@@ -63,6 +63,41 @@ print "== Index the channel"
     --addressing-style path
 )
 
+print "== Verify cache control headers are set correctly"
+# Check repodata.json has 5-minute cache (300 seconds)
+let repodata_cache = (^mc stat --json $"minio/($bucket_name)/noarch/repodata.json" | from json | get metadata."Cache-Control"?)
+if $repodata_cache != "public, max-age=300" {
+    error make {msg: $"Expected repodata.json to have 'public, max-age=300' but got '($repodata_cache)'"}
+}
+print "✓ repodata.json has correct cache control (5 minutes)"
+
+# Check repodata.json.zst has 5-minute cache (300 seconds)
+let repodata_zst_cache = (^mc stat --json $"minio/($bucket_name)/noarch/repodata.json.zst" | from json | get metadata."Cache-Control"?)
+if $repodata_zst_cache != "public, max-age=300" {
+    error make {msg: $"Expected repodata.json.zst to have 'public, max-age=300' but got '($repodata_zst_cache)'"}
+}
+print "✓ repodata.json.zst has correct cache control (5 minutes)"
+
+# Check shard index has 5-minute cache
+let shard_index_cache = (^mc stat --json $"minio/($bucket_name)/noarch/repodata_shards.msgpack.zst" | from json | get metadata."Cache-Control"?)
+if $shard_index_cache != "public, max-age=300" {
+    error make {msg: $"Expected repodata_shards.msgpack.zst to have 'public, max-age=300' but got '($shard_index_cache)'"}
+}
+print "✓ repodata_shards.msgpack.zst has correct cache control (5 minutes)"
+
+# Check individual shard files have immutable cache (1 year)
+let shard_files = (^mc ls --json $"minio/($bucket_name)/noarch/shards/" | lines | each { |line| $line | from json | get key })
+if ($shard_files | length) > 0 {
+    let first_shard = ($shard_files | first)
+    let shard_cache = (^mc stat --json $"minio/($bucket_name)/noarch/shards/($first_shard)" | from json | get metadata."Cache-Control"?)
+    if $shard_cache != "public, max-age=31536000, immutable" {
+        error make {msg: $"Expected shard files to have 'public, max-age=31536000, immutable' but got '($shard_cache)'"}
+    }
+    print "✓ Shard files have correct cache control (immutable, 1 year)"
+} else {
+    print "⚠ No shard files found to check"
+}
+
 print "== Test package can be installed from the channel ==="
 with-env {
   AWS_ACCESS_KEY_ID: $root_user
