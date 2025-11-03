@@ -790,8 +790,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
         // Use the existing link progress bar to show post-link script execution
         if let Some(link_pb) = &inner.link_progress {
             link_pb.set_message(format!(
-                "running post-link script for {} ({})",
-                package_name, script_path
+                "running post-link script for {package_name} ({script_path})",
             ));
         }
 
@@ -804,10 +803,9 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
 
         // Clear the message or update status based on success
         if let Some(link_pb) = &inner.link_progress {
-            if !success {
-                // Keep the message visible if there was a failure
-                // The actual error will be in the logs
-            } else {
+            // Keep the message visible if there was a failure
+            // The actual error will be in the logs
+            if success {
                 // Clear the script message and go back to regular linking message
                 link_pb.set_message("");
             }
@@ -820,8 +818,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
         // Use the existing link progress bar to show pre-unlink script execution
         if let Some(link_pb) = &inner.link_progress {
             link_pb.set_message(format!(
-                "running pre-unlink script for {} ({})",
-                package_name, script_path
+                "running pre-unlink script for {package_name} ({script_path})",
             ));
         }
 
@@ -834,10 +831,9 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
 
         // Clear the message or update status based on success
         if let Some(link_pb) = &inner.link_progress {
-            if !success {
-                // Keep the message visible if there was a failure
-                // The actual error will be in the logs
-            } else {
+            // Keep the message visible if there was a failure
+            // The actual error will be in the logs
+            if success {
                 // Clear the script message and go back to regular linking message
                 link_pb.set_message("");
             }
