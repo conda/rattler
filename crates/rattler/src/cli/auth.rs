@@ -41,6 +41,15 @@ struct LoginArgs {
     /// The S3 session token
     #[clap(long, requires_all = ["s3_access_key_id"])]
     s3_session_token: Option<String>,
+
+    /// Use web-based authentication flow (for prefix.dev)
+    /// This will open a browser for you to authenticate
+    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id"])]
+    web: bool,
+
+    /// Skip opening the browser automatically (only with --web)
+    #[clap(long, requires = "web")]
+    no_browser: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -143,6 +152,155 @@ pub enum ValidationResult {
     Invalid,
 }
 
+/// Device authorization code response
+#[derive(Debug, serde::Deserialize)]
+struct DeviceCodeResponse {
+    device_code: String,
+    user_code: String,
+    verification_uri: String,
+    verification_uri_complete: Option<String>,
+    expires_in: i64,
+    interval: i64,
+}
+
+/// Device token response
+#[derive(Debug, serde::Deserialize)]
+struct DeviceTokenResponse {
+    access_token: String,
+    #[allow(dead_code)]
+    token_type: String,
+    #[allow(dead_code)]
+    expires_in: i64,
+}
+
+/// Device authorization error
+#[derive(Debug, serde::Deserialize)]
+struct DeviceAuthError {
+    error: String,
+    error_description: String,
+}
+
+/// Perform device authorization flow for prefix.dev
+async fn device_flow_login(host: &str, no_browser: bool) -> Result<String, AuthenticationCLIError> {
+    let prefix_url = if let Ok(env_var) = std::env::var("PREFIX_DEV_API_URL") {
+        Url::parse(&env_var).expect("PREFIX_DEV_API_URL must be a valid URL")
+    } else {
+        let host = host.replace("*.", "");
+        let host_url = if host.contains("://") {
+            Url::parse(&host)?
+        } else {
+            Url::parse(&format!("https://{host}"))?
+        };
+        let host_url = host_url.host_str().unwrap_or("prefix.dev");
+        let host_url = host_url.strip_prefix("repo.").unwrap_or(host_url);
+        Url::parse(&format!("https://{host_url}")).expect("constructed url must be valid")
+    };
+
+    let client = Client::new();
+
+    // Step 1: Request device code
+    eprintln!("🔐 Initiating device authorization flow...");
+    let device_code_response: DeviceCodeResponse = client
+        .post(
+            prefix_url
+                .join("api/auth/device/code")
+                .expect("must be valid"),
+        )
+        .header(CONTENT_TYPE, "application/json")
+        .json(&serde_json::json!({}))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+
+    // Step 2: Display user code and verification URL
+    eprintln!("\n✨ To authenticate, please visit:\n");
+    eprintln!("    {}\n", device_code_response.verification_uri);
+    eprintln!("And enter this code:\n");
+    eprintln!("    {}\n", device_code_response.user_code);
+
+    // Try to open browser automatically
+    if !no_browser {
+        if let Some(complete_uri) = &device_code_response.verification_uri_complete {
+            eprintln!("🌐 Opening browser...");
+            let _ = webbrowser::open(complete_uri);
+        }
+    }
+
+    eprintln!("⏳ Waiting for authentication...\n");
+
+    // Step 3: Poll for token
+    let poll_interval = std::time::Duration::from_secs(device_code_response.interval as u64);
+    let start_time = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(device_code_response.expires_in as u64);
+
+    loop {
+        if start_time.elapsed() > timeout {
+            return Err(AuthenticationCLIError::JsonParseError(
+                "Device code expired. Please try again.".to_string(),
+            ));
+        }
+
+        tokio::time::sleep(poll_interval).await;
+
+        let response = client
+            .post(
+                prefix_url
+                    .join("api/auth/device/token")
+                    .expect("must be valid"),
+            )
+            .header(CONTENT_TYPE, "application/json")
+            .json(&serde_json::json!({
+                "device_code": device_code_response.device_code
+            }))
+            .send()
+            .await?;
+
+        match response.status().as_u16() {
+            200 => {
+                // Success!
+                let token_response: DeviceTokenResponse = response.json().await?;
+                eprintln!("✅ Authentication successful!\n");
+                return Ok(token_response.access_token);
+            }
+            400 => {
+                // Check the error type
+                let error: DeviceAuthError = response.json().await?;
+                match error.error.as_str() {
+                    "authorization_pending" => {
+                        // Still waiting, continue polling
+                        eprint!(".");
+                    }
+                    "slow_down" => {
+                        // Server wants us to slow down
+                        tokio::time::sleep(poll_interval).await;
+                    }
+                    "expired_token" => {
+                        return Err(AuthenticationCLIError::JsonParseError(
+                            "Device code expired. Please try again.".to_string(),
+                        ));
+                    }
+                    "access_denied" => {
+                        return Err(AuthenticationCLIError::UnauthorizedToken);
+                    }
+                    _ => {
+                        return Err(AuthenticationCLIError::JsonParseError(format!(
+                            "Authentication error: {}",
+                            error.error_description
+                        )));
+                    }
+                }
+            }
+            _ => {
+                return Err(AuthenticationCLIError::ReqwestError(
+                    response.error_for_status().unwrap_err(),
+                ));
+            }
+        }
+    }
+}
+
 /// Authenticate with a host using the provided credentials.
 ///
 /// This function validates the authentication method based on the host and
@@ -152,6 +310,43 @@ async fn login(
     args: LoginArgs,
     storage: AuthenticationStorage,
 ) -> Result<(), AuthenticationCLIError> {
+    // Check if we should use device flow
+    if args.web {
+        let token = device_flow_login(&args.host, args.no_browser).await?;
+        let auth = Authentication::BearerToken(token);
+        let host = get_url(&args.host)?;
+
+        eprintln!("Authenticating with {host} using {} method", auth.method());
+
+        // Validate the token if using prefix.dev
+        if args.host.contains("prefix.dev") || args.host.contains("localhost") {
+            match validate_prefix_dev_token(
+                match &auth {
+                    Authentication::BearerToken(t) => t,
+                    _ => unreachable!(),
+                },
+                &args.host,
+            )
+            .await?
+            {
+                ValidationResult::Valid(username, url) => {
+                    println!(
+                        "✅ Token is valid. Logged into {url} as \"{username}\". Storing credentials..."
+                    );
+                    storage.store(&host, &auth)?;
+                }
+                ValidationResult::Invalid => {
+                    return Err(AuthenticationCLIError::UnauthorizedToken);
+                }
+            }
+        } else {
+            // For other hosts, just store the token without validation
+            println!("✅ Device authentication successful. Storing credentials...");
+            storage.store(&host, &auth)?;
+        }
+        return Ok(());
+    }
+
     let auth = if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
     } else if let Some(username) = args.username {
