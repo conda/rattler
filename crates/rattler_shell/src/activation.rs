@@ -612,6 +612,86 @@ impl<T: Shell + Clone> Activator<T> {
     /// Runs the activation script and returns the environment variables changed
     /// in the environment after running the script.
     ///
+    /// Fast path activation when there are no activation scripts and no conda prefix to deactivate.
+    /// This avoids spawning a shell by directly computing the environment variable changes.
+    fn run_activation_fast_path(
+        &self,
+        variables: &ActivationVariables,
+        environment: Option<&HashMap<&OsStr, &OsStr>>,
+    ) -> HashMap<String, String> {
+        let mut env_diff = variables.current_env.clone();
+
+        // Get the current shell level and increment it
+        let shlvl = variables
+            .current_env
+            .get("CONDA_SHLVL")
+            .and_then(|s| s.parse::<i32>().ok())
+            .unwrap_or(0);
+        let new_shlvl = shlvl + 1;
+        env_diff.insert("CONDA_SHLVL".to_string(), new_shlvl.to_string());
+
+        // Save the existing CONDA_PREFIX if it exists (for deactivation later)
+        if let Some(existing_prefix) = variables.current_env.get("CONDA_PREFIX") {
+            env_diff.insert(
+                format!("CONDA_ENV_SHLVL_{new_shlvl}_CONDA_PREFIX"),
+                existing_prefix.clone(),
+            );
+        }
+
+        // Set the new CONDA_PREFIX
+        env_diff.insert(
+            "CONDA_PREFIX".to_string(),
+            self.target_prefix.to_string_lossy().to_string(),
+        );
+
+        // Update PATH by prepending our paths
+        let mut new_path = self.paths.clone();
+        if let Some(paths) = &variables.path {
+            new_path.extend(paths.clone());
+        }
+        env_diff.insert(
+            "PATH".to_string(),
+            std::env::join_paths(new_path)
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
+        );
+
+        // Apply environment variables from env_vars.d, with backup
+        for (key, value) in &self.env_vars {
+            // Backup existing value if it exists
+            if let Some(existing_value) = variables.current_env.get(key) {
+                let backup_key = format!("CONDA_ENV_SHLVL_{new_shlvl}_{key}");
+                env_diff.insert(backup_key, existing_value.clone());
+            }
+            env_diff.insert(key.clone(), value.clone());
+        }
+
+        // Apply post-activation environment variables (from conda-meta/state), with backup
+        for (key, value) in &self.post_activation_env_vars {
+            // Backup existing value if it exists (only if not already backed up)
+            if let Some(existing_value) = variables.current_env.get(key) {
+                let backup_key = format!("CONDA_ENV_SHLVL_{new_shlvl}_{key}");
+                env_diff
+                    .entry(backup_key)
+                    .or_insert_with(|| existing_value.clone());
+            }
+            env_diff.insert(key.clone(), value.clone());
+        }
+
+        // Apply environment overrides if provided
+        if let Some(env_overrides) = environment {
+            for (k, v) in env_overrides {
+                env_diff.insert(
+                    k.to_string_lossy().to_string(),
+                    v.to_string_lossy().to_string(),
+                );
+            }
+        }
+
+        env_diff
+    }
+
     /// If the `environment` parameter is not `None`, then it will overwrite the
     /// parent environment variables when running the activation script.
     pub fn run_activation(
@@ -619,52 +699,10 @@ impl<T: Shell + Clone> Activator<T> {
         variables: ActivationVariables,
         environment: Option<HashMap<&OsStr, &OsStr>>,
     ) -> Result<HashMap<String, String>, ActivationError> {
+        // Fast path: if there's no conda prefix to deactivate and no activation scripts,
+        // we can skip spawning a shell and directly compute the environment changes
         if variables.conda_prefix.is_none() && self.activation_scripts.is_empty() {
-            let mut env_diff = variables.current_env.clone();
-
-            let shlvl = variables
-                .current_env
-                .get("CONDA_SHLVL")
-                .and_then(|s| s.parse::<i32>().ok())
-                .unwrap_or(0);
-            let new_shlvl = shlvl + 1;
-            env_diff.insert("CONDA_SHLVL".to_string(), new_shlvl.to_string());
-
-            env_diff.insert(
-                "CONDA_PREFIX".to_string(),
-                self.target_prefix.to_string_lossy().to_string(),
-            );
-
-            let mut new_path = self.paths.clone();
-            if let Some(paths) = &variables.path {
-                new_path.extend(paths.clone());
-            }
-            env_diff.insert(
-                "PATH".to_string(),
-                std::env::join_paths(new_path)
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_string(),
-            );
-
-            for (key, value) in &self.env_vars {
-                env_diff.insert(key.clone(), value.clone());
-            }
-
-            for (key, value) in &self.post_activation_env_vars {
-                env_diff.insert(key.clone(), value.clone());
-            }
-
-            if let Some(env_overrides) = environment {
-                for (k, v) in env_overrides {
-                    env_diff.insert(
-                        k.to_string_lossy().to_string(),
-                        v.to_string_lossy().to_string(),
-                    );
-                }
-            }
-
-            return Ok(env_diff);
+            return Ok(self.run_activation_fast_path(&variables, environment.as_ref()));
         }
 
         let activation_script = self.activation(variables)?.script;
@@ -1127,9 +1165,43 @@ mod tests {
         let activator = Activator::from_path(&env, shell.clone(), Platform::current()).unwrap();
         assert!(activator.activation_scripts.is_empty());
 
-        let activation_env = activator
-            .run_activation(ActivationVariables::default(), None)
-            .unwrap();
+        // Create an initial environment with some variables that should be backed up
+        // Start with a clean environment to have predictable CONDA_SHLVL
+        let mut initial_env = HashMap::new();
+        initial_env.insert("PKG1".to_string(), "original_pkg1_value".to_string());
+        initial_env.insert("STATE".to_string(), "original_state_value".to_string());
+        initial_env.insert("CONDA_SHLVL".to_string(), "0".to_string());
+
+        let variables = ActivationVariables {
+            current_env: initial_env.clone(),
+            ..Default::default()
+        };
+
+        let activation_env = activator.run_activation(variables, None).unwrap();
+
+        // Verify that backup variables were created (SHLVL goes from 0 to 1)
+        assert_eq!(
+            activation_env.get("CONDA_ENV_SHLVL_1_PKG1"),
+            Some(&"original_pkg1_value".to_string()),
+            "PKG1 should be backed up as CONDA_ENV_SHLVL_1_PKG1"
+        );
+        assert_eq!(
+            activation_env.get("CONDA_ENV_SHLVL_1_STATE"),
+            Some(&"original_state_value".to_string()),
+            "STATE should be backed up as CONDA_ENV_SHLVL_1_STATE"
+        );
+
+        // Verify that new values were set
+        assert_eq!(
+            activation_env.get("PKG1"),
+            Some(&"Hello, world!".to_string()),
+            "PKG1 should be set to new value"
+        );
+        assert_eq!(
+            activation_env.get("STATE"),
+            Some(&"Hello, world!".to_string()),
+            "STATE should be set to new value"
+        );
 
         let current_env = std::env::vars().collect::<HashMap<_, _>>();
 

@@ -2,6 +2,8 @@
 source: crates/rattler_shell/src/activation.rs
 expression: env_diff
 ---
+CONDA_ENV_SHLVL_1_PKG1: original_pkg1_value
+CONDA_ENV_SHLVL_1_STATE: original_state_value
 CONDA_SHLVL: "1"
 PKG1: "Hello, world!"
 PKG2: "Hello, world!"
