@@ -151,7 +151,7 @@ mod tests {
     use insta::assert_yaml_snapshot;
     use nom::{bytes::complete::take_while1, character::complete::multispace1, combinator::opt};
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, serde::Serialize)]
     pub struct Statement {
         pub prefix: String,
         pub condition: Option<MatchSpecCondition>,
