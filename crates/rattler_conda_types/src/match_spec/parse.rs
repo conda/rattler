@@ -1516,7 +1516,8 @@ mod tests {
                 .unwrap(),
             ),
             license: Some("MIT".into()),
-            ..MatchSpec::default()
+            #[cfg(feature = "experimental_conditionals")]
+            condition: None,
         });
 
         // insta check all the strings
