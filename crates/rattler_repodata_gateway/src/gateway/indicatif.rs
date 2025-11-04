@@ -181,10 +181,10 @@ fn simplify_url(url: &Url) -> String {
         if path.len() > 50 {
             let segments: Vec<&str> = path.split('/').collect();
             if let Some(last) = segments.last() {
-                return format!("{}/.../{}", domain, last);
+                return format!("{domain}/.../{last}");
             }
         }
-        format!("{}{}", domain, path)
+        format!("{domain}{path}")
     } else {
         url.to_string()
     }
