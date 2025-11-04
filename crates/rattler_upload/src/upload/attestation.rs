@@ -99,7 +99,7 @@ async fn check_cosign_installed() -> miette::Result<()> {
         .output()
         .await
         .into_diagnostic()
-        .map_err(|_| {
+        .map_err(|_err| {
             miette::miette!(
                 "cosign is not installed or not found in PATH.\n\
              Install it with: pixi global install cosign"
@@ -206,19 +206,15 @@ async fn sign_with_cosign(
         );
     }
     // Configure identity provider for keyless signing
-    else if config.use_github_oidc {
-        if std::env::var("GITHUB_ACTIONS").is_err() {
-            if std::env::var("COSIGN_EXPERIMENTAL").is_ok() {
-                tracing::info!(
-                    "Local testing: Using cosign keyless signing via browser OAuth flow."
-                );
-            } else {
-                tracing::warn!(
-                    "Not in GitHub Actions. For local testing:\n\
+    else if config.use_github_oidc && std::env::var("GITHUB_ACTIONS").is_err() {
+        if std::env::var("COSIGN_EXPERIMENTAL").is_ok() {
+            tracing::info!("Local testing: Using cosign keyless signing via browser OAuth flow.");
+        } else {
+            tracing::warn!(
+                "Not in GitHub Actions. For local testing:\n\
                      1. Set COSIGN_EXPERIMENTAL=1 for keyless signing via browser\n\
                      2. Use cosign generate-key-pair for local key-based signing"
-                );
-            }
+            );
         }
     }
 
@@ -228,7 +224,7 @@ async fn sign_with_cosign(
     let output = tokio::time::timeout(std::time::Duration::from_secs(30), cmd.output())
         .await
         .into_diagnostic()
-        .map_err(|_| miette::miette!("cosign command timed out after 30 seconds"))?
+        .map_err(|_err| miette::miette!("cosign command timed out after 30 seconds"))?
         .into_diagnostic()
         .map_err(|e| miette::miette!("Failed to run cosign: {}", e))?;
 

@@ -2,13 +2,13 @@ on:
   workflow_dispatch:
     inputs:
       package_url:
-        description: 'Full URL to download the package from'
+        description: "Full URL to download the package from"
         required: true
-        default: 'https://repo.prefix.dev/conda-forge/noarch/rich-13.7.0-pyhd8ed1ab_0.conda'
+        default: "https://repo.prefix.dev/conda-forge/noarch/rich-13.7.0-pyhd8ed1ab_0.conda"
       channel:
-        description: 'Channel to upload to'
+        description: "Channel to upload to"
         required: true
-        default: 'wolf-private-test'
+        default: "wolf-private-test"
 
 name: Test Cosign Attestation
 
@@ -60,7 +60,7 @@ jobs:
           rustc -V
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62  # v3.10.0
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
 
       - name: Download package
         run: |
