@@ -34,6 +34,7 @@ reqwest-retry = { workspace = true }
 tokio-util = { workspace = true, features = ["codec", "compat"] }
 reqwest = { workspace = true, default-features = false, features = [
   "multipart",
+  "blocking",
 ]}
 url = { workspace = true }
 tracing = { workspace = true }
@@ -50,6 +51,9 @@ tokio = { workspace = true, features = [
   "rt-multi-thread",
   "process",
 ] }
+sigstore = { git = "https://github.com/wolfv/sigstore-rs", branch = "experiments" }
+webbrowser = "1.0"
+hex = { workspace = true }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 sha2 = { workspace = true, features = ["asm"] }

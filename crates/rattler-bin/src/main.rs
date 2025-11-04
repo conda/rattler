@@ -46,6 +46,7 @@ enum Command {
     InstallMenu(commands::menu::InstallOpt),
     RemoveMenu(commands::menu::InstallOpt),
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
+    Verify(commands::verify::Opt),
 }
 
 /// Entry point of the `rattler` cli.
@@ -85,5 +86,6 @@ async fn main() -> miette::Result<()> {
         Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
         Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
         Command::Upload(opts) => rattler_upload::upload_from_args(*opts).await,
+        Command::Verify(opts) => commands::verify::verify(opts).await,
     }
 }
