@@ -35,7 +35,7 @@ impl CommonData {
         }
     }
 
-    /// Create from CommonOpts
+    /// Create from `CommonOpts`
     pub fn from_opts(value: CommonOpts) -> Self {
         Self::new(value.auth_file, value.allow_insecure_host)
     }
