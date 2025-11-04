@@ -78,7 +78,6 @@
 
 use std::{collections::HashMap, io::Read, path::Path, str::FromStr, sync::Arc};
 
-use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use rattler_conda_types::{Platform, RepoDataRecord};
 
@@ -99,7 +98,7 @@ pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
 pub use conda::{
     CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
-    PackageBuildSource, PackageBuildSourceKind,
+    PackageBuildSource,
 };
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
@@ -136,7 +135,7 @@ struct LockFileInner {
     pypi_packages: Vec<PypiPackageData>,
     pypi_environment_package_data: Vec<PypiPackageEnvironmentData>,
 
-    environment_lookup: FxHashMap<String, usize>,
+    environment_lookup: ahash::HashMap<String, usize>,
 }
 
 /// An package used in an environment. Selects a type of package based on the
@@ -168,7 +167,7 @@ struct EnvironmentData {
 
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
-    packages: FxHashMap<Platform, IndexSet<EnvironmentPackageData>>,
+    packages: ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>>,
 }
 
 impl LockFile {

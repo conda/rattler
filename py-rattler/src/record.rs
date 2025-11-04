@@ -10,6 +10,7 @@ use pyo3::{
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
+    utils::TimestampMs,
     NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
 };
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
@@ -491,10 +492,10 @@ impl PyRecord {
     #[setter]
     pub fn set_timestamp(&mut self, timestamp: Option<i64>) -> PyResult<()> {
         if let Some(ts) = timestamp {
-            self.as_package_record_mut().timestamp = Some(
+            self.as_package_record_mut().timestamp = Some(TimestampMs::from_datetime_millis(
                 chrono::DateTime::from_timestamp_millis(ts)
                     .ok_or_else(|| PyValueError::new_err("Invalid timestamp"))?,
-            );
+            ));
         } else {
             self.as_package_record_mut().timestamp = None;
         }

@@ -17,6 +17,10 @@ pip = "~=23.2.1"
 rust = "~=1.88.0"
 
 [feature.build.tasks]
+build = "PIP_REQUIRE_VIRTUALENV=false maturin develop --features pty"
+build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release --features pty"
+
+[feature.build.target.win-64.tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
 build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release"
 
@@ -27,7 +31,7 @@ patchelf = "~=0.17.2"
 # Python 3.8 is the minimum supported version, so we use that for testing
 python = "3.9.*"
 
-ruff = ">=0.13.2,<0.14"
+ruff = ">=0.14.1,<0.15"
 mypy = "~=1.17.0"
 
 pytest = ">=8.4.1,<9"
@@ -45,7 +49,7 @@ types-networkx = "*"
 boto3 = "*"
 
 [feature.test.tasks]
-test = { cmd = "pytest --doctest-modules", depends-on = ["build"] }
+test = { cmd = "pytest --doctest-modules --ignore=rattler/pty/pty_process.py --ignore=rattler/pty/pty_session.py", depends-on = ["build"] }
 fmt-python = "ruff format rattler examples tests"
 fmt-rust = "cargo fmt --all"
 lint-python = "ruff check ."
@@ -67,7 +71,7 @@ mkdocs-material = ">=9.5.20"
 mdx_truly_sane_lists = ">=1.3,<2"
 cairosvg = "2.8.2.*"
 pillow = ">=9.4.0"
-ruff = ">=0.13.2,<0.14"
+ruff = ">=0.14.1,<0.15"
 
 [feature.docs.tasks]
 docs = { cmd = "mkdocs serve" }

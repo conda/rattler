@@ -11,7 +11,6 @@ use std::{
 };
 
 use fs_err as fs;
-use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use indexmap::IndexSet;
 use itertools::Itertools;
 
@@ -99,11 +98,11 @@ pub struct ClobberedPath {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 struct PathTrieNode {
     /// All tags that touch this prefix *or* any descendant.
-    prefixes: HashSet<PackageName>,
+    prefixes: ahash::HashSet<PackageName>,
     /// Tags that have a file exactly at this node.
-    terminals: HashSet<PackageName>,
+    terminals: ahash::HashSet<PackageName>,
     /// Child components.
-    children: HashMap<OsString, PathTrieNode>,
+    children: ahash::HashMap<OsString, PathTrieNode>,
 }
 
 /// A trie of relative file-paths, tagged by package name (in insertion order).
@@ -364,14 +363,14 @@ impl PathResolver {
     pub fn reprioritize_packages(&mut self, new_order: Vec<PackageName>) -> Changes {
         fn rank<'a>(
             order: impl IntoIterator<Item = &'a PackageName>,
-        ) -> HashMap<&'a PackageName, usize> {
+        ) -> ahash::HashMap<&'a PackageName, usize> {
             order.into_iter().enumerate().map(|(i, v)| (v, i)).collect()
         }
 
         fn collect_removed_subtree(
             n: &PathTrieNode,
             cur: &mut PathBuf,
-            old_rank: &HashMap<&PackageName, usize>,
+            old_rank: &ahash::HashMap<&PackageName, usize>,
             to_clobbers: &mut ToClobbers,
         ) {
             let old_winner = n
@@ -393,7 +392,7 @@ impl PathResolver {
         fn collect_new_winners(
             n: &PathTrieNode,
             cur: &mut PathBuf,
-            new_rank: &HashMap<&PackageName, usize>,
+            new_rank: &ahash::HashMap<&PackageName, usize>,
             from_clobbers: &mut FromClobbers,
         ) {
             let new_winner = n
@@ -416,8 +415,8 @@ impl PathResolver {
         fn dfs(
             n: &PathTrieNode,
             cur: &mut PathBuf,
-            old_rank: &HashMap<&PackageName, usize>,
-            new_rank: &HashMap<&PackageName, usize>,
+            old_rank: &ahash::HashMap<&PackageName, usize>,
+            new_rank: &ahash::HashMap<&PackageName, usize>,
             to_clobbers: &mut ToClobbers,
             from_clobbers: &mut FromClobbers,
         ) {
@@ -471,8 +470,8 @@ impl PathResolver {
                 if self.packages.len() != new_order.len() {
                     break 'reorder false;
                 }
-                let self_pkg_set: HashSet<&PackageName> = self.packages.iter().collect();
-                let new_pkg_set: HashSet<&PackageName> = new_order.iter().collect();
+                let self_pkg_set: ahash::HashSet<&PackageName> = self.packages.iter().collect();
+                let new_pkg_set: ahash::HashSet<&PackageName> = new_order.iter().collect();
                 self_pkg_set == new_pkg_set
             };
 
@@ -562,7 +561,10 @@ New:
     }
 
     /// Which packages own this prefix?
-    pub fn packages_for_prefix<P: AsRef<Path>>(&self, path: P) -> Option<&HashSet<PackageName>> {
+    pub fn packages_for_prefix<P: AsRef<Path>>(
+        &self,
+        path: P,
+    ) -> Option<&ahash::HashSet<PackageName>> {
         let mut cur = &self.root;
 
         for comp in path.as_ref().components().map(Component::as_os_str) {
@@ -573,7 +575,10 @@ New:
     }
 
     /// Who owns exactly this file?
-    pub fn packages_for_exact<P: AsRef<Path>>(&self, path: P) -> Option<&HashSet<PackageName>> {
+    pub fn packages_for_exact<P: AsRef<Path>>(
+        &self,
+        path: P,
+    ) -> Option<&ahash::HashSet<PackageName>> {
         Self::get_node(&self.root, path.as_ref()).map(|n| &n.terminals)
     }
 
@@ -607,12 +612,12 @@ New:
 
     /// Collect all paths where multiple packages wrote the same file,
     /// returning a map from each path to its final owner and overridden packages.
-    pub fn collect_clobbered_paths(&self) -> HashMap<PathBuf, ClobberedPath> {
+    pub fn collect_clobbered_paths(&self) -> ahash::HashMap<PathBuf, ClobberedPath> {
         fn dfs(
             node: &PathTrieNode,
             path: &mut PathBuf,
             packages: &IndexSet<PackageName>,
-            results: &mut HashMap<PathBuf, ClobberedPath>,
+            results: &mut ahash::HashMap<PathBuf, ClobberedPath>,
         ) {
             if !node.terminals.is_empty() {
                 // Determine the winning package by insertion priority
@@ -642,7 +647,7 @@ New:
             }
         }
 
-        let mut results = HashMap::default();
+        let mut results = ahash::HashMap::default();
         dfs(
             &self.root,
             &mut PathBuf::new(),
@@ -726,7 +731,7 @@ mod tests {
         resolver.unregister_package("pkg");
         assert!(resolver
             .packages_for_exact("foo.txt")
-            .is_none_or(HashSet::is_empty));
+            .is_none_or(ahash::HashSet::is_empty));
         assert!(resolver.packages_for_prefix("foo").is_none());
     }
 

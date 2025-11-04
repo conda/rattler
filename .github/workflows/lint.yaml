@@ -17,7 +17,7 @@ jobs:
           lfs: false
           submodules: recursive
       - name: Set up pixi
-        uses: prefix-dev/setup-pixi@194d461b21b6c5717c722ffc597fa91ed2ff29fa # v0.9.1
+        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
         with:
           environments: lint
       - name: lint (if this step fails, please 'pixi run lint' locally and push the changes)

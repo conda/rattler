@@ -11,7 +11,7 @@ use std::{
     path::Path,
 };
 
-use fxhash::{FxHashMap, FxHashSet};
+use indexmap::IndexMap;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
@@ -23,8 +23,8 @@ use crate::{
     build_spec::BuildNumber,
     package::{IndexJson, RunExportsJson},
     utils::{
-        serde::{sort_map_alphabetically, DeserializeFromStrUnchecked},
-        UrlWithTrailingSlash,
+        serde::sort_index_map_alphabetically, serde::sort_map_alphabetically,
+        serde::DeserializeFromStrUnchecked, UrlWithTrailingSlash,
     },
     Arch, Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
     ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
@@ -40,8 +40,8 @@ pub struct RepoData {
     pub info: Option<ChannelInfo>,
 
     /// The tar.bz2 packages contained in the repodata.json file
-    #[serde(default, serialize_with = "sort_map_alphabetically")]
-    pub packages: FxHashMap<String, PackageRecord>,
+    #[serde(default, serialize_with = "sort_index_map_alphabetically")]
+    pub packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// The conda packages contained in the repodata.json file (under a
     /// different key for backwards compatibility with previous conda
@@ -49,18 +49,18 @@ pub struct RepoData {
     #[serde(
         default,
         rename = "packages.conda",
-        serialize_with = "sort_map_alphabetically"
+        serialize_with = "sort_index_map_alphabetically"
     )]
-    pub conda_packages: FxHashMap<String, PackageRecord>,
+    pub conda_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// removed packages (files are still accessible, but they are not
     /// installable like regular packages)
     #[serde(
         default,
         serialize_with = "sort_set_alphabetically",
-        skip_serializing_if = "FxHashSet::is_empty"
+        skip_serializing_if = "ahash::HashSet::is_empty"
     )]
-    pub removed: FxHashSet<String>,
+    pub removed: ahash::HashSet<String>,
 
     /// The version of the repodata format
     #[serde(rename = "repodata_version")]
@@ -196,8 +196,7 @@ pub struct PackageRecord {
     pub subdir: String,
 
     /// The date this entry was created.
-    #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
-    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    pub timestamp: Option<crate::utils::TimestampMs>,
 
     /// Track features are nowadays only used to downweight packages (ie. give
     /// them less priority). To that effect, the package is downweighted
@@ -430,14 +429,14 @@ pub struct SubdirRunExportsJson {
     info: Option<ChannelInfo>,
 
     #[serde(default, serialize_with = "sort_map_alphabetically")]
-    packages: FxHashMap<String, PackageRunExports>,
+    packages: ahash::HashMap<String, PackageRunExports>,
 
     #[serde(
         default,
         rename = "packages.conda",
         serialize_with = "sort_map_alphabetically"
     )]
-    conda_packages: FxHashMap<String, PackageRunExports>,
+    conda_packages: ahash::HashMap<String, PackageRunExports>,
 }
 
 impl SubdirRunExportsJson {
@@ -578,7 +577,7 @@ impl PackageRecord {
 }
 
 fn sort_set_alphabetically<S: serde::Serializer>(
-    value: &FxHashSet<String>,
+    value: &ahash::HashSet<String>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     value.iter().collect::<BTreeSet<_>>().serialize(serializer)
@@ -586,7 +585,7 @@ fn sort_set_alphabetically<S: serde::Serializer>(
 
 #[cfg(test)]
 mod test {
-    use fxhash::FxHashMap;
+    use indexmap::IndexMap;
 
     use crate::{
         repo_data::{compute_package_url, determine_subdir},
@@ -610,8 +609,8 @@ mod test {
         let repodata = RepoData {
             version: Some(2),
             info: None,
-            packages: FxHashMap::default(),
-            conda_packages: FxHashMap::default(),
+            packages: IndexMap::default(),
+            conda_packages: IndexMap::default(),
             removed: ["xyz", "foo", "bar", "baz", "qux", "aux", "quux"]
                 .iter()
                 .map(|s| (*s).to_string())
@@ -769,5 +768,110 @@ mod test {
         assert!(result.err().unwrap().to_string().contains(
             "package 'foo=3.0.2=py36h1af98f8_3' has constraint 'bors <2.0', which is not satisfied by 'bors=2.1=bla_1' in the environment"
         ));
+    }
+
+    #[test]
+    fn test_packages_serialized_alphabetically() {
+        use crate::{PackageName, Version};
+
+        // Create a RepoData with packages inserted in NON-alphabetical order
+        let mut packages = IndexMap::default();
+        let mut conda_packages = IndexMap::default();
+
+        // Insert packages in deliberately non-alphabetical order: z, a, m, b
+        packages.insert(
+            "zebra-1.0-h123.tar.bz2".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("zebra"),
+                Version::major(1),
+                "h123".to_string(),
+            ),
+        );
+        packages.insert(
+            "apple-2.0-h456.tar.bz2".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("apple"),
+                Version::major(2),
+                "h456".to_string(),
+            ),
+        );
+        packages.insert(
+            "mango-1.5-h789.tar.bz2".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("mango"),
+                Version::major(1),
+                "h789".to_string(),
+            ),
+        );
+        packages.insert(
+            "banana-3.0-habc.tar.bz2".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("banana"),
+                Version::major(3),
+                "habc".to_string(),
+            ),
+        );
+
+        // Insert conda packages in non-alphabetical order too
+        conda_packages.insert(
+            "xray-1.0-h111.conda".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("xray"),
+                Version::major(1),
+                "h111".to_string(),
+            ),
+        );
+        conda_packages.insert(
+            "alpha-2.0-h222.conda".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("alpha"),
+                Version::major(2),
+                "h222".to_string(),
+            ),
+        );
+        conda_packages.insert(
+            "omega-3.0-h333.conda".to_string(),
+            PackageRecord::new(
+                PackageName::new_unchecked("omega"),
+                Version::major(3),
+                "h333".to_string(),
+            ),
+        );
+
+        let repodata = RepoData {
+            version: Some(2),
+            info: None,
+            packages,
+            conda_packages,
+            removed: ahash::HashSet::default(),
+        };
+
+        // Serialize to JSON string
+        let json = serde_json::to_string(&repodata).unwrap();
+
+        // Parse the JSON to extract the package keys
+        let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        // Check that packages are in alphabetical order
+        if let Some(packages) = json_value.get("packages").and_then(|p| p.as_object()) {
+            let keys: Vec<&String> = packages.keys().collect();
+            let mut sorted_keys = keys.clone();
+            sorted_keys.sort();
+            assert_eq!(
+                keys, sorted_keys,
+                "packages should be serialized in alphabetical order"
+            );
+        }
+
+        // Check that packages.conda are in alphabetical order
+        if let Some(conda_packages) = json_value.get("packages.conda").and_then(|p| p.as_object()) {
+            let keys: Vec<&String> = conda_packages.keys().collect();
+            let mut sorted_keys = keys.clone();
+            sorted_keys.sort();
+            assert_eq!(
+                keys, sorted_keys,
+                "packages.conda should be serialized in alphabetical order"
+            );
+        }
     }
 }

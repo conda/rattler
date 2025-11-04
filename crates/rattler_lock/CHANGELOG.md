@@ -44,6 +44,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.1](https://github.com/conda/rattler/compare/rattler_lock-v0.26.0...rattler_lock-v0.26.1) - 2025-10-28
+
+### Fixed
+
+- timestamp serialization as milliseconds ([#1776](https://github.com/conda/rattler/pull/1776))
+
+### Other
+
+- Replace fxhash with ahash ([#1674](https://github.com/conda/rattler/pull/1674))
+
+## [0.26.0](https://github.com/conda/rattler/compare/rattler_lock-v0.25.3...rattler_lock-v0.26.0) - 2025-10-25
+
+### Added
+
+- *(lock)* add path to package_build_source ([#1719](https://github.com/conda/rattler/pull/1719))
+
+## [0.25.3](https://github.com/conda/rattler/compare/rattler_lock-v0.25.2...rattler_lock-v0.25.3) - 2025-10-18
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.25.2](https://github.com/conda/rattler/compare/rattler_lock-v0.25.1...rattler_lock-v0.25.2) - 2025-10-17
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_solve
+
+## [0.25.1](https://github.com/conda/rattler/compare/rattler_lock-v0.25.0...rattler_lock-v0.25.1) - 2025-10-14
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_solve
+
 ## [0.25.0](https://github.com/conda/rattler/compare/rattler_lock-v0.24.2...rattler_lock-v0.25.0) - 2025-10-03
 
 ### Fixed

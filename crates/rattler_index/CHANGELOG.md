@@ -62,6 +62,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0](https://github.com/conda/rattler/compare/rattler_index-v0.26.5...rattler_index-v0.27.0) - 2025-10-28
+
+### Added
+
+- make precondition checks configurable ([#1777](https://github.com/conda/rattler/pull/1777))
+
+### Other
+
+- Replace fxhash with ahash ([#1674](https://github.com/conda/rattler/pull/1674))
+
+## [0.26.5](https://github.com/conda/rattler/compare/rattler_index-v0.26.4...rattler_index-v0.26.5) - 2025-10-25
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.26.4](https://github.com/conda/rattler/compare/rattler_index-v0.26.3...rattler_index-v0.26.4) - 2025-10-18
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_config, rattler_networking, rattler_s3
+
+## [0.26.3](https://github.com/conda/rattler/compare/rattler_index-v0.26.2...rattler_index-v0.26.3) - 2025-10-17
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.26.2](https://github.com/conda/rattler/compare/rattler_index-v0.26.1...rattler_index-v0.26.2) - 2025-10-14
+
+### Fixed
+
+- retry policy for indexing operations ([#1745](https://github.com/conda/rattler/pull/1745))
+
+## [0.26.1](https://github.com/conda/rattler/compare/rattler_index-v0.26.0...rattler_index-v0.26.1) - 2025-10-13
+
+### Other
+
+- updated the following local packages: rattler_networking, rattler_package_streaming, rattler_s3
+
 ## [0.26.0](https://github.com/conda/rattler/compare/rattler_index-v0.25.6...rattler_index-v0.26.0) - 2025-10-10
 
 ### Added

@@ -79,6 +79,13 @@ impl PtySession {
         self.process_stdin.flush()
     }
 
+    /// Exit the process gracefully by sending SIGTERM.
+    ///
+    /// This method blocks until the process has exited.
+    pub fn exit(&mut self) -> nix::Result<nix::sys::wait::WaitStatus> {
+        self.process.exit()
+    }
+
     /// Interact with the process. This will put the current process into raw mode and
     /// forward all input from stdin to the process and all output from the process to stdout.
     /// This will block until the process exits.

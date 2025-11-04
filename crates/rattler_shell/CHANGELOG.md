@@ -44,6 +44,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.7](https://github.com/conda/rattler/compare/rattler_shell-v0.25.6...rattler_shell-v0.25.7) - 2025-10-28
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.6](https://github.com/conda/rattler/compare/rattler_shell-v0.25.5...rattler_shell-v0.25.6) - 2025-10-25
+
+### Other
+
+- Improve performance of bash shell activation on Windows ([#1758](https://github.com/conda/rattler/pull/1758))
+
+## [0.25.5](https://github.com/conda/rattler/compare/rattler_shell-v0.25.4...rattler_shell-v0.25.5) - 2025-10-18
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.4](https://github.com/conda/rattler/compare/rattler_shell-v0.25.3...rattler_shell-v0.25.4) - 2025-10-17
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_pty
+
+## [0.25.3](https://github.com/conda/rattler/compare/rattler_shell-v0.25.2...rattler_shell-v0.25.3) - 2025-10-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [0.25.2](https://github.com/conda/rattler/compare/rattler_shell-v0.25.1...rattler_shell-v0.25.2) - 2025-10-03
 
 ### Other

@@ -45,6 +45,8 @@ async fn test_read_package_with_retry_success_after_etag_change() {
     let old_metadata = RepodataFileMetadata {
         etag: etag_v1,
         last_modified: metadata_v1.last_modified(),
+        file_existed: true,
+        precondition_checks: rattler_index::PreconditionChecks::Enabled,
     };
 
     let result = read_package_with_retry(&op, path, old_metadata).await;
@@ -77,6 +79,8 @@ async fn test_read_package_with_retry_propagates_other_errors() {
     let metadata = RepodataFileMetadata {
         etag: Some("fake-etag".to_string()),
         last_modified: None,
+        file_existed: true,
+        precondition_checks: rattler_index::PreconditionChecks::Enabled,
     };
 
     let result = read_package_with_retry(&op, path, metadata).await;

@@ -1,8 +1,8 @@
 //! Structs to deal with repodata "shards" which are per-package repodata files.
 
 use chrono::{DateTime, Utc};
-use fxhash::{FxHashMap, FxHashSet};
-use rattler_digest::Sha256Hash;
+use indexmap::IndexMap;
+use rattler_digest::{serde::SerializableHash, Sha256, Sha256Hash};
 use serde::{Deserialize, Serialize};
 
 use crate::PackageRecord;
@@ -10,13 +10,15 @@ use crate::PackageRecord;
 /// The sharded repodata holds a hashmap of package name -> shard (hash).
 /// This index file is stored under
 /// `<channel>/<subdir>/repodata_shards.msgpack.zst`
+#[serde_with::serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShardedRepodata {
     /// Additional information about the sharded subdirectory such as the base
     /// url.
     pub info: ShardedSubdirInfo,
     /// The individual shards indexed by package name.
-    pub shards: FxHashMap<String, Sha256Hash>,
+    #[serde_as(as = "ahash::HashMap<_, SerializableHash<Sha256>>")]
+    pub shards: ahash::HashMap<String, Sha256Hash>,
 }
 
 /// Information about a sharded subdirectory that is stored inside the index
@@ -47,13 +49,13 @@ pub struct ShardedSubdirInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Shard {
     /// The records for all `.tar.bz2` packages
-    pub packages: FxHashMap<String, PackageRecord>,
+    pub packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// The records for all `.conda` packages
     #[serde(rename = "packages.conda", default)]
-    pub conda_packages: FxHashMap<String, PackageRecord>,
+    pub conda_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// The file names of all removed for this shard
     #[serde(default)]
-    pub removed: FxHashSet<String>,
+    pub removed: ahash::HashSet<String>,
 }

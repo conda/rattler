@@ -44,6 +44,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.21](https://github.com/conda/rattler/compare/rattler_networking-v0.25.20...rattler_networking-v0.25.21) - 2025-10-28
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.20](https://github.com/conda/rattler/compare/rattler_networking-v0.25.19...rattler_networking-v0.25.20) - 2025-10-18
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.19](https://github.com/conda/rattler/compare/rattler_networking-v0.25.18...rattler_networking-v0.25.19) - 2025-10-17
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.18](https://github.com/conda/rattler/compare/rattler_networking-v0.25.17...rattler_networking-v0.25.18) - 2025-10-14
+
+### Fixed
+
+- retry policy for indexing operations ([#1745](https://github.com/conda/rattler/pull/1745))
+
+## [0.25.17](https://github.com/conda/rattler/compare/rattler_networking-v0.25.16...rattler_networking-v0.25.17) - 2025-10-13
+
+### Other
+
+- small bearer token improvements ([#1727](https://github.com/conda/rattler/pull/1727))
+
 ## [0.25.16](https://github.com/conda/rattler/compare/rattler_networking-v0.25.15...rattler_networking-v0.25.16) - 2025-10-07
 
 ### Other

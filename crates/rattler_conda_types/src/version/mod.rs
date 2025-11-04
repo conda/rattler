@@ -533,7 +533,7 @@ fn segments_starts_with<
     B: Iterator<Item = SegmentIter<'b>> + 'b,
 >(
     a: A,
-    b: B,
+    b: B, // the prefix we're looking for in 'a'
 ) -> bool {
     for ranges in a.zip_longest(b) {
         let (left, right) = match ranges {
@@ -552,7 +552,16 @@ fn segments_starts_with<
         for values in left.components().zip_longest(right.components()) {
             if !match values {
                 EitherOrBoth::Both(a, b) => a == b,
-                EitherOrBoth::Left(_) => return true,
+
+                EitherOrBoth::Left(component) => {
+                    // If the component is zero we can skip it. If there are
+                    // no more right components and there are still left components,
+                    // we should consider the right component to be 0.
+                    if component.is_zero() {
+                        continue;
+                    }
+                    return false;
+                }
                 EitherOrBoth::Right(_) => return false,
             } {
                 return false;
@@ -1266,6 +1275,31 @@ mod test {
         assert!(Version::from_str("1.2.3")
             .unwrap()
             .starts_with(&Version::from_str("1.2").unwrap()));
+    }
+
+    #[test]
+    fn starts_with_differing_component_sizes() {
+        // segments: [2, 0, 1, [version, 2]]
+        let version = Version::from_str("2.0.1.version2").unwrap();
+        // segments: [2, 0, 1, version, 3]
+        let other_version = Version::from_str("2.0.1.version.3").unwrap();
+
+        assert!(!version.starts_with(&other_version));
+        assert!(!other_version.starts_with(&version));
+    }
+
+    #[test]
+    fn starts_with_matches_extra_component_against_zero() {
+        let version = Version::from_str("1.0.0_version").unwrap();
+        assert!(!Version::from_str("1.0.0_version1")
+            .unwrap()
+            .starts_with(&version));
+        assert!(Version::from_str("1.0.0_version0")
+            .unwrap()
+            .starts_with(&version));
+        assert!(!Version::from_str("1.0.0_version0foo")
+            .unwrap()
+            .starts_with(&version));
     }
 
     fn get_hash(spec: &impl Hash) -> u64 {

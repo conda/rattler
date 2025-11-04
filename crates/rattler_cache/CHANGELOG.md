@@ -49,6 +49,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1](https://github.com/conda/rattler/compare/rattler_cache-v0.4.0...rattler_cache-v0.4.1) - 2025-10-28
+
+### Other
+
+- Replace fxhash with ahash ([#1674](https://github.com/conda/rattler/pull/1674))
+
+## [0.4.0](https://github.com/conda/rattler/compare/rattler_cache-v0.3.41...rattler_cache-v0.4.0) - 2025-10-25
+
+### Added
+
+- add support for layered package cache ([#1003](https://github.com/conda/rattler/pull/1003))
+
+## [0.3.41](https://github.com/conda/rattler/compare/rattler_cache-v0.3.40...rattler_cache-v0.3.41) - 2025-10-18
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_networking
+
+## [0.3.40](https://github.com/conda/rattler/compare/rattler_cache-v0.3.39...rattler_cache-v0.3.40) - 2025-10-17
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.3.39](https://github.com/conda/rattler/compare/rattler_cache-v0.3.38...rattler_cache-v0.3.39) - 2025-10-14
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.3.38](https://github.com/conda/rattler/compare/rattler_cache-v0.3.37...rattler_cache-v0.3.38) - 2025-10-13
+
+### Other
+
+- updated the following local packages: rattler_networking, rattler_package_streaming
+
 ## [0.3.37](https://github.com/conda/rattler/compare/rattler_cache-v0.3.36...rattler_cache-v0.3.37) - 2025-10-07
 
 ### Fixed

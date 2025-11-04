@@ -39,6 +39,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.40.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.3...rattler_conda_types-v0.40.4) - 2025-10-28
+
+### Fixed
+
+- sort packages when serializing repodata ([#1779](https://github.com/conda/rattler/pull/1779))
+- timestamp serialization as milliseconds ([#1776](https://github.com/conda/rattler/pull/1776))
+
+### Other
+
+- Replace fxhash with ahash ([#1674](https://github.com/conda/rattler/pull/1674))
+
+## [0.40.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.2...rattler_conda_types-v0.40.3) - 2025-10-18
+
+### Added
+
+- make read_package_file_content public, add try_from_magic_bytes ([#1757](https://github.com/conda/rattler/pull/1757))
+
+## [0.40.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.1...rattler_conda_types-v0.40.2) - 2025-10-17
+
+### Fixed
+
+- use byte string instead of array for hash encoding ([#1755](https://github.com/conda/rattler/pull/1755))
+
+## [0.40.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.0...rattler_conda_types-v0.40.1) - 2025-10-14
+
+### Added
+
+- derive `PartialEq`, `Eq` and `Hash` for `EntryPoint` ([#1731](https://github.com/conda/rattler/pull/1731))
+
 ## [0.40.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.3...rattler_conda_types-v0.40.0) - 2025-10-03
 
 ### Added
