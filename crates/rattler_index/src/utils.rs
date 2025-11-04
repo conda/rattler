@@ -65,6 +65,7 @@ pub async fn read_with_metadata_check(
 /// - `path`: A string slice that specifies the file path to write.
 /// - `data`: The data to write to the file.
 /// - `metadata`: The metadata to use for conditional write validation.
+/// - `cache_control`: Optional cache control header value to set (for S3 metadata).
 ///
 /// # Returns
 /// Returns `Ok(())` if the file is successfully written and conditions match.
@@ -75,6 +76,7 @@ pub async fn write_with_metadata_check(
     path: &str,
     data: Vec<u8>,
     metadata: &RepodataFileMetadata,
+    cache_control: Option<&str>,
 ) -> opendal::Result<opendal::Metadata> {
     let mut writer = op.write_with(path, data);
 
@@ -88,6 +90,11 @@ pub async fn write_with_metadata_check(
             writer = writer.if_not_exists(true);
         }
         // else: file existed but no etag support, proceed without conditions
+    }
+
+    // Set cache control header if provided
+    if let Some(cache_control_value) = cache_control {
+        writer = writer.cache_control(cache_control_value);
     }
 
     writer.await
