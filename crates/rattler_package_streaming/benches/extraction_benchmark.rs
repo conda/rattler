@@ -78,16 +78,16 @@ async fn download_test_packages(
 
     println!("Downloading test packages...");
     for pkg in TEST_PACKAGES {
-        let file_name = pkg.url.split('/').last().unwrap();
+        let file_name = pkg.url.split('/').next_back().unwrap();
         let file_path = cache_dir.join(file_name);
 
-        if !file_path.exists() {
+        if file_path.exists() {
+            println!("  Using cached {} ({})", pkg.name, pkg.size_category);
+        } else {
             println!("  Downloading {} ({})", pkg.name, pkg.size_category);
             let response = client.get(pkg.url).send().await?;
             let bytes = response.bytes().await?;
             std::fs::write(&file_path, bytes)?;
-        } else {
-            println!("  Using cached {} ({})", pkg.name, pkg.size_category);
         }
 
         paths.push(file_path);
@@ -115,7 +115,7 @@ where
 
     let mut individual_times = Vec::new();
     for task in tasks {
-        let duration = task.await.map_err(|e| format!("Task failed: {:?}", e))??;
+        let duration = task.await.map_err(|e| format!("Task failed: {e:?}"))??;
         individual_times.push(duration.as_millis() as u64);
     }
 
@@ -142,15 +142,15 @@ async fn benchmark_extraction(
 
     run_benchmark(scenario, concurrency, move |i| {
         let pkg_path = package_paths[i % package_paths.len()].clone();
-        let dest = temp_dir.path().join(format!("extract_{}", i));
+        let dest = temp_dir.path().join(format!("extract_{i}"));
 
         async move {
-            std::fs::create_dir_all(&dest).map_err(|e| format!("Failed to create dir: {:?}", e))?;
+            std::fs::create_dir_all(&dest).map_err(|e| format!("Failed to create dir: {e:?}"))?;
 
             let task_start = Instant::now();
             rattler_package_streaming::tokio::fs::extract(&pkg_path, &dest)
                 .await
-                .map_err(|e| format!("Extraction failed: {:?}", e))?;
+                .map_err(|e| format!("Extraction failed: {e:?}"))?;
             Ok(task_start.elapsed())
         }
     })
@@ -167,11 +167,11 @@ async fn benchmark_download_and_extract(
     run_benchmark("Download+Extract", concurrency, move |i| {
         let pkg = &TEST_PACKAGES[i % TEST_PACKAGES.len()];
         let url = pkg.url.to_string();
-        let dest = temp_dir.path().join(format!("extract_{}", i));
+        let dest = temp_dir.path().join(format!("extract_{i}"));
         let client = client.clone();
 
         async move {
-            std::fs::create_dir_all(&dest).map_err(|e| format!("Failed to create dir: {:?}", e))?;
+            std::fs::create_dir_all(&dest).map_err(|e| format!("Failed to create dir: {e:?}"))?;
 
             let task_start = Instant::now();
             rattler_package_streaming::reqwest::tokio::extract(
@@ -182,7 +182,7 @@ async fn benchmark_download_and_extract(
                 None,
             )
             .await
-            .map_err(|e| format!("Download+Extract failed: {:?}", e))?;
+            .map_err(|e| format!("Download+Extract failed: {e:?}"))?;
             Ok(task_start.elapsed())
         }
     })
@@ -248,7 +248,7 @@ async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Run benchmarks at different concurrency levels
     for concurrency in [8, 16, 32] {
-        println!("\n=== Concurrency Level: {} ===", concurrency);
+        println!("\n=== Concurrency Level: {concurrency} ===");
 
         // Scenario 1: Pure extraction
         println!("\nRunning Scenario 1: Pure Extraction...");
