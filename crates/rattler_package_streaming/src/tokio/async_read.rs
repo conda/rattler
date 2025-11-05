@@ -137,6 +137,16 @@ pub async fn extract_tar_bz2(
     let (sha256_reader, md5) = md5_reader.finalize();
     let (_, sha256) = sha256_reader.finalize();
 
+    // Validate that we actually read some data from the stream.
+    // If total_size is 0, it likely means the stream was truncated or the bzip2
+    // decompressor silently failed without detecting an incomplete stream.
+    if total_size == 0 {
+        return Err(ExtractError::IoError(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "no data was read from the package stream - the stream may have been truncated",
+        )));
+    }
+
     Ok(ExtractResult {
         sha256,
         md5,
