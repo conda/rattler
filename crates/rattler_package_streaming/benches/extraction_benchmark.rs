@@ -1,9 +1,9 @@
 // Benchmark for tar.bz2 extraction with different scenarios and concurrency levels
 // Run with: cargo bench --bench extraction_benchmark --package rattler_package_streaming --features reqwest --no-fail-fast
 
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use std::io::Write;
 
 use reqwest::Client;
 use tempfile::TempDir;
@@ -70,7 +70,9 @@ impl BenchmarkResults {
 }
 
 /// Download all test packages to disk for pure extraction benchmark
-async fn download_test_packages(cache_dir: &std::path::Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+async fn download_test_packages(
+    cache_dir: &std::path::Path,
+) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     let client = Client::new();
     let mut paths = Vec::new();
 
@@ -143,8 +145,7 @@ async fn benchmark_extraction(
         let dest = temp_dir.path().join(format!("extract_{}", i));
 
         async move {
-            std::fs::create_dir_all(&dest)
-                .map_err(|e| format!("Failed to create dir: {:?}", e))?;
+            std::fs::create_dir_all(&dest).map_err(|e| format!("Failed to create dir: {:?}", e))?;
 
             let task_start = Instant::now();
             rattler_package_streaming::tokio::fs::extract(&pkg_path, &dest)
@@ -152,7 +153,8 @@ async fn benchmark_extraction(
                 .map_err(|e| format!("Extraction failed: {:?}", e))?;
             Ok(task_start.elapsed())
         }
-    }).await
+    })
+    .await
 }
 
 /// Benchmark download + extract
@@ -169,8 +171,7 @@ async fn benchmark_download_and_extract(
         let client = client.clone();
 
         async move {
-            std::fs::create_dir_all(&dest)
-                .map_err(|e| format!("Failed to create dir: {:?}", e))?;
+            std::fs::create_dir_all(&dest).map_err(|e| format!("Failed to create dir: {:?}", e))?;
 
             let task_start = Instant::now();
             rattler_package_streaming::reqwest::tokio::extract(
@@ -184,15 +185,26 @@ async fn benchmark_download_and_extract(
             .map_err(|e| format!("Download+Extract failed: {:?}", e))?;
             Ok(task_start.elapsed())
         }
-    }).await
+    })
+    .await
 }
 
 fn print_results(results: &BenchmarkResults) {
-    println!("\n{} - Concurrency: {}", results.scenario, results.concurrency);
+    println!(
+        "\n{} - Concurrency: {}",
+        results.scenario, results.concurrency
+    );
     println!("  Total time: {}ms", results.total_time_ms);
-    println!("  Throughput: {:.2} packages/sec", results.throughput_pkg_per_sec);
+    println!(
+        "  Throughput: {:.2} packages/sec",
+        results.throughput_pkg_per_sec
+    );
     println!("  Avg per package: {:.2}ms", results.avg_time_ms());
-    println!("  Min/Max: {}ms / {}ms", results.min_time_ms(), results.max_time_ms());
+    println!(
+        "  Min/Max: {}ms / {}ms",
+        results.min_time_ms(),
+        results.max_time_ms()
+    );
 }
 
 fn save_results_to_file(all_results: &[BenchmarkResults], filename: &str) -> std::io::Result<()> {
