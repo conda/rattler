@@ -205,7 +205,7 @@ impl CacheRwLock {
 
             // Update the length of the file
             let file_length = revision_bytes.len() + sha_bytes;
-            (&*file).set_len(file_length as u64).map_err(|e| {
+            file.set_len(file_length as u64).map_err(|e| {
                 PackageCacheLayerError::LockError(
                     "failed to truncate cache lock after writing revision".to_string(),
                     e,
