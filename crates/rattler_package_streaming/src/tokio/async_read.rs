@@ -29,6 +29,7 @@ async fn unpack_tar_archive<R: tokio::io::AsyncRead + Unpin>(
     let mut entries = archive.entries().map_err(ExtractError::IoError)?;
 
     // Memoize filesystem calls to canonicalize paths
+    #[allow(clippy::default_trait_access)] // So we dont have to import rustc_hash
     let mut memo = Default::default();
 
     while let Some(entry) = entries.next().await {
