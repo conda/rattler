@@ -1,5 +1,5 @@
 // Benchmark for tar.bz2 extraction with different scenarios and concurrency levels
-// Run with: cargo run --release --bin extraction_benchmark --package rattler_package_streaming --features reqwest
+// Run with: cargo bench --bench extraction_benchmark --package rattler_package_streaming --features reqwest --no-fail-fast
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};

@@ -13,6 +13,7 @@ use crate::{read::SizeCountingReader, ExtractError, ExtractResult};
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 
 /// Unix permission bits for executable files (user, group, and other execute bits).
+#[cfg(unix)]
 const EXECUTABLE_MODE_BITS: u32 = 0o111;
 
 /// Unpacks a tar archive, preserving only the executable bit on Unix.
