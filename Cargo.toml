@@ -152,6 +152,7 @@ superslice = "1.0.0"
 syn = "2.0.101"
 sysinfo = "0.36.0"
 tar = "0.4.44"
+astral-tokio-tar = "0.5"
 tempdir = "0.3.7"
 tempfile = "3.20.0"
 temp-env = { version = "0.3.6", features = ["async_closure"] }
