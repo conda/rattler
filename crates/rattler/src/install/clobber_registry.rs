@@ -239,7 +239,7 @@ impl ClobberRegistry {
                 conda_meta_path.join(record.file_name())
             );
             record
-                .write_to_path(conda_meta_path.as_path().join(record.file_name()), true)
+                .write_to_path(conda_meta_path.as_path().join(record.file_name()), false)
                 .map_err(|e| {
                     ClobberError::IoError(
                         format!(
