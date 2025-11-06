@@ -1,0 +1,146 @@
+---
+source: crates/rattler_conda_types/src/match_spec/condition.rs
+expression: results
+---
+- - bla; if foobar or bizbaz
+  - prefix: bla
+    condition:
+      Or:
+        - MatchSpec:
+            name: foobar
+        - MatchSpec:
+            name: bizbaz
+- - "bla; if python >=3.12 or foobar [version='3.12.*', url='https://foobar.com/bla.tar.bz2']"
+  - prefix: bla
+    condition:
+      Or:
+        - MatchSpec:
+            name: python
+            version: ">=3.12"
+        - MatchSpec:
+            name: foobar
+            version: 3.12.*
+            url: "https://foobar.com/bla.tar.bz2"
+- - xyz; if foobar and (bizbaz or blabla)
+  - prefix: xyz
+    condition:
+      And:
+        - MatchSpec:
+            name: foobar
+        - Or:
+            - MatchSpec:
+                name: bizbaz
+            - MatchSpec:
+                name: blabla
+- - test;
+  - prefix: test
+    condition: ~
+- - simple; if single_condition
+  - prefix: simple
+    condition:
+      MatchSpec:
+        name: single_condition
+- - complex; if a and b or c
+  - prefix: complex
+    condition:
+      Or:
+        - And:
+            - MatchSpec:
+                name: a
+            - MatchSpec:
+                name: b
+        - MatchSpec:
+            name: c
+- - nested; if (a or b) and (c or d)
+  - prefix: nested
+    condition:
+      And:
+        - Or:
+            - MatchSpec:
+                name: a
+            - MatchSpec:
+                name: b
+        - Or:
+            - MatchSpec:
+                name: c
+            - MatchSpec:
+                name: d
+- - deep; if a and (b or (c and d))
+  - prefix: deep
+    condition:
+      And:
+        - MatchSpec:
+            name: a
+        - Or:
+            - MatchSpec:
+                name: b
+            - And:
+                - MatchSpec:
+                    name: c
+                - MatchSpec:
+                    name: d
+- - deep; if a and(b or(c and d))
+  - prefix: deep
+    condition:
+      And:
+        - MatchSpec:
+            name: a
+        - Or:
+            - MatchSpec:
+                name: b
+            - And:
+                - MatchSpec:
+                    name: c
+                - MatchSpec:
+                    name: d
+- - "deep; if foobar >=1.23 *or* and(b >32.12,<=43 *and or(c and d))"
+  - prefix: deep
+    condition:
+      And:
+        - MatchSpec:
+            name: foobar
+            version: ">=1.23"
+            build: "*or*"
+        - Or:
+            - MatchSpec:
+                name: b
+                version: ">32.12,<=43"
+                build: "*and"
+            - And:
+                - MatchSpec:
+                    name: c
+                - MatchSpec:
+                    name: d
+- - "whitespace;   if   foo   or   bar  "
+  - prefix: whitespace
+    condition:
+      Or:
+        - MatchSpec:
+            name: foo
+        - MatchSpec:
+            name: bar
+- - underscores; if foo_bar and baz_qux
+  - prefix: underscores
+    condition:
+      And:
+        - MatchSpec:
+            name: foo_bar
+        - MatchSpec:
+            name: baz_qux
+- - mixed; if (alpha and beta) or (gamma and (delta or epsilon))
+  - prefix: mixed
+    condition:
+      Or:
+        - And:
+            - MatchSpec:
+                name: alpha
+            - MatchSpec:
+                name: beta
+        - And:
+            - MatchSpec:
+                name: gamma
+            - Or:
+                - MatchSpec:
+                    name: delta
+                - MatchSpec:
+                    name: epsilon
