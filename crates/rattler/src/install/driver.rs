@@ -154,11 +154,12 @@ impl InstallDriver {
         &self,
         transaction: &Transaction<Old, New>,
         target_prefix: &Path,
+        reporter: Option<&dyn crate::install::installer::Reporter>,
     ) -> Result<Option<PrePostLinkResult>, PrePostLinkError> {
         let mut result = None;
 
         if self.execute_link_scripts {
-            match self.run_pre_unlink_scripts(transaction, target_prefix) {
+            match self.run_pre_unlink_scripts(transaction, target_prefix, reporter) {
                 Ok(res) => {
                     result = Some(res);
                 }
@@ -215,6 +216,7 @@ impl InstallDriver {
         &self,
         transaction: &Transaction<Old, New>,
         target_prefix: &Prefix,
+        reporter: Option<&dyn crate::install::installer::Reporter>,
     ) -> Result<PostProcessResult, PostProcessingError> {
         let prefix_records: Vec<PrefixRecord> = PrefixRecord::collect_from_prefix(target_prefix)
             .map_err(PostProcessingError::FailedToDetectInstalledPackages)?;
@@ -222,17 +224,22 @@ impl InstallDriver {
         let required_packages =
             PackageRecord::sort_topologically(prefix_records.iter().collect::<Vec<_>>());
 
+        let clobbered_paths = self
+            .clobber_registry()
+            .unclobber(&required_packages, target_prefix)?;
+
         self.remove_empty_directories(&transaction.operations, &prefix_records, target_prefix)
             .unwrap_or_else(|e| {
                 tracing::warn!("Failed to remove empty directories: {} (ignored)", e);
             });
 
-        let clobbered_paths = self
-            .clobber_registry()
-            .unclobber(&required_packages, target_prefix)?;
-
         let post_link_result = if self.execute_link_scripts {
-            Some(self.run_post_link_scripts(transaction, &required_packages, target_prefix))
+            Some(self.run_post_link_scripts(
+                transaction,
+                &required_packages,
+                target_prefix,
+                reporter,
+            ))
         } else {
             None
         };

@@ -78,7 +78,6 @@
 
 use std::{collections::HashMap, io::Read, path::Path, str::FromStr, sync::Arc};
 
-use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use rattler_conda_types::{Platform, RepoDataRecord};
 
@@ -97,7 +96,10 @@ mod utils;
 
 pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
-pub use conda::{CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, InputHash};
+pub use conda::{
+    CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
+    PackageBuildSource,
+};
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
 pub use options::SolveOptions;
@@ -133,7 +135,7 @@ struct LockFileInner {
     pypi_packages: Vec<PypiPackageData>,
     pypi_environment_package_data: Vec<PypiPackageEnvironmentData>,
 
-    environment_lookup: FxHashMap<String, usize>,
+    environment_lookup: ahash::HashMap<String, usize>,
 }
 
 /// An package used in an environment. Selects a type of package based on the
@@ -165,7 +167,7 @@ struct EnvironmentData {
 
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
-    packages: FxHashMap<Platform, IndexSet<EnvironmentPackageData>>,
+    packages: ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>>,
 }
 
 impl LockFile {
@@ -558,6 +560,10 @@ mod test {
     #[case::v6_derived_channel("v6/derived-channel-lock.yml")]
     #[case::v6_sources("v6/sources-lock.yml")]
     #[case::v6_options("v6/options-lock.yml")]
+    #[case::v6_pixi_build_pinned_source("v6/pixi-build-pinned-source-lock.yml")]
+    #[case::v6_pixi_build_url_source("v6/pixi-build-url-source-lock.yml")]
+    #[case::v6_pixi_build_git_tag_source("v6/pixi-build-git-tag-source-lock.yml")]
+    #[case::v6_pixi_build_git_rev_only_source("v6/pixi-build-git-rev-only-source-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")

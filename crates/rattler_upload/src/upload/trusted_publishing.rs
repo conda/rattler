@@ -3,7 +3,7 @@
 
 //! Trusted publishing (via OIDC) with GitHub actions.
 
-use reqwest::{header, StatusCode};
+use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -97,7 +97,7 @@ struct MintTokenRequest {
 }
 
 /// Returns the short-lived token to use for uploading.
-pub(crate) async fn get_token(
+pub async fn get_token(
     client: &ClientWithMiddleware,
     prefix_url: &Url,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
@@ -123,6 +123,18 @@ pub(crate) async fn get_token(
     Ok(publish_token)
 }
 
+/// Get raw OIDC token for attestation generation
+pub async fn get_raw_oidc_token(
+    client: &ClientWithMiddleware,
+) -> Result<String, TrustedPublishingError> {
+    let oidc_token_request_token =
+        env::var(consts::ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|err| {
+            TrustedPublishingError::from_var_err(consts::ACTIONS_ID_TOKEN_REQUEST_TOKEN, err)
+        })?;
+
+    get_oidc_token(&oidc_token_request_token, client).await
+}
+
 async fn get_oidc_token(
     oidc_token_request_token: &str,
     client: &ClientWithMiddleware,
@@ -135,10 +147,9 @@ async fn get_oidc_token(
         .query_pairs_mut()
         .append_pair("audience", "prefix.dev");
     tracing::info!("Querying the trusted publishing OIDC token from {oidc_token_url}");
-    let authorization = format!("bearer {oidc_token_request_token}");
     let response = client
         .get(oidc_token_url.clone())
-        .header(header::AUTHORIZATION, authorization)
+        .bearer_auth(oidc_token_request_token)
         .send()
         .await
         .map_err(|err| TrustedPublishingError::ReqwestMiddleware(oidc_token_url.clone(), err))?;

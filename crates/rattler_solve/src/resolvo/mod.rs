@@ -6,22 +6,22 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Formatter},
     marker::PhantomData,
-    ops::Deref,
 };
 
 use chrono::{DateTime, Utc};
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::{
-    package::ArchiveType, version_spec::EqualityOperator, BuildNumberSpec, GenericVirtualPackage,
-    MatchSpec, Matches, NamelessMatchSpec, OrdOperator, PackageName, PackageRecord,
-    ParseMatchSpecError, ParseStrictness, RepoDataRecord, SolverResult, StringMatcher, VersionSpec,
+    package::ArchiveType, utils::TimestampMs, GenericVirtualPackage, MatchSpec, Matches,
+    NamelessMatchSpec, PackageName, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
+    SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
-    Candidates, Dependencies, DependencyProvider, HintDependenciesAvailable, Interner,
-    KnownDependencies, NameId, Problem, Requirement, SolvableId, Solver as LibSolvRsSolver,
-    SolverCache, StringId, UnsolvableOrCancelled, VersionSetId, VersionSetUnionId,
+    Candidates, Condition, ConditionId, ConditionalRequirement, Dependencies, DependencyProvider,
+    HintDependenciesAvailable, Interner, KnownDependencies, NameId, Problem, SolvableId,
+    Solver as LibSolvRsSolver, SolverCache, StringId, UnsolvableOrCancelled, VersionSetId,
+    VersionSetUnionId,
 };
 
 use crate::{
@@ -50,52 +50,35 @@ impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
 impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 
 /// Wrapper around `MatchSpec` so that we can use it in the `resolvo` pool
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct SolverMatchSpec<'a> {
-    inner: NamelessMatchSpec,
-    feature: Option<String>,
-    _marker: PhantomData<&'a PackageRecord>,
-}
+pub enum SolverMatchSpec<'a> {
+    /// Represents a requirement on another package.
+    MatchSpec(NamelessMatchSpec),
 
-impl<'a> SolverMatchSpec<'a> {
-    /// Returns a reference to this match spec with the given feature enabled
-    pub fn with_feature(&self, feature: String) -> SolverMatchSpec<'a> {
-        Self {
-            inner: self.inner.clone(),
-            feature: Some(feature),
-            _marker: self._marker,
-        }
-    }
+    /// The name already uniquely identifies a single package. So we don't need
+    /// any special "spec". here.
+    Extra,
 
-    /// Returns a mutable reference to this match spec after enabling the given
-    /// feature
-    pub fn set_feature(&mut self, feature: String) -> &SolverMatchSpec<'a> {
-        self.feature = Some(feature);
-        self
-    }
+    /// A helper variant to make sure we can add a lifetime to this enum.
+    _Phantom(PhantomData<&'a ()>),
 }
 
 impl From<NamelessMatchSpec> for SolverMatchSpec<'_> {
     fn from(value: NamelessMatchSpec) -> Self {
-        Self {
-            inner: value,
-            feature: None,
-            _marker: PhantomData,
-        }
+        SolverMatchSpec::MatchSpec(value)
     }
 }
 
 impl Display for SolverMatchSpec<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.inner)
-    }
-}
-
-impl Deref for SolverMatchSpec<'_> {
-    type Target = NamelessMatchSpec;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
+        match self {
+            SolverMatchSpec::MatchSpec(spec) => {
+                write!(f, "{spec}")
+            }
+            SolverMatchSpec::Extra => Ok(()),
+            SolverMatchSpec::_Phantom(_) => unreachable!(),
+        }
     }
 }
 
@@ -103,17 +86,25 @@ impl<'a> VersionSet for SolverMatchSpec<'a> {
     type V = SolverPackageRecord<'a>;
 }
 
-/// Wrapper around [`PackageRecord`] so that we can use it in resolvo pool
+/// Wrapper around [`RepoDataRecord`] so that we can use it in resolvo pool.
+/// Also represents a virtual package or an extra of a package.
 #[derive(Eq, PartialEq)]
 pub enum SolverPackageRecord<'a> {
     /// Represents a record from the repodata
     Record(&'a RepoDataRecord),
 
-    /// Represents a record with a specific feature enabled
-    RecordWithFeature(&'a RepoDataRecord, String),
-
     /// Represents a virtual package.
     VirtualPackage(&'a GenericVirtualPackage),
+
+    /// Represents a named extra for a particular package name. e.g.
+    /// `numpy[blas]`
+    Extra {
+        /// The name of the package
+        package: PackageName,
+
+        /// The extra to activate in the package
+        extra: String,
+    },
 }
 
 impl PartialOrd<Self> for SolverPackageRecord<'_> {
@@ -126,7 +117,8 @@ impl Ord for SolverPackageRecord<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.name()
             .cmp(other.name())
-            .then_with(|| self.version().cmp(other.version()))
+            .then_with(|| self.extra().cmp(&other.extra()))
+            .then_with(|| self.version().cmp(&other.version()))
             .then_with(|| self.build_number().cmp(&other.build_number()))
             .then_with(|| self.timestamp().cmp(&other.timestamp()))
     }
@@ -135,47 +127,50 @@ impl Ord for SolverPackageRecord<'_> {
 impl SolverPackageRecord<'_> {
     fn name(&self) -> &PackageName {
         match self {
-            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => {
-                &rec.package_record.name
-            }
+            SolverPackageRecord::Record(rec) => &rec.package_record.name,
+            SolverPackageRecord::Extra { package, .. } => package,
             SolverPackageRecord::VirtualPackage(rec) => &rec.name,
         }
     }
 
-    fn version(&self) -> &rattler_conda_types::Version {
+    fn extra(&self) -> Option<&String> {
         match self {
-            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => {
-                rec.package_record.version.version()
-            }
-            SolverPackageRecord::VirtualPackage(rec) => &rec.version,
+            SolverPackageRecord::Extra { extra, .. } => Some(extra),
+            SolverPackageRecord::Record(_) | SolverPackageRecord::VirtualPackage(_) => None,
+        }
+    }
+
+    fn version(&self) -> Option<&rattler_conda_types::Version> {
+        match self {
+            SolverPackageRecord::Record(rec) => Some(rec.package_record.version.version()),
+            SolverPackageRecord::VirtualPackage(rec) => Some(&rec.version),
+            SolverPackageRecord::Extra { .. } => None,
         }
     }
 
     fn track_features(&self) -> &[String] {
         const EMPTY: [String; 0] = [];
         match self {
-            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => {
-                &rec.package_record.track_features
-            }
-            SolverPackageRecord::VirtualPackage(_rec) => &EMPTY,
+            SolverPackageRecord::Record(rec) => &rec.package_record.track_features,
+            SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(..) => &EMPTY,
         }
     }
 
     fn build_number(&self) -> u64 {
         match self {
-            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => {
-                rec.package_record.build_number
-            }
-            SolverPackageRecord::VirtualPackage(_rec) => 0,
+            SolverPackageRecord::Record(rec) => rec.package_record.build_number,
+            SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(..) => 0,
         }
     }
 
     fn timestamp(&self) -> Option<&chrono::DateTime<chrono::Utc>> {
         match self {
-            SolverPackageRecord::Record(rec) | SolverPackageRecord::RecordWithFeature(rec, _) => {
-                rec.package_record.timestamp.as_ref()
-            }
-            SolverPackageRecord::VirtualPackage(_rec) => None,
+            SolverPackageRecord::Record(rec) => rec
+                .package_record
+                .timestamp
+                .as_ref()
+                .map(TimestampMs::datetime),
+            SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(..) => None,
         }
     }
 }
@@ -186,8 +181,8 @@ impl Display for SolverPackageRecord<'_> {
             SolverPackageRecord::Record(rec) => {
                 write!(f, "{}", &rec.package_record)
             }
-            SolverPackageRecord::RecordWithFeature(rec, feature) => {
-                write!(f, "{}[{}]", &rec.package_record, feature)
+            SolverPackageRecord::Extra { package, extra } => {
+                write!(f, "{}[{}]", package.as_normalized(), extra)
             }
             SolverPackageRecord::VirtualPackage(rec) => {
                 write!(f, "{rec}")
@@ -199,18 +194,24 @@ impl Display for SolverPackageRecord<'_> {
 /// Represents the type of name that is being used in the pool.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum NameType {
-    /// A package name without a feature.
+    /// A simple package
     Base(String),
 
-    /// A package name with a feature.
-    BaseWithFeature(String, String),
+    /// An extra of a package (e.g. `numpy[blas]`)
+    Extra {
+        /// The package name
+        package: String,
+
+        /// The extra to activate.
+        extra: String,
+    },
 }
 
 impl Display for NameType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             NameType::Base(name) => write!(f, "{name}"),
-            NameType::BaseWithFeature(name, feature) => write!(f, "{name}[{feature}]"),
+            NameType::Extra { package, extra } => write!(f, "{package}[{extra}]"),
         }
     }
 }
@@ -218,14 +219,20 @@ impl Display for NameType {
 impl Ord for NameType {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match (self, other) {
-            // Compare names first
-            (NameType::Base(name1), NameType::Base(name2))
-            | (NameType::BaseWithFeature(name1, _), NameType::BaseWithFeature(name2, _)) => {
-                name1.cmp(name2)
-            }
-            // WithoutFeature comes before WithFeature
-            (NameType::Base(_), NameType::BaseWithFeature(_, _)) => std::cmp::Ordering::Greater,
-            (NameType::BaseWithFeature(_, _), NameType::Base(_)) => std::cmp::Ordering::Less,
+            // Compare names first, then extras
+            (NameType::Base(name1), NameType::Base(name2)) => name1.cmp(name2),
+            (
+                NameType::Extra {
+                    package: a,
+                    extra: extra_a,
+                },
+                NameType::Extra {
+                    package: b,
+                    extra: extra_b,
+                },
+            ) => a.cmp(b).then_with(|| extra_a.cmp(extra_b)),
+            (NameType::Base(_), NameType::Extra { .. }) => std::cmp::Ordering::Greater,
+            (NameType::Extra { .. }, NameType::Base(_)) => std::cmp::Ordering::Less,
         }
     }
 }
@@ -236,9 +243,9 @@ impl PartialOrd for NameType {
     }
 }
 
-impl From<&str> for NameType {
-    fn from(value: &str) -> Self {
-        NameType::Base(value.to_owned())
+impl From<&PackageName> for NameType {
+    fn from(value: &PackageName) -> Self {
+        NameType::Base(value.as_normalized().to_owned())
     }
 }
 
@@ -249,7 +256,9 @@ impl From<&str> for NameType {
 pub struct CondaDependencyProvider<'a> {
     /// The pool that deduplicates data used by the provider.
     pub pool: Pool<SolverMatchSpec<'a>, NameType>,
+    name_to_condition: RefCell<HashMap<NameId, ConditionId>>,
 
+    /// Holds all the cached candidates for each package name.
     records: HashMap<NameId, Candidates>,
 
     matchspec_to_highest_version:
@@ -283,7 +292,7 @@ impl<'a> CondaDependencyProvider<'a> {
 
         // Add virtual packages to the records
         for virtual_package in virtual_packages {
-            let name = pool.intern_package_name(virtual_package.name.as_normalized());
+            let name = pool.intern_package_name(&virtual_package.name);
             let solvable =
                 pool.intern_solvable(name, SolverPackageRecord::VirtualPackage(virtual_package));
             records.entry(name).or_default().candidates.push(solvable);
@@ -293,7 +302,7 @@ impl<'a> CondaDependencyProvider<'a> {
         let direct_dependencies = match_specs
             .iter()
             .filter_map(|spec| spec.name.as_ref())
-            .map(|name| pool.intern_package_name(name.as_normalized()))
+            .map(|name| pool.intern_package_name(name))
             .collect();
 
         // TODO: Normalize these channel names to urls so we can compare them correctly.
@@ -375,131 +384,104 @@ impl<'a> CondaDependencyProvider<'a> {
             }
 
             for record in ordered_repodata {
-                let package_name =
-                    pool.intern_package_name(record.package_record.name.as_normalized());
+                let package_name = pool.intern_package_name(&record.package_record.name);
                 let solvable_id =
                     pool.intern_solvable(package_name, SolverPackageRecord::Record(record));
 
-                // Collect all candidates first
-                let mut all_entries = vec![(package_name, solvable_id)];
+                // Update records with all entries in a single mutable borrow
+                let candidates = records.entry(package_name).or_default();
+                candidates.candidates.push(solvable_id);
 
-                // Add feature-enabled solvables
-                for feature in record.package_record.experimental_extra_depends.keys() {
-                    let package_name_with_feature =
-                        pool.intern_package_name(NameType::BaseWithFeature(
-                            record.package_record.name.as_normalized().to_owned(),
-                            feature.clone(),
+                // Filter out any records that are newer than a specific date.
+                match (&exclude_newer, &record.package_record.timestamp) {
+                    (Some(exclude_newer), Some(record_timestamp))
+                        if record_timestamp > exclude_newer =>
+                    {
+                        let reason = pool.intern_string(format!(
+                            "the package is uploaded after the cutoff date of {exclude_newer}"
                         ));
-                    let feature_solvable = pool.intern_solvable(
-                        package_name_with_feature,
-                        SolverPackageRecord::RecordWithFeature(record, feature.clone()),
-                    );
-                    let package_name_with_feature =
-                        pool.intern_package_name(NameType::BaseWithFeature(
-                            record.package_record.name.as_normalized().to_owned(),
-                            feature.clone(),
-                        ));
-
-                    all_entries.push((package_name_with_feature, feature_solvable));
+                        candidates.excluded.push((solvable_id, reason));
+                    }
+                    _ => {}
                 }
 
-                // Update records with all entries in a single mutable borrow
-                for (pkg_name, solvable) in all_entries {
-                    let candidates = records.entry(pkg_name).or_default();
-                    candidates.candidates.push(solvable);
-
-                    // Filter out any records that are newer than a specific date.
-                    match (&exclude_newer, &record.package_record.timestamp) {
-                        (Some(exclude_newer), Some(record_timestamp))
-                            if record_timestamp > exclude_newer =>
-                        {
-                            let reason = pool.intern_string(format!(
-                                "the package is uploaded after the cutoff date of {exclude_newer}"
-                            ));
-                            candidates.excluded.push((solvable, reason));
-                        }
-                        _ => {}
-                    }
-
-                    // Add to excluded when package is not in the specified channel.
-                    if !channel_specific_specs.is_empty() {
-                        if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
-                            spec.name
-                                .as_ref()
-                                .expect("expecting a name")
-                                .as_normalized()
-                                == record.package_record.name.as_normalized()
-                        }) {
-                            // Check if the spec has a channel, and compare it to the repodata
-                            // channel
-                            if let Some(spec_channel) = &spec.channel {
-                                if record.channel.as_ref() != Some(&spec_channel.canonical_name()) {
-                                    tracing::debug!("Ignoring {} {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), match &record.channel {
+                // Add to excluded when package is not in the specified channel.
+                if !channel_specific_specs.is_empty() {
+                    if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
+                        spec.name
+                            .as_ref()
+                            .expect("expecting a name")
+                            .as_normalized()
+                            == record.package_record.name.as_normalized()
+                    }) {
+                        // Check if the spec has a channel, and compare it to the repodata
+                        // channel
+                        if let Some(spec_channel) = &spec.channel {
+                            if record.channel.as_ref() != Some(&spec_channel.canonical_name()) {
+                                tracing::debug!("Ignoring {} {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), match &record.channel {
                                         Some(channel) => format!("from {}", &channel),
                                         None => "without a channel".to_string(),
                                     });
-                                    // Add record to the excluded with reason of being in the non
-                                    // requested channel.
-                                    let message = format!(
-                                        "candidate not in requested channel: '{}'",
-                                        spec_channel
-                                            .name
-                                            .clone()
-                                            .unwrap_or(spec_channel.base_url.to_string())
-                                    );
-                                    candidates
-                                        .excluded
-                                        .push((solvable, pool.intern_string(message)));
-                                    continue;
-                                }
+                                // Add record to the excluded with reason of being in the non
+                                // requested channel.
+                                let message = format!(
+                                    "candidate not in requested channel: '{}'",
+                                    spec_channel
+                                        .name
+                                        .clone()
+                                        .unwrap_or(spec_channel.base_url.to_string())
+                                );
+                                candidates
+                                    .excluded
+                                    .push((solvable_id, pool.intern_string(message)));
+                                continue;
                             }
                         }
                     }
+                }
 
-                    // Enforce channel priority
-                    if let (Some(first_channel), ChannelPriority::Strict) = (
-                        package_name_found_in_channel
-                            .get(record.package_record.name.as_normalized()),
-                        channel_priority,
-                    ) {
-                        // Add the record to the excluded list when it is from a different channel.
-                        if first_channel != &&record.channel {
-                            if let Some(channel) = &record.channel {
-                                tracing::debug!(
-                                    "Ignoring '{}' from '{}' because of strict channel priority.",
-                                    &record.package_record.name.as_normalized(),
-                                    channel
-                                );
-                                candidates.excluded.push((
-                                    solvable,
-                                    pool.intern_string(format!(
-                                        "due to strict channel priority not using this option from: '{channel}'",
-                                    )),
-                                ));
-                            } else {
-                                tracing::debug!(
+                // Enforce channel priority
+                if let (Some(first_channel), ChannelPriority::Strict) = (
+                    package_name_found_in_channel.get(record.package_record.name.as_normalized()),
+                    channel_priority,
+                ) {
+                    // Add the record to the excluded list when it is from a different channel.
+                    if first_channel != &&record.channel {
+                        if let Some(channel) = &record.channel {
+                            tracing::debug!(
+                                "Ignoring '{}' from '{}' because of strict channel priority.",
+                                &record.package_record.name.as_normalized(),
+                                channel
+                            );
+                            candidates.excluded.push((
+                                solvable_id,
+                                pool.intern_string(format!(
+                                    "due to strict channel priority not using this option from: '{channel}'",
+                                )),
+                            ));
+                        } else {
+                            tracing::debug!(
                                     "Ignoring '{}' without a channel because of strict channel priority.",
                                     &record.package_record.name.as_normalized(),
                                 );
-                                candidates.excluded.push((
-                                    solvable,
-                                    pool.intern_string("due to strict channel priority not using from an unknown channel".to_string()),
-                                ));
-                            }
+                            candidates.excluded.push((
+                                solvable_id,
+                                pool.intern_string("due to strict channel priority not using from an unknown channel".to_string()),
+                            ));
                         }
-                    } else {
-                        package_name_found_in_channel.insert(
-                            record.package_record.name.as_normalized().to_string(),
-                            &record.channel,
-                        );
                     }
+                } else {
+                    package_name_found_in_channel.insert(
+                        record.package_record.name.as_normalized().to_string(),
+                        &record.channel,
+                    );
                 }
             }
         }
 
         // Add favored packages to the records
         for favored_record in favored_records {
-            let name = pool.intern_package_name(favored_record.package_record.name.as_normalized());
+            let name = pool.intern_package_name(&favored_record.package_record.name);
             let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(favored_record));
             let candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
@@ -507,7 +489,7 @@ impl<'a> CondaDependencyProvider<'a> {
         }
 
         for locked_record in locked_records {
-            let name = pool.intern_package_name(locked_record.package_record.name.as_normalized());
+            let name = pool.intern_package_name(&locked_record.package_record.name);
             let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(locked_record));
             let candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
@@ -521,6 +503,7 @@ impl<'a> CondaDependencyProvider<'a> {
 
         Ok(Self {
             pool,
+            name_to_condition: RefCell::default(),
             records,
             matchspec_to_highest_version: RefCell::default(),
             parse_match_spec_cache: RefCell::default(),
@@ -531,8 +514,21 @@ impl<'a> CondaDependencyProvider<'a> {
     }
 
     /// Returns all package names
-    pub fn package_names(&self) -> impl Iterator<Item = NameId> + '_ {
+    pub fn package_names(&self) -> impl Iterator<Item = NameId> + use<'_, 'a> {
         self.records.keys().copied()
+    }
+
+    fn extra_condition(&self, package: &PackageName, extra: &str) -> ConditionId {
+        let name_id = self.pool.intern_package_name(NameType::Extra {
+            package: package.as_normalized().to_owned(),
+            extra: extra.to_owned(),
+        });
+        let mut name_to_condition = self.name_to_condition.borrow_mut();
+        *name_to_condition.entry(name_id).or_insert_with(|| {
+            let version_set = extra_version_set(&self.pool, package.clone(), extra.to_owned());
+            self.pool
+                .intern_condition(Condition::Requirement(version_set))
+        })
     }
 }
 
@@ -545,6 +541,10 @@ pub enum CancelReason {
 impl Interner for CondaDependencyProvider<'_> {
     fn display_solvable(&self, solvable: SolvableId) -> impl Display + '_ {
         &self.pool.resolve_solvable(solvable).record
+    }
+
+    fn resolve_condition(&self, condition: ConditionId) -> Condition {
+        self.pool.resolve_condition(condition).clone()
     }
 
     fn version_sets_in_union(
@@ -561,12 +561,13 @@ impl Interner for CondaDependencyProvider<'_> {
 
         let versions = solvables
             .iter()
-            .map(|&id| self.pool.resolve_solvable(id).record.version())
+            .filter_map(|&id| self.pool.resolve_solvable(id).record.version())
             .sorted()
             .format(" | ");
 
         let name = self.display_solvable_name(solvables[0]);
-        format!("{name} {versions}")
+        let result = format!("{name} {versions}");
+        result.trim_end().to_string()
     }
 
     fn display_name(&self, name: NameId) -> impl Display + '_ {
@@ -625,112 +626,100 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
     }
 
     async fn get_candidates(&self, name: NameId) -> Option<Candidates> {
-        self.records.get(&name).cloned()
+        match self.pool.resolve_package_name(name) {
+            NameType::Base(_) => self.records.get(&name).cloned(),
+            NameType::Extra { package, extra } => {
+                // For extras, we need to create a new candidates object
+                // that contains only the extra solvable.
+                let extra_solvable = add_extra(
+                    &self.pool,
+                    PackageName::new_unchecked(package),
+                    extra.clone(),
+                );
+                Some(Candidates {
+                    candidates: vec![extra_solvable],
+                    favored: None,
+                    locked: None,
+                    excluded: Vec::new(),
+                    hint_dependencies_available: HintDependenciesAvailable::All,
+                })
+            }
+        }
     }
 
     async fn get_dependencies(&self, solvable: SolvableId) -> Dependencies {
         let mut dependencies = KnownDependencies::default();
 
-        // Get the record and any feature that might be enabled
-        let (record, feature) = match &self.pool.resolve_solvable(solvable).record {
-            SolverPackageRecord::Record(rec) => (rec, None),
-            SolverPackageRecord::RecordWithFeature(rec, feature) => (rec, Some(feature)),
-            SolverPackageRecord::VirtualPackage(_) => return Dependencies::Known(dependencies),
+        let record = match &self.pool.resolve_solvable(solvable).record {
+            SolverPackageRecord::Record(rec) => rec,
+            SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(_) => {
+                return Dependencies::Known(dependencies)
+            }
         };
 
         let mut parse_match_spec_cache = self.parse_match_spec_cache.borrow_mut();
 
-        // If this is a feature-enabled package, add its feature dependencies
-        if let Some(feature_name) = feature {
-            // Find the feature's dependencies
-            if let Some(deps) = record
-                .package_record
-                .experimental_extra_depends
-                .get(feature_name)
-            {
-                // Add each dependency for this feature
-                for req in deps {
-                    let version_set_id = match parse_match_spec(
-                        &self.pool,
-                        req,
-                        &mut parse_match_spec_cache,
-                    ) {
-                        Ok(version_set_id) => version_set_id,
-                        Err(e) => {
-                            let reason = self.pool.intern_string(format!(
-                                "the optional dependency '{req}' for feature '{feature_name}' failed to parse: {e}"
-                            ));
-                            return Dependencies::Unknown(reason);
-                        }
-                    };
+        // Add regular dependencies
+        for depends in record.package_record.depends.iter() {
+            let version_set_id =
+                match parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache) {
+                    Ok(version_set_id) => version_set_id,
+                    Err(e) => {
+                        let reason = self.pool.intern_string(format!(
+                            "the dependency '{depends}' failed to parse: {e}",
+                        ));
 
-                    dependencies
-                        .requirements
-                        .extend(version_set_id.into_iter().map(Requirement::from));
-                }
-
-                // Add a dependency back to the base package with exact version
-                let base_spec = MatchSpec {
-                    name: Some(record.package_record.name.clone()),
-                    version: Some(VersionSpec::Exact(
-                        EqualityOperator::Equals,
-                        record.package_record.version.version().clone(),
-                    )),
-                    build: Some(StringMatcher::Exact(record.package_record.build.clone())),
-                    build_number: Some(BuildNumberSpec::new(
-                        OrdOperator::Eq,
-                        record.package_record.build_number,
-                    )),
-                    subdir: Some(record.package_record.subdir.clone()),
-                    md5: record.package_record.md5,
-                    sha256: record.package_record.sha256,
-                    extras: None,
-                    ..Default::default()
+                        return Dependencies::Unknown(reason);
+                    }
                 };
 
-                let (name, nameless_spec) = base_spec.into_nameless();
-                let name_id = self.pool.intern_package_name(
-                    name.expect("cannot use matchspec without a name")
-                        .as_normalized(),
-                );
-                let version_set_id = self.pool.intern_version_set(name_id, nameless_spec.into());
-                dependencies.requirements.push(version_set_id.into());
-            }
-        } else {
-            // Add regular dependencies
-            for depends in record.package_record.depends.iter() {
-                let version_set_id =
-                    match parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache) {
-                        Ok(version_set_id) => version_set_id,
-                        Err(e) => {
-                            let reason = self.pool.intern_string(format!(
-                                "the dependency '{depends}' failed to parse: {e}",
-                            ));
+            dependencies
+                .requirements
+                .extend(version_set_id.into_iter().map(ConditionalRequirement::from));
+        }
 
-                            return Dependencies::Unknown(reason);
-                        }
-                    };
+        // Add constraints from the record
+        for constrains in record.package_record.constrains.iter() {
+            let version_set_ids =
+                match parse_match_spec(&self.pool, constrains, &mut parse_match_spec_cache) {
+                    Ok(version_set_id) => version_set_id,
+                    Err(e) => {
+                        let reason = self.pool.intern_string(format!(
+                            "the constrains '{constrains}' failed to parse: {e}",
+                        ));
 
-                dependencies
-                    .requirements
-                    .extend(version_set_id.into_iter().map(Requirement::from));
-            }
+                        return Dependencies::Unknown(reason);
+                    }
+                };
+            dependencies.constrains.extend(version_set_ids);
+        }
 
-            for constrains in record.package_record.constrains.iter() {
-                let version_set_id =
-                    match parse_match_spec(&self.pool, constrains, &mut parse_match_spec_cache) {
-                        Ok(version_set_id) => version_set_id,
-                        Err(e) => {
-                            let reason = self.pool.intern_string(format!(
-                                "the constrains '{constrains}' failed to parse: {e}",
-                            ));
+        // Add extras
+        for (extra, matchspec) in record
+            .package_record
+            .experimental_extra_depends
+            .iter()
+            .flat_map(|(extra, deps)| deps.iter().map(move |dep| (extra, dep)))
+        {
+            let version_set_ids =
+                match parse_match_spec(&self.pool, matchspec, &mut parse_match_spec_cache) {
+                    Ok(version_set_id) => version_set_id,
+                    Err(e) => {
+                        let reason = self.pool.intern_string(format!(
+                            "the constrains '{matchspec}' failed to parse: {e}",
+                        ));
 
-                            return Dependencies::Unknown(reason);
-                        }
-                    };
-                for version_set_id in version_set_id {
-                    dependencies.constrains.push(version_set_id);
-                }
+                        return Dependencies::Unknown(reason);
+                    }
+                };
+
+            // Add them as conditional requirements (e.g. `numpy; if extra`).
+            let condition_id = self.extra_condition(&record.package_record.name, extra);
+            for version_set_id in version_set_ids {
+                dependencies.requirements.push(ConditionalRequirement {
+                    requirement: version_set_id.into(),
+                    condition: Some(condition_id),
+                });
             }
         }
 
@@ -744,53 +733,54 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
         inverse: bool,
     ) -> Vec<SolvableId> {
         let spec = self.pool.resolve_version_set(version_set);
-
-        candidates
-            .iter()
-            .copied()
-            .filter(|c| {
-                let record = &self.pool.resolve_solvable(*c).record;
-                match record {
-                    SolverPackageRecord::Record(rec) => {
-                        // Base package matches if spec matches and no features are required
-
-                        spec.matches(*rec) != inverse
-                    }
-                    SolverPackageRecord::RecordWithFeature(rec, feature) => {
-                        // Feature-enabled package matches if spec matches and feature is required
-
-                        if spec.matches(*rec) {
-                            if let Some(spec_feature) = &spec.feature {
-                                (*spec_feature == *feature) != inverse
-                            } else {
-                                inverse
+        match spec {
+            SolverMatchSpec::MatchSpec(spec) => {
+                candidates
+                    .iter()
+                    .copied()
+                    .filter(|c| {
+                        let record = &self.pool.resolve_solvable(*c).record;
+                        match record {
+                            SolverPackageRecord::Record(rec) => {
+                                // Base package matches if spec matches and no features are required
+                                spec.matches(*rec) != inverse
                             }
-                        } else {
-                            inverse
-                        }
-                    }
-                    SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
-                        version,
-                        build_string,
-                        ..
-                    }) => {
-                        if let Some(spec) = spec.version.as_ref() {
-                            if !spec.matches(version) {
-                                return inverse;
-                            }
-                        }
+                            SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
+                                version,
+                                build_string,
+                                ..
+                            }) => {
+                                if let Some(spec) = spec.version.as_ref() {
+                                    if !spec.matches(version) {
+                                        return inverse;
+                                    }
+                                }
 
-                        if let Some(build_match) = spec.build.as_ref() {
-                            if !build_match.matches(build_string) {
-                                return inverse;
+                                if let Some(build_match) = spec.build.as_ref() {
+                                    if !build_match.matches(build_string) {
+                                        return inverse;
+                                    }
+                                }
+
+                                !inverse
+                            }
+                            SolverPackageRecord::Extra { .. } => {
+                                unreachable!("extras should never be compared to matchspecs")
                             }
                         }
-
-                        !inverse
-                    }
+                    })
+                    .collect()
+            }
+            SolverMatchSpec::Extra => {
+                // Extras are already filtered by name.
+                if inverse {
+                    Vec::new()
+                } else {
+                    candidates.to_vec()
                 }
-            })
-            .collect()
+            }
+            SolverMatchSpec::_Phantom(_) => unreachable!(),
+        }
     }
 
     fn should_cancel_with_value(&self) -> Option<Box<dyn std::any::Any>> {
@@ -838,54 +828,30 @@ impl super::SolverImpl for Solver {
 
         // Construct the requirements that the solver needs to satisfy.
         let virtual_package_requirements = task.virtual_packages.iter().map(|spec| {
-            let name_id = provider.pool.intern_package_name(spec.name.as_normalized());
+            let name_id = provider.pool.intern_package_name(&spec.name);
             provider
                 .pool
                 .intern_version_set(name_id, NamelessMatchSpec::default().into())
         });
 
-        let root_requirements = task.specs.iter().flat_map(|spec| {
-            let (name, nameless_spec) = spec.clone().into_nameless();
-            let features = &spec.extras;
-            let name = name.expect("cannot use matchspec without a name");
-            let name_id = provider.pool.intern_package_name(name.as_normalized());
-            let mut reqs = vec![provider
-                .pool
-                .intern_version_set(name_id, nameless_spec.clone().into())];
+        let root_requirements = task
+            .specs
+            .into_iter()
+            .flat_map(|spec| version_sets_for_match_spec(&provider.pool, spec));
 
-            // Add requirements for optional features if specified
-            if let Some(features) = features {
-                for feature in features {
-                    // Create a version set that matches the feature-enabled package
-                    let package_name_with_feature =
-                        NameType::BaseWithFeature(name.as_normalized().to_owned(), feature.clone());
-                    let feature_name_id =
-                        provider.pool.intern_package_name(package_name_with_feature);
-
-                    let mut solver_match_spec: SolverMatchSpec<'_> = nameless_spec.clone().into();
-                    let _ = solver_match_spec.set_feature(feature.clone());
-
-                    let feature_version_set = provider
-                        .pool
-                        .intern_version_set(feature_name_id, solver_match_spec);
-                    reqs.push(feature_version_set);
-                }
-            }
-            reqs
-        });
-
-        let all_requirements: Vec<Requirement> = virtual_package_requirements
+        let all_requirements: Vec<_> = virtual_package_requirements
             .chain(root_requirements)
-            .map(Requirement::from)
+            .map(ConditionalRequirement::from)
             .collect();
 
         let root_constraints = task
             .constraints
             .iter()
             .map(|spec| {
-                let (name, spec) = spec.clone().into_nameless();
-                let name = name.expect("cannot use matchspec without a name");
-                let name_id = provider.pool.intern_package_name(name.as_normalized());
+                let (Some(name), spec) = spec.clone().into_nameless() else {
+                    unimplemented!("matchspecs without a name are not supported");
+                };
+                let name_id = provider.pool.intern_package_name(&name);
                 provider.pool.intern_version_set(name_id, spec.into())
             })
             .collect();
@@ -908,7 +874,7 @@ impl super::SolverImpl for Solver {
         })?;
 
         // Get the resulting packages from the solver.
-        let mut features: HashMap<PackageName, Vec<String>> = HashMap::new();
+        let mut extras: HashMap<PackageName, Vec<String>> = HashMap::new();
         let mut records = Vec::new();
 
         for id in solvables {
@@ -916,17 +882,17 @@ impl super::SolverImpl for Solver {
                 SolverPackageRecord::Record(rec) => {
                     records.push((*rec).clone());
                 }
-                SolverPackageRecord::RecordWithFeature(rec, feature) => {
-                    features
-                        .entry(rec.package_record.name.clone())
+                SolverPackageRecord::Extra { package, extra } => {
+                    extras
+                        .entry(package.clone())
                         .or_default()
-                        .push(feature.clone());
+                        .push(extra.clone());
                 }
                 SolverPackageRecord::VirtualPackage(_) => {}
             }
         }
 
-        Ok(SolverResult { records, features })
+        Ok(SolverResult { records, extras })
     }
 }
 
@@ -939,39 +905,72 @@ fn parse_match_spec(
         return Ok(spec_id.clone());
     }
 
+    // Parse the match spec and extract the name of the package it depends on.
     let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient)?;
-    let (name, spec) = match_spec.into_nameless();
 
-    let mut version_set_ids = vec![];
-    if let Some(ref features) = spec.extras {
-        let spec_with_feature: SolverMatchSpec<'_> = spec.clone().into();
+    // Get the version sets for the match spec.
+    let version_set_ids = version_sets_for_match_spec(pool, match_spec);
 
-        for feature in features {
-            let name_with_feature = NameType::BaseWithFeature(
-                name.as_ref()
-                    .expect("Packages with no name are not supported")
-                    .as_normalized()
-                    .to_owned(),
-                feature.clone(),
-            );
-            let dependency_name = pool.intern_package_name(name_with_feature);
-
-            let version_set_id = pool.intern_version_set(
-                dependency_name,
-                spec_with_feature.with_feature(feature.clone()),
-            );
-            version_set_ids.push(version_set_id);
-        }
-    } else {
-        let dependency_name = pool.intern_package_name(
-            name.as_ref()
-                .expect("Packages with no name are not supported")
-                .as_normalized(),
-        );
-        let version_set_id = pool.intern_version_set(dependency_name, spec.into());
-        version_set_ids.push(version_set_id);
-    }
+    // Store in the match spec cache
     parse_match_spec_cache.insert(spec_str.to_string(), version_set_ids.clone());
 
     Ok(version_set_ids)
+}
+
+fn version_sets_for_match_spec(
+    pool: &Pool<SolverMatchSpec<'_>, NameType>,
+    spec: MatchSpec,
+) -> Vec<VersionSetId> {
+    let (Some(name), spec) = spec.into_nameless() else {
+        unimplemented!("matchspecs without a name are not supported");
+    };
+
+    // Add a dependency on each extra.
+    let mut version_set_ids = vec![];
+    for extra in spec.extras.iter().flatten() {
+        version_set_ids.push(extra_version_set(pool, name.clone(), extra.clone()));
+    }
+
+    // Create a version set for the match spec itself.
+    let dependency_name = pool.intern_package_name(&name);
+    let version_set_id = pool.intern_version_set(dependency_name, spec.into());
+    version_set_ids.push(version_set_id);
+
+    version_set_ids
+}
+
+/// Adds a particular "extra" to the set of solvables
+pub fn add_extra(
+    pool: &Pool<SolverMatchSpec<'_>, NameType>,
+    package_name: PackageName,
+    extra: String,
+) -> SolvableId {
+    let name = NameType::Extra {
+        package: package_name.as_normalized().to_owned(),
+        extra: extra.clone(),
+    };
+    let name_id = pool.intern_package_name(name);
+
+    // Ensure that there is a single solvable for this extra.
+    pool.intern_solvable(
+        name_id,
+        SolverPackageRecord::Extra {
+            package: package_name,
+            extra,
+        },
+    )
+}
+
+/// Returns a version set for a particular package name and extra.
+pub fn extra_version_set(
+    pool: &Pool<SolverMatchSpec<'_>, NameType>,
+    package_name: PackageName,
+    extra: String,
+) -> VersionSetId {
+    let name = NameType::Extra {
+        package: package_name.as_normalized().to_owned(),
+        extra,
+    };
+    let name_id = pool.intern_package_name(name);
+    pool.intern_version_set(name_id, SolverMatchSpec::Extra)
 }

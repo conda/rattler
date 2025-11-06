@@ -12,7 +12,7 @@ use rattler_conda_types::{
     PackageName, PackageRecord, PrefixRecord,
 };
 
-const CLOBBERS_DIR_NAME: &str = "__clobbers__";
+pub const CLOBBERS_DIR_NAME: &str = "__clobbers__";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClobberedPath {
@@ -73,11 +73,11 @@ impl ClobberRegistry {
     pub fn unregister_paths(&mut self, prefix_paths: &PrefixRecord) {
         let package_name = prefix_paths.repodata_record.package_record.name.clone();
         // Assume that normalized name in different two different PackageName are unique.
-        let normalized_name = package_name.as_normalized();
+        let normalized_name = path_resolver::PackageName::from(package_name.as_normalized());
 
-        let (_, to_add) = self.path_trie.unregister_package(normalized_name);
+        let (_, to_add) = self.path_trie.unregister_package(normalized_name.clone());
 
-        self.package_name_map.remove(normalized_name);
+        self.package_name_map.remove(&normalized_name);
 
         self.to_add.extend(to_add);
     }
@@ -147,8 +147,8 @@ impl ClobberRegistry {
         // 1
         let new_priorities = sorted_prefix_records
             .iter()
-            .map(|&pr| pr.name().as_normalized().to_string())
-            .collect::<Vec<String>>();
+            .map(|&pr| pr.name().as_normalized().into())
+            .collect::<Vec<path_resolver::PackageName>>();
 
         let (mut removals, additions) = self.path_trie.reprioritize_packages(new_priorities);
 
@@ -294,6 +294,7 @@ mod tests {
     use insta::assert_yaml_snapshot;
     use itertools::Itertools;
     use rattler_conda_types::{prefix::Prefix, Platform, PrefixRecord, RepoDataRecord, Version};
+    use rattler_networking::LazyClient;
     use transaction::TransactionOperation;
 
     use crate::{
@@ -422,6 +423,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -434,7 +436,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -476,6 +478,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder()
@@ -486,7 +489,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -544,6 +547,7 @@ mod tests {
                 python_info: None,
                 current_python_info: None,
                 platform: Platform::current(),
+                unchanged: vec![],
             };
 
             // execute transaction
@@ -556,7 +560,7 @@ mod tests {
             execute_transaction(
                 transaction,
                 &prefix_path,
-                &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+                &LazyClient::default(),
                 &cache,
                 &InstallDriver::default(),
                 &InstallOptions::default(),
@@ -628,6 +632,7 @@ mod tests {
                 python_info: None,
                 current_python_info: None,
                 platform: Platform::current(),
+                unchanged: vec![],
             };
 
             // execute transaction
@@ -640,7 +645,7 @@ mod tests {
             execute_transaction(
                 transaction,
                 &prefix_path,
-                &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+                &LazyClient::default(),
                 &cache,
                 &InstallDriver::default(),
                 &InstallOptions::default(),
@@ -684,6 +689,7 @@ mod tests {
                 python_info: None,
                 current_python_info: None,
                 platform: Platform::current(),
+                unchanged: vec![],
             };
 
             let install_driver = InstallDriver::builder()
@@ -693,7 +699,7 @@ mod tests {
             execute_transaction(
                 transaction,
                 &prefix_path,
-                &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+                &LazyClient::default(),
                 &cache,
                 &install_driver,
                 &InstallOptions::default(),
@@ -735,6 +741,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -747,7 +754,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -790,6 +797,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder()
@@ -799,7 +807,7 @@ mod tests {
         let result = execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -842,6 +850,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -854,7 +863,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -886,6 +895,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder()
@@ -893,9 +903,9 @@ mod tests {
             .finish();
 
         install_driver
-            .pre_process(&transaction, target_prefix.path())
+            .pre_process(&transaction, target_prefix.path(), None)
             .unwrap();
-        let dl_client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+        let dl_client = LazyClient::default();
         for op in &transaction.operations {
             execute_operation(
                 &prefix_path,
@@ -926,6 +936,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -938,7 +949,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -983,6 +994,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
@@ -993,7 +1005,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -1016,6 +1028,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
@@ -1026,7 +1039,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -1061,6 +1074,7 @@ mod tests {
             python_info: Some(python_info.clone()),
             current_python_info: Some(python_info.clone()),
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -1078,7 +1092,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &install_options,
@@ -1115,6 +1129,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -1127,7 +1142,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -1146,6 +1161,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder()
@@ -1155,7 +1171,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -1184,6 +1200,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -1196,7 +1213,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -1218,6 +1235,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder()
@@ -1225,10 +1243,10 @@ mod tests {
             .finish();
 
         install_driver
-            .pre_process(&transaction, &prefix_path)
+            .pre_process(&transaction, &prefix_path, None)
             .unwrap();
 
-        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+        let client = LazyClient::default();
         for op in &transaction.operations {
             execute_operation(
                 &prefix_path,
@@ -1250,7 +1268,7 @@ mod tests {
         );
 
         install_driver
-            .post_process(&transaction, &prefix_path)
+            .post_process(&transaction, &prefix_path, None)
             .unwrap();
 
         assert_check_files!(&target_prefix.path(), &["bin/python"]);
@@ -1270,6 +1288,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         // execute transaction
@@ -1282,7 +1301,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -1302,6 +1321,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder()
@@ -1311,7 +1331,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -1348,6 +1368,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder().with_prefix_records(&[]).finish();
@@ -1355,7 +1376,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -1398,6 +1419,7 @@ mod tests {
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
+            unchanged: vec![],
         };
 
         let install_driver = InstallDriver::builder().with_prefix_records(&[]).finish();
@@ -1405,7 +1427,7 @@ mod tests {
         execute_transaction(
             transaction,
             &prefix_path,
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &LazyClient::default(),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -1419,6 +1441,51 @@ mod tests {
                 "clobber/clobber-fd-rev-2.txt",
                 "__clobbers__/clobber-fd-rev-3/clobber"
             ],
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_os = "windows"))]
+    async fn test_clobber_with_symlinks_and_reprioritization() {
+        let repodata_record_with_symlink1 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-with-symlink-a-0.1.0-h4616a5c_0.conda"),
+        );
+        let repodata_record_with_symlink2 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-with-symlink-b-0.1.0-h4616a5c_0.conda"),
+        );
+
+        let target_prefix = tempfile::tempdir().unwrap();
+        let prefix_path = Prefix::create(target_prefix.path()).unwrap();
+        let packages_dir = tempfile::tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: vec![
+                TransactionOperation::Install(repodata_record_with_symlink1),
+                TransactionOperation::Install(repodata_record_with_symlink2),
+            ],
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+            unchanged: vec![],
+        };
+
+        let install_driver = InstallDriver::builder().with_prefix_records(&[]).finish();
+
+        execute_transaction(
+            transaction,
+            &prefix_path,
+            &LazyClient::default(),
+            &cache,
+            &install_driver,
+            &InstallOptions::default(),
+        )
+        .await;
+
+        // Validate that the clobber.so symbolic link is still present in the libraries directory
+        assert_check_files!(
+            &target_prefix.path(),
+            &["lib/clobber-1.txt", "lib/clobber-2.txt", "lib/clobber.so"],
         );
     }
 }

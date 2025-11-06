@@ -32,16 +32,16 @@
 //! use reqwest_middleware::ClientWithMiddleware;
 //! use url::Url;
 //! use rattler_repodata_gateway::fetch;
+//! use rattler_networking::LazyClient;
 //!
 //! #[tokio::main]
 //! async fn main() {
 //!     let repodata_url = Url::parse("https://conda.anaconda.org/conda-forge/osx-64/").unwrap();
-//!     let client = ClientWithMiddleware::from(Client::new());
 //!     let cache = PathBuf::from("./cache");
 //!
 //!     let result = fetch::fetch_repo_data(
 //!         repodata_url,
-//!         client,
+//!         LazyClient::default(),
 //!         cache,
 //!         fetch::FetchRepoDataOptions { ..Default::default() },
 //!         None,
@@ -66,7 +66,7 @@ mod reporter;
 #[cfg(feature = "sparse")]
 pub mod sparse;
 mod utils;
-pub use reporter::Reporter;
+pub use reporter::{DownloadReporter, JLAPReporter, Reporter};
 
 #[cfg(feature = "gateway")]
 mod gateway;
@@ -76,3 +76,7 @@ pub use gateway::{
     ChannelConfig, Gateway, GatewayBuilder, GatewayError, MaxConcurrency, RepoData, SourceConfig,
     SubdirSelection,
 };
+#[cfg(feature = "indicatif")]
+pub use gateway::{IndicatifReporter, IndicatifReporterBuilder};
+#[cfg(all(not(target_arch = "wasm32"), feature = "gateway"))]
+pub use gateway::{RunExportExtractorError, RunExportsReporter};

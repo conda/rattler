@@ -94,7 +94,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         };
 
         // Otherwise, select the variant with the highest version
-        match (self.strategy, a_record.version().cmp(b_record.version())) {
+        match (self.strategy, a_record.version().cmp(&b_record.version())) {
             (CompareStrategy::Default, Ordering::Greater)
             | (CompareStrategy::LowestVersion, Ordering::Less) => return Ordering::Less,
             (CompareStrategy::Default, Ordering::Less)
@@ -192,7 +192,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             };
 
             for requirement in &known.requirements {
-                let version_set_id = match requirement {
+                let version_set_id = match &requirement.requirement {
                     // Ignore union requirements, these do not occur in the conda ecosystem
                     // currently
                     Requirement::Union(_) => {
@@ -359,29 +359,32 @@ pub(super) fn find_highest_version(
 
             let pool = &solver.provider().pool;
 
-            candidates
+            let mut highest_version = None;
+            for record in candidates
                 .iter()
                 .map(|id| &pool.resolve_solvable(*id).record)
-                .fold(None, |init, record| {
-                    Some(init.map_or_else(
-                        || {
-                            (
-                                record.version().clone(),
-                                !record.track_features().is_empty(),
-                            )
-                        },
-                        |(version, has_tracked_features)| {
-                            if &version < record.version() {
-                                (
-                                    record.version().clone(),
-                                    !record.track_features().is_empty(),
-                                )
-                            } else {
-                                (version, has_tracked_features)
-                            }
-                        },
-                    ))
-                })
+            {
+                let (version, has_tracked_features) = match record {
+                    SolverPackageRecord::Record(record) => (
+                        record.package_record.version.version(),
+                        !record.package_record.track_features.is_empty(),
+                    ),
+                    SolverPackageRecord::VirtualPackage(record) => (&record.version, false),
+                    SolverPackageRecord::Extra { .. } => continue,
+                };
+                highest_version = highest_version.map_or_else(
+                    || Some((version.clone(), has_tracked_features)),
+                    |(highest_version, current_has_tracked_features)| {
+                        if version > &highest_version {
+                            Some((version.clone(), has_tracked_features))
+                        } else {
+                            Some((highest_version, current_has_tracked_features))
+                        }
+                    },
+                );
+            }
+
+            highest_version
         })
         .clone()
 }

@@ -11,6 +11,8 @@ import pytest
 
 from rattler import Platform
 from rattler.index import index_fs, index_s3
+from rattler.index.index import S3Credentials
+
 
 # ------------------------------------ FILESYSTEM ------------------------------------ #
 
@@ -130,11 +132,14 @@ async def test_index_s3(
     # Run index command
     await index_s3(
         channel_url=s3_channel,
-        region=s3_config.region,
-        endpoint_url=s3_config.endpoint_url,
-        force_path_style=True,
-        access_key_id=s3_config.access_key_id,
-        secret_access_key=s3_config.secret_access_key,
+        credentials=S3Credentials(
+            region=s3_config.region,
+            endpoint_url=s3_config.endpoint_url,
+            access_key_id=s3_config.access_key_id,
+            secret_access_key=s3_config.secret_access_key,
+            session_token=s3_config.session_token,
+            addressing_style="path",
+        ),
         repodata_patch=None,
         force=True,
     )

@@ -268,7 +268,6 @@ pub fn parse_string_list(input: &str) -> Result<Vec<String>, ParseMatchSpecError
     }
 }
 
-
 /// Parses a list of flag matchers from a bracket value
 fn parse_flags(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     use nom::{

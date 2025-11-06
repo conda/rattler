@@ -1,6 +1,6 @@
 [package]
 name = "rattler_conda_types"
-version = "0.36.0"
+version = "0.40.4"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for common types used within the Conda ecosystem"
@@ -15,9 +15,9 @@ default = ["rayon"]
 experimental_extras = []
 
 [dependencies]
+ahash = { workspace = true }
 chrono = { workspace = true }
 file_url = { workspace = true }
-fxhash = { workspace = true }
 glob = { workspace = true }
 hex = { workspace = true }
 itertools = { workspace = true }
@@ -54,6 +54,7 @@ indexmap = { workspace = true }
 dirs = { workspace = true }
 rayon = { workspace = true, optional = true }
 fs-err = { workspace = true }
+memmap2 = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = { version = "0.10.0" }

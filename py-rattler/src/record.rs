@@ -10,6 +10,7 @@ use pyo3::{
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
+    utils::TimestampMs,
     NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
 };
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
@@ -40,6 +41,7 @@ pub struct PyRecord {
 }
 
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum RecordInner {
     Prefix(PrefixRecord),
     RepoData(RepoDataRecord),
@@ -214,31 +216,35 @@ impl PyRecord {
     }
 
     #[staticmethod]
-    #[pyo3(signature = (package_record, paths_data, link=None, package_tarball_full_path=None, extracted_package_dir=None, requested_spec=None, files=None))]
+    #[pyo3(signature = (repodata_record, paths_data, link=None, package_tarball_full_path=None, extracted_package_dir=None, requested_spec=None, requested_specs=None, files=None))]
+    #[allow(clippy::too_many_arguments)]
     pub fn create_prefix_record(
-        package_record: PyRecord,
+        repodata_record: PyRecord,
         paths_data: PyPrefixPaths,
         link: Option<PyLink>,
         package_tarball_full_path: Option<PathBuf>,
         extracted_package_dir: Option<PathBuf>,
         requested_spec: Option<String>,
+        requested_specs: Option<Vec<String>>,
         files: Option<Vec<PathBuf>>,
     ) -> PyResult<Self> {
-        if !package_record.is_repodata_record() {
+        if !repodata_record.is_repodata_record() {
             return Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
             ));
         }
 
+        #[allow(deprecated)]
         Ok(Self {
             inner: RecordInner::Prefix(PrefixRecord {
-                repodata_record: package_record.try_as_repodata_record().unwrap().clone(),
+                repodata_record: repodata_record.try_as_repodata_record().unwrap().clone(),
                 package_tarball_full_path,
                 extracted_package_dir,
                 files: files.unwrap_or_default(),
                 paths_data: paths_data.into(),
                 link: link.map(Into::into),
                 requested_spec,
+                requested_specs: requested_specs.unwrap_or_default(),
                 // TODO wire up support
                 installed_system_menus: Vec::new(),
             }),
@@ -487,10 +493,10 @@ impl PyRecord {
     #[setter]
     pub fn set_timestamp(&mut self, timestamp: Option<i64>) -> PyResult<()> {
         if let Some(ts) = timestamp {
-            self.as_package_record_mut().timestamp = Some(
+            self.as_package_record_mut().timestamp = Some(TimestampMs::from_datetime_millis(
                 chrono::DateTime::from_timestamp_millis(ts)
                     .ok_or_else(|| PyValueError::new_err("Invalid timestamp"))?,
-            );
+            ));
         } else {
             self.as_package_record_mut().timestamp = None;
         }
@@ -636,14 +642,30 @@ impl PyRecord {
 
     /// The spec that was used when this package was installed. Note that this
     /// field is not updated if the currently another spec was used.
+    /// Deprecated: Use requested_specs instead.
     #[getter]
+    #[allow(deprecated)]
     pub fn requested_spec(&self) -> PyResult<Option<String>> {
         Ok(self.try_as_prefix_record()?.requested_spec.clone())
     }
 
     #[setter]
+    #[allow(deprecated)]
     pub fn set_requested_spec(&mut self, spec: Option<String>) -> PyResult<()> {
         self.try_as_prefix_record_mut()?.requested_spec = spec;
+        Ok(())
+    }
+
+    /// Multiple specs that were used when this package was installed.
+    /// This field replaces the deprecated requested_spec field.
+    #[getter]
+    pub fn requested_specs(&self) -> PyResult<Vec<String>> {
+        Ok(self.try_as_prefix_record()?.requested_specs.clone())
+    }
+
+    #[setter]
+    pub fn set_requested_specs(&mut self, specs: Vec<String>) -> PyResult<()> {
+        self.try_as_prefix_record_mut()?.requested_specs = specs;
         Ok(())
     }
 

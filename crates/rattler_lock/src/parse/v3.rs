@@ -2,7 +2,6 @@
 
 use std::{collections::BTreeSet, ops::Not, str::FromStr, sync::Arc};
 
-use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{ExtraName, Requirement};
@@ -138,8 +137,8 @@ pub fn parse_v3_or_lower(
     let mut conda_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_runtime_configs = IndexSet::with_capacity(lock_file.package.len());
-    let mut per_platform: FxHashMap<Platform, IndexSet<EnvironmentPackageData>> =
-        FxHashMap::default();
+    let mut per_platform: ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>> =
+        ahash::HashMap::default();
     for package in lock_file.package {
         let LockedPackageV3 { platform, kind } = package;
 
@@ -216,7 +215,7 @@ pub fn parse_v3_or_lower(
                             sha256,
                             size: value.size,
                             subdir: subdir.to_string(),
-                            timestamp: value.timestamp,
+                            timestamp: value.timestamp.map(Into::into),
                             track_features: value.track_features,
                             version: value.version,
                             purls: value.purls.is_empty().not().then_some(value.purls),

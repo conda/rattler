@@ -1,65 +1,15 @@
 //! Command-line options.
+use std::path::PathBuf;
+
 use clap::{arg, Parser};
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
-use rattler_conda_types::{NamedChannelOrUrl, Platform};
-use rattler_networking::mirror_middleware;
-use rattler_solve::ChannelPriority;
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
+use rattler_networking::AuthenticationStorage;
 use tracing::warn;
 use url::Url;
 
-#[cfg(feature = "s3")]
-use rattler_networking::s3_middleware;
-
-/// The configuration type for rattler-build - just extends rattler / pixi config and can load the same TOML files.
-pub type Config = rattler_config::config::ConfigBase<()>;
-
-/// Container for `rattler_solver::ChannelPriority` so that it can be parsed
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ChannelPriorityWrapper {
-    /// The `ChannelPriority` value to be used when building the Configuration
-    pub value: ChannelPriority,
-}
-impl FromStr for ChannelPriorityWrapper {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "strict" => Ok(ChannelPriorityWrapper {
-                value: ChannelPriority::Strict,
-            }),
-            "disabled" => Ok(ChannelPriorityWrapper {
-                value: ChannelPriority::Disabled,
-            }),
-            _ => Err("Channel priority must be either 'strict' or 'disabled'".to_string()),
-        }
-    }
-}
-
-/// Common opts that are shared between `Rebuild` and `Build` subcommands
-#[derive(Parser, Clone, Debug)]
+/// Common opts for upload operations
+#[derive(Parser, Clone, Debug, Default)]
 pub struct CommonOpts {
-    /// Output directory for build artifacts.
-    #[clap(
-        long,
-        env = "CONDA_BLD_PATH",
-        verbatim_doc_comment,
-        help_heading = "Modifying result"
-    )]
-    pub output_dir: Option<PathBuf>,
-
-    /// Enable support for repodata.json.zst
-    #[clap(long, env = "RATTLER_ZSTD", default_value = "true", hide = true)]
-    pub use_zstd: bool,
-
-    /// Enable support for repodata.json.bz2
-    #[clap(long, env = "RATTLER_BZ2", default_value = "true", hide = true)]
-    pub use_bz2: bool,
-
-    /// Enable experimental features
-    #[arg(long, env = "RATTLER_BUILD_EXPERIMENTAL")]
-    pub experimental: bool,
-
     /// List of hosts for which SSL certificate verification should be skipped
     #[arg(long, value_delimiter = ',')]
     pub allow_insecure_host: Option<Vec<String>>,
@@ -67,88 +17,27 @@ pub struct CommonOpts {
     /// Path to an auth-file to read authentication information from
     #[clap(long, env = "RATTLER_AUTH_FILE", hide = true)]
     pub auth_file: Option<PathBuf>,
-
-    /// Channel priority to use when solving
-    #[arg(long)]
-    pub channel_priority: Option<ChannelPriorityWrapper>,
 }
 
 #[derive(Clone, Debug)]
 #[allow(missing_docs)]
 pub struct CommonData {
-    pub output_dir: PathBuf,
-    pub experimental: bool,
     pub auth_file: Option<PathBuf>,
-    pub channel_priority: ChannelPriority,
-    pub mirror_config: HashMap<Url, Vec<mirror_middleware::Mirror>>,
     pub allow_insecure_host: Option<Vec<String>>,
-    #[cfg(feature = "s3")]
-    pub s3_config: HashMap<String, s3_middleware::S3Config>,
 }
 
 impl CommonData {
     /// Create a new instance of `CommonData`
-    pub fn new(
-        output_dir: Option<PathBuf>,
-        experimental: bool,
-        auth_file: Option<PathBuf>,
-        config: Config,
-        channel_priority: Option<ChannelPriority>,
-        allow_insecure_host: Option<Vec<String>>,
-    ) -> Self {
-        // mirror config
-        // todo: this is a duplicate in pixi and pixi-pack: do it like in `compute_s3_config`
-        let mut mirror_config = HashMap::new();
-        tracing::debug!("Using mirrors: {:?}", config.mirrors);
-
-        #[allow(clippy::items_after_statements)]
-        fn ensure_trailing_slash(url: &url::Url) -> url::Url {
-            if url.path().ends_with('/') {
-                url.clone()
-            } else {
-                // Do not use `join` because it removes the last element
-                format!("{url}/")
-                    .parse()
-                    .expect("Failed to add trailing slash to URL")
-            }
-        }
-
-        for (key, value) in &config.mirrors {
-            let mut mirrors = Vec::new();
-            for v in value {
-                mirrors.push(mirror_middleware::Mirror {
-                    url: ensure_trailing_slash(v),
-                    no_jlap: false,
-                    no_bz2: false,
-                    no_zstd: false,
-                    max_failures: None,
-                });
-            }
-            mirror_config.insert(ensure_trailing_slash(key), mirrors);
-        }
-        #[cfg(feature = "s3")]
-        let s3_config = rattler_networking::s3_middleware::compute_s3_config(&config.s3_options.0);
+    pub fn new(auth_file: Option<PathBuf>, allow_insecure_host: Option<Vec<String>>) -> Self {
         Self {
-            output_dir: output_dir.unwrap_or_else(|| PathBuf::from("./output")),
-            experimental,
             auth_file,
-            #[cfg(feature = "s3")]
-            s3_config,
-            mirror_config,
-            channel_priority: channel_priority.unwrap_or(ChannelPriority::Strict),
             allow_insecure_host,
         }
     }
 
-    fn from_opts_and_config(value: CommonOpts, config: Config) -> Self {
-        Self::new(
-            value.output_dir,
-            value.experimental,
-            value.auth_file,
-            config,
-            value.channel_priority.map(|c| c.value),
-            value.allow_insecure_host,
-        )
+    /// Create from `CommonOpts`
+    pub fn from_opts(value: CommonOpts) -> Self {
+        Self::new(value.auth_file, value.allow_insecure_host)
     }
 }
 
@@ -166,6 +55,16 @@ pub struct UploadOpts {
     /// Common options.
     #[clap(flatten)]
     pub common: CommonOpts,
+
+    #[clap(skip)]
+    pub auth_store: Option<AuthenticationStorage>,
+}
+
+impl UploadOpts {
+    pub fn with_auth_store(mut self, auth_store: Option<AuthenticationStorage>) -> Self {
+        self.auth_store = auth_store;
+        self
+    }
 }
 
 /// Server type.
@@ -325,6 +224,10 @@ pub struct PrefixOpts {
     #[arg(long, required = false)]
     pub attestation: Option<PathBuf>,
 
+    /// Automatically generate attestations when using trusted publishing
+    #[arg(long, default_value = "false")]
+    pub generate_attestation: bool,
+
     /// Skip upload if package is existed.
     #[arg(short, long)]
     pub skip_existing: bool,
@@ -337,6 +240,7 @@ pub struct PrefixData {
     pub channel: String,
     pub api_key: Option<String>,
     pub attestation: Option<PathBuf>,
+    pub generate_attestation: bool,
     pub skip_existing: bool,
 }
 
@@ -347,6 +251,7 @@ impl From<PrefixOpts> for PrefixData {
             value.channel,
             value.api_key,
             value.attestation,
+            value.generate_attestation,
             value.skip_existing,
         )
     }
@@ -359,6 +264,7 @@ impl PrefixData {
         channel: String,
         api_key: Option<String>,
         attestation: Option<PathBuf>,
+        generate_attestation: bool,
         skip_existing: bool,
     ) -> Self {
         Self {
@@ -366,6 +272,7 @@ impl PrefixData {
             channel,
             api_key,
             attestation,
+            generate_attestation,
             skip_existing,
         }
     }
@@ -396,6 +303,7 @@ pub struct AnacondaOpts {
     pub force: bool,
 }
 
+#[cfg(feature = "s3")]
 fn parse_s3_url(value: &str) -> Result<Url, String> {
     let url: Url =
         Url::parse(value).map_err(|err| format!("`{value}` isn't a valid URL: {err}"))?;
@@ -409,39 +317,20 @@ fn parse_s3_url(value: &str) -> Result<Url, String> {
 }
 
 /// Options for uploading to S3
+#[cfg(feature = "s3")]
 #[derive(Clone, Debug, PartialEq, Parser)]
 pub struct S3Opts {
-    /// The channel URL in the S3 bucket to upload the package to, e.g., `s3://my-bucket/my-channel`
+    /// The channel URL in the S3 bucket to upload the package to, e.g.,
+    /// `s3://my-bucket/my-channel`
     #[arg(short, long, env = "S3_CHANNEL", value_parser = parse_s3_url)]
     pub channel: Url,
 
-    /// The endpoint URL of the S3 backend
-    #[arg(
-        long,
-        env = "S3_ENDPOINT_URL",
-        default_value = "https://s3.amazonaws.com"
-    )]
-    pub endpoint_url: Url,
+    #[clap(flatten)]
+    pub credentials: rattler_s3::clap::S3CredentialsOpts,
 
-    /// The region of the S3 backend
-    #[arg(long, env = "S3_REGION", default_value = "eu-central-1")]
-    pub region: String,
-
-    /// Whether to use path-style S3 URLs
-    #[arg(long, env = "S3_FORCE_PATH_STYLE", default_value = "false")]
-    pub force_path_style: bool,
-
-    /// The access key ID for the S3 bucket.
-    #[arg(long, env = "S3_ACCESS_KEY_ID", requires_all = ["secret_access_key"])]
-    pub access_key_id: Option<String>,
-
-    /// The secret access key for the S3 bucket.
-    #[arg(long, env = "S3_SECRET_ACCESS_KEY", requires_all = ["access_key_id"])]
-    pub secret_access_key: Option<String>,
-
-    /// The session token for the S3 bucket.
-    #[arg(long, env = "S3_SESSION_TOKEN", requires_all = ["access_key_id", "secret_access_key"])]
-    pub session_token: Option<String>,
+    /// Replace files if it already exists.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Debug)]
@@ -577,82 +466,6 @@ impl CondaForgeData {
             }),
             provider,
             dry_run,
-        }
-    }
-}
-
-/// Debug options
-#[derive(Parser)]
-pub struct DebugOpts {
-    /// Recipe file to debug
-    #[arg(short, long)]
-    pub recipe: PathBuf,
-
-    /// Output directory for build artifacts
-    #[arg(short, long)]
-    pub output: Option<PathBuf>,
-
-    /// The target platform to build for
-    #[arg(long)]
-    pub target_platform: Option<Platform>,
-
-    /// The host platform to build for (defaults to `target_platform`)
-    #[arg(long)]
-    pub host_platform: Option<Platform>,
-
-    /// The build platform to build for (defaults to current platform)
-    #[arg(long)]
-    pub build_platform: Option<Platform>,
-
-    /// Channels to use when building
-    #[arg(short = 'c', long = "channel")]
-    pub channels: Option<Vec<NamedChannelOrUrl>>,
-
-    /// Common options
-    #[clap(flatten)]
-    pub common: CommonOpts,
-
-    /// Name of the specific output to debug (only required when a recipe has multiple outputs)
-    #[arg(long, help = "Name of the specific output to debug")]
-    pub output_name: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-/// Data structure containing the configuration for debugging a recipe
-pub struct DebugData {
-    /// Path to the recipe file to debug
-    pub recipe_path: PathBuf,
-    /// Directory where build artifacts will be stored
-    pub output_dir: PathBuf,
-    /// Platform where the build is being executed
-    pub build_platform: Platform,
-    /// Target platform for the build
-    pub target_platform: Platform,
-    /// Host platform for runtime dependencies
-    pub host_platform: Platform,
-    /// List of channels to search for dependencies
-    pub channels: Option<Vec<NamedChannelOrUrl>>,
-    /// Common configuration options
-    pub common: CommonData,
-    /// Name of the specific output to debug (if recipe has multiple outputs)
-    pub output_name: Option<String>,
-}
-
-impl DebugData {
-    /// Generate a new `TestData` struct from `TestOpts` and an optional pixi config.
-    /// `TestOpts` have higher priority than the pixi config.
-    pub fn from_opts_and_config(opts: DebugOpts, config: Option<Config>) -> Self {
-        Self {
-            recipe_path: opts.recipe,
-            output_dir: opts.output.unwrap_or_else(|| PathBuf::from("./output")),
-            build_platform: opts.build_platform.unwrap_or(Platform::current()),
-            target_platform: opts.target_platform.unwrap_or(Platform::current()),
-            host_platform: opts
-                .host_platform
-                .unwrap_or_else(|| opts.target_platform.unwrap_or(Platform::current())),
-            channels: opts.channels,
-            common: CommonData::from_opts_and_config(opts.common, config.unwrap_or_default()),
-            output_name: opts.output_name,
         }
     }
 }

@@ -12,6 +12,7 @@ use std::{
 };
 
 use enum_dispatch::enum_dispatch;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use rattler_conda_types::Platform;
 use thiserror::Error;
@@ -197,7 +198,10 @@ pub trait Shell {
     }
 }
 
-/// Convert a native PATH on Windows to a Unix style path using cygpath.
+/// Convert a native PATH on Windows to a Unix style path using cygpath. This uses
+/// the `--path` option of cygpath, which converts a search PATH like
+/// "C:\path1;D:\path2" to "/c/path1:/d/path2" or the equivalent for the specific
+/// build of cygpath. Batching multiple paths together is better for performance.
 pub(crate) fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
     // call cygpath on Windows to convert paths to Unix style
     let output = Command::new("cygpath")
@@ -269,8 +273,18 @@ pub struct Bash;
 impl Shell for Bash {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
         validate_env_var_name(env_var)?;
-        let quoted_value = shlex::try_quote(value).unwrap_or_default();
-        Ok(writeln!(f, "export {env_var}={quoted_value}")?)
+
+        // Check if the value contains variable references ($)
+        // If so, use double quotes to allow variable expansion, otherwise use shlex quoting
+        if value.contains('$') {
+            // Use double quotes to allow variable expansion, but escape any existing double quotes
+            let escaped_value = value.replace('"', "\\\"");
+            Ok(writeln!(f, "export {env_var}=\"{escaped_value}\"")?)
+        } else {
+            // Use shlex quoting for values that don't need variable expansion
+            let quoted_value = shlex::try_quote(value).unwrap_or_else(|_| value.into());
+            Ok(writeln!(f, "export {env_var}={quoted_value}")?)
+        }
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult {
@@ -293,49 +307,42 @@ impl Shell for Bash {
         platform: &Platform,
     ) -> ShellResult {
         // Put paths in a vector of the correct format.
-        let mut paths_vec = paths
+        let paths_vec = paths
             .iter()
-            .map(|path| {
-                // check if we are on Windows, and if yes, convert native path to unix for (Git)
-                // Bash
-                if cfg!(windows) {
-                    match native_path_to_unix(path.to_string_lossy().as_ref()) {
-                        Ok(path) => path,
-                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                            // This indicates that the cygpath executable could not be found. In
-                            // that case we just ignore any conversion
-                            // and use the windows path directly.
-                            path.to_string_lossy().to_string()
-                        }
-                        Err(e) => panic!("{e}"),
-                    }
-                } else {
-                    path.to_string_lossy().into_owned()
-                }
-            })
+            .map(|path| path.to_string_lossy().into_owned())
             .collect_vec();
 
+        // Create the shell specific list of paths.
+        let paths_string = if cfg!(windows) {
+            // Use cygpath to convert the paths joined with the Windows ";" separator.
+            match native_path_to_unix(&paths_vec.join(";")) {
+                Ok(path) => path,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    // When cygpath isn't found, join the paths with the posix separator.
+                    paths_vec.join(":")
+                }
+                Err(e) => panic!("{e}"),
+            }
+        } else {
+            paths_vec.join(":")
+        };
         // Replace, Append, or Prepend the path variable to the paths.
         let path_var = self.path_var(platform);
-        match modification_behavior {
-            PathModificationBehavior::Replace => (),
-            PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var(path_var)),
-            PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var(path_var)),
-        }
-        // Create the shell specific list of paths.
-        let paths_string = paths_vec.join(self.path_separator(platform));
-
-        let path_var = self.path_var(platform);
-        let paths_str = paths_string.as_str();
+        let combined_paths_string: String = match modification_behavior {
+            PathModificationBehavior::Replace => paths_string,
+            PathModificationBehavior::Prepend => {
+                format!("{paths_string}:{}", &self.format_env_var(path_var))
+            }
+            PathModificationBehavior::Append => {
+                format!("{}:{paths_string}", self.format_env_var(path_var))
+            }
+        };
         // Use double quotes "" so that ${PATH} is substituted. Calling set_env_var
         // would correctly escape ${PATH} so that it literally is in the result.
-        Ok(writeln!(f, "export {path_var}=\"{paths_str}\"")?)
-    }
-
-    /// For Bash, the separator in the path variable is always ":", even on
-    /// Windows
-    fn path_separator(&self, _platform: &Platform) -> &str {
-        ":"
+        Ok(writeln!(
+            f,
+            "export {path_var}=\"{combined_paths_string}\""
+        )?)
     }
 
     /// For Bash, the path variable is always all capital PATH, even on Windows.
@@ -1034,6 +1041,26 @@ impl<T: Shell + 'static> ShellScript<T> {
             contents: String::new(),
             platform,
         }
+    }
+
+    /// Apply the provided environment variables to the script while
+    /// backing up existing values to the current shell level.
+    pub fn apply_env_vars_with_backup(
+        &mut self,
+        current_env: &HashMap<String, String>,
+        new_shlvl: i32,
+        envs: &IndexMap<String, String>,
+    ) -> Result<&mut Self, ShellError> {
+        for (key, value) in envs {
+            if let Some(existing_value) = current_env.get(key) {
+                self.set_env_var(
+                    &format!("CONDA_ENV_SHLVL_{new_shlvl}_{key}"),
+                    existing_value,
+                )?;
+            }
+            self.set_env_var(key, value)?;
+        }
+        Ok(self)
     }
 
     /// Export an environment variable.

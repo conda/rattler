@@ -1,21 +1,25 @@
-use crate::utils::BodyStreamExt;
+use std::future::Future;
+
 use bytes::Bytes;
 use futures::{Stream, TryStreamExt};
-use std::future::Future;
 use url::Url;
 
+use crate::utils::BodyStreamExt;
+
 /// A trait that enables being notified of download progress.
-pub trait Reporter: Send + Sync {
+pub trait DownloadReporter: Send + Sync {
     /// Called when a download of a file started.
     ///
-    /// Returns an index that can be used to identify the download in subsequent calls.
+    /// Returns an index that can be used to identify the download in subsequent
+    /// calls.
     fn on_download_start(&self, _url: &Url) -> usize {
         0
     }
 
     /// Called when the download of a file makes any progress.
     ///
-    /// The `total_bytes` parameter is `None` if the total size of the file is unknown.
+    /// The `total_bytes` parameter is `None` if the total size of the file is
+    /// unknown.
     ///
     /// The `index` parameter is the index returned by `on_download_start`.
     fn on_download_progress(
@@ -31,7 +35,10 @@ pub trait Reporter: Send + Sync {
     ///
     /// The `index` parameter is the index returned by `on_download_start`.
     fn on_download_complete(&self, _url: &Url, _index: usize) {}
+}
 
+/// A trait that enables being notified of JLAP operations progress.
+pub trait JLAPReporter: Send + Sync {
     /// Called when starting to apply JLAP to existing repodata.
     ///
     /// This function should return a unique index that can be used to
@@ -62,31 +69,43 @@ pub trait Reporter: Send + Sync {
     fn on_jlap_completed(&self, _index: usize) {}
 }
 
+/// A trait that enables being notified of repodata fetching progress.
+pub trait Reporter: Send + Sync {
+    /// Returns a reporter for downloading files.
+    fn download_reporter(&self) -> Option<&dyn DownloadReporter>;
+
+    /// Returns a reporter for JLAP operations.
+    fn jlap_reporter(&self) -> Option<&dyn JLAPReporter>;
+}
+
 #[allow(dead_code)]
 pub(crate) trait ResponseReporterExt {
-    /// Converts a response into a stream of bytes, notifying a reporter of the progress.
+    /// Converts a response into a stream of bytes, notifying a reporter of the
+    /// progress.
     fn byte_stream_with_progress(
         self,
-        reporter: Option<(&dyn Reporter, usize)>,
+        reporter: Option<(&dyn DownloadReporter, usize)>,
     ) -> impl Stream<Item = reqwest::Result<Bytes>>;
 
-    /// Reads all the bytes from a stream and notifies a reporter of the progress.
+    /// Reads all the bytes from a stream and notifies a reporter of the
+    /// progress.
     fn bytes_with_progress(
         self,
-        reporter: Option<(&dyn Reporter, usize)>,
+        reporter: Option<(&dyn DownloadReporter, usize)>,
     ) -> impl Future<Output = reqwest::Result<Vec<u8>>>;
 
-    /// Reads all the bytes from a stream and convert it to text and notifies a reporter of the progress.
+    /// Reads all the bytes from a stream and convert it to text and notifies a
+    /// reporter of the progress.
     fn text_with_progress(
         self,
-        reporter: Option<(&dyn Reporter, usize)>,
+        reporter: Option<(&dyn DownloadReporter, usize)>,
     ) -> impl Future<Output = reqwest::Result<String>>;
 }
 
 impl ResponseReporterExt for reqwest::Response {
     fn byte_stream_with_progress(
         self,
-        reporter: Option<(&dyn Reporter, usize)>,
+        reporter: Option<(&dyn DownloadReporter, usize)>,
     ) -> impl Stream<Item = reqwest::Result<Bytes>> {
         let total_size = self.content_length().map(|len| len as usize);
         let url = self.url().clone();
@@ -101,14 +120,14 @@ impl ResponseReporterExt for reqwest::Response {
 
     fn bytes_with_progress(
         self,
-        reporter: Option<(&dyn Reporter, usize)>,
+        reporter: Option<(&dyn DownloadReporter, usize)>,
     ) -> impl Future<Output = reqwest::Result<Vec<u8>>> {
         self.byte_stream_with_progress(reporter).bytes()
     }
 
     fn text_with_progress(
         self,
-        reporter: Option<(&dyn Reporter, usize)>,
+        reporter: Option<(&dyn DownloadReporter, usize)>,
     ) -> impl Future<Output = reqwest::Result<String>> {
         self.byte_stream_with_progress(reporter).text()
     }

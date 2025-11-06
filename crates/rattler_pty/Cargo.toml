@@ -1,6 +1,6 @@
 [package]
 name = "rattler_pty"
-version = "0.2.5"
+version = "0.2.7"
 description = "A crate to create pty"
 categories.workspace = true
 homepage.workspace = true
@@ -10,6 +10,7 @@ edition.workspace = true
 readme.workspace = true
 
 [dependencies]
+tokio = { workspace = true, features = ["io-util", "fs", "time"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
