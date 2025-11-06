@@ -108,7 +108,7 @@ pub enum ParseMatchSpecError {
     #[error("found multiple values for: {0}")]
     MultipleValueForKey(String),
 
-    /// An error occured when parsing the flag
+    /// An error occurred when parsing the flag
     #[error("unable to parse flag: {0}")]
     InvalidFlag(String),
 
