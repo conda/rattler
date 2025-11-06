@@ -246,7 +246,7 @@ impl MinimalPrefixRecord {
             experimental_extra_depends: std::collections::BTreeMap::new(),
             legacy_bz2_md5: None,
             // TODO: double check if we need flags here?
-            flags: Default::default(),
+            flags: std::collections::BTreeSet::default(),
         }
     }
 
