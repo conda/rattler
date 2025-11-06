@@ -10,7 +10,6 @@
 //! don't read file entirely. See documentation of
 //! [`MinimalPrefixRecord::from_path`] for more information.
 
-use std::collections::BTreeSet;
 use std::io::Read;
 use std::str::FromStr;
 use std::{io, path::Path};
