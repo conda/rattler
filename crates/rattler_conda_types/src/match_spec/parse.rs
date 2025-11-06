@@ -1560,7 +1560,7 @@ mod tests {
             build: "py27_0*".parse().ok(),
             build_number: Some(BuildNumberSpec::from_str(">=6").unwrap()),
             file_name: Some("foo-1.0-py27_0.tar.bz2".to_string()),
-            extras: Some(vec!["bar".to_string(), "baz".to_string()]),
+            extras: None,
             channel: Some(
                 Channel::from_str("conda-forge", &channel_config())
                     .map(Arc::new)
