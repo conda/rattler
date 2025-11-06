@@ -187,7 +187,7 @@ impl serde::Serialize for NamedChannelOrUrl {
 }
 
 /// `Channel`s are the primary source of package information.
-#[derive(Debug, Clone, Serialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Serialize, Eq, PartialEq, Hash, Deserialize)]
 pub struct Channel {
     /// The platforms supported by this channel, or None if no explicit
     /// platforms have been specified.
@@ -198,6 +198,7 @@ pub struct Channel {
     pub base_url: ChannelUrl,
 
     /// The name of the channel
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 

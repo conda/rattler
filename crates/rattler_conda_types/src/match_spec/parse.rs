@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::HashSet, ops::Not, str::FromStr, sync::Arc};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_till1, take_until, take_while, take_while1},
-    character::complete::{char, multispace0, one_of, space0},
+    character::complete::{char, multispace0, multispace1, one_of, space0},
     combinator::{opt, recognize},
     error::{context, ContextError, ParseError},
     multi::{separated_list0, separated_list1},
@@ -20,9 +20,12 @@ use super::{
     matcher::{StringMatcher, StringMatcherParseError},
     MatchSpec,
 };
+#[cfg(feature = "experimental_conditionals")]
+use crate::match_spec::condition::parse_condition;
+#[cfg(feature = "experimental_flags")]
+use crate::match_spec::flags::FlagMatcher;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
-    match_spec::flags::FlagMatcher,
     package::ArchiveIdentifier,
     utils::{path::is_absolute_path, url::parse_scheme},
     version_spec::{
@@ -108,6 +111,14 @@ pub enum ParseMatchSpecError {
     /// An error occured when parsing the flag
     #[error("unable to parse flag: {0}")]
     InvalidFlag(String),
+
+    /// More than one semicolon in match spec
+    #[error("more than one semicolon in match spec")]
+    MoreThanOneSemicolon,
+
+    /// Invalid condition in match spec
+    #[error("could not parse condition {0}: {1}")]
+    InvalidCondition(String, String),
 }
 
 impl FromStr for MatchSpec {
@@ -139,12 +150,39 @@ fn strip_comment(input: &str) -> (&str, Option<&str>) {
 
 /// Strips any if statements from the matchspec. `if` statements in matchspec
 /// are "anticipating future compatibility issues".
-fn strip_if(input: &str) -> (&str, Option<&str>) {
-    // input
-    //     .split_once("if")
-    //     .map(|(spec, if_statement)| (spec, Some(if_statement)))
-    //     .unwrap_or_else(|| (input, None))
-    (input, None)
+fn strip_if(input: &str) -> Result<(&str, Option<&str>), ParseMatchSpecError> {
+    // Check that we only have a single `if` statement (semicolon separated)
+    if input.matches(';').count() > 1 {
+        return Err(ParseMatchSpecError::MoreThanOneSemicolon);
+    }
+
+    // Try to parse with nom for better whitespace handling
+    if let Ok((matchspec_str, condition)) = parse_if_statement(input) {
+        Ok((matchspec_str.trim(), Some(condition.trim())))
+    } else {
+        // No condition found, return the input as is
+        Ok((input.trim(), None))
+    }
+}
+
+/// Parse the if statement structure with flexible whitespace
+fn parse_if_statement(input: &str) -> IResult<&str, &str> {
+    let (remaining, (matchspec_part, _)) = (
+        // Take everything up to "; if"
+        nom::bytes::complete::take_until(";"),
+        // Match "; if " with flexible whitespace
+        (
+            multispace0,
+            char(';'),
+            multispace0,
+            tag("if"),
+            multispace1, // At least one whitespace after "if"
+        ),
+    )
+        .parse(input)?;
+
+    // Return the condition part and the matchspec part
+    Ok((matchspec_part, remaining))
 }
 
 /// An optimized data structure to store key value pairs in between a bracket
@@ -269,6 +307,7 @@ pub fn parse_string_list(input: &str) -> Result<Vec<String>, ParseMatchSpecError
 }
 
 /// Parses a list of flag matchers from a bracket value
+#[cfg(feature = "experimental_flags")]
 fn parse_flags(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     use nom::{
         combinator::{all_consuming, map},
@@ -375,13 +414,21 @@ fn parse_bracket_vec_into_components(
             }
             "license" => match_spec.license = Some(value.to_string()),
             "flags" => {
-                match_spec.flags = Some(
-                    parse_flags(value)?
-                        .into_iter()
-                        .map(|s| FlagMatcher::from_str(&s))
-                        .collect::<Result<Vec<_>, _>>()
-                        .map_err(|_e| ParseMatchSpecError::InvalidFlag(value.to_string()))?,
-                );
+                // Flags are still experimental
+                #[cfg(feature = "experimental_flags")]
+                {
+                    match_spec.flags = Some(
+                        parse_flags(value)?
+                            .into_iter()
+                            .map(|s| FlagMatcher::from_str(&s))
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(|_e| ParseMatchSpecError::InvalidFlag(value.to_string()))?,
+                    );
+                }
+                #[cfg(not(feature = "experimental_flags"))]
+                {
+                    return Err(ParseMatchSpecError::InvalidBracketKey("flags".to_string()));
+                }
             }
             // TODO: Still need to add `track_features`, `features`, and `license_family`
             // to the match spec.
@@ -662,13 +709,17 @@ fn parse_channel_and_subdir(
 
 /// Parses a conda match spec.
 /// This is based on: <https://github.com/conda/conda/blob/master/conda/models/match_spec.py#L569>
-fn matchspec_parser(
+pub(crate) fn matchspec_parser(
     input: &str,
     strictness: ParseStrictness,
 ) -> Result<MatchSpec, ParseMatchSpecError> {
     // Step 1. Strip '#' and `if` statement
     let (input, _comment) = strip_comment(input);
-    let (input, _if_clause) = strip_if(input);
+
+    #[cfg(feature = "experimental_conditionals")]
+    let (input, condition) = strip_if(input)?;
+    #[cfg(not(feature = "experimental_conditionals"))]
+    let (input, _condition) = strip_if(input)?;
 
     // 2. Strip off brackets portion
     let (input, brackets) = strip_brackets(input.trim())?;
@@ -741,6 +792,22 @@ fn matchspec_parser(
         }
         match_spec.version = match_spec.version.or(version);
         match_spec.build = match_spec.build.or(build);
+    }
+
+    #[cfg(feature = "experimental_conditionals")]
+    if let Some(condition) = condition {
+        let (remainder, condition) = parse_condition(condition).map_err(|e| {
+            ParseMatchSpecError::InvalidCondition(condition.to_string(), e.to_string())
+        })?;
+
+        if remainder.trim().is_empty().not() {
+            return Err(ParseMatchSpecError::InvalidCondition(
+                condition.to_string(),
+                "remainder not empty".to_string(),
+            ));
+        }
+
+        match_spec.condition = Some(condition);
     }
 
     Ok(match_spec)
@@ -1338,6 +1405,15 @@ mod tests {
     }
 
     #[test]
+    fn test_multiple_semicolons() {
+        let spec = MatchSpec::from_str("foo; if bar; if baz", Strict);
+        assert_matches!(spec, Err(ParseMatchSpecError::MoreThanOneSemicolon));
+
+        let spec2 = MatchSpec::from_str("package; something; else", Lenient);
+        assert_matches!(spec2, Err(ParseMatchSpecError::MoreThanOneSemicolon));
+    }
+
+    #[test]
     fn test_namespace() {
         // Test with url channel and url in brackets
         let spec = MatchSpec::from_str(
@@ -1505,12 +1581,15 @@ mod tests {
                 .unwrap(),
             ),
             license: Some("MIT".into()),
+            #[cfg(feature = "experimental_flags")]
             flags: Some(
                 ["~flag1", "~flag2", "?flag3", "foobar:amd"]
                     .iter()
                     .map(|s| s.parse().unwrap())
                     .collect(),
             ),
+            #[cfg(feature = "experimental_conditionals")]
+            condition: None,
         });
 
         // insta check all the strings
@@ -1538,6 +1617,24 @@ mod tests {
         let version_spec = match_spec.version.unwrap();
         let version = Version::from_str("0.4.1").unwrap();
         assert!(version_spec.matches(&version));
+    }
+
+    #[test]
+    #[cfg(feature = "experimental_conditionals")]
+    fn test_conditional_parsing() {
+        let spec = MatchSpec::from_str("foo; if python >=3.6", Strict).unwrap();
+        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(
+            spec.condition.unwrap().to_string(),
+            "python >=3.6".to_string()
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "experimental_conditionals"))]
+    fn test_conditional_parsing_disabled() {
+        let spec = MatchSpec::from_str("foo; if python >=3.6", Strict).unwrap();
+        assert_eq!(spec.name, Some("foo".parse().unwrap()));
     }
 
     #[cfg(feature = "experimental_extras")]
