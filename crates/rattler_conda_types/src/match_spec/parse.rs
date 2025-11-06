@@ -1595,7 +1595,7 @@ mod tests {
             .iter()
             .map(|s| match MatchSpec::from_str(s, Strict) {
                 Ok(spec) => spec,
-                Err(e) => panic!("Failed to parse back: '{}' with error: {:?}", s, e),
+                Err(e) => panic!("Failed to parse back: '{s}' with error: {e:?}",),
             })
             .collect::<Vec<_>>();
         assert_eq!(specs, parsed_specs);
