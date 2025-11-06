@@ -197,10 +197,12 @@ impl CacheRwLock {
                 0
             };
 
-            // Ensure all bytes are written to disk
-            file.flush().map_err(|e| {
+            // Ensure all bytes are written to disk and immediately visible to other processes.
+            // Use sync_all() instead of flush() to ensure the revision is written through
+            // to disk, preventing race conditions on Linux where flush() only writes to OS buffers.
+            file.sync_all().map_err(|e| {
                 PackageCacheLayerError::LockError(
-                    "failed to flush cache lock after writing revision".to_string(),
+                    "failed to sync cache lock after writing revision".to_string(),
                     e,
                 )
             })?;
