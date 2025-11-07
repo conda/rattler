@@ -595,7 +595,7 @@ where
 
             // Validate the package directory.
             let validation_result = tokio::task::spawn_blocking(move || {
-                validate_package_directory(&path_inner, ValidationMode::Fast)
+                validate_package_directory(&path_inner, ValidationMode::Skip)
             })
             .await;
 
