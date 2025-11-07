@@ -4310,6 +4310,7 @@ name = "rattler-bin"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "console 0.16.1",
  "indicatif",
