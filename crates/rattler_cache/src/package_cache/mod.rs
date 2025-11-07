@@ -12,8 +12,8 @@ use std::{
 };
 
 pub use cache_key::CacheKey;
-pub use cache_lock::{CacheGlobalLock, CacheLock};
 use cache_lock::CacheRwLock;
+pub use cache_lock::{CacheGlobalLock, CacheLock};
 use dashmap::DashMap;
 use fs_err::tokio as tokio_fs;
 use futures::TryFutureExt;
