@@ -620,11 +620,21 @@ impl Installer {
                     let requested_spec = spec_mapping_ref
                         .and_then(|mapping| mapping.get(&record.package_record.name).cloned())
                         .unwrap_or_default();
+
+                    // Reuse index_json and paths_json from cache validation if available
+                    let mut install_options = base_install_options.clone();
+                    if let Some(index_json) = cache_lock.index_json() {
+                        install_options.index_json = Some(index_json.clone());
+                    }
+                    if let Some(paths_json) = cache_lock.paths_json() {
+                        install_options.paths_json = Some(paths_json.clone());
+                    }
+
                     link_package(
                         &record,
                         prefix,
                         cache_lock.path(),
-                        base_install_options.clone(),
+                        install_options,
                         driver,
                         requested_spec,
                     )

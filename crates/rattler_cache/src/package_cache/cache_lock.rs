@@ -8,6 +8,7 @@ use std::{
 
 use digest::generic_array::GenericArray;
 use fs4::fs_std::FileExt;
+use rattler_conda_types::package::{IndexJson, PathsJson};
 use rattler_digest::Sha256Hash;
 
 use crate::package_cache::PackageCacheLayerError;
@@ -23,6 +24,8 @@ pub struct CacheLock {
     pub(super) revision: u64,
     pub(super) sha256: Option<Sha256Hash>,
     pub(super) path: PathBuf,
+    pub(super) index_json: Option<IndexJson>,
+    pub(super) paths_json: Option<PathsJson>,
 }
 
 impl Debug for CacheLock {
@@ -45,6 +48,16 @@ impl CacheLock {
     /// number of times the cache entry has been updated.
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// Returns the cached `index.json` data if it was read during validation.
+    pub fn index_json(&self) -> Option<&IndexJson> {
+        self.index_json.as_ref()
+    }
+
+    /// Returns the cached `paths.json` data if it was read during validation.
+    pub fn paths_json(&self) -> Option<&PathsJson> {
+        self.paths_json.as_ref()
     }
 }
 

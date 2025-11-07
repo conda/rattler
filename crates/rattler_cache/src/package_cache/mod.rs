@@ -630,6 +630,8 @@ where
                 revision: cache_revision,
                 sha256: locked_sha256,
                 path: path_inner,
+                index_json: None,
+                paths_json: None,
             });
         }
 
@@ -644,12 +646,14 @@ where
         }
 
         match validation_result {
-            Ok(Ok(_)) => {
+            Ok(Ok((index_json, paths_json))) => {
                 tracing::debug!("validation succeeded");
                 return Ok(CacheLock {
                     revision: cache_revision,
                     sha256: locked_sha256,
                     path,
+                    index_json: Some(index_json),
+                    paths_json: Some(paths_json),
                 });
             }
             Ok(Err(e)) => {
@@ -700,6 +704,8 @@ where
             revision: new_revision,
             sha256: given_sha.copied(),
             path,
+            index_json: None,
+            paths_json: None,
         })
     } else {
         Err(PackageCacheLayerError::InvalidPackage)
