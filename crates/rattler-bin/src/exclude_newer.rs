@@ -5,7 +5,7 @@ use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use std::fmt;
 use std::str::FromStr;
 
-/// A wrapper around a chrono DateTime that is used to exclude packages after a
+/// A wrapper around a chrono `DateTime` that is used to exclude packages after a
 /// certain point in time.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ExcludeNewer(pub DateTime<Utc>);
@@ -29,9 +29,9 @@ impl FromStr for ExcludeNewer {
         // If we only have a date, we use the next day at midnight
         // This ensures that packages from the entire day are included
         let date = NaiveDate::parse_from_str(s, "%Y-%m-%d")?;
-        let next_day = date.succ_opt().ok_or_else(|| {
-            NaiveDate::parse_from_str("invalid", "%Y-%m-%d").unwrap_err()
-        })?;
+        let next_day = date
+            .succ_opt()
+            .ok_or_else(|| NaiveDate::parse_from_str("invalid", "%Y-%m-%d").unwrap_err())?;
         let datetime = Utc
             .from_utc_datetime(&next_day.and_hms_opt(0, 0, 0).unwrap())
             .with_timezone(&Utc);
