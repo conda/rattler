@@ -480,7 +480,7 @@ impl Installer {
         let _global_cache_lock = package_cache
             .acquire_global_lock()
             .await
-            .map_err(|e| InstallerError::FailedToAcquireCacheLock(e))?;
+            .map_err(InstallerError::FailedToAcquireCacheLock)?;
 
         // Construct a driver.
         let driver = InstallDriver::builder()
