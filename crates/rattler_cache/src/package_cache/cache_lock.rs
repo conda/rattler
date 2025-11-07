@@ -15,10 +15,6 @@ use crate::package_cache::PackageCacheLayerError;
 
 /// A global lock for the entire package cache.
 ///
-/// This lock is simpler than [`CacheRwLock`] - it doesn't store any metadata
-/// like revision or sha256, it's purely for coordinating access to the cache
-/// directory across multiple package operations.
-///
 /// This can be used to reduce lock overhead when performing many package
 /// operations by acquiring a single global lock instead of individual per-package locks.
 pub struct CacheGlobalLock {
