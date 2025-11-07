@@ -442,10 +442,10 @@ pub async fn link_package(
                 no_link: entry.no_link,
                 sha256: entry.sha256,
                 // Only set sha256_in_prefix if it differs from the original sha256
-                sha256_in_prefix: if Some(result.sha256) != entry.sha256 {
-                    Some(result.sha256)
-                } else {
+                sha256_in_prefix: if Some(result.sha256) == entry.sha256 {
                     None
+                } else {
+                    Some(result.sha256)
                 },
                 size_in_bytes: Some(result.file_size),
                 file_mode: match result.method {
@@ -863,10 +863,10 @@ pub fn link_package_sync(
                     no_link: entry.no_link,
                     sha256: entry.sha256,
                     // Only set sha256_in_prefix if it differs from the original sha256
-                    sha256_in_prefix: if Some(result.sha256) != entry.sha256 {
-                        Some(result.sha256)
-                    } else {
+                    sha256_in_prefix: if Some(result.sha256) == entry.sha256 {
                         None
+                    } else {
+                        Some(result.sha256)
                     },
                     size_in_bytes: Some(result.file_size),
                     file_mode: match result.method {
