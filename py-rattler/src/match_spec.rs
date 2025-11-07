@@ -123,7 +123,10 @@ impl PyMatchSpec {
     /// The condition under which this match spec applies
     #[getter]
     pub fn condition(&self) -> Option<String> {
-        self.inner.condition.as_ref().map(|c| c.to_string())
+        self.inner
+            .condition
+            .as_ref()
+            .map(std::string::ToString::to_string)
     }
 
     /// The md5 hash of the package

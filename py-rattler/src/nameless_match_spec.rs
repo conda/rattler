@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
-use rattler_conda_types::{
-    Channel, MatchSpec, Matches, NamelessMatchSpec, ParseMatchSpecOptions,
-};
+use rattler_conda_types::{Channel, MatchSpec, Matches, NamelessMatchSpec, ParseMatchSpecOptions};
 
 use crate::{channel::PyChannel, error::PyRattlerError, match_spec::PyMatchSpec, record::PyRecord};
 
@@ -116,7 +114,10 @@ impl PyNamelessMatchSpec {
     /// The condition under which this match spec applies
     #[getter]
     pub fn condition(&self) -> Option<String> {
-        self.inner.condition.as_ref().map(|c| c.to_string())
+        self.inner
+            .condition
+            .as_ref()
+            .map(std::string::ToString::to_string)
     }
 
     /// The md5 hash of the package

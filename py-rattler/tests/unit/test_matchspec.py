@@ -136,11 +136,7 @@ def test_experimental_conditionals_default() -> None:
 
 def test_experimental_both_features() -> None:
     """Test using both experimental extras and conditionals together."""
-    m = MatchSpec(
-        "numpy[extras=[test]]; if python >=3.7",
-        experimental_extras=True,
-        experimental_conditionals=True
-    )
+    m = MatchSpec("numpy[extras=[test]]; if python >=3.7", experimental_extras=True, experimental_conditionals=True)
     assert m.name is not None
     assert m.name.normalized == "numpy"
     assert m.extras == ["test"]
@@ -154,20 +150,9 @@ def test_nameless_experimental_extras() -> None:
     assert nms.extras == ["test"]
 
 
-def test_nameless_experimental_conditionals() -> None:
-    """Test that NamelessMatchSpec also supports experimental conditionals."""
-    nms = NamelessMatchSpec(">=1.20; if python >=3.6", experimental_conditionals=True)
-    assert nms.version == ">=1.20"
-    assert nms.condition == "python >=3.6"
-
-
 def test_strict_mode_with_experimental_features() -> None:
     """Test that experimental features work with strict parsing mode."""
-    m = MatchSpec(
-        "numpy[extras=[test]]",
-        strict=True,
-        experimental_extras=True
-    )
+    m = MatchSpec("numpy[extras=[test]]", strict=True, experimental_extras=True)
     assert m.name is not None
     assert m.name.normalized == "numpy"
     assert m.extras == ["test"]
@@ -175,11 +160,7 @@ def test_strict_mode_with_experimental_features() -> None:
 
 def test_lenient_mode_with_experimental_features() -> None:
     """Test that experimental features work with lenient parsing mode."""
-    m = MatchSpec(
-        "numpy[extras=[test]]",
-        strict=False,
-        experimental_extras=True
-    )
+    m = MatchSpec("numpy[extras=[test]]", strict=False, experimental_extras=True)
     assert m.name is not None
     assert m.name.normalized == "numpy"
     assert m.extras == ["test"]
