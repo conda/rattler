@@ -20,7 +20,7 @@ use rattler::{
 };
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
-    ParseStrictness, Platform, PrefixRecord, RepoDataRecord, Version,
+    ParseMatchSpecOptions, Platform, PrefixRecord, RepoDataRecord, Version,
 };
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
@@ -122,10 +122,14 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // Parse the specs from the command line. We do this explicitly instead of allow
     // clap to deal with this because we need to parse the `channel_config` when
     // parsing matchspecs.
+    let match_spec_options = ParseMatchSpecOptions::strict()
+        .with_experimental_extras(true)
+        .with_experimental_conditionals(true);
+
     let specs = opt
         .specs
         .iter()
-        .map(|spec| MatchSpec::from_str(spec, ParseStrictness::Strict))
+        .map(|spec| MatchSpec::from_str(spec, match_spec_options))
         .collect::<Result<Vec<_>, _>>()
         .into_diagnostic()?;
 

@@ -80,11 +80,21 @@ class MatchSpec:
     - build
     """
 
-    def __init__(self, spec: str, strict: bool = False) -> None:
+    def __init__(
+        self,
+        spec: str,
+        strict: bool = False,
+        experimental_extras: bool = False,
+        experimental_conditionals: bool = False,
+    ) -> None:
         """
         Create a new version spec.
 
         When `strict` is `True`, some ambiguous version specs are rejected.
+
+        When `experimental_extras` is `True`, extras syntax is enabled (e.g., `pkg[extras=[foo,bar]]`).
+
+        When `experimental_conditionals` is `True`, conditionals syntax is enabled (e.g., `pkg; if python >=3.6`).
 
         ```python
         >>> MatchSpec("pip >=24.0")
@@ -97,7 +107,7 @@ class MatchSpec:
         ```
         """
         if isinstance(spec, str):
-            self._match_spec = PyMatchSpec(spec, strict)
+            self._match_spec = PyMatchSpec(spec, strict, experimental_extras, experimental_conditionals)
         else:
             raise TypeError(
                 f"MatchSpec constructor received unsupported type {type(spec).__name__!r} for the 'spec' parameter"
@@ -159,6 +169,20 @@ class MatchSpec:
         The namespace of the package.
         """
         return self._match_spec.namespace
+
+    @property
+    def extras(self) -> Optional[list[str]]:
+        """
+        The extras (optional dependencies) of the package.
+        """
+        return self._match_spec.extras
+
+    @property
+    def condition(self) -> Optional[str]:
+        """
+        The condition under which this match spec applies.
+        """
+        return self._match_spec.condition
 
     @property
     def md5(self) -> Optional[bytes]:

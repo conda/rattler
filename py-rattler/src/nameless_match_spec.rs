@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
-use rattler_conda_types::{Channel, MatchSpec, Matches, NamelessMatchSpec, ParseStrictness};
+use rattler_conda_types::{
+    Channel, MatchSpec, Matches, NamelessMatchSpec, ParseMatchSpecOptions,
+};
 
 use crate::{channel::PyChannel, error::PyRattlerError, match_spec::PyMatchSpec, record::PyRecord};
 
@@ -34,17 +36,24 @@ impl From<PyMatchSpec> for PyNamelessMatchSpec {
 #[pymethods]
 impl PyNamelessMatchSpec {
     #[new]
-    pub fn __init__(spec: &str, strict: bool) -> PyResult<Self> {
-        Ok(NamelessMatchSpec::from_str(
-            spec,
-            if strict {
-                ParseStrictness::Strict
-            } else {
-                ParseStrictness::Lenient
-            },
-        )
-        .map(Into::into)
-        .map_err(PyRattlerError::from)?)
+    #[pyo3(signature = (spec, strict = true, experimental_extras = false, experimental_conditionals = false))]
+    pub fn __init__(
+        spec: &str,
+        strict: bool,
+        experimental_extras: bool,
+        experimental_conditionals: bool,
+    ) -> PyResult<Self> {
+        let options = if strict {
+            ParseMatchSpecOptions::strict()
+        } else {
+            ParseMatchSpecOptions::lenient()
+        }
+        .with_experimental_extras(experimental_extras)
+        .with_experimental_conditionals(experimental_conditionals);
+
+        Ok(NamelessMatchSpec::from_str(spec, options)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
     }
 
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
@@ -96,6 +105,18 @@ impl PyNamelessMatchSpec {
     #[getter]
     pub fn namespace(&self) -> Option<String> {
         self.inner.namespace.clone()
+    }
+
+    /// The extras (optional dependencies) of the package
+    #[getter]
+    pub fn extras(&self) -> Option<Vec<String>> {
+        self.inner.extras.clone()
+    }
+
+    /// The condition under which this match spec applies
+    #[getter]
+    pub fn condition(&self) -> Option<String> {
+        self.inner.condition.as_ref().map(|c| c.to_string())
     }
 
     /// The md5 hash of the package

@@ -90,7 +90,7 @@ fn matchspec_token(input: &str) -> IResult<&str, &str> {
 fn matchspec(input: &str) -> IResult<&str, MatchSpecCondition> {
     let (remaining, matchspec_str) = matchspec_token(input)?;
 
-    match matchspec_parser(matchspec_str, crate::ParseStrictness::Strict) {
+    match matchspec_parser(matchspec_str, crate::ParseStrictness::Strict.into()) {
         Ok(parsed_matchspec) => Ok((
             remaining,
             MatchSpecCondition::MatchSpec(Box::new(parsed_matchspec)),
