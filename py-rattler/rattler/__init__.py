@@ -1,4 +1,4 @@
-from rattler.version import Version, VersionWithSource
+from rattler.version import Version, VersionSpec, VersionWithSource
 from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.repo_data import (
     PackageRecord,
@@ -49,6 +49,7 @@ del _get_rattler_version
 
 __all__ = [
     "Version",
+    "VersionSpec",
     "VersionWithSource",
     "MatchSpec",
     "NamelessMatchSpec",
