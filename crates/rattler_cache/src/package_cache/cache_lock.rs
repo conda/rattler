@@ -13,6 +13,77 @@ use rattler_digest::Sha256Hash;
 
 use crate::package_cache::PackageCacheLayerError;
 
+/// A global lock for the entire package cache.
+///
+/// This lock is simpler than [`CacheRwLock`] - it doesn't store any metadata
+/// like revision or sha256, it's purely for coordinating access to the cache
+/// directory across multiple package operations.
+///
+/// This can be used to reduce lock overhead when performing many package
+/// operations by acquiring a single global lock instead of individual per-package locks.
+pub struct CacheGlobalLock {
+    file: std::fs::File,
+}
+
+impl Debug for CacheGlobalLock {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CacheGlobalLock").finish()
+    }
+}
+
+impl Drop for CacheGlobalLock {
+    fn drop(&mut self) {
+        // Ensure that the lock is released when the lock is dropped.
+        let _ = fs4::fs_std::FileExt::unlock(&self.file);
+    }
+}
+
+impl CacheGlobalLock {
+    /// Acquires a global write lock on the package cache.
+    ///
+    /// This lock should be used to coordinate access across multiple package
+    /// operations to reduce the overhead of acquiring individual locks.
+    pub async fn acquire(path: &Path) -> Result<Self, PackageCacheLayerError> {
+        let lock_file_path = path.to_path_buf();
+        let acquire_lock_fut = simple_spawn_blocking::tokio::run_blocking_task(move || {
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .read(true)
+                .open(&lock_file_path)
+                .map_err(|e| {
+                    PackageCacheLayerError::LockError(
+                        format!(
+                            "failed to open global cache lock for writing: '{}'",
+                            lock_file_path.display()
+                        ),
+                        e,
+                    )
+                })?;
+
+            file.lock_exclusive().map_err(move |e| {
+                PackageCacheLayerError::LockError(
+                    format!(
+                        "failed to acquire write lock on global cache lock file: '{}'",
+                        lock_file_path.display()
+                    ),
+                    e,
+                )
+            })?;
+
+            Ok(CacheGlobalLock { file })
+        });
+
+        tokio::select!(
+            lock = acquire_lock_fut => lock,
+            _ = warn_timeout_future(
+                "Blocking waiting for global file lock on package cache".to_string()
+            ) => unreachable!("warn_timeout_future should never finish")
+        )
+    }
+}
+
 /// A lock on the cache entry. As long as this lock is held, no other process is
 /// allowed to modify the cache entry. This however, does not guarantee that the
 /// contents of the cache is not corrupted by external processes, but it does
@@ -52,18 +123,11 @@ pub struct CacheRwLock {
     file: Arc<Mutex<std::fs::File>>,
 }
 
-impl Drop for CacheRwLock {
-    fn drop(&mut self) {
-        // Ensure that the lock is released when the lock is dropped.
-        let _ = fs4::fs_std::FileExt::unlock(&*self.file.lock());
-    }
-}
-
 impl CacheRwLock {
     pub async fn acquire_read(path: &Path) -> Result<Self, PackageCacheLayerError> {
         let lock_file_path = path.to_path_buf();
 
-        let acquire_lock_fut = simple_spawn_blocking::tokio::run_blocking_task(move || {
+        simple_spawn_blocking::tokio::run_blocking_task(move || {
             let file = std::fs::OpenOptions::new()
                 .create(true)
                 .read(true)
@@ -80,37 +144,19 @@ impl CacheRwLock {
                     )
                 })?;
 
-            fs4::fs_std::FileExt::lock_shared(&file).map_err(move |e| {
-                PackageCacheLayerError::LockError(
-                    format!(
-                        "failed to acquire read lock on cache lock file: '{}'",
-                        lock_file_path.display()
-                    ),
-                    e,
-                )
-            })?;
-
             Ok(CacheRwLock {
                 file: Arc::new(Mutex::new(file)),
             })
-        });
-
-        tokio::select!(
-            lock = acquire_lock_fut => lock,
-            _ = warn_timeout_future(format!(
-                "Blocking waiting for file lock on package cache for {}",
-                path.file_name()
-                    .expect("lock file must have a name")
-                    .to_string_lossy()
-            )) => unreachable!("warn_timeout_future should never finish")
-        )
+        })
+        .await
     }
 }
 
 impl CacheRwLock {
     pub async fn acquire_write(path: &Path) -> Result<Self, PackageCacheLayerError> {
         let lock_file_path = path.to_path_buf();
-        let acquire_lock_fut = simple_spawn_blocking::tokio::run_blocking_task(move || {
+
+        simple_spawn_blocking::tokio::run_blocking_task(move || {
             let file = std::fs::OpenOptions::new()
                 .create(true)
                 .truncate(false)
@@ -120,37 +166,18 @@ impl CacheRwLock {
                 .map_err(|e| {
                     PackageCacheLayerError::LockError(
                         format!(
-                            "failed to open cache lock for writing: '{}",
+                            "failed to open cache lock for writing: '{}'",
                             lock_file_path.display()
                         ),
                         e,
                     )
                 })?;
 
-            file.lock_exclusive().map_err(move |e| {
-                PackageCacheLayerError::LockError(
-                    format!(
-                        "failed to acquire write lock on cache lock file: '{}'",
-                        lock_file_path.display()
-                    ),
-                    e,
-                )
-            })?;
-
             Ok(CacheRwLock {
                 file: Arc::new(Mutex::new(file)),
             })
-        });
-
-        tokio::select!(
-            lock = acquire_lock_fut => lock,
-            _ = warn_timeout_future(format!(
-                "Blocking waiting for file lock on package cache for {}",
-                path.file_name()
-                    .expect("lock file must have a name")
-                    .to_string_lossy()
-            )) => unreachable!("warn_timeout_future should never finish")
-        )
+        })
+        .await
     }
 }
 

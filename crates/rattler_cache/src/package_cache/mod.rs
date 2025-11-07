@@ -12,7 +12,7 @@ use std::{
 };
 
 pub use cache_key::CacheKey;
-pub use cache_lock::CacheLock;
+pub use cache_lock::{CacheGlobalLock, CacheLock};
 use cache_lock::CacheRwLock;
 use dashmap::DashMap;
 use fs_err::tokio as tokio_fs;
@@ -248,6 +248,41 @@ impl PackageCache {
             cache_origin: true,
             ..self
         }
+    }
+
+    /// Acquires a global lock on the package cache.
+    ///
+    /// This lock can be used to coordinate multiple package operations,
+    /// reducing the overhead of acquiring individual locks for each package.
+    /// The lock is held until the returned `CacheGlobalLock` is dropped.
+    ///
+    /// This is particularly useful when installing many packages at once,
+    /// as it significantly reduces the number of file locking syscalls.
+    pub async fn acquire_global_lock(&self) -> Result<CacheGlobalLock, PackageCacheError> {
+        // Use the first writable layer's path for the global cache lock
+        let (_, writable_layers) = self.split_layers();
+        let cache_layer = writable_layers
+            .first()
+            .ok_or(PackageCacheError::NoWritableLayers)?;
+
+        let lock_file_path = cache_layer.path.join(".cache.lock");
+
+        // Ensure the directory exists
+        tokio_fs::create_dir_all(&cache_layer.path)
+            .await
+            .map_err(|e| {
+                PackageCacheError::LayerError(Box::new(PackageCacheLayerError::LockError(
+                    format!(
+                        "failed to create cache directory: '{}'",
+                        cache_layer.path.display()
+                    ),
+                    e,
+                )))
+            })?;
+
+        CacheGlobalLock::acquire(&lock_file_path)
+            .await
+            .map_err(|e| PackageCacheError::LayerError(Box::new(e)))
     }
 
     /// Constructs a new [`PackageCache`] located at the specified paths.

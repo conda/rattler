@@ -475,6 +475,13 @@ impl Installer {
             )
         });
 
+        // Acquire a global lock on the package cache for the entire installation.
+        // This significantly reduces overhead by avoiding per-package locking.
+        let _global_cache_lock = package_cache
+            .acquire_global_lock()
+            .await
+            .map_err(|e| InstallerError::FailedToAcquireCacheLock(e))?;
+
         // Construct a driver.
         let driver = InstallDriver::builder()
             .execute_link_scripts(self.execute_link_scripts)
