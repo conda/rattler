@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashSet, ops::Not, str::FromStr, sync::Arc};
+use std::{borrow::Cow, collections::HashSet, ops::Not, path::Path, str::FromStr, sync::Arc};
 
 use nom::{
     branch::alt,
@@ -395,7 +395,45 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
             .map(Some)
             .map_err(|_err| ParseMatchSpecError::InvalidPackagePathOrUrl);
     }
+
+    // If it looks like a relative path use the cwd to resolve
+    if looks_like_relative_path(input) {
+        let cwd = typed_path::utils::utf8_current_dir()
+            .map_err(|_| ParseMatchSpecError::InvalidPackagePathOrUrl)?;
+        let current_dir = cwd.to_typed_path_buf();
+        let relative_path = Utf8TypedPath::from(input);
+        // Resolve to an absolute url
+        let absolute_path = current_dir.join(relative_path).normalize();
+        return file_url::file_path_to_url(absolute_path.to_path())
+            .map(Some)
+            .map_err(|_| ParseMatchSpecError::InvalidPackagePathOrUrl);
+    }
+
     Ok(None)
+}
+
+fn looks_like_relative_path(input: &str) -> bool {
+    use std::path::Component;
+
+    if input.is_empty() {
+        return false;
+    }
+
+    let path = Path::new(input);
+    if path.is_absolute() {
+        return false;
+    }
+
+    let mut components = path.components();
+    let Some(first) = components.next() else {
+        return false;
+    };
+
+    match first {
+        Component::CurDir | Component::ParentDir | Component::Prefix(_) => true,
+        Component::Normal(_) => components.next().is_some(),
+        Component::RootDir => false,
+    }
 }
 
 /// Strip the package name from the input.
@@ -815,6 +853,7 @@ mod tests {
     use rstest::rstest;
     use serde::Serialize;
     use smallvec::smallvec;
+    use typed_path::Utf8TypedPath;
     use url::Url;
 
     use super::{
@@ -1061,6 +1100,34 @@ mod tests {
         let spec_with_brackets =
             NamelessMatchSpec::from_str(format!("[url={unix_path_str}]").as_str(), Strict).unwrap();
         assert_eq!(spec_with_brackets.url, Some(unix_path));
+    }
+
+    #[test]
+    fn test_relative_path_with_dot_prefix() {
+        let rel_path = "./relative/path/foo-1.0-py27_0.conda";
+        let spec = NamelessMatchSpec::from_str(rel_path, Strict).unwrap();
+
+        let cwd = typed_path::utils::utf8_current_dir()
+            .unwrap()
+            .to_typed_path_buf();
+        let expected_path = cwd.join(Utf8TypedPath::from(rel_path)).normalize();
+        let expected_url = file_url::file_path_to_url(expected_path.to_path()).unwrap();
+
+        assert_eq!(spec.url, Some(expected_url));
+    }
+
+    #[test]
+    fn test_relative_path_with_directory_components() {
+        let rel_path = "relative/path/foo-1.0-py27_0.conda";
+        let spec = NamelessMatchSpec::from_str(rel_path, Strict).unwrap();
+
+        let cwd = typed_path::utils::utf8_current_dir()
+            .unwrap()
+            .to_typed_path_buf();
+        let expected_path = cwd.join(Utf8TypedPath::from(rel_path)).normalize();
+        let expected_url = file_url::file_path_to_url(expected_path.to_path()).unwrap();
+
+        assert_eq!(spec.url, Some(expected_url));
     }
 
     #[test]
@@ -1416,10 +1483,7 @@ mod tests {
 
         let err = MatchSpec::from_str("bla/bla", Strict)
             .expect_err("Should try to parse as name not url");
-        assert_eq!(
-            err.to_string(),
-            "'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
-        );
+        assert_matches!(err, ParseMatchSpecError::MissingPackageName);
     }
 
     #[test]
