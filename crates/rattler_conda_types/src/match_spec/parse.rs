@@ -106,6 +106,12 @@ pub enum ParseMatchSpecError {
     #[error("found multiple values for: {0}")]
     MultipleValueForKey(String),
 
+    /// Relative paths cannot be resolved without knowing the current directory
+    #[error(
+        "relative package path '{0}' cannot be resolved because the current directory is unavailable"
+    )]
+    RelativePathRequiresCurrentDir(String),
+
     /// More than one semicolon in match spec
     #[error("more than one semicolon in match spec")]
     MoreThanOneSemicolon,
@@ -397,16 +403,8 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
     }
 
     // If it looks like a relative path use the cwd to resolve
-    if looks_like_relative_path(input) {
-        let cwd = typed_path::utils::utf8_current_dir()
-            .map_err(|_err| ParseMatchSpecError::InvalidPackagePathOrUrl)?;
-        let current_dir = cwd.to_typed_path_buf();
-        let relative_path = Utf8TypedPath::from(input);
-        // Resolve to an absolute url
-        let absolute_path = current_dir.join(relative_path).normalize();
-        return file_url::file_path_to_url(absolute_path.to_path())
-            .map(Some)
-            .map_err(|_err| ParseMatchSpecError::InvalidPackagePathOrUrl);
+    if let Some(url) = resolve_relative_path(input)? {
+        return Ok(Some(url));
     }
 
     Ok(None)
@@ -436,6 +434,32 @@ fn looks_like_relative_path(input: &str) -> bool {
         Component::Normal(_) => components.next().is_some(),
         Component::RootDir => false,
     }
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn resolve_relative_path(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
+    if !looks_like_relative_path(input) {
+        return Ok(None);
+    }
+
+    let cwd = typed_path::utils::utf8_current_dir()
+        .map_err(|_err| ParseMatchSpecError::InvalidPackagePathOrUrl)?;
+    let current_dir = cwd.to_typed_path_buf();
+    let relative_path = Utf8TypedPath::from(input);
+    let absolute_path = current_dir.join(relative_path).normalize();
+    file_url::file_path_to_url(absolute_path.to_path())
+        .map(Some)
+        .map_err(|_err| ParseMatchSpecError::InvalidPackagePathOrUrl)
+}
+
+#[cfg(target_family = "wasm")]
+fn resolve_relative_path(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
+    if looks_like_relative_path(input) {
+        return Err(ParseMatchSpecError::RelativePathRequiresCurrentDir(
+            input.to_string(),
+        ));
+    }
+    Ok(None)
 }
 
 /// Strip the package name from the input.
