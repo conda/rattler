@@ -177,7 +177,7 @@ fn path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<String, FileURL
     Ok(result)
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone, Eq, PartialEq)]
 pub enum FileURLParseError {
     #[error("The path is not an absolute path")]
     NotAnAbsolutePath,

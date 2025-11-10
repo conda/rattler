@@ -399,14 +399,14 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
     // If it looks like a relative path use the cwd to resolve
     if looks_like_relative_path(input) {
         let cwd = typed_path::utils::utf8_current_dir()
-            .map_err(|_| ParseMatchSpecError::InvalidPackagePathOrUrl)?;
+            .map_err(|_err| ParseMatchSpecError::InvalidPackagePathOrUrl)?;
         let current_dir = cwd.to_typed_path_buf();
         let relative_path = Utf8TypedPath::from(input);
         // Resolve to an absolute url
         let absolute_path = current_dir.join(relative_path).normalize();
         return file_url::file_path_to_url(absolute_path.to_path())
             .map(Some)
-            .map_err(|_| ParseMatchSpecError::InvalidPackagePathOrUrl);
+            .map_err(|_err| ParseMatchSpecError::InvalidPackagePathOrUrl);
     }
 
     Ok(None)
@@ -415,10 +415,12 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
 fn looks_like_relative_path(input: &str) -> bool {
     use std::path::Component;
 
+    // Empty path is not relative
     if input.is_empty() {
         return false;
     }
 
+    // Absolute paths are not either
     let path = Path::new(input);
     if path.is_absolute() {
         return false;
