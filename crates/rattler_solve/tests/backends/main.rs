@@ -683,6 +683,12 @@ macro_rules! solver_backend_tests {
         fn test_solve_complex_conditional_dependencies() {
             crate::conditional_tests::solve_complex_conditional_dependencies::<$T>();
         }
+
+        #[test]
+        #[cfg(feature = "experimental_conditionals")]
+        fn test_solve_conditional_unusual_package() {
+            crate::conditional_tests::solve_conditional_unusual_package::<$T>();
+        }
     };
 }
 
