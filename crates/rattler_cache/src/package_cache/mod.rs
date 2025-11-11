@@ -241,7 +241,11 @@ impl PackageCacheLayer {
 impl PackageCache {
     /// Constructs a new [`PackageCache`] with only one layer.
     pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self::new_layered(std::iter::once(path.into()), false, ValidationMode::default())
+        Self::new_layered(
+            std::iter::once(path.into()),
+            false,
+            ValidationMode::default(),
+        )
     }
 
     /// Adds the origin (url or path) to the cache key to avoid unwanted cache
