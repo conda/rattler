@@ -19,87 +19,84 @@ pub struct Opt {
 
 pub async fn extract(opt: Opt) -> miette::Result<()> {
     // Try to parse as URL, otherwise treat as file path
-    let (destination, result) = match Url::parse(&opt.package) {
-        Ok(url) => {
-            // URL path: download and extract from remote location
-            let destination = if let Some(dest) = opt.destination {
-                dest
+    let (destination, result) = if let Ok(url) = Url::parse(&opt.package) {
+        // URL path: download and extract from remote location
+        let destination = if let Some(dest) = opt.destination {
+            dest
+        } else {
+            // Extract filename from URL path
+            let filename = url
+                .path_segments()
+                .and_then(Iterator::last)
+                .ok_or_else(|| miette::miette!("Could not extract package name from URL"))?;
+
+            // Remove extensions (.tar.bz2 or .conda)
+            let package_name = if let Some(stripped) = filename.strip_suffix(".tar.bz2") {
+                stripped.to_string()
+            } else if let Some(stripped) = filename.strip_suffix(".conda") {
+                stripped.to_string()
             } else {
-                // Extract filename from URL path
-                let filename = url
-                    .path_segments()
-                    .and_then(Iterator::last)
-                    .ok_or_else(|| miette::miette!("Could not extract package name from URL"))?;
-
-                // Remove extensions (.tar.bz2 or .conda)
-                let package_name = if let Some(stripped) = filename.strip_suffix(".tar.bz2") {
-                    stripped.to_string()
-                } else if let Some(stripped) = filename.strip_suffix(".conda") {
-                    stripped.to_string()
-                } else {
-                    filename.to_string()
-                };
-
-                PathBuf::from(package_name)
+                filename.to_string()
             };
 
-            println!("Extracting {} to {}", opt.package, destination.display());
+            PathBuf::from(package_name)
+        };
 
-            // Create HTTP client with authentication middleware
-            let download_client = Client::builder()
-                .no_gzip()
-                .build()
-                .into_diagnostic()
-                .context("Failed to create HTTP client")?;
+        println!("Extracting {} to {}", opt.package, destination.display());
 
-            let authentication_storage =
-                AuthenticationStorage::from_env_and_defaults().into_diagnostic()?;
-            let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-                .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
-                    authentication_storage,
-                )))
-                .with(rattler_networking::OciMiddleware)
-                .with(rattler_networking::GCSMiddleware)
-                .build();
-
-            let result = rattler_package_streaming::reqwest::tokio::extract(
-                download_client,
-                url,
-                &destination,
-                None,
-                None,
-            )
-            .await
+        // Create HTTP client with authentication middleware
+        let download_client = Client::builder()
+            .no_gzip()
+            .build()
             .into_diagnostic()
-            .with_context(|| format!("Failed to extract package from URL: {}", opt.package))?;
+            .context("Failed to create HTTP client")?;
 
-            (destination, result)
-        }
-        Err(_) => {
-            // File path: extract from local file
-            let destination = if let Some(dest) = opt.destination {
-                dest
-            } else {
-                // Extract to a directory with the same name as the package (without extension)
-                let path = PathBuf::from(&opt.package);
-                let package_name = path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .ok_or_else(|| miette::miette!("Invalid package filename"))?
-                    .to_string();
+        let authentication_storage =
+            AuthenticationStorage::from_env_and_defaults().into_diagnostic()?;
+        let download_client = reqwest_middleware::ClientBuilder::new(download_client)
+            .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
+                authentication_storage,
+            )))
+            .with(rattler_networking::OciMiddleware)
+            .with(rattler_networking::GCSMiddleware)
+            .build();
 
-                PathBuf::from(package_name)
-            };
+        let result = rattler_package_streaming::reqwest::tokio::extract(
+            download_client,
+            url,
+            &destination,
+            None,
+            None,
+        )
+        .await
+        .into_diagnostic()
+        .with_context(|| format!("Failed to extract package from URL: {}", opt.package))?;
 
-            println!("Extracting {} to {}", opt.package, destination.display());
+        (destination, result)
+    } else {
+        // File path: extract from local file
+        let destination = if let Some(dest) = opt.destination {
+            dest
+        } else {
+            // Extract to a directory with the same name as the package (without extension)
+            let path = PathBuf::from(&opt.package);
+            let package_name = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .ok_or_else(|| miette::miette!("Invalid package filename"))?
+                .to_string();
 
-            let result =
-                rattler_package_streaming::fs::extract(&PathBuf::from(&opt.package), &destination)
-                    .into_diagnostic()
-                    .with_context(|| format!("Failed to extract package: {}", opt.package))?;
+            PathBuf::from(package_name)
+        };
 
-            (destination, result)
-        }
+        println!("Extracting {} to {}", opt.package, destination.display());
+
+        let result =
+            rattler_package_streaming::fs::extract(&PathBuf::from(&opt.package), &destination)
+                .into_diagnostic()
+                .with_context(|| format!("Failed to extract package: {}", opt.package))?;
+
+        (destination, result)
     };
 
     println!(
