@@ -1,4 +1,4 @@
-#![cfg(feature = "experimental_conditionals")]
+#![cfg(any(feature = "experimental_conditionals", feature = "experimental_extras"))]
 
 use std::str::FromStr;
 

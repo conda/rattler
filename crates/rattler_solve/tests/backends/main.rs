@@ -11,11 +11,14 @@ use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
 use url::Url;
 
-#[cfg(feature = "experimental_conditionals")]
+#[cfg(any(feature = "experimental_conditionals", feature = "experimental_extras"))]
 mod helpers;
 
 #[cfg(feature = "experimental_conditionals")]
 mod conditional_tests;
+
+#[cfg(feature = "experimental_extras")]
+mod extras_tests;
 
 fn channel_config() -> ChannelConfig {
     ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap())
@@ -685,59 +688,27 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        #[cfg(feature = "experimental_conditionals")]
-        fn test_solve_conditional_unusual_package() {
-            crate::conditional_tests::solve_conditional_unusual_package::<$T>();
-        }
-
-        /// Test that extras pull in the correct dependencies
-        #[test]
         #[cfg(feature = "experimental_extras")]
         fn test_extras_basic() {
-            let mut result = solve::<$T>(
-                &[super::dummy_channel_with_optional_dependencies_json_path()],
-                SimpleSolveTask {
-                    specs: &["foo[extras=[with-bar]]"],
-                    ..SimpleSolveTask::default()
-                },
-            )
-            .unwrap();
-
-            // Sort the records by package name to make the test deterministic
-            result
-                .records
-                .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
-
-            // Make sure we have two packages `foo` and `bar`
-            assert_eq!(result.records.len(), 2);
-            assert_eq!(result.records[0].package_record.name.as_normalized(), "bar");
-            assert_eq!(result.records[1].package_record.name.as_normalized(), "foo");
+            crate::extras_tests::solve_extras_basic::<$T>();
         }
 
-        /// Test that extras influence version selection
         #[test]
         #[cfg(feature = "experimental_extras")]
         fn test_extras_version_restriction() {
-            let mut result = solve::<$T>(
-                &[super::dummy_channel_with_optional_dependencies_json_path()],
-                SimpleSolveTask {
-                    specs: &["foo[extras=[with-bar]]", "bar"],
-                    ..SimpleSolveTask::default()
-                },
-            )
-            .unwrap();
+            crate::extras_tests::solve_extras_version_restriction::<$T>();
+        }
 
-            // Sort the records by package name to make the test deterministic
-            result
-                .records
-                .sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
+        #[test]
+        #[cfg(feature = "experimental_extras")]
+        fn test_multiple_extras() {
+            crate::extras_tests::solve_multiple_extras::<$T>();
+        }
 
-            // Even though 2 versions of `bar` are available, we should have
-            // selected the one with version "1" because it is restricted by the
-            // extra added to foo.
-            assert_eq!(result.records.len(), 2);
-            assert_eq!(result.records[0].file_name, "bar-1-xxx.tar.bz2");
-            assert_eq!(result.records[1].package_record.name.as_normalized(), "foo");
+        #[test]
+        #[cfg(feature = "experimental_extras")]
+        fn test_extras_complex_constraints() {
+            crate::extras_tests::solve_extras_complex_constraints::<$T>();
         }
     };
 }
