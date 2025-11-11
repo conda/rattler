@@ -17,7 +17,7 @@ pub struct Opt {
     destination: Option<PathBuf>,
 }
 
-pub async fn unpack(opt: Opt) -> miette::Result<()> {
+pub async fn extract(opt: Opt) -> miette::Result<()> {
     // Try to parse as URL, otherwise treat as file path
     let is_url = Url::parse(&opt.package).is_ok();
 
