@@ -1,4 +1,4 @@
-#![cfg(feature = "experimental_conditionals")]
+#![cfg(any(feature = "experimental_conditionals", feature = "experimental_extras"))]
 
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -19,7 +19,7 @@ impl PackageBuilder {
             record: RepoDataRecord {
                 url: Url::from_str("http://example.com").unwrap(),
                 channel: None,
-                file_name: format!("dummy-filename-{name}"),
+                file_name: format!("{}-0.0.0-h123456_0.tar.bz2", name),
                 package_record: PackageRecord {
                     name: name.parse().unwrap(),
                     version: Version::from_str("0.0.0").unwrap().into(),
@@ -67,6 +67,10 @@ impl PackageBuilder {
 
     pub fn version(mut self, version: &str) -> Self {
         self.record.package_record.version = Version::from_str(version).unwrap().into();
+        // Update filename to include the new version
+        let name = self.record.package_record.name.as_normalized();
+        let build = &self.record.package_record.build;
+        self.record.file_name = format!("{}-{}-{}.tar.bz2", name, version, build);
         self
     }
 
@@ -77,6 +81,18 @@ impl PackageBuilder {
 
     pub fn build_number(mut self, build_number: u64) -> Self {
         self.record.package_record.build_number = build_number;
+        self
+    }
+
+    pub fn extra_depends(
+        mut self,
+        extra: &str,
+        deps: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.record
+            .package_record
+            .experimental_extra_depends
+            .insert(extra.to_string(), deps.into_iter().map(Into::into).collect());
         self
     }
 
