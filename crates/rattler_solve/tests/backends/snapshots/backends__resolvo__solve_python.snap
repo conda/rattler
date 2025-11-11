@@ -1,7 +1,6 @@
 ---
-source: crates/rattler_solve/tests/backends.rs
-assertion_line: 398
-expression: "solve_real_world::<rattler_solve::libsolv_c::Solver>(vec![\"python=3.9\"])"
+source: crates/rattler_solve/tests/backends/main.rs
+expression: "solve_real_world :: < rattler_solve::resolvo::Solver > (vec! [\"python=3.9\"])"
 ---
 - _libgcc_mutex 0.1 conda_forge
 - _openmp_mutex 4.5 2_gnu
@@ -23,4 +22,3 @@ expression: "solve_real_world::<rattler_solve::libsolv_c::Solver>(vec![\"python=
 - tk 8.6.12 h27826a3_0
 - tzdata 2021e he74cb21_0
 - xz 5.2.6 h166bdaf_0
-

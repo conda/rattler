@@ -11,6 +11,12 @@ use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
 use url::Url;
 
+#[cfg(feature = "experimental_conditionals")]
+mod helpers;
+
+#[cfg(feature = "experimental_conditionals")]
+mod conditional_tests;
+
 fn channel_config() -> ChannelConfig {
     ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap())
 }
@@ -39,12 +45,12 @@ fn dummy_channel_with_optional_dependencies_json_path() -> String {
     )
 }
 
-fn dummy_md5_hash() -> rattler_digest::Md5Hash {
+pub(crate) fn dummy_md5_hash() -> rattler_digest::Md5Hash {
     rattler_digest::parse_digest_from_hex::<rattler_digest::Md5>("b3af409bb8423187c75e6c7f5b683908")
         .unwrap()
 }
 
-fn dummy_sha256_hash() -> rattler_digest::Sha256Hash {
+pub(crate) fn dummy_sha256_hash() -> rattler_digest::Sha256Hash {
     rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
     )
@@ -75,36 +81,96 @@ fn installed_package(
     build: &str,
     build_number: u64,
 ) -> RepoDataRecord {
-    RepoDataRecord {
-        url: Url::from_str("http://example.com").unwrap(),
-        channel: Some(channel.to_string()),
-        file_name: format!("dummy-filename-{name}"),
-        package_record: PackageRecord {
-            name: name.parse().unwrap(),
-            version: version.parse().unwrap(),
-            build: build.to_string(),
-            build_number,
-            subdir: subdir.to_string(),
-            md5: Some(dummy_md5_hash()),
-            sha256: Some(dummy_sha256_hash()),
-            size: None,
-            arch: None,
-            experimental_extra_depends: BTreeMap::new(),
-            platform: None,
-            depends: Vec::new(),
-            constrains: Vec::new(),
-            track_features: Vec::new(),
-            features: None,
-            noarch: NoArchType::default(),
-            license: None,
-            license_family: None,
-            timestamp: None,
-            legacy_bz2_size: None,
-            legacy_bz2_md5: None,
-            purls: None,
-            python_site_packages_path: None,
-            run_exports: None,
-        },
+    PackageBuilder::new(name)
+        .channel(channel)
+        .subdir(subdir)
+        .version(version)
+        .build_string(build)
+        .build_number(build_number)
+        .build()
+}
+
+#[derive(Clone)]
+struct PackageBuilder {
+    record: RepoDataRecord,
+}
+
+impl PackageBuilder {
+    fn new(name: &str) -> Self {
+        Self {
+            record: RepoDataRecord {
+                url: Url::from_str("http://example.com").unwrap(),
+                channel: None,
+                file_name: format!("dummy-filename-{name}"),
+                package_record: PackageRecord {
+                    name: name.parse().unwrap(),
+                    version: Version::from_str("0.0.0").unwrap().into(),
+                    build: "h123456_0".to_string(),
+                    build_number: 0,
+                    subdir: "linux-64".to_string(),
+                    md5: Some(dummy_md5_hash()),
+                    sha256: Some(dummy_sha256_hash()),
+                    size: None,
+                    arch: None,
+                    experimental_extra_depends: BTreeMap::new(),
+                    platform: None,
+                    depends: Vec::new(),
+                    constrains: Vec::new(),
+                    track_features: Vec::new(),
+                    features: None,
+                    noarch: NoArchType::default(),
+                    license: None,
+                    license_family: None,
+                    timestamp: None,
+                    legacy_bz2_size: None,
+                    legacy_bz2_md5: None,
+                    purls: None,
+                    python_site_packages_path: None,
+                    run_exports: None,
+                },
+            },
+        }
+    }
+
+    #[cfg(feature = "experimental_conditionals")]
+    fn depends(mut self, deps: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.record.package_record.depends = deps.into_iter().map(Into::into).collect();
+        self
+    }
+
+    fn channel(mut self, channel: &str) -> Self {
+        self.record.channel = Some(channel.to_string());
+        self
+    }
+
+    fn subdir(mut self, subdir: &str) -> Self {
+        self.record.package_record.subdir = subdir.to_string();
+        self
+    }
+
+    fn version(mut self, version: &str) -> Self {
+        self.record.package_record.version = Version::from_str(version).unwrap().into();
+        self
+    }
+
+    fn build_string(mut self, build: &str) -> Self {
+        self.record.package_record.build = build.to_string();
+        self
+    }
+
+    fn build_number(mut self, build_number: u64) -> Self {
+        self.record.package_record.build_number = build_number;
+        self
+    }
+
+    fn build(self) -> RepoDataRecord {
+        self.record
+    }
+}
+
+impl From<PackageBuilder> for RepoDataRecord {
+    fn from(builder: PackageBuilder) -> Self {
+        builder.build()
     }
 }
 
@@ -196,11 +262,10 @@ fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
     static REPO_DATA: Lazy<SparseRepoData> = Lazy::new(|| {
         let conda_forge = tools::fetch_test_conda_forge_repodata("linux-64")
             .expect("Failed to fetch linux-64 repodata");
-
         SparseRepoData::from_file(
             Channel::from_str("conda-forge", &channel_config()).unwrap(),
             "conda-forge".to_string(),
-            conda_forge.to_str().unwrap(),
+            &conda_forge,
             None,
         )
         .unwrap()
@@ -605,6 +670,18 @@ macro_rules! solver_backend_tests {
             };
 
             insta::assert_snapshot!(output);
+        }
+
+        #[test]
+        #[cfg(feature = "experimental_conditionals")]
+        fn test_solve_conditional_dependencies() {
+            crate::conditional_tests::solve_conditional_dependencies::<$T>();
+        }
+
+        #[test]
+        #[cfg(feature = "experimental_conditionals")]
+        fn test_solve_complex_conditional_dependencies() {
+            crate::conditional_tests::solve_complex_conditional_dependencies::<$T>();
         }
     };
 }
@@ -1073,143 +1150,6 @@ mod resolvo {
               └─ bar <2, which cannot be installed because there are no viable options:
                  └─ bar 1, which conflicts with the versions reported above.
         "###);
-    }
-
-    #[test]
-    fn test_solve_conditional_dependencies() {
-        use rattler_conda_types::{MatchSpec, Version};
-        use rattler_solve::{SolverImpl, SolverTask};
-
-        // Create test packages with conditional dependencies
-        let conditional_pkg = installed_package(
-            "test",
-            "linux-64",
-            "conditional-pkg",
-            "1.0.0",
-            "h123456_0",
-            0,
-        );
-
-        let python39_pkg = installed_package("test", "linux-64", "python", "3.9.0", "h123456_0", 0);
-
-        let python38_pkg = installed_package("test", "linux-64", "python", "3.8.0", "h123456_0", 0);
-
-        let numpy_pkg =
-            installed_package("test", "linux-64", "numpy", "1.21.0", "py39h123456_0", 0);
-
-        let scipy_pkg = installed_package("test", "linux-64", "scipy", "1.7.0", "py39h123456_0", 0);
-
-        // Modify the conditional package to have conditional dependencies
-        let mut conditional_pkg_modified = conditional_pkg.clone();
-        conditional_pkg_modified.package_record.depends = vec![
-            "python >=3.8".to_string(),
-            "numpy; if python >=3.9".to_string(), // Conditional dependency
-            "scipy; if __unix".to_string(),       // Virtual package condition
-        ];
-
-        // Test 1: Solve with Python 3.9 - should include numpy due to condition
-        let repo_data_records = vec![
-            conditional_pkg_modified.clone(),
-            python39_pkg.clone(),
-            numpy_pkg.clone(),
-            scipy_pkg.clone(),
-        ];
-
-        let specs = vec![
-            MatchSpec::from_str("conditional-pkg", ParseStrictness::Lenient).unwrap(),
-            MatchSpec::from_str("python=3.9", ParseStrictness::Lenient).unwrap(),
-        ];
-
-        let task = SolverTask {
-            specs,
-            virtual_packages: vec![rattler_conda_types::GenericVirtualPackage {
-                name: "__unix".parse().unwrap(),
-                version: Version::from_str("0").unwrap(),
-                build_string: "0".to_string(),
-            }],
-            ..SolverTask::from_iter([&repo_data_records])
-        };
-
-        let result = rattler_solve::resolvo::Solver.solve(task);
-
-        // Check if our conditional dependency parsing worked
-        match result {
-            Ok(solution) => {
-                let package_names: Vec<_> = solution
-                    .records
-                    .iter()
-                    .map(|r| r.package_record.name.as_normalized())
-                    .collect();
-
-                // At minimum, should include conditional-pkg and python
-                assert!(package_names.contains(&"conditional-pkg"));
-                assert!(package_names.contains(&"python"));
-
-                // If conditional dependencies are working, numpy should be included due to python>=3.9 condition
-                assert!(package_names.contains(&"numpy"));
-
-                // If conditional dependencies are working, scipy should be included due to __unix condition
-                assert!(package_names.contains(&"scipy"));
-            }
-            Err(e) => {
-                // If solving fails, it might be because the conditional dependency implementation is not complete
-                println!("Solving failed: {e:?}");
-                println!(
-                    "This is expected if conditional dependencies are not fully implemented yet"
-                );
-            }
-        }
-
-        // Test 2: Solve with Python 3.8 - should NOT include numpy due to condition
-        let repo_data_records = vec![
-            conditional_pkg_modified.clone(),
-            python38_pkg.clone(),
-            numpy_pkg.clone(),
-            scipy_pkg.clone(),
-        ];
-
-        let specs = vec![
-            MatchSpec::from_str("conditional-pkg", ParseStrictness::Lenient).unwrap(),
-            MatchSpec::from_str("python=3.8", ParseStrictness::Lenient).unwrap(),
-        ];
-
-        let task = SolverTask {
-            specs,
-            virtual_packages: vec![rattler_conda_types::GenericVirtualPackage {
-                name: "__unix".parse().unwrap(),
-                version: Version::from_str("0").unwrap(),
-                build_string: "0".to_string(),
-            }],
-            ..SolverTask::from_iter([&repo_data_records])
-        };
-
-        let result = rattler_solve::resolvo::Solver.solve(task);
-
-        match result {
-            Ok(solution) => {
-                let package_names: Vec<_> = solution
-                    .records
-                    .iter()
-                    .map(|r| r.package_record.name.as_normalized())
-                    .collect();
-
-                // Should include conditional-pkg and python
-                assert!(package_names.contains(&"conditional-pkg"));
-                assert!(package_names.contains(&"python"));
-
-                // If conditional dependencies are working, numpy should NOT be included due to python<3.9 condition
-                assert!(!package_names.contains(&"numpy"));
-
-                // If conditional dependencies are working, scipy should be included due to __unix condition
-                assert!(package_names.contains(&"scipy"));
-            }
-            Err(e) => {
-                println!("Solving failed: {e:?}");
-                println!(
-                    "This is expected if conditional dependencies are not fully implemented yet"
-                );
-            }
-        }
     }
 }
 

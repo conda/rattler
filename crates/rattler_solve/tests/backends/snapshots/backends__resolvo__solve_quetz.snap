@@ -1,7 +1,6 @@
 ---
-source: crates/rattler_solve/tests/backends.rs
-assertion_line: 398
-expression: "solve_real_world::<rattler_solve::libsolv_c::Solver>(vec![\"quetz\",])"
+source: crates/rattler_solve/tests/backends/main.rs
+expression: "solve_real_world :: < rattler_solve::resolvo::Solver > (vec! [\"quetz\",])"
 ---
 - _libgcc_mutex 0.1 conda_forge
 - _openmp_mutex 4.5 2_gnu
@@ -99,4 +98,3 @@ expression: "solve_real_world::<rattler_solve::libsolv_c::Solver>(vec![\"quetz\"
 - yaml 0.2.5 h7f98852_2
 - zipp 3.7.0 pyhd8ed1ab_1
 - zstandard 0.18.0 py38h0a891b7_0
-

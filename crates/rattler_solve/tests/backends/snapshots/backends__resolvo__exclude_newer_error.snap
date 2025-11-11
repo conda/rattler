@@ -1,6 +1,5 @@
 ---
-source: crates/rattler_solve/tests/backends.rs
-assertion_line: 663
+source: crates/rattler_solve/tests/backends/main.rs
 expression: result.unwrap_err()
 ---
 Cannot solve the request because of: The following packages are incompatible

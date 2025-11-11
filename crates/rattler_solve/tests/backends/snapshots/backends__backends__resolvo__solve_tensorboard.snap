@@ -1,7 +1,6 @@
 ---
-source: crates/rattler_solve/tests/backends.rs
-assertion_line: 398
-expression: "solve_real_world::<rattler_solve::libsolv_c::Solver>(vec![\"tensorboard=2.1.1\",\n        \"grpc-cpp=1.39.1\"])"
+source: crates/rattler_solve/tests/backends/mod.rs
+expression: "solve_real_world :: < rattler_solve::resolvo::Solver >\n(vec! [\"tensorboard=2.1.1\", \"grpc-cpp=1.39.1\"])"
 ---
 - _libgcc_mutex 0.1 conda_forge
 - _openmp_mutex 4.5 2_gnu
@@ -81,4 +80,3 @@ expression: "solve_real_world::<rattler_solve::libsolv_c::Solver>(vec![\"tensorb
 - yarl 1.7.2 py39hb9d737c_2
 - zipp 3.7.0 pyhd8ed1ab_1
 - zlib 1.2.12 h166bdaf_2
-
