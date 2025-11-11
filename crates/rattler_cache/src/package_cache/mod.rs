@@ -59,6 +59,7 @@ struct PackageCacheInner {
 pub struct PackageCacheLayer {
     path: PathBuf,
     packages: DashMap<BucketKey, Arc<tokio::sync::Mutex<Entry>>>,
+    validation_mode: ValidationMode,
 }
 
 /// A key that defines the actual location of the package in the cache.
@@ -183,6 +184,7 @@ impl PackageCacheLayer {
             cache_key.sha256.as_ref(),
             None,
             None,
+            self.validation_mode,
         )
         .await
         {
@@ -222,6 +224,7 @@ impl PackageCacheLayer {
             cache_key.sha256.as_ref(),
             Some(fetch),
             reporter,
+            self.validation_mode,
         )
         .await
         {
@@ -238,7 +241,7 @@ impl PackageCacheLayer {
 impl PackageCache {
     /// Constructs a new [`PackageCache`] with only one layer.
     pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self::new_layered(std::iter::once(path.into()), false)
+        Self::new_layered(std::iter::once(path.into()), false, ValidationMode::default())
     }
 
     /// Adds the origin (url or path) to the cache key to avoid unwanted cache
@@ -253,7 +256,7 @@ impl PackageCache {
     /// Constructs a new [`PackageCache`] located at the specified paths.
     /// Layers are queried in the order they are provided.
     /// The first writable layer is written to.
-    pub fn new_layered<I>(paths: I, cache_origin: bool) -> Self
+    pub fn new_layered<I>(paths: I, cache_origin: bool, validation_mode: ValidationMode) -> Self
     where
         I: IntoIterator,
         I::Item: Into<PathBuf>,
@@ -263,6 +266,7 @@ impl PackageCache {
             .map(|path| PackageCacheLayer {
                 path: path.into(),
                 packages: DashMap::default(),
+                validation_mode,
             })
             .collect();
 
@@ -535,6 +539,7 @@ async fn validate_package_common<F, Fut, E>(
     given_sha: Option<&Sha256Hash>,
     fetch: Option<F>,
     reporter: Option<Arc<dyn CacheReporter>>,
+    validation_mode: ValidationMode,
 ) -> Result<CacheLock, PackageCacheLayerError>
 where
     F: Fn(PathBuf) -> Fut + Send,
@@ -595,7 +600,7 @@ where
 
             // Validate the package directory.
             let validation_result = tokio::task::spawn_blocking(move || {
-                validate_package_directory(&path_inner, ValidationMode::Fast)
+                validate_package_directory(&path_inner, validation_mode)
             })
             .await;
 
@@ -1166,6 +1171,7 @@ mod test {
         let cache = PackageCache::new_layered(
             all_layers_paths.iter().map(|dir| dir.path().to_path_buf()),
             false,
+            ValidationMode::default(),
         );
 
         let (readonly_layers, writable_layers) = cache.inner.layers.split_at(readonly_layer_count);
