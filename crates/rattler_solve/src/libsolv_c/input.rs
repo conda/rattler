@@ -7,6 +7,8 @@ use chrono::{DateTime, Utc};
 use rattler_conda_types::{package::ArchiveType, GenericVirtualPackage, RepoDataRecord};
 #[cfg(feature = "experimental_conditionals")]
 use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseStrictness};
+#[cfg(feature = "experimental_extras")]
+use std::collections::HashSet;
 
 use super::{
     c_string,
@@ -109,6 +111,10 @@ pub fn add_repodata_records<'a>(
     let data = repo.add_repodata();
 
     let mut solvable_ids = Vec::new();
+
+    // Track all extras we encounter so we can create synthetic solvables for them
+    #[cfg(feature = "experimental_extras")]
+    let mut extras: HashSet<(String, String)> = HashSet::new();
     for (repo_data_index, repo_data) in repo_data.into_iter().enumerate() {
         // Skip packages that are newer than the specified timestamp
         match (exclude_newer, repo_data.package_record.timestamp.as_ref()) {
@@ -189,6 +195,31 @@ pub fn add_repodata_records<'a>(
             data.add_idarray(solvable_id, solvable_constraints, match_spec_id);
         }
 
+        // Process experimental_extra_depends: convert them into conditional requirements
+        #[cfg(feature = "experimental_extras")]
+        {
+            for (extra_name, deps) in record.experimental_extra_depends.iter() {
+                // Track this extra for synthetic solvable creation
+                extras.insert((record.name.as_normalized().to_string(), extra_name.clone()));
+
+                // Create conditional dependencies: dep; if package[extra]
+                for dep_str in deps.iter() {
+                    // Parse the dependency matchspec
+                    let dep_id = pool.conda_matchspec(&c_string(dep_str));
+
+                    // Create the condition: package[extra]
+                    let extra_name_str = format!("{}[{}]", record.name.as_normalized(), extra_name);
+                    let extra_condition_id = pool.intern_str(extra_name_str.as_str()).into();
+
+                    // Create a conditional dependency: dep; if package[extra]
+                    let conditional_dep_id = pool.rel_cond(dep_id, extra_condition_id);
+
+                    // Add it as a requirement
+                    repo.add_requires(solvable, conditional_dep_id);
+                }
+            }
+        }
+
         // Track features
         for track_features in record.track_features.iter() {
             let track_feature = track_features.trim();
@@ -255,6 +286,29 @@ pub fn add_repodata_records<'a>(
         }
 
         solvable_ids.push(solvable_id);
+    }
+
+    // Add synthetic solvables for extras
+    #[cfg(feature = "experimental_extras")]
+    {
+        for (package_name, extra_name) in extras {
+            // Create synthetic solvable with name "package[extra]"
+            let solvable_id = repo.add_solvable();
+            let solvable = unsafe { solvable_id.resolve_raw(pool).as_mut() };
+
+            // Set the name to "package[extra]" using bracket notation
+            let synthetic_name = format!("{}[{}]", package_name, extra_name);
+            solvable.name = pool.intern_str(synthetic_name.as_str()).into();
+
+            // Set a dummy version (version "0" to indicate this is a synthetic solvable)
+            solvable.evr = pool.intern_str("0").into();
+
+            // Add self-provides so the solver can find it
+            let rel_eq = pool.rel_eq(solvable.name, solvable.evr);
+            repo.add_provides(solvable, rel_eq);
+
+            solvable_ids.push(solvable_id);
+        }
     }
 
     repo.internalize();
