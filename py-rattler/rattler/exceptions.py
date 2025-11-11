@@ -1,6 +1,7 @@
 try:
     from rattler.rattler import (
         InvalidVersionError,
+        InvalidVersionSpecError,
         InvalidMatchSpecError,
         InvalidPackageNameError,
         InvalidUrlError,
@@ -28,6 +29,9 @@ except ImportError:
 
     class InvalidVersionError(Exception):  # type: ignore[no-redef]
         """Error that can occur when parsing a Version"""
+
+    class InvalidVersionSpecError(Exception):  # type: ignore[no-redef]
+        """Error that can occur when parsing a VersionSpec"""
 
     class InvalidMatchSpecError(Exception):  # type: ignore[no-redef]
         """Error that can occur when parsing a MatchSpec"""
@@ -100,6 +104,7 @@ __all__ = [
     "InvalidPackageNameError",
     "InvalidUrlError",
     "InvalidVersionError",
+    "InvalidVersionSpecError",
     "IoError",
     "LinkError",
     "ParseArchError",

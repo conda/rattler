@@ -7,6 +7,7 @@ use tracing_subscriber::{filter::LevelFilter, util::SubscriberInitExt, EnvFilter
 use crate::writer::IndicatifWriter;
 
 mod commands;
+mod exclude_newer;
 mod writer;
 
 /// Returns a global instance of [`indicatif::MultiProgress`].

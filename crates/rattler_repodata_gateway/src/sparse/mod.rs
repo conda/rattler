@@ -749,10 +749,7 @@ impl<'de> TryFrom<&'de str> for PackageFilename<'de> {
 
 #[cfg(test)]
 mod test {
-    use std::{
-        collections::HashSet,
-        path::{Path, PathBuf},
-    };
+    use std::{collections::HashSet, path::PathBuf};
 
     use bytes::Bytes;
     use fs_err as fs;
@@ -765,14 +762,17 @@ mod test {
     use super::{
         load_repo_data_recursively, PackageFilename, PackageFormatSelection, SparseRepoData,
     };
-    use crate::utils::test::fetch_repo_data;
 
     fn test_dir() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
+        tools::test_data_dir()
     }
 
     async fn default_repo_data() -> Vec<(Channel, &'static str, PathBuf)> {
-        tokio::try_join!(fetch_repo_data("linux-64"), fetch_repo_data("noarch")).unwrap();
+        tokio::try_join!(
+            tools::fetch_test_conda_forge_repodata_async("linux-64"),
+            tools::fetch_test_conda_forge_repodata_async("noarch")
+        )
+        .unwrap();
 
         let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
         vec![
@@ -832,7 +832,11 @@ mod test {
         package_names: impl IntoIterator<Item = impl AsRef<str>>,
         variant_consolidation: PackageFormatSelection,
     ) -> Vec<Vec<RepoDataRecord>> {
-        tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
+        tokio::try_join!(
+            tools::fetch_test_conda_forge_repodata_async("noarch"),
+            tools::fetch_test_conda_forge_repodata_async("linux-64")
+        )
+        .unwrap();
 
         //"linux-sha=20021d1dff9941ccf189f27404e296c54bc37fc4600c7027b366c03fc0bfa89e"
         //"noarch-sha=05e0c4ce7be29f36949c33cce782f21aecfbdd41f9e3423839670fb38fc5d691"
@@ -960,7 +964,11 @@ mod test {
 
     #[tokio::test]
     async fn load_complete_records() {
-        tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
+        tokio::try_join!(
+            tools::fetch_test_conda_forge_repodata_async("noarch"),
+            tools::fetch_test_conda_forge_repodata_async("linux-64")
+        )
+        .unwrap();
 
         let mut records = Vec::new();
         for path in [

@@ -35,6 +35,7 @@ rstest = { workspace = true }
 serde_json = { workspace = true }
 similar-asserts = { workspace = true }
 url = { workspace = true }
+tools = { path = "../tools" }
 
 [features]
 default = ["resolvo"]
