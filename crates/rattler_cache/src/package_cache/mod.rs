@@ -12,7 +12,7 @@ use std::{
 };
 
 pub use cache_key::CacheKey;
-use cache_lock::CacheRwLock;
+use cache_lock::CacheMetadataFile;
 pub use cache_lock::{CacheGlobalLock, CacheLock};
 use dashmap::DashMap;
 use fs_err::tokio as tokio_fs;
@@ -576,8 +576,8 @@ where
     Fut: Future<Output = Result<(), E>> + 'static,
     E: Error + Send + Sync + 'static,
 {
-    // Acquire a read lock on the cache entry. This ensures that no other process is
-    // currently writing to the cache.
+    // Open the cache metadata file to read/write revision and hash information.
+    // Concurrent access is coordinated via the global cache lock.
     let lock_file_path = {
         // Append the `.lock` extension to the cache path to create the lock file path.
         let mut path_str = path.as_os_str().to_owned();
@@ -597,122 +597,103 @@ where
             .await?;
     }
 
-    let mut validated_revision = known_valid_revision;
+    let mut metadata = CacheMetadataFile::acquire(&lock_file_path).await?;
+    let cache_revision = metadata.read_revision()?;
+    let locked_sha256 = metadata.read_sha256()?;
 
-    loop {
-        let mut read_lock = CacheRwLock::acquire_read(&lock_file_path).await?;
-        let cache_revision = read_lock.read_revision()?;
-        let locked_sha256 = read_lock.read_sha256()?;
+    let hash_mismatch = match (given_sha, &locked_sha256) {
+        (Some(given_hash), Some(locked_sha256)) => given_hash != locked_sha256,
+        _ => false,
+    };
 
-        let hash_mismatch = match (given_sha, &locked_sha256) {
-            (Some(given_hash), Some(locked_sha256)) => given_hash != locked_sha256,
-            _ => false,
-        };
+    let cache_dir_exists = path.is_dir();
+    if cache_dir_exists && !hash_mismatch {
+        let path_inner = path.clone();
 
-        let cache_dir_exists = path.is_dir();
-        if cache_dir_exists && !hash_mismatch {
-            let path_inner = path.clone();
+        let reporter = reporter.as_deref().map(|r| (r, r.on_validate_start()));
 
-            let reporter = reporter.as_deref().map(|r| (r, r.on_validate_start()));
-
-            // If we know the revision is already valid we can return immediately.
-            if validated_revision == Some(cache_revision) {
-                if let Some((reporter, index)) = reporter {
-                    reporter.on_validate_complete(index);
-                }
-                return Ok(CacheLock {
-                    _lock: read_lock,
-                    revision: cache_revision,
-                    sha256: locked_sha256,
-                    path: path_inner,
-                });
-            }
-
-            // Validate the package directory.
-            let validation_result = tokio::task::spawn_blocking(move || {
-                validate_package_directory(&path_inner, ValidationMode::Fast)
-            })
-            .await;
-
+        // If we know the revision is already valid we can return immediately.
+        if known_valid_revision == Some(cache_revision) {
             if let Some((reporter, index)) = reporter {
                 reporter.on_validate_complete(index);
             }
-
-            match validation_result {
-                Ok(Ok(_)) => {
-                    tracing::debug!("validation succeeded");
-                    return Ok(CacheLock {
-                        _lock: read_lock,
-                        revision: cache_revision,
-                        sha256: locked_sha256,
-                        path,
-                    });
-                }
-                Ok(Err(e)) => {
-                    tracing::warn!("validation for {path:?} failed: {e}");
-                    if let Some(cause) = e.source() {
-                        tracing::debug!(
-                            "  Caused by: {}",
-                            std::iter::successors(Some(cause), |e| (*e).source())
-                                .format("\n  Caused by: ")
-                        );
-                    }
-                }
-                Err(e) => {
-                    if let Ok(panic) = e.try_into_panic() {
-                        std::panic::resume_unwind(panic)
-                    }
-                }
-            }
-        } else if !cache_dir_exists {
-            tracing::debug!("cache directory does not exist");
-        } else if hash_mismatch {
-            tracing::warn!(
-                "hash mismatch, wanted a package at location {} with hash {} but the cached package has hash {}, fetching package",
-                path.display(),
-                given_sha.map_or(String::from("<unknown>"), |s| format!("{s:x}")),
-                locked_sha256.map_or(String::from("<unknown>"), |s| format!("{s:x}"))
-            );
+            return Ok(CacheLock {
+                revision: cache_revision,
+                sha256: locked_sha256,
+                path: path_inner,
+            });
         }
 
-        // If the cache is stale, we need to fetch the package again. We have to acquire
-        // a write lock on the cache entry. However, we can't do that while we have a
-        // read lock on the cache lock file. So we release the read lock and acquire a
-        // write lock on the cache lock file. In the meantime, another process might
-        // have already fetched the package. To guard against this we read a revision
-        // from the lock-file while we have the read lock, then we acquire the write
-        // lock and check if the revision has changed. If it has, we assume that
-        // another process has already fetched the package and we restart the
-        // validation process.
-        if let Some(ref fetch_fn) = fetch {
-            drop(read_lock);
+        // Validate the package directory.
+        let validation_result = tokio::task::spawn_blocking(move || {
+            validate_package_directory(&path_inner, ValidationMode::Fast)
+        })
+        .await;
 
-            let mut write_lock = CacheRwLock::acquire_write(&lock_file_path).await?;
-
-            let read_revision = write_lock.read_revision()?;
-            if read_revision != cache_revision {
-                tracing::debug!(
-                    "cache revisions don't match '{}', retrying to acquire lock file.",
-                    lock_file_path.display()
-                );
-                continue;
-            }
-
-            // Write the new revision
-            let new_revision = cache_revision + 1;
-            write_lock
-                .write_revision_and_sha(new_revision, given_sha)
-                .await?;
-
-            // Fetch the package.
-            fetch_fn(path.clone())
-                .await
-                .map_err(|e| PackageCacheLayerError::FetchError(Arc::new(e)))?;
-
-            validated_revision = Some(new_revision);
-        } else {
-            return Err(PackageCacheLayerError::InvalidPackage);
+        if let Some((reporter, index)) = reporter {
+            reporter.on_validate_complete(index);
         }
+
+        match validation_result {
+            Ok(Ok(_)) => {
+                tracing::debug!("validation succeeded");
+                return Ok(CacheLock {
+                    revision: cache_revision,
+                    sha256: locked_sha256,
+                    path,
+                });
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("validation for {path:?} failed: {e}");
+                if let Some(cause) = e.source() {
+                    tracing::debug!(
+                        "  Caused by: {}",
+                        std::iter::successors(Some(cause), |e| (*e).source())
+                            .format("\n  Caused by: ")
+                    );
+                }
+            }
+            Err(e) => {
+                if let Ok(panic) = e.try_into_panic() {
+                    std::panic::resume_unwind(panic)
+                }
+            }
+        }
+    } else if !cache_dir_exists {
+        tracing::debug!("cache directory does not exist");
+    } else if hash_mismatch {
+        tracing::warn!(
+            "hash mismatch, wanted a package at location {} with hash {} but the cached package has hash {}, fetching package",
+            path.display(),
+            given_sha.map_or(String::from("<unknown>"), |s| format!("{s:x}")),
+            locked_sha256.map_or(String::from("<unknown>"), |s| format!("{s:x}"))
+        );
+    }
+
+    // If the cache is stale, we need to fetch the package again.
+    // Since we hold the global cache lock, we can safely update the metadata
+    // and fetch the package without worrying about concurrent modifications.
+    if let Some(ref fetch_fn) = fetch {
+        // Write the new revision
+        let new_revision = cache_revision + 1;
+        metadata
+            .write_revision_and_sha(new_revision, given_sha)
+            .await?;
+
+        // Fetch the package.
+        fetch_fn(path.clone())
+            .await
+            .map_err(|e| PackageCacheLayerError::FetchError(Arc::new(e)))?;
+
+        // After fetching, return the cache lock with the new revision.
+        // We don't need to re-validate since we just fetched it.
+        Ok(CacheLock {
+            revision: new_revision,
+            sha256: given_sha.copied(),
+            path,
+        })
+    } else {
+        Err(PackageCacheLayerError::InvalidPackage)
     }
 }
 
