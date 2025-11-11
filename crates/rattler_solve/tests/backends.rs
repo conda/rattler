@@ -14,22 +14,6 @@ fn channel_config() -> ChannelConfig {
     ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap())
 }
 
-fn conda_json_path() -> String {
-    format!(
-        "{}/{}",
-        env!("CARGO_MANIFEST_DIR"),
-        "../../test-data/channels/conda-forge/linux-64/repodata.json"
-    )
-}
-
-fn conda_json_path_noarch() -> String {
-    format!(
-        "{}/{}",
-        env!("CARGO_MANIFEST_DIR"),
-        "../../test-data/channels/conda-forge/noarch/repodata.json"
-    )
-}
-
 fn pytorch_json_path() -> String {
     format!(
         "{}/{}",
@@ -175,12 +159,14 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
 
 fn read_real_world_repo_data() -> &'static Vec<SparseRepoData> {
     static REPO_DATA: Lazy<Vec<SparseRepoData>> = Lazy::new(|| {
-        let json_file = conda_json_path();
-        let json_file_noarch = conda_json_path_noarch();
+        let json_file = tools::fetch_test_conda_forge_repodata("linux-64")
+            .expect("Failed to fetch linux-64 repodata");
+        let json_file_noarch = tools::fetch_test_conda_forge_repodata("noarch")
+            .expect("Failed to fetch noarch repodata");
 
         vec![
-            read_sparse_repodata(&json_file),
-            read_sparse_repodata(&json_file_noarch),
+            read_sparse_repodata(json_file.to_str().unwrap()),
+            read_sparse_repodata(json_file_noarch.to_str().unwrap()),
         ]
     });
 
@@ -204,11 +190,13 @@ fn read_pytorch_sparse_repo_data() -> &'static SparseRepoData {
 
 fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
     static REPO_DATA: Lazy<SparseRepoData> = Lazy::new(|| {
-        let conda_forge = conda_json_path();
+        let conda_forge = tools::fetch_test_conda_forge_repodata("linux-64")
+            .expect("Failed to fetch linux-64 repodata");
+
         SparseRepoData::from_file(
             Channel::from_str("conda-forge", &channel_config()).unwrap(),
             "conda-forge".to_string(),
-            conda_forge,
+            conda_forge.to_str().unwrap(),
             None,
         )
         .unwrap()

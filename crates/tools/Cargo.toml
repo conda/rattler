@@ -25,6 +25,7 @@ reqwest = { workspace = true, default-features = false, features = [
 ] }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
 
 [package.metadata.release]
 # Dont publish the binary
