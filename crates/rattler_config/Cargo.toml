@@ -14,6 +14,9 @@ readme.workspace = true
 edit = []
 default = ["edit"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 console = { workspace = true }
 thiserror = { workspace = true }

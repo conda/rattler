@@ -18,6 +18,9 @@ gcs = ["google-cloud-auth"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-smithy-http-client"]
 system-integration = ["keyring", "netrc-rs", "dirs"]
 
+[package.metadata.docs.rs]
+features = ["gcs", "s3"]
+
 [dependencies]
 anyhow = { workspace = true }
 async-once-cell = { workspace = true }
