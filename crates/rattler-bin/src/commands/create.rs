@@ -91,6 +91,7 @@ pub enum SolveStrategy {
 pub enum Solver {
     #[default]
     Resolvo,
+    #[value(name = "libsolv")]
     LibSolv,
 }
 
