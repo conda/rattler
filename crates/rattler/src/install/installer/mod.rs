@@ -721,7 +721,7 @@ async fn link_package(
 
             let pkg_meta_path = prefix_record.file_name();
             prefix_record
-                .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
+                .write_to_path(conda_meta_path.join(&pkg_meta_path), false)
                 .map_err(|e| {
                     InstallerError::IoError(format!("failed to write {pkg_meta_path}"), e)
                 })?;
@@ -1325,7 +1325,7 @@ mod tests {
             ..PrefixRecord::from_repodata_record(repo_record.clone(), Vec::new())
         };
 
-        old_record.write_to_path(&meta_file_path, true).unwrap();
+        old_record.write_to_path(&meta_file_path, false).unwrap();
 
         // Verify the old record has deprecated field set
         let initial_record = read_prefix_record(&meta_file_path);

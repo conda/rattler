@@ -243,7 +243,7 @@ mod tests {
 
         // Write the conda-meta information
         let pkg_meta_path = conda_meta_path.join(prefix_record.file_name());
-        prefix_record.write_to_path(&pkg_meta_path, true).unwrap();
+        prefix_record.write_to_path(&pkg_meta_path, false).unwrap();
 
         // Unlink the package
         unlink_package(&prefix, &prefix_record).await.unwrap();
@@ -294,7 +294,7 @@ mod tests {
 
         // Write the conda-meta information
         let pkg_meta_path = conda_meta_path.join(prefix_record.file_name());
-        prefix_record.write_to_path(&pkg_meta_path, true).unwrap();
+        prefix_record.write_to_path(&pkg_meta_path, false).unwrap();
 
         fs::create_dir(
             target_prefix
@@ -422,7 +422,7 @@ mod tests {
 
             let prefix_record = PrefixRecord::from_repodata_record(repodata_record, paths);
             prefix_record
-                .write_to_path(conda_meta_path.join(prefix_record.file_name()), true)
+                .write_to_path(conda_meta_path.join(prefix_record.file_name()), false)
                 .unwrap();
             prefix_records.push(prefix_record);
         }
