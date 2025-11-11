@@ -8,10 +8,45 @@ use std::{
 
 use digest::generic_array::GenericArray;
 use fs4::fs_std::FileExt;
-use parking_lot::Mutex;
 use rattler_digest::Sha256Hash;
 
 use crate::package_cache::PackageCacheLayerError;
+
+/// A validated cache entry with its associated metadata.
+///
+/// This struct represents a cache entry that has been validated and is ready for use.
+/// It holds the cache entry's path, revision number, and optional SHA256 hash.
+///
+/// Note: Concurrent access is coordinated via the global cache lock mechanism
+/// (see [`CacheGlobalLock`]). Individual cache entries do not hold locks.
+pub struct CacheLock {
+    pub(super) revision: u64,
+    pub(super) sha256: Option<Sha256Hash>,
+    pub(super) path: PathBuf,
+}
+
+impl Debug for CacheLock {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CacheLock")
+            .field("path", &self.path)
+            .field("revision", &self.revision)
+            .field("sha256", &self.sha256)
+            .finish()
+    }
+}
+
+impl CacheLock {
+    /// Returns the path to the cache entry on disk.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Returns the revision of the cache entry. This revision indicates the
+    /// number of times the cache entry has been updated.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+}
 
 /// A global lock for the entire package cache.
 ///
@@ -80,52 +115,13 @@ impl CacheGlobalLock {
     }
 }
 
-/// A validated cache entry with its associated metadata.
-///
-/// This struct represents a cache entry that has been validated and is ready for use.
-/// It holds the cache entry's path, revision number, and optional SHA256 hash.
-///
-/// Note: Concurrent access is coordinated via the global cache lock mechanism
-/// (see [`CacheGlobalLock`]). Individual cache entries do not hold locks.
-pub struct CacheLock {
-    pub(super) revision: u64,
-    pub(super) sha256: Option<Sha256Hash>,
-    pub(super) path: PathBuf,
-}
-
-impl Debug for CacheLock {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CacheLock")
-            .field("path", &self.path)
-            .field("revision", &self.revision)
-            .field("sha256", &self.sha256)
-            .finish()
-    }
-}
-
-impl CacheLock {
-    /// Returns the path to the cache entry on disk.
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    /// Returns the revision of the cache entry. This revision indicates the
-    /// number of times the cache entry has been updated.
-    pub fn revision(&self) -> u64 {
-        self.revision
-    }
-}
-
 /// A handle to a cache metadata file.
 ///
 /// This struct manages access to a `.lock` file that stores metadata about a cache entry,
 /// including its revision number and optional SHA256 hash. It does not provide filesystem
 /// locking - concurrent access should be coordinated via [`CacheGlobalLock`].
-///
-/// The file is wrapped in an `Arc<Mutex<...>>` to allow safe concurrent access to the
-/// file handle from multiple async tasks.
 pub struct CacheMetadataFile {
-    file: Arc<Mutex<std::fs::File>>,
+    file: Arc<std::fs::File>,
 }
 
 impl CacheMetadataFile {
@@ -155,24 +151,25 @@ impl CacheMetadataFile {
                 })?;
 
             Ok(CacheMetadataFile {
-                file: Arc::new(Mutex::new(file)),
+                file: Arc::new(file),
             })
         })
         .await
     }
+}
 
+impl CacheMetadataFile {
     pub async fn write_revision_and_sha(
         &mut self,
         revision: u64,
         sha256: Option<&Sha256Hash>,
     ) -> Result<(), PackageCacheLayerError> {
         let file = self.file.clone();
+
         let sha256 = sha256.cloned();
         simple_spawn_blocking::tokio::run_blocking_task(move || {
-            let mut file = file.lock();
-
             // Ensure we write from the start of the file
-            file.rewind().map_err(|e| {
+            (&*file).rewind().map_err(|e| {
                 PackageCacheLayerError::LockError(
                     "failed to rewind cache lock for reading revision".to_string(),
                     e,
@@ -181,7 +178,7 @@ impl CacheMetadataFile {
 
             // Write the bytes of the revision
             let revision_bytes = revision.to_be_bytes();
-            file.write_all(&revision_bytes).map_err(|e| {
+            (&*file).write_all(&revision_bytes).map_err(|e| {
                 PackageCacheLayerError::LockError(
                     "failed to write revision from cache lock".to_string(),
                     e,
@@ -192,7 +189,7 @@ impl CacheMetadataFile {
             let sha_bytes = if let Some(sha) = sha256 {
                 let len = sha.len();
                 let sha = &sha[..];
-                file.write_all(sha).map_err(|e| {
+                (&*file).write_all(sha).map_err(|e| {
                     PackageCacheLayerError::LockError(
                         "failed to write sha256 from cache lock".to_string(),
                         e,
@@ -204,7 +201,7 @@ impl CacheMetadataFile {
             };
 
             // Ensure all bytes are written to disk
-            file.flush().map_err(|e| {
+            (&*file).flush().map_err(|e| {
                 PackageCacheLayerError::LockError(
                     "failed to flush cache lock after writing revision".to_string(),
                     e,
@@ -227,15 +224,14 @@ impl CacheMetadataFile {
 
     /// Reads the revision from the cache metadata file.
     pub fn read_revision(&mut self) -> Result<u64, PackageCacheLayerError> {
-        let mut file = self.file.lock();
-        file.rewind().map_err(|e| {
+        (&*self.file).rewind().map_err(|e| {
             PackageCacheLayerError::LockError(
                 "failed to rewind cache lock for reading revision".to_string(),
                 e,
             )
         })?;
         let mut buf = [0; 8];
-        match file.read_exact(&mut buf) {
+        match (&*self.file).read_exact(&mut buf) {
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                 return Ok(0);
@@ -254,21 +250,22 @@ impl CacheMetadataFile {
     pub fn read_sha256(&mut self) -> Result<Option<Sha256Hash>, PackageCacheLayerError> {
         const SHA256_LEN: usize = 32;
         const REVISION_LEN: u64 = 8;
-        let mut file = self.file.lock();
-        file.rewind().map_err(|e| {
+        (&*self.file).rewind().map_err(|e| {
             PackageCacheLayerError::LockError(
                 "failed to rewind cache lock for reading sha256".to_string(),
                 e,
             )
         })?;
         let mut buf = [0; SHA256_LEN];
-        let _ = file.seek(SeekFrom::Start(REVISION_LEN)).map_err(|e| {
-            PackageCacheLayerError::LockError(
-                "failed to seek to sha256 in cache lock".to_string(),
-                e,
-            )
-        })?;
-        match file.read_exact(&mut buf) {
+        let _ = (&*self.file)
+            .seek(SeekFrom::Start(REVISION_LEN))
+            .map_err(|e| {
+                PackageCacheLayerError::LockError(
+                    "failed to seek to sha256 in cache lock".to_string(),
+                    e,
+                )
+            })?;
+        match (&*self.file).read_exact(&mut buf) {
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                 return Ok(None);
