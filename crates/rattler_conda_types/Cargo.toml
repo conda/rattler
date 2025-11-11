@@ -15,6 +15,9 @@ default = ["rayon"]
 experimental_extras = ["experimental_conditionals"]
 experimental_conditionals = []
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 ahash = { workspace = true }
 chrono = { workspace = true }

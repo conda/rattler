@@ -13,6 +13,9 @@ readme.workspace = true
 [features]
 s3 = ["rattler_networking/s3", "rattler_s3"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }

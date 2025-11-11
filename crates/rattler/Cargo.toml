@@ -17,6 +17,9 @@ rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls', 'rat
 cli-tools = ['dep:clap', 'reqwest/blocking']
 indicatif = ['dep:indicatif', 'dep:console']
 
+[package.metadata.docs.rs]
+features = ["cli-tools", "indicatif"]
+
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, optional = true }

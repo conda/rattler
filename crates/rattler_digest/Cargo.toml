@@ -27,6 +27,9 @@ generic-array = { workspace = true, optional = true }
 tokio = ["dep:tokio"]
 serde = ["dep:serde", "generic-array/serde"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dev-dependencies]
 rstest = { workspace = true }
 tempfile = { workspace = true }
