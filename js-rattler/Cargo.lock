@@ -1740,7 +1740,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -1771,7 +1771,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.40.3"
+version = "0.40.4"
 dependencies = [
  "ahash",
  "chrono",
@@ -1836,7 +1836,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.20"
+version = "0.25.21"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -1859,7 +1859,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.12"
+version = "0.23.13"
 dependencies = [
  "bzip2",
  "chrono",
@@ -1896,7 +1896,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.13"
+version = "0.24.14"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -1954,7 +1954,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "3.0.8"
+version = "3.0.9"
 dependencies = [
  "chrono",
  "futures",

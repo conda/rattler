@@ -50,6 +50,10 @@ pub struct IndexJson {
     /// mutually exclusive features.
     pub features: Option<String>,
 
+    /// The flags (variant selection hints) that were used to build this package.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub flags: BTreeSet<String>,
+
     /// Optionally, the license
     pub license: Option<String>,
 

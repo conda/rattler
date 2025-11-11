@@ -81,6 +81,8 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[serde(rename = "extra_depends")]
     pub experimental_extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub flags: Cow<'a, BTreeSet<String>>,
 
     // Additional properties (in semi alphabetic order but grouped by commonality)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -169,6 +171,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             constrains: value.constrains.into_owned(),
             depends: value.depends.into_owned(),
             experimental_extra_depends: value.experimental_extra_depends.into_owned(),
+            flags: value.flags.into_owned(),
             features: value.features.into_owned(),
             legacy_bz2_md5: value.legacy_bz2_md5,
             legacy_bz2_size: value.legacy_bz2_size.into_owned(),
@@ -289,6 +292,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             depends: Cow::Borrowed(&package_record.depends),
             constrains: Cow::Borrowed(&package_record.constrains),
             experimental_extra_depends: Cow::Borrowed(&package_record.experimental_extra_depends),
+            flags: Cow::Borrowed(&package_record.flags),
             md5: package_record.md5,
             legacy_bz2_md5: package_record.legacy_bz2_md5,
             sha256: package_record.sha256,

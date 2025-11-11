@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use pyo3::exceptions::PyValueError;
@@ -169,6 +169,7 @@ impl PyRecord {
                 constrains: Vec::new(),
                 depends: Vec::new(),
                 experimental_extra_depends: BTreeMap::new(),
+                flags: BTreeSet::new(),
                 features: None,
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,

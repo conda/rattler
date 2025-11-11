@@ -1,5 +1,7 @@
 #[cfg(feature = "experimental_conditionals")]
 use crate::match_spec::condition::MatchSpecCondition;
+#[cfg(feature = "experimental_flags")]
+use crate::match_spec::flags::FlagMatcher;
 use crate::package::ArchiveIdentifier;
 use crate::{
     build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
@@ -21,6 +23,8 @@ use crate::ChannelConfig;
 
 #[cfg(feature = "experimental_conditionals")]
 pub mod condition;
+#[cfg(feature = "experimental_flags")]
+pub mod flags;
 pub mod matcher;
 pub mod parse;
 
@@ -161,6 +165,9 @@ pub struct MatchSpec {
     pub url: Option<Url>,
     /// The license of the package
     pub license: Option<String>,
+    /// The flags selector that this match spec is looking for.
+    #[cfg(feature = "experimental_flags")]
+    pub flags: Option<Vec<FlagMatcher>>,
     /// The condition under which this match spec applies.
     #[cfg(feature = "experimental_conditionals")]
     pub condition: Option<MatchSpecCondition>,
@@ -226,6 +233,11 @@ impl Display for MatchSpec {
             keys.push(format!("license=\"{license}\""));
         }
 
+        #[cfg(feature = "experimental_flags")]
+        if let Some(flags) = &self.flags {
+            keys.push(format!("flags=[{}]", flags.iter().format(", ")));
+        }
+
         if !keys.is_empty() {
             write!(f, "[{}]", keys.join(", "))?;
         }
@@ -257,6 +269,8 @@ impl MatchSpec {
                 sha256: self.sha256,
                 url: self.url,
                 license: self.license,
+                #[cfg(feature = "experimental_flags")]
+                flags: self.flags,
                 #[cfg(feature = "experimental_conditionals")]
                 condition: self.condition,
             },
@@ -316,6 +330,9 @@ pub struct NamelessMatchSpec {
     pub url: Option<Url>,
     /// The license of the package
     pub license: Option<String>,
+    /// The flags selector that this match spec is looking for.
+    #[cfg(feature = "experimental_flags")]
+    pub flags: Option<Vec<FlagMatcher>>,
     /// The condition under which this match spec applies.
     #[cfg(feature = "experimental_conditionals")]
     pub condition: Option<MatchSpecCondition>,
@@ -370,6 +387,8 @@ impl From<MatchSpec> for NamelessMatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            #[cfg(feature = "experimental_flags")]
+            flags: spec.flags,
             #[cfg(feature = "experimental_conditionals")]
             condition: spec.condition,
         }
@@ -393,6 +412,8 @@ impl MatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
+            #[cfg(feature = "experimental_flags")]
+            flags: spec.flags,
             #[cfg(feature = "experimental_conditionals")]
             condition: spec.condition,
         }
@@ -514,6 +535,15 @@ impl Matches<PackageRecord> for MatchSpec {
         if let Some(license) = self.license.as_ref() {
             if Some(license) != other.license.as_ref() {
                 return false;
+            }
+        }
+
+        #[cfg(feature = "experimental_flags")]
+        if let Some(flags) = &self.flags {
+            for flag in flags {
+                if !flag.matches(&other.flags) {
+                    return false;
+                }
             }
         }
 

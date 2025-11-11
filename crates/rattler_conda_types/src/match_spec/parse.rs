@@ -22,6 +22,8 @@ use super::{
 };
 #[cfg(feature = "experimental_conditionals")]
 use crate::match_spec::condition::parse_condition;
+#[cfg(feature = "experimental_flags")]
+use crate::match_spec::flags::FlagMatcher;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
     package::ArchiveIdentifier,
@@ -105,6 +107,10 @@ pub enum ParseMatchSpecError {
     /// Multiple values for a key in the matchspec
     #[error("found multiple values for: {0}")]
     MultipleValueForKey(String),
+
+    /// An error occurred when parsing the flag
+    #[error("unable to parse flag: {0}")]
+    InvalidFlag(String),
 
     /// More than one semicolon in match spec
     #[error("more than one semicolon in match spec")]
@@ -266,10 +272,16 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
     }
 }
 
+/// Parses extras (optional features) from a bracket value
 #[cfg(feature = "experimental_extras")]
+fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
+    parse_string_list(input)
+}
+
 /// Parses a list of optional dependencies from a string `feat1, feat2, feat3]`
 /// -> `vec![feat1, feat2, feat3]`.
-pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
+#[cfg(feature = "experimental_extras")]
+pub fn parse_string_list(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     use nom::{
         combinator::{all_consuming, map},
         multi::separated_list1,
@@ -291,6 +303,41 @@ pub fn parse_extras(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
     match all_consuming(parse_features).parse(input).finish() {
         Ok((_remaining, features)) => Ok(features),
         Err(_e) => Err(ParseMatchSpecError::InvalidBracket),
+    }
+}
+
+/// Parses a list of flag matchers from a bracket value
+#[cfg(feature = "experimental_flags")]
+fn parse_flags(input: &str) -> Result<Vec<String>, ParseMatchSpecError> {
+    use nom::{
+        combinator::{all_consuming, map},
+        multi::separated_list1,
+    };
+
+    // Strip outer brackets if present
+    let input = input.trim();
+    let input = if input.starts_with('[') && input.ends_with(']') {
+        &input[1..input.len() - 1]
+    } else {
+        input
+    };
+
+    fn parse_flag(i: &str) -> IResult<&str, &str> {
+        delimited(
+            multispace0,
+            take_while1(|c: char| !c.is_whitespace() && c != ','),
+            multispace0,
+        )
+        .parse(i)
+    }
+
+    fn parse_flags_list(i: &str) -> IResult<&str, Vec<String>> {
+        separated_list1(char(','), map(parse_flag, |s: &str| s.to_string())).parse(i)
+    }
+
+    match all_consuming(parse_flags_list).parse(input).finish() {
+        Ok((_remaining, flags)) => Ok(flags),
+        Err(nom::error::Error { .. }) => Err(ParseMatchSpecError::InvalidBracket),
     }
 }
 
@@ -366,6 +413,23 @@ fn parse_bracket_vec_into_components(
                 match_spec.subdir = match_spec.subdir.or(subdir);
             }
             "license" => match_spec.license = Some(value.to_string()),
+            "flags" => {
+                // Flags are still experimental
+                #[cfg(feature = "experimental_flags")]
+                {
+                    match_spec.flags = Some(
+                        parse_flags(value)?
+                            .into_iter()
+                            .map(|s| FlagMatcher::from_str(&s))
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(|_e| ParseMatchSpecError::InvalidFlag(value.to_string()))?,
+                    );
+                }
+                #[cfg(not(feature = "experimental_flags"))]
+                {
+                    return Err(ParseMatchSpecError::InvalidBracketKey("flags".to_string()));
+                }
+            }
             // TODO: Still need to add `track_features`, `features`, and `license_family`
             // to the match spec.
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
@@ -824,9 +888,10 @@ mod tests {
     #[cfg(feature = "experimental_extras")]
     use crate::match_spec::parse::parse_extras;
     use crate::{
-        match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
-        NamelessMatchSpec, ParseChannelError, ParseStrictness, ParseStrictness::*, Version,
-        VersionSpec,
+        match_spec::parse::parse_bracket_list,
+        BuildNumberSpec, Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError,
+        ParseStrictness::{self, *},
+        Version, VersionSpec,
     };
 
     fn channel_config() -> ChannelConfig {
@@ -1483,6 +1548,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "experimental_flags"))]
     fn test_matchspec_to_string() {
         let mut specs: Vec<MatchSpec> =
             vec![MatchSpec::from_str("foo[version=1.0.*, build_number=\">6\"]", Strict).unwrap()];
@@ -1527,7 +1593,70 @@ mod tests {
         // parse back the strings and check if they are the same
         let parsed_specs = vec_strings
             .iter()
-            .map(|s| MatchSpec::from_str(s, Strict).unwrap())
+            .map(|s| match MatchSpec::from_str(s, Strict) {
+                Ok(spec) => spec,
+                Err(e) => panic!("Failed to parse back: '{s}' with error: {e:?}",),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(specs, parsed_specs);
+    }
+
+    #[test]
+    #[cfg(feature = "experimental_flags")]
+    fn test_matchspec_to_string_with_flags() {
+        let mut specs: Vec<MatchSpec> =
+            vec![MatchSpec::from_str("foo[version=1.0.*, build_number=\">6\"]", Strict).unwrap()];
+
+        // complete matchspec to verify that we print all fields including flags
+        specs.push(MatchSpec {
+            name: Some("foo".parse().unwrap()),
+            version: Some(VersionSpec::from_str("1.0.*", Strict).unwrap()),
+            build: "py27_0*".parse().ok(),
+            build_number: Some(BuildNumberSpec::from_str(">=6").unwrap()),
+            file_name: Some("foo-1.0-py27_0.tar.bz2".to_string()),
+            extras: Some(vec!["bar".to_string(), "baz".to_string()]),
+            channel: Some(
+                Channel::from_str("conda-forge", &channel_config())
+                    .map(Arc::new)
+                    .unwrap(),
+            ),
+            subdir: Some("linux-64".to_string()),
+            namespace: Some("foospace".to_string()),
+            md5: Some(parse_digest_from_hex::<Md5>("8b1a9953c4611296a827abf8c47804d7").unwrap()),
+            sha256: Some(
+                parse_digest_from_hex::<Sha256>(
+                    "315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3",
+                )
+                .unwrap(),
+            ),
+            url: Some(
+                Url::parse(
+                    "https://conda.anaconda.org/conda-forge/linux-64/foo-1.0-py27_0.tar.bz2",
+                )
+                .unwrap(),
+            ),
+            license: Some("MIT".into()),
+            flags: Some(
+                ["~flag1", "~flag2", "?flag3", "foobar:amd"]
+                    .iter()
+                    .map(|s| s.parse().unwrap())
+                    .collect(),
+            ),
+            #[cfg(feature = "experimental_conditionals")]
+            condition: None,
+        });
+
+        // insta check all the strings
+        let vec_strings = specs.iter().map(ToString::to_string).collect::<Vec<_>>();
+        insta::assert_debug_snapshot!(vec_strings);
+
+        // parse back the strings and check if they are the same
+        let parsed_specs = vec_strings
+            .iter()
+            .map(|s| match MatchSpec::from_str(s, Strict) {
+                Ok(spec) => spec,
+                Err(e) => panic!("Failed to parse back: '{}' with error: {:?}", s, e),
+            })
             .collect::<Vec<_>>();
         assert_eq!(specs, parsed_specs);
     }

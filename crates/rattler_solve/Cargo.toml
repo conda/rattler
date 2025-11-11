@@ -44,6 +44,7 @@ resolvo_diagnostics = ["resolvo?/diagnostics"]
 resolvo = ["dep:resolvo", "dep:futures"]
 experimental_extras = ["rattler_conda_types/experimental_extras"]
 experimental_conditionals = ["rattler_conda_types/experimental_conditionals"]
+experimental_flags = ["rattler_conda_types/experimental_flags"]
 
 [[bench]]
 name = "bench"

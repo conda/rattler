@@ -14,6 +14,7 @@ readme.workspace = true
 default = ["rayon"]
 experimental_extras = ["experimental_conditionals"]
 experimental_conditionals = []
+experimental_flags = []
 
 [package.metadata.docs.rs]
 all-features = true

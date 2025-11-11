@@ -245,6 +245,8 @@ impl MinimalPrefixRecord {
             python_site_packages_path: None,
             experimental_extra_depends: std::collections::BTreeMap::new(),
             legacy_bz2_md5: None,
+            // TODO: double check if we need flags here?
+            flags: std::collections::BTreeSet::default(),
         }
     }
 
