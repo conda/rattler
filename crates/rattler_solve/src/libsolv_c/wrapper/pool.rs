@@ -288,7 +288,7 @@ impl From<StringId> for Id {
 
 /// Wrapper for the match spec type of libsolv
 #[derive(Copy, Clone)]
-pub struct MatchSpecId(Id);
+pub struct MatchSpecId(pub(crate) Id);
 
 /// Conversion to [`Id`]
 impl From<MatchSpecId> for Id {

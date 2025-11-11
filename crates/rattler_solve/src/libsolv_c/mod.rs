@@ -21,6 +21,9 @@ use wrapper::{
     solve_goal::SolveGoal,
 };
 
+#[cfg(feature = "experimental_extras")]
+use wrapper::pool::MatchSpecId;
+
 use crate::{ChannelPriority, IntoRepoData, SolveError, SolveStrategy, SolverRepoData, SolverTask};
 
 mod input;
@@ -110,10 +113,13 @@ impl super::SolverImpl for Solver {
             ]));
         }
 
-        if task.specs.iter().any(|spec| spec.extras.is_some()) {
-            return Err(SolveError::UnsupportedOperations(
-                vec!["extras".to_string()],
-            ));
+        #[cfg(not(feature = "experimental_extras"))]
+        {
+            if task.specs.iter().any(|spec| spec.extras.is_some()) {
+                return Err(SolveError::UnsupportedOperations(
+                    vec!["extras".to_string()],
+                ));
+            }
         }
 
         // Construct a default libsolv pool
@@ -242,8 +248,39 @@ impl super::SolverImpl for Solver {
 
         // Specify the matchspec requests
         for spec in task.specs {
-            let id = pool.intern_matchspec(&spec);
+            // Strip extras from the spec before passing to libsolv (libsolv doesn't understand extras syntax)
+            #[cfg(feature = "experimental_extras")]
+            let (base_spec, extras_opt) = {
+                let mut base = spec.clone();
+                let extras = base.extras.take();
+                (base, extras)
+            };
+            #[cfg(not(feature = "experimental_extras"))]
+            let base_spec = spec;
+
+            let id = pool.intern_matchspec(&base_spec);
             goal.install(id, false);
+
+            // If the spec includes extras, also add dependencies on the synthetic extra solvables
+            #[cfg(feature = "experimental_extras")]
+            {
+                if let Some(extras) = extras_opt {
+                    if let Some(name) = &spec.name {
+                        for extra in extras.iter() {
+                            // Create a dependency on the synthetic "package[extra]" solvable
+                            // We can't use MatchSpec::from_str or conda_matchspec because brackets
+                            // have special meaning in conda matchspecs. Instead, we intern the name
+                            // directly and use it as an Id
+                            let extra_name = format!("{}[{}]", name.as_normalized(), extra);
+                            let name_id = pool.intern_str(extra_name.as_str());
+                            // Convert StringId to MatchSpecId - this works because libsolv can use
+                            // a simple name as a dependency specification
+                            let extra_id = MatchSpecId(name_id.into());
+                            goal.install(extra_id, false);
+                        }
+                    }
+                }
+            }
         }
 
         for spec in task.constraints {
