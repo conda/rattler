@@ -32,7 +32,7 @@ pub use indicatif::{
     ProgressFormatter,
 };
 use itertools::Itertools;
-use rattler_cache::package_cache::{CacheLock, CacheReporter};
+use rattler_cache::package_cache::{CacheMetadata, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
     MatchSpec, PackageName, Platform, PrefixRecord, RepoDataRecord,
@@ -759,7 +759,7 @@ async fn populate_cache(
     downloader: LazyClient,
     cache: &PackageCache,
     reporter: Option<(Arc<dyn Reporter>, usize)>,
-) -> Result<CacheLock, InstallerError> {
+) -> Result<CacheMetadata, InstallerError> {
     struct CacheReporterBridge {
         reporter: Arc<dyn Reporter>,
         cache_index: usize,

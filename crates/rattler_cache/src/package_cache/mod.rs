@@ -13,7 +13,7 @@ use std::{
 
 pub use cache_key::CacheKey;
 use cache_lock::CacheMetadataFile;
-pub use cache_lock::{CacheGlobalLock, CacheLock};
+pub use cache_lock::{CacheGlobalLock, CacheMetadata};
 use dashmap::DashMap;
 use fs_err::tokio as tokio_fs;
 use futures::TryFutureExt;
@@ -165,7 +165,7 @@ impl PackageCacheLayer {
     pub async fn try_validate(
         &self,
         cache_key: &CacheKey,
-    ) -> Result<CacheLock, PackageCacheLayerError> {
+    ) -> Result<CacheMetadata, PackageCacheLayerError> {
         let cache_entry = self
             .packages
             .get(&cache_key.clone().into())
@@ -203,7 +203,7 @@ impl PackageCacheLayer {
         fetch: F,
         cache_key: &CacheKey,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<CacheLock, PackageCacheLayerError>
+    ) -> Result<CacheMetadata, PackageCacheLayerError>
     where
         F: (Fn(PathBuf) -> Fut) + Send + 'static,
         Fut: Future<Output = Result<(), E>> + Send + 'static,
@@ -349,7 +349,7 @@ impl PackageCache {
         pkg: impl Into<CacheKey>,
         fetch: F,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<CacheLock, PackageCacheError>
+    ) -> Result<CacheMetadata, PackageCacheError>
     where
         F: (Fn(PathBuf) -> Fut) + Send + 'static,
         Fut: Future<Output = Result<(), E>> + Send + 'static,
@@ -408,7 +408,7 @@ impl PackageCache {
         url: Url,
         client: LazyClient,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<CacheLock, PackageCacheError> {
+    ) -> Result<CacheMetadata, PackageCacheError> {
         self.get_or_fetch_from_url_with_retry(pkg, url, client, DoNotRetryPolicy, reporter)
             .await
     }
@@ -422,7 +422,7 @@ impl PackageCache {
         &self,
         path: &Path,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<CacheLock, PackageCacheError> {
+    ) -> Result<CacheMetadata, PackageCacheError> {
         let path_buf = path.to_path_buf();
         let mut cache_key: CacheKey = ArchiveIdentifier::try_from_path(&path_buf).unwrap().into();
         if self.cache_origin {
@@ -463,7 +463,7 @@ impl PackageCache {
         client: LazyClient,
         retry_policy: impl RetryPolicy + Send + 'static + Clone,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<CacheLock, PackageCacheError> {
+    ) -> Result<CacheMetadata, PackageCacheError> {
         let request_start = SystemTime::now();
         // Convert into cache key
         let mut cache_key = pkg.into();
@@ -579,7 +579,7 @@ async fn validate_package_common<F, Fut, E>(
     fetch: Option<F>,
     reporter: Option<Arc<dyn CacheReporter>>,
     validation_mode: ValidationMode,
-) -> Result<CacheLock, PackageCacheLayerError>
+) -> Result<CacheMetadata, PackageCacheLayerError>
 where
     F: Fn(PathBuf) -> Fut + Send,
     Fut: Future<Output = Result<(), E>> + 'static,
@@ -626,7 +626,7 @@ where
             if let Some((reporter, index)) = reporter {
                 reporter.on_validate_complete(index);
             }
-            return Ok(CacheLock {
+            return Ok(CacheMetadata {
                 revision: cache_revision,
                 sha256: locked_sha256,
                 path: path_inner,
@@ -648,7 +648,7 @@ where
         match validation_result {
             Ok(Ok((index_json, paths_json))) => {
                 tracing::debug!("validation succeeded");
-                return Ok(CacheLock {
+                return Ok(CacheMetadata {
                     revision: cache_revision,
                     sha256: locked_sha256,
                     path,
@@ -698,9 +698,9 @@ where
             .await
             .map_err(|e| PackageCacheLayerError::FetchError(Arc::new(e)))?;
 
-        // After fetching, return the cache lock with the new revision.
+        // After fetching, return the cache metadata with the new revision.
         // We don't need to re-validate since we just fetched it.
-        Ok(CacheLock {
+        Ok(CacheMetadata {
             revision: new_revision,
             sha256: given_sha.copied(),
             path,

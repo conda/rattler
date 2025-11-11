@@ -20,7 +20,7 @@ use crate::package_cache::PackageCacheLayerError;
 ///
 /// Note: Concurrent access is coordinated via the global cache lock mechanism
 /// (see [`CacheGlobalLock`]). Individual cache entries do not hold locks.
-pub struct CacheLock {
+pub struct CacheMetadata {
     pub(super) revision: u64,
     pub(super) sha256: Option<Sha256Hash>,
     pub(super) path: PathBuf,
@@ -28,9 +28,9 @@ pub struct CacheLock {
     pub(super) paths_json: Option<PathsJson>,
 }
 
-impl Debug for CacheLock {
+impl Debug for CacheMetadata {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CacheLock")
+        f.debug_struct("CacheMetadata")
             .field("path", &self.path)
             .field("revision", &self.revision)
             .field("sha256", &self.sha256)
@@ -38,7 +38,7 @@ impl Debug for CacheLock {
     }
 }
 
-impl CacheLock {
+impl CacheMetadata {
     /// Returns the path to the cache entry on disk.
     pub fn path(&self) -> &Path {
         &self.path
