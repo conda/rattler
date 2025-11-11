@@ -86,7 +86,7 @@ async fn extract_from_url(
         rattler_package_streaming::reqwest::tokio::extract(client, url, &destination, None, None)
             .await
             .into_diagnostic()
-            .with_context(|| format!("Failed to extract package from URL: {}", package_display))?;
+            .with_context(|| format!("Failed to extract package from URL: {package_display}"))?;
 
     Ok((destination, result))
 }
@@ -121,7 +121,7 @@ fn extract_from_path(
 
     let result = rattler_package_streaming::fs::extract(&PathBuf::from(package_path), &destination)
         .into_diagnostic()
-        .with_context(|| format!("Failed to extract package: {}", package_path))?;
+        .with_context(|| format!("Failed to extract package: {package_path}"))?;
 
     Ok((destination, result))
 }
