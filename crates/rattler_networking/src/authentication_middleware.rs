@@ -135,7 +135,7 @@ pub fn default_auth_store_fallback_directory() -> &'static Path {
             }, |home| home.join(".rattler/"));
         #[cfg(not(feature = "dirs"))]
         {
-            return PathBuf::from("/rattler/");
+            PathBuf::from("/rattler/")
         }
     })
 }
