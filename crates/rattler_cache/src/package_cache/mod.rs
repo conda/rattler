@@ -188,10 +188,10 @@ impl PackageCacheLayer {
         )
         .await
         {
-            Ok(cache_lock) => {
-                cache_entry.last_revision = Some(cache_lock.revision);
-                cache_entry.last_sha256 = cache_lock.sha256;
-                Ok(cache_lock)
+            Ok(cache_metadata) => {
+                cache_entry.last_revision = Some(cache_metadata.revision);
+                cache_entry.last_sha256 = cache_metadata.sha256;
+                Ok(cache_metadata)
             }
             Err(err) => Err(err),
         }
@@ -228,10 +228,10 @@ impl PackageCacheLayer {
         )
         .await
         {
-            Ok(cache_lock) => {
-                cache_entry.last_revision = Some(cache_lock.revision);
-                cache_entry.last_sha256 = cache_lock.sha256;
-                Ok(cache_lock)
+            Ok(cache_metadata) => {
+                cache_entry.last_revision = Some(cache_metadata.revision);
+                cache_entry.last_sha256 = cache_metadata.sha256;
+                Ok(cache_metadata)
             }
             Err(e) => Err(e),
         }
@@ -389,7 +389,7 @@ impl PackageCache {
         tracing::debug!("no matches in all layers. writing to first writable layer");
         if let Some(layer) = writable_layers.first() {
             return match layer.validate_or_fetch(fetch, &cache_key, reporter).await {
-                Ok(cache_lock) => Ok(cache_lock),
+                Ok(cache_metadata) => Ok(cache_metadata),
                 Err(e) => Err(e.into()),
             };
         }
@@ -811,7 +811,7 @@ mod test {
         let cache = PackageCache::new(packages_dir.path());
 
         // Get the package to the cache
-        let cache_lock = cache
+        let cache_metadata = cache
             .get_or_fetch(
                 ArchiveIdentifier::try_from_path(&tar_archive_path).unwrap(),
                 move |destination| {
@@ -832,7 +832,7 @@ mod test {
 
         // Validate the contents of the package
         let (_, current_paths) =
-            validate_package_directory(cache_lock.path(), ValidationMode::Full).unwrap();
+            validate_package_directory(cache_metadata.path(), ValidationMode::Full).unwrap();
 
         // Make sure that the paths are the same as what we would expect from the
         // original tar archive.
@@ -1060,20 +1060,20 @@ mod test {
 
         let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
 
-        let cache_lock_with_origin_hash = package_cache_with_origin_hash
+        let cache_metadata_with_origin_hash = package_cache_with_origin_hash
             .get_or_fetch_from_path(&package_path, None)
             .await
             .unwrap();
 
-        let file_name = get_file_name_from_path(cache_lock_with_origin_hash.path());
+        let file_name = get_file_name_from_path(cache_metadata_with_origin_hash.path());
         assert_eq!(file_name, "clobber-python-0.1.0-cpython");
 
-        let cache_lock_without_origin_hash = package_cache_without_origin_hash
+        let cache_metadata_without_origin_hash = package_cache_without_origin_hash
             .get_or_fetch_from_path(&package_path, None)
             .await
             .unwrap();
 
-        let file_name = get_file_name_from_path(cache_lock_without_origin_hash.path());
+        let file_name = get_file_name_from_path(cache_metadata_without_origin_hash.path());
         let path_hash = compute_bytes_digest::<Sha256>(package_path.to_string_lossy().as_bytes());
         let expected_file_name = format!("clobber-python-0.1.0-cpython-{path_hash:x}");
         assert_eq!(file_name, expected_file_name);
@@ -1102,7 +1102,7 @@ mod test {
 
         // Get the package to the cache
         let cloned_archive_path = tar_archive_path.clone();
-        let cache_lock = cache
+        let cache_metadata = cache
             .get_or_fetch(
                 key.clone(),
                 move |destination| {
@@ -1121,8 +1121,8 @@ mod test {
             .await
             .unwrap();
 
-        let sha_1 = cache_lock.sha256.expect("expected sha256 to be set");
-        drop(cache_lock);
+        let sha_1 = cache_metadata.sha256.expect("expected sha256 to be set");
+        drop(cache_metadata);
 
         let new_sha = parse_digest_from_hex::<Sha256>(
             "5dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc9",
@@ -1133,7 +1133,7 @@ mod test {
         // And expect the package to be replaced
         let should_run = Arc::new(AtomicBool::new(false));
         let cloned = should_run.clone();
-        let cache_lock = cache
+        let cache_metadata = cache
             .get_or_fetch(
                 key.clone(),
                 move |destination| {
@@ -1158,7 +1158,7 @@ mod test {
         );
         assert_ne!(
             sha_1,
-            cache_lock.sha256.expect("expected sha256 to be set"),
+            cache_metadata.sha256.expect("expected sha256 to be set"),
             "expected sha256 to be different"
         );
     }
