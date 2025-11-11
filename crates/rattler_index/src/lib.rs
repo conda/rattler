@@ -90,6 +90,7 @@ const REPODATA: &str = "repodata.json";
 const REPODATA_SHARDS: &str = "repodata_shards.msgpack.zst";
 const ZSTD_REPODATA_COMPRESSION_LEVEL: i32 = 19;
 const CACHE_CONTROL_IMMUTABLE: &str = "public, max-age=31536000, immutable";
+const CACHE_CONTROL_REPODATA: &str = "public, max-age=300"; // 5 minutes
 
 /// Returns a retry policy optimized for write operations with potential lock contention.
 ///
@@ -845,6 +846,7 @@ pub async fn write_repodata(
             &unpatched_repodata_path,
             unpatched_repodata_bytes,
             repodata_from_packages_metadata,
+            Some(CACHE_CONTROL_REPODATA),
         )
         .await?;
     }
@@ -872,6 +874,7 @@ pub async fn write_repodata(
             &repodata_zst_path,
             repodata_zst_bytes,
             repodata_zst_metadata,
+            Some(CACHE_CONTROL_REPODATA),
         )
         .await?;
     }
@@ -884,6 +887,7 @@ pub async fn write_repodata(
         &repodata_path,
         repodata_bytes,
         &metadata.repodata,
+        Some(CACHE_CONTROL_REPODATA),
     )
     .await?;
 
@@ -980,6 +984,7 @@ pub async fn write_repodata(
                 &repodata_shards_path,
                 sharded_repodata_encoded,
                 repodata_shards_metadata,
+                Some(CACHE_CONTROL_REPODATA),
             )
             .await?;
         }

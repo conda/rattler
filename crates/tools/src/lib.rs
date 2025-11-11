@@ -1,7 +1,10 @@
 pub mod libsolv_bindings;
 mod test_files;
 
-pub use test_files::{download_and_cache_file, download_and_cache_file_async};
+pub use test_files::{
+    download_and_cache_file, download_and_cache_file_async, fetch_test_conda_forge_repodata,
+    fetch_test_conda_forge_repodata_async, test_data_dir,
+};
 
 use std::{
     fs,

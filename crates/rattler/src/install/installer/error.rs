@@ -59,6 +59,10 @@ pub enum InstallerError {
     /// Attempted to install platform-specific packages when target platform is noarch
     #[error("cannot install platform-specific packages with noarch as the target platform. The following packages have non-noarch subdirs: {}", .0.join(", "))]
     PlatformSpecificPackagesWithNoarchPlatform(Vec<String>),
+
+    /// Failed to acquire the global cache lock
+    #[error("failed to acquire global cache lock")]
+    FailedToAcquireCacheLock(#[source] PackageCacheError),
 }
 
 impl From<Cancelled> for InstallerError {

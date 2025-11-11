@@ -38,7 +38,7 @@ print "Minio server is up and running..."
 print $"== Configuring bucket ($bucket_name)..."
 ^mc alias set minio http://localhost:9000 $root_user $root_password
 ^mc mb $"minio/($bucket_name)"
-^mc policy set download $"minio/($bucket_name)"
+^mc anonymous set download $"minio/($bucket_name)"
 
 print "== Upload packages to Minio"
 (^rattler
@@ -62,6 +62,51 @@ print "== Index the channel"
     --endpoint-url "http://localhost:9000"
     --addressing-style path
 )
+
+print "== Verify cache control headers are set correctly"
+# Check repodata.json has 5-minute cache (300 seconds)
+let repodata_headers = (curl -I -s $"http://localhost:9000/($bucket_name)/noarch/repodata.json")
+let repodata_cache = ($repodata_headers | grep -i "cache-control" | str trim | split row ": " | get 1 | str trim)
+if $repodata_cache != "public, max-age=300" {
+    print $"DEBUG: Full headers for repodata.json:\n($repodata_headers)"
+    print $"DEBUG: Extracted cache value type: ($repodata_cache | describe)"
+    print $"DEBUG: Extracted cache value bytes: ($repodata_cache | into binary | encode hex)"
+    error make {msg: $"Expected repodata.json to have 'public, max-age=300' but got '($repodata_cache)'"}
+}
+print "✓ repodata.json has correct cache control (5 minutes)"
+
+# Check repodata.json.zst has 5-minute cache (300 seconds)
+let repodata_zst_headers = (curl -I -s $"http://localhost:9000/($bucket_name)/noarch/repodata.json.zst")
+let repodata_zst_cache = ($repodata_zst_headers | grep -i "cache-control" | str trim | split row ": " | get 1 | str trim)
+if $repodata_zst_cache != "public, max-age=300" {
+    print $"DEBUG: Full headers for repodata.json.zst:\n($repodata_zst_headers)"
+    error make {msg: $"Expected repodata.json.zst to have 'public, max-age=300' but got '($repodata_zst_cache)'"}
+}
+print "✓ repodata.json.zst has correct cache control (5 minutes)"
+
+# Check shard index has 5-minute cache
+let shard_index_headers = (curl -I -s $"http://localhost:9000/($bucket_name)/noarch/repodata_shards.msgpack.zst")
+let shard_index_cache = ($shard_index_headers | grep -i "cache-control" | str trim | split row ": " | get 1 | str trim)
+if $shard_index_cache != "public, max-age=300" {
+    print $"DEBUG: Full headers for repodata_shards.msgpack.zst:\n($shard_index_headers)"
+    error make {msg: $"Expected repodata_shards.msgpack.zst to have 'public, max-age=300' but got '($shard_index_cache)'"}
+}
+print "✓ repodata_shards.msgpack.zst has correct cache control (5 minutes)"
+
+# Check individual shard files have immutable cache (1 year)
+let shard_files = (^mc ls --json $"minio/($bucket_name)/noarch/shards/" | lines | each { |line| $line | from json | get key })
+if ($shard_files | length) > 0 {
+    let first_shard = ($shard_files | first)
+    let shard_headers = (curl -I -s $"http://localhost:9000/($bucket_name)/noarch/shards/($first_shard)")
+    let shard_cache = ($shard_headers | grep -i "cache-control" | str trim | split row ": " | get 1 | str trim)
+    if $shard_cache != "public, max-age=31536000, immutable" {
+        print $"DEBUG: Full headers for shard:\n($shard_headers)"
+        error make {msg: $"Expected shard files to have 'public, max-age=31536000, immutable' but got '($shard_cache)'"}
+    }
+    print "✓ Shard files have correct cache control (immutable, 1 year)"
+} else {
+    print "⚠ No shard files found to check"
+}
 
 print "== Test package can be installed from the channel ==="
 with-env {

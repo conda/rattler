@@ -475,6 +475,13 @@ impl Installer {
             )
         });
 
+        // Acquire a global lock on the package cache for the entire installation.
+        // This significantly reduces overhead by avoiding per-package locking.
+        let _global_cache_lock = package_cache
+            .acquire_global_lock()
+            .await
+            .map_err(InstallerError::FailedToAcquireCacheLock)?;
+
         // Construct a driver.
         let driver = InstallDriver::builder()
             .execute_link_scripts(self.execute_link_scripts)
@@ -692,6 +699,9 @@ async fn link_package(
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
+    // Since we use the `Prefix` type, the conda-meta folder is guaranteed to exist
+    let conda_meta_path = target_prefix.path().join("conda-meta");
+
     rayon::spawn_fifo(move || {
         let inner = move || {
             // Link the contents of the package into the prefix.
@@ -716,21 +726,7 @@ async fn link_package(
                 ..PrefixRecord::from_repodata_record(record.clone(), paths)
             };
 
-            let conda_meta_path = target_prefix.path().join("conda-meta");
-            std::fs::create_dir_all(&conda_meta_path).map_err(|e| {
-                InstallerError::IoError("failed to create conda-meta directory".to_string(), e)
-            })?;
-
-            let pkg_meta_path = format!(
-                "{}-{}-{}.json",
-                prefix_record
-                    .repodata_record
-                    .package_record
-                    .name
-                    .as_normalized(),
-                prefix_record.repodata_record.package_record.version,
-                prefix_record.repodata_record.package_record.build
-            );
+            let pkg_meta_path = prefix_record.file_name();
             prefix_record
                 .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
                 .map_err(|e| {

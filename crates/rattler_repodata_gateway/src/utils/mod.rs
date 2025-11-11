@@ -52,10 +52,6 @@ pub(crate) fn url_to_cache_filename(url: &::url::Url) -> String {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use std::path::{Path, PathBuf};
-
-    use fs_err::tokio as tokio_fs;
-    use tempfile::NamedTempFile;
     use url::Url;
 
     use super::url_to_cache_filename;
@@ -66,49 +62,5 @@ pub(crate) mod test {
             url_to_cache_filename(&Url::parse("http://test.com/1234/").unwrap()),
             "302f0a61"
         );
-    }
-
-    pub(crate) fn test_dir() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
-    }
-
-    pub(crate) async fn fetch_repo_data(subdir: &str) -> Result<(), reqwest::Error> {
-        let path = test_dir().join(format!("channels/conda-forge/{subdir}/repodata.json"));
-
-        // Early out if the file already eixsts
-        if path.exists() {
-            return Ok(());
-        }
-
-        // Create the parent directory if it doesn't exist
-        let parent_dir = path.parent().unwrap();
-        tokio_fs::create_dir_all(&parent_dir).await.unwrap();
-
-        // Acquire a lock on the file to ensure we don't download the file twice.
-        let mut lock = fslock::LockFile::open(&parent_dir.join(".lock")).unwrap();
-        loop {
-            if lock.try_lock_with_pid().unwrap() {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-
-        // Early out if the file was downloaded while we were waiting for the lock
-        if path.is_file() {
-            return Ok(());
-        }
-
-        // Download the file and persist after download
-        let mut file = NamedTempFile::new_in(parent_dir).unwrap();
-        let data = reqwest::get(format!(
-            "https://rattler-test.pixi.run/test-data/channels/conda-forge/{subdir}/repodata.json"
-        ))
-        .await?;
-        tokio_fs::write(&mut file, data.bytes().await?)
-            .await
-            .unwrap();
-        file.persist(&path).unwrap();
-
-        Ok(())
     }
 }

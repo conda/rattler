@@ -3021,9 +3021,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.74"
+version = "0.10.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24ad14dd45412269e1a30f52ad8f0664f0f4f4a89ee8fe28c3b3527021ebb654"
+checksum = "08838db121398ad17ab8531ce9de97b244589089e290a384c900cb9ff7434328"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -3062,9 +3062,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.110"
+version = "0.9.111"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a9f0075ba3c21b09f8e8b2026584b1d18d49388648f2fbbf3c97ea8deced8e2"
+checksum = "82cab2d520aa75e3c58898289429321eb788c3106963d0dc886ec7a5f4adc321"
 dependencies = [
  "cc",
  "libc",
@@ -3162,7 +3162,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "path_resolver"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "ahash",
  "fs-err",
@@ -3720,7 +3720,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.38.3"
+version = "0.38.4"
 dependencies = [
  "anyhow",
  "console",
@@ -3762,7 +3762,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3793,7 +3793,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.40.3"
+version = "0.40.4"
 dependencies = [
  "ahash",
  "chrono",
@@ -3832,7 +3832,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.14"
+version = "0.2.15"
 dependencies = [
  "console",
  "fs-err",
@@ -3865,7 +3865,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.26.5"
+version = "0.27.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3901,7 +3901,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "ahash",
  "chrono",
@@ -3933,7 +3933,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.33"
+version = "0.2.34"
 dependencies = [
  "chrono",
  "configparser",
@@ -3961,7 +3961,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.20"
+version = "0.25.21"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -3991,7 +3991,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.12"
+version = "0.23.13"
 dependencies = [
  "bzip2",
  "chrono",
@@ -4038,7 +4038,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.13"
+version = "0.24.14"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4097,7 +4097,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4113,7 +4113,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.6"
+version = "0.25.7"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4131,7 +4131,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "3.0.8"
+version = "3.0.9"
 dependencies = [
  "chrono",
  "futures",
@@ -4147,7 +4147,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.2.4"
+version = "2.2.5"
 dependencies = [
  "archspec",
  "libloading",
