@@ -4808,6 +4808,7 @@ dependencies = [
  "similar-asserts",
  "tempfile",
  "thiserror 2.0.17",
+ "tools",
  "tracing",
  "url",
 ]
@@ -6342,6 +6343,7 @@ dependencies = [
  "clap",
  "difference",
  "dirs",
+ "fs-err",
  "fslock",
  "rattler_digest",
  "reqwest",
