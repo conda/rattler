@@ -4321,6 +4321,7 @@ dependencies = [
  "rattler_conda_types",
  "rattler_menuinst",
  "rattler_networking",
+ "rattler_package_streaming",
  "rattler_repodata_gateway",
  "rattler_solve",
  "rattler_upload",
@@ -4329,6 +4330,7 @@ dependencies = [
  "reqwest-middleware",
  "tokio",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]

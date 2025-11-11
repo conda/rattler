@@ -36,12 +36,14 @@ rattler_solve = { workspace = true, default-features = false, features = ["resol
 rattler_virtual_packages = { workspace = true, default-features = false }
 rattler_cache = { workspace = true, default-features = false }
 rattler_menuinst = { workspace = true, default-features = false }
+rattler_package_streaming = { workspace = true, default-features = false, features = ["reqwest"] }
 rattler_upload = { workspace = true, features = ["s3"]}
 reqwest = { workspace = true, features = ["stream"] }
 reqwest-middleware = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
+url = { workspace = true }
 
 [package.metadata.release]
 # Dont publish the binary
