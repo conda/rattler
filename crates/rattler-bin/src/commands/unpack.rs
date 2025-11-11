@@ -1,8 +1,8 @@
 use std::{path::PathBuf, sync::Arc};
 
 use miette::{Context, IntoDiagnostic};
-use reqwest::Client;
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
+use reqwest::Client;
 use url::Url;
 
 #[derive(Debug, clap::Parser)]
@@ -31,7 +31,7 @@ pub async fn unpack(opt: Opt) -> miette::Result<()> {
             let url = Url::parse(&opt.package).into_diagnostic()?;
             let filename = url
                 .path_segments()
-                .and_then(|segments| segments.last())
+                .and_then(Iterator::last)
                 .ok_or_else(|| miette::miette!("Could not extract package name from URL"))?;
 
             // Remove extensions (.tar.bz2 or .conda)
@@ -53,11 +53,7 @@ pub async fn unpack(opt: Opt) -> miette::Result<()> {
         PathBuf::from(package_name)
     };
 
-    println!(
-        "Extracting {} to {}",
-        opt.package,
-        destination.display()
-    );
+    println!("Extracting {} to {}", opt.package, destination.display());
 
     // Extract the package
     let result = if is_url {
