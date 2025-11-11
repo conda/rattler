@@ -17,86 +17,121 @@ pub struct Opt {
     destination: Option<PathBuf>,
 }
 
+/// Strips package extensions (.tar.bz2 or .conda) from a filename
+fn strip_package_extension(filename: &str) -> String {
+    if let Some(stripped) = filename.strip_suffix(".tar.bz2") {
+        stripped.to_string()
+    } else if let Some(stripped) = filename.strip_suffix(".conda") {
+        stripped.to_string()
+    } else {
+        filename.to_string()
+    }
+}
+
+/// Creates an HTTP client with authentication middleware
+fn create_authenticated_client() -> miette::Result<reqwest_middleware::ClientWithMiddleware> {
+    let download_client = Client::builder()
+        .no_gzip()
+        .build()
+        .into_diagnostic()
+        .context("Failed to create HTTP client")?;
+
+    let authentication_storage =
+        AuthenticationStorage::from_env_and_defaults().into_diagnostic()?;
+
+    let client = reqwest_middleware::ClientBuilder::new(download_client)
+        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
+            authentication_storage,
+        )))
+        .with(rattler_networking::OciMiddleware)
+        .with(rattler_networking::GCSMiddleware)
+        .build();
+
+    Ok(client)
+}
+
+/// Determines the destination directory for URL-based extraction
+fn determine_url_destination(url: &Url, destination: Option<PathBuf>) -> miette::Result<PathBuf> {
+    if let Some(dest) = destination {
+        return Ok(dest);
+    }
+
+    // Extract filename from URL path
+    let filename = url
+        .path_segments()
+        .and_then(Iterator::last)
+        .ok_or_else(|| miette::miette!("Could not extract package name from URL"))?;
+
+    let package_name = strip_package_extension(filename);
+    Ok(PathBuf::from(package_name))
+}
+
+/// Extracts a conda package from a URL
+async fn extract_from_url(
+    url: Url,
+    destination: Option<PathBuf>,
+    package_display: &str,
+) -> miette::Result<(PathBuf, rattler_package_streaming::ExtractResult)> {
+    let destination = determine_url_destination(&url, destination)?;
+
+    println!(
+        "Extracting {} to {}",
+        package_display,
+        destination.display()
+    );
+
+    let client = create_authenticated_client()?;
+
+    let result =
+        rattler_package_streaming::reqwest::tokio::extract(client, url, &destination, None, None)
+            .await
+            .into_diagnostic()
+            .with_context(|| format!("Failed to extract package from URL: {}", package_display))?;
+
+    Ok((destination, result))
+}
+
+/// Determines the destination directory for file-based extraction
+fn determine_path_destination(
+    package_path: &str,
+    destination: Option<PathBuf>,
+) -> miette::Result<PathBuf> {
+    if let Some(dest) = destination {
+        return Ok(dest);
+    }
+
+    let path = PathBuf::from(package_path);
+    let package_name = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| miette::miette!("Invalid package filename"))?
+        .to_string();
+
+    Ok(PathBuf::from(package_name))
+}
+
+/// Extracts a conda package from a local file path
+fn extract_from_path(
+    package_path: &str,
+    destination: Option<PathBuf>,
+) -> miette::Result<(PathBuf, rattler_package_streaming::ExtractResult)> {
+    let destination = determine_path_destination(package_path, destination)?;
+
+    println!("Extracting {} to {}", package_path, destination.display());
+
+    let result = rattler_package_streaming::fs::extract(&PathBuf::from(package_path), &destination)
+        .into_diagnostic()
+        .with_context(|| format!("Failed to extract package: {}", package_path))?;
+
+    Ok((destination, result))
+}
+
 pub async fn extract(opt: Opt) -> miette::Result<()> {
     // Try to parse as URL, otherwise treat as file path
     let (destination, result) = if let Ok(url) = Url::parse(&opt.package) {
-        // URL path: download and extract from remote location
-        let destination = if let Some(dest) = opt.destination {
-            dest
-        } else {
-            // Extract filename from URL path
-            let filename = url
-                .path_segments()
-                .and_then(Iterator::last)
-                .ok_or_else(|| miette::miette!("Could not extract package name from URL"))?;
-
-            // Remove extensions (.tar.bz2 or .conda)
-            let package_name = if let Some(stripped) = filename.strip_suffix(".tar.bz2") {
-                stripped.to_string()
-            } else if let Some(stripped) = filename.strip_suffix(".conda") {
-                stripped.to_string()
-            } else {
-                filename.to_string()
-            };
-
-            PathBuf::from(package_name)
-        };
-
-        println!("Extracting {} to {}", opt.package, destination.display());
-
-        // Create HTTP client with authentication middleware
-        let download_client = Client::builder()
-            .no_gzip()
-            .build()
-            .into_diagnostic()
-            .context("Failed to create HTTP client")?;
-
-        let authentication_storage =
-            AuthenticationStorage::from_env_and_defaults().into_diagnostic()?;
-        let download_client = reqwest_middleware::ClientBuilder::new(download_client)
-            .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
-                authentication_storage,
-            )))
-            .with(rattler_networking::OciMiddleware)
-            .with(rattler_networking::GCSMiddleware)
-            .build();
-
-        let result = rattler_package_streaming::reqwest::tokio::extract(
-            download_client,
-            url,
-            &destination,
-            None,
-            None,
-        )
-        .await
-        .into_diagnostic()
-        .with_context(|| format!("Failed to extract package from URL: {}", opt.package))?;
-
-        (destination, result)
+        extract_from_url(url, opt.destination, &opt.package).await?
     } else {
-        // File path: extract from local file
-        let destination = if let Some(dest) = opt.destination {
-            dest
-        } else {
-            // Extract to a directory with the same name as the package (without extension)
-            let path = PathBuf::from(&opt.package);
-            let package_name = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .ok_or_else(|| miette::miette!("Invalid package filename"))?
-                .to_string();
-
-            PathBuf::from(package_name)
-        };
-
-        println!("Extracting {} to {}", opt.package, destination.display());
-
-        let result =
-            rattler_package_streaming::fs::extract(&PathBuf::from(&opt.package), &destination)
-                .into_diagnostic()
-                .with_context(|| format!("Failed to extract package: {}", opt.package))?;
-
-        (destination, result)
+        extract_from_path(&opt.package, opt.destination)?
     };
 
     println!(
