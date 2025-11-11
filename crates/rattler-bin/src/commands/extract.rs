@@ -50,12 +50,8 @@ fn create_authenticated_client() -> miette::Result<reqwest_middleware::ClientWit
     Ok(client)
 }
 
-/// Determines the destination directory for URL-based extraction
-fn determine_url_destination(url: &Url, destination: Option<PathBuf>) -> miette::Result<PathBuf> {
-    if let Some(dest) = destination {
-        return Ok(dest);
-    }
-
+/// Determines the destination directory from a URL
+fn determine_destination_from_url(url: &Url) -> miette::Result<PathBuf> {
     // Extract filename from URL path
     let filename = url
         .path_segments()
@@ -72,7 +68,7 @@ async fn extract_from_url(
     destination: Option<PathBuf>,
     package_display: &str,
 ) -> miette::Result<(PathBuf, rattler_package_streaming::ExtractResult)> {
-    let destination = determine_url_destination(&url, destination)?;
+    let destination = destination.map_or_else(|| determine_destination_from_url(&url), Ok)?;
 
     println!(
         "Extracting {} to {}",
@@ -91,15 +87,8 @@ async fn extract_from_url(
     Ok((destination, result))
 }
 
-/// Determines the destination directory for file-based extraction
-fn determine_path_destination(
-    package_path: &str,
-    destination: Option<PathBuf>,
-) -> miette::Result<PathBuf> {
-    if let Some(dest) = destination {
-        return Ok(dest);
-    }
-
+/// Determines the destination directory from a file path
+fn determine_destination_from_path(package_path: &str) -> miette::Result<PathBuf> {
     let path = PathBuf::from(package_path);
     let package_name = path
         .file_stem()
@@ -115,7 +104,8 @@ fn extract_from_path(
     package_path: &str,
     destination: Option<PathBuf>,
 ) -> miette::Result<(PathBuf, rattler_package_streaming::ExtractResult)> {
-    let destination = determine_path_destination(package_path, destination)?;
+    let destination =
+        destination.map_or_else(|| determine_destination_from_path(package_path), Ok)?;
 
     println!("Extracting {} to {}", package_path, destination.display());
 
