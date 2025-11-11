@@ -119,6 +119,30 @@ impl Pool {
         unsafe { ffi::pool_rel2id(self.raw_ptr(), id1, id2, ffi::REL_EQ as i32, 1) }
     }
 
+    /// Interns a `REL_AND` relation between `id1` and `id2`
+    pub fn rel_and(&self, id1: Id, id2: Id) -> Id {
+        unsafe { ffi::pool_rel2id(self.raw_ptr(), id1, id2, ffi::REL_AND as i32, 1) }
+    }
+
+    /// Interns a `REL_OR` relation between `id1` and `id2`
+    pub fn rel_or(&self, id1: Id, id2: Id) -> Id {
+        unsafe { ffi::pool_rel2id(self.raw_ptr(), id1, id2, ffi::REL_OR as i32, 1) }
+    }
+
+    /// Interns a `REL_COND` relation (conditional dependency)
+    /// This creates a conditional dependency: `dependency` is required if `condition` is true
+    pub fn rel_cond(&self, dependency: Id, condition: Id) -> Id {
+        unsafe {
+            ffi::pool_rel2id(
+                self.raw_ptr(),
+                dependency,
+                condition,
+                ffi::REL_COND as i32,
+                1,
+            )
+        }
+    }
+
     /// Interns the provided matchspec
     pub fn conda_matchspec(&self, matchspec: &CStr) -> Id {
         unsafe { ffi::pool_conda_matchspec(self.raw_ptr(), matchspec.as_ptr()) }

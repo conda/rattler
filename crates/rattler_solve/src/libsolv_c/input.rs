@@ -5,6 +5,8 @@ use std::{cmp::Ordering, collections::HashMap};
 
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{package::ArchiveType, GenericVirtualPackage, RepoDataRecord};
+#[cfg(feature = "experimental_conditionals")]
+use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseStrictness};
 
 use super::{
     c_string,
@@ -45,6 +47,29 @@ pub fn add_solv_file(pool: &Pool, repo: &Repo<'_>, solv_bytes: &LibcByteSlice) {
     let file = unsafe { libc::fmemopen(solv_bytes.as_ptr(), solv_bytes.len(), mode.as_ptr()) };
     repo.add_solv(pool, file);
     unsafe { libc::fclose(file) };
+}
+
+/// Parses a condition from a `MatchSpecCondition` and returns the corresponding libsolv Id
+#[cfg(feature = "experimental_conditionals")]
+fn parse_condition(condition: &MatchSpecCondition, pool: &Pool) -> super::wrapper::ffi::Id {
+    match condition {
+        MatchSpecCondition::MatchSpec(match_spec) => {
+            // Convert the match spec to a string and use conda_matchspec to parse it
+            let match_spec_str = match_spec.to_string();
+            let c_str = c_string(&match_spec_str);
+            pool.conda_matchspec(&c_str)
+        }
+        MatchSpecCondition::And(left, right) => {
+            let left_id = parse_condition(left, pool);
+            let right_id = parse_condition(right, pool);
+            pool.rel_and(left_id, right_id)
+        }
+        MatchSpecCondition::Or(left, right) => {
+            let left_id = parse_condition(left, pool);
+            let right_id = parse_condition(right, pool);
+            pool.rel_or(left_id, right_id)
+        }
+    }
 }
 
 /// Adds [`RepoDataRecord`] to `repo`
@@ -121,11 +146,37 @@ pub fn add_repodata_records<'a>(
         );
 
         // Dependencies
-        for match_spec in record.depends.iter() {
-            // Create a reldep id from a matchspec
-            let match_spec_id = pool.conda_matchspec(&c_string(match_spec));
+        for match_spec_str in record.depends.iter() {
+            #[cfg(feature = "experimental_conditionals")]
+            {
+                // Parse the match spec to check for conditions
+                if let Ok(match_spec) =
+                    MatchSpec::from_str(match_spec_str, ParseStrictness::Lenient)
+                {
+                    if let Some(condition) = match_spec.condition.as_ref() {
+                        // Create the dependency without the condition
+                        let dep_str = match_spec_str
+                            .split(';')
+                            .next()
+                            .unwrap_or(match_spec_str)
+                            .trim();
+                        let dep_id = pool.conda_matchspec(&c_string(dep_str));
 
-            // Add it to the list of requirements of this solvable
+                        // Parse the condition
+                        let condition_id = parse_condition(condition, pool);
+
+                        // Create a conditional dependency
+                        let conditional_dep_id = pool.rel_cond(dep_id, condition_id);
+
+                        // Add it to the list of requirements
+                        repo.add_requires(solvable, conditional_dep_id);
+                        continue;
+                    }
+                }
+            }
+
+            // Regular dependency without condition
+            let match_spec_id = pool.conda_matchspec(&c_string(match_spec_str));
             repo.add_requires(solvable, match_spec_id);
         }
 
