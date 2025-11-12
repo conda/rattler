@@ -1364,7 +1364,7 @@ mod tests {
     #[test]
     fn test_missing_package_name() {
         for exact_names_only in vec![true, false] {
-            let package_name = strip_package_name("", false);
+            let package_name = strip_package_name("", exact_names_only);
             assert_matches!(package_name, Err(ParseMatchSpecError::MissingPackageName));
         }
     }
@@ -1454,7 +1454,7 @@ mod tests {
             .expect_err("Should try to parse as name not url");
         assert_eq!(
             err.to_string(),
-            "invalid package name bla/bla: 'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+            "invalid package name 'bla/bla': 'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
         );
     }
 

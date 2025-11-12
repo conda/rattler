@@ -659,6 +659,7 @@ pub enum MatchSpecUrlError {
 
 #[cfg(test)]
 mod tests {
+    use glob::Pattern;
     use itertools::Itertools;
     use rstest::rstest;
     use std::str::FromStr;
@@ -666,8 +667,9 @@ mod tests {
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
     use crate::{
-        match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
-        ParseStrictness::*, RepoDataRecord, StringMatcher, Version, VersionSpec,
+        match_spec::Matches, parse_mode::ParseStrictnessWithNameMatcher, MatchSpec,
+        NamelessMatchSpec, PackageName, PackageRecord, ParseMatchSpecError, ParseStrictness::*,
+        RepoDataRecord, StringMatcher, Version, VersionSpec,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -1013,24 +1015,59 @@ mod tests {
             MatchSpec::from_nameless(NamelessMatchSpec::from_str(">=12", Strict).unwrap(), None);
         assert!(!spec.is_virtual());
 
-        let spec = MatchSpec::from_str("__virtual_glob*", Strict).unwrap();
+        let spec = MatchSpec::from_str(
+            "__virtual_glob*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
         assert!(spec.is_virtual());
 
-        let spec = MatchSpec::from_str("^__virtual_regex.*$", Strict).unwrap();
+        let spec = MatchSpec::from_str(
+            "^__virtual_regex.*$",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
         assert!(spec.is_virtual());
 
         // technically, these can also match virtual packages like `__spec_with_glob`
         // but as this also matches packages that are not virtual, `is_virtual` should be `false`
-        let spec = MatchSpec::from_str("*spec_with_glob", Strict).unwrap();
+        let spec = MatchSpec::from_str(
+            "*spec_with_glob",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
         assert!(!spec.is_virtual());
 
-        let spec = MatchSpec::from_str("^.*spec_with_regex$", Strict).unwrap();
+        let spec = MatchSpec::from_str(
+            "^.*spec_with_regex$",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
         assert!(!spec.is_virtual());
     }
 
     #[test]
     fn test_glob_in_name() {
-        let spec = MatchSpec::from_str("foo* >=12", Strict).unwrap();
+        let spec = MatchSpec::from_str(
+            "foo* >=12",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
         assert!(spec.matches(&PackageRecord::new(
             PackageName::from_str("foo").unwrap(),
             Version::from_str("13.0").unwrap(),
@@ -1047,7 +1084,14 @@ mod tests {
             String::from(""),
         )));
 
-        let spec = MatchSpec::from_str("foo* >=12[license=MIT]", Strict).unwrap();
+        let spec = MatchSpec::from_str(
+            "foo* >=12[license=MIT]",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
         assert!(!spec.matches(&PackageRecord::new(
             PackageName::from_str("foo-bar").unwrap(),
             Version::from_str("12.0").unwrap(),
@@ -1062,5 +1106,16 @@ mod tests {
             record.license = Some("MIT".into());
             record
         }));
+    }
+
+    #[test]
+    fn test_allow_exact_names_only() {
+        let err = MatchSpec::from_str("foo* >=12[license=MIT]", Strict).unwrap_err();
+        assert_eq!(
+            err,
+            ParseMatchSpecError::OnlyExactPackageNameMatchersAllowed(
+                crate::PackageNameMatcher::Glob(Pattern::new("foo*").unwrap())
+            )
+        )
     }
 }
