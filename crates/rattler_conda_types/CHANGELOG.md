@@ -39,6 +39,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.40.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.3...rattler_conda_types-v0.40.4) - 2025-10-28
+
+### Fixed
+
+- sort packages when serializing repodata ([#1779](https://github.com/conda/rattler/pull/1779))
+- timestamp serialization as milliseconds ([#1776](https://github.com/conda/rattler/pull/1776))
+
+### Other
+
+- Replace fxhash with ahash ([#1674](https://github.com/conda/rattler/pull/1674))
+
 ## [0.40.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.2...rattler_conda_types-v0.40.3) - 2025-10-18
 
 ### Added

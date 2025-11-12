@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2](https://github.com/conda/rattler/compare/path_resolver-v0.2.1...path_resolver-v0.2.2) - 2025-10-28
+
+### Other
+
+- Replace fxhash with ahash ([#1674](https://github.com/conda/rattler/pull/1674))
+
 ## [0.2.1](https://github.com/conda/rattler/compare/path_resolver-v0.2.0...path_resolver-v0.2.1) - 2025-09-30
 
 ### Fixed

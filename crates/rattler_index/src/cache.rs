@@ -228,6 +228,8 @@ pub async fn read_package_with_retry(
                         metadata = RepodataFileMetadata {
                             etag: fresh_metadata.etag().map(str::to_owned),
                             last_modified: fresh_metadata.last_modified(),
+                            file_existed: true,
+                            precondition_checks: crate::PreconditionChecks::Enabled,
                         };
                         // Loop continues to next iteration with fresh metadata
                     }

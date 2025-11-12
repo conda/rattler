@@ -1,6 +1,6 @@
 [package]
 name = "rattler"
-version = "0.38.3"
+version = "0.38.4"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust library to install conda environments"
@@ -16,6 +16,9 @@ native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rat
 rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_networking/rustls-tls']
 cli-tools = ['dep:clap', 'reqwest/blocking']
 indicatif = ['dep:indicatif', 'dep:console']
+
+[package.metadata.docs.rs]
+features = ["cli-tools", "indicatif"]
 
 [dependencies]
 anyhow = { workspace = true }

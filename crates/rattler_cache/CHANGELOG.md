@@ -49,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1](https://github.com/conda/rattler/compare/rattler_cache-v0.4.0...rattler_cache-v0.4.1) - 2025-10-28
+
+### Other
+
+- Replace fxhash with ahash ([#1674](https://github.com/conda/rattler/pull/1674))
+
 ## [0.4.0](https://github.com/conda/rattler/compare/rattler_cache-v0.3.41...rattler_cache-v0.4.0) - 2025-10-25
 
 ### Added

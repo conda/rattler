@@ -1,6 +1,6 @@
 [package]
 name = "rattler_upload"
-version = "0.3.9"
+version = "0.3.10"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>", "Magenta Qin <magenta2127@gmail.com>"]
 description = "A crate to Upload conda packages to various channels."
@@ -12,6 +12,9 @@ readme.workspace = true
 
 [features]
 s3 = ["rattler_networking/s3", "rattler_s3"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 rattler_conda_types = { workspace = true, default-features = false }

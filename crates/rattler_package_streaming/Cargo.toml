@@ -1,6 +1,6 @@
 [package]
 name = "rattler_package_streaming"
-version = "0.23.12"
+version = "0.23.13"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Extract and stream of Conda package archives"
@@ -46,6 +46,9 @@ default = ["rustls-tls"]
 native-tls = ["rattler_networking/native-tls", "rattler_redaction/native-tls"]
 rustls-tls = ["rattler_networking/rustls-tls", "rattler_redaction/rustls-tls"]
 reqwest = ["dep:reqwest-middleware", "dep:reqwest"]
+
+[package.metadata.docs.rs]
+features = ["reqwest"]
 
 [dev-dependencies]
 assert_matches = { workspace = true }

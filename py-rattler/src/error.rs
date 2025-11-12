@@ -4,9 +4,14 @@ use pyo3::exceptions::PyValueError;
 use pyo3::{create_exception, exceptions::PyException, PyErr};
 use rattler::install::TransactionError;
 use rattler_conda_types::{
-    ConvertSubdirError, InvalidPackageNameError, PackageNameMatcherParseError, ParseArchError,
-    ParseChannelError, ParseMatchSpecError, ParsePlatformError, ParseVersionError,
-    ValidatePackageRecordsError, VersionBumpError, VersionExtendError,
+    version_spec::ParseVersionSpecError, ConvertSubdirError, ConvertSubdirError,
+    ConvertSubdirError, InvalidPackageNameError, InvalidPackageNameError, InvalidPackageNameError,
+    PackageNameMatcherParseError, ParseArchError, ParseArchError, ParseArchError,
+    ParseChannelError, ParseChannelError, ParseChannelError, ParseMatchSpecError,
+    ParseMatchSpecError, ParseMatchSpecError, ParsePlatformError, ParsePlatformError,
+    ParsePlatformError, ParseVersionError, ParseVersionError, ParseVersionError,
+    ValidatePackageRecordsError, ValidatePackageRecordsError, VersionBumpError, VersionBumpError,
+    VersionExtendError, VersionExtendError,
 };
 use rattler_lock::{ConversionError, ParseCondaLockError};
 use rattler_networking::authentication_storage::AuthenticationStorageError;
@@ -22,6 +27,8 @@ use thiserror::Error;
 pub enum PyRattlerError {
     #[error(transparent)]
     InvalidVersion(#[from] ParseVersionError),
+    #[error(transparent)]
+    InvalidVersionSpec(#[from] ParseVersionSpecError),
     #[error(transparent)]
     InvalidMatchSpec(#[from] ParseMatchSpecError),
     #[error(transparent)]
@@ -106,6 +113,9 @@ impl From<PyRattlerError> for PyErr {
         match value {
             PyRattlerError::InvalidVersion(err) => {
                 InvalidVersionException::new_err(pretty_print_error(&err))
+            }
+            PyRattlerError::InvalidVersionSpec(err) => {
+                InvalidVersionSpecException::new_err(pretty_print_error(&err))
             }
             PyRattlerError::InvalidMatchSpec(err) => {
                 InvalidMatchSpecException::new_err(pretty_print_error(&err))
@@ -199,6 +209,7 @@ impl From<PyRattlerError> for PyErr {
 }
 
 create_exception!(exceptions, InvalidVersionException, PyException);
+create_exception!(exceptions, InvalidVersionSpecException, PyException);
 create_exception!(exceptions, InvalidMatchSpecException, PyException);
 create_exception!(exceptions, InvalidPackageNameException, PyException);
 create_exception!(exceptions, PackageNameMatcherParseException, PyException);

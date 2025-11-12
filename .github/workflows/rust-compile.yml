@@ -22,7 +22,7 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
-  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,experimental_extras,edit,rattler_config
+  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,experimental_extras,experimental_conditionals,edit,rattler_config
 
 jobs:
   check-rustdoc-links:
@@ -33,7 +33,7 @@ jobs:
         with:
           submodules: recursive
       - name: Set up pixi
-        uses: prefix-dev/setup-pixi@28eb668aafebd9dede9d97c4ba1cd9989a4d0004 # v0.9.2
+        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
       - run: pixi r doc
 
   build:

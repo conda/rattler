@@ -290,22 +290,28 @@ mod test {
     use url::Url;
 
     use crate::{
-        fetch::CacheAction,
-        gateway::Gateway,
-        utils::{simple_channel_server::SimpleChannelServer, test::fetch_repo_data},
+        fetch::CacheAction, gateway::Gateway, utils::simple_channel_server::SimpleChannelServer,
         DownloadReporter, GatewayError, JLAPReporter, RepoData, Reporter, SourceConfig,
         SubdirSelection,
     };
 
     async fn local_conda_forge() -> Channel {
-        tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
+        tokio::try_join!(
+            tools::fetch_test_conda_forge_repodata_async("noarch"),
+            tools::fetch_test_conda_forge_repodata_async("linux-64")
+        )
+        .unwrap();
         Channel::from_directory(
             &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/conda-forge"),
         )
     }
 
     async fn remote_conda_forge() -> SimpleChannelServer {
-        tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
+        tokio::try_join!(
+            tools::fetch_test_conda_forge_repodata_async("noarch"),
+            tools::fetch_test_conda_forge_repodata_async("linux-64")
+        )
+        .unwrap();
         SimpleChannelServer::new(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/conda-forge"),
         )
