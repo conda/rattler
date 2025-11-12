@@ -1363,8 +1363,10 @@ mod tests {
 
     #[test]
     fn test_missing_package_name() {
-        let package_name = strip_package_name("");
-        assert_matches!(package_name, Err(ParseMatchSpecError::MissingPackageName));
+        for exact_names_only in vec![true, false] {
+            let package_name = strip_package_name("", false);
+            assert_matches!(package_name, Err(ParseMatchSpecError::MissingPackageName));
+        }
     }
 
     #[test]
