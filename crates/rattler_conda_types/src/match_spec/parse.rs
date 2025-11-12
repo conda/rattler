@@ -24,6 +24,7 @@ use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
     match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError},
     package::ArchiveIdentifier,
+    parse_mode::ParseStrictnessWithNameMatcher,
     utils::{path::is_absolute_path, url::parse_scheme},
     version_spec::{
         is_start_of_version_constraint,
@@ -103,6 +104,10 @@ pub enum ParseMatchSpecError {
     /// Multiple values for a key in the matchspec
     #[error("found multiple values for: {0}")]
     MultipleValueForKey(String),
+
+    /// Only exact package name matchers are allowed
+    #[error("only exact package name matchers are allowed. Got {0}")]
+    OnlyExactPackageNameMatchersAllowed(PackageNameMatcher),
 }
 
 impl FromStr for MatchSpec {
@@ -115,11 +120,11 @@ impl FromStr for MatchSpec {
 
 impl MatchSpec {
     /// Parses a [`MatchSpec`] from a string with a given strictness.
-    pub fn from_str(
-        source: &str,
-        strictness: ParseStrictness,
-    ) -> Result<Self, ParseMatchSpecError> {
-        matchspec_parser(source, strictness)
+    pub fn from_str<T>(source: &str, strictness: T) -> Result<Self, ParseMatchSpecError>
+    where
+        T: Into<ParseStrictnessWithNameMatcher>,
+    {
+        matchspec_parser(source, strictness.into())
     }
 }
 
@@ -364,6 +369,7 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
 /// Strip the package name from the input.
 fn strip_package_name(
     input: &str,
+    exact_names_only: bool,
 ) -> Result<(Option<PackageNameMatcher>, &str), ParseMatchSpecError> {
     let (rest, package_name) =
         take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(
@@ -384,13 +390,31 @@ fn strip_package_name(
         return Ok((None, rest));
     }
 
-    Ok((
-        Some(
-            PackageNameMatcher::from_str(trimmed_package_name)
-                .map_err(ParseMatchSpecError::InvalidPackageNameMatcher)?,
-        ),
-        rest,
-    ))
+    let package_name = match PackageNameMatcher::from_str(trimmed_package_name)
+        .map_err(ParseMatchSpecError::InvalidPackageNameMatcher)?
+    {
+        PackageNameMatcher::Exact(name) => PackageNameMatcher::Exact(name),
+        PackageNameMatcher::Glob(glob) => {
+            if exact_names_only {
+                return Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowed(
+                    PackageNameMatcher::Glob(glob),
+                ));
+            } else {
+                PackageNameMatcher::Glob(glob)
+            }
+        }
+        PackageNameMatcher::Regex(regex) => {
+            if exact_names_only {
+                return Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowed(
+                    PackageNameMatcher::Regex(regex),
+                ));
+            } else {
+                PackageNameMatcher::Regex(regex)
+            }
+        }
+    };
+
+    Ok((Some(package_name), rest))
 }
 
 /// Splits a string into version and build constraints.
@@ -617,7 +641,7 @@ fn parse_channel_and_subdir(
 /// This is based on: <https://github.com/conda/conda/blob/master/conda/models/match_spec.py#L569>
 fn matchspec_parser(
     input: &str,
-    strictness: ParseStrictness,
+    strictness: ParseStrictnessWithNameMatcher,
 ) -> Result<MatchSpec, ParseMatchSpecError> {
     // Step 1. Strip '#' and `if` statement
     let (input, _comment) = strip_comment(input);
@@ -625,8 +649,11 @@ fn matchspec_parser(
 
     // 2. Strip off brackets portion
     let (input, brackets) = strip_brackets(input.trim())?;
-    let mut nameless_match_spec =
-        parse_bracket_vec_into_components(brackets, NamelessMatchSpec::default(), strictness)?;
+    let mut nameless_match_spec = parse_bracket_vec_into_components(
+        brackets,
+        NamelessMatchSpec::default(),
+        strictness.parse_strictness,
+    )?;
 
     // 3. Strip off parens portion
     // TODO: What is this? I've never seen it
@@ -674,14 +701,14 @@ fn matchspec_parser(
     }
 
     // Step 6. Strip off the package name from the input
-    let (name, input) = strip_package_name(input)?;
+    let (name, input) = strip_package_name(input, strictness.exact_names_only)?;
     let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, name);
 
     // Step 7. Otherwise, sort our version + build
     let input = input.trim();
     if !input.is_empty() {
-        let (version, build) = parse_version_and_build(input, strictness)?;
-        if strictness == Strict {
+        let (version, build) = parse_version_and_build(input, strictness.parse_strictness)?;
+        if strictness.parse_strictness == Strict {
             if match_spec.version.is_some() && version.is_some() {
                 return Err(ParseMatchSpecError::MultipleValueForKey(
                     "version".to_owned(),
