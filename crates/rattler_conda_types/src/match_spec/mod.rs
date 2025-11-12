@@ -1117,6 +1117,6 @@ mod tests {
             ParseMatchSpecError::OnlyExactPackageNameMatchersAllowed(
                 crate::PackageNameMatcher::Glob(Pattern::new("foo*").unwrap())
             )
-        )
+        );
     }
 }
