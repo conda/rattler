@@ -33,13 +33,8 @@ use crate::{
         version_tree::{recognize_constraint, recognize_version},
         ParseVersionSpecError,
     },
-    Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError,
-    Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
-    ParseChannelError, ParseStrictness,
+    Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError, ParseStrictness,
     ParseStrictness::{Lenient, Strict},
-    Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
-    ParseChannelError,
-    ParseStrictness::{self, Lenient, Strict},
     ParseVersionError, Platform, VersionSpec,
 };
 
