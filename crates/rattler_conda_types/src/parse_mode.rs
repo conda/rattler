@@ -7,17 +7,11 @@ pub struct ParseStrictnessWithNameMatcher {
     pub parse_strictness: ParseStrictness,
 }
 
-impl Into<ParseStrictnessWithNameMatcher> for ParseStrictness {
-    fn into(self) -> ParseStrictnessWithNameMatcher {
-        match self {
-            ParseStrictness::Lenient => ParseStrictnessWithNameMatcher {
-                exact_names_only: true,
-                parse_strictness: ParseStrictness::Lenient,
-            },
-            ParseStrictness::Strict => ParseStrictnessWithNameMatcher {
-                exact_names_only: true,
-                parse_strictness: ParseStrictness::Strict,
-            },
+impl From<ParseStrictness> for ParseStrictnessWithNameMatcher {
+    fn from(value: ParseStrictness) -> Self {
+        ParseStrictnessWithNameMatcher {
+            exact_names_only: true,
+            parse_strictness: value,
         }
     }
 }
