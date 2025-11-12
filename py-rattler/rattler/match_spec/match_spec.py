@@ -40,6 +40,7 @@ class MatchSpec:
 
     1. `name` (i.e. "package name") is required, but its value can be '*'. Its
     position is always outside the key-value brackets.
+    It can also be a glob pattern or a regex if `exact_names_only` is `False`.
     2. If `version` is an exact version, it goes outside the key-value brackets and
     is prepended by `==`. If `version` is a "fuzzy" value (e.g. `1.11.*`), it goes
     outside the key-value brackets with the `.*` left off and is prepended by `=`.
@@ -80,7 +81,7 @@ class MatchSpec:
     - build
     """
 
-    def __init__(self, spec: str, strict: bool = False) -> None:
+    def __init__(self, spec: str, strict: bool = False, exact_names_only: bool = True) -> None:
         """
         Create a new version spec.
 
@@ -91,13 +92,18 @@ class MatchSpec:
         MatchSpec("pip >=24.0")
         >>> MatchSpec("pip 24")
         MatchSpec("pip ==24")
-        >>> MatchSpec('python[license=MIT]')
+        >>> MatchSpec("python[license=MIT]")
         MatchSpec("python[license="MIT"]")
+        >>> MatchSpec("foo*", strict=True, exact_names_only=False)
+        MatchSpec("foo*")
+        >>> MatchSpec("^foo.*$", strict=True, exact_names_only=True) # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        InvalidMatchSpecException: only exact package name matchers are allowed. Got ^foo.*$
         >>>
         ```
         """
         if isinstance(spec, str):
-            self._match_spec = PyMatchSpec(spec, strict)
+            self._match_spec = PyMatchSpec(spec, strict, exact_names_only)
         else:
             raise TypeError(
                 f"MatchSpec constructor received unsupported type {type(spec).__name__!r} for the 'spec' parameter"
