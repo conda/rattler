@@ -4,14 +4,10 @@ use pyo3::exceptions::PyValueError;
 use pyo3::{create_exception, exceptions::PyException, PyErr};
 use rattler::install::TransactionError;
 use rattler_conda_types::{
-    version_spec::ParseVersionSpecError, ConvertSubdirError, ConvertSubdirError,
-    ConvertSubdirError, InvalidPackageNameError, InvalidPackageNameError, InvalidPackageNameError,
-    PackageNameMatcherParseError, ParseArchError, ParseArchError, ParseArchError,
-    ParseChannelError, ParseChannelError, ParseChannelError, ParseMatchSpecError,
-    ParseMatchSpecError, ParseMatchSpecError, ParsePlatformError, ParsePlatformError,
-    ParsePlatformError, ParseVersionError, ParseVersionError, ParseVersionError,
-    ValidatePackageRecordsError, ValidatePackageRecordsError, VersionBumpError, VersionBumpError,
-    VersionExtendError, VersionExtendError,
+    version_spec::ParseVersionSpecError, ConvertSubdirError, InvalidPackageNameError,
+    PackageNameMatcherParseError, ParseArchError, ParseChannelError, ParseMatchSpecError,
+    ParsePlatformError, ParseVersionError, ValidatePackageRecordsError, VersionBumpError,
+    VersionExtendError,
 };
 use rattler_lock::{ConversionError, ParseCondaLockError};
 use rattler_networking::authentication_storage::AuthenticationStorageError;
