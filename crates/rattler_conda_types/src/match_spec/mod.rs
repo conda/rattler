@@ -1,5 +1,4 @@
 //! Query language for conda packages.
-#[cfg(feature = "experimental_conditionals")]
 use crate::match_spec::condition::MatchSpecCondition;
 use crate::package::ArchiveIdentifier;
 use crate::{
@@ -20,7 +19,6 @@ use url::Url;
 use crate::Channel;
 use crate::ChannelConfig;
 
-#[cfg(feature = "experimental_conditionals")]
 /// Experimental conditionals for match specs.
 pub mod condition;
 /// Match a given string either by exact match, glob or regex

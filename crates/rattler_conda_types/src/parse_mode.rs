@@ -32,6 +32,9 @@ pub struct ParseMatchSpecOptions {
     /// The strictness of the parser.
     strictness: ParseStrictness,
 
+    /// Whether to allow only `Exact` matchers for the package name or whether to also allow `Glob` or `Regex` matchers.
+    exact_names_only: bool,
+
     /// Whether to allow experimental extras syntax (e.g., `foo[extras=[bar,baz]]`).
     allow_experimental_extras: bool,
 
@@ -44,6 +47,7 @@ impl ParseMatchSpecOptions {
     pub fn new(strictness: ParseStrictness) -> Self {
         Self {
             strictness,
+            exact_names_only: true,
             allow_experimental_extras: false,
             allow_experimental_conditionals: false,
         }
@@ -66,6 +70,11 @@ impl ParseMatchSpecOptions {
         self.strictness
     }
 
+    /// Returns whether only exact package names are allowed.
+    pub fn exact_names_only(&self) -> bool {
+        self.exact_names_only
+    }
+
     /// Returns whether experimental extras parsing is allowed.
     pub fn allow_experimental_extras(&self) -> bool {
         self.allow_experimental_extras
@@ -74,6 +83,12 @@ impl ParseMatchSpecOptions {
     /// Returns whether experimental conditionals parsing is allowed.
     pub fn allow_experimental_conditionals(&self) -> bool {
         self.allow_experimental_conditionals
+    }
+
+    /// Sets whether to allow only exact package names.
+    pub fn with_exact_names_only(mut self, enable: bool) -> Self {
+        self.exact_names_only = enable;
+        self
     }
 
     /// Sets whether to allow experimental extras syntax.

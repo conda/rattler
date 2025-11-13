@@ -25,7 +25,6 @@ use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
     match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError},
     package::ArchiveIdentifier,
-    parse_mode::ParseStrictnessWithNameMatcher,
     utils::{path::is_absolute_path, url::parse_scheme},
     version_spec::{
         is_start_of_version_constraint,
@@ -33,9 +32,7 @@ use crate::{
         ParseVersionSpecError,
     },
     Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError, ParseMatchSpecOptions,
-    ParseStrictness,
-    ParseStrictness::{Lenient, Strict},
-    ParseVersionError, Platform, VersionSpec,
+    ParseStrictness, ParseVersionError, Platform, VersionSpec,
 };
 
 /// The type of parse error that occurred when parsing match spec.
