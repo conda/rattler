@@ -1,4 +1,5 @@
 mod component;
+mod version_spec;
 
 use crate::PyRattlerError;
 use component::PyComponent;
@@ -9,6 +10,7 @@ use std::{
     hash::{Hash, Hasher},
     str::FromStr,
 };
+pub use version_spec::PyVersionSpec;
 
 #[pyclass]
 #[repr(transparent)]

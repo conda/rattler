@@ -1,6 +1,6 @@
 [package]
 name = "rattler_digest"
-version = "1.1.7"
+version = "1.2.0"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "An simple crate used by rattler crates to compute different hashes from different sources"
@@ -26,6 +26,9 @@ generic-array = { workspace = true, optional = true }
 [features]
 tokio = ["dep:tokio"]
 serde = ["dep:serde", "generic-array/serde"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dev-dependencies]
 rstest = { workspace = true }

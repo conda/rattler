@@ -49,6 +49,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/conda/rattler/compare/rattler_cache-v0.4.1...rattler_cache-v0.5.0) - 2025-11-13
+
+### Added
+
+- add validation mode argument to PackageCache layers ([#1834](https://github.com/conda/rattler/pull/1834))
+
+### Other
+
+- remove cache lock mutex ([#1809](https://github.com/conda/rattler/pull/1809))
+- use global cache lock to reduce per-package lock overhead ([#1818](https://github.com/conda/rattler/pull/1818))
+
 ## [0.4.1](https://github.com/conda/rattler/compare/rattler_cache-v0.4.0...rattler_cache-v0.4.1) - 2025-10-28
 
 ### Other

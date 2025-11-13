@@ -3,8 +3,9 @@ use std::{collections::BTreeMap, str::FromStr, time::Instant};
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
-    ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageName,
+    PackageRecord, ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult,
+    Version,
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
@@ -12,22 +13,6 @@ use url::Url;
 
 fn channel_config() -> ChannelConfig {
     ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap())
-}
-
-fn conda_json_path() -> String {
-    format!(
-        "{}/{}",
-        env!("CARGO_MANIFEST_DIR"),
-        "../../test-data/channels/conda-forge/linux-64/repodata.json"
-    )
-}
-
-fn conda_json_path_noarch() -> String {
-    format!(
-        "{}/{}",
-        env!("CARGO_MANIFEST_DIR"),
-        "../../test-data/channels/conda-forge/noarch/repodata.json"
-    )
 }
 
 fn pytorch_json_path() -> String {
@@ -131,7 +116,11 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
 
     let sparse_repo_data = read_real_world_repo_data();
 
-    let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
+    let names = specs.iter().filter_map(|s| {
+        s.name
+            .as_ref()
+            .and_then(|n| Option::<PackageName>::from(n.clone()))
+    });
     let available_packages = SparseRepoData::load_records_recursive(
         sparse_repo_data,
         names,
@@ -174,12 +163,14 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
 
 fn read_real_world_repo_data() -> &'static Vec<SparseRepoData> {
     static REPO_DATA: Lazy<Vec<SparseRepoData>> = Lazy::new(|| {
-        let json_file = conda_json_path();
-        let json_file_noarch = conda_json_path_noarch();
+        let json_file = tools::fetch_test_conda_forge_repodata("linux-64")
+            .expect("Failed to fetch linux-64 repodata");
+        let json_file_noarch = tools::fetch_test_conda_forge_repodata("noarch")
+            .expect("Failed to fetch noarch repodata");
 
         vec![
-            read_sparse_repodata(&json_file),
-            read_sparse_repodata(&json_file_noarch),
+            read_sparse_repodata(json_file.to_str().unwrap()),
+            read_sparse_repodata(json_file_noarch.to_str().unwrap()),
         ]
     });
 
@@ -203,11 +194,13 @@ fn read_pytorch_sparse_repo_data() -> &'static SparseRepoData {
 
 fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
     static REPO_DATA: Lazy<SparseRepoData> = Lazy::new(|| {
-        let conda_forge = conda_json_path();
+        let conda_forge = tools::fetch_test_conda_forge_repodata("linux-64")
+            .expect("Failed to fetch linux-64 repodata");
+
         SparseRepoData::from_file(
             Channel::from_str("conda-forge", &channel_config()).unwrap(),
             "conda-forge".to_string(),
-            conda_forge,
+            conda_forge.to_str().unwrap(),
             None,
         )
         .unwrap()
@@ -1299,7 +1292,11 @@ fn compare_solve(task: CompareTask<'_>) {
 
     let sparse_repo_data = read_real_world_repo_data();
 
-    let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
+    let names = specs.iter().filter_map(|s| {
+        s.name
+            .as_ref()
+            .and_then(|n| Option::<PackageName>::from(n.clone()))
+    });
     let available_packages = SparseRepoData::load_records_recursive(
         sparse_repo_data,
         names,
@@ -1435,7 +1432,11 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
 ) {
     let spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient).unwrap();
     let specs = vec![spec.clone()];
-    let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
+    let names = specs.iter().filter_map(|s| {
+        s.name
+            .as_ref()
+            .and_then(|n| Option::<PackageName>::from(n.clone()))
+    });
 
     let available_packages = SparseRepoData::load_records_recursive(
         repo_data,
@@ -1454,7 +1455,10 @@ fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
     let result: Vec<RepoDataRecord> = T::default().solve(task).unwrap().records;
 
     let record = result.iter().find(|record| {
-        record.package_record.name.as_normalized() == spec.name.as_ref().unwrap().as_normalized()
+        spec.name
+            .as_ref()
+            .unwrap()
+            .matches(&record.package_record.name)
     });
     assert_eq!(record.unwrap().channel, Some(expected_channel.to_string()));
 }

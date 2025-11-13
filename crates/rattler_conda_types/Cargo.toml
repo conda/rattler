@@ -1,6 +1,6 @@
 [package]
 name = "rattler_conda_types"
-version = "0.40.4"
+version = "0.41.0"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for common types used within the Conda ecosystem"
@@ -12,6 +12,9 @@ readme.workspace = true
 
 [features]
 default = ["rayon"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 ahash = { workspace = true }

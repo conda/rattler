@@ -65,7 +65,9 @@ def test_parse_no_channel() -> None:
     m = MatchSpec("python[version=3.9]")
     assert m.channel is None
     assert m.name is not None
-    assert m.name.normalized == "python"
+    package_name = m.name.as_package_name()
+    assert package_name is not None
+    assert package_name.normalized == "python"
     assert m.version == "==3.9"
 
 

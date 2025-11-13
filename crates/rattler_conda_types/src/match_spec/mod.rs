@@ -1,3 +1,5 @@
+//! Query language for conda packages.
+#[cfg(feature = "experimental_conditionals")]
 use crate::match_spec::condition::MatchSpecCondition;
 use crate::package::ArchiveIdentifier;
 use crate::{
@@ -18,11 +20,18 @@ use url::Url;
 use crate::Channel;
 use crate::ChannelConfig;
 
+#[cfg(feature = "experimental_conditionals")]
+/// Experimental conditionals for match specs.
 pub mod condition;
+/// Match a given string either by exact match, glob or regex
 pub mod matcher;
+/// Match package names either by exact match, glob or regex
+pub mod package_name_matcher;
+/// Parse a match spec from a string
 pub mod parse;
 
 use matcher::StringMatcher;
+use package_name_matcher::PackageNameMatcher;
 
 /// A [`MatchSpec`] is, fundamentally, a query language for conda packages. Any of the fields that
 /// comprise a [`crate::PackageRecord`] can be used to compose a [`MatchSpec`].
@@ -78,41 +87,41 @@ use matcher::StringMatcher;
 /// # Examples:
 ///
 /// ```rust
-/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher, PackageName, Channel, ChannelConfig, ParseStrictness::*};
+/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher, PackageNameMatcher, PackageName, Channel, ChannelConfig, ParseStrictness::*};
 /// use std::str::FromStr;
 /// use std::sync::Arc;
 ///
 /// let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 /// let spec = MatchSpec::from_str("foo 1.0.* py27_0", Strict).unwrap();
-/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
+/// assert_eq!(spec.name, Some(PackageNameMatcher::Exact(PackageName::new_unchecked("foo"))));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*", Strict).unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
 /// let spec = MatchSpec::from_str("foo ==1.0 py27_0", Strict).unwrap();
-/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
+/// assert_eq!(spec.name, Some(PackageNameMatcher::Exact(PackageName::new_unchecked("foo"))));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("==1.0", Strict).unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
 /// let spec = MatchSpec::from_str(r#"conda-forge::foo[version="1.0.*"]"#, Strict).unwrap();
-/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
+/// assert_eq!(spec.name, Some(PackageNameMatcher::Exact(PackageName::new_unchecked("foo"))));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*", Strict).unwrap()));
 /// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 ///
 /// let spec = MatchSpec::from_str(r#"conda-forge::foo >=1.0[subdir="linux-64"]"#, Strict).unwrap();
-/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
+/// assert_eq!(spec.name, Some(PackageNameMatcher::Exact(PackageName::new_unchecked("foo"))));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0", Strict).unwrap()));
 /// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 /// assert_eq!(spec, MatchSpec::from_str("conda-forge/linux-64::foo >=1.0", Strict).unwrap());
 ///
 /// let spec = MatchSpec::from_str("*/linux-64::foo >=1.0", Strict).unwrap();
-/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
+/// assert_eq!(spec.name, Some(PackageNameMatcher::Exact(PackageName::new_unchecked("foo"))));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0", Strict).unwrap()));
 /// assert_eq!(spec.channel, Some(Channel::from_str("*", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
 /// let spec = MatchSpec::from_str(r#"foo[build="py2*"]"#, Strict).unwrap();
-/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
+/// assert_eq!(spec.name, Some(PackageNameMatcher::Exact(PackageName::new_unchecked("foo"))));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py2*").unwrap()));
 /// ```
 ///
@@ -132,7 +141,7 @@ use matcher::StringMatcher;
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct MatchSpec {
     /// The name of the package
-    pub name: Option<PackageName>,
+    pub name: Option<PackageNameMatcher>,
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
     pub version: Option<VersionSpec>,
     /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
@@ -181,7 +190,7 @@ impl Display for MatchSpec {
         }
 
         match &self.name {
-            Some(name) => write!(f, "{}", name.as_normalized())?,
+            Some(name) => write!(f, "{name}")?,
             None => write!(f, "*")?,
         }
 
@@ -237,7 +246,7 @@ impl Display for MatchSpec {
 
 impl MatchSpec {
     /// Decomposes this instance into a [`NamelessMatchSpec`] and a name.
-    pub fn into_nameless(self) -> (Option<PackageName>, NamelessMatchSpec) {
+    pub fn into_nameless(self) -> (Option<PackageNameMatcher>, NamelessMatchSpec) {
         (
             self.name,
             NamelessMatchSpec {
@@ -261,10 +270,13 @@ impl MatchSpec {
     /// Returns whether the package is a virtual package.
     /// This is determined by the package name starting with `__`.
     /// Not having a package name is considered not virtual.
+    /// Matching both virtual and non-virtual packages is considered not virtual.
     pub fn is_virtual(&self) -> bool {
-        self.name
-            .as_ref()
-            .is_some_and(|name| name.as_normalized().starts_with("__"))
+        self.name.as_ref().is_some_and(|name| match name {
+            PackageNameMatcher::Exact(name) => name.as_normalized().starts_with("__"),
+            PackageNameMatcher::Glob(pattern) => pattern.as_str().starts_with("__"),
+            PackageNameMatcher::Regex(regex) => regex.as_str().starts_with(r"^__"),
+        })
     }
 }
 
@@ -272,7 +284,7 @@ impl MatchSpec {
 impl From<PackageName> for MatchSpec {
     fn from(value: PackageName) -> Self {
         Self {
-            name: Some(value),
+            name: Some(PackageNameMatcher::Exact(value)),
             ..Default::default()
         }
     }
@@ -370,7 +382,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
 
 impl MatchSpec {
     /// Constructs a [`MatchSpec`] from a [`NamelessMatchSpec`] and a name.
-    pub fn from_nameless(spec: NamelessMatchSpec, name: Option<PackageName>) -> Self {
+    pub fn from_nameless(spec: NamelessMatchSpec, name: Option<PackageNameMatcher>) -> Self {
         Self {
             name,
             version: spec.version,
@@ -467,7 +479,7 @@ impl Matches<PackageRecord> for MatchSpec {
     /// Match a [`MatchSpec`] against a [`PackageRecord`]
     fn matches(&self, other: &PackageRecord) -> bool {
         if let Some(name) = self.name.as_ref() {
-            if name != &other.name {
+            if !name.matches(&other.name) {
                 return false;
             }
         }
@@ -550,7 +562,7 @@ impl Matches<GenericVirtualPackage> for MatchSpec {
     /// Match a [`MatchSpec`] against a [`GenericVirtualPackage`]
     fn matches(&self, other: &GenericVirtualPackage) -> bool {
         if let Some(name) = self.name.as_ref() {
-            if name != &other.name {
+            if !name.matches(&other.name) {
                 return false;
             }
         }
@@ -607,8 +619,8 @@ impl TryFrom<Url> for MatchSpec {
             .ok_or(MatchSpecUrlError::InvalidFilename(filename.to_string()))?;
 
         spec.name = Some(
-            PackageName::from_str(&archive_identifier.name)
-                .map_err(|_err| MatchSpecUrlError::InvalidPackageName(archive_identifier.name))?,
+            PackageNameMatcher::from_str(&archive_identifier.name)
+                .map_err(|e| MatchSpecUrlError::InvalidPackageName(e.to_string()))?,
         );
 
         Ok(spec)
@@ -641,6 +653,7 @@ pub enum MatchSpecUrlError {
 
 #[cfg(test)]
 mod tests {
+    use glob::Pattern;
     use itertools::Itertools;
     use rstest::rstest;
     use std::str::FromStr;
@@ -648,8 +661,9 @@ mod tests {
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
     use crate::{
-        match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
-        ParseStrictness::*, RepoDataRecord, StringMatcher, Version, VersionSpec,
+        match_spec::Matches, parse_mode::ParseStrictnessWithNameMatcher, MatchSpec,
+        NamelessMatchSpec, PackageName, PackageRecord, ParseMatchSpecError, ParseStrictness::*,
+        RepoDataRecord, StringMatcher, Version, VersionSpec,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -994,5 +1008,108 @@ mod tests {
         let spec =
             MatchSpec::from_nameless(NamelessMatchSpec::from_str(">=12", Strict).unwrap(), None);
         assert!(!spec.is_virtual());
+
+        let spec = MatchSpec::from_str(
+            "__virtual_glob*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+        assert!(spec.is_virtual());
+
+        let spec = MatchSpec::from_str(
+            "^__virtual_regex.*$",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+        assert!(spec.is_virtual());
+
+        // technically, these can also match virtual packages like `__spec_with_glob`
+        // but as this also matches packages that are not virtual, `is_virtual` should be `false`
+        let spec = MatchSpec::from_str(
+            "*spec_with_glob",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+        assert!(!spec.is_virtual());
+
+        let spec = MatchSpec::from_str(
+            "^.*spec_with_regex$",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+        assert!(!spec.is_virtual());
+    }
+
+    #[test]
+    fn test_glob_in_name() {
+        let spec = MatchSpec::from_str(
+            "foo* >=12",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+        assert!(spec.matches(&PackageRecord::new(
+            PackageName::from_str("foo").unwrap(),
+            Version::from_str("13.0").unwrap(),
+            String::from(""),
+        )));
+        assert!(!spec.matches(&PackageRecord::new(
+            PackageName::from_str("foo").unwrap(),
+            Version::from_str("11.0").unwrap(),
+            String::from(""),
+        )));
+        assert!(spec.matches(&PackageRecord::new(
+            PackageName::from_str("foo-bar").unwrap(),
+            Version::from_str("12.0").unwrap(),
+            String::from(""),
+        )));
+
+        let spec = MatchSpec::from_str(
+            "foo* >=12[license=MIT]",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+        assert!(!spec.matches(&PackageRecord::new(
+            PackageName::from_str("foo-bar").unwrap(),
+            Version::from_str("12.0").unwrap(),
+            String::from(""),
+        )));
+        assert!(spec.matches(&{
+            let mut record = PackageRecord::new(
+                PackageName::from_str("foo-bar").unwrap(),
+                Version::from_str("12.0").unwrap(),
+                String::from(""),
+            );
+            record.license = Some("MIT".into());
+            record
+        }));
+    }
+
+    #[test]
+    fn test_allow_exact_names_only() {
+        let err = MatchSpec::from_str("foo* >=12[license=MIT]", Strict).unwrap_err();
+        assert_eq!(
+            err,
+            ParseMatchSpecError::OnlyExactPackageNameMatchersAllowed(
+                crate::PackageNameMatcher::Glob(Pattern::new("foo*").unwrap())
+            )
+        );
     }
 }

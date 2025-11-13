@@ -23,9 +23,10 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rayon::prelude::IndexedParallelIterator;
 
 /// The mode in which the validation should be performed.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub enum ValidationMode {
     /// Only check if the files exists. Do not check if the hashes match.
+    #[default]
     Fast,
 
     /// Check if the files exists and the content matches the hashes.

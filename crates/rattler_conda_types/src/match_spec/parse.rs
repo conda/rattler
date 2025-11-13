@@ -23,16 +23,19 @@ use super::{
 use crate::match_spec::condition::parse_condition;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
+    match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError},
     package::ArchiveIdentifier,
+    parse_mode::ParseStrictnessWithNameMatcher,
     utils::{path::is_absolute_path, url::parse_scheme},
     version_spec::{
         is_start_of_version_constraint,
         version_tree::{recognize_constraint, recognize_version},
         ParseVersionSpecError,
     },
-    Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
-    ParseChannelError, ParseMatchSpecOptions, ParseStrictness, ParseVersionError, Platform,
-    VersionSpec,
+    Channel, ChannelConfig, NamelessMatchSpec, ParseChannelError, ParseMatchSpecOptions,
+    ParseStrictness,
+    ParseStrictness::{Lenient, Strict},
+    ParseVersionError, Platform, VersionSpec,
 };
 
 /// The type of parse error that occurred when parsing match spec.
@@ -96,9 +99,9 @@ pub enum ParseMatchSpecError {
     #[error("unable to parse hash digest from hex")]
     InvalidHashDigest,
 
-    /// The package name was invalid
+    /// The package name matcher was invalid
     #[error(transparent)]
-    InvalidPackageName(#[from] InvalidPackageNameError),
+    InvalidPackageNameMatcher(#[from] PackageNameMatcherParseError),
 
     /// Multiple values for a key in the matchspec
     #[error("found multiple values for: {0}")]
@@ -111,6 +114,10 @@ pub enum ParseMatchSpecError {
     /// Invalid condition in match spec
     #[error("could not parse condition {0}: {1}")]
     InvalidCondition(String, String),
+
+    /// Only exact package name matchers are allowed
+    #[error("only exact package name matchers are allowed. Got {0}")]
+    OnlyExactPackageNameMatchersAllowed(PackageNameMatcher),
 }
 
 impl FromStr for MatchSpec {
@@ -395,7 +402,10 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
 }
 
 /// Strip the package name from the input.
-fn strip_package_name(input: &str) -> Result<(Option<PackageName>, &str), ParseMatchSpecError> {
+fn strip_package_name(
+    input: &str,
+    exact_names_only: bool,
+) -> Result<(Option<PackageNameMatcher>, &str), ParseMatchSpecError> {
     let (rest, package_name) =
         take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(
             input.trim(),
@@ -408,15 +418,38 @@ fn strip_package_name(input: &str) -> Result<(Option<PackageName>, &str), ParseM
         return Err(ParseMatchSpecError::MissingPackageName);
     }
 
+    let rest = rest.trim();
+
     // Handle asterisk as a wildcard (no package name)
     if trimmed_package_name == "*" {
-        return Ok((None, rest.trim()));
+        return Ok((None, rest));
     }
 
-    Ok((
-        Some(PackageName::from_str(trimmed_package_name)?),
-        rest.trim(),
-    ))
+    let package_name = match PackageNameMatcher::from_str(trimmed_package_name)
+        .map_err(ParseMatchSpecError::InvalidPackageNameMatcher)?
+    {
+        PackageNameMatcher::Exact(name) => PackageNameMatcher::Exact(name),
+        PackageNameMatcher::Glob(glob) => {
+            if exact_names_only {
+                return Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowed(
+                    PackageNameMatcher::Glob(glob),
+                ));
+            } else {
+                PackageNameMatcher::Glob(glob)
+            }
+        }
+        PackageNameMatcher::Regex(regex) => {
+            if exact_names_only {
+                return Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowed(
+                    PackageNameMatcher::Regex(regex),
+                ));
+            } else {
+                PackageNameMatcher::Regex(regex)
+            }
+        }
+    };
+
+    Ok((Some(package_name), rest))
 }
 
 /// Splits a string into version and build constraints.
@@ -671,7 +704,7 @@ pub(crate) fn matchspec_parser(
     if nameless_match_spec.url.is_none() {
         if let Some(url) = parse_url_like(&input)? {
             let archive = ArchiveIdentifier::try_from_url(&url);
-            let name = archive.and_then(|a| a.try_into().ok());
+            let name = archive.and_then(|a| PackageNameMatcher::from_str(&a.name).ok());
 
             // TODO: This should also work without a proper name from the url filename
             if name.is_none() {
@@ -710,7 +743,7 @@ pub(crate) fn matchspec_parser(
     }
 
     // Step 6. Strip off the package name from the input
-    let (name, input) = strip_package_name(input)?;
+    let (name, input) = strip_package_name(input, options.exact_names_only())?;
     let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, name);
 
     // Step 7. Otherwise, sort our version + build
@@ -1329,8 +1362,10 @@ mod tests {
 
     #[test]
     fn test_missing_package_name() {
-        let package_name = strip_package_name("");
-        assert_matches!(package_name, Err(ParseMatchSpecError::MissingPackageName));
+        for exact_names_only in [true, false] {
+            let package_name = strip_package_name("", exact_names_only);
+            assert_matches!(package_name, Err(ParseMatchSpecError::MissingPackageName));
+        }
     }
 
     #[test]
@@ -1418,7 +1453,7 @@ mod tests {
             .expect_err("Should try to parse as name not url");
         assert_eq!(
             err.to_string(),
-            "'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+            "invalid package name 'bla/bla': 'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
         );
     }
 
@@ -1434,7 +1469,7 @@ mod tests {
     fn test_issue_717() {
         assert_matches!(
             MatchSpec::from_str("ray[default,data] >=2.9.0,<3.0.0", Strict),
-            Err(ParseMatchSpecError::InvalidPackageName(_))
+            Err(ParseMatchSpecError::InvalidPackageNameMatcher(_))
         );
     }
 

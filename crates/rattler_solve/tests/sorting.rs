@@ -35,7 +35,7 @@ fn load_repodata(package_name: &PackageName) -> Vec<Vec<RepoDataRecord>> {
 
 fn create_sorting_snapshot(package_name: &str, strategy: SolveStrategy) -> String {
     let match_spec = MatchSpec::from_str(package_name, Lenient).unwrap();
-    let package_name = match_spec.name.clone().unwrap();
+    let package_name = Option::<PackageName>::from(match_spec.name.clone().unwrap()).unwrap();
 
     // Load repodata
     let repodata = load_repodata(&package_name);

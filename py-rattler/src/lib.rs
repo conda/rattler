@@ -12,6 +12,7 @@ mod nameless_match_spec;
 mod networking;
 mod no_arch_type;
 mod package_name;
+mod package_name_matcher;
 mod package_streaming;
 mod paths_json;
 mod platform;
@@ -37,9 +38,10 @@ use error::{
     ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
     EnvironmentCreationException, ExtractException, FetchRepoDataException,
     InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
-    InvalidUrlException, InvalidVersionException, IoException, LinkException, ParseArchException,
-    ParsePlatformException, PyRattlerError, SolverException, TransactionException,
-    ValidatePackageRecordsException, VersionBumpException,
+    InvalidUrlException, InvalidVersionException, InvalidVersionSpecException, IoException,
+    LinkException, PackageNameMatcherParseException, ParseArchException, ParsePlatformException,
+    PyRattlerError, SolverException, TransactionException, ValidatePackageRecordsException,
+    VersionBumpException,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -60,6 +62,7 @@ use networking::middleware::{
 use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
 use package_name::PyPackageName;
+use package_name_matcher::PyPackageNameMatcher;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
 use platform::{PyArch, PyPlatform};
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
@@ -74,7 +77,7 @@ use repo_data::{
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 use solver::{py_solve, py_solve_with_sparse_repodata};
-use version::PyVersion;
+use version::{PyVersion, PyVersionSpec};
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
 
 #[cfg(feature = "pty")]
@@ -97,11 +100,13 @@ impl<T> Deref for Wrap<T> {
 #[pymodule]
 fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyVersion>()?;
+    m.add_class::<PyVersionSpec>()?;
 
     m.add_class::<PyMatchSpec>()?;
     m.add_class::<PyNamelessMatchSpec>()?;
 
     m.add_class::<PyPackageName>()?;
+    m.add_class::<PyPackageNameMatcher>()?;
 
     m.add_class::<PyChannel>()?;
     m.add_class::<PyChannelConfig>()?;
@@ -192,8 +197,16 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         py.get_type::<InvalidVersionException>(),
     )?;
     m.add(
+        "InvalidVersionSpecError",
+        py.get_type::<InvalidVersionSpecException>(),
+    )?;
+    m.add(
         "InvalidMatchSpecError",
         py.get_type::<InvalidMatchSpecException>(),
+    )?;
+    m.add(
+        "PackageNameMatcherParseError",
+        py.get_type::<PackageNameMatcherParseException>(),
     )?;
     m.add(
         "InvalidPackageNameError",

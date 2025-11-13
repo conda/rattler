@@ -1,6 +1,6 @@
 [package]
 name = "rattler_config"
-version = "0.2.15"
+version = "0.2.16"
 edition.workspace = true
 authors = []
 description = "A crate to configure rattler and derived tools."
@@ -13,6 +13,9 @@ readme.workspace = true
 [features]
 edit = []
 default = ["edit"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 console = { workspace = true }

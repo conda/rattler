@@ -1,12 +1,15 @@
-use std::borrow::Borrow;
 use std::sync::Arc;
+use std::{borrow::Borrow, str::FromStr};
 
 use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
-use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, ParseMatchSpecOptions};
+use rattler_conda_types::{
+    Channel, MatchSpec, Matches, PackageNameMatcher, ParseMatchSpecOptions, ParseStrictness,
+    ParseStrictnessWithNameMatcher,
+};
 
 use crate::{
     channel::PyChannel, error::PyRattlerError, nameless_match_spec::PyNamelessMatchSpec,
-    package_name::PyPackageName, record::PyRecord,
+    package_name_matcher::PyPackageNameMatcher, record::PyRecord,
 };
 
 #[pyclass]
@@ -37,10 +40,11 @@ impl Borrow<MatchSpec> for PyMatchSpec {
 #[pymethods]
 impl PyMatchSpec {
     #[new]
-    #[pyo3(signature = (spec, strict = true, experimental_extras = false, experimental_conditionals = false))]
+    #[pyo3(signature = (spec, strict = true, exact_names_only = true, experimental_extras = false, experimental_conditionals = false))]
     pub fn __init__(
         spec: &str,
         strict: bool,
+        exact_names_only: bool,
         experimental_extras: bool,
         experimental_conditionals: bool,
     ) -> PyResult<Self> {
@@ -49,6 +53,7 @@ impl PyMatchSpec {
         } else {
             ParseMatchSpecOptions::lenient()
         }
+        .with_exact_names_only(exact_names_only)
         .with_experimental_extras(experimental_extras)
         .with_experimental_conditionals(experimental_conditionals);
 
@@ -59,7 +64,7 @@ impl PyMatchSpec {
 
     /// The name of the package
     #[getter]
-    pub fn name(&self) -> Option<PyPackageName> {
+    pub fn name(&self) -> Option<PyPackageNameMatcher> {
         self.inner.name.clone().map(std::convert::Into::into)
     }
 
@@ -157,7 +162,7 @@ impl PyMatchSpec {
         Ok(Self {
             inner: MatchSpec::from_nameless(
                 spec.clone().into(),
-                Some(PackageName::try_from(name).map_err(PyRattlerError::from)?),
+                Some(PackageNameMatcher::from_str(&name).map_err(PyRattlerError::from)?),
             ),
         })
     }

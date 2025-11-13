@@ -35,7 +35,7 @@ use itertools::Itertools;
 use rattler_cache::package_cache::{CacheLock, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
-    MatchSpec, PackageName, Platform, PrefixRecord, RepoDataRecord,
+    MatchSpec, PackageName, PackageNameMatcher, Platform, PrefixRecord, RepoDataRecord,
 };
 use rattler_networking::retry_policies::default_retry_policy;
 use rattler_networking::LazyClient;
@@ -475,6 +475,13 @@ impl Installer {
             )
         });
 
+        // Acquire a global lock on the package cache for the entire installation.
+        // This significantly reduces overhead by avoiding per-package locking.
+        let _global_cache_lock = package_cache
+            .acquire_global_lock()
+            .await
+            .map_err(InstallerError::FailedToAcquireCacheLock)?;
+
         // Construct a driver.
         let driver = InstallDriver::builder()
             .execute_link_scripts(self.execute_link_scripts)
@@ -844,13 +851,13 @@ fn update_requested_specs_in_json(
 /// - The value is a vector of string representations of all matching
 ///   `MatchSpecs`
 ///
-/// `MatchSpecs` without names are skipped.
-/// For multiple `MatchSpecs` with the same package name, all are collected.
+/// Only `MatchSpec`s that have a `PackageNameMatcher::Exact` are included.
+/// For multiple `MatchSpec`s with the same package name, all are collected.
 fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<PackageName, Vec<String>> {
     let mut mapping = std::collections::HashMap::new();
 
     for spec in specs {
-        if let Some(name) = &spec.name {
+        if let Some(PackageNameMatcher::Exact(name)) = &spec.name {
             mapping
                 .entry(name.clone())
                 .or_insert_with(Vec::new)
