@@ -4,7 +4,8 @@ use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageName,
-    PackageRecord, ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
+    PackageRecord, ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult,
+    Version,
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
@@ -30,7 +31,6 @@ fn dummy_channel_json_path() -> String {
     )
 }
 
-#[cfg(feature = "experimental_extras")]
 fn dummy_channel_with_optional_dependencies_json_path() -> String {
     format!(
         "{}/{}",
@@ -716,7 +716,6 @@ mod resolvo {
     use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
     use url::Url;
 
-    #[cfg(feature = "experimental_extras")]
     use super::dummy_channel_with_optional_dependencies_json_path;
     use super::{
         dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
@@ -969,7 +968,6 @@ mod resolvo {
     }
 
     /// A test that checks that extras can be used to select optional dependencies.
-    #[cfg(feature = "experimental_extras")]
     #[test]
     fn test_optional_dependency() {
         let mut result = solve::<rattler_solve::resolvo::Solver>(
@@ -1001,7 +999,6 @@ mod resolvo {
     }
 
     /// A test that checks that extras influence the version selection of other packages.
-    #[cfg(feature = "experimental_extras")]
     #[test]
     fn test_optional_dependency_restrict() {
         let mut result = solve::<rattler_solve::resolvo::Solver>(
@@ -1028,7 +1025,6 @@ mod resolvo {
 
     /// A test that checks that if two extras have conflicting dependencies the
     /// solution is unsolvable.
-    #[cfg(feature = "experimental_extras")]
     #[test]
     fn test_optional_dependency_conflicting_extras() {
         let result = solve::<rattler_solve::resolvo::Solver>(
@@ -1056,7 +1052,6 @@ mod resolvo {
 
     /// A test that checks that extras can cause conflicts with other package
     /// dependencies.
-    #[cfg(feature = "experimental_extras")]
     #[test]
     fn test_optional_dependency_conflicting_with_package() {
         let result = solve::<rattler_solve::resolvo::Solver>(
@@ -1241,13 +1236,25 @@ fn solve<T: SolverImpl + Default>(
     let specs: Vec<_> = task
         .specs
         .iter()
-        .map(|m| MatchSpec::from_str(m, ParseStrictness::Lenient).unwrap())
+        .map(|m| {
+            MatchSpec::from_str(
+                m,
+                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
+            )
+            .unwrap()
+        })
         .collect();
 
     let constraints = task
         .constraints
         .into_iter()
-        .map(|m| MatchSpec::from_str(m, ParseStrictness::Lenient).unwrap())
+        .map(|m| {
+            MatchSpec::from_str(
+                m,
+                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
+            )
+            .unwrap()
+        })
         .collect();
 
     let task = SolverTask {
