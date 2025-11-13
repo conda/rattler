@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.2](https://github.com/conda/rattler/compare/rattler_lock-v0.26.1...rattler_lock-v0.26.2) - 2025-11-13
+
+### Added
+
+- Add glob support for package name in matchspec ([#1480](https://github.com/conda/rattler/pull/1480))
+
 ## [0.26.1](https://github.com/conda/rattler/compare/rattler_lock-v0.26.0...rattler_lock-v0.26.1) - 2025-10-28
 
 ### Fixed

@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.1](https://github.com/conda/rattler/compare/rattler_index-v0.27.0...rattler_index-v0.27.1) - 2025-11-13
+
+### Added
+
+- add cache control for repodata.json / zst and shard index ([#1796](https://github.com/conda/rattler/pull/1796))
+
 ## [0.27.0](https://github.com/conda/rattler/compare/rattler_index-v0.26.5...rattler_index-v0.27.0) - 2025-10-28
 
 ### Added

@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0](https://github.com/conda/rattler/compare/rattler_digest-v1.1.7...rattler_digest-v1.2.0) - 2025-11-13
+
+### Added
+
+- expose crate features on docs.rs ([#1835](https://github.com/conda/rattler/pull/1835))
+
 ## [1.1.7](https://github.com/conda/rattler/compare/rattler_digest-v1.1.6...rattler_digest-v1.1.7) - 2025-10-17
 
 ### Fixed

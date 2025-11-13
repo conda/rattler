@@ -83,6 +83,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.0](https://github.com/conda/rattler/compare/rattler-v0.38.4...rattler-v0.39.0) - 2025-11-13
+
+### Added
+
+- Add glob support for package name in matchspec ([#1480](https://github.com/conda/rattler/pull/1480))
+- expose crate features on docs.rs ([#1835](https://github.com/conda/rattler/pull/1835))
+- add post-link and pre-unlink to reporter interface ([#1793](https://github.com/conda/rattler/pull/1793))
+
+### Fixed
+
+- omit `sha256_in_prefix` when equal to `sha256` ([#1812](https://github.com/conda/rattler/pull/1812))
+
+### Other
+
+- use global cache lock to reduce per-package lock overhead ([#1818](https://github.com/conda/rattler/pull/1818))
+- clean up installer ([#1811](https://github.com/conda/rattler/pull/1811))
+
 ## [0.38.4](https://github.com/conda/rattler/compare/rattler-v0.38.3...rattler-v0.38.4) - 2025-10-28
 
 ### Other
