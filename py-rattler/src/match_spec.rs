@@ -1,12 +1,15 @@
-use std::borrow::Borrow;
 use std::sync::Arc;
+use std::{borrow::Borrow, str::FromStr};
 
 use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
-use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, ParseStrictness};
+use rattler_conda_types::{
+    Channel, MatchSpec, Matches, PackageNameMatcher, ParseStrictness,
+    ParseStrictnessWithNameMatcher,
+};
 
 use crate::{
     channel::PyChannel, error::PyRattlerError, nameless_match_spec::PyNamelessMatchSpec,
-    package_name::PyPackageName, record::PyRecord,
+    package_name_matcher::PyPackageNameMatcher, record::PyRecord,
 };
 
 #[pyclass]
@@ -37,22 +40,23 @@ impl Borrow<MatchSpec> for PyMatchSpec {
 #[pymethods]
 impl PyMatchSpec {
     #[new]
-    pub fn __init__(spec: &str, strict: bool) -> PyResult<Self> {
-        Ok(MatchSpec::from_str(
-            spec,
-            if strict {
+    pub fn __init__(spec: &str, strict: bool, exact_names_only: bool) -> PyResult<Self> {
+        let strictness = ParseStrictnessWithNameMatcher {
+            parse_strictness: if strict {
                 ParseStrictness::Strict
             } else {
                 ParseStrictness::Lenient
             },
-        )
-        .map(Into::into)
-        .map_err(PyRattlerError::from)?)
+            exact_names_only,
+        };
+        Ok(MatchSpec::from_str(spec, strictness)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
     }
 
     /// The name of the package
     #[getter]
-    pub fn name(&self) -> Option<PyPackageName> {
+    pub fn name(&self) -> Option<PyPackageNameMatcher> {
         self.inner.name.clone().map(std::convert::Into::into)
     }
 
@@ -135,7 +139,7 @@ impl PyMatchSpec {
         Ok(Self {
             inner: MatchSpec::from_nameless(
                 spec.clone().into(),
-                Some(PackageName::try_from(name).map_err(PyRattlerError::from)?),
+                Some(PackageNameMatcher::from_str(&name).map_err(PyRattlerError::from)?),
             ),
         })
     }

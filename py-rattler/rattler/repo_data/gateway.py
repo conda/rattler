@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, List, Iterable
 from dataclasses import dataclass
-
-from rattler.rattler import PyGateway, PySourceConfig, PyMatchSpec
+from typing import Iterable, List, Optional
 
 from rattler.channel import Channel
 from rattler.match_spec import MatchSpec
-from rattler.networking import Client, CacheAction
-from rattler.repo_data.record import RepoDataRecord
-from rattler.platform import Platform, PlatformLiteral
+from rattler.networking import CacheAction, Client
 from rattler.package.package_name import PackageName
+from rattler.platform import Platform, PlatformLiteral
+from rattler.rattler import PyGateway, PyMatchSpec, PySourceConfig
+from rattler.repo_data.record import RepoDataRecord
 
 
 @dataclass
@@ -175,7 +174,10 @@ class Gateway:
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
                 for platform in platforms
             ],
-            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True) for spec in specs],
+            specs=[
+                spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True, True)
+                for spec in specs
+            ],
             recursive=recursive,
         )
 
