@@ -39,6 +39,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.41.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.4...rattler_conda_types-v0.41.0) - 2025-11-13
+
+### Added
+
+- Add glob support for package name in matchspec ([#1480](https://github.com/conda/rattler/pull/1480))
+- expose crate features on docs.rs ([#1835](https://github.com/conda/rattler/pull/1835))
+- parse matchspec conditions and translate to resolvo ([#1545](https://github.com/conda/rattler/pull/1545))
+
+### Fixed
+
+- omit `sha256_in_prefix` when equal to `sha256` ([#1812](https://github.com/conda/rattler/pull/1812))
+- `Version::starts_with` for versions with differing non-final component sizes ([#1791](https://github.com/conda/rattler/pull/1791))
+
 ## [0.40.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.3...rattler_conda_types-v0.40.4) - 2025-10-28
 
 ### Fixed

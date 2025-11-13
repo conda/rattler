@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.14](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.13...rattler_package_streaming-v0.23.14) - 2025-11-13
+
+### Added
+
+- expose crate features on docs.rs ([#1835](https://github.com/conda/rattler/pull/1835))
+
 ## [0.23.13](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.12...rattler_package_streaming-v0.23.13) - 2025-10-28
 
 ### Other
