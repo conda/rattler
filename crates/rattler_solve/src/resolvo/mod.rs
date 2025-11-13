@@ -14,8 +14,8 @@ use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
     package::ArchiveType, utils::TimestampMs, GenericVirtualPackage, MatchSpec, Matches,
-    NamelessMatchSpec, PackageName, PackageNameMatcher, ParseMatchSpecError,
-    ParseMatchSpecOptions, RepoDataRecord, SolverResult,
+    NamelessMatchSpec, PackageName, PackageNameMatcher, ParseMatchSpecError, ParseMatchSpecOptions,
+    RepoDataRecord, SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
