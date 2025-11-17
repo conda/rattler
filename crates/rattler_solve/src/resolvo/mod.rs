@@ -15,8 +15,8 @@ use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
     package::ArchiveType, utils::TimestampMs, GenericVirtualPackage, MatchSpec, Matches,
-    NamelessMatchSpec, PackageName, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
-    SolverResult,
+    NamelessMatchSpec, PackageName, PackageNameMatcher, ParseMatchSpecError, ParseStrictness,
+    RepoDataRecord, SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -306,7 +306,8 @@ impl<'a> CondaDependencyProvider<'a> {
         let direct_dependencies = match_specs
             .iter()
             .filter_map(|spec| spec.name.as_ref())
-            .map(|name| pool.intern_package_name(name))
+            .filter_map(|name| Option::<PackageName>::from(name.clone()))
+            .map(|name| pool.intern_package_name(&name))
             .collect();
 
         // TODO: Normalize these channel names to urls so we can compare them correctly.
@@ -414,7 +415,8 @@ impl<'a> CondaDependencyProvider<'a> {
                     if let Some(spec) = channel_specific_specs.iter().find(|&&spec| {
                         spec.name
                             .as_ref()
-                            .expect("expecting a name")
+                            .and_then(|name| Option::<PackageName>::from(name.clone()))
+                            .expect("expecting an exact package name")
                             .as_normalized()
                             == record.package_record.name.as_normalized()
                     }) {
@@ -871,8 +873,9 @@ impl super::SolverImpl for Solver {
             .constraints
             .iter()
             .map(|spec| {
-                let (Some(name), spec) = spec.clone().into_nameless() else {
-                    unimplemented!("matchspecs without a name are not supported");
+                let (Some(PackageNameMatcher::Exact(name)), spec) = spec.clone().into_nameless()
+                else {
+                    unimplemented!("only exact package names are supported");
                 };
                 let name_id = provider.pool.intern_package_name(&name);
                 provider.pool.intern_version_set(name_id, spec.into())
@@ -956,8 +959,8 @@ fn version_sets_for_match_spec(
     pool: &Pool<SolverMatchSpec<'_>, NameType>,
     spec: MatchSpec,
 ) -> Vec<VersionSetId> {
-    let (Some(name), spec) = spec.into_nameless() else {
-        unimplemented!("matchspecs without a name are not supported");
+    let (Some(PackageNameMatcher::Exact(name)), spec) = spec.into_nameless() else {
+        unimplemented!("only exact package names are supported");
     };
 
     // Add a dependency on each extra.

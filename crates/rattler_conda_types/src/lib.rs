@@ -7,7 +7,7 @@ mod build_spec;
 mod channel;
 mod channel_data;
 mod explicit_environment_spec;
-mod match_spec;
+pub mod match_spec;
 pub mod menuinst;
 mod no_arch_type;
 mod parse_mode;
@@ -43,6 +43,7 @@ pub use explicit_environment_spec::{
 pub use generic_virtual_package::GenericVirtualPackage;
 #[cfg(feature = "experimental_conditionals")]
 pub use match_spec::condition::MatchSpecCondition;
+pub use match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError};
 pub use match_spec::{
     matcher::{StringMatcher, StringMatcherParseError},
     parse::ParseMatchSpecError,
@@ -53,7 +54,7 @@ pub use minimal_prefix_record::{
 };
 pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
 pub use package_name::{InvalidPackageNameError, PackageName};
-pub use parse_mode::ParseStrictness;
+pub use parse_mode::{ParseStrictness, ParseStrictnessWithNameMatcher};
 pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_record::PrefixRecord;
 pub use record_traits::HasArtifactIdentificationRefs;

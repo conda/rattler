@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/conda/rattler/compare/rattler_upload-v0.3.10...rattler_upload-v0.4.0) - 2025-11-13
+
+### Added
+
+- expose crate features on docs.rs ([#1835](https://github.com/conda/rattler/pull/1835))
+- cleanup upload CLI structs ([#1807](https://github.com/conda/rattler/pull/1807))
+- create attestations on upload with cosign ([#1679](https://github.com/conda/rattler/pull/1679))
+
 ## [0.3.10](https://github.com/conda/rattler/compare/rattler_upload-v0.3.9...rattler_upload-v0.3.10) - 2025-10-28
 
 ### Other

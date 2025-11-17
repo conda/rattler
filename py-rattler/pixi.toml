@@ -1,4 +1,4 @@
-[project]
+[workspace]
 name = "py-rattler"
 description = "Add a short description here"
 authors = [

@@ -44,6 +44,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.22](https://github.com/conda/rattler/compare/rattler_networking-v0.25.21...rattler_networking-v0.25.22) - 2025-11-13
+
+### Added
+
+- expose crate features on docs.rs ([#1835](https://github.com/conda/rattler/pull/1835))
+
+### Fixed
+
+- omit `sha256_in_prefix` when equal to `sha256` ([#1812](https://github.com/conda/rattler/pull/1812))
+
 ## [0.25.21](https://github.com/conda/rattler/compare/rattler_networking-v0.25.20...rattler_networking-v0.25.21) - 2025-10-28
 
 ### Other
