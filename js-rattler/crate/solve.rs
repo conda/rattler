@@ -92,7 +92,7 @@ pub async fn simple_solve(
                     .sha256
                     .as_ref()
                     .and_then(|s| parse_digest_from_hex::<Sha256>(s)),
-                size: pkg.size.unwrap_or_default(),
+                size: pkg.size,
                 arch: None,
                 platform: None,
                 depends: pkg.depends.unwrap_or_default(),
@@ -197,7 +197,7 @@ pub async fn simple_solve(
                 .sha256
                 .as_ref()
                 .map(|hash| format!("{hash:x}")),
-            size: Some(r.package_record.size),
+            size: r.package_record.size,
             depends: Some(r.package_record.depends.clone()),
             subdir: Some(r.package_record.subdir.clone()),
         })
