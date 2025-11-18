@@ -32,10 +32,10 @@ pub use indicatif::{
     ProgressFormatter,
 };
 use itertools::Itertools;
-use rattler_cache::package_cache::{CacheLock, CacheReporter};
+use rattler_cache::package_cache::{CacheMetadata, CacheReporter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
-    MatchSpec, PackageName, Platform, PrefixRecord, RepoDataRecord,
+    MatchSpec, PackageName, PackageNameMatcher, Platform, PrefixRecord, RepoDataRecord,
 };
 use rattler_networking::retry_policies::default_retry_policy;
 use rattler_networking::LazyClient;
@@ -588,7 +588,7 @@ impl Installer {
                             let cache_index = r.on_populate_cache_start(operation_idx, &record);
                             (r, cache_index)
                         });
-                        let cache_lock = populate_cache(
+                        let cache_metadata = populate_cache(
                             &record,
                             downloader,
                             &package_cache,
@@ -598,7 +598,7 @@ impl Installer {
                         if let Some((reporter, index)) = populate_cache_report {
                             reporter.on_populate_cache_complete(index);
                         }
-                        Ok((cache_lock, record))
+                        Ok((cache_metadata, record))
                     })
                     .map_err(JoinError::try_into_panic)
                     .map(|res| match res {
@@ -613,18 +613,28 @@ impl Installer {
                 };
 
                 // Install the package if it was fetched.
-                if let Some((cache_lock, record)) = package_to_install.await? {
+                if let Some((cache_metadata, record)) = package_to_install.await? {
                     let reporter = reporter
                         .as_deref()
                         .map(|r| (r, r.on_link_start(operation_idx, &record)));
                     let requested_spec = spec_mapping_ref
                         .and_then(|mapping| mapping.get(&record.package_record.name).cloned())
                         .unwrap_or_default();
+
+                    // Reuse index_json and paths_json from cache validation if available
+                    let mut install_options = base_install_options.clone();
+                    if let Some(index_json) = cache_metadata.index_json() {
+                        install_options.index_json = Some(index_json.clone());
+                    }
+                    if let Some(paths_json) = cache_metadata.paths_json() {
+                        install_options.paths_json = Some(paths_json.clone());
+                    }
+
                     link_package(
                         &record,
                         prefix,
-                        cache_lock.path(),
-                        base_install_options.clone(),
+                        cache_metadata.path(),
+                        install_options,
                         driver,
                         requested_spec,
                     )
@@ -749,7 +759,7 @@ async fn populate_cache(
     downloader: LazyClient,
     cache: &PackageCache,
     reporter: Option<(Arc<dyn Reporter>, usize)>,
-) -> Result<CacheLock, InstallerError> {
+) -> Result<CacheMetadata, InstallerError> {
     struct CacheReporterBridge {
         reporter: Arc<dyn Reporter>,
         cache_index: usize,
@@ -851,13 +861,13 @@ fn update_requested_specs_in_json(
 /// - The value is a vector of string representations of all matching
 ///   `MatchSpecs`
 ///
-/// `MatchSpecs` without names are skipped.
-/// For multiple `MatchSpecs` with the same package name, all are collected.
+/// Only `MatchSpec`s that have a `PackageNameMatcher::Exact` are included.
+/// For multiple `MatchSpec`s with the same package name, all are collected.
 fn create_spec_mapping(specs: &[MatchSpec]) -> std::collections::HashMap<PackageName, Vec<String>> {
     let mut mapping = std::collections::HashMap::new();
 
     for spec in specs {
-        if let Some(name) = &spec.name {
+        if let Some(PackageNameMatcher::Exact(name)) = &spec.name {
             mapping
                 .entry(name.clone())
                 .or_insert_with(Vec::new)

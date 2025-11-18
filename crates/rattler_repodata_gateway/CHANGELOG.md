@@ -44,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.14...rattler_repodata_gateway-v0.25.0) - 2025-11-13
+
+### Added
+
+- Add glob support for package name in matchspec ([#1480](https://github.com/conda/rattler/pull/1480))
+- move repodata fetch logic to tools crate ([#1820](https://github.com/conda/rattler/pull/1820))
+- parse matchspec conditions and translate to resolvo ([#1545](https://github.com/conda/rattler/pull/1545))
+
 ## [0.24.14](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.24.13...rattler_repodata_gateway-v0.24.14) - 2025-10-28
 
 ### Fixed

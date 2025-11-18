@@ -4251,7 +4251,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.38.4"
+version = "0.39.0"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4336,7 +4336,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4375,7 +4375,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.40.4"
+version = "0.41.0"
 dependencies = [
  "ahash",
  "assert_matches",
@@ -4425,7 +4425,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "console 0.16.1",
  "fs-err",
@@ -4443,7 +4443,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.1.7"
+version = "1.2.0"
 dependencies = [
  "blake2",
  "digest",
@@ -4465,7 +4465,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.0"
+version = "0.27.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4515,7 +4515,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.26.1"
+version = "0.26.2"
 dependencies = [
  "ahash",
  "chrono",
@@ -4552,7 +4552,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.34"
+version = "0.2.35"
 dependencies = [
  "chrono",
  "configparser",
@@ -4581,7 +4581,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.21"
+version = "0.25.22"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4619,7 +4619,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.13"
+version = "0.23.14"
 dependencies = [
  "assert_matches",
  "bzip2",
@@ -4672,7 +4672,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.14"
+version = "0.25.0"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4741,7 +4741,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4757,7 +4757,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_sandbox"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "birdcage",
  "clap",
@@ -4768,7 +4768,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.7"
+version = "0.25.8"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4790,7 +4790,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "3.0.9"
+version = "3.1.0"
 dependencies = [
  "chrono",
  "criterion",
@@ -4817,7 +4817,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.3.10"
+version = "0.4.0"
 dependencies = [
  "base64",
  "clap",
@@ -4851,7 +4851,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.2.5"
+version = "2.2.6"
 dependencies = [
  "archspec",
  "libloading",
