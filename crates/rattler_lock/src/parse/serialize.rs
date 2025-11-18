@@ -106,8 +106,6 @@ enum SerializablePackageSelector<'a> {
         build: Option<&'a str>,
         #[serde(skip_serializing_if = "Option::is_none")]
         subdir: Option<&'a str>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        variants: Option<&'a BTreeMap<String, VariantValue>>,
     },
     Pypi {
         pypi: &'a UrlOrPath,
@@ -223,7 +221,6 @@ impl<'a> SerializablePackageSelector<'a> {
             version,
             build,
             subdir,
-            variants: package.as_source().and_then(|s| s.variants.as_ref()),
         }
     }
 
@@ -270,7 +267,6 @@ impl Ord for SerializablePackageSelector<'_> {
                     build: build_a,
                     version: version_a,
                     subdir: subdir_a,
-                    variants: variants_a,
                 },
                 SerializablePackageSelector::Conda {
                     conda: b,
@@ -278,14 +274,12 @@ impl Ord for SerializablePackageSelector<'_> {
                     build: build_b,
                     version: version_b,
                     subdir: subdir_b,
-                    variants: variants_b,
                 },
             ) => compare_url_by_location(a, b)
                 .then_with(|| name_a.cmp(name_b))
                 .then_with(|| version_a.cmp(version_b))
                 .then_with(|| build_a.cmp(build_b))
-                .then_with(|| subdir_a.cmp(subdir_b))
-                .then_with(|| variants_a.cmp(variants_b)),
+                .then_with(|| subdir_a.cmp(subdir_b)),
             (
                 SerializablePackageSelector::Pypi { pypi: a, .. },
                 SerializablePackageSelector::Pypi { pypi: b, .. },

@@ -1,7 +1,9 @@
-# V6 lock file with multiple source packages that have different variants
+# V6 lock file with source packages that have variants as optional metadata
 #
-# This tests that variants can be used in V6 to disambiguate between
-# multiple source packages at the same location.
+# This tests that variants can be included in V6 as optional metadata
+# in the package definitions. Note that variants cannot be used in the
+# package selectors in V6 (that would be a breaking change), so packages
+# must be distinguishable by other means (name, version, etc.).
 
 version: 6
 environments:
@@ -10,18 +12,11 @@ environments:
       - url: https://conda.anaconda.org/conda-forge/
     packages:
       linux-64:
-        - conda: my-package
-          variants:
-            target_platform: linux-64
-            python: "3.11"
-      win-64:
-        - conda: my-package
-          variants:
-            target_platform: win-64
-            python: "3.11"
+        - conda: my-package-linux
+        - conda: my-package-win
 
 packages:
-  - conda: my-package
+  - conda: my-package-linux
     name: my-package
     version: 1.0.0
     subdir: noarch
@@ -31,7 +26,7 @@ packages:
     depends:
       - python >=3.8
     license: MIT
-  - conda: my-package
+  - conda: my-package-win
     name: my-package
     version: 1.0.0
     subdir: noarch

@@ -10,8 +10,6 @@ environments:
     packages:
       linux-64:
         - conda: my-package
-          variants:
-            target_platform: linux-64
 packages:
   - conda: my-package
     name: my-package
