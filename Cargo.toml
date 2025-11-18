@@ -37,6 +37,7 @@ async-fd-lock = "0.2.0"
 fs4 = "0.13.1"
 async-once-cell = "0.5.4"
 async-trait = "0.1.88"
+astral_async_zip = { version = "0.0.17", default-features = false }
 axum = { version = "0.8.4", default-features = false, features = [
   "tokio",
   "http1",
