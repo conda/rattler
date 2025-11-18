@@ -125,3 +125,14 @@ impl From<ParseStrictness> for ParseMatchSpecOptions {
         Self::new(strictness)
     }
 }
+
+impl From<ParseStrictnessWithNameMatcher> for ParseMatchSpecOptions {
+    fn from(value: ParseStrictnessWithNameMatcher) -> Self {
+        Self {
+            strictness: value.parse_strictness,
+            exact_names_only: value.exact_names_only,
+            allow_experimental_extras: false,
+            allow_experimental_conditionals: false,
+        }
+    }
+}
