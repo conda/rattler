@@ -15,7 +15,7 @@ use crate::{
     file_format_version::FileFormatVersion,
     parse::{models::v6, V6},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath, VariantValue,
+    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
 };
 
 #[serde_as]

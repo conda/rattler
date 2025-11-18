@@ -257,7 +257,9 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
 
         let channel = value.as_binary().and_then(|binary| binary.channel.as_ref());
         let file_name = value.as_binary().map(|binary| binary.file_name.as_str());
-        let variants = value.as_source().and_then(|source| source.variants.as_ref());
+        let variants = value
+            .as_source()
+            .and_then(|source| source.variants.as_ref());
         let input = value.as_source().and_then(|source| source.input.as_ref());
         let package_build_source = value
             .as_source()

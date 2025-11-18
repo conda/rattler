@@ -18,7 +18,7 @@ use crate::{
     parse::{models, models::v6, V5, V6},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
-    UrlOrPath, VariantValue,
+    UrlOrPath,
 };
 
 #[serde_as]
