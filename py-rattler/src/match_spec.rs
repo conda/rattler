@@ -40,7 +40,7 @@ impl Borrow<MatchSpec> for PyMatchSpec {
 #[pymethods]
 impl PyMatchSpec {
     #[new]
-    #[pyo3(signature = (spec, strict = true, exact_names_only = true, experimental_extras = false, experimental_conditionals = false))]
+    #[pyo3(signature = (spec, strict = false, exact_names_only = true, experimental_extras = false, experimental_conditionals = false))]
     pub fn __init__(
         spec: &str,
         strict: bool,

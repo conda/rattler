@@ -34,7 +34,7 @@ impl From<PyMatchSpec> for PyNamelessMatchSpec {
 #[pymethods]
 impl PyNamelessMatchSpec {
     #[new]
-    #[pyo3(signature = (spec, strict = true, experimental_extras = false, experimental_conditionals = false))]
+    #[pyo3(signature = (spec, strict = false, experimental_extras = false, experimental_conditionals = false))]
     pub fn __init__(
         spec: &str,
         strict: bool,
