@@ -8,6 +8,7 @@ use std::{
 
 use digest::generic_array::GenericArray;
 use fs4::fs_std::FileExt;
+use rattler_conda_types::package::{IndexJson, PathsJson};
 use rattler_digest::Sha256Hash;
 
 use crate::package_cache::PackageCacheLayerError;
@@ -19,15 +20,17 @@ use crate::package_cache::PackageCacheLayerError;
 ///
 /// Note: Concurrent access is coordinated via the global cache lock mechanism
 /// (see [`CacheGlobalLock`]). Individual cache entries do not hold locks.
-pub struct CacheLock {
+pub struct CacheMetadata {
     pub(super) revision: u64,
     pub(super) sha256: Option<Sha256Hash>,
     pub(super) path: PathBuf,
+    pub(super) index_json: Option<IndexJson>,
+    pub(super) paths_json: Option<PathsJson>,
 }
 
-impl Debug for CacheLock {
+impl Debug for CacheMetadata {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CacheLock")
+        f.debug_struct("CacheMetadata")
             .field("path", &self.path)
             .field("revision", &self.revision)
             .field("sha256", &self.sha256)
@@ -35,7 +38,7 @@ impl Debug for CacheLock {
     }
 }
 
-impl CacheLock {
+impl CacheMetadata {
     /// Returns the path to the cache entry on disk.
     pub fn path(&self) -> &Path {
         &self.path
@@ -45,6 +48,16 @@ impl CacheLock {
     /// number of times the cache entry has been updated.
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// Returns the cached `index.json` data if it was read during validation.
+    pub fn index_json(&self) -> Option<&IndexJson> {
+        self.index_json.as_ref()
+    }
+
+    /// Returns the cached `paths.json` data if it was read during validation.
+    pub fn paths_json(&self) -> Option<&PathsJson> {
+        self.paths_json.as_ref()
     }
 }
 

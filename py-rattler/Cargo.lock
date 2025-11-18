@@ -123,9 +123,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.99"
+version = "1.0.100"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0674a1ddeecb70197781e945de4b3b8ffb61fa939a5597bcf48503737663100"
+checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
 name = "arbitrary"
@@ -1702,7 +1702,7 @@ version = "0.2.6"
 dependencies = [
  "itertools 0.14.0",
  "percent-encoding",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "typed-path",
  "url",
 ]
@@ -1990,7 +1990,7 @@ dependencies = [
  "rustls-pemfile",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "time",
  "tokio",
 ]
@@ -2011,7 +2011,7 @@ dependencies = [
  "rand 0.9.2",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tokio",
 ]
 
@@ -2039,7 +2039,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "time",
  "url",
 ]
@@ -3074,9 +3074,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.73"
+version = "0.10.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8505734d46c8ab1e19a1dce3aef597ad87dcb4c37e7188231769bd6bd51cebf8"
+checksum = "08838db121398ad17ab8531ce9de97b244589089e290a384c900cb9ff7434328"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -3115,9 +3115,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.109"
+version = "0.9.111"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90096e2e47630d78b7d1c20952dc621f957103f8bc2c8359ec81290d75238571"
+checksum = "82cab2d520aa75e3c58898289429321eb788c3106963d0dc886ec7a5f4adc321"
 dependencies = [
  "cc",
  "libc",
@@ -3463,7 +3463,7 @@ dependencies = [
  "hex",
  "percent-encoding",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -3499,7 +3499,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tokio",
  "url",
 ]
@@ -3640,7 +3640,7 @@ dependencies = [
  "rustc-hash",
  "rustls",
  "socket2",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
  "web-time",
@@ -3661,7 +3661,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tinyvec",
  "tracing",
  "web-time",
@@ -3772,7 +3772,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.38.4"
+version = "0.39.0"
 dependencies = [
  "anyhow",
  "console",
@@ -3805,7 +3805,7 @@ dependencies = [
  "simple_spawn_blocking",
  "smallvec",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
  "url",
@@ -3814,7 +3814,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3837,7 +3837,7 @@ dependencies = [
  "serde_json",
  "simple_spawn_blocking",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
  "url",
@@ -3845,7 +3845,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.40.4"
+version = "0.41.0"
 dependencies = [
  "ahash",
  "chrono",
@@ -3876,7 +3876,7 @@ dependencies = [
  "smallvec",
  "strum",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tracing",
  "typed-path",
  "url",
@@ -3884,7 +3884,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "console",
  "fs-err",
@@ -3892,7 +3892,7 @@ dependencies = [
  "rattler_conda_types",
  "serde",
  "serde_json",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "toml",
  "tracing",
  "url",
@@ -3900,7 +3900,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.1.7"
+version = "1.2.0"
 dependencies = [
  "blake2",
  "digest",
@@ -3917,7 +3917,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.0"
+version = "0.27.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3953,7 +3953,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.26.1"
+version = "0.26.2"
 dependencies = [
  "ahash",
  "chrono",
@@ -3970,7 +3970,7 @@ dependencies = [
  "serde_repr",
  "serde_with",
  "serde_yaml",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "typed-path",
  "url",
 ]
@@ -3985,7 +3985,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.34"
+version = "0.2.35"
 dependencies = [
  "chrono",
  "configparser",
@@ -4003,7 +4003,7 @@ dependencies = [
  "sha2",
  "shlex",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tracing",
  "unicode-normalization",
  "which",
@@ -4013,7 +4013,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.21"
+version = "0.25.22"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4036,14 +4036,14 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tracing",
  "url",
 ]
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.13"
+version = "0.23.14"
 dependencies = [
  "bzip2",
  "chrono",
@@ -4060,7 +4060,7 @@ dependencies = [
  "simple_spawn_blocking",
  "tar",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-util",
  "tracing",
@@ -4090,7 +4090,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.24.14"
+version = "0.25.0"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4137,7 +4137,7 @@ dependencies = [
  "strum",
  "superslice",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-util",
  "tracing",
@@ -4149,7 +4149,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4158,14 +4158,14 @@ dependencies = [
  "clap",
  "rattler_networking",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tracing",
  "url",
 ]
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.7"
+version = "0.25.8"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4177,13 +4177,13 @@ dependencies = [
  "serde_json",
  "shlex",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tracing",
 ]
 
 [[package]]
 name = "rattler_solve"
-version = "3.0.9"
+version = "3.1.0"
 dependencies = [
  "chrono",
  "futures",
@@ -4193,13 +4193,13 @@ dependencies = [
  "resolvo",
  "serde",
  "tempfile",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tracing",
 ]
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.2.5"
+version = "2.2.6"
 dependencies = [
  "archspec",
  "libloading",
@@ -4209,7 +4209,7 @@ dependencies = [
  "rattler_conda_types",
  "regex",
  "serde",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
  "tracing",
  "winver",
 ]
@@ -4251,7 +4251,7 @@ checksum = "dd6f9d3d47bdd2ad6945c5015a226ec6155d0bcdfd8f7cd29f86b71f8de99d2b"
 dependencies = [
  "getrandom 0.2.16",
  "libredox",
- "thiserror 2.0.16",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -4835,15 +4835,16 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.143"
+version = "1.0.145"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d401abef1d108fbd9cbaebc3e46611f4b1021f714a0597a71f41ee463f5f4a5a"
+checksum = "402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"
 dependencies = [
  "indexmap 2.10.0",
  "itoa",
  "memchr",
  "ryu",
  "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -5237,11 +5238,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.16"
+version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3467d614147380f2e4e374161426ff399c91084acd2363eaf549172b3d5e60c0"
+checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
 dependencies = [
- "thiserror-impl 2.0.16",
+ "thiserror-impl 2.0.17",
 ]
 
 [[package]]
@@ -5257,9 +5258,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.16"
+version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c5e1be1c48b9172ee610da68fd9cd2770e7a4056cb3fc98710ee6906f0c7960"
+checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
 dependencies = [
  "proc-macro2",
  "quote",
