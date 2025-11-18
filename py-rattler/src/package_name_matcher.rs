@@ -54,6 +54,18 @@ impl PyPackageNameMatcher {
         Option::<PackageName>::from(self.inner.clone()).map(PyPackageName::from)
     }
 
+    /// Returns the normalized string representation of the matcher.
+    /// For exact matches, returns the normalized package name.
+    /// For glob and regex patterns, returns the pattern string.
+    #[getter]
+    pub fn normalized(&self) -> String {
+        match &self.inner {
+            PackageNameMatcher::Exact(name) => name.as_normalized().to_string(),
+            PackageNameMatcher::Glob(pattern) => pattern.as_str().to_string(),
+            PackageNameMatcher::Regex(regex) => regex.as_str().to_string(),
+        }
+    }
+
     /// Compute the hash of the name.
     fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
