@@ -18,7 +18,7 @@ use crate::{
     parse::{models, models::v6, V5, V6},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
-    UrlOrPath,
+    UrlOrPath, VariantValue,
 };
 
 #[serde_as]
@@ -119,6 +119,7 @@ enum DeserializablePackageSelector {
         version: Option<VersionWithSource>,
         build: Option<String>,
         subdir: Option<String>,
+        variants: Option<BTreeMap<String, VariantValue>>,
     },
     Pypi {
         pypi: UrlOrPath,
@@ -214,6 +215,7 @@ fn parse_from_lock<P>(
                                             version,
                                             build,
                                             subdir,
+                                            variants,
                                         } => {
                                             let all_packages = conda_url_lookup
                                                 .get(&conda)
@@ -296,6 +298,10 @@ fn parse_from_lock<P>(
                                                             build == &conda_package.record().build
                                                         }) && subdir.as_ref().is_none_or(|subdir| {
                                                             subdir == &conda_package.record().subdir
+                                                        }) && variants.as_ref().is_none_or(|v| {
+                                                            conda_package.as_source().is_some_and(|s| {
+                                                                s.variants.as_ref() == Some(v)
+                                                            })
                                                         })
                                                     })
                                                     .copied()
