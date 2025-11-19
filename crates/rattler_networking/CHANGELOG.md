@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.23](https://github.com/conda/rattler/compare/rattler_networking-v0.25.22...rattler_networking-v0.25.23) - 2025-11-19
+
+### Other
+
+- updated the following local packages: rattler_config
+
 ## [0.25.22](https://github.com/conda/rattler/compare/rattler_networking-v0.25.21...rattler_networking-v0.25.22) - 2025-11-13
 
 ### Added

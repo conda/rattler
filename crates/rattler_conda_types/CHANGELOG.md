@@ -39,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.41.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.41.0...rattler_conda_types-v0.41.1) - 2025-11-19
+
+### Added
+
+- add accessor methods to PackageNameMatcher ([#1857](https://github.com/conda/rattler/pull/1857))
+
 ## [0.41.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.4...rattler_conda_types-v0.41.0) - 2025-11-13
 
 ### Added
