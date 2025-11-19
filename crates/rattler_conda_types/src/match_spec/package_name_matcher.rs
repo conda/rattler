@@ -60,6 +60,30 @@ impl PackageNameMatcher {
             PackageNameMatcher::Regex(regex) => regex.is_match(other.as_normalized()),
         }
     }
+
+    /// Returns the inner [`PackageName`] if this is an exact match.
+    pub fn as_exact(&self) -> Option<&PackageName> {
+        match self {
+            PackageNameMatcher::Exact(name) => Some(name),
+            _ => None,
+        }
+    }
+
+    /// Returns the inner glob pattern if this is a glob match.
+    pub fn as_glob(&self) -> Option<&glob::Pattern> {
+        match self {
+            PackageNameMatcher::Glob(pattern) => Some(pattern),
+            _ => None,
+        }
+    }
+
+    /// Returns the inner regex if this is a regex match.
+    pub fn as_regex(&self) -> Option<&regex::Regex> {
+        match self {
+            PackageNameMatcher::Regex(regex) => Some(regex),
+            _ => None,
+        }
+    }
 }
 
 impl From<PackageNameMatcher> for Option<PackageName> {
