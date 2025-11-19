@@ -4429,54 +4429,54 @@ packages:
     - Cargo.toml
 - conda: crates/rattler_index
   name: rattler_index
-  version: 0.27.1
+  version: 0.27.2
   build: h1ec88cb_0
   subdir: osx-arm64
   constrains:
   - __osx >=11.0
   license: BSD-3-Clause
   input:
-    hash: bb8e71fef8081332ad1e349bde6aa8664c6fcd3952e395eddef23b54574dc7d7
+    hash: 0a738211b949f39d228ac494667e523dbaffbd49b2970cf3dd8ccfbd6046bec2
     globs:
     - ../../Cargo.toml
     - ../Cargo.toml
     - Cargo.toml
 - conda: crates/rattler_index
   name: rattler_index
-  version: 0.27.1
+  version: 0.27.2
   build: h6eef762_0
   subdir: win-64
   license: BSD-3-Clause
   input:
-    hash: bb8e71fef8081332ad1e349bde6aa8664c6fcd3952e395eddef23b54574dc7d7
+    hash: 0a738211b949f39d228ac494667e523dbaffbd49b2970cf3dd8ccfbd6046bec2
     globs:
     - ../../Cargo.toml
     - ../Cargo.toml
     - Cargo.toml
 - conda: crates/rattler_index
   name: rattler_index
-  version: 0.27.1
+  version: 0.27.2
   build: h983c4f9_0
   subdir: osx-64
   constrains:
   - __osx >=10.13
   license: BSD-3-Clause
   input:
-    hash: bb8e71fef8081332ad1e349bde6aa8664c6fcd3952e395eddef23b54574dc7d7
+    hash: 0a738211b949f39d228ac494667e523dbaffbd49b2970cf3dd8ccfbd6046bec2
     globs:
     - ../../Cargo.toml
     - ../Cargo.toml
     - Cargo.toml
 - conda: crates/rattler_index
   name: rattler_index
-  version: 0.27.1
+  version: 0.27.2
   build: hd342602_0
   subdir: linux-64
   constrains:
   - __glibc >=2.17
   license: BSD-3-Clause
   input:
-    hash: bb8e71fef8081332ad1e349bde6aa8664c6fcd3952e395eddef23b54574dc7d7
+    hash: 0a738211b949f39d228ac494667e523dbaffbd49b2970cf3dd8ccfbd6046bec2
     globs:
     - ../../Cargo.toml
     - ../Cargo.toml
