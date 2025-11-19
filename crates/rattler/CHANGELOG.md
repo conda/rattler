@@ -83,6 +83,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.1](https://github.com/conda/rattler/compare/rattler-v0.39.0...rattler-v0.39.1) - 2025-11-19
+
+### Added
+
+- cache and reuse `paths.json` and `index.json` from package validation ([#1837](https://github.com/conda/rattler/pull/1837))
+
 ## [0.39.0](https://github.com/conda/rattler/compare/rattler-v0.38.4...rattler-v0.39.0) - 2025-11-13
 
 ### Added
