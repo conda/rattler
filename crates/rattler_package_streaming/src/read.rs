@@ -105,17 +105,17 @@ fn extract_zipfile<R: std::io::Read>(
 }
 
 // Define a custom reader to track file size
-struct SizeCountingReader<R: Read> {
+pub(crate) struct SizeCountingReader<R> {
     inner: R,
     size: u64,
 }
 
-impl<R: Read> SizeCountingReader<R> {
-    fn new(inner: R) -> Self {
+impl<R> SizeCountingReader<R> {
+    pub(crate) fn new(inner: R) -> Self {
         Self { inner, size: 0 }
     }
 
-    fn finalize(self) -> (R, u64) {
+    pub(crate) fn finalize(self) -> (R, u64) {
         (self.inner, self.size)
     }
 }
@@ -125,6 +125,30 @@ impl<R: Read> Read for SizeCountingReader<R> {
         let bytes_read = self.inner.read(buf)?;
         self.size += bytes_read as u64;
         Ok(bytes_read)
+    }
+}
+
+// AsyncRead implementation for use with tokio
+impl<R: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for SizeCountingReader<R> {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        let previously_filled = buf.filled().len();
+
+        // Since R: Unpin, we can safely use get_mut
+        let this = self.as_mut().get_mut();
+        let reader = std::pin::Pin::new(&mut this.inner);
+
+        match reader.poll_read(cx, buf) {
+            std::task::Poll::Ready(Ok(())) => {
+                let bytes_read = buf.filled().len() - previously_filled;
+                this.size += bytes_read as u64;
+                std::task::Poll::Ready(Ok(()))
+            }
+            other => other,
+        }
     }
 }
 
