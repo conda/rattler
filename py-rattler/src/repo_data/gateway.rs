@@ -11,7 +11,7 @@ use pyo3::types::PyAnyMethods;
 use pyo3::{pyclass, pymethods, Bound, FromPyObject, PyAny, PyResult, Python};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
-use rattler_repodata_gateway::{ChannelConfig, Gateway, SourceConfig, SubdirSelection};
+use rattler_repodata_gateway::{CacheClearMode, ChannelConfig, Gateway, SourceConfig, SubdirSelection};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use url::Url;
@@ -99,8 +99,12 @@ impl PyGateway {
         })
     }
 
-    pub fn clear_repodata_cache(&self, channel: &PyChannel, subdirs: Wrap<SubdirSelection>) {
-        self.inner.clear_repodata_cache(&channel.inner, subdirs.0);
+    #[pyo3(signature = (channel, subdirs, mode=None))]
+    pub fn clear_repodata_cache(&self, channel: &PyChannel, subdirs: Wrap<SubdirSelection>, mode: Option<Wrap<CacheClearMode>>) -> PyResult<()> {
+        let mode = mode.map(|m| m.0).unwrap_or_default();
+        self.inner.clear_repodata_cache(&channel.inner, subdirs.0, mode)
+            .map_err(PyRattlerError::from)?;
+        Ok(())
     }
 
     pub fn query<'a>(
@@ -196,6 +200,32 @@ impl<'py> FromPyObject<'py> for Wrap<CacheAction> {
                 return Err(PyValueError::new_err(format!(
                     "cache action must be one of {{'cache-or-fetch', 'use-cache-only', 'force-cache-only', 'no-cache'}}, got {v}",
                 )))
+            }
+        };
+        Ok(Wrap(parsed))
+    }
+}
+
+impl<'py> FromPyObject<'py> for Wrap<CacheClearMode> {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        let as_py_str: PyBackedStr = ob.extract()?;
+        let parsed = match as_py_str.as_ref() {
+            "memory" => CacheClearMode::InMemory,
+            #[cfg(not(target_arch = "wasm32"))]
+            "memory-and-disk" => CacheClearMode::InMemoryAndDisk,
+            v => {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    return Err(PyValueError::new_err(format!(
+                        "cache clear mode must be one of {{'memory', 'memory-and-disk'}}, got {v}",
+                    )))
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    return Err(PyValueError::new_err(format!(
+                        "cache clear mode must be 'memory', got {v}",
+                    )))
+                }
             }
         };
         Ok(Wrap(parsed))

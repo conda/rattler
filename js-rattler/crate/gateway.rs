@@ -1,7 +1,7 @@
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
+use std::{collections::{HashMap, HashSet}, path::PathBuf, str::FromStr};
 
 use rattler_conda_types::{Channel, Platform};
-use rattler_repodata_gateway::{fetch::CacheAction, ChannelConfig, Gateway, SourceConfig};
+use rattler_repodata_gateway::{fetch::CacheAction, CacheClearMode, ChannelConfig, Gateway, SourceConfig, SubdirSelection};
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::Deserialize;
