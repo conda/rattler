@@ -1,5 +1,3 @@
-#![cfg(any(feature = "experimental_conditionals", feature = "experimental_extras"))]
-
 use std::collections::BTreeMap;
 use std::str::FromStr;
 

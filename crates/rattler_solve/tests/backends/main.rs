@@ -11,13 +11,8 @@ use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
 use url::Url;
 
-#[cfg(any(feature = "experimental_conditionals", feature = "experimental_extras"))]
 mod helpers;
-
-#[cfg(feature = "experimental_conditionals")]
 mod conditional_tests;
-
-#[cfg(feature = "experimental_extras")]
 mod extras_tests;
 
 fn channel_config() -> ChannelConfig {
@@ -676,37 +671,31 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        #[cfg(feature = "experimental_conditionals")]
         fn test_solve_conditional_dependencies() {
             crate::conditional_tests::solve_conditional_dependencies::<$T>();
         }
 
         #[test]
-        #[cfg(feature = "experimental_conditionals")]
         fn test_solve_complex_conditional_dependencies() {
             crate::conditional_tests::solve_complex_conditional_dependencies::<$T>();
         }
 
         #[test]
-        #[cfg(feature = "experimental_extras")]
         fn test_extras_basic() {
             crate::extras_tests::solve_extras_basic::<$T>();
         }
 
         #[test]
-        #[cfg(feature = "experimental_extras")]
         fn test_extras_version_restriction() {
             crate::extras_tests::solve_extras_version_restriction::<$T>();
         }
 
         #[test]
-        #[cfg(feature = "experimental_extras")]
         fn test_multiple_extras() {
             crate::extras_tests::solve_multiple_extras::<$T>();
         }
 
         #[test]
-        #[cfg(feature = "experimental_extras")]
         fn test_extras_complex_constraints() {
             crate::extras_tests::solve_extras_complex_constraints::<$T>();
         }

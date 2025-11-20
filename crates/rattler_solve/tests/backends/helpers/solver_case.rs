@@ -1,8 +1,6 @@
-#![cfg(any(feature = "experimental_conditionals", feature = "experimental_extras"))]
-
 use std::str::FromStr;
 
-use rattler_conda_types::{GenericVirtualPackage, MatchSpec, ParseStrictness, RepoDataRecord};
+use rattler_conda_types::{GenericVirtualPackage, MatchSpec, ParseMatchSpecOptions, RepoDataRecord};
 use rattler_solve::{SolverImpl, SolverTask};
 
 /// Shared building blocks that keep the integration tests concise and data driven.
@@ -49,7 +47,15 @@ impl<'a> SolverCase<'a> {
     pub fn specs(mut self, specs: impl IntoIterator<Item = &'a str>) -> Self {
         self.specs = specs
             .into_iter()
-            .map(|spec| MatchSpec::from_str(spec, ParseStrictness::Lenient).unwrap())
+            .map(|spec| {
+                MatchSpec::from_str(
+                    spec,
+                    ParseMatchSpecOptions::lenient()
+                        .with_experimental_extras(true)
+                        .with_experimental_conditionals(true),
+                )
+                .unwrap()
+            })
             .collect();
         self
     }
