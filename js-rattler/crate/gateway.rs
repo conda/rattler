@@ -152,4 +152,94 @@ impl JsGateway {
             .map(|name| name.as_source().to_string())
             .collect())
     }
+
+    /// Clears the cache for the given channel.
+    ///
+    /// Any subsequent query will re-fetch any required data from the source.
+    ///
+    /// # Arguments
+    ///
+    /// * `channel` - The channel URL or name to clear the cache for
+    /// * `subdirs` - Optional array of platform subdirectories to clear (e.g., ["linux-64", "noarch"]).
+    ///              If not provided, all subdirectories for the channel are cleared.
+    /// * `mode` - Optional cache clear mode: "memory" (default) or "memory-and-disk".
+    ///           Note: "memory-and-disk" is only available in Node.js, not in browsers.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Clear only in-memory cache for all subdirectories
+    /// await gateway.clearRepoDataCache("conda-forge");
+    ///
+    /// // Clear specific subdirectories
+    /// await gateway.clearRepoDataCache("conda-forge", ["linux-64", "noarch"]);
+    ///
+    /// // Clear both in-memory and on-disk cache (Node.js only)
+    /// await gateway.clearRepoDataCache("conda-forge", ["linux-64"], "memory-and-disk");
+    /// ```
+    #[wasm_bindgen(js_name = clearRepoDataCache)]
+    pub fn clear_repodata_cache(
+        &self,
+        channel: String,
+        subdirs: Option<Vec<String>>,
+        mode: Option<String>,
+    ) -> JsResult<()> {
+        // TODO: Dont hardcode
+        let channel_config =
+            rattler_conda_types::ChannelConfig::default_with_root_dir(PathBuf::from(""));
+
+        // Parse the channel
+        let channel = Channel::from_str(&channel, &channel_config)
+            .map_err(|e| JsError::new(&format!("Invalid channel: {}", e)))?;
+
+        // Parse subdirs selection
+        let subdir_selection = if let Some(subdirs) = subdirs {
+            if subdirs.is_empty() {
+                SubdirSelection::All
+            } else {
+                // Validate that the platform strings are valid
+                for subdir in &subdirs {
+                    Platform::from_str(subdir)
+                        .map_err(|e| JsError::new(&format!("Invalid platform '{}': {}", subdir, e)))?;
+                }
+                SubdirSelection::Some(subdirs.into_iter().collect::<HashSet<_>>())
+            }
+        } else {
+            SubdirSelection::All
+        };
+
+        // Parse cache clear mode
+        let cache_mode = if let Some(mode_str) = mode {
+            match mode_str.as_str() {
+                "memory" => CacheClearMode::InMemory,
+                #[cfg(not(target_arch = "wasm32"))]
+                "memory-and-disk" => CacheClearMode::InMemoryAndDisk,
+                #[cfg(target_arch = "wasm32")]
+                "memory-and-disk" => {
+                    return Err(JsError::new(
+                        "Cache mode 'memory-and-disk' is not supported in browsers (WASM). Only 'memory' is available."
+                    ));
+                }
+                _ => {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    return Err(JsError::new(
+                        "Invalid cache mode. Expected 'memory' or 'memory-and-disk'"
+                    ));
+                    #[cfg(target_arch = "wasm32")]
+                    return Err(JsError::new(
+                        "Invalid cache mode. Expected 'memory'"
+                    ));
+                }
+            }
+        } else {
+            CacheClearMode::InMemory
+        };
+
+        // Clear the cache
+        self.inner
+            .clear_repodata_cache(&channel, subdir_selection, cache_mode)
+            .map_err(|e| JsError::new(&format!("Failed to clear cache: {}", e)))?;
+
+        Ok(())
+    }
 }

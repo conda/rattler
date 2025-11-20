@@ -11,7 +11,9 @@ use pyo3::types::PyAnyMethods;
 use pyo3::{pyclass, pymethods, Bound, FromPyObject, PyAny, PyResult, Python};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
-use rattler_repodata_gateway::{CacheClearMode, ChannelConfig, Gateway, SourceConfig, SubdirSelection};
+use rattler_repodata_gateway::{
+    CacheClearMode, ChannelConfig, Gateway, SourceConfig, SubdirSelection,
+};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use url::Url;
@@ -100,9 +102,15 @@ impl PyGateway {
     }
 
     #[pyo3(signature = (channel, subdirs, mode=None))]
-    pub fn clear_repodata_cache(&self, channel: &PyChannel, subdirs: Wrap<SubdirSelection>, mode: Option<Wrap<CacheClearMode>>) -> PyResult<()> {
+    pub fn clear_repodata_cache(
+        &self,
+        channel: &PyChannel,
+        subdirs: Wrap<SubdirSelection>,
+        mode: Option<Wrap<CacheClearMode>>,
+    ) -> PyResult<()> {
         let mode = mode.map(|m| m.0).unwrap_or_default();
-        self.inner.clear_repodata_cache(&channel.inner, subdirs.0, mode)
+        self.inner
+            .clear_repodata_cache(&channel.inner, subdirs.0, mode)
             .map_err(PyRattlerError::from)?;
         Ok(())
     }
@@ -218,13 +226,13 @@ impl<'py> FromPyObject<'py> for Wrap<CacheClearMode> {
                 {
                     return Err(PyValueError::new_err(format!(
                         "cache clear mode must be one of {{'memory', 'memory-and-disk'}}, got {v}",
-                    )))
+                    )));
                 }
                 #[cfg(target_arch = "wasm32")]
                 {
                     return Err(PyValueError::new_err(format!(
                         "cache clear mode must be 'memory', got {v}",
-                    )))
+                    )));
                 }
             }
         };

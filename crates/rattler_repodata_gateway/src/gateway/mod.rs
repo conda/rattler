@@ -205,21 +205,20 @@ impl Gateway {
     ///
     /// # Examples
     ///
-    /// ```no_run
-    /// # use rattler_repodata_gateway::{Gateway, SubdirSelection, CacheClearMode};
-    /// # use rattler_conda_types::Channel;
-    /// # use url::Url;
-    /// # tokio_test::block_on(async {
+    /// ```rust,no_run
+    /// use rattler_repodata_gateway::{Gateway, SubdirSelection, CacheClearMode};
+    /// use rattler_conda_types::Channel;
+    /// use url::Url;
+    ///
     /// let gateway = Gateway::new();
     /// let channel = Channel::from_url(Url::parse("https://conda.anaconda.org/conda-forge").unwrap());
     ///
     /// // Clear only in-memory cache
     /// gateway.clear_repodata_cache(&channel, SubdirSelection::All, CacheClearMode::InMemory);
     ///
-    /// # #[cfg(not(target_arch = "wasm32"))]
     /// // Clear both in-memory and on-disk cache
     /// gateway.clear_repodata_cache(&channel, SubdirSelection::All, CacheClearMode::InMemoryAndDisk).unwrap();
-    /// # });
+    /// });
     /// ```
     ///
     /// # Errors
@@ -324,19 +323,8 @@ impl Gateway {
                     // Drop the lock explicitly before deleting the lock file itself
                     drop(_lock);
 
-                    // Now delete the lock file
-                    if lock_file_path.exists() {
-                        if let Err(e) = fs_err::remove_file(&lock_file_path) {
-                            tracing::warn!(
-                                "Failed to delete lock file {:?}: {}",
-                                lock_file_path,
-                                e
-                            );
-                            errors.push(e);
-                        } else {
-                            tracing::debug!("Deleted lock file: {:?}", lock_file_path);
-                        }
-                    }
+                    // Note: we do not delete the lock file to prevent a ABA "locking" problem where
+                    // another process might acquire the lock between us dropping it and deleting the file.
                 }
             }
 
