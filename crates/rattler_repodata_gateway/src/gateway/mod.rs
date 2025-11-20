@@ -15,7 +15,7 @@ mod sharded_subdir;
 mod subdir;
 mod subdir_builder;
 
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, str::FromStr, sync::Arc};
 
 use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 pub use barrier_cell::BarrierCell;
@@ -79,6 +79,18 @@ impl SubdirSelection {
             SubdirSelection::Some(subdirs) => subdirs.contains(&subdir.to_string()),
         }
     }
+}
+
+/// Specifies which cache layers to clear.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CacheClearMode {
+    /// Clear only the in-memory cache
+    #[default]
+    InMemory,
+
+    /// Clear both in-memory and on-disk cache
+    #[cfg(not(target_arch = "wasm32"))]
+    InMemoryAndDisk,
 }
 
 impl Gateway {
@@ -181,15 +193,160 @@ impl Gateway {
         Ok(())
     }
 
-    /// Clears any in-memory cache for the given channel.
+    /// Clears cache for the given channel.
     ///
     /// Any subsequent query will re-fetch any required data from the source.
     ///
-    /// This method does not clear any on-disk cache.
-    pub fn clear_repodata_cache(&self, channel: &Channel, subdirs: SubdirSelection) {
+    /// # Arguments
+    ///
+    /// * `channel` - The channel to clear the cache for
+    /// * `subdirs` - Which subdirectories to clear (all or specific platforms)
+    /// * `mode` - Whether to clear only in-memory cache or both in-memory and on-disk cache
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use rattler_repodata_gateway::{Gateway, SubdirSelection, CacheClearMode};
+    /// # use rattler_conda_types::Channel;
+    /// # use url::Url;
+    /// # tokio_test::block_on(async {
+    /// let gateway = Gateway::new();
+    /// let channel = Channel::from_url(Url::parse("https://conda.anaconda.org/conda-forge").unwrap());
+    ///
+    /// // Clear only in-memory cache
+    /// gateway.clear_repodata_cache(&channel, SubdirSelection::All, CacheClearMode::InMemory);
+    ///
+    /// # #[cfg(not(target_arch = "wasm32"))]
+    /// // Clear both in-memory and on-disk cache
+    /// gateway.clear_repodata_cache(&channel, SubdirSelection::All, CacheClearMode::InMemoryAndDisk).unwrap();
+    /// # });
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `mode` is [`CacheClearMode::InMemoryAndDisk`] and any file deletion fails.
+    /// Continues attempting to delete remaining files even if some deletions fail.
+    #[allow(unused_variables)]
+    pub fn clear_repodata_cache(
+        &self,
+        channel: &Channel,
+        subdirs: SubdirSelection,
+        mode: CacheClearMode,
+    ) -> Result<(), std::io::Error> {
+        // Clear in-memory cache
         self.inner.subdirs.retain(|key, _| {
             key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str())
         });
+
+        // Clear on-disk cache if requested
+        #[cfg(not(target_arch = "wasm32"))]
+        if mode == CacheClearMode::InMemoryAndDisk {
+            use crate::utils::LockedFile;
+
+            let cache_dir = &self.inner.cache;
+
+            // For each platform that matches the selection, compute the cache keys and delete the files
+            let platforms_to_clear: Vec<Platform> = match &subdirs {
+                SubdirSelection::All => {
+                    // Get all known platforms
+                    Platform::all().collect()
+                }
+                SubdirSelection::Some(subdirs) => {
+                    // Parse the platform names from the subdir strings
+                    subdirs
+                        .iter()
+                        .filter_map(|s| Platform::from_str(s).ok())
+                        .collect()
+                }
+            };
+
+            let mut errors = Vec::new();
+
+            for platform in platforms_to_clear {
+                // Construct the subdir URL for this channel and platform
+                let subdir_url = channel.platform_url(platform);
+
+                // Compute cache keys for both regular and current repodata variants
+                for variant in [
+                    crate::fetch::Variant::AfterPatches,
+                    crate::fetch::Variant::Current,
+                ] {
+                    let repodata_url = match subdir_url.join(variant.file_name()) {
+                        Ok(url) => url,
+                        Err(e) => {
+                            tracing::warn!("Failed to join URL: {}", e);
+                            continue;
+                        }
+                    };
+
+                    let cache_key = crate::utils::url_to_cache_filename(&repodata_url);
+
+                    // Acquire the lock file to ensure exclusive access before deleting.
+                    // LockedFile::open_rw will block and wait until the lock is available,
+                    // ensuring we don't delete files that are currently being used by another process.
+                    let lock_file_path = cache_dir.join(format!("{}.lock", &cache_key));
+                    let _lock = match LockedFile::open_rw(&lock_file_path, "repodata cache cleanup")
+                    {
+                        Ok(lock) => {
+                            tracing::debug!("Acquired lock for {:?}", lock_file_path);
+                            lock
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to acquire lock for {:?}: {}. Skipping deletion.",
+                                lock_file_path,
+                                e
+                            );
+                            errors.push(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!("Failed to acquire lock: {}", e),
+                            ));
+                            continue;
+                        }
+                    };
+
+                    // Delete the cache files (json and info.json) while holding the lock
+                    for extension in ["json", "info.json"] {
+                        let file_path = cache_dir.join(format!("{}.{}", cache_key, extension));
+                        if file_path.exists() {
+                            if let Err(e) = fs_err::remove_file(&file_path) {
+                                tracing::warn!(
+                                    "Failed to delete cache file {:?}: {}",
+                                    file_path,
+                                    e
+                                );
+                                errors.push(e);
+                            } else {
+                                tracing::debug!("Deleted cache file: {:?}", file_path);
+                            }
+                        }
+                    }
+
+                    // Drop the lock explicitly before deleting the lock file itself
+                    drop(_lock);
+
+                    // Now delete the lock file
+                    if lock_file_path.exists() {
+                        if let Err(e) = fs_err::remove_file(&lock_file_path) {
+                            tracing::warn!(
+                                "Failed to delete lock file {:?}: {}",
+                                lock_file_path,
+                                e
+                            );
+                            errors.push(e);
+                        } else {
+                            tracing::debug!("Deleted lock file: {:?}", lock_file_path);
+                        }
+                    }
+                }
+            }
+
+            if let Some(first_error) = errors.into_iter().next() {
+                return Err(first_error);
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -701,11 +858,85 @@ mod test {
         );
 
         // Now clear the cache and run the query again.
-        gateway.clear_repodata_cache(&local_channel.channel(), SubdirSelection::default());
+        gateway
+            .clear_repodata_cache(
+                &local_channel.channel(),
+                SubdirSelection::default(),
+                super::CacheClearMode::InMemory,
+            )
+            .unwrap();
         query.clone().execute().await.unwrap();
         assert!(
             !downloads.urls.is_empty(),
             "after clearing the cache there should be new urls fetched"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clear_cache_from_disk() {
+        use std::path::PathBuf;
+        use tempfile::TempDir;
+
+        let local_channel = remote_conda_forge().await;
+
+        // Create a gateway with a temporary cache directory
+        let cache_dir = TempDir::new().unwrap();
+        let gateway = Gateway::builder()
+            .with_cache_dir(cache_dir.path().to_path_buf())
+            .finish();
+
+        // Run a query to populate the cache
+        let _records = gateway
+            .query(
+                vec![local_channel.channel()],
+                vec![Platform::Linux64, Platform::NoArch],
+                vec![PackageName::from_str("python").unwrap()].into_iter(),
+            )
+            .execute()
+            .await
+            .unwrap();
+
+        // Verify that cache files were created
+        let cache_files: Vec<PathBuf> = std::fs::read_dir(cache_dir.path())
+            .unwrap()
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
+            .filter(|path| {
+                path.extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| ext == "json" || ext == "lock")
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        assert!(
+            !cache_files.is_empty(),
+            "there should be cache files on disk"
+        );
+
+        // Clear the cache from disk
+        gateway
+            .clear_repodata_cache(
+                &local_channel.channel(),
+                SubdirSelection::default(),
+                super::CacheClearMode::InMemoryAndDisk,
+            )
+            .unwrap();
+
+        // Verify that cache files were deleted
+        let remaining_cache_files: Vec<PathBuf> = std::fs::read_dir(cache_dir.path())
+            .unwrap()
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
+            .filter(|path| {
+                path.extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| ext == "json" || ext == "lock")
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        assert!(
+            remaining_cache_files.is_empty(),
+            "all cache files should be deleted"
         );
     }
 
