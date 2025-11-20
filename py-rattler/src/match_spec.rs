@@ -2,10 +2,7 @@ use std::sync::Arc;
 use std::{borrow::Borrow, str::FromStr};
 
 use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
-use rattler_conda_types::{
-    Channel, MatchSpec, Matches, PackageNameMatcher, ParseStrictness,
-    ParseStrictnessWithNameMatcher,
-};
+use rattler_conda_types::{Channel, MatchSpec, Matches, PackageNameMatcher, ParseMatchSpecOptions};
 
 use crate::{
     channel::PyChannel, error::PyRattlerError, nameless_match_spec::PyNamelessMatchSpec,
@@ -40,16 +37,24 @@ impl Borrow<MatchSpec> for PyMatchSpec {
 #[pymethods]
 impl PyMatchSpec {
     #[new]
-    pub fn __init__(spec: &str, strict: bool, exact_names_only: bool) -> PyResult<Self> {
-        let strictness = ParseStrictnessWithNameMatcher {
-            parse_strictness: if strict {
-                ParseStrictness::Strict
-            } else {
-                ParseStrictness::Lenient
-            },
-            exact_names_only,
-        };
-        Ok(MatchSpec::from_str(spec, strictness)
+    #[pyo3(signature = (spec, strict = false, exact_names_only = true, experimental_extras = false, experimental_conditionals = false))]
+    pub fn __init__(
+        spec: &str,
+        strict: bool,
+        exact_names_only: bool,
+        experimental_extras: bool,
+        experimental_conditionals: bool,
+    ) -> PyResult<Self> {
+        let options = if strict {
+            ParseMatchSpecOptions::strict()
+        } else {
+            ParseMatchSpecOptions::lenient()
+        }
+        .with_exact_names_only(exact_names_only)
+        .with_experimental_extras(experimental_extras)
+        .with_experimental_conditionals(experimental_conditionals);
+
+        Ok(MatchSpec::from_str(spec, options)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
     }
@@ -109,6 +114,21 @@ impl PyMatchSpec {
     #[getter]
     pub fn namespace(&self) -> Option<String> {
         self.inner.namespace.clone()
+    }
+
+    /// The extras (optional dependencies) of the package
+    #[getter]
+    pub fn extras(&self) -> Option<Vec<String>> {
+        self.inner.extras.clone()
+    }
+
+    /// The condition under which this match spec applies
+    #[getter]
+    pub fn condition(&self) -> Option<String> {
+        self.inner
+            .condition
+            .as_ref()
+            .map(std::string::ToString::to_string)
     }
 
     /// The md5 hash of the package
