@@ -15,7 +15,7 @@ mod sharded_subdir;
 mod subdir;
 mod subdir_builder;
 
-use std::{collections::HashSet, str::FromStr, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
 
 use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 pub use barrier_cell::BarrierCell;
@@ -241,6 +241,7 @@ impl Gateway {
         #[cfg(not(target_arch = "wasm32"))]
         if mode == CacheClearMode::InMemoryAndDisk {
             use crate::utils::LockedFile;
+            use std::str::FromStr;
 
             let cache_dir = &self.inner.cache;
 
