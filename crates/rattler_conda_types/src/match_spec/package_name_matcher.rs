@@ -62,6 +62,24 @@ impl PackageNameMatcher {
     }
 }
 
+impl From<PackageName> for PackageNameMatcher {
+    fn from(value: PackageName) -> Self {
+        PackageNameMatcher::Exact(value)
+    }
+}
+
+impl From<glob::Pattern> for PackageNameMatcher {
+    fn from(value: glob::Pattern) -> Self {
+        PackageNameMatcher::Glob(value)
+    }
+}
+
+impl From<regex::Regex> for PackageNameMatcher {
+    fn from(value: regex::Regex) -> Self {
+        PackageNameMatcher::Regex(value)
+    }
+}
+
 impl From<PackageNameMatcher> for Option<PackageName> {
     fn from(value: PackageNameMatcher) -> Self {
         match value {
