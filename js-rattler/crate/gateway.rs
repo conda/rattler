@@ -1,7 +1,13 @@
-use std::{collections::{HashMap, HashSet}, path::PathBuf, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    str::FromStr,
+};
 
 use rattler_conda_types::{Channel, Platform};
-use rattler_repodata_gateway::{fetch::CacheAction, CacheClearMode, ChannelConfig, Gateway, SourceConfig, SubdirSelection};
+use rattler_repodata_gateway::{
+    fetch::CacheAction, CacheClearMode, ChannelConfig, Gateway, SourceConfig, SubdirSelection,
+};
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::Deserialize;
@@ -199,8 +205,9 @@ impl JsGateway {
             } else {
                 // Validate that the platform strings are valid
                 for subdir in &subdirs {
-                    Platform::from_str(subdir)
-                        .map_err(|e| JsError::new(&format!("Invalid platform '{}': {}", subdir, e)))?;
+                    Platform::from_str(subdir).map_err(|e| {
+                        JsError::new(&format!("Invalid platform '{}': {}", subdir, e))
+                    })?;
                 }
                 SubdirSelection::Some(subdirs.into_iter().collect::<HashSet<_>>())
             }
@@ -223,12 +230,10 @@ impl JsGateway {
                 _ => {
                     #[cfg(not(target_arch = "wasm32"))]
                     return Err(JsError::new(
-                        "Invalid cache mode. Expected 'memory' or 'memory-and-disk'"
+                        "Invalid cache mode. Expected 'memory' or 'memory-and-disk'",
                     ));
                     #[cfg(target_arch = "wasm32")]
-                    return Err(JsError::new(
-                        "Invalid cache mode. Expected 'memory'"
-                    ));
+                    return Err(JsError::new("Invalid cache mode. Expected 'memory'"));
                 }
             }
         } else {
