@@ -203,6 +203,14 @@ impl Gateway {
     /// * `subdirs` - Which subdirectories to clear (all or specific platforms)
     /// * `mode` - Whether to clear only in-memory cache or both in-memory and on-disk cache
     ///
+    /// # Behavior
+    ///
+    /// When using [`CacheClearMode::InMemoryAndDisk`], this function will:
+    /// - Acquire file locks for each cache entry before deletion
+    /// - Block and wait if locks are held by other processes
+    /// - Delete cache files (`.json`, `.info.json`) while holding the lock
+    /// - Leave lock files in place to prevent ABA locking problems
+    ///
     /// # Examples
     ///
     /// ```rust,no_run
@@ -211,14 +219,27 @@ impl Gateway {
     /// use url::Url;
     ///
     /// let gateway = Gateway::new();
-    /// let channel = Channel::from_url(Url::parse("https://conda.anaconda.org/conda-forge").unwrap());
+    /// let channel = Channel::from_url(
+    ///     Url::parse("https://conda.anaconda.org/conda-forge").unwrap()
+    /// );
     ///
-    /// // Clear only in-memory cache
-    /// gateway.clear_repodata_cache(&channel, SubdirSelection::All, CacheClearMode::InMemory);
+    /// // Clear only in-memory cache (fast, always available)
+    /// gateway.clear_repodata_cache(
+    ///     &channel,
+    ///     SubdirSelection::All,
+    ///     CacheClearMode::InMemory
+    /// )?;
     ///
-    /// // Clear both in-memory and on-disk cache
-    /// gateway.clear_repodata_cache(&channel, SubdirSelection::All, CacheClearMode::InMemoryAndDisk).unwrap();
-    /// });
+    /// # #[cfg(not(target_arch = "wasm32"))]
+    /// # {
+    /// // Clear both in-memory and on-disk cache (may block on locks)
+    /// gateway.clear_repodata_cache(
+    ///     &channel,
+    ///     SubdirSelection::All,
+    ///     CacheClearMode::InMemoryAndDisk
+    /// )?;
+    /// # }
+    /// # Ok::<(), std::io::Error>(())
     /// ```
     ///
     /// # Errors
