@@ -297,17 +297,16 @@ impl Gateway {
                                 lock_file_path,
                                 e
                             );
-                            errors.push(std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!("Failed to acquire lock: {}", e),
-                            ));
+                            errors.push(std::io::Error::other(format!(
+                                "Failed to acquire lock: {e}"
+                            )));
                             continue;
                         }
                     };
 
                     // Delete the cache files (json and info.json) while holding the lock
                     for extension in ["json", "info.json"] {
-                        let file_path = cache_dir.join(format!("{}.{}", cache_key, extension));
+                        let file_path = cache_dir.join(format!("{cache_key}.{extension}"));
                         if file_path.exists() {
                             if let Err(e) = fs_err::remove_file(&file_path) {
                                 tracing::warn!(
@@ -903,8 +902,7 @@ mod test {
             .filter(|path| {
                 path.extension()
                     .and_then(|ext| ext.to_str())
-                    .map(|ext| ext == "json" || ext == "lock")
-                    .unwrap_or(false)
+                    .is_some_and(|ext| ext == "json" || ext == "lock")
             })
             .collect();
 
@@ -929,8 +927,7 @@ mod test {
             .filter(|path| {
                 path.extension()
                     .and_then(|ext| ext.to_str())
-                    .map(|ext| ext == "json" || ext == "lock")
-                    .unwrap_or(false)
+                    .is_some_and(|ext| ext == "json" || ext == "lock")
             })
             .collect();
 
