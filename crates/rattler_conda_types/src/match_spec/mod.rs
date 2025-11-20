@@ -127,7 +127,7 @@ use matcher::StringMatcher;
 /// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Debug, Default, Clone, Serialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Eq, PartialEq, Hash)]
 pub struct MatchSpec {
     /// The name of the package
     pub name: Option<PackageName>,
