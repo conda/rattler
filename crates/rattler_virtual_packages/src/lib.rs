@@ -162,6 +162,9 @@ pub enum VirtualPackage {
     /// Available `Cuda` version
     Cuda(Cuda),
 
+    /// Available CUDA compute capability
+    CudaArch(CudaArch),
+
     /// The CPU architecture
     Archspec(Archspec),
 }
@@ -187,6 +190,9 @@ pub struct VirtualPackages {
     /// Available `Cuda` version
     pub cuda: Option<Cuda>,
 
+    /// Available CUDA compute capability
+    pub cuda_arch: Option<CudaArch>,
+
     /// The CPU architecture
     pub archspec: Option<Archspec>,
 }
@@ -201,6 +207,7 @@ impl VirtualPackages {
             osx,
             libc,
             cuda,
+            cuda_arch,
             archspec,
         } = self;
 
@@ -211,6 +218,7 @@ impl VirtualPackages {
             osx.map(VirtualPackage::Osx),
             libc.map(VirtualPackage::LibC),
             cuda.map(VirtualPackage::Cuda),
+            cuda_arch.map(VirtualPackage::CudaArch),
             archspec.map(VirtualPackage::Archspec),
         ]
         .into_iter()
@@ -232,6 +240,7 @@ impl VirtualPackages {
             osx: Osx::detect(overrides.osx.as_ref())?,
             libc: LibC::detect(overrides.libc.as_ref())?,
             cuda: Cuda::detect(overrides.cuda.as_ref())?,
+            cuda_arch: CudaArch::detect(overrides.cuda_arch.as_ref())?,
             archspec: Archspec::detect(overrides.archspec.as_ref())?,
         })
     }
@@ -322,6 +331,7 @@ impl VirtualPackages {
                 osx,
                 libc,
                 cuda: virtual_packages.cuda,
+                cuda_arch: virtual_packages.cuda_arch,
                 archspec,
             })
         }
@@ -341,6 +351,7 @@ impl From<VirtualPackage> for GenericVirtualPackage {
             VirtualPackage::Osx(osx) => osx.into(),
             VirtualPackage::LibC(libc) => libc.into(),
             VirtualPackage::Cuda(cuda) => cuda.into(),
+            VirtualPackage::CudaArch(cuda_arch) => cuda_arch.into(),
             VirtualPackage::Archspec(spec) => spec.into(),
         }
     }
@@ -406,6 +417,8 @@ pub struct VirtualPackageOverrides {
     pub libc: Option<Override>,
     /// The override for the cuda virtual package
     pub cuda: Option<Override>,
+    /// The override for the `cuda_arch` virtual package
+    pub cuda_arch: Option<Override>,
     /// The override for the archspec virtual package
     pub archspec: Option<Override>,
 }
@@ -420,6 +433,7 @@ impl VirtualPackageOverrides {
             linux: Some(ov.clone()),
             libc: Some(ov.clone()),
             cuda: Some(ov.clone()),
+            cuda_arch: Some(ov.clone()),
             archspec: Some(ov),
         }
     }
@@ -589,6 +603,139 @@ impl From<Cuda> for GenericVirtualPackage {
 impl From<Cuda> for VirtualPackage {
     fn from(cuda: Cuda) -> Self {
         VirtualPackage::Cuda(cuda)
+    }
+}
+
+/// CUDA compute capability virtual package description.
+///
+/// This virtual package represents the minimum CUDA compute capability (SM version)
+/// across all detected CUDA devices on the system. The compute capability determines
+/// which instruction sets and features are available on a GPU.
+///
+/// ## Rationale
+///
+/// CUDA compute capability is critical for package compatibility because:
+///
+/// * Different GPU models support different compute capabilities (e.g., 5.0, 7.0, 8.0, 9.0)
+/// * Packages compiled for a specific compute capability only run on GPUs with that
+///   capability or higher
+/// * The minimum capability ensures packages work on all GPUs in a multi-GPU system
+///
+/// ## Use Cases
+///
+/// The `__cuda_arch` virtual package enables:
+///
+/// * **Hardware-specific constraints**: Packages can specify minimum compute capability requirements
+/// * **Multi-variant builds**: Build different optimized variants for different architectures
+/// * **Forward compatibility**: Properly configured packages can run on newer GPUs
+///
+/// ## Build String
+///
+/// The build string contains the device name (e.g., "NVIDIA `GeForce` RTX 3090") to help
+/// users identify which GPU determined the minimum compute capability.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
+pub struct CudaArch {
+    /// The compute capability version (e.g., 8.6 for RTX 3090).
+    ///
+    /// This is formatted as `{major}.{minor}` and represents the minimum
+    /// compute capability across all detected CUDA devices.
+    pub version: Version,
+
+    /// The name of the device that has the minimum compute capability.
+    ///
+    /// This is used as the build string to help identify which GPU
+    /// determined the virtual package version.
+    pub device_name: String,
+}
+
+impl CudaArch {
+    /// Returns the minimum CUDA compute capability available on the current platform.
+    ///
+    /// Returns `None` if:
+    /// * No CUDA drivers are installed
+    /// * No CUDA devices are detected
+    /// * Device enumeration fails
+    /// * The system is using musl libc (dynamic library loading not supported)
+    pub fn current() -> Option<Self> {
+        cuda::cuda_arch().map(|arch_info| Self {
+            version: Version::from_str(&format!("{}.{}", arch_info.major, arch_info.minor))
+                .unwrap_or_else(|_| Version::major(u64::from(arch_info.major))),
+            device_name: arch_info.device_name,
+        })
+    }
+}
+
+impl EnvOverride for CudaArch {
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
+        // Parse format: "version" or "version=build"
+        // e.g., "8.6" or "8.6=NVIDIA GeForce RTX 3090"
+        let (version_str, device_name_input) = env_var_value
+            .split_once('=')
+            .map_or((env_var_value, None), |(v, b)| (v, Some(b)));
+
+        // Validate version format: must be "major.minor" where both are digits
+        if !cuda::is_valid_cuda_version_format(version_str) {
+            tracing::warn!(
+                "Invalid CUDA compute capability format '{}'. Expected format: 'major.minor' (e.g., '8.6'). \
+                 The default capability of '0.0=None' will be used instead.",
+                version_str
+            );
+            return Ok(Self {
+                version: Version::from_str("0.0")?,
+                device_name: "None".to_string(),
+            });
+        }
+
+        let version = Version::from_str(version_str)?;
+
+        // Validate and sanitize device name if provided
+        let device_name = if let Some(name) = device_name_input {
+            let sanitized = cuda::sanitize_device_name(name);
+            if sanitized.is_empty() || sanitized != name {
+                tracing::warn!(
+                    "Invalid device name '{}' contains characters not allowed in build strings. \
+                     Sanitized to '{}'.",
+                    name,
+                    sanitized
+                );
+            }
+            if sanitized.is_empty() {
+                "override".to_string()
+            } else {
+                sanitized
+            }
+        } else {
+            "override".to_string()
+        };
+
+        Ok(Self {
+            version,
+            device_name,
+        })
+    }
+
+    fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current())
+    }
+
+    const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_CUDA_ARCH";
+}
+
+impl From<CudaArch> for GenericVirtualPackage {
+    fn from(cuda_arch: CudaArch) -> Self {
+        GenericVirtualPackage {
+            name: PackageName::new_unchecked("__cuda_arch"),
+            version: cuda_arch.version,
+            // Use the device name as the build string to help identify which GPU
+            // determined the minimum compute capability
+            build_string: cuda_arch.device_name,
+        }
+    }
+}
+
+impl From<CudaArch> for VirtualPackage {
+    fn from(cuda_arch: CudaArch) -> Self {
+        VirtualPackage::CudaArch(cuda_arch)
     }
 }
 
@@ -985,5 +1132,78 @@ mod test {
         assert!(win_names.contains(&"__win".to_string()));
         assert!(!win_names.contains(&"__unix".to_string()));
         assert!(win_names.contains(&"__archspec".to_string()));
+    }
+
+    #[test]
+    fn test_is_valid_cuda_version_format() {
+        // Valid formats
+        assert!(cuda::is_valid_cuda_version_format("8.6"));
+        assert!(cuda::is_valid_cuda_version_format("7.5"));
+        assert!(cuda::is_valid_cuda_version_format("10.2"));
+        assert!(cuda::is_valid_cuda_version_format("0.0"));
+        assert!(cuda::is_valid_cuda_version_format("12.0"));
+
+        // Invalid formats - not major.minor
+        assert!(!cuda::is_valid_cuda_version_format("8"));
+        assert!(!cuda::is_valid_cuda_version_format("8.6.1"));
+        assert!(!cuda::is_valid_cuda_version_format("8.6.1.0"));
+        assert!(!cuda::is_valid_cuda_version_format(""));
+        assert!(!cuda::is_valid_cuda_version_format(".6"));
+        assert!(!cuda::is_valid_cuda_version_format("8."));
+        assert!(!cuda::is_valid_cuda_version_format("."));
+
+        // Invalid formats - non-digit characters
+        assert!(!cuda::is_valid_cuda_version_format("8.6a"));
+        assert!(!cuda::is_valid_cuda_version_format("a.6"));
+        assert!(!cuda::is_valid_cuda_version_format("8.b"));
+        assert!(!cuda::is_valid_cuda_version_format("eight.six"));
+        assert!(!cuda::is_valid_cuda_version_format("8-6"));
+        assert!(!cuda::is_valid_cuda_version_format("8_6"));
+    }
+
+    #[test]
+    fn test_parse_cuda_arch() {
+        // Test parsing version only
+        let cuda_arch = CudaArch::parse_version("8.6").unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("8.6").unwrap());
+        assert_eq!(cuda_arch.device_name, "override");
+
+        // Test parsing version with build string (sanitized)
+        let cuda_arch = CudaArch::parse_version("8.6=NVIDIA GeForce RTX 3090").unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("8.6").unwrap());
+        assert_eq!(cuda_arch.device_name, "GeForceRTX3090");
+
+        // Test with device name that needs sanitization (hyphen filtered out)
+        let cuda_arch = CudaArch::parse_version("7.5=Tesla V100-SXM2").unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("7.5").unwrap());
+        assert_eq!(cuda_arch.device_name, "TeslaV100SXM2");
+
+        // Test invalid version format (falls back to 0.0=None)
+        let cuda_arch = CudaArch::parse_version("invalid").unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("0.0").unwrap());
+        assert_eq!(cuda_arch.device_name, "None");
+
+        let cuda_arch = CudaArch::parse_version("8").unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("0.0").unwrap());
+        assert_eq!(cuda_arch.device_name, "None");
+
+        let cuda_arch = CudaArch::parse_version("8.6.1").unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("0.0").unwrap());
+        assert_eq!(cuda_arch.device_name, "None");
+
+        // Test device name with all invalid chars (falls back to "override")
+        let cuda_arch = CudaArch::parse_version("8.6=!!!").unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("8.6").unwrap());
+        assert_eq!(cuda_arch.device_name, "override");
+
+        // Test override via environment variable
+        let env_var_name = format!("{}_{}", CudaArch::DEFAULT_ENV_NAME, "test123");
+        env::set_var(&env_var_name, "7.5=Tesla V100");
+        let result = CudaArch::detect(Some(&Override::EnvVar(env_var_name.clone()))).unwrap();
+        assert!(result.is_some());
+        let cuda_arch = result.unwrap();
+        assert_eq!(cuda_arch.version, Version::from_str("7.5").unwrap());
+        assert_eq!(cuda_arch.device_name, "TeslaV100");
+        env::remove_var(&env_var_name);
     }
 }
