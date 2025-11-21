@@ -2,12 +2,6 @@ use configparser::ini::Ini;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-#[derive(Error, Debug)]
-pub enum MimeConfigError {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-}
-
 #[derive(Debug)]
 pub struct MimeConfig {
     config: Ini,
@@ -104,6 +98,13 @@ impl MimeConfig {
 
 #[cfg(test)]
 mod tests {
+
+    #[derive(Error, Debug)]
+    pub enum MimeConfigError {
+        #[error("IO error: {0}")]
+        Io(#[from] std::io::Error),
+    }
+
     use crate::test::test_data;
 
     use super::*;
