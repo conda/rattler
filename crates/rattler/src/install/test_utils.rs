@@ -81,7 +81,7 @@ pub async fn execute_operation(
     }
 
     install_driver
-        .remove_empty_directories(&[op.clone()], &[], target_prefix)
+        .remove_empty_directories(std::slice::from_ref(&op), &[], target_prefix)
         .unwrap();
 
     let install_package = if let Some(install_record) = install_record {
