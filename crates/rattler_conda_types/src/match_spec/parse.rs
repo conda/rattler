@@ -112,9 +112,13 @@ pub enum ParseMatchSpecError {
     #[error("could not parse condition {0}: {1}")]
     InvalidCondition(String, String),
 
-    /// Only exact package name matchers are allowed
-    #[error("only exact package name matchers are allowed. Got {0}")]
-    OnlyExactPackageNameMatchersAllowed(PackageNameMatcher),
+    /// Only exact package name matchers are allowed but a glob was provided
+    #[error("\"{0}\" looks like a glob but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .")]
+    OnlyExactPackageNameMatchersAllowedGlob(String),
+
+    /// Only exact package name matchers are allowed but a regex was provided
+    #[error("\"{0}\" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .")]
+    OnlyExactPackageNameMatchersAllowedRegex(String),
 }
 
 impl FromStr for MatchSpec {
@@ -428,8 +432,8 @@ fn strip_package_name(
         PackageNameMatcher::Exact(name) => PackageNameMatcher::Exact(name),
         PackageNameMatcher::Glob(glob) => {
             if exact_names_only {
-                return Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowed(
-                    PackageNameMatcher::Glob(glob),
+                return Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedGlob(
+                    glob.as_str().to_string(),
                 ));
             } else {
                 PackageNameMatcher::Glob(glob)
@@ -437,8 +441,8 @@ fn strip_package_name(
         }
         PackageNameMatcher::Regex(regex) => {
             if exact_names_only {
-                return Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowed(
-                    PackageNameMatcher::Regex(regex),
+                return Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedRegex(
+                    regex.as_str().to_string(),
                 ));
             } else {
                 PackageNameMatcher::Regex(regex)
@@ -1667,5 +1671,22 @@ mod tests {
 
         // Missing opening bracket
         assert!(MatchSpec::from_str("foo[extras=bar,baz]]", opts).is_err());
+    }
+
+    #[test]
+    fn test_glob_and_regex_error_messages() {
+        // Test glob error message
+        let glob_err = MatchSpec::from_str("bla*", Strict).unwrap_err();
+        assert_eq!(
+            glob_err.to_string(),
+            "\"bla*\" looks like a glob but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or ."
+        );
+
+        // Test regex error message
+        let regex_err = MatchSpec::from_str("^foo.*$", Strict).unwrap_err();
+        assert_eq!(
+            regex_err.to_string(),
+            "\"^foo.*$\" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or ."
+        );
     }
 }
