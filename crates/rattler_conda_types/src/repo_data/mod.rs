@@ -167,7 +167,7 @@ pub struct PackageRecord {
     /// starting from 0.23.2, this field became [`Option<Vec<PackageUrl>>`].
     /// This was done to support older lockfiles,
     /// where we didn't differentiate between empty purl and missing one.
-    /// Now, `None::` means that the purl is missing, and it will be tried to
+    /// Now, `None` means that the purl is missing, and it will be tried to
     /// filled in. So later it can be one of the following:
     /// [`Some(vec![])`] means that the purl is empty and package is not pypi
     /// one. [`Some([`PackageUrl`])`] means that it is a pypi package.
