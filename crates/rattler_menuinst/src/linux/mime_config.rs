@@ -1,6 +1,5 @@
 use configparser::ini::Ini;
 use std::path::{Path, PathBuf};
-use thiserror::Error;
 
 #[derive(Debug)]
 pub struct MimeConfig {
@@ -98,6 +97,7 @@ impl MimeConfig {
 
 #[cfg(test)]
 mod tests {
+    use thiserror::Error;
 
     #[derive(Error, Debug)]
     pub enum MimeConfigError {
