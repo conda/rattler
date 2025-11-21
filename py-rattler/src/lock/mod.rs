@@ -2,7 +2,7 @@ use crate::channel::PyChannel;
 use crate::match_spec::PyMatchSpec;
 use crate::version::PyVersion;
 use crate::{error::PyRattlerError, platform::PyPlatform, record::PyRecord};
-use pep508_rs::Requirement;
+use uv_pep508::Requirement;
 use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
 use rattler_conda_types::RepoDataRecord;
 use rattler_lock::{
