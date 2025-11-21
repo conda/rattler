@@ -63,7 +63,7 @@ dirs = "6.0.0"
 dunce = "1.0.5"
 enum_dispatch = "0.3.13"
 file_url = { path = "crates/file_url", version = "=0.2.6", default-features = false }
-fs-err = { version = "3.1.0" }
+fs-err = { version = "3.2.0" }
 fs4 = "0.13.1"
 fslock = "0.2.1"
 futures = "0.3.31"
@@ -103,9 +103,6 @@ opendal = { version = "0.54.0", default-features = false }
 parking_lot = "0.12.4"
 path_resolver = { path = "crates/path_resolver", version = "=0.2.2", default-features = false }
 pathdiff = "0.2.3"
-uv-normalize = { version = "0.0.1" }
-uv-pep440 = { version = "0.0.1", features = ["serde"] }
-uv-pep508 = { version = "0.0.1", features = ["serde"] }
 percent-encoding = "2.3.1"
 pin-project-lite = "0.2.16"
 plist = "1"
@@ -192,6 +189,9 @@ typed-path = { version = "0.11.0" }
 unicode-normalization = "0.1.24"
 url = { version = "2.5.4" }
 uuid = { version = "1.17.0", default-features = false }
+uv-normalize = { version = "0.0.1" }
+uv-pep440 = { version = "0.0.1", features = ["serde"] }
+uv-pep508 = { version = "0.0.1", features = ["serde"] }
 walkdir = "2.5.0"
 wasmtimer = "0.4.1"
 which = "8.0.0"
