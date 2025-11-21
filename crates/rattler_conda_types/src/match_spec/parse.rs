@@ -432,18 +432,22 @@ fn strip_package_name(
         PackageNameMatcher::Exact(name) => PackageNameMatcher::Exact(name),
         PackageNameMatcher::Glob(glob) => {
             if exact_names_only {
-                return Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedGlob(
-                    glob.as_str().to_string(),
-                ));
+                return Err(
+                    ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedGlob(
+                        glob.as_str().to_string(),
+                    ),
+                );
             } else {
                 PackageNameMatcher::Glob(glob)
             }
         }
         PackageNameMatcher::Regex(regex) => {
             if exact_names_only {
-                return Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedRegex(
-                    regex.as_str().to_string(),
-                ));
+                return Err(
+                    ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedRegex(
+                        regex.as_str().to_string(),
+                    ),
+                );
             } else {
                 PackageNameMatcher::Regex(regex)
             }
