@@ -39,6 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.41.2...rattler_conda_types-v0.42.0) - 2025-11-22
+
+### Added
+
+- improve error messages for glob and regex package names ([#1867](https://github.com/conda/rattler/pull/1867))
+
+### Other
+
+- make `extras` and `conditionals` runtime-configurable ([#1816](https://github.com/conda/rattler/pull/1816))
+
 ## [0.41.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.41.1...rattler_conda_types-v0.41.2) - 2025-11-20
 
 ### Added
