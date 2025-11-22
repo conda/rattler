@@ -100,7 +100,7 @@ pub struct ChannelDataPackage {
     #[serde(rename = "pre_unlink")]
     pub has_pre_unlink_scripts: bool,
 
-    /// Any run_exports contained within the package.
+    /// Any `run_exports` contained within the package.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     #[serde_as(as = "HashMap<DisplayFromStr, _>")]
     pub run_exports: HashMap<Version, RunExportsJson>,

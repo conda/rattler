@@ -7,8 +7,8 @@ use std::{
 };
 
 use indexmap::{IndexMap, IndexSet};
-use pep508_rs::ExtraName;
 use rattler_conda_types::{Platform, Version};
+use uv_normalize::ExtraName;
 
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,

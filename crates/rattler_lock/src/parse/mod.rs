@@ -32,7 +32,7 @@ pub enum ParseCondaLockError {
     MissingPackage(String, Platform, UrlOrPath),
 
     #[error(transparent)]
-    InvalidPypiPackageName(#[from] pep508_rs::InvalidNameError),
+    InvalidPypiPackageName(#[from] uv_normalize::InvalidNameError),
 
     #[error("missing field `{0}` for package {1}")]
     MissingField(String, UrlOrPath),

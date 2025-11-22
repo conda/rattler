@@ -22,7 +22,7 @@ pub struct RunExportsJson {
     /// noarch run exports apply a run export only to noarch packages (other run
     /// exports are ignored) for example, python uses this to apply a
     /// dependency on python to all noarch packages, but not to
-    /// the python_abi package
+    /// the `python_abi` package
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub noarch: Vec<String>,
     /// weak constrains apply a constrain dependency from host to build, or run

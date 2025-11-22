@@ -1,11 +1,12 @@
 use crate::{PackageHashes, UrlOrPath};
-use pep440_rs::VersionSpecifiers;
-use pep508_rs::{ExtraName, PackageName, Requirement};
 use rattler_digest::{digest::Digest, Sha256};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
+use uv_normalize::{ExtraName, PackageName};
+use uv_pep440::VersionSpecifiers;
+use uv_pep508::Requirement;
 
 /// A pinned Pypi package
 #[derive(Eq, PartialEq, Clone, Debug, Hash)]
@@ -14,7 +15,7 @@ pub struct PypiPackageData {
     pub name: PackageName,
 
     /// The version of the package.
-    pub version: pep440_rs::Version,
+    pub version: uv_pep440::Version,
 
     /// The location of the package. This can be a URL or a path.
     pub location: UrlOrPath,
@@ -67,8 +68,8 @@ impl PypiPackageData {
         // Check if the version of the requirement matches
         match &spec.version_or_url {
             None => {}
-            Some(pep508_rs::VersionOrUrl::Url(_)) => return false,
-            Some(pep508_rs::VersionOrUrl::VersionSpecifier(spec)) => {
+            Some(uv_pep508::VersionOrUrl::Url(_)) => return false,
+            Some(uv_pep508::VersionOrUrl::VersionSpecifier(spec)) => {
                 if !spec.contains(&self.version) {
                     return false;
                 }

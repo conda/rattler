@@ -40,13 +40,13 @@ use package_name_matcher::PackageNameMatcher;
 /// values -- by including wildcard `*` and `>`/`<` ranges--where supported. Any non-specified field
 /// is the equivalent of a full wildcard match.
 ///
-/// MatchSpecs can also be composed using a single positional argument, with optional
+/// `MatchSpecs` can also be composed using a single positional argument, with optional
 /// keyword arguments. Keyword arguments also override any conflicting information provided in
 /// the positional argument. Conda has historically had several string representations for equivalent
-/// MatchSpecs.
+/// `MatchSpecs`.
 ///
 /// A series of rules are now followed for creating the canonical string representation of a
-/// MatchSpec instance. The canonical string representation can generically be
+/// `MatchSpec` instance. The canonical string representation can generically be
 /// represented by
 ///
 /// (channel(/subdir):(namespace):)name(version(build))[key1=value1,key2=value2]

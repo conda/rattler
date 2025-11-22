@@ -100,7 +100,7 @@ pub struct PathsEntry {
     pub size_in_bytes: Option<u64>,
 
     /// The file mode of the entry. This is used in conjunction with a
-    /// prefix_placeholder
+    /// `prefix_placeholder`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_mode: Option<FileMode>,
 

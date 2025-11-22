@@ -46,7 +46,7 @@ fn create_sorting_snapshot(package_name: &str, strategy: SolveStrategy) -> Strin
         &[],
         &[],
         &[],
-        &[match_spec.clone()],
+        std::slice::from_ref(&match_spec),
         None,
         ChannelPriority::default(),
         None,

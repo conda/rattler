@@ -7,11 +7,11 @@ use std::{
 
 use indexmap::IndexSet;
 use itertools::Either;
-use pep508_rs::ExtraName;
 use rattler_conda_types::{PackageName, Platform, VersionWithSource};
 use serde::{de::Error, Deserialize, Deserializer};
 use serde_with::{serde_as, DeserializeAs};
 use serde_yaml::Value;
+use uv_normalize::ExtraName;
 
 use crate::{
     file_format_version::FileFormatVersion,

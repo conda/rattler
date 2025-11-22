@@ -167,7 +167,7 @@ pub struct PackageRecord {
     /// starting from 0.23.2, this field became [`Option<Vec<PackageUrl>>`].
     /// This was done to support older lockfiles,
     /// where we didn't differentiate between empty purl and missing one.
-    /// Now, None:: means that the purl is missing, and it will be tried to
+    /// Now, `None` means that the purl is missing, and it will be tried to
     /// filled in. So later it can be one of the following:
     /// [`Some(vec![])`] means that the purl is empty and package is not pypi
     /// one. [`Some([`PackageUrl`])`] means that it is a pypi package.
@@ -200,7 +200,7 @@ pub struct PackageRecord {
 
     /// Track features are nowadays only used to downweight packages (ie. give
     /// them less priority). To that effect, the package is downweighted
-    /// by the number of track_features.
+    /// by the number of `track_features`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[serde_as(as = "crate::utils::serde::Features")]
     pub track_features: Vec<String>,

@@ -1,9 +1,10 @@
 use std::borrow::Cow;
 
-use pep440_rs::VersionSpecifiers;
-use pep508_rs::{PackageName, Requirement};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
+use uv_normalize::PackageName;
+use uv_pep440::VersionSpecifiers;
+use uv_pep508::Requirement;
 
 use crate::{PackageHashes, PypiPackageData, UrlOrPath};
 
@@ -31,7 +32,7 @@ pub(crate) struct PypiPackageDataModel<'a> {
     #[serde(rename = "pypi")]
     pub location: Cow<'a, UrlOrPath>,
     pub name: Cow<'a, PackageName>,
-    pub version: Cow<'a, pep440_rs::Version>,
+    pub version: Cow<'a, uv_pep440::Version>,
     #[serde(default, skip_serializing_if = "Option::is_none", flatten)]
     pub hash: Cow<'a, Option<PackageHashes>>,
     #[serde(default, skip_serializing_if = "<[Requirement]>::is_empty")]

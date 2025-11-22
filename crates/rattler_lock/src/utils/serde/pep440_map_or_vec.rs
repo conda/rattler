@@ -1,9 +1,9 @@
 use std::hash::BuildHasherDefault;
 
 use indexmap::IndexMap;
-use pep508_rs::{Requirement, VersionOrUrl};
 use serde::{Deserialize, Deserializer};
 use serde_with::{serde_as, DeserializeAs, DisplayFromStr};
+use uv_pep508::{Requirement, VersionOrUrl};
 
 pub(crate) struct Pep440MapOrVec;
 
@@ -19,7 +19,7 @@ impl<'de> DeserializeAs<'de, Vec<Requirement>> for Pep440MapOrVec {
             Vec(Vec<Requirement>),
             Map(
                 #[serde_as(as = "IndexMap<_, DisplayFromStr, BuildHasherDefault<ahash::AHasher>>")]
-                IndexMap<String, pep440_rs::VersionSpecifiers, BuildHasherDefault<ahash::AHasher>>,
+                IndexMap<String, uv_pep440::VersionSpecifiers, BuildHasherDefault<ahash::AHasher>>,
             ),
         }
 
@@ -28,9 +28,9 @@ impl<'de> DeserializeAs<'de, Vec<Requirement>> for Pep440MapOrVec {
             MapOrVec::Map(m) => m
                 .into_iter()
                 .map(|(name, spec)| {
-                    Ok::<_, pep508_rs::InvalidNameError>(pep508_rs::Requirement {
-                        name: pep508_rs::PackageName::new(name)?,
-                        extras: Vec::new(),
+                    Ok::<_, uv_normalize::InvalidNameError>(uv_pep508::Requirement {
+                        name: uv_normalize::PackageName::from_owned(name)?,
+                        extras: Box::new([]),
                         version_or_url: if spec.is_empty() {
                             None
                         } else {

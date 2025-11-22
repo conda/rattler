@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_lock/src/lib.rs
+assertion_line: 572
 expression: conda_lock
 ---
 version: 6
@@ -79,7 +80,7 @@ packages:
     name: click
     version: 8.1.7
     requires_dist:
-      - "colorama ; platform_system == 'Windows'"
+      - "colorama ; sys_platform == 'win32'"
       - "importlib-metadata ; python_full_version < '3.8'"
     requires_python: ">=3.7"
   - pypi: "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl"

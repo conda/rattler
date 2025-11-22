@@ -3,14 +3,15 @@
 use std::{collections::BTreeSet, ops::Not, str::FromStr, sync::Arc};
 
 use indexmap::IndexSet;
-use pep440_rs::VersionSpecifiers;
-use pep508_rs::{ExtraName, Requirement};
 use rattler_conda_types::{
     NoArchType, PackageName, PackageRecord, PackageUrl, Platform, VersionWithSource,
 };
 use serde::Deserialize;
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use url::Url;
+use uv_normalize::ExtraName;
+use uv_pep440::VersionSpecifiers;
+use uv_pep508::Requirement;
 
 use super::ParseCondaLockError;
 use crate::{
@@ -61,7 +62,7 @@ enum LockedPackageKindV3 {
 #[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 struct PypiLockedPackageV3 {
     pub name: String,
-    pub version: pep440_rs::Version,
+    pub version: uv_pep440::Version,
     #[serde(default, alias = "dependencies", skip_serializing_if = "Vec::is_empty")]
     #[serde_as(deserialize_as = "crate::utils::serde::Pep440MapOrVec")]
     pub requires_dist: Vec<Requirement>,
@@ -230,7 +231,7 @@ pub fn parse_v3_or_lower(
             LockedPackageKindV3::Pypi(pkg) => {
                 let deduplicated_index = pypi_packages
                     .insert_full(PypiPackageData {
-                        name: pep508_rs::PackageName::new(pkg.name)?,
+                        name: uv_normalize::PackageName::from_owned(pkg.name)?,
                         version: pkg.version,
                         requires_dist: pkg.requires_dist,
                         requires_python: pkg.requires_python,

@@ -32,7 +32,7 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
                     &[],
                     &[],
                     &[],
-                    &[match_spec.clone()],
+                    std::slice::from_ref(&match_spec),
                     None,
                     ChannelPriority::default(),
                     None,
