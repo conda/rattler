@@ -1,5 +1,5 @@
 ---
-source: crates/rattler_solve/tests/backends.rs
+source: crates/rattler_solve/tests/backends/main.rs
 expression: err
 ---
 Cannot solve the request because of: The following packages are incompatible

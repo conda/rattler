@@ -1,0 +1,9 @@
+---
+source: crates/rattler_solve/tests/backends/main.rs
+expression: err
+---
+Unsolvable(
+    [
+        "No candidates were found for asdfasdf *.\n",
+    ],
+)

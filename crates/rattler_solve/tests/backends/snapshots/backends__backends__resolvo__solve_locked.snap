@@ -1,5 +1,5 @@
 ---
-source: crates/rattler_solve/tests/backends.rs
+source: crates/rattler_solve/tests/backends/mod.rs
 expression: result.unwrap_err()
 ---
 Cannot solve the request because of: The following packages are incompatible
@@ -7,4 +7,3 @@ Cannot solve the request because of: The following packages are incompatible
    └─ bors 2.0 | 2.1
 ├─ bors 1.0 is locked, but another version is required as reported above
 ├─ bors 1.0 is locked, but another version is required as reported above
-
