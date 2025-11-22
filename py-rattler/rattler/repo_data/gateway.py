@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from enum import Enum
 from typing import Iterable, List, Optional
 
 from rattler.channel import Channel
@@ -11,6 +12,16 @@ from rattler.package.package_name import PackageName
 from rattler.platform import Platform, PlatformLiteral
 from rattler.rattler import PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
+
+
+class CacheClearMode(Enum):
+    """Specifies which cache layers to clear."""
+
+    MEMORY = "memory"
+    """Clear only the in-memory cache."""
+
+    MEMORY_AND_DISK = "memory-and-disk"
+    """Clear both in-memory and on-disk cache."""
 
 
 @dataclass
@@ -222,25 +233,28 @@ class Gateway:
         return [PackageName._from_py_package_name(package_name) for package_name in py_package_names]
 
     def clear_repodata_cache(
-        self, channel: Channel | str, subdirs: Optional[Iterable[Platform | PlatformLiteral]] = None
+        self,
+        channel: Channel | str,
+        subdirs: Optional[Iterable[Platform | PlatformLiteral]] = None,
+        mode: CacheClearMode = CacheClearMode.MEMORY,
     ) -> None:
         """
-        Clears any in-memory cache for the given channel.
+        Clears the cache for the given channel.
 
         Any subsequent query will re-fetch any required data from the source.
-
-        This method does not clear any on-disk cache.
 
         Arguments:
             channel: The channel to clear the cache for.
             subdirs: A selection of subdirectories to clear, if `None` is specified
                      all subdirectories of the channel are cleared.
+            mode: Specifies which cache layers to clear. Defaults to `CacheClearMode.MEMORY`.
 
         Examples
         --------
         ```python
         >>> gateway = Gateway()
         >>> gateway.clear_repodata_cache("conda-forge", ["linux-64"])
+        >>> gateway.clear_repodata_cache("conda-forge", ["linux-64"], mode=CacheClearMode.MEMORY_AND_DISK)
         >>> gateway.clear_repodata_cache("robostack")
         >>>
         ```
@@ -250,6 +264,7 @@ class Gateway:
             {subdir._inner if isinstance(subdir, Platform) else Platform(subdir)._inner for subdir in subdirs}
             if subdirs is not None
             else None,
+            mode.value,
         )
 
     def __repr__(self) -> str:

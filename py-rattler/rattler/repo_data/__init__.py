@@ -3,7 +3,7 @@ from rattler.repo_data.repo_data import RepoData
 from rattler.repo_data.patch_instructions import PatchInstructions
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.sparse import SparseRepoData, PackageFormatSelection
-from rattler.repo_data.gateway import Gateway, SourceConfig
+from rattler.repo_data.gateway import Gateway, SourceConfig, CacheClearMode
 
 __all__ = [
     "PackageRecord",
@@ -13,5 +13,6 @@ __all__ = [
     "SparseRepoData",
     "Gateway",
     "SourceConfig",
+    "CacheClearMode",
     "PackageFormatSelection",
 ]

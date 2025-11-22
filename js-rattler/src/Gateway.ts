@@ -2,6 +2,17 @@ import { JsGateway } from "../pkg";
 import { Platform } from "./Platform";
 import { NormalizedPackageName } from "./PackageName";
 
+/**
+ * Specifies which cache layers to clear.
+ *
+ * @public
+ */
+export type CacheClearMode =
+    /** Clear only the in-memory cache */
+    | "memory"
+    /** Clear both in-memory and on-disk cache (Node.js only, not available in browsers) */
+    | "memory-and-disk";
+
 export type GatewaySourceConfig = {
     /** `true` if downloading `repodata.json.zst` is enabled. Defaults to `true`. */
     zstdEnabled?: boolean;
@@ -88,5 +99,38 @@ export class Gateway {
             channels,
             platforms,
         )) as NormalizedPackageName[];
+    }
+
+    /**
+     * Clears the cache for the given channel.
+     *
+     * Any subsequent query will re-fetch any required data from the source.
+     *
+     * @param channel - The channel URL or name to clear the cache for
+     * @param subdirs - Optional array of platform subdirectories to clear (e.g., ["linux-64", "noarch"]).
+     *                 If not provided, all subdirectories for the channel are cleared.
+     * @param mode - Optional cache clear mode: "memory" (default) or "memory-and-disk".
+     *              Note: "memory-and-disk" is only available in Node.js, not in browsers.
+     *
+     * @example
+     * ```typescript
+     * const gateway = new Gateway();
+     *
+     * // Clear only in-memory cache for all subdirectories
+     * gateway.clearRepoDataCache("conda-forge");
+     *
+     * // Clear specific subdirectories
+     * gateway.clearRepoDataCache("conda-forge", ["linux-64", "noarch"]);
+     *
+     * // Clear both in-memory and on-disk cache (Node.js only)
+     * gateway.clearRepoDataCache("conda-forge", ["linux-64"], "memory-and-disk");
+     * ```
+     */
+    public clearRepoDataCache(
+        channel: string,
+        subdirs?: Platform[] | null,
+        mode?: CacheClearMode | null,
+    ): void {
+        this.native.clearRepoDataCache(channel, subdirs ?? undefined, mode ?? undefined);
     }
 }
