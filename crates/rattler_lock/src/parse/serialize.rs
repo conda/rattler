@@ -5,11 +5,11 @@ use std::{
 };
 
 use itertools::Itertools;
-use pep508_rs::ExtraName;
 use rattler_conda_types::{PackageName, Platform, VersionWithSource};
 use serde::{Serialize, Serializer};
 use serde_with::{serde_as, SerializeAs};
 use url::Url;
+use uv_normalize::ExtraName;
 
 use crate::{
     file_format_version::FileFormatVersion,

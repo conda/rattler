@@ -36,6 +36,7 @@ impl Borrow<MatchSpec> for PyMatchSpec {
 
 #[pymethods]
 impl PyMatchSpec {
+    #[allow(clippy::fn_params_excessive_bools)]
     #[new]
     #[pyo3(signature = (spec, strict = false, exact_names_only = true, experimental_extras = false, experimental_conditionals = false))]
     pub fn __init__(
@@ -143,17 +144,17 @@ impl PyMatchSpec {
         self.inner.sha256.map(|sha256| PyBytes::new(py, &sha256))
     }
 
-    /// Returns a string representation of MatchSpec
+    /// Returns a string representation of `MatchSpec`
     pub fn as_str(&self) -> String {
         format!("{}", self.inner)
     }
 
-    /// Matches a MatchSpec against a PackageRecord
+    /// Matches a `MatchSpec` against a `PackageRecord`
     pub fn matches(&self, record: &PyRecord) -> bool {
         self.inner.matches(record.as_package_record())
     }
 
-    /// Constructs a PyMatchSpec from a PyNamelessMatchSpec and a name.
+    /// Constructs a `PyMatchSpec` from a `PyNamelessMatchSpec` and a name.
     #[staticmethod]
     pub fn from_nameless(spec: &PyNamelessMatchSpec, name: String) -> PyResult<Self> {
         Ok(Self {

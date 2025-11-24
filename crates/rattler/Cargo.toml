@@ -10,19 +10,13 @@ repository.workspace = true
 license.workspace = true
 readme.workspace = true
 
-[features]
-default = ['rustls-tls']
-native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
-rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_networking/rustls-tls']
-cli-tools = ['dep:clap', 'reqwest/blocking']
-indicatif = ['dep:indicatif', 'dep:console']
-
 [package.metadata.docs.rs]
 features = ["cli-tools", "indicatif"]
 
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, optional = true }
+console = { workspace = true, optional = true }
 digest = { workspace = true }
 dirs = { workspace = true }
 fs-err = { workspace = true }
@@ -35,43 +29,59 @@ memchr = { workspace = true }
 memmap2 = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
+path_resolver = { workspace = true, default-features = false }
 rattler_cache = { workspace = true }
 rattler_conda_types = { workspace = true }
 rattler_digest = { workspace = true }
-rattler_networking = { workspace = true }
-rattler_shell = { workspace = true }
-rattler_package_streaming = { workspace = true, features = ["reqwest"] }
 rattler_menuinst = { workspace = true, default-features = false }
-path_resolver = { workspace = true, default-features = false }
+rattler_networking = { workspace = true }
+rattler_package_streaming = { workspace = true, features = ["reqwest"] }
+rattler_shell = { workspace = true }
 rayon = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
-reqwest = { workspace = true, features = ["stream", "json", "gzip"] }
+reqwest = { workspace = true, features = ["gzip", "json", "stream"] }
 reqwest-middleware = { workspace = true }
-smallvec = { workspace = true }
+serde_json.workspace = true
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
+smallvec = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["rt", "io-util", "macros"] }
+tokio = { workspace = true, features = ["io-util", "macros", "rt"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
-uuid = { workspace = true, features = ["v4", "fast-rng"] }
-console = { workspace = true, optional = true }
-serde_json.workspace = true
+uuid = { workspace = true, features = ["fast-rng", "v4"] }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-rand = { workspace = true }
-rstest = { workspace = true }
-tracing-test = { workspace = true }
-insta = { workspace = true, features = ["yaml"] }
-rattler_lock = { path = "../rattler_lock" }
-tools = { path="../tools" }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 axum = { workspace = true }
-tower-http = { workspace = true, features = ["fs"] }
-tower = { workspace = true, features = ["util"] }
-walkdir.workspace = true
+insta = { workspace = true, features = ["yaml"] }
 mockito = "1.0"
-tempfile = "3.0"
+rand = { workspace = true }
+rattler_lock = { path = "../rattler_lock" }
+rstest = { workspace = true }
 temp-env = { workspace = true }
+tempfile = "3.0"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tools = { path = "../tools" }
+tower = { workspace = true, features = ["util"] }
+tower-http = { workspace = true, features = ["fs"] }
+tracing-test = { workspace = true }
+walkdir.workspace = true
+
+[features]
+default = ["rustls-tls"]
+cli-tools = ["dep:clap", "reqwest/blocking"]
+indicatif = ["dep:console", "dep:indicatif"]
+native-tls = [
+  "rattler_cache/native-tls",
+  "rattler_networking/native-tls",
+  "rattler_package_streaming/native-tls",
+  "reqwest/native-tls"
+]
+rustls-tls = [
+  "rattler_cache/rustls-tls",
+  "rattler_networking/rustls-tls",
+  "rattler_package_streaming/rustls-tls",
+  "reqwest/rustls-tls"
+]

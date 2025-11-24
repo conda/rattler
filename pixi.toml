@@ -2,10 +2,10 @@
 name = "rattler"
 description = "Rust library to install conda environments"
 authors = [
-    "Wolf Vollprecht <wolf@prefix.dev>",
-    "Bas Zalmstra <bas@prefix.dev>",
-    "Tim de Jager <tim@prefix.dev>",
-    "Ruben Arts <ruben@prefix.dev>",
+  "Wolf Vollprecht <wolf@prefix.dev>",
+  "Bas Zalmstra <bas@prefix.dev>",
+  "Tim de Jager <tim@prefix.dev>",
+  "Ruben Arts <ruben@prefix.dev>",
 ]
 channels = ["https://prefix.dev/conda-forge"]
 platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
@@ -14,7 +14,7 @@ preview = ["pixi-build"]
 
 [workspace.build-variants]
 # Use the same Rust version everywhere
-rust_compiler_version = ["1.88.0"]
+rust_compiler_version = ["1.89.0"]
 
 [tasks]
 build = "cargo build"
@@ -30,16 +30,17 @@ cxx-compiler = "~=1.11.0"
 openssl = "~=3.1"
 make = "~=4.3"
 pkg-config = "~=0.29.2"
-rust = "~=1.88.0"
+rust = "~=1.89.0"
 cmake = "~=3.26.4"
 cargo-nextest = ">=0.9.91,<0.10"
 # for rust-analyzer
-rust-src = "~=1.88.0"
+rust-src = "~=1.89.0"
 
 [target.linux-64.dependencies]
 clang = ">=18.1.8,<19.0"
 compilers = ">=1.6.0"
 mold = ">=2.33.0,<3.0"
+
 [target.linux-64.activation]
 scripts = ["scripts/activate_linux.sh"]
 
@@ -70,12 +71,9 @@ ruff-lint = "ruff check --fix --exit-non-zero-on-fix --force-exclude"
 cargo-fmt = "cargo fmt --all"
 cargo-clippy = "cargo clippy --all-targets --workspace -- -D warnings -Dclippy::dbg_macro"
 
-[environments]
-lint = { features = [ "lint" ], solve-group = "default" }
-
-#------------------------------
+# ------------------------------
 # Minio E2E test
-#------------------------------
+# ------------------------------
 [feature.minio.dependencies]
 minio-server = ">=2025.1.20,<2026"
 minio-client = ">=2025.7.21,<2026"
@@ -86,13 +84,9 @@ nushell = ">=0.106.1,<0.107"
 [feature.minio.tasks]
 e2e-s3-minio = "nu scripts/e2e/s3-minio.nu"
 
-[environments.minio]
-features = ["minio"]
-no-default-feature = true
-
-#------------------------------
+# ------------------------------
 # S3 E2E test
-#------------------------------
+# ------------------------------
 [feature.s3.dependencies]
 awscli = ">=2.28.18,<3"
 rattler_index = { path = "crates/rattler_index" }
@@ -101,6 +95,13 @@ nushell = ">=0.106.1,<0.107"
 
 [feature.s3.tasks]
 e2e-s3-aws = "nu scripts/e2e/s3-aws.nu"
+
+[environments]
+lint = { features = ["lint"], solve-group = "default" }
+
+[environments.minio]
+features = ["minio"]
+no-default-feature = true
 
 [environments.s3]
 features = ["s3"]
