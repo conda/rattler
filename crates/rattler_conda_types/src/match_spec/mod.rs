@@ -651,7 +651,6 @@ pub enum MatchSpecUrlError {
 
 #[cfg(test)]
 mod tests {
-    use glob::Pattern;
     use itertools::Itertools;
     use rstest::rstest;
     use std::str::FromStr;
@@ -1105,9 +1104,7 @@ mod tests {
         let err = MatchSpec::from_str("foo* >=12[license=MIT]", Strict).unwrap_err();
         assert_eq!(
             err,
-            ParseMatchSpecError::OnlyExactPackageNameMatchersAllowed(
-                crate::PackageNameMatcher::Glob(Pattern::new("foo*").unwrap())
-            )
+            ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedGlob("foo*".to_string())
         );
     }
 }

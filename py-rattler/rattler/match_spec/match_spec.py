@@ -109,7 +109,7 @@ class MatchSpec:
         MatchSpec("foo*")
         >>> MatchSpec("^foo.*$", strict=True, exact_names_only=True) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        InvalidMatchSpecException: only exact package name matchers are allowed. Got ^foo.*$
+        InvalidMatchSpecException: "^foo.*$" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .
         >>>
         ```
         """
