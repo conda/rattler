@@ -32,6 +32,7 @@ rattler_digest = { workspace = true, default-features = false, features = [
 ] }
 rattler_macros = { workspace = true, default-features = false }
 rattler_redaction = { workspace = true, default-features = false }
+fancy-regex = { workspace = true }
 regex = { workspace = true }
 simd-json = { workspace = true, features = ["serde_impl"] }
 serde = { workspace = true, features = ["derive", "rc"] }
