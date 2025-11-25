@@ -1,6 +1,12 @@
 mod index;
 
-use std::{io::Write, path::PathBuf, sync::Arc};
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
+use rattler_conda_types::Platform;
 
 use super::{add_trailing_slash, decode_zst_bytes_async, parse_records};
 use crate::{
@@ -16,6 +22,9 @@ use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata}
 use rattler_networking::LazyClient;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use url::Url;
+
+pub(crate) const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
+pub(crate) const SHARDS_CACHE_SUFFIX: &str = ".shards-cache-v1";
 
 pub struct ShardedSubdir {
     channel: Channel,
@@ -102,6 +111,48 @@ impl ShardedSubdir {
             cache_action,
             concurrent_requests_semaphore,
         })
+    }
+
+    /// Clears the on-disk cache for the sharded repodata index of the given
+    /// channel and platform.
+    ///
+    /// This acquires an exclusive lock on the cache file before removing it
+    /// to prevent race conditions with concurrent readers/writers.
+    ///
+    /// If the cache file doesn't exist, this is a no-op since there's nothing
+    /// to clear.
+    pub fn clear_cache(
+        cache_dir: &Path,
+        channel: &Channel,
+        platform: Platform,
+    ) -> Result<(), std::io::Error> {
+        let index_base_url = channel
+            .base_url
+            .url()
+            .join(&format!("{}/", platform.as_str()))
+            .expect("invalid subdir url");
+        let canonical_shards_url = index_base_url
+            .join(REPODATA_SHARDS_FILENAME)
+            .expect("invalid shard base url");
+        let cache_path = cache_dir.join(format!(
+            "{}{}",
+            crate::utils::url_to_cache_filename(&canonical_shards_url),
+            SHARDS_CACHE_SUFFIX
+        ));
+
+        if cache_path.exists() {
+            // Acquire an exclusive lock before removing the file.
+            // This uses flock() on Unix (same as async_fd_lock used in normal flow).
+            // On Unix, the file can be deleted while locked and will be removed
+            // when the last handle is closed.
+            let mut lock = fslock::LockFile::open(&cache_path).map_err(std::io::Error::other)?;
+            lock.lock().map_err(std::io::Error::other)?;
+
+            // Now remove the file while holding the lock
+            fs_err::remove_file(&cache_path)?;
+            tracing::debug!("deleted shard index cache: {:?}", cache_path);
+        }
+        Ok(())
     }
 }
 
