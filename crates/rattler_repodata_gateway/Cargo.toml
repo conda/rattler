@@ -68,6 +68,7 @@ windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem", "Win32
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 async-fd-lock = { workspace = true }
+fslock = { workspace = true }
 simple_spawn_blocking = { workspace = true, features = ["tokio"] }
 tokio = { workspace = true, features = ["rt", "io-util"] }
 rattler_package_streaming = { workspace = true, default-features = false, optional = true }

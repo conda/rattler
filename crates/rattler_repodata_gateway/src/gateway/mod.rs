@@ -771,6 +771,97 @@ mod test {
         );
     }
 
+    #[test]
+    fn test_clear_disk_cache() {
+        use crate::gateway::remote_subdir::RemoteSubdirClient;
+
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        // Create a test channel
+        let channel_config = ChannelConfig::default_with_root_dir(PathBuf::new());
+        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
+
+        // Create mock cache files for linux-64 platform
+        let subdir_url = channel.platform_url(Platform::Linux64);
+        let cache_key = crate::utils::url_to_cache_filename(
+            &subdir_url.join("repodata.json").expect("valid filename"),
+        );
+
+        // Create mock cache files
+        let json_path = cache_dir.path().join(format!("{cache_key}.json"));
+        let info_path = cache_dir.path().join(format!("{cache_key}.info.json"));
+        let lock_path = cache_dir.path().join(format!("{cache_key}.lock"));
+
+        std::fs::write(&json_path, b"{}").unwrap();
+        std::fs::write(&info_path, b"{}").unwrap();
+        std::fs::write(&lock_path, b"").unwrap();
+
+        // Verify files exist
+        assert!(json_path.exists(), "json file should exist before clear");
+        assert!(info_path.exists(), "info file should exist before clear");
+        assert!(lock_path.exists(), "lock file should exist before clear");
+
+        // Clear the disk cache
+        RemoteSubdirClient::clear_cache(cache_dir.path(), &channel, Platform::Linux64).unwrap();
+
+        // Verify json and info files are removed but lock file remains
+        assert!(
+            !json_path.exists(),
+            "json file should be removed after clear"
+        );
+        assert!(
+            !info_path.exists(),
+            "info file should be removed after clear"
+        );
+        assert!(
+            lock_path.exists(),
+            "lock file should remain after clear to avoid ABA problem"
+        );
+    }
+
+    #[test]
+    fn test_clear_sharded_disk_cache() {
+        use crate::gateway::sharded_subdir::ShardedSubdir;
+
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        // Create a test channel
+        let channel_config = ChannelConfig::default_with_root_dir(PathBuf::new());
+        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
+
+        // Create mock sharded cache file for linux-64 platform
+        let index_base_url = channel
+            .base_url
+            .url()
+            .join(&format!("{}/", Platform::Linux64.as_str()))
+            .expect("invalid subdir url");
+        let canonical_shards_url = index_base_url
+            .join("repodata_shards.msgpack.zst")
+            .expect("invalid shard base url");
+        let cache_path = cache_dir.path().join(format!(
+            "{}.shards-cache-v1",
+            crate::utils::url_to_cache_filename(&canonical_shards_url)
+        ));
+
+        // Create mock cache file
+        std::fs::write(&cache_path, b"mock shard data").unwrap();
+
+        // Verify file exists
+        assert!(
+            cache_path.exists(),
+            "sharded cache file should exist before clear"
+        );
+
+        // Clear the disk cache
+        ShardedSubdir::clear_cache(cache_dir.path(), &channel, Platform::Linux64).unwrap();
+
+        // Verify cache file is removed
+        assert!(
+            !cache_path.exists(),
+            "sharded cache file should be removed after clear"
+        );
+    }
+
     fn run_exports_missing(records: &[RepoDataRecord]) -> bool {
         records
             .iter()

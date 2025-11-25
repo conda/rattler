@@ -88,7 +88,7 @@ impl RemoteSubdirClient {
         // Acquire a lock before modifying the cache files
         let lock_path = cache_dir.join(format!("{cache_key}.lock"));
         let _lock = crate::utils::LockedFile::open_rw(&lock_path, "repodata cache clear")
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
 
         // Remove the cached repodata files (but NOT the lock file)
         let json_path = cache_dir.join(format!("{cache_key}.json"));
