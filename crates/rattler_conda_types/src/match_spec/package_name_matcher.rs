@@ -23,7 +23,7 @@ pub enum PackageNameMatcher {
     /// and uses the regex syntax. For example, `^foo.*bar$` matches any
     /// string starting with `foo` and ending with `bar`. Note that the regex
     /// is anchored, so it must match the entire string.
-    Regex(regex::Regex),
+    Regex(fancy_regex::Regex),
 }
 
 impl Hash for PackageNameMatcher {
@@ -57,7 +57,11 @@ impl PackageNameMatcher {
         match self {
             PackageNameMatcher::Exact(s) => s == other,
             PackageNameMatcher::Glob(glob) => glob.matches(other.as_normalized()),
-            PackageNameMatcher::Regex(regex) => regex.is_match(other.as_normalized()),
+            // `fancy_regex` can fail on pathological backtracking cases.
+            // Treat match errors as non-matches.
+            PackageNameMatcher::Regex(regex) => {
+                regex.is_match(other.as_normalized()).unwrap_or(false)
+            }
         }
     }
 
@@ -78,7 +82,7 @@ impl PackageNameMatcher {
     }
 
     /// Returns the inner regex if this is a regex match.
-    pub fn as_regex(&self) -> Option<&regex::Regex> {
+    pub fn as_regex(&self) -> Option<&fancy_regex::Regex> {
         match self {
             PackageNameMatcher::Regex(regex) => Some(regex),
             _ => None,
@@ -98,8 +102,8 @@ impl From<glob::Pattern> for PackageNameMatcher {
     }
 }
 
-impl From<regex::Regex> for PackageNameMatcher {
-    fn from(value: regex::Regex) -> Self {
+impl From<fancy_regex::Regex> for PackageNameMatcher {
+    fn from(value: fancy_regex::Regex) -> Self {
         PackageNameMatcher::Regex(value)
     }
 }
@@ -146,11 +150,11 @@ impl FromStr for PackageNameMatcher {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.starts_with('^') && s.ends_with('$') {
-            Ok(PackageNameMatcher::Regex(regex::Regex::new(s).map_err(
-                |_err| PackageNameMatcherParseError::Regex {
+            Ok(PackageNameMatcher::Regex(
+                fancy_regex::Regex::new(s).map_err(|_err| PackageNameMatcherParseError::Regex {
                     regex: s.to_string(),
-                },
-            )?))
+                })?,
+            ))
         } else if s.contains('*') {
             Ok(PackageNameMatcher::Glob(glob::Pattern::new(s).map_err(
                 |_err| PackageNameMatcherParseError::Glob {
@@ -228,7 +232,7 @@ mod tests {
             "foo*bar".parse().unwrap()
         );
         assert_eq!(
-            PackageNameMatcher::Regex(regex::Regex::new("^foo.*$").unwrap()),
+            PackageNameMatcher::Regex(fancy_regex::Regex::new("^foo.*$").unwrap()),
             "^foo.*$".parse().unwrap()
         );
     }
