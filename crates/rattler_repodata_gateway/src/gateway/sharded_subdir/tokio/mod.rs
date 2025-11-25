@@ -143,10 +143,8 @@ impl ShardedSubdir {
             // This uses flock() on Unix (same as async_fd_lock used in normal flow).
             // On Unix, the file can be deleted while locked and will be removed
             // when the last handle is closed.
-            let mut lock = fslock::LockFile::open(&cache_path)
-                .map_err(std::io::Error::other)?;
-            lock.lock()
-                .map_err(std::io::Error::other)?;
+            let mut lock = fslock::LockFile::open(&cache_path).map_err(std::io::Error::other)?;
+            lock.lock().map_err(std::io::Error::other)?;
 
             // Now remove the file while holding the lock
             fs_err::remove_file(&cache_path)?;

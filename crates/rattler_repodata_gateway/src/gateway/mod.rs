@@ -229,11 +229,9 @@ impl Gateway {
                 ) {
                     errors.push(e);
                 }
-                if let Err(e) = sharded_subdir::ShardedSubdir::clear_cache(
-                    &self.inner.cache,
-                    channel,
-                    platform,
-                ) {
+                if let Err(e) =
+                    sharded_subdir::ShardedSubdir::clear_cache(&self.inner.cache, channel, platform)
+                {
                     errors.push(e);
                 }
             }
@@ -942,6 +940,173 @@ mod test {
                 super::CacheClearMode::InMemoryOnly,
             )
             .unwrap();
+    }
+
+    /// Helper function to generate minimal repodata JSON for a single package.
+    fn make_repodata(name: &str, version: &str) -> String {
+        format!(
+            r#"{{
+    "packages.conda": {{
+        "{name}-{version}-0.conda": {{
+            "build": "0",
+            "build_number": 0,
+            "depends": [],
+            "md5": "00000000000000000000000000000000",
+            "name": "{name}",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 1000,
+            "subdir": "linux-64",
+            "timestamp": 1700000000000,
+            "version": "{version}"
+        }}
+    }}
+}}"#
+        )
+    }
+
+    /// Integration test that verifies cache clearing actually works end-to-end.
+    /// Creates a simple channel with a single package, queries it, modifies
+    /// the source data, and verifies that memory-only cache clearing still
+    /// returns cached data while disk cache clearing forces a re-fetch.
+    #[tokio::test]
+    async fn test_gateway_clear_disk_cache_integration() {
+        // Create a temporary directory for the channel subdir
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir_path = channel_dir.path().join("linux-64");
+        std::fs::create_dir_all(&subdir_path).unwrap();
+
+        // Write initial repodata with version 1.0.0
+        let repodata_v1 = make_repodata("testpkg", "1.0.0");
+        std::fs::write(subdir_path.join("repodata.json"), &repodata_v1).unwrap();
+
+        // Start the SimpleChannelServer
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let channel = server.channel();
+
+        // Create a temporary cache directory
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        // Create a gateway with the custom cache directory
+        let gateway = Gateway::builder()
+            .with_cache_dir(cache_dir.path().to_path_buf())
+            .finish();
+
+        // Query to populate the cache - should get version 1.0.0
+        let records = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        // Verify we got exactly one record with version 1.0.0
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(all_records.len(), 1, "should have exactly one record");
+        assert_eq!(
+            all_records[0].package_record.version.as_str(),
+            "1.0.0",
+            "initial version should be 1.0.0"
+        );
+
+        // Sleep to ensure filesystem timestamp changes (server uses mtime for caching)
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+
+        // Modify the repodata on disk - change to version 2.0.0
+        let repodata_v2 = make_repodata("testpkg", "2.0.0");
+        std::fs::write(subdir_path.join("repodata.json"), &repodata_v2).unwrap();
+
+        // Query again without any cache clearing - should still get 1.0.0 (memory cache)
+        let records = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(
+            all_records[0].package_record.version.as_str(),
+            "1.0.0",
+            "should still be 1.0.0 due to memory cache"
+        );
+
+        // Clear memory cache only (not disk)
+        gateway
+            .clear_repodata_cache(
+                &channel,
+                SubdirSelection::Some(["linux-64"].into_iter().map(String::from).collect()),
+                super::CacheClearMode::InMemoryOnly,
+            )
+            .unwrap();
+
+        // Create a new gateway with ForceCacheOnly to verify disk cache has v1
+        // (Using ForceCacheOnly ensures we read from disk cache without checking server)
+        let gateway_cache_only = Gateway::builder()
+            .with_cache_dir(cache_dir.path().to_path_buf())
+            .with_channel_config(crate::ChannelConfig {
+                default: SourceConfig {
+                    cache_action: CacheAction::ForceCacheOnly,
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .finish();
+
+        // Query with ForceCacheOnly - should get 1.0.0 from disk cache
+        let records = gateway_cache_only
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(
+            all_records[0].package_record.version.as_str(),
+            "1.0.0",
+            "should still be 1.0.0 from disk cache when using ForceCacheOnly"
+        );
+
+        // Clear both memory and disk cache on the original gateway
+        gateway
+            .clear_repodata_cache(
+                &channel,
+                SubdirSelection::Some(["linux-64"].into_iter().map(String::from).collect()),
+                super::CacheClearMode::InMemoryAndDisk,
+            )
+            .unwrap();
+
+        // Query again (fresh gateway to avoid memory cache)
+        // should now get 2.0.0 (fresh fetch from server since disk cache was cleared)
+        let gateway_fresh = Gateway::builder()
+            .with_cache_dir(cache_dir.path().to_path_buf())
+            .finish();
+
+        let records = gateway_fresh
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(
+            all_records[0].package_record.version.as_str(),
+            "2.0.0",
+            "should now be 2.0.0 after clearing disk cache"
+        );
     }
 
     fn run_exports_missing(records: &[RepoDataRecord]) -> bool {
