@@ -172,11 +172,14 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             Err(_) => return,
         };
 
-        // Get the known dependencies for each solvable, filter out the unknown
-        // dependencies
+        // Get the known dependencies for each solvable. Solvables with unknown
+        // dependencies are moved to the end of the array (sorted lower).
         let mut id_and_deps: HashMap<_, Vec<_>> = HashMap::with_capacity(dependencies.len());
         let mut name_count: HashMap<NameId, usize> = HashMap::new();
-        for (solvable_idx, &solvable_id) in solvables.iter().enumerate() {
+        let mut known_count = solvables.len();
+        let mut solvable_idx = 0;
+        while solvable_idx < known_count {
+            let solvable_id = solvables[solvable_idx];
             let dependencies = self
                 .solver
                 .get_or_cache_dependencies(solvable_id)
@@ -185,7 +188,10 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             let known = match dependencies {
                 Ok(Dependencies::Known(known_dependencies)) => known_dependencies,
                 Ok(Dependencies::Unknown(_)) => {
-                    unreachable!("Unknown dependencies should never happen in the conda ecosystem")
+                    // Swap to end and don't advance index - need to check swapped-in element
+                    known_count -= 1;
+                    solvables.swap(solvable_idx, known_count);
+                    continue;
                 }
                 // Solver cancelation, lets just return
                 Err(_) => return,
@@ -228,13 +234,18 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                     }
                 }
             }
+
+            solvable_idx += 1;
         }
+
+        // Only sort solvables with known dependencies (unknown deps are already at the end)
+        let solvables = &mut solvables[..known_count];
 
         // Sort all the dependencies that the solvables have in common by their name.
         let sorted_unique_names = name_count
             .into_iter()
             .filter_map(|(name, count)| {
-                if count == solvables.len() {
+                if count == known_count {
                     Some(name)
                 } else {
                     None

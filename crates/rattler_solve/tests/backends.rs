@@ -606,6 +606,79 @@ macro_rules! solver_backend_tests {
 
             insta::assert_snapshot!(output);
         }
+
+        /// Test that packages with unparseable dependencies don't crash the solver.
+        /// This can happen when repodata contains malformed dependency strings.
+        #[test]
+        fn test_solve_with_unparseable_dependency() {
+            use rattler_conda_types::MatchSpec;
+            use rattler_solve::{SolverImpl, SolverTask};
+
+            // Create two versions of a package, one with valid deps and one with invalid deps
+            // Both have the same version/build number so they'll be sorted together
+            let mut pkg_valid = installed_package(
+                "test-channel",
+                "linux-64",
+                "sortme",
+                "1.0.0",
+                "build_a",
+                0,
+            );
+            pkg_valid.package_record.depends = vec!["python >=3.8".to_string()];
+
+            let mut pkg_invalid = installed_package(
+                "test-channel",
+                "linux-64",
+                "sortme",
+                "1.0.0",
+                "build_b",
+                0,
+            );
+            // This is a malformed dependency string that can't be parsed as a MatchSpec
+            pkg_invalid.package_record.depends =
+                vec!["this-is-not-a-valid-matchspec @#$%^&*()".to_string()];
+
+            // Add a python package so the valid dependency can be satisfied
+            let python_pkg = installed_package(
+                "test-channel",
+                "linux-64",
+                "python",
+                "3.9.0",
+                "h123456_0",
+                0,
+            );
+
+            let repo_data = vec![pkg_valid, pkg_invalid, python_pkg];
+
+            let specs =
+                vec![MatchSpec::from_str("sortme", ParseStrictness::Lenient).unwrap()];
+
+            let task = SolverTask {
+                specs,
+                ..SolverTask::from_iter([&repo_data])
+            };
+
+            // This should not panic with "Unknown dependencies should never happen"
+            // The solver should handle the unparseable dependency gracefully
+            let result = <$T>::default().solve(task);
+
+            // We expect the solve to succeed, selecting the package with valid dependencies
+            match result {
+                Ok(solution) => {
+                    let sortme = solution
+                        .records
+                        .iter()
+                        .find(|r| r.package_record.name.as_normalized() == "sortme")
+                        .expect("sortme package should be in solution");
+                    // The valid build should be selected
+                    assert_eq!(sortme.package_record.build, "build_a");
+                }
+                Err(e) => {
+                    // If it errors, it should be a proper error, not a panic
+                    println!("Solve returned error (this is acceptable): {e}");
+                }
+            }
+        }
     };
 }
 
