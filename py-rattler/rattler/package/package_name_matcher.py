@@ -39,6 +39,28 @@ class PackageNameMatcher:
         package_name_matcher._package_name_matcher = py_package_name_matcher
         return package_name_matcher
 
+    @property
+    def normalized(self) -> str:
+        """
+        Returns the normalized string representation of the matcher.
+
+        For exact matches, returns the normalized package name.
+        For glob and regex patterns, returns the pattern string.
+
+        Examples
+        --------
+        ```python
+        >>> PackageNameMatcher("rattler").normalized
+        'rattler'
+        >>> PackageNameMatcher("jupyter-*").normalized
+        'jupyter-*'
+        >>> PackageNameMatcher("^jupyter-.*$").normalized
+        '^jupyter-.*$'
+        >>>
+        ```
+        """
+        return self._package_name_matcher.normalized
+
     def as_package_name(self) -> Union[PackageName, None]:
         """
         Converts a PackageNameMatcher to a PackageName if it is an exact matcher.

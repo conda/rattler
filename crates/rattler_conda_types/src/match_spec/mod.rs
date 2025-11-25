@@ -1,5 +1,4 @@
 //! Query language for conda packages.
-#[cfg(feature = "experimental_conditionals")]
 use crate::match_spec::condition::MatchSpecCondition;
 use crate::package::ArchiveIdentifier;
 use crate::{
@@ -20,7 +19,6 @@ use url::Url;
 use crate::Channel;
 use crate::ChannelConfig;
 
-#[cfg(feature = "experimental_conditionals")]
 /// Experimental conditionals for match specs.
 pub mod condition;
 /// Match a given string either by exact match, glob or regex
@@ -169,7 +167,6 @@ pub struct MatchSpec {
     /// The license of the package
     pub license: Option<String>,
     /// The condition under which this match spec applies.
-    #[cfg(feature = "experimental_conditionals")]
     pub condition: Option<MatchSpecCondition>,
 }
 
@@ -237,7 +234,6 @@ impl Display for MatchSpec {
             write!(f, "[{}]", keys.join(", "))?;
         }
 
-        #[cfg(feature = "experimental_conditionals")]
         if let Some(condition) = &self.condition {
             write!(f, "; if {condition}")?;
         }
@@ -264,7 +260,6 @@ impl MatchSpec {
                 sha256: self.sha256,
                 url: self.url,
                 license: self.license,
-                #[cfg(feature = "experimental_conditionals")]
                 condition: self.condition,
             },
         )
@@ -327,7 +322,6 @@ pub struct NamelessMatchSpec {
     /// The license of the package
     pub license: Option<String>,
     /// The condition under which this match spec applies.
-    #[cfg(feature = "experimental_conditionals")]
     pub condition: Option<MatchSpecCondition>,
 }
 
@@ -356,7 +350,6 @@ impl Display for NamelessMatchSpec {
             write!(f, "[{}]", keys.join(", "))?;
         }
 
-        #[cfg(feature = "experimental_conditionals")]
         if let Some(condition) = &self.condition {
             write!(f, "; if {condition}")?;
         }
@@ -380,7 +373,6 @@ impl From<MatchSpec> for NamelessMatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
-            #[cfg(feature = "experimental_conditionals")]
             condition: spec.condition,
         }
     }
@@ -403,7 +395,6 @@ impl MatchSpec {
             sha256: spec.sha256,
             url: spec.url,
             license: spec.license,
-            #[cfg(feature = "experimental_conditionals")]
             condition: spec.condition,
         }
     }
@@ -660,7 +651,6 @@ pub enum MatchSpecUrlError {
 
 #[cfg(test)]
 mod tests {
-    use glob::Pattern;
     use itertools::Itertools;
     use rstest::rstest;
     use std::str::FromStr;
@@ -1114,9 +1104,7 @@ mod tests {
         let err = MatchSpec::from_str("foo* >=12[license=MIT]", Strict).unwrap_err();
         assert_eq!(
             err,
-            ParseMatchSpecError::OnlyExactPackageNameMatchersAllowed(
-                crate::PackageNameMatcher::Glob(Pattern::new("foo*").unwrap())
-            )
+            ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedGlob("foo*".to_string())
         );
     }
 }

@@ -49,6 +49,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2](https://github.com/conda/rattler/compare/rattler_cache-v0.6.1...rattler_cache-v0.6.2) - 2025-11-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_networking
+
+## [0.6.1](https://github.com/conda/rattler/compare/rattler_cache-v0.6.0...rattler_cache-v0.6.1) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.6.0](https://github.com/conda/rattler/compare/rattler_cache-v0.5.0...rattler_cache-v0.6.0) - 2025-11-19
+
+### Added
+
+- cache and reuse `paths.json` and `index.json` from package validation ([#1837](https://github.com/conda/rattler/pull/1837))
+
 ## [0.5.0](https://github.com/conda/rattler/compare/rattler_cache-v0.4.1...rattler_cache-v0.5.0) - 2025-11-13
 
 ### Added

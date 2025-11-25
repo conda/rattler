@@ -4,7 +4,8 @@ use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageName,
-    PackageRecord, ParseStrictness, RepoData, RepoDataRecord, SolverResult, Version,
+    PackageRecord, ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult,
+    Version,
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
@@ -30,7 +31,6 @@ fn dummy_channel_json_path() -> String {
     )
 }
 
-#[cfg(feature = "experimental_extras")]
 fn dummy_channel_with_optional_dependencies_json_path() -> String {
     format!(
         "{}/{}",
@@ -716,7 +716,6 @@ mod resolvo {
     use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
     use url::Url;
 
-    #[cfg(feature = "experimental_extras")]
     use super::dummy_channel_with_optional_dependencies_json_path;
     use super::{
         dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
@@ -969,7 +968,6 @@ mod resolvo {
     }
 
     /// A test that checks that extras can be used to select optional dependencies.
-    #[cfg(feature = "experimental_extras")]
     #[test]
     fn test_optional_dependency() {
         let mut result = solve::<rattler_solve::resolvo::Solver>(
@@ -1001,7 +999,6 @@ mod resolvo {
     }
 
     /// A test that checks that extras influence the version selection of other packages.
-    #[cfg(feature = "experimental_extras")]
     #[test]
     fn test_optional_dependency_restrict() {
         let mut result = solve::<rattler_solve::resolvo::Solver>(
@@ -1028,7 +1025,6 @@ mod resolvo {
 
     /// A test that checks that if two extras have conflicting dependencies the
     /// solution is unsolvable.
-    #[cfg(feature = "experimental_extras")]
     #[test]
     fn test_optional_dependency_conflicting_extras() {
         let result = solve::<rattler_solve::resolvo::Solver>(
@@ -1056,7 +1052,6 @@ mod resolvo {
 
     /// A test that checks that extras can cause conflicts with other package
     /// dependencies.
-    #[cfg(feature = "experimental_extras")]
     #[test]
     fn test_optional_dependency_conflicting_with_package() {
         let result = solve::<rattler_solve::resolvo::Solver>(
@@ -1216,6 +1211,154 @@ mod resolvo {
             }
         }
     }
+
+    #[test]
+    fn test_conditional_root_requirement_satisfied() {
+        use rattler_conda_types::{MatchSpec, ParseMatchSpecOptions, Version};
+        use rattler_solve::{SolverImpl, SolverTask};
+
+        // Create test packages
+        let python_pkg = installed_package("test", "linux-64", "python", "3.9.0", "h123456_0", 0);
+
+        let repo_data_records = vec![python_pkg.clone()];
+
+        // Conditional root requirement that should be INCLUDED (virtual package exists)
+        let specs = vec![MatchSpec::from_str(
+            "python; if __unix",
+            ParseMatchSpecOptions::lenient().with_experimental_conditionals(true),
+        )
+        .unwrap()];
+
+        let task = SolverTask {
+            specs,
+            virtual_packages: vec![rattler_conda_types::GenericVirtualPackage {
+                name: "__unix".parse().unwrap(),
+                version: Version::from_str("0").unwrap(),
+                build_string: "0".to_string(),
+            }],
+            ..SolverTask::from_iter([&repo_data_records])
+        };
+
+        let result = rattler_solve::resolvo::Solver.solve(task);
+        assert!(
+            result.is_ok(),
+            "Solving should succeed when condition is met"
+        );
+
+        let solution = result.unwrap();
+        let package_names: Vec<_> = solution
+            .records
+            .iter()
+            .map(|r| r.package_record.name.as_normalized())
+            .collect();
+
+        // Python should be included because __unix virtual package exists
+        assert!(
+            package_names.contains(&"python"),
+            "Python should be included when __unix condition is satisfied"
+        );
+    }
+
+    #[test]
+    fn test_conditional_root_requirement_not_satisfied() {
+        use rattler_conda_types::{MatchSpec, ParseMatchSpecOptions, Version};
+        use rattler_solve::{SolverImpl, SolverTask};
+
+        // Create test packages
+        let python_pkg = installed_package("test", "linux-64", "python", "3.9.0", "h123456_0", 0);
+
+        let repo_data_records = vec![python_pkg.clone()];
+
+        // Conditional root requirement that should be EXCLUDED (virtual package does not exist)
+        let specs = vec![MatchSpec::from_str(
+            "python; if __win",
+            ParseMatchSpecOptions::lenient().with_experimental_conditionals(true),
+        )
+        .unwrap()];
+
+        let task = SolverTask {
+            specs,
+            virtual_packages: vec![rattler_conda_types::GenericVirtualPackage {
+                name: "__unix".parse().unwrap(),
+                version: Version::from_str("0").unwrap(),
+                build_string: "0".to_string(),
+            }],
+            ..SolverTask::from_iter([&repo_data_records])
+        };
+
+        let result = rattler_solve::resolvo::Solver.solve(task);
+        assert!(
+            result.is_ok(),
+            "Solving should succeed when condition is not met"
+        );
+
+        let solution = result.unwrap();
+        let package_names: Vec<_> = solution
+            .records
+            .iter()
+            .map(|r| r.package_record.name.as_normalized())
+            .collect();
+
+        // Python should NOT be included because __win virtual package does not exist
+        assert!(
+            !package_names.contains(&"python"),
+            "Python should NOT be included when __win condition is not satisfied"
+        );
+    }
+
+    #[test]
+    fn test_conditional_root_requirement_with_logic() {
+        use rattler_conda_types::{MatchSpec, ParseMatchSpecOptions, Version};
+        use rattler_solve::{SolverImpl, SolverTask};
+
+        // Create test packages
+        let python_pkg = installed_package("test", "linux-64", "python", "3.9.0", "h123456_0", 0);
+
+        let repo_data_records = vec![python_pkg.clone()];
+
+        // Multiple conditional root requirements with AND logic
+        let specs = vec![MatchSpec::from_str(
+            "python; if __unix and __linux",
+            ParseMatchSpecOptions::lenient().with_experimental_conditionals(true),
+        )
+        .unwrap()];
+
+        let task = SolverTask {
+            specs,
+            virtual_packages: vec![
+                rattler_conda_types::GenericVirtualPackage {
+                    name: "__unix".parse().unwrap(),
+                    version: Version::from_str("0").unwrap(),
+                    build_string: "0".to_string(),
+                },
+                rattler_conda_types::GenericVirtualPackage {
+                    name: "__linux".parse().unwrap(),
+                    version: Version::from_str("0").unwrap(),
+                    build_string: "0".to_string(),
+                },
+            ],
+            ..SolverTask::from_iter([&repo_data_records])
+        };
+
+        let result = rattler_solve::resolvo::Solver.solve(task);
+        assert!(
+            result.is_ok(),
+            "Solving should succeed when AND condition is met"
+        );
+
+        let solution = result.unwrap();
+        let package_names: Vec<_> = solution
+            .records
+            .iter()
+            .map(|r| r.package_record.name.as_normalized())
+            .collect();
+
+        // Python should be included because both __unix and __linux exist
+        assert!(
+            package_names.contains(&"python"),
+            "Python should be included when both conditions are satisfied"
+        );
+    }
 }
 
 #[derive(Default)]
@@ -1241,13 +1384,25 @@ fn solve<T: SolverImpl + Default>(
     let specs: Vec<_> = task
         .specs
         .iter()
-        .map(|m| MatchSpec::from_str(m, ParseStrictness::Lenient).unwrap())
+        .map(|m| {
+            MatchSpec::from_str(
+                m,
+                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
+            )
+            .unwrap()
+        })
         .collect();
 
     let constraints = task
         .constraints
         .into_iter()
-        .map(|m| MatchSpec::from_str(m, ParseStrictness::Lenient).unwrap())
+        .map(|m| {
+            MatchSpec::from_str(
+                m,
+                ParseMatchSpecOptions::lenient().with_experimental_extras(true),
+            )
+            .unwrap()
+        })
         .collect();
 
     let task = SolverTask {
