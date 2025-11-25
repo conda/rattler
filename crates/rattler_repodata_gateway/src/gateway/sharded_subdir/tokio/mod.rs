@@ -114,6 +114,9 @@ impl ShardedSubdir {
 
     /// Clears the on-disk cache for the sharded repodata index of the given
     /// channel and platform.
+    ///
+    /// This acquires an exclusive lock on the cache file before removing it
+    /// to prevent race conditions with concurrent readers/writers.
     pub fn clear_cache(
         cache_dir: &Path,
         channel: &Channel,
@@ -133,6 +136,16 @@ impl ShardedSubdir {
         ));
 
         if cache_path.exists() {
+            // Acquire an exclusive lock before removing the file.
+            // This uses flock() on Unix (same as async_fd_lock used in normal flow).
+            // On Unix, the file can be deleted while locked and will be removed
+            // when the last handle is closed.
+            let mut lock = fslock::LockFile::open(&cache_path)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            lock.lock()
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+            // Now remove the file while holding the lock
             fs_err::remove_file(&cache_path)?;
             tracing::debug!("deleted shard index cache: {:?}", cache_path);
         }

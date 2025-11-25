@@ -70,8 +70,9 @@ impl RemoteSubdirClient {
 
     /// Clears the on-disk cache for the given channel and platform.
     ///
-    /// This removes all cached repodata files (JSON, info, and lock files) for
-    /// the specified channel and platform combination.
+    /// This removes all cached repodata files (JSON and info files) for
+    /// the specified channel and platform combination. The lock file is
+    /// retained to avoid the ABA problem with concurrent processes.
     pub fn clear_cache(
         cache_dir: &Path,
         channel: &Channel,
@@ -84,12 +85,16 @@ impl RemoteSubdirClient {
                 .expect("valid filename"),
         );
 
-        // Remove the cached repodata files
+        // Acquire a lock before modifying the cache files
+        let lock_path = cache_dir.join(format!("{cache_key}.lock"));
+        let _lock = crate::utils::LockedFile::open_rw(&lock_path, "repodata cache clear")
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        // Remove the cached repodata files (but NOT the lock file)
         let json_path = cache_dir.join(format!("{cache_key}.json"));
         let info_path = cache_dir.join(format!("{cache_key}.info.json"));
-        let lock_path = cache_dir.join(format!("{cache_key}.lock"));
 
-        for path in [json_path, info_path, lock_path] {
+        for path in [json_path, info_path] {
             if path.exists() {
                 fs_err::remove_file(&path)?;
                 tracing::debug!("deleted repodata cache file: {:?}", path);
