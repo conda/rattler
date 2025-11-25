@@ -607,11 +607,11 @@ macro_rules! solver_backend_tests {
             insta::assert_snapshot!(output);
         }
 
-        /// Test that packages with unparseable dependencies don't crash the solver.
+        /// Test that packages with unparsable dependencies don't crash the solver.
         /// This can happen when repodata contains malformed dependency strings.
         #[test]
-        fn test_solve_with_unparseable_dependency() {
-            use rattler_conda_types::MatchSpec;
+        fn test_solve_with_unparsable_dependency() {
+            use rattler_conda_types::{MatchSpec, ParseStrictness};
             use rattler_solve::{SolverImpl, SolverTask};
 
             // Create two versions of a package, one with valid deps and one with invalid deps
@@ -659,7 +659,7 @@ macro_rules! solver_backend_tests {
             };
 
             // This should not panic with "Unknown dependencies should never happen"
-            // The solver should handle the unparseable dependency gracefully
+            // The solver should handle the unparsable dependency gracefully
             let result = <$T>::default().solve(task);
 
             // We expect the solve to succeed, selecting the package with valid dependencies
