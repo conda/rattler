@@ -862,6 +862,88 @@ mod test {
         );
     }
 
+    #[test]
+    fn test_clear_disk_cache_no_cache() {
+        use crate::gateway::remote_subdir::RemoteSubdirClient;
+
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        // Create a test channel
+        let channel_config = ChannelConfig::default_with_root_dir(PathBuf::new());
+        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
+
+        // Clear should succeed even when there's no cache (empty directory)
+        RemoteSubdirClient::clear_cache(cache_dir.path(), &channel, Platform::Linux64).unwrap();
+
+        // Clear should also succeed when the cache directory doesn't exist at all
+        let non_existent_dir = cache_dir.path().join("does-not-exist");
+        RemoteSubdirClient::clear_cache(&non_existent_dir, &channel, Platform::Linux64).unwrap();
+    }
+
+    #[test]
+    fn test_clear_sharded_disk_cache_no_cache() {
+        use crate::gateway::sharded_subdir::ShardedSubdir;
+
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        // Create a test channel
+        let channel_config = ChannelConfig::default_with_root_dir(PathBuf::new());
+        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
+
+        // Clear should succeed even when there's no cache (empty directory)
+        ShardedSubdir::clear_cache(cache_dir.path(), &channel, Platform::Linux64).unwrap();
+
+        // Clear should also succeed when the cache directory doesn't exist at all
+        let non_existent_dir = cache_dir.path().join("does-not-exist");
+        ShardedSubdir::clear_cache(&non_existent_dir, &channel, Platform::Linux64).unwrap();
+    }
+
+    #[test]
+    fn test_gateway_clear_repodata_cache() {
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        // Create a test channel
+        let channel_config = ChannelConfig::default_with_root_dir(PathBuf::new());
+        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
+
+        // Create a gateway with the custom cache directory
+        let gateway = Gateway::builder()
+            .with_cache_dir(cache_dir.path().to_path_buf())
+            .finish();
+
+        // Clear should succeed even when there's no cache
+        gateway
+            .clear_repodata_cache(
+                &channel,
+                SubdirSelection::default(),
+                super::CacheClearMode::InMemoryAndDisk,
+            )
+            .unwrap();
+
+        // Clear with specific subdirs should also succeed
+        gateway
+            .clear_repodata_cache(
+                &channel,
+                SubdirSelection::Some(
+                    ["linux-64", "noarch"]
+                        .into_iter()
+                        .map(String::from)
+                        .collect(),
+                ),
+                super::CacheClearMode::InMemoryAndDisk,
+            )
+            .unwrap();
+
+        // Clear in-memory only should also succeed
+        gateway
+            .clear_repodata_cache(
+                &channel,
+                SubdirSelection::default(),
+                super::CacheClearMode::InMemoryOnly,
+            )
+            .unwrap();
+    }
+
     fn run_exports_missing(records: &[RepoDataRecord]) -> bool {
         records
             .iter()

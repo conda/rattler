@@ -117,6 +117,9 @@ impl ShardedSubdir {
     ///
     /// This acquires an exclusive lock on the cache file before removing it
     /// to prevent race conditions with concurrent readers/writers.
+    ///
+    /// If the cache file doesn't exist, this is a no-op since there's nothing
+    /// to clear.
     pub fn clear_cache(
         cache_dir: &Path,
         channel: &Channel,
