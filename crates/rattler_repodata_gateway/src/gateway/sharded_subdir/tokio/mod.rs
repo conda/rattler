@@ -23,7 +23,8 @@ use rattler_networking::LazyClient;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use url::Url;
 
-const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
+pub(crate) const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
+pub(crate) const SHARDS_CACHE_SUFFIX: &str = ".shards-cache-v1";
 
 pub struct ShardedSubdir {
     channel: Channel,
@@ -134,8 +135,9 @@ impl ShardedSubdir {
             .join(REPODATA_SHARDS_FILENAME)
             .expect("invalid shard base url");
         let cache_path = cache_dir.join(format!(
-            "{}.shards-cache-v1",
-            crate::utils::url_to_cache_filename(&canonical_shards_url)
+            "{}{}",
+            crate::utils::url_to_cache_filename(&canonical_shards_url),
+            SHARDS_CACHE_SUFFIX
         ));
 
         if cache_path.exists() {

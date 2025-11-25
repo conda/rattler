@@ -819,7 +819,9 @@ mod test {
 
     #[test]
     fn test_clear_sharded_disk_cache() {
-        use crate::gateway::sharded_subdir::ShardedSubdir;
+        use crate::gateway::sharded_subdir::{
+            ShardedSubdir, REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX,
+        };
 
         let cache_dir = tempfile::tempdir().unwrap();
 
@@ -834,11 +836,12 @@ mod test {
             .join(&format!("{}/", Platform::Linux64.as_str()))
             .expect("invalid subdir url");
         let canonical_shards_url = index_base_url
-            .join("repodata_shards.msgpack.zst")
+            .join(REPODATA_SHARDS_FILENAME)
             .expect("invalid shard base url");
         let cache_path = cache_dir.path().join(format!(
-            "{}.shards-cache-v1",
-            crate::utils::url_to_cache_filename(&canonical_shards_url)
+            "{}{}",
+            crate::utils::url_to_cache_filename(&canonical_shards_url),
+            SHARDS_CACHE_SUFFIX
         ));
 
         // Create mock cache file
