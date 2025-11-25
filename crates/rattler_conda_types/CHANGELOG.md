@@ -39,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.0...rattler_conda_types-v0.42.1) - 2025-11-25
+
+### Added
+
+- *(rattler_conda_types)* use `fancy_regex` for matchers ([#1885](https://github.com/conda/rattler/pull/1885))
+
 ## [0.42.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.41.2...rattler_conda_types-v0.42.0) - 2025-11-22
 
 ### Added

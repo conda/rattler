@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.4](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.25.3...rattler_repodata_gateway-v0.25.4) - 2025-11-25
+
+### Added
+
+- *(gateway)* allow cleaning disk cache ([#1881](https://github.com/conda/rattler/pull/1881))
+
 ## [0.25.3](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.25.2...rattler_repodata_gateway-v0.25.3) - 2025-11-22
 
 ### Other
