@@ -1,7 +1,10 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use crate::{
-    fetch::{fetch_repo_data, FetchRepoDataError, FetchRepoDataOptions},
+    fetch::{fetch_repo_data, FetchRepoDataError, FetchRepoDataOptions, Variant},
     gateway::{
         error::SubdirNotFoundError, local_subdir::LocalSubdirClient, GatewayError, SourceConfig,
     },
@@ -63,5 +66,36 @@ impl RemoteSubdirClient {
         .await?;
 
         Ok(Self { sparse })
+    }
+
+    /// Clears the on-disk cache for the given channel and platform.
+    ///
+    /// This removes all cached repodata files (JSON, info, and lock files) for
+    /// the specified channel and platform combination.
+    pub fn clear_cache(
+        cache_dir: &Path,
+        channel: &Channel,
+        platform: Platform,
+    ) -> Result<(), std::io::Error> {
+        let subdir_url = channel.platform_url(platform);
+        let cache_key = crate::utils::url_to_cache_filename(
+            &subdir_url
+                .join(Variant::default().file_name())
+                .expect("valid filename"),
+        );
+
+        // Remove the cached repodata files
+        let json_path = cache_dir.join(format!("{cache_key}.json"));
+        let info_path = cache_dir.join(format!("{cache_key}.info.json"));
+        let lock_path = cache_dir.join(format!("{cache_key}.lock"));
+
+        for path in [json_path, info_path, lock_path] {
+            if path.exists() {
+                fs_err::remove_file(&path)?;
+                tracing::debug!("deleted repodata cache file: {:?}", path);
+            }
+        }
+
+        Ok(())
     }
 }

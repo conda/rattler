@@ -81,6 +81,17 @@ impl SubdirSelection {
     }
 }
 
+/// Specifies what caches to clear.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CacheClearMode {
+    /// Only clear in-memory caches.
+    #[default]
+    InMemoryOnly,
+
+    /// Clear both in-memory and on-disk caches.
+    InMemoryAndDisk,
+}
+
 impl Gateway {
     /// Constructs a simple gateway with the default configuration. Use
     /// [`Gateway::builder`] if you want more control over how the gateway
@@ -185,11 +196,56 @@ impl Gateway {
     ///
     /// Any subsequent query will re-fetch any required data from the source.
     ///
-    /// This method does not clear any on-disk cache.
-    pub fn clear_repodata_cache(&self, channel: &Channel, subdirs: SubdirSelection) {
+    /// When `mode` is [`CacheClearMode::InMemoryAndDisk`], this method also
+    /// clears on-disk caches for the specified channel and subdirectories.
+    pub fn clear_repodata_cache(
+        &self,
+        channel: &Channel,
+        subdirs: SubdirSelection,
+        mode: CacheClearMode,
+    ) -> Result<(), std::io::Error> {
         self.inner.subdirs.retain(|key, _| {
             key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str())
         });
+
+        #[cfg(not(target_arch = "wasm32"))]
+        if mode == CacheClearMode::InMemoryAndDisk {
+            use std::str::FromStr;
+
+            let platforms_to_clear: Vec<Platform> = match &subdirs {
+                SubdirSelection::All => Platform::all().collect(),
+                SubdirSelection::Some(subdirs) => subdirs
+                    .iter()
+                    .filter_map(|s| Platform::from_str(s).ok())
+                    .collect(),
+            };
+
+            let mut errors = Vec::new();
+            for platform in platforms_to_clear {
+                if let Err(e) = remote_subdir::RemoteSubdirClient::clear_cache(
+                    &self.inner.cache,
+                    channel,
+                    platform,
+                ) {
+                    errors.push(e);
+                }
+                if let Err(e) = sharded_subdir::ShardedSubdir::clear_cache(
+                    &self.inner.cache,
+                    channel,
+                    platform,
+                ) {
+                    errors.push(e);
+                }
+            }
+            if let Some(first_error) = errors.into_iter().next() {
+                return Err(first_error);
+            }
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        let _ = mode;
+
+        Ok(())
     }
 }
 
@@ -701,7 +757,13 @@ mod test {
         );
 
         // Now clear the cache and run the query again.
-        gateway.clear_repodata_cache(&local_channel.channel(), SubdirSelection::default());
+        gateway
+            .clear_repodata_cache(
+                &local_channel.channel(),
+                SubdirSelection::default(),
+                super::CacheClearMode::InMemoryOnly,
+            )
+            .unwrap();
         query.clone().execute().await.unwrap();
         assert!(
             !downloads.urls.is_empty(),
