@@ -44,7 +44,7 @@ zstd = { workspace = true, features = ["zstdmt"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { workspace = true, features = ["wasm_js"] }
 # Also need getrandom 0.2 for rand dependency
-getrandom_v02 = { package = "getrandom", version = "0.2", features = ["js"] }
+getrandom_v02 = { package = "getrandom", version = "0.3", features = ["js"] }
 
 [features]
 default = ["rustls-tls"]
