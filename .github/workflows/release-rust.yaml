@@ -43,7 +43,7 @@ jobs:
           # Verify configs are gone
           git config --global --list
       - name: Run release-plz
-        uses: release-plz/action@d529f731ae3e89610ada96eda34e5c6ba3b12214 # v0.5
+        uses: release-plz/action@1efcf74dfcd6e500990dad806e286899ae384064 # v0.5
         with:
           command: release
         env:
@@ -87,7 +87,7 @@ jobs:
           git config --global --list
 
       - name: Run release-plz
-        uses: release-plz/action@d529f731ae3e89610ada96eda34e5c6ba3b12214 # v0.5
+        uses: release-plz/action@1efcf74dfcd6e500990dad806e286899ae384064 # v0.5
         id: release-plz
         with:
           command: release-pr
