@@ -858,14 +858,25 @@ impl super::SolverImpl for Solver {
                 .intern_version_set(name_id, NamelessMatchSpec::default().into())
         });
 
-        let root_requirements = task
-            .specs
-            .into_iter()
-            .flat_map(|spec| version_sets_for_match_spec(&provider.pool, spec));
+        let root_requirements = task.specs.into_iter().flat_map(|spec| {
+            let condition_id = if let Some(condition) = spec.condition.as_ref() {
+                let mut cache = provider.parse_match_spec_cache.borrow_mut();
+                Some(parse_condition(condition, &provider.pool, &mut cache))
+            } else {
+                None
+            };
+
+            version_sets_for_match_spec(&provider.pool, spec)
+                .into_iter()
+                .map(move |version_set_id| ConditionalRequirement {
+                    requirement: version_set_id.into(),
+                    condition: condition_id,
+                })
+        });
 
         let all_requirements: Vec<_> = virtual_package_requirements
-            .chain(root_requirements)
             .map(ConditionalRequirement::from)
+            .chain(root_requirements)
             .collect();
 
         let root_constraints = task

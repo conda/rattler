@@ -1211,6 +1211,154 @@ mod resolvo {
             }
         }
     }
+
+    #[test]
+    fn test_conditional_root_requirement_satisfied() {
+        use rattler_conda_types::{MatchSpec, ParseMatchSpecOptions, Version};
+        use rattler_solve::{SolverImpl, SolverTask};
+
+        // Create test packages
+        let python_pkg = installed_package("test", "linux-64", "python", "3.9.0", "h123456_0", 0);
+
+        let repo_data_records = vec![python_pkg.clone()];
+
+        // Conditional root requirement that should be INCLUDED (virtual package exists)
+        let specs = vec![MatchSpec::from_str(
+            "python; if __unix",
+            ParseMatchSpecOptions::lenient().with_experimental_conditionals(true),
+        )
+        .unwrap()];
+
+        let task = SolverTask {
+            specs,
+            virtual_packages: vec![rattler_conda_types::GenericVirtualPackage {
+                name: "__unix".parse().unwrap(),
+                version: Version::from_str("0").unwrap(),
+                build_string: "0".to_string(),
+            }],
+            ..SolverTask::from_iter([&repo_data_records])
+        };
+
+        let result = rattler_solve::resolvo::Solver.solve(task);
+        assert!(
+            result.is_ok(),
+            "Solving should succeed when condition is met"
+        );
+
+        let solution = result.unwrap();
+        let package_names: Vec<_> = solution
+            .records
+            .iter()
+            .map(|r| r.package_record.name.as_normalized())
+            .collect();
+
+        // Python should be included because __unix virtual package exists
+        assert!(
+            package_names.contains(&"python"),
+            "Python should be included when __unix condition is satisfied"
+        );
+    }
+
+    #[test]
+    fn test_conditional_root_requirement_not_satisfied() {
+        use rattler_conda_types::{MatchSpec, ParseMatchSpecOptions, Version};
+        use rattler_solve::{SolverImpl, SolverTask};
+
+        // Create test packages
+        let python_pkg = installed_package("test", "linux-64", "python", "3.9.0", "h123456_0", 0);
+
+        let repo_data_records = vec![python_pkg.clone()];
+
+        // Conditional root requirement that should be EXCLUDED (virtual package does not exist)
+        let specs = vec![MatchSpec::from_str(
+            "python; if __win",
+            ParseMatchSpecOptions::lenient().with_experimental_conditionals(true),
+        )
+        .unwrap()];
+
+        let task = SolverTask {
+            specs,
+            virtual_packages: vec![rattler_conda_types::GenericVirtualPackage {
+                name: "__unix".parse().unwrap(),
+                version: Version::from_str("0").unwrap(),
+                build_string: "0".to_string(),
+            }],
+            ..SolverTask::from_iter([&repo_data_records])
+        };
+
+        let result = rattler_solve::resolvo::Solver.solve(task);
+        assert!(
+            result.is_ok(),
+            "Solving should succeed when condition is not met"
+        );
+
+        let solution = result.unwrap();
+        let package_names: Vec<_> = solution
+            .records
+            .iter()
+            .map(|r| r.package_record.name.as_normalized())
+            .collect();
+
+        // Python should NOT be included because __win virtual package does not exist
+        assert!(
+            !package_names.contains(&"python"),
+            "Python should NOT be included when __win condition is not satisfied"
+        );
+    }
+
+    #[test]
+    fn test_conditional_root_requirement_with_logic() {
+        use rattler_conda_types::{MatchSpec, ParseMatchSpecOptions, Version};
+        use rattler_solve::{SolverImpl, SolverTask};
+
+        // Create test packages
+        let python_pkg = installed_package("test", "linux-64", "python", "3.9.0", "h123456_0", 0);
+
+        let repo_data_records = vec![python_pkg.clone()];
+
+        // Multiple conditional root requirements with AND logic
+        let specs = vec![MatchSpec::from_str(
+            "python; if __unix and __linux",
+            ParseMatchSpecOptions::lenient().with_experimental_conditionals(true),
+        )
+        .unwrap()];
+
+        let task = SolverTask {
+            specs,
+            virtual_packages: vec![
+                rattler_conda_types::GenericVirtualPackage {
+                    name: "__unix".parse().unwrap(),
+                    version: Version::from_str("0").unwrap(),
+                    build_string: "0".to_string(),
+                },
+                rattler_conda_types::GenericVirtualPackage {
+                    name: "__linux".parse().unwrap(),
+                    version: Version::from_str("0").unwrap(),
+                    build_string: "0".to_string(),
+                },
+            ],
+            ..SolverTask::from_iter([&repo_data_records])
+        };
+
+        let result = rattler_solve::resolvo::Solver.solve(task);
+        assert!(
+            result.is_ok(),
+            "Solving should succeed when AND condition is met"
+        );
+
+        let solution = result.unwrap();
+        let package_names: Vec<_> = solution
+            .records
+            .iter()
+            .map(|r| r.package_record.name.as_normalized())
+            .collect();
+
+        // Python should be included because both __unix and __linux exist
+        assert!(
+            package_names.contains(&"python"),
+            "Python should be included when both conditions are satisfied"
+        );
+    }
 }
 
 #[derive(Default)]
