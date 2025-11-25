@@ -92,7 +92,7 @@ json-patch = "4.0.0"
 keyring = "3.6.2"
 lazy-regex = "3.4.1"
 libc = { version = "0.2" }
-libloading = "0.8.7"
+libloading = "0.9.0"
 libz-sys = { version = "1.1.22", default-features = false }
 md-5 = "0.10.6"
 memchr = "2.7.4"
