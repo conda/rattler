@@ -1171,13 +1171,13 @@ dependencies = [
 
 [[package]]
 name = "clang-sys"
-version = "1.6.1"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c688fc74432808e3eb684cae8830a86be1d66a2bd58e1f248ed0960a590baf6f"
+checksum = "0b023947811758c97c59bf9d1c188fd619ad4718dcaa767947df1cadb14f39f4"
 dependencies = [
  "glob",
  "libc",
- "libloading 0.7.4",
+ "libloading 0.8.9",
 ]
 
 [[package]]
@@ -1739,7 +1739,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2007,7 +2007,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3172,7 +3172,7 @@ version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d463f34ca3c400fde3a054da0e0b8c6ffa21e4590922f3e18281bb5eeef4cbdc"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3230,12 +3230,12 @@ dependencies = [
 
 [[package]]
 name = "libloading"
-version = "0.7.4"
+version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b67380fd3b2fbe7527a606e18729d21c6f3951633d0500574c4dc22d2d638b9f"
+checksum = "d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55"
 dependencies = [
  "cfg-if",
- "winapi",
+ "windows-link 0.2.1",
 ]
 
 [[package]]
@@ -3582,7 +3582,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4387,7 +4387,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4509,7 +4509,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.39.3"
+version = "0.39.4"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4594,7 +4594,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4633,7 +4633,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "ahash",
  "assert_matches",
@@ -4684,7 +4684,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "console 0.16.1",
  "fs-err",
@@ -4724,7 +4724,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.4"
+version = "0.27.5"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4774,7 +4774,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.26.5"
+version = "0.26.6"
 dependencies = [
  "ahash",
  "chrono",
@@ -4811,7 +4811,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.38"
+version = "0.2.39"
 dependencies = [
  "chrono",
  "configparser",
@@ -4840,7 +4840,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.25"
+version = "0.25.26"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4878,7 +4878,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.17"
+version = "0.23.18"
 dependencies = [
  "assert_matches",
  "bzip2",
@@ -4933,7 +4933,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.25.3"
+version = "0.25.4"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -5002,7 +5002,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -5018,7 +5018,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_sandbox"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "birdcage",
  "clap",
@@ -5029,7 +5029,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.11"
+version = "0.25.12"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -5051,7 +5051,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "4.0.0"
+version = "4.0.1"
 dependencies = [
  "chrono",
  "criterion",
@@ -5078,7 +5078,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "base64",
  "clap",
@@ -5112,7 +5112,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.3.0"
+version = "2.3.1"
 dependencies = [
  "archspec",
  "libloading 0.9.0",
@@ -5585,7 +5585,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6032,9 +6032,9 @@ dependencies = [
 
 [[package]]
 name = "signal-hook-registry"
-version = "1.4.6"
+version = "1.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2a4719bff48cee6b39d12c020eeb490953ad2443b7055bd0b21fca26bd8c28b"
+checksum = "7664a098b8e616bdfcc2dc0e9ac44eb231eedf41db4e9fe95d8d32ec728dedad"
 dependencies = [
  "libc",
 ]
@@ -6378,7 +6378,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.2",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7250,7 +7250,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7869,18 +7869,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.28"
+version = "0.8.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43fa6694ed34d6e57407afbccdeecfa268c470a7d2a5b0cf49ce9fcc345afb90"
+checksum = "4ea879c944afe8a2b25fef16bb4ba234f47c694565e97383b36f3a878219065c"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.28"
+version = "0.8.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c640b22cd9817fae95be82f0d2f90b11f7605f6c319d16705c459b27ac2cbc26"
+checksum = "cf955aa904d6040f70dc8e9384444cb1030aed272ba3cb09bbc4ab9e7c1f34f5"
 dependencies = [
  "proc-macro2",
  "quote",
