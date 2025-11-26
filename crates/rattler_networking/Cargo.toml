@@ -32,6 +32,7 @@ google-cloud-auth = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true, features = [
     "rt-tokio",
     "sso",
+    "credentials-login",
     "credentials-process",
 ] }
 aws-sdk-s3 = { workspace = true, optional = true, features = [
