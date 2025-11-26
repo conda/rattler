@@ -121,7 +121,7 @@ reflink-copy = "0.1.26"
 regex = "1.11.1"
 reqwest = { version = "0.12.15", default-features = false }
 reqwest-middleware = "0.4.2"
-reqwest-retry = "0.7.0"
+reqwest-retry = "0.8.0"
 resolvo = { version = "0.10.0" }
 # hold back at 0.4.0 until `reqwest-retry` is updated
 retry-policies = { version = "0.4.0", default-features = false }
