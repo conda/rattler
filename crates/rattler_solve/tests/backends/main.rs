@@ -744,21 +744,6 @@ macro_rules! solver_backend_tests {
             crate::solver_case_tests::solve_noop::<$T>();
         }
 
-        #[test]
-        fn test_lowest_version_strategy() {
-            crate::strategy_tests::solve_lowest_version_strategy::<$T>();
-        }
-
-        #[test]
-        fn test_lowest_version_strategy_transitive() {
-            crate::strategy_tests::solve_lowest_version_strategy_transitive::<$T>();
-        }
-
-        #[test]
-        fn test_lowest_version_direct_strategy() {
-            crate::strategy_tests::solve_lowest_version_direct_strategy::<$T>();
-        }
-
         /// Test that packages with unparsable dependencies don't crash the solver.
         /// This can happen when repodata contains malformed dependency strings.
         #[test]
@@ -1306,6 +1291,27 @@ mod resolvo {
     #[test]
     fn test_conditional_root_requirement_with_logic() {
         crate::conditional_tests::solve_conditional_root_requirement_with_logic::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
+
+    // Strategy tests (resolvo-specific, using SolverCase)
+
+    #[test]
+    fn test_lowest_version_strategy() {
+        crate::strategy_tests::solve_lowest_version_strategy::<rattler_solve::resolvo::Solver>();
+    }
+
+    #[test]
+    fn test_lowest_version_strategy_transitive() {
+        crate::strategy_tests::solve_lowest_version_strategy_transitive::<
+            rattler_solve::resolvo::Solver,
+        >();
+    }
+
+    #[test]
+    fn test_lowest_version_direct_strategy() {
+        crate::strategy_tests::solve_lowest_version_direct_strategy::<
             rattler_solve::resolvo::Solver,
         >();
     }
