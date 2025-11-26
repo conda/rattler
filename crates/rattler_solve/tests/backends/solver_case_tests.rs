@@ -20,7 +20,10 @@ pub(super) fn solve_favored<T: SolverImpl + Default>() {
 pub(super) fn solve_constraints<T: SolverImpl + Default>() {
     let bors_1 = PackageBuilder::new("bors").version("1.0").build();
     let bors_2 = PackageBuilder::new("bors").version("2.0").build();
-    let foobar = PackageBuilder::new("foobar").version("1.0").depends(["bors"]).build();
+    let foobar = PackageBuilder::new("foobar")
+        .version("1.0")
+        .depends(["bors"])
+        .build();
 
     SolverCase::new("constraints limit package selection")
         .repository([bors_1, bors_2, foobar])
@@ -30,10 +33,16 @@ pub(super) fn solve_constraints<T: SolverImpl + Default>() {
         .run::<T>();
 }
 
-/// Test that exclude_newer filters out packages newer than the given timestamp.
+/// Test that `exclude_newer` filters out packages newer than the given timestamp.
 pub(super) fn solve_exclude_newer<T: SolverImpl + Default>() {
-    let foo_old = PackageBuilder::new("foo").version("1.0").timestamp("2021-06-01T00:00:00Z").build();
-    let foo_new = PackageBuilder::new("foo").version("2.0").timestamp("2022-06-01T00:00:00Z").build();
+    let foo_old = PackageBuilder::new("foo")
+        .version("1.0")
+        .timestamp("2021-06-01T00:00:00Z")
+        .build();
+    let foo_new = PackageBuilder::new("foo")
+        .version("2.0")
+        .timestamp("2022-06-01T00:00:00Z")
+        .build();
 
     SolverCase::new("exclude_newer filters out packages newer than timestamp")
         .repository([foo_old, foo_new])
@@ -82,6 +91,7 @@ pub(super) fn solve_install_new<T: SolverImpl + Default>() {
 }
 
 /// Test that removing a package results in empty solution.
+#[allow(clippy::disallowed_names)]
 pub(super) fn solve_remove<T: SolverImpl + Default>() {
     let foo = PackageBuilder::new("foo").version("1.0").build();
 

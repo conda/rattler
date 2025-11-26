@@ -1288,17 +1288,23 @@ mod resolvo {
 
     #[test]
     fn test_conditional_root_requirement_satisfied() {
-        crate::conditional_tests::solve_conditional_root_requirement_satisfied::<rattler_solve::resolvo::Solver>();
+        crate::conditional_tests::solve_conditional_root_requirement_satisfied::<
+            rattler_solve::resolvo::Solver,
+        >();
     }
 
     #[test]
     fn test_conditional_root_requirement_not_satisfied() {
-        crate::conditional_tests::solve_conditional_root_requirement_not_satisfied::<rattler_solve::resolvo::Solver>();
+        crate::conditional_tests::solve_conditional_root_requirement_not_satisfied::<
+            rattler_solve::resolvo::Solver,
+        >();
     }
 
     #[test]
     fn test_conditional_root_requirement_with_logic() {
-        crate::conditional_tests::solve_conditional_root_requirement_with_logic::<rattler_solve::resolvo::Solver>();
+        crate::conditional_tests::solve_conditional_root_requirement_with_logic::<
+            rattler_solve::resolvo::Solver,
+        >();
     }
 }
 

@@ -142,7 +142,7 @@ pub(super) fn solve_complex_conditional_dependencies<T: SolverImpl + Default>() 
 }
 
 /// Test that conditional root requirements work when condition is satisfied.
-/// This is resolvo-specific as libsolv_c doesn't support conditionals.
+/// This is resolvo-specific as `libsolv_c` doesn't support conditionals.
 pub(super) fn solve_conditional_root_requirement_satisfied<T: SolverImpl + Default>() {
     use rattler_conda_types::Version;
 
@@ -163,7 +163,7 @@ pub(super) fn solve_conditional_root_requirement_satisfied<T: SolverImpl + Defau
 }
 
 /// Test that conditional root requirements work when condition is NOT satisfied.
-/// This is resolvo-specific as libsolv_c doesn't support conditionals.
+/// This is resolvo-specific as `libsolv_c` doesn't support conditionals.
 pub(super) fn solve_conditional_root_requirement_not_satisfied<T: SolverImpl + Default>() {
     use rattler_conda_types::Version;
 
@@ -185,7 +185,7 @@ pub(super) fn solve_conditional_root_requirement_not_satisfied<T: SolverImpl + D
 }
 
 /// Test that conditional root requirements with AND logic work correctly.
-/// This is resolvo-specific as libsolv_c doesn't support conditionals.
+/// This is resolvo-specific as `libsolv_c` doesn't support conditionals.
 pub(super) fn solve_conditional_root_requirement_with_logic<T: SolverImpl + Default>() {
     use rattler_conda_types::Version;
 
@@ -202,10 +202,12 @@ pub(super) fn solve_conditional_root_requirement_with_logic<T: SolverImpl + Defa
         build_string: "0".to_string(),
     };
 
-    SolverCase::new("conditional root spec with AND logic includes package when both conditions satisfied")
-        .repository([python.clone()])
-        .specs(["python; if __unix and __linux"])
-        .virtual_packages(vec![unix_virtual, linux_virtual])
-        .expect_present([("python", "3.9.0")])
-        .run::<T>();
+    SolverCase::new(
+        "conditional root spec with AND logic includes package when both conditions satisfied",
+    )
+    .repository([python.clone()])
+    .specs(["python; if __unix and __linux"])
+    .virtual_packages(vec![unix_virtual, linux_virtual])
+    .expect_present([("python", "3.9.0")])
+    .run::<T>();
 }

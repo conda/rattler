@@ -89,20 +89,14 @@ impl<'a> SolverCase<'a> {
     }
 
     /// Provides packages that are already installed (locked packages).
-    pub fn locked_packages(
-        mut self,
-        packages: impl IntoIterator<Item = RepoDataRecord>,
-    ) -> Self {
+    pub fn locked_packages(mut self, packages: impl IntoIterator<Item = RepoDataRecord>) -> Self {
         self.locked_packages = packages.into_iter().collect();
         self
     }
 
     /// Provides packages that are pinned to specific versions.
     #[allow(dead_code)]
-    pub fn pinned_packages(
-        mut self,
-        packages: impl IntoIterator<Item = RepoDataRecord>,
-    ) -> Self {
+    pub fn pinned_packages(mut self, packages: impl IntoIterator<Item = RepoDataRecord>) -> Self {
         self.pinned_packages = packages.into_iter().collect();
         self
     }
@@ -119,7 +113,7 @@ impl<'a> SolverCase<'a> {
         self
     }
 
-    /// Sets the solve strategy (e.g., LowestVersion, LowestVersionDirect).
+    /// Sets the solve strategy (e.g., `LowestVersion`, `LowestVersionDirect`).
     #[allow(dead_code)]
     pub fn strategy(mut self, strategy: SolveStrategy) -> Self {
         self.strategy = strategy;
