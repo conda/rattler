@@ -1,7 +1,8 @@
+use chrono::{DateTime, Utc};
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
 };
-use rattler_solve::{SolverImpl, SolverTask};
+use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
 
 /// Shared building blocks that keep the integration tests concise and data driven.
 ///
@@ -19,7 +20,12 @@ pub struct SolverCase<'a> {
     name: &'a str,
     repositories: Vec<Vec<RepoDataRecord>>,
     specs: Vec<MatchSpec>,
+    constraints: Vec<MatchSpec>,
+    locked_packages: Vec<RepoDataRecord>,
+    pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
+    exclude_newer: Option<DateTime<Utc>>,
+    strategy: SolveStrategy,
     expect_present: Vec<PkgMatcher>,
     expect_absent: Vec<PkgMatcher>,
 }
@@ -31,7 +37,12 @@ impl<'a> SolverCase<'a> {
             name,
             repositories: Vec::new(),
             specs: Vec::new(),
+            constraints: Vec::new(),
+            locked_packages: Vec::new(),
+            pinned_packages: Vec::new(),
             virtual_packages: Vec::new(),
+            exclude_newer: None,
+            strategy: SolveStrategy::default(),
             expect_present: Vec::new(),
             expect_absent: Vec::new(),
         }
@@ -60,9 +71,58 @@ impl<'a> SolverCase<'a> {
         self
     }
 
+    /// Adds constraints that limit which packages can be selected.
+    pub fn constraints(mut self, constraints: impl IntoIterator<Item = &'a str>) -> Self {
+        self.constraints = constraints
+            .into_iter()
+            .map(|spec| {
+                MatchSpec::from_str(
+                    spec,
+                    ParseMatchSpecOptions::lenient()
+                        .with_experimental_extras(true)
+                        .with_experimental_conditionals(true),
+                )
+                .unwrap()
+            })
+            .collect();
+        self
+    }
+
+    /// Provides packages that are already installed (locked packages).
+    pub fn locked_packages(
+        mut self,
+        packages: impl IntoIterator<Item = RepoDataRecord>,
+    ) -> Self {
+        self.locked_packages = packages.into_iter().collect();
+        self
+    }
+
+    /// Provides packages that are pinned to specific versions.
+    #[allow(dead_code)]
+    pub fn pinned_packages(
+        mut self,
+        packages: impl IntoIterator<Item = RepoDataRecord>,
+    ) -> Self {
+        self.pinned_packages = packages.into_iter().collect();
+        self
+    }
+
     /// Provides the virtual packages in scope for this scenario.
     pub fn virtual_packages(mut self, packages: Vec<GenericVirtualPackage>) -> Self {
         self.virtual_packages = packages;
+        self
+    }
+
+    /// Excludes packages newer than the given timestamp.
+    pub fn exclude_newer(mut self, timestamp: &str) -> Self {
+        self.exclude_newer = Some(timestamp.parse().expect("invalid timestamp format"));
+        self
+    }
+
+    /// Sets the solve strategy (e.g., LowestVersion, LowestVersionDirect).
+    #[allow(dead_code)]
+    pub fn strategy(mut self, strategy: SolveStrategy) -> Self {
+        self.strategy = strategy;
         self
     }
 
@@ -92,7 +152,12 @@ impl<'a> SolverCase<'a> {
         let repo_refs: Vec<_> = self.repositories.iter().collect();
         let task = SolverTask {
             specs: self.specs.clone(),
+            constraints: self.constraints.clone(),
+            locked_packages: self.locked_packages.clone(),
+            pinned_packages: self.pinned_packages.clone(),
             virtual_packages: self.virtual_packages.clone(),
+            exclude_newer: self.exclude_newer,
+            strategy: self.strategy,
             ..SolverTask::from_iter(repo_refs)
         };
 

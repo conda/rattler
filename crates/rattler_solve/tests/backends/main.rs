@@ -14,6 +14,7 @@ use url::Url;
 mod conditional_tests;
 mod extras_tests;
 mod helpers;
+mod solver_case_tests;
 
 fn channel_config() -> ChannelConfig {
     ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap())
@@ -698,6 +699,48 @@ macro_rules! solver_backend_tests {
         #[test]
         fn test_extras_complex_constraints() {
             crate::extras_tests::solve_extras_complex_constraints::<$T>();
+        }
+
+        // Tests migrated to SolverCase
+
+        #[test]
+        fn test_solver_case_favored() {
+            crate::solver_case_tests::solve_favored::<$T>();
+        }
+
+        #[test]
+        fn test_solver_case_constraints() {
+            crate::solver_case_tests::solve_constraints::<$T>();
+        }
+
+        #[test]
+        fn test_solver_case_exclude_newer() {
+            crate::solver_case_tests::solve_exclude_newer::<$T>();
+        }
+
+        #[test]
+        fn test_solver_case_upgrade() {
+            crate::solver_case_tests::solve_upgrade::<$T>();
+        }
+
+        #[test]
+        fn test_solver_case_downgrade() {
+            crate::solver_case_tests::solve_downgrade::<$T>();
+        }
+
+        #[test]
+        fn test_solver_case_install_new() {
+            crate::solver_case_tests::solve_install_new::<$T>();
+        }
+
+        #[test]
+        fn test_solver_case_remove() {
+            crate::solver_case_tests::solve_remove::<$T>();
+        }
+
+        #[test]
+        fn test_solver_case_noop() {
+            crate::solver_case_tests::solve_noop::<$T>();
         }
     };
 }
