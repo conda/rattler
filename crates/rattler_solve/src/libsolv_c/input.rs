@@ -286,7 +286,7 @@ pub fn add_repodata_records<'a>(
         let solvable = unsafe { solvable_id.resolve_raw(pool).as_mut() };
 
         // Set the name to "package[extra]" using bracket notation
-        let synthetic_name = format!("{}[{}]", package_name, extra_name);
+        let synthetic_name = format!("{package_name}[{extra_name}]");
         solvable.name = pool.intern_str(synthetic_name.as_str()).into();
 
         // Set a dummy version (version "0" to indicate this is a synthetic solvable)

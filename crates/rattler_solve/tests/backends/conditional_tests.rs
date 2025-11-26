@@ -140,4 +140,3 @@ pub(super) fn solve_complex_conditional_dependencies<T: SolverImpl + Default>() 
             .expect_absent([&pkg_c]),
     ]);
 }
-

@@ -16,7 +16,7 @@ use rattler_conda_types::{
 };
 use wrapper::{
     flags::SolverFlag,
-    pool::{Pool, MatchSpecId, Verbosity},
+    pool::{MatchSpecId, Pool, Verbosity},
     repo::Repo,
     solve_goal::SolveGoal,
 };

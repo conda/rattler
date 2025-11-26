@@ -17,7 +17,7 @@ impl PackageBuilder {
             record: RepoDataRecord {
                 url: Url::from_str("http://example.com").unwrap(),
                 channel: None,
-                file_name: format!("{}-0.0.0-h123456_0.tar.bz2", name),
+                file_name: format!("{name}-0.0.0-h123456_0.tar.bz2"),
                 package_record: PackageRecord {
                     name: name.parse().unwrap(),
                     version: Version::from_str("0.0.0").unwrap().into(),
@@ -68,7 +68,7 @@ impl PackageBuilder {
         // Update filename to include the new version
         let name = self.record.package_record.name.as_normalized();
         let build = &self.record.package_record.build;
-        self.record.file_name = format!("{}-{}-{}.tar.bz2", name, version, build);
+        self.record.file_name = format!("{name}-{version}-{build}.tar.bz2");
         self
     }
 
@@ -90,7 +90,10 @@ impl PackageBuilder {
         self.record
             .package_record
             .experimental_extra_depends
-            .insert(extra.to_string(), deps.into_iter().map(Into::into).collect());
+            .insert(
+                extra.to_string(),
+                deps.into_iter().map(Into::into).collect(),
+            );
         self
     }
 

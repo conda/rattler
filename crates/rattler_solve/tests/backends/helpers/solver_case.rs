@@ -1,6 +1,6 @@
-use std::str::FromStr;
-
-use rattler_conda_types::{GenericVirtualPackage, MatchSpec, ParseMatchSpecOptions, RepoDataRecord};
+use rattler_conda_types::{
+    GenericVirtualPackage, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
+};
 use rattler_solve::{SolverImpl, SolverTask};
 
 /// Shared building blocks that keep the integration tests concise and data driven.
@@ -73,7 +73,7 @@ impl<'a> SolverCase<'a> {
         M: IntoPkgMatcher,
     {
         self.expect_present
-            .extend(pkgs.into_iter().map(|pkg| pkg.into_pkg_matcher()));
+            .extend(pkgs.into_iter().map(IntoPkgMatcher::into_pkg_matcher));
         self
     }
 
@@ -84,7 +84,7 @@ impl<'a> SolverCase<'a> {
         M: IntoPkgMatcher,
     {
         self.expect_absent
-            .extend(pkgs.into_iter().map(|pkg| pkg.into_pkg_matcher()));
+            .extend(pkgs.into_iter().map(IntoPkgMatcher::into_pkg_matcher));
         self
     }
 
@@ -113,7 +113,7 @@ pub fn run_solver_cases<T: SolverImpl + Default>(cases: &[SolverCase<'_>]) {
 }
 
 #[derive(Clone)]
-struct PkgMatcher {
+pub(crate) struct PkgMatcher {
     display: String,
     kind: MatcherKind,
 }
@@ -198,7 +198,7 @@ pub trait IntoPkgMatcher {
     fn into_pkg_matcher(self) -> PkgMatcher;
 }
 
-impl<'a> IntoPkgMatcher for &'a RepoDataRecord {
+impl IntoPkgMatcher for &RepoDataRecord {
     fn into_pkg_matcher(self) -> PkgMatcher {
         PkgMatcher {
             display: format!(
@@ -274,7 +274,6 @@ fn assert_expectations(
     for matcher in matchers {
         let found = records.iter().any(|record| matcher.matches(record));
         match (should_exist, found) {
-            (true, true) | (false, false) => continue,
             (true, false) => panic!(
                 "solver case '{case}' expected {} to be present, found packages: {}",
                 matcher.display,
@@ -285,6 +284,9 @@ fn assert_expectations(
                 matcher.display,
                 format_records(records)
             ),
+            (true, true) | (false, false) => {
+                // continue
+            }
         }
     }
 }

@@ -11,9 +11,9 @@ use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
 use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
 use url::Url;
 
-mod helpers;
 mod conditional_tests;
 mod extras_tests;
+mod helpers;
 
 fn channel_config() -> ChannelConfig {
     ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap())
@@ -130,7 +130,7 @@ impl PackageBuilder {
         }
     }
 
-    #[cfg(feature = "experimental_conditionals")]
+    #[allow(dead_code)]
     fn depends(mut self, deps: impl IntoIterator<Item = impl Into<String>>) -> Self {
         self.record.package_record.depends = deps.into_iter().map(Into::into).collect();
         self
