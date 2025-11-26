@@ -5035,6 +5035,7 @@ dependencies = [
  "chrono",
  "criterion",
  "futures",
+ "humantime",
  "insta",
  "itertools 0.14.0",
  "libc",

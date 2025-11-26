@@ -6,6 +6,8 @@ use std::{cmp::Ordering, collections::HashMap};
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{package::ArchiveType, GenericVirtualPackage, RepoDataRecord};
 
+use crate::MinimumAgeConfig;
+
 use super::{
     c_string,
     libc_byte_slice::LibcByteSlice,
@@ -55,6 +57,7 @@ pub fn add_repodata_records<'a>(
     repo: &Repo<'_>,
     repo_data: impl IntoIterator<Item = &'a RepoDataRecord>,
     exclude_newer: Option<&DateTime<Utc>>,
+    min_age: Option<&MinimumAgeConfig>,
 ) -> Result<Vec<SolvableId>, SolveError> {
     // Sanity check
     repo.ensure_belongs_to_pool(pool);
@@ -83,12 +86,27 @@ pub fn add_repodata_records<'a>(
     // details)
     let data = repo.add_repodata();
 
+    // Compute the cutoff time for min_age.
+    // Packages published after this time will be excluded (unless exempt).
+    let min_age_cutoff = min_age.map(super::super::MinimumAgeConfig::cutoff);
+
     let mut solvable_ids = Vec::new();
     for (repo_data_index, repo_data) in repo_data.into_iter().enumerate() {
         // Skip packages that are newer than the specified timestamp
         match (exclude_newer, repo_data.package_record.timestamp.as_ref()) {
             (Some(exclude_newer), Some(timestamp)) if *timestamp > *exclude_newer => continue,
             _ => {}
+        }
+
+        // Skip packages that haven't been published long enough (unless exempt)
+        if let (Some(config), Some(cutoff), Some(timestamp)) = (
+            min_age,
+            &min_age_cutoff,
+            repo_data.package_record.timestamp.as_ref(),
+        ) {
+            if *timestamp > *cutoff && !config.is_exempt(&repo_data.package_record.name) {
+                continue;
+            }
         }
 
         // Create a solvable for the package
@@ -324,7 +342,7 @@ pub fn cache_repodata(
     // Add repodata to a new pool + repo
     let pool = Pool::default();
     let repo = Repo::new(&pool, url, channel_priority.unwrap_or(0));
-    add_repodata_records(&pool, &repo, data, None)?;
+    add_repodata_records(&pool, &repo, data, None, None)?;
 
     // Export repo to .solv in memory
     let mut stream_ptr = std::ptr::null_mut();

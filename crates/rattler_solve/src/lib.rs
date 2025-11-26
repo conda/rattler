@@ -9,10 +9,13 @@ pub mod libsolv_c;
 #[cfg(feature = "resolvo")]
 pub mod resolvo;
 
+use std::collections::HashSet;
 use std::fmt;
 
 use chrono::{DateTime, Utc};
-use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord, SolverResult};
+use rattler_conda_types::{
+    GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, SolverResult,
+};
 
 /// Represents a solver implementation, capable of solving [`SolverTask`]s
 pub trait SolverImpl {
@@ -76,6 +79,105 @@ impl fmt::Display for SolveError {
                 write!(f, "encountered duplicate records for {filename}")
             }
         }
+    }
+}
+
+/// Configuration for filtering packages based on their minimum age.
+///
+/// This feature helps reduce the risk of installing compromised packages by
+/// delaying the installation of newly published versions. In most cases,
+/// malicious releases are discovered and removed from channels within a short
+/// time window (often within an hour). By requiring packages to have been
+/// published for a minimum duration, you give the community time to identify
+/// and report malicious packages before they can be installed.
+///
+/// This is similar to pnpm's `minimumReleaseAge` feature.
+///
+/// # Example
+///
+/// ```
+/// use std::time::Duration;
+/// use rattler_solve::MinimumAgeConfig;
+///
+/// // Only allow packages that have been published for at least 1 hour
+/// let config = MinimumAgeConfig::new(Duration::from_secs(60 * 60))
+///     // But allow "my-internal-package" to bypass this check
+///     .with_exempt_package("my-internal-package".parse().unwrap());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MinimumAgeConfig {
+    /// The minimum age a package must have before it can be considered for
+    /// installation. Packages published more recently than this duration ago
+    /// will be excluded from the solve.
+    ///
+    /// For example, if set to 7 days, only packages that were published at
+    /// least 7 days ago will be considered.
+    pub min_age: std::time::Duration,
+
+    /// The reference time to use when calculating the cutoff date.
+    /// Packages published after `now - min_age` will be excluded.
+    ///
+    /// Defaults to the current time when [`MinimumAgeConfig::new`] is called.
+    pub now: DateTime<Utc>,
+
+    /// Packages that are exempt from the minimum release age requirement.
+    ///
+    /// This is useful for packages that you trust or that need to be updated
+    /// frequently, even if they were recently published.
+    pub exempt_packages: HashSet<PackageName>,
+}
+
+impl Default for MinimumAgeConfig {
+    fn default() -> Self {
+        Self {
+            min_age: std::time::Duration::default(),
+            now: Utc::now(),
+            exempt_packages: HashSet::new(),
+        }
+    }
+}
+
+impl MinimumAgeConfig {
+    /// Creates a new `MinimumAgeConfig` with the specified minimum age.
+    /// The reference time (`now`) is set to the current time.
+    pub fn new(min_age: std::time::Duration) -> Self {
+        Self {
+            min_age,
+            now: Utc::now(),
+            exempt_packages: HashSet::new(),
+        }
+    }
+
+    /// Sets the reference time to use when calculating the cutoff date.
+    pub fn with_now(mut self, now: DateTime<Utc>) -> Self {
+        self.now = now;
+        self
+    }
+
+    /// Adds a package to the set of exempt packages.
+    pub fn with_exempt_package(mut self, package: PackageName) -> Self {
+        self.exempt_packages.insert(package);
+        self
+    }
+
+    /// Sets the set of exempt packages.
+    pub fn with_exempt_packages(mut self, packages: impl IntoIterator<Item = PackageName>) -> Self {
+        self.exempt_packages = packages.into_iter().collect();
+        self
+    }
+
+    /// Returns `true` if the given package is exempt from the minimum release
+    /// age check.
+    pub fn is_exempt(&self, package: &PackageName) -> bool {
+        self.exempt_packages.contains(package)
+    }
+
+    /// Computes the cutoff time. Packages published after this time will be
+    /// excluded (unless exempt).
+    pub fn cutoff(&self) -> DateTime<Utc> {
+        let duration = chrono::Duration::from_std(self.min_age)
+            .expect("min_release_age duration is too large");
+        self.now - duration
     }
 }
 
@@ -146,6 +248,18 @@ pub struct SolverTask<TAvailablePackagesIterator> {
     /// timestamp.
     pub exclude_newer: Option<DateTime<Utc>>,
 
+    /// Only consider packages that have been published for at least the
+    /// specified duration.
+    ///
+    /// This helps reduce the risk of installing compromised packages, as
+    /// malicious releases are typically discovered and removed from channels
+    /// within a short time window. By requiring a minimum age, you give the
+    /// community time to identify and report malicious packages.
+    ///
+    /// Some packages can be exempted from this check using the
+    /// [`MinimumAgeConfig::exempt_packages`] field.
+    pub min_age: Option<MinimumAgeConfig>,
+
     /// The solve strategy.
     pub strategy: SolveStrategy,
 }
@@ -164,6 +278,7 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
             timeout: None,
             channel_priority: ChannelPriority::default(),
             exclude_newer: None,
+            min_age: None,
             strategy: SolveStrategy::default(),
         }
     }

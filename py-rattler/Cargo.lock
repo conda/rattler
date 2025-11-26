@@ -4189,6 +4189,7 @@ version = "4.0.0"
 dependencies = [
  "chrono",
  "futures",
+ "humantime",
  "itertools 0.14.0",
  "rattler_conda_types",
  "rattler_digest",

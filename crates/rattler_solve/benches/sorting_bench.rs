@@ -36,6 +36,7 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
                     None,
                     ChannelPriority::default(),
                     None,
+                    None,
                     rattler_solve::SolveStrategy::Highest,
                 )
                 .expect("failed to create dependency provider");
