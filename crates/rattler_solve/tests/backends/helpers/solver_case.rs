@@ -3,6 +3,7 @@ use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
 };
 use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
+use std::collections::HashMap;
 
 /// Shared building blocks that keep the integration tests concise and data driven.
 ///
@@ -28,6 +29,7 @@ pub struct SolverCase<'a> {
     strategy: SolveStrategy,
     expect_present: Vec<PkgMatcher>,
     expect_absent: Vec<PkgMatcher>,
+    expect_extras: HashMap<String, Vec<String>>,
 }
 
 impl<'a> SolverCase<'a> {
@@ -45,6 +47,7 @@ impl<'a> SolverCase<'a> {
             strategy: SolveStrategy::default(),
             expect_present: Vec::new(),
             expect_absent: Vec::new(),
+            expect_extras: HashMap::new(),
         }
     }
 
@@ -141,6 +144,24 @@ impl<'a> SolverCase<'a> {
         self
     }
 
+    /// Registers expected extras for packages in the solution.
+    /// The extras map contains package names as keys and lists of expected extra names as values.
+    pub fn expect_extras(
+        mut self,
+        extras: impl IntoIterator<Item = (&'a str, impl IntoIterator<Item = &'a str>)>,
+    ) -> Self {
+        self.expect_extras = extras
+            .into_iter()
+            .map(|(name, extras)| {
+                (
+                    name.to_string(),
+                    extras.into_iter().map(ToString::to_string).collect(),
+                )
+            })
+            .collect();
+        self
+    }
+
     pub fn run<T: SolverImpl + Default>(&self) {
         let repo_refs: Vec<_> = self.repositories.iter().collect();
         let task = SolverTask {
@@ -160,6 +181,38 @@ impl<'a> SolverCase<'a> {
 
         assert_expectations(self.name, &solution.records, &self.expect_present, true);
         assert_expectations(self.name, &solution.records, &self.expect_absent, false);
+
+        // Check extras assertions
+        if !self.expect_extras.is_empty() {
+            let actual_extras: HashMap<String, Vec<String>> = solution
+                .extras
+                .iter()
+                .map(|(name, extras)| (name.as_normalized().to_string(), extras.clone()))
+                .collect();
+
+            for (pkg_name, expected_extras) in &self.expect_extras {
+                let actual = actual_extras.get(pkg_name);
+                match actual {
+                    Some(actual_list) => {
+                        let mut expected_sorted = expected_extras.clone();
+                        let mut actual_sorted = actual_list.clone();
+                        expected_sorted.sort();
+                        actual_sorted.sort();
+                        assert_eq!(
+                            expected_sorted, actual_sorted,
+                            "solver case '{}': expected extras {:?} for package '{}', got {:?}",
+                            self.name, expected_extras, pkg_name, actual_list
+                        );
+                    }
+                    None => {
+                        panic!(
+                            "solver case '{}': expected extras {:?} for package '{}', but no extras found for that package",
+                            self.name, expected_extras, pkg_name
+                        );
+                    }
+                }
+            }
+        }
     }
 }
 

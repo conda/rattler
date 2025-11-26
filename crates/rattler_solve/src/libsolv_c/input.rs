@@ -15,7 +15,8 @@ use super::{
         keys::{
             REPOKEY_TYPE_MD5, REPOKEY_TYPE_SHA256, SOLVABLE_BUILDFLAVOR, SOLVABLE_BUILDTIME,
             SOLVABLE_BUILDVERSION, SOLVABLE_CHECKSUM, SOLVABLE_CONSTRAINS, SOLVABLE_DOWNLOADSIZE,
-            SOLVABLE_LICENSE, SOLVABLE_PKGID, SOLVABLE_TRACK_FEATURES,
+            SOLVABLE_EXTRA_NAME, SOLVABLE_EXTRA_PACKAGE, SOLVABLE_LICENSE, SOLVABLE_PKGID,
+            SOLVABLE_REPODATA_RECORD_INDEX, SOLVABLE_TRACK_FEATURES,
         },
         pool::Pool,
         repo::Repo,
@@ -50,7 +51,7 @@ pub fn add_solv_file(pool: &Pool, repo: &Repo<'_>, solv_bytes: &LibcByteSlice) {
 }
 
 /// Parses a condition from a `MatchSpecCondition` and returns the corresponding libsolv Id
-fn parse_condition(condition: &MatchSpecCondition, pool: &Pool) -> super::wrapper::ffi::Id {
+pub fn parse_condition(condition: &MatchSpecCondition, pool: &Pool) -> super::wrapper::ffi::Id {
     match condition {
         MatchSpecCondition::MatchSpec(match_spec) => {
             // Convert the match spec to a string and use conda_matchspec to parse it
@@ -98,7 +99,7 @@ pub fn add_repodata_records<'a>(
     let repo_type_sha256 = pool.find_interned_str(REPOKEY_TYPE_SHA256).unwrap();
 
     // Custom id
-    let solvable_index_id = pool.intern_str("solvable:repodata_record_index");
+    let solvable_index_id = pool.intern_str(SOLVABLE_REPODATA_RECORD_INDEX);
 
     // Keeps a mapping from packages added to the repo to the type and solvable
     let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
@@ -279,6 +280,10 @@ pub fn add_repodata_records<'a>(
         solvable_ids.push(solvable_id);
     }
 
+    // Custom ids for storing extra info on synthetic solvables
+    let extra_package_id = pool.intern_str(SOLVABLE_EXTRA_PACKAGE);
+    let extra_name_id = pool.intern_str(SOLVABLE_EXTRA_NAME);
+
     // Add synthetic solvables for extras
     for (package_name, extra_name) in extras {
         // Create synthetic solvable with name "package[extra]"
@@ -295,6 +300,12 @@ pub fn add_repodata_records<'a>(
         // Add self-provides so the solver can find it
         let rel_eq = pool.rel_eq(solvable.name, solvable.evr);
         repo.add_provides(solvable, rel_eq);
+
+        // Store extra info so we can retrieve it from the transaction
+        let package_name_interned = pool.intern_str(package_name.as_str());
+        let extra_name_interned = pool.intern_str(extra_name.as_str());
+        data.set_id(solvable_id, extra_package_id, package_name_interned.into());
+        data.set_id(solvable_id, extra_name_id, extra_name_interned.into());
 
         solvable_ids.push(solvable_id);
     }

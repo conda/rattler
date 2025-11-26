@@ -14,3 +14,8 @@ pub const REPOKEY_TYPE_MD5: &str = "repokey:type:md5";
 pub const REPOKEY_TYPE_SHA256: &str = "repokey:type:sha256";
 pub const SOLVABLE_CONSTRAINS: &str = "solvable:constrains";
 pub const SOLVABLE_TRACK_FEATURES: &str = "solvable:track_features";
+
+// Custom rattler keys for tracking additional metadata
+pub const SOLVABLE_REPODATA_RECORD_INDEX: &str = "solvable:repodata_record_index";
+pub const SOLVABLE_EXTRA_PACKAGE: &str = "solvable:extra_package";
+pub const SOLVABLE_EXTRA_NAME: &str = "solvable:extra_name";

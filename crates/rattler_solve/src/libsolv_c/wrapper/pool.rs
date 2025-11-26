@@ -261,6 +261,11 @@ impl Pool {
 pub struct StringId(pub(super) Id);
 
 impl StringId {
+    /// Creates a `StringId` from a raw libsolv Id.
+    pub fn from_id(id: Id) -> Self {
+        Self(id)
+    }
+
     /// Resolves the id to the interned string, if present in the pool
     ///
     /// Note: string ids are basically indexes in an array, so using a [`StringId`] from one pool in

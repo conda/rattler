@@ -142,7 +142,6 @@ pub(super) fn solve_complex_conditional_dependencies<T: SolverImpl + Default>() 
 }
 
 /// Test that conditional root requirements work when condition is satisfied.
-/// This is resolvo-specific as `libsolv_c` doesn't support conditionals.
 pub(super) fn solve_conditional_root_requirement_satisfied<T: SolverImpl + Default>() {
     use rattler_conda_types::Version;
 
@@ -163,7 +162,6 @@ pub(super) fn solve_conditional_root_requirement_satisfied<T: SolverImpl + Defau
 }
 
 /// Test that conditional root requirements work when condition is NOT satisfied.
-/// This is resolvo-specific as `libsolv_c` doesn't support conditionals.
 pub(super) fn solve_conditional_root_requirement_not_satisfied<T: SolverImpl + Default>() {
     use rattler_conda_types::Version;
 
@@ -185,7 +183,6 @@ pub(super) fn solve_conditional_root_requirement_not_satisfied<T: SolverImpl + D
 }
 
 /// Test that conditional root requirements with AND logic work correctly.
-/// This is resolvo-specific as `libsolv_c` doesn't support conditionals.
 pub(super) fn solve_conditional_root_requirement_with_logic<T: SolverImpl + Default>() {
     use rattler_conda_types::Version;
 

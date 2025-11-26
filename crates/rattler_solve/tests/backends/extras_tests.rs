@@ -16,7 +16,8 @@ pub(super) fn solve_extras_basic<T: SolverImpl + Default>() {
         SolverCase::new("Extras pull in optional dependencies")
             .repository(vec![foo_pkg.clone(), bar_pkg.clone()])
             .specs(["foo[extras=[with-bar]]"])
-            .expect_present([&foo_pkg, &bar_pkg]),
+            .expect_present([&foo_pkg, &bar_pkg])
+            .expect_extras([("foo", ["with-bar"])]),
         SolverCase::new("Without extras, optional dependencies are not included")
             .repository(vec![foo_pkg.clone(), bar_pkg.clone()])
             .specs(["foo"])
@@ -63,7 +64,8 @@ pub(super) fn solve_multiple_extras<T: SolverImpl + Default>() {
         SolverCase::new("Multiple extras pull all their dependencies")
             .repository(vec![pkg.clone(), dep1.clone(), dep2.clone()])
             .specs(["pkg[extras=[extra1,extra2]]"])
-            .expect_present([&pkg, &dep1, &dep2]),
+            .expect_present([&pkg, &dep1, &dep2])
+            .expect_extras([("pkg", ["extra1", "extra2"])]),
         SolverCase::new("No extras pull no optional dependencies")
             .repository(vec![pkg.clone(), dep1.clone(), dep2.clone()])
             .specs(["pkg"])

@@ -7,9 +7,9 @@ use std::{
 };
 
 pub use input::cache_repodata;
-use input::{add_repodata_records, add_solv_file, add_virtual_packages};
+use input::{add_repodata_records, add_solv_file, add_virtual_packages, parse_condition};
 pub use libc_byte_slice::LibcByteSlice;
-use output::get_required_packages;
+use output::{get_required_packages, SolverOutput};
 use rattler_conda_types::{
     match_spec::package_name_matcher::PackageNameMatcher, MatchSpec, NamelessMatchSpec,
     RepoDataRecord, SolverResult,
@@ -236,14 +236,26 @@ impl super::SolverImpl for Solver {
 
         // Specify the matchspec requests
         for spec in task.specs {
-            // Strip extras from the spec before passing to libsolv (libsolv doesn't understand extras syntax)
-            let (base_spec, extras_opt) = {
+            // Strip extras and condition from the spec before passing to libsolv
+            // (libsolv doesn't understand extras or conditional syntax directly)
+            let (base_spec, extras_opt, condition_opt) = {
                 let mut base = spec.clone();
                 let extras = base.extras.take();
-                (base, extras)
+                let condition = base.condition.take();
+                (base, extras, condition)
             };
 
-            let id = pool.intern_matchspec(&base_spec);
+            // Create the base matchspec ID
+            let base_id = pool.intern_matchspec(&base_spec);
+
+            // If there's a condition, wrap the dependency with rel_cond
+            let id = if let Some(condition) = condition_opt.as_ref() {
+                let condition_id = parse_condition(condition, &pool);
+                MatchSpecId(pool.rel_cond(base_id.into(), condition_id))
+            } else {
+                base_id
+            };
+
             goal.install(id, false);
 
             // If the spec includes extras, also add dependencies on the synthetic extra solvables
@@ -295,7 +307,10 @@ impl super::SolverImpl for Solver {
 
         let transaction = solver.solve(&mut goal).map_err(SolveError::Unsolvable)?;
 
-        let required_records = get_required_packages(
+        let SolverOutput {
+            packages: required_records,
+            extras,
+        } = get_required_packages(
             &pool,
             &repo_mapping,
             &transaction,
@@ -312,7 +327,7 @@ impl super::SolverImpl for Solver {
 
         Ok(SolverResult {
             records: required_records,
-            extras: HashMap::new(),
+            extras,
         })
     }
 }
