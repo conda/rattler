@@ -15,6 +15,7 @@ mod conditional_tests;
 mod extras_tests;
 mod helpers;
 mod solver_case_tests;
+mod strategy_tests;
 
 fn channel_config() -> ChannelConfig {
     ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap())
@@ -743,46 +744,48 @@ macro_rules! solver_backend_tests {
             crate::solver_case_tests::solve_noop::<$T>();
         }
 
+        #[test]
+        fn test_lowest_version_strategy() {
+            crate::strategy_tests::solve_lowest_version_strategy::<$T>();
+        }
+
+        #[test]
+        fn test_lowest_version_strategy_transitive() {
+            crate::strategy_tests::solve_lowest_version_strategy_transitive::<$T>();
+        }
+
+        #[test]
+        fn test_lowest_version_direct_strategy() {
+            crate::strategy_tests::solve_lowest_version_direct_strategy::<$T>();
+        }
+
         /// Test that packages with unparsable dependencies don't crash the solver.
         /// This can happen when repodata contains malformed dependency strings.
         #[test]
         fn test_solve_with_unparsable_dependency() {
+            use crate::helpers::PackageBuilder;
             use rattler_conda_types::{MatchSpec, ParseStrictness};
             use rattler_solve::{SolverImpl, SolverTask};
 
             // Create two versions of a package, one with valid deps and one with invalid deps
             // Both have the same version/build number so they'll be sorted together
-            let mut pkg_valid = installed_package(
-                "test-channel",
-                "linux-64",
-                "sortme",
-                "1.0.0",
-                "build_a",
-                0,
-            );
-            pkg_valid.package_record.depends = vec!["python >=3.8".to_string()];
+            let pkg_valid = PackageBuilder::new("sortme")
+                .version("1.0.0")
+                .build_string("build_a")
+                .depends(["python >=3.8"])
+                .build();
 
-            let mut pkg_invalid = installed_package(
-                "test-channel",
-                "linux-64",
-                "sortme",
-                "1.0.0",
-                "build_b",
-                0,
-            );
-            // This is a malformed dependency string that can't be parsed as a MatchSpec
-            pkg_invalid.package_record.depends =
-                vec!["this-is-not-a-valid-matchspec @#$%^&*()".to_string()];
+            let pkg_invalid = PackageBuilder::new("sortme")
+                .version("1.0.0")
+                .build_string("build_b")
+                // This is a malformed dependency string that can't be parsed as a MatchSpec
+                .depends(["this-is-not-a-valid-matchspec @#$%^&*()"])
+                .build();
 
             // Add a python package so the valid dependency can be satisfied
-            let python_pkg = installed_package(
-                "test-channel",
-                "linux-64",
-                "python",
-                "3.9.0",
-                "h123456_0",
-                0,
-            );
+            let python_pkg = PackageBuilder::new("python")
+                .version("3.9.0")
+                .build();
 
             let repo_data = vec![pkg_valid, pkg_invalid, python_pkg];
 

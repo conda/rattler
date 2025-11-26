@@ -114,7 +114,6 @@ impl<'a> SolverCase<'a> {
     }
 
     /// Sets the solve strategy (e.g., `LowestVersion`, `LowestVersionDirect`).
-    #[allow(dead_code)]
     pub fn strategy(mut self, strategy: SolveStrategy) -> Self {
         self.strategy = strategy;
         self

@@ -75,6 +75,10 @@ impl PackageBuilder {
 
     pub fn build_string(mut self, build: &str) -> Self {
         self.record.package_record.build = build.to_string();
+        // Update filename to include the new build string
+        let name = self.record.package_record.name.as_normalized();
+        let version = self.record.package_record.version.as_str();
+        self.record.file_name = format!("{name}-{version}-{build}.tar.bz2");
         self
     }
 
