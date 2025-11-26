@@ -1,6 +1,6 @@
 use std::{path::Path, str::FromStr, sync::Arc, time::SystemTime};
 
-use super::ShardedRepodata;
+use super::{ShardedRepodata, REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX};
 use crate::{
     fetch::CacheAction,
     gateway::{error::SubdirNotFoundError, sharded_subdir::decode_zst_bytes_async},
@@ -25,8 +25,6 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader, BufWriter},
 };
 use url::Url;
-
-const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
 
 /// Creates a `SubdirNotFoundError` for when sharded repodata is not available.
 fn create_subdir_not_found_error(channel_base_url: &Url) -> GatewayError {
@@ -126,8 +124,9 @@ pub async fn fetch_index(
         .expect("invalid shard base url");
 
     let cache_file_name = format!(
-        "{}.shards-cache-v1",
-        url_to_cache_filename(&canonical_shards_url)
+        "{}{}",
+        url_to_cache_filename(&canonical_shards_url),
+        SHARDS_CACHE_SUFFIX
     );
     let cache_path = cache_dir.join(cache_file_name);
 

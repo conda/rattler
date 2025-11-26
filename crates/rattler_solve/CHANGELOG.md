@@ -42,6 +42,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.1](https://github.com/conda/rattler/compare/rattler_solve-v4.0.0...rattler_solve-v4.0.1) - 2025-11-25
+
+### Fixed
+
+- *(rattler_solve)* handle unparsable dependencies gracefully in sorting ([#1884](https://github.com/conda/rattler/pull/1884))
+- *(solver)* conditionals on root requirements ([#1880](https://github.com/conda/rattler/pull/1880))
+
+## [4.0.0](https://github.com/conda/rattler/compare/rattler_solve-v3.1.2...rattler_solve-v4.0.0) - 2025-11-22
+
+### Other
+
+- make `extras` and `conditionals` runtime-configurable ([#1816](https://github.com/conda/rattler/pull/1816))
+
 ## [3.1.2](https://github.com/conda/rattler/compare/rattler_solve-v3.1.1...rattler_solve-v3.1.2) - 2025-11-20
 
 ### Other

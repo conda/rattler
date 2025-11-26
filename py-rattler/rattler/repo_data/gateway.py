@@ -222,19 +222,22 @@ class Gateway:
         return [PackageName._from_py_package_name(package_name) for package_name in py_package_names]
 
     def clear_repodata_cache(
-        self, channel: Channel | str, subdirs: Optional[Iterable[Platform | PlatformLiteral]] = None
+        self,
+        channel: Channel | str,
+        subdirs: Optional[Iterable[Platform | PlatformLiteral]] = None,
+        clear_disk: bool = False,
     ) -> None:
         """
-        Clears any in-memory cache for the given channel.
+        Clears the cache for the given channel.
 
         Any subsequent query will re-fetch any required data from the source.
-
-        This method does not clear any on-disk cache.
 
         Arguments:
             channel: The channel to clear the cache for.
             subdirs: A selection of subdirectories to clear, if `None` is specified
                      all subdirectories of the channel are cleared.
+            clear_disk: If `True`, also clears the on-disk cache. By default only the
+                        in-memory cache is cleared.
 
         Examples
         --------
@@ -242,6 +245,7 @@ class Gateway:
         >>> gateway = Gateway()
         >>> gateway.clear_repodata_cache("conda-forge", ["linux-64"])
         >>> gateway.clear_repodata_cache("robostack")
+        >>> gateway.clear_repodata_cache("conda-forge", clear_disk=True)
         >>>
         ```
         """
@@ -250,6 +254,7 @@ class Gateway:
             {subdir._inner if isinstance(subdir, Platform) else Platform(subdir)._inner for subdir in subdirs}
             if subdirs is not None
             else None,
+            clear_disk,
         )
 
     def __repr__(self) -> str:

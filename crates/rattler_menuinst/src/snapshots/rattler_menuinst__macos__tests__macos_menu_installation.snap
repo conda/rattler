@@ -13,7 +13,7 @@ expression: "fs::read_to_string(dirs.location.join(\"Contents/Info.plist\")).unw
 	<key>CFBundleExecutable</key>
 	<string>spyder-6-test-env</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.spyder-6-test-env</string>
+	<string>org.spyder-ide.Spyder-6-.prefix</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleVersion</key>

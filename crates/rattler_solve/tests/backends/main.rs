@@ -742,6 +742,79 @@ macro_rules! solver_backend_tests {
         fn test_solver_case_noop() {
             crate::solver_case_tests::solve_noop::<$T>();
         }
+
+        /// Test that packages with unparsable dependencies don't crash the solver.
+        /// This can happen when repodata contains malformed dependency strings.
+        #[test]
+        fn test_solve_with_unparsable_dependency() {
+            use rattler_conda_types::{MatchSpec, ParseStrictness};
+            use rattler_solve::{SolverImpl, SolverTask};
+
+            // Create two versions of a package, one with valid deps and one with invalid deps
+            // Both have the same version/build number so they'll be sorted together
+            let mut pkg_valid = installed_package(
+                "test-channel",
+                "linux-64",
+                "sortme",
+                "1.0.0",
+                "build_a",
+                0,
+            );
+            pkg_valid.package_record.depends = vec!["python >=3.8".to_string()];
+
+            let mut pkg_invalid = installed_package(
+                "test-channel",
+                "linux-64",
+                "sortme",
+                "1.0.0",
+                "build_b",
+                0,
+            );
+            // This is a malformed dependency string that can't be parsed as a MatchSpec
+            pkg_invalid.package_record.depends =
+                vec!["this-is-not-a-valid-matchspec @#$%^&*()".to_string()];
+
+            // Add a python package so the valid dependency can be satisfied
+            let python_pkg = installed_package(
+                "test-channel",
+                "linux-64",
+                "python",
+                "3.9.0",
+                "h123456_0",
+                0,
+            );
+
+            let repo_data = vec![pkg_valid, pkg_invalid, python_pkg];
+
+            let specs =
+                vec![MatchSpec::from_str("sortme", ParseStrictness::Lenient).unwrap()];
+
+            let task = SolverTask {
+                specs,
+                ..SolverTask::from_iter([&repo_data])
+            };
+
+            // This should not panic with "Unknown dependencies should never happen"
+            // The solver should handle the unparsable dependency gracefully
+            let result = <$T>::default().solve(task);
+
+            // We expect the solve to succeed, selecting the package with valid dependencies
+            match result {
+                Ok(solution) => {
+                    let sortme = solution
+                        .records
+                        .iter()
+                        .find(|r| r.package_record.name.as_normalized() == "sortme")
+                        .expect("sortme package should be in solution");
+                    // The valid build should be selected
+                    assert_eq!(sortme.package_record.build, "build_a");
+                }
+                Err(e) => {
+                    // If it errors, it should be a proper error, not a panic
+                    println!("Solve returned error (this is acceptable): {e}");
+                }
+            }
+        }
     };
 }
 
@@ -1209,6 +1282,23 @@ mod resolvo {
               └─ bar <2, which cannot be installed because there are no viable options:
                  └─ bar 1, which conflicts with the versions reported above.
         "###);
+    }
+
+    // Conditional root requirement tests (resolvo-specific, using SolverCase)
+
+    #[test]
+    fn test_conditional_root_requirement_satisfied() {
+        crate::conditional_tests::solve_conditional_root_requirement_satisfied::<rattler_solve::resolvo::Solver>();
+    }
+
+    #[test]
+    fn test_conditional_root_requirement_not_satisfied() {
+        crate::conditional_tests::solve_conditional_root_requirement_not_satisfied::<rattler_solve::resolvo::Solver>();
+    }
+
+    #[test]
+    fn test_conditional_root_requirement_with_logic() {
+        crate::conditional_tests::solve_conditional_root_requirement_with_logic::<rattler_solve::resolvo::Solver>();
     }
 }
 

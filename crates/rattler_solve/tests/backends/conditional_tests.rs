@@ -140,3 +140,72 @@ pub(super) fn solve_complex_conditional_dependencies<T: SolverImpl + Default>() 
             .expect_absent([&pkg_c]),
     ]);
 }
+
+/// Test that conditional root requirements work when condition is satisfied.
+/// This is resolvo-specific as libsolv_c doesn't support conditionals.
+pub(super) fn solve_conditional_root_requirement_satisfied<T: SolverImpl + Default>() {
+    use rattler_conda_types::Version;
+
+    let python = PackageBuilder::new("python").version("3.9.0").build();
+
+    let unix_virtual = GenericVirtualPackage {
+        name: "__unix".parse().unwrap(),
+        version: Version::from_str("0").unwrap(),
+        build_string: "0".to_string(),
+    };
+
+    SolverCase::new("conditional root spec includes package when condition satisfied")
+        .repository([python.clone()])
+        .specs(["python; if __unix"])
+        .virtual_packages(vec![unix_virtual])
+        .expect_present([("python", "3.9.0")])
+        .run::<T>();
+}
+
+/// Test that conditional root requirements work when condition is NOT satisfied.
+/// This is resolvo-specific as libsolv_c doesn't support conditionals.
+pub(super) fn solve_conditional_root_requirement_not_satisfied<T: SolverImpl + Default>() {
+    use rattler_conda_types::Version;
+
+    let python = PackageBuilder::new("python").version("3.9.0").build();
+
+    // Only __unix is present, but spec requires __win
+    let unix_virtual = GenericVirtualPackage {
+        name: "__unix".parse().unwrap(),
+        version: Version::from_str("0").unwrap(),
+        build_string: "0".to_string(),
+    };
+
+    SolverCase::new("conditional root spec excludes package when condition not satisfied")
+        .repository([python.clone()])
+        .specs(["python; if __win"])
+        .virtual_packages(vec![unix_virtual])
+        .expect_absent(["python"])
+        .run::<T>();
+}
+
+/// Test that conditional root requirements with AND logic work correctly.
+/// This is resolvo-specific as libsolv_c doesn't support conditionals.
+pub(super) fn solve_conditional_root_requirement_with_logic<T: SolverImpl + Default>() {
+    use rattler_conda_types::Version;
+
+    let python = PackageBuilder::new("python").version("3.9.0").build();
+
+    let unix_virtual = GenericVirtualPackage {
+        name: "__unix".parse().unwrap(),
+        version: Version::from_str("0").unwrap(),
+        build_string: "0".to_string(),
+    };
+    let linux_virtual = GenericVirtualPackage {
+        name: "__linux".parse().unwrap(),
+        version: Version::from_str("0").unwrap(),
+        build_string: "0".to_string(),
+    };
+
+    SolverCase::new("conditional root spec with AND logic includes package when both conditions satisfied")
+        .repository([python.clone()])
+        .specs(["python; if __unix and __linux"])
+        .virtual_packages(vec![unix_virtual, linux_virtual])
+        .expect_present([("python", "3.9.0")])
+        .run::<T>();
+}
