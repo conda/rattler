@@ -699,6 +699,14 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
             let specs = match parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache) {
                 Ok(version_set_id) => version_set_id,
                 Err(e) => {
+                    tracing::debug!(
+                        "{}/{} from {} has invalid dependency '{}': {}, this variant will be ignored",
+                        record.package_record.subdir,
+                        record.file_name,
+                        record.channel.as_deref().unwrap_or("unknown"),
+                        depends,
+                        e
+                    );
                     let reason = self
                         .pool
                         .intern_string(format!("the dependency '{depends}' failed to parse: {e}",));
@@ -722,17 +730,28 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
 
         // Add constraints from the record
         for constrains in record.package_record.constrains.iter() {
-            let (version_set_ids, condition_id) =
-                match parse_match_spec(&self.pool, constrains, &mut parse_match_spec_cache) {
-                    Ok(version_set_id) => version_set_id,
-                    Err(e) => {
-                        let reason = self.pool.intern_string(format!(
-                            "the constrains '{constrains}' failed to parse: {e}",
-                        ));
+            let (version_set_ids, condition_id) = match parse_match_spec(
+                &self.pool,
+                constrains,
+                &mut parse_match_spec_cache,
+            ) {
+                Ok(version_set_id) => version_set_id,
+                Err(e) => {
+                    tracing::debug!(
+                            "{}/{} from {} has invalid constraint '{}': {}, this variant will be ignored",
+                            record.package_record.subdir,
+                            record.file_name,
+                            record.channel.as_deref().unwrap_or("unknown"),
+                            constrains,
+                            e
+                        );
+                    let reason = self.pool.intern_string(format!(
+                        "the constrains '{constrains}' failed to parse: {e}",
+                    ));
 
-                        return Dependencies::Unknown(reason);
-                    }
-                };
+                    return Dependencies::Unknown(reason);
+                }
+            };
             if condition_id.is_some() {
                 tracing::warn!("The package '{name}' has a constraint with a condition '{constrains}'. This is not supported by the solver and will be ignored.", name = record.package_record.name.as_normalized(), constrains = constrains);
             }
@@ -746,17 +765,28 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
             .iter()
             .flat_map(|(extra, deps)| deps.iter().map(move |dep| (extra, dep)))
         {
-            let (version_set_ids, spec_condition) =
-                match parse_match_spec(&self.pool, matchspec, &mut parse_match_spec_cache) {
-                    Ok(version_set_id) => version_set_id,
-                    Err(e) => {
-                        let reason = self.pool.intern_string(format!(
-                            "the constrains '{matchspec}' failed to parse: {e}",
-                        ));
+            let (version_set_ids, spec_condition) = match parse_match_spec(
+                &self.pool,
+                matchspec,
+                &mut parse_match_spec_cache,
+            ) {
+                Ok(version_set_id) => version_set_id,
+                Err(e) => {
+                    tracing::debug!(
+                        "{}/{} from {} has invalid extra dependency '{}': {}, this variant will be ignored",
+                        record.package_record.subdir,
+                        record.file_name,
+                        record.channel.as_deref().unwrap_or("unknown"),
+                        matchspec,
+                        e
+                    );
+                    let reason = self.pool.intern_string(format!(
+                        "the constrains '{matchspec}' failed to parse: {e}",
+                    ));
 
-                        return Dependencies::Unknown(reason);
-                    }
-                };
+                    return Dependencies::Unknown(reason);
+                }
+            };
 
             // Add them as conditional requirements (e.g. `numpy; if extra`).
             let extra_condition = self.extra_condition(&record.package_record.name, extra);

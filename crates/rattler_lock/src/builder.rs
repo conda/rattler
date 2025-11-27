@@ -338,6 +338,31 @@ impl LockFileBuilder {
         self
     }
 
+    /// Sets the `PyPI` prerelease mode for an environment.
+    ///
+    /// This function is similar to [`Self::with_pypi_prerelease_mode`] but differs in
+    /// that it takes a mutable reference to self instead of consuming it.
+    pub fn set_pypi_prerelease_mode(
+        &mut self,
+        environment: impl Into<String>,
+        prerelease_mode: crate::PypiPrereleaseMode,
+    ) -> &mut Self {
+        self.environment_data(environment)
+            .options
+            .pypi_prerelease_mode = Some(prerelease_mode);
+        self
+    }
+
+    /// Sets the `PyPI` prerelease mode for an environment.
+    pub fn with_pypi_prerelease_mode(
+        mut self,
+        environment: impl Into<String>,
+        prerelease_mode: crate::PypiPrereleaseMode,
+    ) -> Self {
+        self.set_pypi_prerelease_mode(environment, prerelease_mode);
+        self
+    }
+
     /// Sets the options for an environment.
     pub fn with_options(mut self, environment: impl Into<String>, options: SolveOptions) -> Self {
         self.set_options(environment, options);
@@ -399,7 +424,7 @@ mod test {
     use rattler_conda_types::{PackageName, PackageRecord, Platform, Version};
     use url::Url;
 
-    use crate::{CondaBinaryData, LockFile};
+    use crate::{CondaBinaryData, LockFile, PypiPrereleaseMode};
 
     #[test]
     fn test_merge_records_and_purls() {
@@ -469,5 +494,98 @@ mod test {
             )
             .finish();
         insta::assert_snapshot!(lock_file.render_to_string().unwrap());
+    }
+
+    #[test]
+    fn test_pypi_prerelease_mode() {
+        let record = PackageRecord {
+            subdir: "linux-64".into(),
+            ..PackageRecord::new(
+                PackageName::new_unchecked("python"),
+                Version::from_str("3.12.0").unwrap(),
+                "build".into(),
+            )
+        };
+
+        let lock_file = LockFile::builder()
+            .with_conda_package(
+                "default",
+                Platform::Linux64,
+                CondaBinaryData {
+                    package_record: record.clone(),
+                    location: Url::parse(
+                        "https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2",
+                    )
+                    .unwrap()
+                    .into(),
+                    file_name: "python-3.12.0-build.tar.bz2".to_string(),
+                    channel: None,
+                }
+                .into(),
+            )
+            .with_pypi_prerelease_mode("default", PypiPrereleaseMode::Allow)
+            .finish();
+
+        // Verify the prerelease mode is set correctly
+        let env = lock_file.environment("default").unwrap();
+        assert_eq!(env.pypi_prerelease_mode(), Some(PypiPrereleaseMode::Allow));
+
+        // Verify it serializes correctly
+        insta::assert_snapshot!(lock_file.render_to_string().unwrap());
+    }
+
+    #[test]
+    fn test_pypi_prerelease_mode_roundtrip() {
+        let record = PackageRecord {
+            subdir: "linux-64".into(),
+            ..PackageRecord::new(
+                PackageName::new_unchecked("python"),
+                Version::from_str("3.12.0").unwrap(),
+                "build".into(),
+            )
+        };
+
+        // Test various prerelease modes
+        for mode in [
+            PypiPrereleaseMode::Disallow,
+            PypiPrereleaseMode::Allow,
+            PypiPrereleaseMode::IfNecessary,
+            PypiPrereleaseMode::Explicit,
+            PypiPrereleaseMode::IfNecessaryOrExplicit,
+        ] {
+            let lock_file = LockFile::builder()
+                .with_conda_package(
+                    "default",
+                    Platform::Linux64,
+                    CondaBinaryData {
+                        package_record: record.clone(),
+                        location: Url::parse(
+                            "https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2",
+                        )
+                        .unwrap()
+                        .into(),
+                        file_name: "python-3.12.0-build.tar.bz2".to_string(),
+                        channel: None,
+                    }
+                    .into(),
+                )
+                .with_pypi_prerelease_mode("default", mode)
+                .finish();
+
+            // Serialize
+            let rendered = lock_file.render_to_string().unwrap();
+
+            // Parse again
+            let parsed = LockFile::from_str(&rendered).unwrap();
+
+            // Verify the prerelease mode roundtrips correctly
+            assert_eq!(
+                parsed
+                    .environment("default")
+                    .unwrap()
+                    .pypi_prerelease_mode(),
+                Some(mode)
+            );
+        }
     }
 }

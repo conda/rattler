@@ -5,6 +5,8 @@ use std::{cmp::Ordering, collections::HashMap};
 
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{package::ArchiveType, GenericVirtualPackage, RepoDataRecord};
+use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseMatchSpecOptions};
+use std::collections::HashSet;
 
 use crate::MinimumAgeConfig;
 
@@ -15,7 +17,8 @@ use super::{
         keys::{
             REPOKEY_TYPE_MD5, REPOKEY_TYPE_SHA256, SOLVABLE_BUILDFLAVOR, SOLVABLE_BUILDTIME,
             SOLVABLE_BUILDVERSION, SOLVABLE_CHECKSUM, SOLVABLE_CONSTRAINS, SOLVABLE_DOWNLOADSIZE,
-            SOLVABLE_LICENSE, SOLVABLE_PKGID, SOLVABLE_TRACK_FEATURES,
+            SOLVABLE_EXTRA_NAME, SOLVABLE_EXTRA_PACKAGE, SOLVABLE_LICENSE, SOLVABLE_PKGID,
+            SOLVABLE_REPODATA_RECORD_INDEX, SOLVABLE_TRACK_FEATURES,
         },
         pool::Pool,
         repo::Repo,
@@ -49,6 +52,28 @@ pub fn add_solv_file(pool: &Pool, repo: &Repo<'_>, solv_bytes: &LibcByteSlice) {
     unsafe { libc::fclose(file) };
 }
 
+/// Parses a condition from a `MatchSpecCondition` and returns the corresponding libsolv Id
+pub fn parse_condition(condition: &MatchSpecCondition, pool: &Pool) -> super::wrapper::ffi::Id {
+    match condition {
+        MatchSpecCondition::MatchSpec(match_spec) => {
+            // Convert the match spec to a string and use conda_matchspec to parse it
+            let match_spec_str = match_spec.to_string();
+            let c_str = c_string(&match_spec_str);
+            pool.conda_matchspec(&c_str)
+        }
+        MatchSpecCondition::And(left, right) => {
+            let left_id = parse_condition(left, pool);
+            let right_id = parse_condition(right, pool);
+            pool.rel_and(left_id, right_id)
+        }
+        MatchSpecCondition::Or(left, right) => {
+            let left_id = parse_condition(left, pool);
+            let right_id = parse_condition(right, pool);
+            pool.rel_or(left_id, right_id)
+        }
+    }
+}
+
 /// Adds [`RepoDataRecord`] to `repo`
 ///
 /// Panics if the repo does not belong to the pool
@@ -77,7 +102,7 @@ pub fn add_repodata_records<'a>(
     let repo_type_sha256 = pool.find_interned_str(REPOKEY_TYPE_SHA256).unwrap();
 
     // Custom id
-    let solvable_index_id = pool.intern_str("solvable:repodata_record_index");
+    let solvable_index_id = pool.intern_str(SOLVABLE_REPODATA_RECORD_INDEX);
 
     // Keeps a mapping from packages added to the repo to the type and solvable
     let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
@@ -91,6 +116,9 @@ pub fn add_repodata_records<'a>(
     let min_age_cutoff = min_age.map(super::super::MinimumAgeConfig::cutoff);
 
     let mut solvable_ids = Vec::new();
+
+    // Track all extras we encounter so we can create synthetic solvables for them
+    let mut extras: HashSet<(String, String)> = HashSet::new();
     for (repo_data_index, repo_data) in repo_data.into_iter().enumerate() {
         // Skip packages that are newer than the specified timestamp
         match (exclude_newer, repo_data.package_record.timestamp.as_ref()) {
@@ -139,11 +167,32 @@ pub fn add_repodata_records<'a>(
         );
 
         // Dependencies
-        for match_spec in record.depends.iter() {
-            // Create a reldep id from a matchspec
-            let match_spec_id = pool.conda_matchspec(&c_string(match_spec));
+        for match_spec_str in record.depends.iter() {
+            // Parse the match spec to check for conditions
+            if let Ok(match_spec) = MatchSpec::from_str(
+                match_spec_str,
+                ParseMatchSpecOptions::lenient().with_experimental_conditionals(true),
+            ) {
+                if let Some(condition) = match_spec.condition.as_ref() {
+                    // Create the dependency without the condition
+                    let mut dep_spec = match_spec.clone();
+                    dep_spec.condition = None;
+                    let dep_id = pool.conda_matchspec(&c_string(dep_spec.to_string()));
 
-            // Add it to the list of requirements of this solvable
+                    // Parse the condition
+                    let condition_id = parse_condition(condition, pool);
+
+                    // Create a conditional dependency
+                    let conditional_dep_id = pool.rel_cond(dep_id, condition_id);
+
+                    // Add it to the list of requirements
+                    repo.add_requires(solvable, conditional_dep_id);
+                    continue;
+                }
+            }
+
+            // Regular dependency without condition
+            let match_spec_id = pool.conda_matchspec(&c_string(match_spec_str));
             repo.add_requires(solvable, match_spec_id);
         }
 
@@ -154,6 +203,28 @@ pub fn add_repodata_records<'a>(
 
             // Add it to the list of constraints of this solvable
             data.add_idarray(solvable_id, solvable_constraints, match_spec_id);
+        }
+
+        // Process experimental_extra_depends: convert them into conditional requirements
+        for (extra_name, deps) in record.experimental_extra_depends.iter() {
+            // Track this extra for synthetic solvable creation
+            extras.insert((record.name.as_normalized().to_string(), extra_name.clone()));
+
+            // Create conditional dependencies: dep; if package[extra]
+            for dep_str in deps.iter() {
+                // Parse the dependency matchspec
+                let dep_id = pool.conda_matchspec(&c_string(dep_str));
+
+                // Create the condition: package[extra]
+                let extra_name_str = format!("{}[{}]", record.name.as_normalized(), extra_name);
+                let extra_condition_id = pool.intern_str(extra_name_str.as_str()).into();
+
+                // Create a conditional dependency: dep; if package[extra]
+                let conditional_dep_id = pool.rel_cond(dep_id, extra_condition_id);
+
+                // Add it as a requirement
+                repo.add_requires(solvable, conditional_dep_id);
+            }
         }
 
         // Track features
@@ -220,6 +291,36 @@ pub fn add_repodata_records<'a>(
                 &c_string(format!("{sha256:x}")),
             );
         }
+
+        solvable_ids.push(solvable_id);
+    }
+
+    // Custom ids for storing extra info on synthetic solvables
+    let extra_package_id = pool.intern_str(SOLVABLE_EXTRA_PACKAGE);
+    let extra_name_id = pool.intern_str(SOLVABLE_EXTRA_NAME);
+
+    // Add synthetic solvables for extras
+    for (package_name, extra_name) in extras {
+        // Create synthetic solvable with name "package[extra]"
+        let solvable_id = repo.add_solvable();
+        let solvable = unsafe { solvable_id.resolve_raw(pool).as_mut() };
+
+        // Set the name to "package[extra]" using bracket notation
+        let synthetic_name = format!("{package_name}[{extra_name}]");
+        solvable.name = pool.intern_str(synthetic_name.as_str()).into();
+
+        // Set a dummy version (version "0" to indicate this is a synthetic solvable)
+        solvable.evr = pool.intern_str("0").into();
+
+        // Add self-provides so the solver can find it
+        let rel_eq = pool.rel_eq(solvable.name, solvable.evr);
+        repo.add_provides(solvable, rel_eq);
+
+        // Store extra info so we can retrieve it from the transaction
+        let package_name_interned = pool.intern_str(package_name.as_str());
+        let extra_name_interned = pool.intern_str(extra_name.as_str());
+        data.set_id(solvable_id, extra_package_id, package_name_interned.into());
+        data.set_id(solvable_id, extra_name_id, extra_name_interned.into());
 
         solvable_ids.push(solvable_id);
     }

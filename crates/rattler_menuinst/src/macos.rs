@@ -444,9 +444,14 @@ impl MacOSMenu {
         // This one is _not_ part of the schema, so we just set it
         pl.insert("CFBundleExecutable".into(), Value::String(slugname.clone()));
 
+        let cf_bundle_identifier = resolve(
+            &self.item.cf_bundle_identifier,
+            &self.placeholders,
+            &format!("com.{slugname}"),
+        );
         pl.insert(
             "CFBundleIdentifier".into(),
-            Value::String(format!("com.{slugname}")),
+            Value::String(cf_bundle_identifier.clone()),
         );
         pl.insert("CFBundlePackageType".into(), Value::String("APPL".into()));
 
@@ -508,7 +513,7 @@ impl MacOSMenu {
             pl.insert("LSBackgroundOnly".into(), Value::Boolean(true));
             pl.insert(
                 "CFBundleIdentifier".into(),
-                Value::String(format!("com.{slugname}-appkit-launcher")),
+                Value::String(format!("{cf_bundle_identifier}-appkit-launcher")),
             );
         }
 

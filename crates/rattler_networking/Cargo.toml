@@ -1,6 +1,6 @@
 [package]
 name = "rattler_networking"
-version = "0.25.25"
+version = "0.25.26"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Authenticated requests in the conda ecosystem"
@@ -32,6 +32,7 @@ google-cloud-auth = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true, features = [
     "rt-tokio",
     "sso",
+    "credentials-login",
     "credentials-process",
 ] }
 aws-sdk-s3 = { workspace = true, optional = true, features = [

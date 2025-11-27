@@ -23,7 +23,7 @@ pub enum NetRcStorageError {
     IOError(#[from] std::io::Error),
 
     /// An error occurred when parsing the netrc file
-    #[error("could not parse .netc file: {0}")]
+    #[error("could not parse .netrc file: {0}")]
     ParseError(netrc_rs::Error),
 
     /// Something is not supported
