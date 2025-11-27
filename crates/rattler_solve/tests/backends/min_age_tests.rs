@@ -138,6 +138,34 @@ pub fn solve_min_age_excludes_unknown_timestamp<T: SolverImpl + Default>() {
         .run::<T>();
 }
 
+/// Test that exempt packages are included even without a timestamp.
+pub fn solve_min_age_exempt_no_timestamp<T: SolverImpl + Default>() {
+    let repo = vec![
+        PackageBuilder::new("pkg-a")
+            .version("1.0")
+            .timestamp("2020-01-15T12:00:00Z")
+            .build(),
+        PackageBuilder::new("pkg-a")
+            .version("2.0")
+            // No timestamp - would normally be excluded
+            .build(),
+    ];
+
+    // 1000 days minimum age
+    let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
+
+    // Exempt pkg-a from the filter
+    let config = MinimumAgeConfig::new(min_age).with_exempt_package("pkg-a".parse().unwrap());
+
+    SolverCase::new("min_age exempt package without timestamp")
+        .repository(repo)
+        .specs(["pkg-a"])
+        .min_age(config)
+        // pkg-a 2.0 has no timestamp but is exempt, so it should be selected
+        .expect_present([("pkg-a", "2.0")])
+        .run::<T>();
+}
+
 /// Test that packages without timestamps can be included with the option.
 pub fn solve_min_age_include_unknown_timestamp<T: SolverImpl + Default>() {
     let repo = vec![

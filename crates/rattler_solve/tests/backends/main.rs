@@ -484,6 +484,11 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn test_min_age_exempt_no_timestamp() {
+            crate::min_age_tests::solve_min_age_exempt_no_timestamp::<$T>();
+        }
+
+        #[test]
         fn test_duplicate_record() {
             use rattler_solve::SolverImpl;
 
