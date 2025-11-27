@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.16](https://github.com/conda/rattler/compare/rattler_s3-v0.1.15...rattler_s3-v0.1.16) - 2025-11-27
+
+### Added
+
+- enable credentials-login for aws new login functionality ([#1891](https://github.com/conda/rattler/pull/1891))
+
 ## [0.1.15](https://github.com/conda/rattler/compare/rattler_s3-v0.1.14...rattler_s3-v0.1.15) - 2025-11-25
 
 ### Other

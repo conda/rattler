@@ -42,6 +42,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.0](https://github.com/conda/rattler/compare/rattler_solve-v4.0.1...rattler_solve-v4.1.0) - 2025-11-27
+
+### Added
+
+- *(solver)* add minimum package age filter for security ([#1890](https://github.com/conda/rattler/pull/1890))
+- add condition dependency and `extras` support for libsolv ([#1836](https://github.com/conda/rattler/pull/1836))
+
 ## [4.0.1](https://github.com/conda/rattler/compare/rattler_solve-v4.0.0...rattler_solve-v4.0.1) - 2025-11-25
 
 ### Fixed

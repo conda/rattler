@@ -44,6 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.7](https://github.com/conda/rattler/compare/rattler_lock-v0.26.6...rattler_lock-v0.26.7) - 2025-11-27
+
+### Added
+
+- add `variants` to the lock-file (v6) ([#1854](https://github.com/conda/rattler/pull/1854))
+- *(rattler_lock)* add prerelease-mode support for PyPI dependencies ([#1889](https://github.com/conda/rattler/pull/1889))
+
 ## [0.26.6](https://github.com/conda/rattler/compare/rattler_lock-v0.26.5...rattler_lock-v0.26.6) - 2025-11-25
 
 ### Other
