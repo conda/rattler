@@ -114,13 +114,13 @@ pub fn solve_min_age_exempt_dependency<T: SolverImpl + Default>() {
 /// Test that packages without timestamps are excluded by default.
 pub fn solve_min_age_excludes_unknown_timestamp<T: SolverImpl + Default>() {
     let repo = vec![
-        PackageBuilder::new("pkg-no-ts")
-            .version("1.0")
-            // No timestamp set - should be filtered by default
-            .build(),
-        PackageBuilder::new("pkg-old")
+        PackageBuilder::new("pkg-a")
             .version("1.0")
             .timestamp("2020-01-15T12:00:00Z")
+            .build(),
+        PackageBuilder::new("pkg-a")
+            .version("2.0")
+            // No timestamp - should be excluded by default
             .build(),
     ];
 
@@ -129,11 +129,12 @@ pub fn solve_min_age_excludes_unknown_timestamp<T: SolverImpl + Default>() {
 
     SolverCase::new("min_age excludes unknown timestamp by default")
         .repository(repo)
-        .specs(["pkg-old"])
+        .specs(["pkg-a"])
         .min_age(MinimumAgeConfig::new(min_age))
-        // pkg-old should be available (has old timestamp)
-        // pkg-no-ts is not requested but would be excluded if it were
-        .expect_present(["pkg-old"])
+        // pkg-a 2.0 has no timestamp and should be excluded
+        // pkg-a 1.0 has an old timestamp and should be selected
+        .expect_present([("pkg-a", "1.0")])
+        .expect_absent([("pkg-a", "2.0")])
         .run::<T>();
 }
 
