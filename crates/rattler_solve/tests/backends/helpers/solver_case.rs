@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
 };
-use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
+use rattler_solve::{MinimumAgeConfig, SolveStrategy, SolverImpl, SolverTask};
 use std::collections::HashMap;
 
 /// Shared building blocks that keep the integration tests concise and data driven.
@@ -26,6 +26,7 @@ pub struct SolverCase<'a> {
     pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
     exclude_newer: Option<DateTime<Utc>>,
+    min_age: Option<MinimumAgeConfig>,
     strategy: SolveStrategy,
     expect_present: Vec<PkgMatcher>,
     expect_absent: Vec<PkgMatcher>,
@@ -44,6 +45,7 @@ impl<'a> SolverCase<'a> {
             pinned_packages: Vec::new(),
             virtual_packages: Vec::new(),
             exclude_newer: None,
+            min_age: None,
             strategy: SolveStrategy::default(),
             expect_present: Vec::new(),
             expect_absent: Vec::new(),
@@ -116,6 +118,15 @@ impl<'a> SolverCase<'a> {
         self
     }
 
+    /// Sets the minimum age configuration for package filtering.
+    ///
+    /// Packages published more recently than the specified age will be excluded,
+    /// unless they are in the exempt packages list.
+    pub fn min_age(mut self, config: MinimumAgeConfig) -> Self {
+        self.min_age = Some(config);
+        self
+    }
+
     /// Sets the solve strategy (e.g., `LowestVersion`, `LowestVersionDirect`).
     pub fn strategy(mut self, strategy: SolveStrategy) -> Self {
         self.strategy = strategy;
@@ -171,6 +182,7 @@ impl<'a> SolverCase<'a> {
             pinned_packages: self.pinned_packages.clone(),
             virtual_packages: self.virtual_packages.clone(),
             exclude_newer: self.exclude_newer,
+            min_age: self.min_age.clone(),
             strategy: self.strategy,
             ..SolverTask::from_iter(repo_refs)
         };

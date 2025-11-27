@@ -331,6 +331,7 @@ checksum = "a0149602eeaf915158e14029ba0c78dedb8c08d554b024d54c8f239aab46511d"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
+ "aws-sdk-signin",
  "aws-sdk-sso",
  "aws-sdk-ssooidc",
  "aws-sdk-sts",
@@ -341,15 +342,20 @@ dependencies = [
  "aws-smithy-runtime-api",
  "aws-smithy-types",
  "aws-types",
+ "base64-simd",
  "bytes",
  "fastrand",
  "hex",
  "http 1.4.0",
+ "p256 0.13.2",
+ "rand 0.8.5",
  "ring",
+ "sha2",
  "time",
  "tokio",
  "tracing",
  "url",
+ "uuid",
  "zeroize",
 ]
 
@@ -422,6 +428,28 @@ dependencies = [
  "sha2",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "aws-sdk-signin"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "539a464c46384f614b887611bf958ec5a9fb3bf6e3ee966f18fd0b040ced9996"
+dependencies = [
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand",
+ "http 0.2.12",
+ "regex-lite",
+ "tracing",
 ]
 
 [[package]]
@@ -1740,6 +1768,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fancy-regex"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "998b056554fbe42e03ae0e152895cd1a7e1002aec800fdc6635d20270260c46f"
+dependencies = [
+ "bit-set",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1837,6 +1876,12 @@ name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
+
+[[package]]
+name = "foldhash"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "foreign-types"
@@ -2174,11 +2219,11 @@ dependencies = [
 
 [[package]]
 name = "halfbrown"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa2c385c6df70fd180bbb673d93039dbd2cd34e41d782600bdf6e1ca7bce39aa"
+checksum = "0c7ed2f2edad8a14c8186b847909a41fbb9c3eafa44f88bd891114ed5019da09"
 dependencies = [
- "hashbrown 0.15.5",
+ "hashbrown 0.16.1",
  "serde",
 ]
 
@@ -2202,7 +2247,7 @@ checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
 dependencies = [
  "allocator-api2",
  "equivalent",
- "foldhash",
+ "foldhash 0.1.5",
 ]
 
 [[package]]
@@ -2210,6 +2255,11 @@ name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
+dependencies = [
+ "allocator-api2",
+ "equivalent",
+ "foldhash 0.2.0",
+]
 
 [[package]]
 name = "heck"
@@ -2835,9 +2885,9 @@ dependencies = [
 
 [[package]]
 name = "libloading"
-version = "0.8.9"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55"
+checksum = "754ca22de805bb5744484a5b151a9e1a8e837d5dc232c2d7d8c2e3492edc8b60"
 dependencies = [
  "cfg-if",
  "windows-link 0.2.1",
@@ -3657,7 +3707,7 @@ dependencies = [
 
 [[package]]
 name = "py-rattler"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3962,7 +4012,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.39.3"
+version = "0.39.4"
 dependencies = [
  "anyhow",
  "console",
@@ -4004,7 +4054,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4035,12 +4085,13 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "ahash",
  "chrono",
  "core-foundation 0.10.1",
  "dirs",
+ "fancy-regex",
  "file_url",
  "fs-err",
  "glob",
@@ -4074,7 +4125,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.19"
+version = "0.2.20"
 dependencies = [
  "console",
  "fs-err",
@@ -4107,7 +4158,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.4"
+version = "0.27.5"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4143,7 +4194,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.26.5"
+version = "0.26.6"
 dependencies = [
  "ahash",
  "chrono",
@@ -4175,7 +4226,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.38"
+version = "0.2.39"
 dependencies = [
  "chrono",
  "configparser",
@@ -4203,7 +4254,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.25"
+version = "0.25.26"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4233,7 +4284,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.17"
+version = "0.23.18"
 dependencies = [
  "bzip2",
  "chrono",
@@ -4282,7 +4333,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.25.3"
+version = "0.25.4"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4342,7 +4393,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4358,7 +4409,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.11"
+version = "0.25.12"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4376,10 +4427,11 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "4.0.0"
+version = "4.0.1"
 dependencies = [
  "chrono",
  "futures",
+ "humantime",
  "itertools 0.14.0",
  "rattler_conda_types",
  "rattler_digest",
@@ -4392,7 +4444,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.3.0"
+version = "2.3.1"
 dependencies = [
  "archspec",
  "libloading",
@@ -5225,11 +5277,10 @@ checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
 
 [[package]]
 name = "simd-json"
-version = "0.15.1"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c962f626b54771990066e5435ec8331d1462576cd2d1e62f24076ae014f92112"
+checksum = "4255126f310d2ba20048db6321c81ab376f6a6735608bf11f0785c41f01f64e3"
 dependencies = [
- "getrandom 0.3.4",
  "halfbrown",
  "ref-cast",
  "serde",
@@ -5937,9 +5988,9 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "value-trait"
-version = "0.11.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0508fce11ad19e0aab49ce20b6bec7f8f82902ded31df1c9fc61b90f0eb396b8"
+checksum = "8e80f0c733af0720a501b3905d22e2f97662d8eacfe082a75ed7ffb5ab08cb59"
 dependencies = [
  "float-cmp",
  "halfbrown",

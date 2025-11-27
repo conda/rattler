@@ -8,12 +8,15 @@ use rattler_conda_types::{
     Version,
 };
 use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
-use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
+use rattler_solve::{
+    ChannelPriority, MinimumAgeConfig, SolveError, SolveStrategy, SolverImpl, SolverTask,
+};
 use url::Url;
 
 mod conditional_tests;
 mod extras_tests;
 mod helpers;
+mod min_age_tests;
 mod solver_case_tests;
 mod strategy_tests;
 
@@ -451,6 +454,41 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn test_min_age_filters_new_packages() {
+            crate::min_age_tests::solve_min_age_filters_new_packages::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_with_exemption() {
+            crate::min_age_tests::solve_min_age_with_exemption::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_with_dependencies() {
+            crate::min_age_tests::solve_min_age_with_dependencies::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exempt_dependency() {
+            crate::min_age_tests::solve_min_age_exempt_dependency::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_excludes_unknown_timestamp() {
+            crate::min_age_tests::solve_min_age_excludes_unknown_timestamp::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_include_unknown_timestamp() {
+            crate::min_age_tests::solve_min_age_include_unknown_timestamp::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_exempt_no_timestamp() {
+            crate::min_age_tests::solve_min_age_exempt_no_timestamp::<$T>();
+        }
+
+        #[test]
         fn test_duplicate_record() {
             use rattler_solve::SolverImpl;
 
@@ -648,6 +686,7 @@ mod libsolv_c {
                 timeout: None,
                 channel_priority: ChannelPriority::default(),
                 exclude_newer: None,
+                min_age: None,
                 strategy: SolveStrategy::default(),
             })
             .unwrap()
@@ -942,6 +981,7 @@ struct SimpleSolveTask<'a> {
     pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
     exclude_newer: Option<DateTime<Utc>>,
+    min_age: Option<MinimumAgeConfig>,
     strategy: SolveStrategy,
 }
 
@@ -985,6 +1025,7 @@ fn solve<T: SolverImpl + Default>(
         constraints,
         pinned_packages: task.pinned_packages,
         exclude_newer: task.exclude_newer,
+        min_age: task.min_age,
         strategy: task.strategy,
         ..SolverTask::from_iter(&repo_data)
     };
