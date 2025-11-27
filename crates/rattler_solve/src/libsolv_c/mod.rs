@@ -7,16 +7,16 @@ use std::{
 };
 
 pub use input::cache_repodata;
-use input::{add_repodata_records, add_solv_file, add_virtual_packages};
+use input::{add_repodata_records, add_solv_file, add_virtual_packages, parse_condition};
 pub use libc_byte_slice::LibcByteSlice;
-use output::get_required_packages;
+use output::{get_required_packages, SolverOutput};
 use rattler_conda_types::{
     match_spec::package_name_matcher::PackageNameMatcher, MatchSpec, NamelessMatchSpec,
     RepoDataRecord, SolverResult,
 };
 use wrapper::{
     flags::SolverFlag,
-    pool::{Pool, Verbosity},
+    pool::{MatchSpecId, Pool, Verbosity},
     repo::Repo,
     solve_goal::SolveGoal,
 };
@@ -108,12 +108,6 @@ impl super::SolverImpl for Solver {
             return Err(SolveError::UnsupportedOperations(vec![
                 "strategy".to_string()
             ]));
-        }
-
-        if task.specs.iter().any(|spec| spec.extras.is_some()) {
-            return Err(SolveError::UnsupportedOperations(
-                vec!["extras".to_string()],
-            ));
         }
 
         // Construct a default libsolv pool
@@ -242,8 +236,48 @@ impl super::SolverImpl for Solver {
 
         // Specify the matchspec requests
         for spec in task.specs {
-            let id = pool.intern_matchspec(&spec);
+            // Strip extras and condition from the spec before passing to libsolv
+            // (libsolv doesn't understand extras or conditional syntax directly)
+            let (base_spec, extras_opt, condition_opt) = {
+                let mut base = spec.clone();
+                let extras = base.extras.take();
+                let condition = base.condition.take();
+                (base, extras, condition)
+            };
+
+            // Create the base matchspec ID
+            let base_id = pool.intern_matchspec(&base_spec);
+
+            // If there's a condition, wrap the dependency with rel_cond
+            let id = if let Some(condition) = condition_opt.as_ref() {
+                let condition_id = parse_condition(condition, &pool);
+                MatchSpecId(pool.rel_cond(base_id.into(), condition_id))
+            } else {
+                base_id
+            };
+
             goal.install(id, false);
+
+            // If the spec includes extras, also add dependencies on the synthetic extra solvables
+            if let Some(extras) = extras_opt {
+                if let Some(name_matcher) = &spec.name {
+                    // Only exact package names support extras
+                    if let Some(exact_name) = name_matcher.as_exact() {
+                        for extra in extras.iter() {
+                            // Create a dependency on the synthetic "package[extra]" solvable
+                            // We can't use MatchSpec::from_str or conda_matchspec because brackets
+                            // have special meaning in conda matchspecs. Instead, we intern the name
+                            // directly and use it as an Id
+                            let extra_name = format!("{}[{}]", exact_name.as_normalized(), extra);
+                            let name_id = pool.intern_str(extra_name.as_str());
+                            // Convert StringId to MatchSpecId - this works because libsolv can use
+                            // a simple name as a dependency specification
+                            let extra_id = MatchSpecId(name_id.into());
+                            goal.install(extra_id, false);
+                        }
+                    }
+                }
+            }
         }
 
         for spec in task.constraints {
@@ -273,7 +307,10 @@ impl super::SolverImpl for Solver {
 
         let transaction = solver.solve(&mut goal).map_err(SolveError::Unsolvable)?;
 
-        let required_records = get_required_packages(
+        let SolverOutput {
+            packages: required_records,
+            extras,
+        } = get_required_packages(
             &pool,
             &repo_mapping,
             &transaction,
@@ -290,7 +327,7 @@ impl super::SolverImpl for Solver {
 
         Ok(SolverResult {
             records: required_records,
-            extras: HashMap::new(),
+            extras,
         })
     }
 }
