@@ -127,13 +127,13 @@ pub fn add_repodata_records<'a>(
         }
 
         // Skip packages that haven't been published long enough (unless exempt)
-        if let (Some(config), Some(cutoff), Some(timestamp)) = (
-            min_age,
-            &min_age_cutoff,
-            repo_data.package_record.timestamp.as_ref(),
-        ) {
-            if *timestamp > *cutoff && !config.is_exempt(&repo_data.package_record.name) {
-                continue;
+        if let (Some(config), Some(cutoff)) = (min_age, &min_age_cutoff) {
+            if !config.is_exempt(&repo_data.package_record.name) {
+                match repo_data.package_record.timestamp.as_ref() {
+                    Some(timestamp) if *timestamp > *cutoff => continue,
+                    None if !config.include_unknown_timestamp => continue,
+                    _ => {}
+                }
             }
         }
 

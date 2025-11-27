@@ -125,6 +125,12 @@ pub struct MinimumAgeConfig {
     /// This is useful for packages that you trust or that need to be updated
     /// frequently, even if they were recently published.
     pub exempt_packages: HashSet<PackageName>,
+
+    /// Whether to include packages that don't have a timestamp.
+    ///
+    /// By default, packages without a timestamp are excluded when a minimum age
+    /// filter is active. Set this to `true` to include them anyway.
+    pub include_unknown_timestamp: bool,
 }
 
 impl Default for MinimumAgeConfig {
@@ -133,6 +139,7 @@ impl Default for MinimumAgeConfig {
             min_age: std::time::Duration::default(),
             now: Utc::now(),
             exempt_packages: HashSet::new(),
+            include_unknown_timestamp: false,
         }
     }
 }
@@ -145,6 +152,7 @@ impl MinimumAgeConfig {
             min_age,
             now: Utc::now(),
             exempt_packages: HashSet::new(),
+            include_unknown_timestamp: false,
         }
     }
 
@@ -163,6 +171,15 @@ impl MinimumAgeConfig {
     /// Sets the set of exempt packages.
     pub fn with_exempt_packages(mut self, packages: impl IntoIterator<Item = PackageName>) -> Self {
         self.exempt_packages = packages.into_iter().collect();
+        self
+    }
+
+    /// Sets whether packages without a timestamp should be included.
+    ///
+    /// By default, packages without a timestamp are excluded. Call this with
+    /// `true` to include them.
+    pub fn with_include_unknown_timestamp(mut self, include: bool) -> Self {
+        self.include_unknown_timestamp = include;
         self
     }
 

@@ -62,14 +62,21 @@ impl PyMinimumAgeConfig {
     ///         published before it can be installed.
     ///     exempt_packages: Optional list of package names that are exempt
     ///         from the minimum age requirement.
+    ///     include_unknown_timestamp: Whether to include packages without a
+    ///         timestamp. Defaults to False (exclude them).
     #[new]
-    #[pyo3(signature = (seconds, exempt_packages=None))]
-    pub fn new(seconds: u64, exempt_packages: Option<Vec<PyPackageName>>) -> Self {
+    #[pyo3(signature = (seconds, exempt_packages=None, include_unknown_timestamp=false))]
+    pub fn new(
+        seconds: u64,
+        exempt_packages: Option<Vec<PyPackageName>>,
+        include_unknown_timestamp: bool,
+    ) -> Self {
         let mut config = MinimumAgeConfig::new(std::time::Duration::from_secs(seconds));
         if let Some(exempt) = exempt_packages {
             let exempt_set: HashSet<PackageName> = exempt.into_iter().map(Into::into).collect();
             config = config.with_exempt_packages(exempt_set);
         }
+        config = config.with_include_unknown_timestamp(include_unknown_timestamp);
         Self { inner: config }
     }
 
@@ -88,6 +95,12 @@ impl PyMinimumAgeConfig {
             .cloned()
             .map(Into::into)
             .collect()
+    }
+
+    /// Whether packages without a timestamp are included.
+    #[getter]
+    pub fn include_unknown_timestamp(&self) -> bool {
+        self.inner.include_unknown_timestamp
     }
 }
 

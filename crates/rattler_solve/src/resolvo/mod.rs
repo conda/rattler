@@ -427,15 +427,22 @@ impl<'a> CondaDependencyProvider<'a> {
                 }
 
                 // Filter out any records that haven't been published long enough.
-                if let (Some(config), Some(cutoff), Some(timestamp)) =
-                    (&min_age, &min_age_cutoff, &record.package_record.timestamp)
-                {
-                    if timestamp > cutoff && !config.is_exempt(&record.package_record.name) {
-                        let age = humantime::format_duration(config.min_age);
-                        let reason = pool.intern_string(format!(
-                            "the package was published less than {age} ago"
-                        ));
-                        candidates.excluded.push((solvable_id, reason));
+                if let (Some(config), Some(cutoff)) = (&min_age, &min_age_cutoff) {
+                    if !config.is_exempt(&record.package_record.name) {
+                        let exclude_reason = match &record.package_record.timestamp {
+                            Some(timestamp) if timestamp > cutoff => {
+                                let age = humantime::format_duration(config.min_age);
+                                Some(format!("the package was published less than {age} ago"))
+                            }
+                            None if !config.include_unknown_timestamp => {
+                                Some("the package has no timestamp".to_string())
+                            }
+                            _ => None,
+                        };
+                        if let Some(reason) = exclude_reason {
+                            let reason = pool.intern_string(reason);
+                            candidates.excluded.push((solvable_id, reason));
+                        }
                     }
                 }
 

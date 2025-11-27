@@ -474,8 +474,13 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_min_age_no_timestamp() {
-            crate::min_age_tests::solve_min_age_no_timestamp::<$T>();
+        fn test_min_age_excludes_unknown_timestamp() {
+            crate::min_age_tests::solve_min_age_excludes_unknown_timestamp::<$T>();
+        }
+
+        #[test]
+        fn test_min_age_include_unknown_timestamp() {
+            crate::min_age_tests::solve_min_age_include_unknown_timestamp::<$T>();
         }
 
         #[test]
