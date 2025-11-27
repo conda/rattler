@@ -16,6 +16,7 @@ use url::Url;
 mod conditional_tests;
 mod extras_tests;
 mod helpers;
+mod min_age_tests;
 mod solver_case_tests;
 mod strategy_tests;
 
@@ -452,105 +453,29 @@ macro_rules! solver_backend_tests {
             );
         }
 
-        /// Test that min_age filters out packages that are too new.
-        /// The dummy repodata has:
-        /// - foo 3.0.2 from 2020-11-11 (tar.bz2) and 2024-05-13 (.conda variants)
-        /// - foo 4.0.2 from 2024-05-13
-        /// With a min_age of 1000 days (from ~Nov 2025), the cutoff is ~March 2023,
-        /// so only the 2020-11-11 packages should be available.
         #[test]
-        fn test_min_age() {
-            use rattler_solve::MinimumAgeConfig;
-
-            // 1000 days - this should filter out packages from 2024-05-13
-            let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
-
-            let pkgs = solve::<$T>(
-                &[dummy_channel_json_path()],
-                SimpleSolveTask {
-                    specs: &["foo"],
-                    min_age: Some(MinimumAgeConfig::new(min_age)),
-                    ..SimpleSolveTask::default()
-                },
-            )
-            .unwrap();
-
-            assert_eq!(1, pkgs.records.len());
-
-            let info = &pkgs.records[0];
-            assert_eq!("foo", info.package_record.name.as_normalized());
-            assert_eq!("3.0.2", &info.package_record.version.to_string(),
-                "foo 4.0.2 should be filtered out because it's too new");
-            assert_eq!(&info.file_name, "foo-3.0.2-py36h1af98f8_1.tar.bz2",
-                "the .conda variants are from 2024, so only the tar.bz2 from 2020 should be selected");
+        fn test_min_age_filters_new_packages() {
+            crate::min_age_tests::solve_min_age_filters_new_packages::<$T>();
         }
 
-        /// Test that packages can be exempted from min_age filtering.
         #[test]
         fn test_min_age_with_exemption() {
-            use rattler_solve::MinimumAgeConfig;
-
-            // 1000 days - this would normally filter out packages from 2024-05-13
-            let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
-
-            // But we exempt "foo" from the filter
-            let config = MinimumAgeConfig::new(min_age)
-                .with_exempt_package("foo".parse().unwrap());
-
-            let pkgs = solve::<$T>(
-                &[dummy_channel_json_path()],
-                SimpleSolveTask {
-                    specs: &["foo"],
-                    min_age: Some(config),
-                    ..SimpleSolveTask::default()
-                },
-            )
-            .unwrap();
-
-            assert_eq!(1, pkgs.records.len());
-
-            let info = &pkgs.records[0];
-            assert_eq!("foo", info.package_record.name.as_normalized());
-            assert_eq!("4.0.2", &info.package_record.version.to_string(),
-                "foo should get the latest version because it's exempted from min_age");
+            crate::min_age_tests::solve_min_age_with_exemption::<$T>();
         }
 
-        /// Test that min_age applies to dependencies but exemptions work correctly.
         #[test]
         fn test_min_age_with_dependencies() {
-            use rattler_solve::MinimumAgeConfig;
+            crate::min_age_tests::solve_min_age_with_dependencies::<$T>();
+        }
 
-            // foobar depends on bors
-            // foobar versions: 2.0 (2020), 2.1 (2024)
-            // bors versions: 1.0, 1.1, 1.2.1 (2020), 2.0, 2.1 (2024)
+        #[test]
+        fn test_min_age_exempt_dependency() {
+            crate::min_age_tests::solve_min_age_exempt_dependency::<$T>();
+        }
 
-            // 1000 days - filters out 2024 packages
-            let min_age = std::time::Duration::from_secs(1000 * 24 * 60 * 60);
-
-            let pkgs = solve::<$T>(
-                &[dummy_channel_json_path()],
-                SimpleSolveTask {
-                    specs: &["foobar"],
-                    min_age: Some(MinimumAgeConfig::new(min_age)),
-                    ..SimpleSolveTask::default()
-                },
-            )
-            .unwrap();
-
-            // Should get foobar 2.0 (from 2020) and a compatible bors version (from 2020)
-            assert_eq!(2, pkgs.records.len());
-
-            let foobar = pkgs.records.iter().find(|r| r.package_record.name.as_normalized() == "foobar").unwrap();
-            assert_eq!("2.0", &foobar.package_record.version.to_string(),
-                "foobar 2.1 should be filtered out because it's too new");
-
-            let bors = pkgs.records.iter().find(|r| r.package_record.name.as_normalized() == "bors").unwrap();
-            // bors should be one of the 2020 versions (1.0, 1.1, or 1.2.1)
-            let bors_version = bors.package_record.version.to_string();
-            assert!(
-                bors_version == "1.0" || bors_version == "1.1" || bors_version == "1.2.1",
-                "bors should be an older version from 2020, got {}", bors_version
-            );
+        #[test]
+        fn test_min_age_no_timestamp() {
+            crate::min_age_tests::solve_min_age_no_timestamp::<$T>();
         }
 
         #[test]
