@@ -4548,7 +4548,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.39.4"
+version = "0.39.5"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4633,7 +4633,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4672,7 +4672,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.42.1"
+version = "0.42.2"
 dependencies = [
  "ahash",
  "assert_matches",
@@ -4723,7 +4723,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.20"
+version = "0.2.21"
 dependencies = [
  "console 0.16.1",
  "fs-err",
@@ -4763,7 +4763,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.5"
+version = "0.27.6"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4801,7 +4801,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_libsolv_c"
-version = "1.2.3"
+version = "1.3.0"
 dependencies = [
  "anyhow",
  "cc",
@@ -4813,7 +4813,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.26.6"
+version = "0.26.7"
 dependencies = [
  "ahash",
  "chrono",
@@ -4850,7 +4850,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.39"
+version = "0.2.40"
 dependencies = [
  "chrono",
  "configparser",
@@ -4879,7 +4879,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.26"
+version = "0.25.27"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4917,7 +4917,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.18"
+version = "0.23.19"
 dependencies = [
  "assert_matches",
  "bzip2",
@@ -4972,7 +4972,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.25.4"
+version = "0.25.5"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -5041,7 +5041,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -5068,7 +5068,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.12"
+version = "0.25.13"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -5090,7 +5090,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "4.0.1"
+version = "4.1.0"
 dependencies = [
  "chrono",
  "criterion",
@@ -5118,7 +5118,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.4.4"
+version = "0.4.5"
 dependencies = [
  "base64",
  "clap",
@@ -5152,7 +5152,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.3.1"
+version = "2.3.2"
 dependencies = [
  "archspec",
  "libloading 0.9.0",
