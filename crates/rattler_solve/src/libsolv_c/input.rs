@@ -159,7 +159,7 @@ pub fn add_repodata_records<'a>(
                     // Create the dependency without the condition
                     let mut dep_spec = match_spec.clone();
                     dep_spec.condition = None;
-                    let dep_id = pool.conda_matchspec(&c_string(&dep_spec.to_string()));
+                    let dep_id = pool.conda_matchspec(&c_string(dep_spec.to_string()));
 
                     // Parse the condition
                     let condition_id = parse_condition(condition, pool);
