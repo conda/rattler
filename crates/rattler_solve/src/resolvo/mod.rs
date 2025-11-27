@@ -296,7 +296,7 @@ impl<'a> CondaDependencyProvider<'a> {
 
         // Compute the cutoff time for min_age.
         // Packages published after this time will be excluded (unless exempt).
-        let min_age_cutoff = min_age.map(super::MinimumAgeConfig::cutoff);
+        let min_age_cutoff = min_age.map(MinimumAgeConfig::cutoff);
 
         // Add virtual packages to the records
         for virtual_package in virtual_packages {

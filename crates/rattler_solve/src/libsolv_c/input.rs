@@ -113,7 +113,7 @@ pub fn add_repodata_records<'a>(
 
     // Compute the cutoff time for min_age.
     // Packages published after this time will be excluded (unless exempt).
-    let min_age_cutoff = min_age.map(super::super::MinimumAgeConfig::cutoff);
+    let min_age_cutoff = min_age.map(MinimumAgeConfig::cutoff);
 
     let mut solvable_ids = Vec::new();
 
