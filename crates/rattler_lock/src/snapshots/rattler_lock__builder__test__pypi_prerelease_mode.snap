@@ -1,0 +1,16 @@
+---
+source: crates/rattler_lock/src/builder.rs
+expression: lock_file.render_to_string().unwrap()
+---
+version: 6
+environments:
+  default:
+    channels: []
+    options:
+      pypi-prerelease-mode: allow
+    packages:
+      linux-64:
+      - conda: https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2
+packages:
+- conda: https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2
+  channel: null

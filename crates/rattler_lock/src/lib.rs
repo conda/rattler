@@ -102,7 +102,7 @@ pub use conda::{
 };
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
-pub use options::SolveOptions;
+pub use options::{PypiPrereleaseMode, SolveOptions};
 pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
@@ -281,6 +281,13 @@ impl<'lock> Environment<'lock> {
     /// Starting with version `5` of the format this should not be optional.
     pub fn pypi_indexes(&self) -> Option<&PypiIndexes> {
         self.data().indexes.as_ref()
+    }
+
+    /// Returns the `PyPI` prerelease mode that was used to solve this environment.
+    ///
+    /// Returns `None` if no prerelease mode was explicitly set.
+    pub fn pypi_prerelease_mode(&self) -> Option<PypiPrereleaseMode> {
+        self.data().options.pypi_prerelease_mode
     }
 
     /// Returns the solver options that were used to create this environment.
