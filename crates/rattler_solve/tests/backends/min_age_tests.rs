@@ -36,7 +36,7 @@ fn create_timestamped_repo() -> Vec<rattler_conda_types::RepoDataRecord> {
     ]
 }
 
-/// Test that min_age filters out packages that are too new.
+/// Test that `min_age` filters out packages that are too new.
 pub fn solve_min_age_filters_new_packages<T: SolverImpl + Default>() {
     let repo = create_timestamped_repo();
 
@@ -53,7 +53,7 @@ pub fn solve_min_age_filters_new_packages<T: SolverImpl + Default>() {
         .run::<T>();
 }
 
-/// Test that packages can be exempted from min_age filtering.
+/// Test that packages can be exempted from `min_age` filtering.
 pub fn solve_min_age_with_exemption<T: SolverImpl + Default>() {
     let repo = create_timestamped_repo();
 
@@ -71,7 +71,7 @@ pub fn solve_min_age_with_exemption<T: SolverImpl + Default>() {
         .run::<T>();
 }
 
-/// Test that min_age applies to dependencies as well.
+/// Test that `min_age` applies to dependencies as well.
 pub fn solve_min_age_with_dependencies<T: SolverImpl + Default>() {
     let repo = create_timestamped_repo();
 
