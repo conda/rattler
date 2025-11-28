@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, List, Iterable
 from dataclasses import dataclass
-
-from rattler.rattler import PyGateway, PySourceConfig, PyMatchSpec
+from typing import Iterable, List, Optional
 
 from rattler.channel import Channel
 from rattler.match_spec import MatchSpec
-from rattler.networking import Client, CacheAction
-from rattler.repo_data.record import RepoDataRecord
-from rattler.platform import Platform, PlatformLiteral
+from rattler.networking import CacheAction, Client
 from rattler.package.package_name import PackageName
+from rattler.platform import Platform, PlatformLiteral
+from rattler.rattler import PyGateway, PyMatchSpec, PySourceConfig
+from rattler.repo_data.record import RepoDataRecord
 
 
 @dataclass
@@ -175,7 +174,10 @@ class Gateway:
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
                 for platform in platforms
             ],
-            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True) for spec in specs],
+            specs=[
+                spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True, True)
+                for spec in specs
+            ],
             recursive=recursive,
         )
 
@@ -220,19 +222,22 @@ class Gateway:
         return [PackageName._from_py_package_name(package_name) for package_name in py_package_names]
 
     def clear_repodata_cache(
-        self, channel: Channel | str, subdirs: Optional[Iterable[Platform | PlatformLiteral]] = None
+        self,
+        channel: Channel | str,
+        subdirs: Optional[Iterable[Platform | PlatformLiteral]] = None,
+        clear_disk: bool = False,
     ) -> None:
         """
-        Clears any in-memory cache for the given channel.
+        Clears the cache for the given channel.
 
         Any subsequent query will re-fetch any required data from the source.
-
-        This method does not clear any on-disk cache.
 
         Arguments:
             channel: The channel to clear the cache for.
             subdirs: A selection of subdirectories to clear, if `None` is specified
                      all subdirectories of the channel are cleared.
+            clear_disk: If `True`, also clears the on-disk cache. By default only the
+                        in-memory cache is cleared.
 
         Examples
         --------
@@ -240,6 +245,7 @@ class Gateway:
         >>> gateway = Gateway()
         >>> gateway.clear_repodata_cache("conda-forge", ["linux-64"])
         >>> gateway.clear_repodata_cache("robostack")
+        >>> gateway.clear_repodata_cache("conda-forge", clear_disk=True)
         >>>
         ```
         """
@@ -248,6 +254,7 @@ class Gateway:
             {subdir._inner if isinstance(subdir, Platform) else Platform(subdir)._inner for subdir in subdirs}
             if subdirs is not None
             else None,
+            clear_disk,
         )
 
     def __repr__(self) -> str:

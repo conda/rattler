@@ -15,7 +15,7 @@ use url::Url;
 use super::source_data::{PackageBuildSourceSerializer, SourceLocationSerializer};
 use crate::{
     conda,
-    conda::{CondaBinaryData, CondaSourceData, PackageBuildSource},
+    conda::{CondaBinaryData, CondaSourceData, PackageBuildSource, VariantValue},
     source::SourceLocation,
     utils::{derived_fields, derived_fields::LocationDerivedFields},
     CondaPackageData, ConversionError, UrlOrPath,
@@ -61,6 +61,10 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub subdir: Option<Cow<'a, str>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub noarch: Option<Cow<'a, NoArchType>>,
+
+    // Conda-build variants for source packages (optional in V6, required in V7)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variants: Option<Cow<'a, BTreeMap<String, VariantValue>>>,
 
     // Then the hashes
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -228,6 +232,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             Ok(CondaPackageData::Source(CondaSourceData {
                 package_record,
                 location: value.location,
+                variants: value.variants.map(Cow::into_owned),
                 package_build_source: value.package_build_source,
                 input: value.input.map(|input| conda::InputHash {
                     hash: input.hash,
@@ -252,6 +257,9 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
 
         let channel = value.as_binary().and_then(|binary| binary.channel.as_ref());
         let file_name = value.as_binary().map(|binary| binary.file_name.as_str());
+        let variants = value
+            .as_source()
+            .and_then(|source| source.variants.as_ref());
         let input = value.as_source().and_then(|source| source.input.as_ref());
         let package_build_source = value
             .as_source()
@@ -281,6 +289,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                 .then_some(Cow::Borrowed(&package_record.subdir)),
             noarch: (package_record.noarch != derived_noarch)
                 .then_some(Cow::Borrowed(&package_record.noarch)),
+            variants: variants.map(Cow::Borrowed),
             channel: (channel != derived.channel.as_ref())
                 .then_some(Cow::Owned(normalized_channel)),
             file_name: (file_name != derived.file_name.as_deref())

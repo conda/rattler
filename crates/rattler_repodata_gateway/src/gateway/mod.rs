@@ -81,6 +81,17 @@ impl SubdirSelection {
     }
 }
 
+/// Specifies what caches to clear.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CacheClearMode {
+    /// Only clear in-memory caches.
+    #[default]
+    InMemoryOnly,
+
+    /// Clear both in-memory and on-disk caches.
+    InMemoryAndDisk,
+}
+
 impl Gateway {
     /// Constructs a simple gateway with the default configuration. Use
     /// [`Gateway::builder`] if you want more control over how the gateway
@@ -185,11 +196,54 @@ impl Gateway {
     ///
     /// Any subsequent query will re-fetch any required data from the source.
     ///
-    /// This method does not clear any on-disk cache.
-    pub fn clear_repodata_cache(&self, channel: &Channel, subdirs: SubdirSelection) {
+    /// When `mode` is [`CacheClearMode::InMemoryAndDisk`], this method also
+    /// clears on-disk caches for the specified channel and subdirectories.
+    pub fn clear_repodata_cache(
+        &self,
+        channel: &Channel,
+        subdirs: SubdirSelection,
+        mode: CacheClearMode,
+    ) -> Result<(), std::io::Error> {
         self.inner.subdirs.retain(|key, _| {
             key.0.base_url != channel.base_url || !subdirs.contains(key.1.as_str())
         });
+
+        #[cfg(not(target_arch = "wasm32"))]
+        if mode == CacheClearMode::InMemoryAndDisk {
+            use std::str::FromStr;
+
+            let platforms_to_clear: Vec<Platform> = match &subdirs {
+                SubdirSelection::All => Platform::all().collect(),
+                SubdirSelection::Some(subdirs) => subdirs
+                    .iter()
+                    .filter_map(|s| Platform::from_str(s).ok())
+                    .collect(),
+            };
+
+            let mut errors = Vec::new();
+            for platform in platforms_to_clear {
+                if let Err(e) = remote_subdir::RemoteSubdirClient::clear_cache(
+                    &self.inner.cache,
+                    channel,
+                    platform,
+                ) {
+                    errors.push(e);
+                }
+                if let Err(e) =
+                    sharded_subdir::ShardedSubdir::clear_cache(&self.inner.cache, channel, platform)
+                {
+                    errors.push(e);
+                }
+            }
+            if let Some(first_error) = errors.into_iter().next() {
+                return Err(first_error);
+            }
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        let _ = mode;
+
+        Ok(())
     }
 }
 
@@ -290,22 +344,28 @@ mod test {
     use url::Url;
 
     use crate::{
-        fetch::CacheAction,
-        gateway::Gateway,
-        utils::{simple_channel_server::SimpleChannelServer, test::fetch_repo_data},
+        fetch::CacheAction, gateway::Gateway, utils::simple_channel_server::SimpleChannelServer,
         DownloadReporter, GatewayError, JLAPReporter, RepoData, Reporter, SourceConfig,
         SubdirSelection,
     };
 
     async fn local_conda_forge() -> Channel {
-        tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
+        tokio::try_join!(
+            tools::fetch_test_conda_forge_repodata_async("noarch"),
+            tools::fetch_test_conda_forge_repodata_async("linux-64")
+        )
+        .unwrap();
         Channel::from_directory(
             &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/conda-forge"),
         )
     }
 
     async fn remote_conda_forge() -> SimpleChannelServer {
-        tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
+        tokio::try_join!(
+            tools::fetch_test_conda_forge_repodata_async("noarch"),
+            tools::fetch_test_conda_forge_repodata_async("linux-64")
+        )
+        .unwrap();
         SimpleChannelServer::new(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/conda-forge"),
         )
@@ -581,7 +641,7 @@ mod test {
             .await
             .unwrap_err();
 
-        assert_matches!(gateway_error, GatewayError::MatchSpecWithoutName(_));
+        assert_matches!(gateway_error, GatewayError::MatchSpecWithoutExactName(_));
     }
 
     #[rstest]
@@ -695,11 +755,360 @@ mod test {
         );
 
         // Now clear the cache and run the query again.
-        gateway.clear_repodata_cache(&local_channel.channel(), SubdirSelection::default());
+        gateway
+            .clear_repodata_cache(
+                &local_channel.channel(),
+                SubdirSelection::default(),
+                super::CacheClearMode::InMemoryOnly,
+            )
+            .unwrap();
         query.clone().execute().await.unwrap();
         assert!(
             !downloads.urls.is_empty(),
             "after clearing the cache there should be new urls fetched"
+        );
+    }
+
+    #[test]
+    fn test_clear_disk_cache() {
+        use crate::gateway::remote_subdir::RemoteSubdirClient;
+
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        // Create a test channel
+        let channel_config = ChannelConfig::default_with_root_dir(PathBuf::new());
+        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
+
+        // Create mock cache files for linux-64 platform
+        let subdir_url = channel.platform_url(Platform::Linux64);
+        let cache_key = crate::utils::url_to_cache_filename(
+            &subdir_url.join("repodata.json").expect("valid filename"),
+        );
+
+        // Create mock cache files
+        let json_path = cache_dir.path().join(format!("{cache_key}.json"));
+        let info_path = cache_dir.path().join(format!("{cache_key}.info.json"));
+        let lock_path = cache_dir.path().join(format!("{cache_key}.lock"));
+
+        std::fs::write(&json_path, b"{}").unwrap();
+        std::fs::write(&info_path, b"{}").unwrap();
+        std::fs::write(&lock_path, b"").unwrap();
+
+        // Verify files exist
+        assert!(json_path.exists(), "json file should exist before clear");
+        assert!(info_path.exists(), "info file should exist before clear");
+        assert!(lock_path.exists(), "lock file should exist before clear");
+
+        // Clear the disk cache
+        RemoteSubdirClient::clear_cache(cache_dir.path(), &channel, Platform::Linux64).unwrap();
+
+        // Verify json and info files are removed but lock file remains
+        assert!(
+            !json_path.exists(),
+            "json file should be removed after clear"
+        );
+        assert!(
+            !info_path.exists(),
+            "info file should be removed after clear"
+        );
+        assert!(
+            lock_path.exists(),
+            "lock file should remain after clear to avoid ABA problem"
+        );
+    }
+
+    #[test]
+    fn test_clear_sharded_disk_cache() {
+        use crate::gateway::sharded_subdir::{
+            ShardedSubdir, REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX,
+        };
+
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        // Create a test channel
+        let channel_config = ChannelConfig::default_with_root_dir(PathBuf::new());
+        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
+
+        // Create mock sharded cache file for linux-64 platform
+        let index_base_url = channel
+            .base_url
+            .url()
+            .join(&format!("{}/", Platform::Linux64.as_str()))
+            .expect("invalid subdir url");
+        let canonical_shards_url = index_base_url
+            .join(REPODATA_SHARDS_FILENAME)
+            .expect("invalid shard base url");
+        let cache_path = cache_dir.path().join(format!(
+            "{}{}",
+            crate::utils::url_to_cache_filename(&canonical_shards_url),
+            SHARDS_CACHE_SUFFIX
+        ));
+
+        // Create mock cache file
+        std::fs::write(&cache_path, b"mock shard data").unwrap();
+
+        // Verify file exists
+        assert!(
+            cache_path.exists(),
+            "sharded cache file should exist before clear"
+        );
+
+        // Clear the disk cache
+        ShardedSubdir::clear_cache(cache_dir.path(), &channel, Platform::Linux64).unwrap();
+
+        // Verify cache file is removed
+        assert!(
+            !cache_path.exists(),
+            "sharded cache file should be removed after clear"
+        );
+    }
+
+    #[test]
+    fn test_clear_disk_cache_no_cache() {
+        use crate::gateway::remote_subdir::RemoteSubdirClient;
+
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        // Create a test channel
+        let channel_config = ChannelConfig::default_with_root_dir(PathBuf::new());
+        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
+
+        // Clear should succeed even when there's no cache (empty directory)
+        RemoteSubdirClient::clear_cache(cache_dir.path(), &channel, Platform::Linux64).unwrap();
+
+        // Clear should also succeed when the cache directory doesn't exist at all
+        let non_existent_dir = cache_dir.path().join("does-not-exist");
+        RemoteSubdirClient::clear_cache(&non_existent_dir, &channel, Platform::Linux64).unwrap();
+    }
+
+    #[test]
+    fn test_clear_sharded_disk_cache_no_cache() {
+        use crate::gateway::sharded_subdir::ShardedSubdir;
+
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        // Create a test channel
+        let channel_config = ChannelConfig::default_with_root_dir(PathBuf::new());
+        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
+
+        // Clear should succeed even when there's no cache (empty directory)
+        ShardedSubdir::clear_cache(cache_dir.path(), &channel, Platform::Linux64).unwrap();
+
+        // Clear should also succeed when the cache directory doesn't exist at all
+        let non_existent_dir = cache_dir.path().join("does-not-exist");
+        ShardedSubdir::clear_cache(&non_existent_dir, &channel, Platform::Linux64).unwrap();
+    }
+
+    #[test]
+    fn test_gateway_clear_repodata_cache() {
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        // Create a test channel
+        let channel_config = ChannelConfig::default_with_root_dir(PathBuf::new());
+        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
+
+        // Create a gateway with the custom cache directory
+        let gateway = Gateway::builder()
+            .with_cache_dir(cache_dir.path().to_path_buf())
+            .finish();
+
+        // Clear should succeed even when there's no cache
+        gateway
+            .clear_repodata_cache(
+                &channel,
+                SubdirSelection::default(),
+                super::CacheClearMode::InMemoryAndDisk,
+            )
+            .unwrap();
+
+        // Clear with specific subdirs should also succeed
+        gateway
+            .clear_repodata_cache(
+                &channel,
+                SubdirSelection::Some(
+                    ["linux-64", "noarch"]
+                        .into_iter()
+                        .map(String::from)
+                        .collect(),
+                ),
+                super::CacheClearMode::InMemoryAndDisk,
+            )
+            .unwrap();
+
+        // Clear in-memory only should also succeed
+        gateway
+            .clear_repodata_cache(
+                &channel,
+                SubdirSelection::default(),
+                super::CacheClearMode::InMemoryOnly,
+            )
+            .unwrap();
+    }
+
+    /// Helper function to generate minimal repodata JSON for a single package.
+    fn make_repodata(name: &str, version: &str) -> String {
+        format!(
+            r#"{{
+    "packages.conda": {{
+        "{name}-{version}-0.conda": {{
+            "build": "0",
+            "build_number": 0,
+            "depends": [],
+            "md5": "00000000000000000000000000000000",
+            "name": "{name}",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "size": 1000,
+            "subdir": "linux-64",
+            "timestamp": 1700000000000,
+            "version": "{version}"
+        }}
+    }}
+}}"#
+        )
+    }
+
+    /// Integration test that verifies cache clearing actually works end-to-end.
+    /// Creates a simple channel with a single package, queries it, modifies
+    /// the source data, and verifies that memory-only cache clearing still
+    /// returns cached data while disk cache clearing forces a re-fetch.
+    #[tokio::test]
+    async fn test_gateway_clear_disk_cache_integration() {
+        // Create a temporary directory for the channel subdir
+        let channel_dir = tempfile::tempdir().unwrap();
+        let subdir_path = channel_dir.path().join("linux-64");
+        std::fs::create_dir_all(&subdir_path).unwrap();
+
+        // Write initial repodata with version 1.0.0
+        let repodata_v1 = make_repodata("testpkg", "1.0.0");
+        std::fs::write(subdir_path.join("repodata.json"), &repodata_v1).unwrap();
+
+        // Start the SimpleChannelServer
+        let server = SimpleChannelServer::new(channel_dir.path()).await;
+        let channel = server.channel();
+
+        // Create a temporary cache directory
+        let cache_dir = tempfile::tempdir().unwrap();
+
+        // Create a gateway with the custom cache directory
+        let gateway = Gateway::builder()
+            .with_cache_dir(cache_dir.path().to_path_buf())
+            .finish();
+
+        // Query to populate the cache - should get version 1.0.0
+        let records = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        // Verify we got exactly one record with version 1.0.0
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(all_records.len(), 1, "should have exactly one record");
+        assert_eq!(
+            all_records[0].package_record.version.as_str(),
+            "1.0.0",
+            "initial version should be 1.0.0"
+        );
+
+        // Sleep to ensure filesystem timestamp changes (server uses mtime for caching)
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+
+        // Modify the repodata on disk - change to version 2.0.0
+        let repodata_v2 = make_repodata("testpkg", "2.0.0");
+        std::fs::write(subdir_path.join("repodata.json"), &repodata_v2).unwrap();
+
+        // Query again without any cache clearing - should still get 1.0.0 (memory cache)
+        let records = gateway
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(
+            all_records[0].package_record.version.as_str(),
+            "1.0.0",
+            "should still be 1.0.0 due to memory cache"
+        );
+
+        // Clear memory cache only (not disk)
+        gateway
+            .clear_repodata_cache(
+                &channel,
+                SubdirSelection::Some(["linux-64"].into_iter().map(String::from).collect()),
+                super::CacheClearMode::InMemoryOnly,
+            )
+            .unwrap();
+
+        // Create a new gateway with ForceCacheOnly to verify disk cache has v1
+        // (Using ForceCacheOnly ensures we read from disk cache without checking server)
+        let gateway_cache_only = Gateway::builder()
+            .with_cache_dir(cache_dir.path().to_path_buf())
+            .with_channel_config(crate::ChannelConfig {
+                default: SourceConfig {
+                    cache_action: CacheAction::ForceCacheOnly,
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .finish();
+
+        // Query with ForceCacheOnly - should get 1.0.0 from disk cache
+        let records = gateway_cache_only
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(
+            all_records[0].package_record.version.as_str(),
+            "1.0.0",
+            "should still be 1.0.0 from disk cache when using ForceCacheOnly"
+        );
+
+        // Clear both memory and disk cache on the original gateway
+        gateway
+            .clear_repodata_cache(
+                &channel,
+                SubdirSelection::Some(["linux-64"].into_iter().map(String::from).collect()),
+                super::CacheClearMode::InMemoryAndDisk,
+            )
+            .unwrap();
+
+        // Query again (fresh gateway to avoid memory cache)
+        // should now get 2.0.0 (fresh fetch from server since disk cache was cleared)
+        let gateway_fresh = Gateway::builder()
+            .with_cache_dir(cache_dir.path().to_path_buf())
+            .finish();
+
+        let records = gateway_fresh
+            .query(
+                vec![channel.clone()],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(
+            all_records[0].package_record.version.as_str(),
+            "2.0.0",
+            "should now be 2.0.0 after clearing disk cache"
         );
     }
 

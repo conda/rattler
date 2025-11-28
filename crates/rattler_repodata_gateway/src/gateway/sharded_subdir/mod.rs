@@ -14,6 +14,9 @@ cfg_if! {
     } else {
         mod tokio;
         pub use tokio::ShardedSubdir;
+        // Re-exported for use in tests
+        #[cfg(test)]
+        pub(crate) use tokio::{REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX};
     }
 }
 

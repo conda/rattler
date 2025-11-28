@@ -1,6 +1,6 @@
 [package]
 name = "rattler_networking"
-version = "0.25.21"
+version = "0.25.27"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Authenticated requests in the conda ecosystem"
@@ -18,6 +18,9 @@ gcs = ["google-cloud-auth"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-smithy-http-client"]
 system-integration = ["keyring", "netrc-rs", "dirs"]
 
+[package.metadata.docs.rs]
+features = ["gcs", "s3"]
+
 [dependencies]
 anyhow = { workspace = true }
 async-once-cell = { workspace = true }
@@ -29,6 +32,7 @@ google-cloud-auth = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true, features = [
     "rt-tokio",
     "sso",
+    "credentials-login",
     "credentials-process",
 ] }
 aws-sdk-s3 = { workspace = true, optional = true, features = [

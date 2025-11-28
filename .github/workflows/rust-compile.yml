@@ -22,7 +22,7 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
-  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,experimental_extras,edit,rattler_config
+  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,edit,rattler_config
 
 jobs:
   check-rustdoc-links:
@@ -119,7 +119,7 @@ jobs:
           sudo apt install musl-tools gcc g++
           sudo ln -s /usr/bin/musl-gcc /usr/bin/musl-g++
 
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
 
       - name: Show version information (Rust, cargo, GCC)
         shell: bash

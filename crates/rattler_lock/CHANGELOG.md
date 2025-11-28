@@ -44,6 +44,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.7](https://github.com/conda/rattler/compare/rattler_lock-v0.26.6...rattler_lock-v0.26.7) - 2025-11-27
+
+### Added
+
+- add `variants` to the lock-file (v6) ([#1854](https://github.com/conda/rattler/pull/1854))
+- *(rattler_lock)* add prerelease-mode support for PyPI dependencies ([#1889](https://github.com/conda/rattler/pull/1889))
+
+## [0.26.6](https://github.com/conda/rattler/compare/rattler_lock-v0.26.5...rattler_lock-v0.26.6) - 2025-11-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.26.5](https://github.com/conda/rattler/compare/rattler_lock-v0.26.4...rattler_lock-v0.26.5) - 2025-11-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.26.4](https://github.com/conda/rattler/compare/rattler_lock-v0.26.3...rattler_lock-v0.26.4) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.26.3](https://github.com/conda/rattler/compare/rattler_lock-v0.26.2...rattler_lock-v0.26.3) - 2025-11-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.26.2](https://github.com/conda/rattler/compare/rattler_lock-v0.26.1...rattler_lock-v0.26.2) - 2025-11-13
+
+### Added
+
+- Add glob support for package name in matchspec ([#1480](https://github.com/conda/rattler/pull/1480))
+
 ## [0.26.1](https://github.com/conda/rattler/compare/rattler_lock-v0.26.0...rattler_lock-v0.26.1) - 2025-10-28
 
 ### Fixed

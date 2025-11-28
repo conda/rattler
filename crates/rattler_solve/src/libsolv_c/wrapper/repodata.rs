@@ -65,6 +65,13 @@ impl Repodata<'_> {
         }
     }
 
+    /// Calls [`ffi::repodata_set_id`]
+    pub fn set_id(&self, solvable_id: SolvableId, key: StringId, value: ffi::Id) {
+        unsafe {
+            ffi::repodata_set_id(self.raw_ptr(), solvable_id.into(), key.into(), value);
+        }
+    }
+
     /// Calls [`ffi::repodata_set_str`]
     pub fn set_str(&self, solvable_id: SolvableId, key: StringId, value: &CStr) {
         unsafe {

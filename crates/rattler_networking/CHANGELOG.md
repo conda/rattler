@@ -44,6 +44,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.27](https://github.com/conda/rattler/compare/rattler_networking-v0.25.26...rattler_networking-v0.25.27) - 2025-11-27
+
+### Added
+
+- enable credentials-login for aws new login functionality ([#1891](https://github.com/conda/rattler/pull/1891))
+
+## [0.25.26](https://github.com/conda/rattler/compare/rattler_networking-v0.25.25...rattler_networking-v0.25.26) - 2025-11-25
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.25](https://github.com/conda/rattler/compare/rattler_networking-v0.25.24...rattler_networking-v0.25.25) - 2025-11-22
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.24](https://github.com/conda/rattler/compare/rattler_networking-v0.25.23...rattler_networking-v0.25.24) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.23](https://github.com/conda/rattler/compare/rattler_networking-v0.25.22...rattler_networking-v0.25.23) - 2025-11-19
+
+### Other
+
+- updated the following local packages: rattler_config
+
+## [0.25.22](https://github.com/conda/rattler/compare/rattler_networking-v0.25.21...rattler_networking-v0.25.22) - 2025-11-13
+
+### Added
+
+- expose crate features on docs.rs ([#1835](https://github.com/conda/rattler/pull/1835))
+
+### Fixed
+
+- omit `sha256_in_prefix` when equal to `sha256` ([#1812](https://github.com/conda/rattler/pull/1812))
+
 ## [0.25.21](https://github.com/conda/rattler/compare/rattler_networking-v0.25.20...rattler_networking-v0.25.21) - 2025-10-28
 
 ### Other

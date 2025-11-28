@@ -62,6 +62,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.6](https://github.com/conda/rattler/compare/rattler_index-v0.27.5...rattler_index-v0.27.6) - 2025-11-27
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.27.5](https://github.com/conda/rattler/compare/rattler_index-v0.27.4...rattler_index-v0.27.5) - 2025-11-25
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.27.4](https://github.com/conda/rattler/compare/rattler_index-v0.27.3...rattler_index-v0.27.4) - 2025-11-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_config, rattler_networking, rattler_s3
+
+## [0.27.3](https://github.com/conda/rattler/compare/rattler_index-v0.27.2...rattler_index-v0.27.3) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.27.2](https://github.com/conda/rattler/compare/rattler_index-v0.27.1...rattler_index-v0.27.2) - 2025-11-19
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.27.1](https://github.com/conda/rattler/compare/rattler_index-v0.27.0...rattler_index-v0.27.1) - 2025-11-13
+
+### Added
+
+- add cache control for repodata.json / zst and shard index ([#1796](https://github.com/conda/rattler/pull/1796))
+
 ## [0.27.0](https://github.com/conda/rattler/compare/rattler_index-v0.26.5...rattler_index-v0.27.0) - 2025-10-28
 
 ### Added

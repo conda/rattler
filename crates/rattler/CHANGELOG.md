@@ -83,6 +83,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.5](https://github.com/conda/rattler/compare/rattler-v0.39.4...rattler-v0.39.5) - 2025-11-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_menuinst, rattler_package_streaming, rattler_cache, rattler_shell
+
+## [0.39.4](https://github.com/conda/rattler/compare/rattler-v0.39.3...rattler-v0.39.4) - 2025-11-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.39.3](https://github.com/conda/rattler/compare/rattler-v0.39.2...rattler-v0.39.3) - 2025-11-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_networking, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.39.2](https://github.com/conda/rattler/compare/rattler-v0.39.1...rattler-v0.39.2) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming, rattler_cache, rattler_shell, rattler_menuinst
+
+## [0.39.1](https://github.com/conda/rattler/compare/rattler-v0.39.0...rattler-v0.39.1) - 2025-11-19
+
+### Added
+
+- cache and reuse `paths.json` and `index.json` from package validation ([#1837](https://github.com/conda/rattler/pull/1837))
+
+## [0.39.0](https://github.com/conda/rattler/compare/rattler-v0.38.4...rattler-v0.39.0) - 2025-11-13
+
+### Added
+
+- Add glob support for package name in matchspec ([#1480](https://github.com/conda/rattler/pull/1480))
+- expose crate features on docs.rs ([#1835](https://github.com/conda/rattler/pull/1835))
+- add post-link and pre-unlink to reporter interface ([#1793](https://github.com/conda/rattler/pull/1793))
+
+### Fixed
+
+- omit `sha256_in_prefix` when equal to `sha256` ([#1812](https://github.com/conda/rattler/pull/1812))
+
+### Other
+
+- use global cache lock to reduce per-package lock overhead ([#1818](https://github.com/conda/rattler/pull/1818))
+- clean up installer ([#1811](https://github.com/conda/rattler/pull/1811))
+
 ## [0.38.4](https://github.com/conda/rattler/compare/rattler-v0.38.3...rattler-v0.38.4) - 2025-10-28
 
 ### Other

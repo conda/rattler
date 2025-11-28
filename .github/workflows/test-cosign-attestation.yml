@@ -1,0 +1,74 @@
+on:
+  workflow_dispatch:
+    inputs:
+      package_url:
+        description: "Full URL to download the package from"
+        required: true
+        default: "https://repo.prefix.dev/conda-forge/noarch/rich-13.7.0-pyhd8ed1ab_0.conda"
+      channel:
+        description: "Channel to upload to"
+        required: true
+        default: "wolf-private-test"
+
+name: Test Cosign Attestation
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_LOG: info
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test-attestation:
+    name: Test Cosign Attestation Upload
+    runs-on: ubuntu-22.04
+
+    # These permissions are needed to create a sigstore certificate.
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        run: |
+          rustup component add rustfmt
+          rustup target add x86_64-unknown-linux-musl
+
+      - name: Install musl tools
+        run: |
+          sudo apt install musl-tools gcc g++
+          sudo ln -s /usr/bin/musl-gcc /usr/bin/musl-g++
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+
+      - name: Show version information (Rust, cargo, GCC)
+        shell: bash
+        run: |
+          gcc --version || true
+          rustup -V
+          rustup toolchain list
+          cargo -V
+          rustc -V
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+
+      - name: Download package
+        run: |
+          PACKAGE_NAME=$(basename ${{ inputs.package_url }})
+          curl -L -o $PACKAGE_NAME ${{ inputs.package_url }}
+          ls -lh $PACKAGE_NAME
+          echo "PACKAGE_NAME=$PACKAGE_NAME" >> $GITHUB_ENV
+
+      - name: Run rattler upload with attestation generation
+        run: |
+          cargo run --bin rattler -- upload prefix --generate-attestation -c ${{ inputs.channel }} $PACKAGE_NAME

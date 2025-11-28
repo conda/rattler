@@ -7,6 +7,7 @@ use tracing_subscriber::{filter::LevelFilter, util::SubscriberInitExt, EnvFilter
 use crate::writer::IndicatifWriter;
 
 mod commands;
+mod exclude_newer;
 mod writer;
 
 /// Returns a global instance of [`indicatif::MultiProgress`].
@@ -45,6 +46,7 @@ enum Command {
     VirtualPackages(commands::virtual_packages::Opt),
     InstallMenu(commands::menu::InstallOpt),
     RemoveMenu(commands::menu::InstallOpt),
+    Extract(commands::extract::Opt),
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
 }
 
@@ -84,6 +86,7 @@ async fn main() -> miette::Result<()> {
         Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
         Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
         Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
+        Command::Extract(opts) => commands::extract::extract(opts).await,
         Command::Upload(opts) => rattler_upload::upload_from_args(*opts).await,
     }
 }
