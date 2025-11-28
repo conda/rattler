@@ -21,9 +21,9 @@ use super::opt::{
 };
 
 use crate::upload::{
-    attestation::{create_attestation_with_cosign, AttestationConfig},
+    attestation::{create_attestation, AttestationConfig},
     default_bytes_style, get_client_with_retry, get_default_client,
-    trusted_publishing::{check_trusted_publishing, get_raw_oidc_token, TrustedPublishResult},
+    trusted_publishing::{check_trusted_publishing, TrustedPublishResult},
 };
 
 use super::package::sha256_sum;
@@ -107,23 +107,12 @@ pub async fn upload_package_to_prefix(
     let client = get_client_with_retry().into_diagnostic()?;
 
     // Check if we're using trusted publishing and if we should generate attestations
-    let (token, should_generate_attestation, oidc_token) = match prefix_data.api_key {
-        Some(api_key) => (api_key, false, None),
+    let (token, should_generate_attestation) = match prefix_data.api_key {
+        Some(api_key) => (api_key, false),
         None => match check_trusted_publishing(&client, &prefix_data.url).await {
             TrustedPublishResult::Configured(token) => {
-                // Get the OIDC token for attestation generation
-                let oidc_token = if prefix_data.generate_attestation {
-                    match get_raw_oidc_token(&client).await {
-                        Ok(token) => Some(token),
-                        Err(e) => {
-                            tracing::warn!("Failed to get OIDC token for attestation: {e}");
-                            None
-                        }
-                    }
-                } else {
-                    None
-                };
-                (token.secret().to_string(), oidc_token.is_some(), oidc_token)
+                // When using trusted publishing, we can generate attestations
+                (token.secret().to_string(), prefix_data.generate_attestation)
             }
             TrustedPublishResult::Skipped => {
                 if prefix_data.attestation.is_some() || prefix_data.generate_attestation {
@@ -131,7 +120,7 @@ pub async fn upload_package_to_prefix(
                         "Attestation was requested, but trusted publishing is not configured"
                     ));
                 }
-                (check_storage()?, false, None)
+                (check_storage()?, false)
             }
             TrustedPublishResult::Ignored(err) => {
                 tracing::warn!("Checked for trusted publishing but failed with {err}");
@@ -140,7 +129,7 @@ pub async fn upload_package_to_prefix(
                         "Attestation was requested, but trusted publishing is not configured"
                     ));
                 }
-                (check_storage()?, false, None)
+                (check_storage()?, false)
             }
         },
     };
@@ -158,7 +147,7 @@ pub async fn upload_package_to_prefix(
             .into_diagnostic()?;
 
         // Generate attestation if we're using trusted publishing and it was requested
-        let attestation_path = if should_generate_attestation && oidc_token.is_some() {
+        let attestation_path = if should_generate_attestation {
             let channel_url = prefix_data
                 .url
                 .join(&prefix_data.channel)
@@ -170,18 +159,9 @@ pub async fn upload_package_to_prefix(
                 repo_owner: None,
                 repo_name: None,
                 github_token: None,
-                use_github_oidc: true,
-                cosign_private_key: std::env::var("COSIGN_KEY_PATH").ok(),
             };
 
-            match create_attestation_with_cosign(
-                package_file,
-                channel_url.as_str(),
-                &config,
-                &client,
-            )
-            .await
-            {
+            match create_attestation(package_file, channel_url.as_str(), &config, &client).await {
                 Ok(attestation_bundle_json) => {
                     // Save attestation bundle JSON to a file next to the package
                     tracing::info!("Generated attestation: {}", attestation_bundle_json);
@@ -199,10 +179,9 @@ pub async fn upload_package_to_prefix(
                          Upload aborted because attestation generation was requested but failed.\n\
                          \n\
                          Troubleshooting:\n\
-                         1. Ensure cosign is installed: pixi global install cosign\n\
-                         2. Check that you're running in GitHub Actions with 'id-token: write' permission\n\
-                         3. Verify OIDC token is available and valid\n\
-                         4. Check cosign logs above for specific errors",
+                         1. Check that you're running in a supported CI environment (GitHub Actions, GitLab CI, etc.)\n\
+                         2. For GitHub Actions, ensure you have 'id-token: write' permission\n\
+                         3. Verify OIDC token is available and valid",
                         filename, e
                     ));
                 }

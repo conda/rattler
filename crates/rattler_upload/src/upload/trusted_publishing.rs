@@ -123,18 +123,6 @@ pub async fn get_token(
     Ok(publish_token)
 }
 
-/// Get raw OIDC token for attestation generation
-pub async fn get_raw_oidc_token(
-    client: &ClientWithMiddleware,
-) -> Result<String, TrustedPublishingError> {
-    let oidc_token_request_token =
-        env::var(consts::ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|err| {
-            TrustedPublishingError::from_var_err(consts::ACTIONS_ID_TOKEN_REQUEST_TOKEN, err)
-        })?;
-
-    get_oidc_token(&oidc_token_request_token, client).await
-}
-
 async fn get_oidc_token(
     oidc_token_request_token: &str,
     client: &ClientWithMiddleware,
