@@ -1,4 +1,4 @@
-use chrono::DateTime;
+use jiff::Timestamp;
 use pyo3::{
     exceptions::PyValueError, pybacked::PyBackedStr, pyfunction, types::PyAnyMethods, Bound,
     FromPyObject, PyAny, PyErr, PyResult, Python,
@@ -69,7 +69,7 @@ pub fn py_solve(
             .await
             .map_err(PyRattlerError::from)?;
 
-        let exclude_newer = exclude_newer_timestamp_ms.and_then(DateTime::from_timestamp_millis);
+        let exclude_newer = exclude_newer_timestamp_ms.and_then(|ts| Timestamp::from_millisecond(ts).ok());
 
         let solve_result = tokio::task::spawn_blocking(move || {
             let task = SolverTask {
@@ -145,7 +145,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
         .collect::<Vec<_>>();
 
     future_into_py(py, async move {
-        let exclude_newer = exclude_newer_timestamp_ms.and_then(DateTime::from_timestamp_millis);
+        let exclude_newer = exclude_newer_timestamp_ms.and_then(|ts| Timestamp::from_millisecond(ts).ok());
 
         let solve_result = tokio::task::spawn_blocking(move || {
             // Ensure that all the SparseRepoData instances are still valid, e.g. not closed.

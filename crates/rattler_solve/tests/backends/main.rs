@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, str::FromStr, time::Instant};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageName,
@@ -274,7 +274,7 @@ fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
 }
 macro_rules! solver_backend_tests {
     ($T:path) => {
-        use chrono::{DateTime, Utc};
+        use jiff::Timestamp;
         use itertools::Itertools;
 
         #[test]
@@ -747,7 +747,7 @@ mod resolvo {
 
     #[test]
     fn test_exclude_newer_error() {
-        let date = "2021-12-12T12:12:12Z".parse::<DateTime<Utc>>().unwrap();
+        let date = "2021-12-12T12:12:12Z".parse::<Timestamp>().unwrap();
 
         let result = solve::<rattler_solve::resolvo::Solver>(
             &[dummy_channel_json_path()],
@@ -941,7 +941,7 @@ struct SimpleSolveTask<'a> {
     installed_packages: Vec<RepoDataRecord>,
     pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<Timestamp>,
     strategy: SolveStrategy,
 }
 
@@ -1001,7 +1001,7 @@ fn solve<T: SolverImpl + Default>(
 #[derive(Default)]
 struct CompareTask<'a> {
     specs: Vec<&'a str>,
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<Timestamp>,
 }
 
 fn compare_solve(task: CompareTask<'_>) {

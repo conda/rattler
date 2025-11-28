@@ -8,14 +8,14 @@ use std::{
     marker::PhantomData,
 };
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
-    package::ArchiveType, utils::TimestampMs, GenericVirtualPackage, MatchSpec, Matches,
-    NamelessMatchSpec, PackageName, PackageNameMatcher, ParseMatchSpecError, ParseMatchSpecOptions,
-    RepoDataRecord, SolverResult,
+    package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
+    PackageName, PackageNameMatcher, ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord,
+    SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -166,13 +166,13 @@ impl SolverPackageRecord<'_> {
         }
     }
 
-    fn timestamp(&self) -> Option<&chrono::DateTime<chrono::Utc>> {
+    fn timestamp(&self) -> Option<Timestamp> {
         match self {
             SolverPackageRecord::Record(rec) => rec
                 .package_record
                 .timestamp
                 .as_ref()
-                .map(TimestampMs::datetime),
+                .map(|ts| ts.jiff_timestamp()),
             SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(..) => None,
         }
     }
@@ -287,7 +287,7 @@ impl<'a> CondaDependencyProvider<'a> {
         match_specs: &[MatchSpec],
         stop_time: Option<std::time::SystemTime>,
         channel_priority: ChannelPriority,
-        exclude_newer: Option<DateTime<Utc>>,
+        exclude_newer: Option<Timestamp>,
         strategy: SolveStrategy,
     ) -> Result<Self, SolveError> {
         let pool = Pool::default();

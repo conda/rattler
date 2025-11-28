@@ -11,7 +11,7 @@ pub mod resolvo;
 
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord, SolverResult};
 
 /// Represents a solver implementation, capable of solving [`SolverTask`]s
@@ -144,7 +144,7 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// Exclude any package that has a timestamp newer than the specified
     /// timestamp.
-    pub exclude_newer: Option<DateTime<Utc>>,
+    pub exclude_newer: Option<Timestamp>,
 
     /// The solve strategy.
     pub strategy: SolveStrategy,

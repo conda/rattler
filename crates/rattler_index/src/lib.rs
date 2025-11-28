@@ -935,7 +935,7 @@ pub async fn write_repodata(
                 subdir: subdir.to_string(),
                 base_url: "".into(),
                 shards_base_url: "./shards/".into(),
-                created_at: Some(chrono::Utc::now()),
+                created_at: Some(jiff::Timestamp::now()),
             },
             shards: shards
                 .iter()

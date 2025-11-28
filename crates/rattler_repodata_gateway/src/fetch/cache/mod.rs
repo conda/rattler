@@ -120,17 +120,19 @@ pub struct JLAPFooter {
 pub struct Expiring<T> {
     pub value: T,
 
-    // #[serde(with = "chrono::serde::ts_seconds")]
-    pub last_checked: chrono::DateTime<chrono::Utc>,
+    pub last_checked: jiff::Timestamp,
 }
 
 impl<T> Expiring<T> {
-    pub fn value(&self, expiration: chrono::Duration) -> Option<&T> {
-        if chrono::Utc::now().signed_duration_since(self.last_checked) >= expiration {
-            None
-        } else {
-            Some(&self.value)
+    pub fn value(&self, expiration: jiff::Span) -> Option<&T> {
+        let now = jiff::Timestamp::now();
+        // Check if the expiration span has elapsed since last_checked
+        if let Ok(expires_at) = self.last_checked.checked_add(expiration) {
+            if now >= expires_at {
+                return None;
+            }
         }
+        Some(&self.value)
     }
 }
 

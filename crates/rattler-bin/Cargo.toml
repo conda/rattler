@@ -23,7 +23,7 @@ rustls-tls = ["reqwest/rustls-tls", "reqwest/rustls-tls-native-roots", "rattler/
 
 [dependencies]
 anyhow = { workspace = true }
-chrono = { workspace = true }
+jiff = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 console = { workspace = true, features = ["windows-console-colors"] }
 indicatif = { workspace = true }
