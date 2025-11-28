@@ -1,29 +1,378 @@
-//! Provides functionality to detect the CUDA version present on the current system.
+//! Provides functionality to detect CUDA information present on the current system.
 //!
-//! Two methods are provided:
+//! This module detects two types of CUDA information:
 //!
-//! * [`detect_cuda_version_via_nvml`]
-//! * [`detect_cuda_version_via_libcuda`]
+//! ## CUDA Driver Version (`__cuda`)
 //!
-//! Both will detect the current supported CUDA version but the first method has less edge cases.
-//! See the function documentation for more information.
+//! The CUDA driver version represents the maximum CUDA version supported by the installed
+//! NVIDIA drivers. This is detected via:
+//!
+//! * CUDA driver library (libcuda) - Standard method
+//! * nvidia-smi command - Fallback on musl systems where dynamic library loading is not supported
+//!
+//! ## CUDA Compute Capability (`__cuda_arch`)
+//!
+//! The CUDA compute capability (also known as SM version or architecture version) represents
+//! the **minimum** compute capability of all CUDA devices detected on the system.
 
-use libloading::Symbol;
+use libloading::{Library, Symbol};
 use once_cell::sync::OnceCell;
 use rattler_conda_types::Version;
 use std::process::Command;
 use std::{
+    ffi::CStr,
     mem::MaybeUninit,
     os::raw::{c_int, c_uint, c_ulong},
     str::FromStr,
 };
 
-/// Returns the maximum Cuda version available on the current platform.
+/// Maximum length for device names in build strings to comply with CEP-26.
+const MAX_BUILD_STRING_LEN: usize = 64;
+
+/// Checks if a character is valid in a conda build string according to CEP-26.
+///
+/// Valid characters are: alphanumeric (a-z, A-Z, 0-9), underscore (_), period (.), and plus (+).
+fn is_valid_build_string_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '+'
+}
+
+/// Strips a prefix from a string in a case-insensitive manner.
+///
+/// Returns the remainder of the string if it starts with the prefix (ignoring case),
+/// otherwise returns `None`.
+fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
+    if s.len() >= prefix.len() && s[..prefix.len()].eq_ignore_ascii_case(prefix) {
+        Some(&s[prefix.len()..])
+    } else {
+        None
+    }
+}
+
+/// Sanitizes a device name to comply with CEP-26 build string requirements.
+///
+/// This function:
+/// 1. Removes "NVIDIA" prefix (case-insensitive) to save space
+/// 2. Filters out any characters not allowed in build strings
+/// 3. Truncates to maximum 64 characters
+///
+/// Returns the sanitized device name.
+pub(crate) fn sanitize_device_name(name: &str) -> String {
+    // Remove NVIDIA prefix (case-insensitive) and trim whitespace
+    let name = strip_prefix_ci(name, "NVIDIA").unwrap_or(name).trim();
+
+    // Filter valid characters and truncate
+    name.chars()
+        .filter(|c| is_valid_build_string_char(*c))
+        .take(MAX_BUILD_STRING_LEN)
+        .collect()
+}
+
+/// Validates that a string is in the format "major.minor" where both parts are digits.
+///
+/// Returns `true` if the format is valid for CUDA compute capability.
+pub(crate) fn is_valid_cuda_version_format(s: &str) -> bool {
+    let mut parts = s.split('.');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(major), Some(minor), None) => {
+            !major.is_empty()
+                && major.chars().all(|c| c.is_ascii_digit())
+                && !minor.is_empty()
+                && minor.chars().all(|c| c.is_ascii_digit())
+        }
+        _ => false,
+    }
+}
+
+/// Information about CUDA compute capability for a specific device.
+///
+/// The compute capability (also called SM version) defines the set of features and
+/// instructions supported by a CUDA device. Higher compute capabilities generally
+/// support more features and newer instruction sets.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CudaArchInfo {
+    /// Major version of the compute capability (e.g., 8 for compute capability 8.6)
+    pub major: u32,
+    /// Minor version of the compute capability (e.g., 6 for compute capability 8.6)
+    pub minor: u32,
+    /// Human-readable name of the device (e.g., "NVIDIA `GeForce` RTX 3090")
+    pub device_name: String,
+}
+
+/// Combined CUDA information detected from the system.
+///
+/// This struct contains both the CUDA driver version and compute capability information.
+/// Each field is optional because detection can fail independently:
+///
+/// * `version` may be present even without GPUs (driver installed but no devices)
+/// * `arch_info` requires at least one GPU device to be present
+/// * Both may be `None` if CUDA is not available or detection fails
+#[derive(Debug, Clone)]
+pub struct CudaInfo {
+    /// The maximum CUDA version supported by the installed driver.
+    ///
+    /// This corresponds to the `__cuda` virtual package.
+    pub version: Option<Version>,
+
+    /// Information about the minimum compute capability across all detected devices.
+    ///
+    /// This corresponds to the `__cuda_arch` virtual package. Returns `None` if
+    /// no CUDA devices are detected or if device enumeration fails.
+    pub arch_info: Option<CudaArchInfo>,
+}
+
+/// Returns comprehensive CUDA information from the current platform.
+///
+/// This function returns both the CUDA driver version and compute capability information
+/// in a single cached result. The detection is performed only once per process and the
+/// result is cached for subsequent calls.
+///
+/// This is more efficient than calling [`cuda_version`] and [`cuda_arch`] separately
+/// because the CUDA library is loaded only once.
+pub fn cuda_info() -> &'static CudaInfo {
+    static DETECTED_CUDA_INFO: OnceCell<CudaInfo> = OnceCell::new();
+    DETECTED_CUDA_INFO.get_or_init(detect_cuda_info)
+}
+
+/// Returns the maximum CUDA version available on the current platform.
+///
+/// This corresponds to the `__cuda` virtual package. The result is cached,
+/// so subsequent calls are very fast.
 pub fn cuda_version() -> Option<Version> {
-    static DETECTED_CUDA_VERSION: OnceCell<Option<Version>> = OnceCell::new();
-    DETECTED_CUDA_VERSION
-        .get_or_init(detect_cuda_version)
-        .clone()
+    cuda_info().version.clone()
+}
+
+/// Returns CUDA compute capability information from the current platform.
+///
+/// This function returns the **minimum** compute capability across all detected
+/// CUDA devices, along with the name of the device that has this minimum capability.
+///
+/// Returns `None` if:
+/// * No CUDA drivers are installed
+/// * No CUDA devices are detected
+/// * Device enumeration fails
+/// * The system is using musl libc (dynamic library loading not supported)
+///
+/// The result is cached, so subsequent calls are very fast.
+pub fn cuda_arch() -> Option<CudaArchInfo> {
+    cuda_info().arch_info.clone()
+}
+
+/// Detects comprehensive CUDA information from the current system.
+///
+/// This function performs unified detection of both CUDA driver version and compute
+/// capability by loading the CUDA library once and querying all necessary information.
+///
+/// The detection process:
+/// 1. Attempts to load the CUDA driver library (`libcuda`)
+/// 2. Initializes the CUDA driver API
+/// 3. Queries the driver version (for `__cuda` virtual package)
+/// 4. Enumerates all CUDA devices and queries their compute capabilities
+/// 5. Returns the minimum compute capability across all devices (for `__cuda_arch` virtual package)
+///
+/// On musl systems, only the version is detected via `nvidia-smi` since dynamic library
+/// loading is not supported.
+fn detect_cuda_info() -> CudaInfo {
+    if cfg!(target_env = "musl") {
+        // Dynamically loading a library is not supported on musl so we have to fall-back to using
+        // the nvidia-smi command. Architecture detection requires library loading, so it's
+        // unavailable on musl.
+        CudaInfo {
+            version: detect_cuda_version_via_nvidia_smi(),
+            arch_info: None,
+        }
+    } else {
+        // Try to detect via libcuda which allows us to get both version and architecture info
+        detect_cuda_info_via_libcuda()
+    }
+}
+
+/// Detects CUDA version and architecture information via the CUDA driver library.
+///
+/// This function loads `libcuda` and uses the CUDA Driver API to query both the driver
+/// version and device compute capabilities. This is more efficient than separate detection
+/// because the library is loaded only once.
+///
+/// Returns a `CudaInfo` struct where:
+/// * `version` is `None` if the driver version cannot be determined
+/// * `arch_info` is `None` if no devices are present or device queries fail
+fn detect_cuda_info_via_libcuda() -> CudaInfo {
+    // Try to open the CUDA library
+    let cuda_library = match cuda_library_paths()
+        .iter()
+        .find_map(|path| unsafe { Library::new(*path).ok() })
+    {
+        Some(lib) => lib,
+        None => {
+            return CudaInfo {
+                version: None,
+                arch_info: None,
+            }
+        }
+    };
+
+    // Get entry points from the library
+    let cu_init: Symbol<'_, unsafe extern "C" fn(c_uint) -> c_ulong> =
+        match unsafe { cuda_library.get(b"cuInit\0") } {
+            Ok(init) => init,
+            Err(_) => {
+                return CudaInfo {
+                    version: None,
+                    arch_info: None,
+                }
+            }
+        };
+
+    // Initialize the CUDA library
+    if unsafe { cu_init(0) } != 0 {
+        return CudaInfo {
+            version: None,
+            arch_info: None,
+        };
+    }
+
+    // Detect the driver version (can succeed even without devices)
+    let version = detect_cuda_version_from_library(&cuda_library);
+
+    // Detect architecture info (requires devices to be present)
+    let arch_info = detect_cuda_arch_from_library(&cuda_library);
+
+    CudaInfo { version, arch_info }
+}
+
+/// Detects CUDA driver version from an already-loaded CUDA library.
+///
+/// This function queries the CUDA driver version using `cuDriverGetVersion`.
+/// The version can be detected even if no GPU devices are present on the system.
+fn detect_cuda_version_from_library(cuda_library: &Library) -> Option<Version> {
+    let cu_driver_get_version: Symbol<'_, unsafe extern "C" fn(*mut c_int) -> c_ulong> =
+        unsafe { cuda_library.get(b"cuDriverGetVersion\0") }.ok()?;
+
+    // Get the version from the library
+    let mut version_int = MaybeUninit::uninit();
+    if unsafe { cu_driver_get_version(version_int.as_mut_ptr()) != 0 } {
+        return None;
+    }
+    let version = unsafe { version_int.assume_init() };
+
+    // Convert the version integer to a version string
+    Version::from_str(&format!("{}.{}", version / 1000, (version % 1000) / 10)).ok()
+}
+
+/// Detects CUDA compute capability from an already-loaded CUDA library.
+///
+/// This function enumerates all CUDA devices and queries their compute capabilities,
+/// returning the **minimum** compute capability found across all devices along with
+/// the name of the device that has this minimum capability.
+///
+/// Returns `None` if:
+/// * No CUDA devices are detected (`cuDeviceGetCount` returns 0)
+/// * Device enumeration fails
+/// * Any of the required CUDA Driver API functions cannot be loaded
+fn detect_cuda_arch_from_library(cuda_library: &Library) -> Option<CudaArchInfo> {
+    // CUDA device attribute constants for querying compute capability
+    const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: c_int = 75;
+    const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: c_int = 76;
+
+    // Maximum device name length in CUDA
+    const MAX_DEVICE_NAME_LEN: usize = 256;
+
+    // Get required function pointers from the library
+    let cu_device_get_count: Symbol<'_, unsafe extern "C" fn(*mut c_int) -> c_ulong> =
+        unsafe { cuda_library.get(b"cuDeviceGetCount\0") }.ok()?;
+
+    let cu_device_get: Symbol<'_, unsafe extern "C" fn(*mut c_int, c_int) -> c_ulong> =
+        unsafe { cuda_library.get(b"cuDeviceGet\0") }.ok()?;
+
+    let cu_device_get_attribute: Symbol<
+        '_,
+        unsafe extern "C" fn(*mut c_int, c_int, c_int) -> c_ulong,
+    > = unsafe { cuda_library.get(b"cuDeviceGetAttribute\0") }.ok()?;
+
+    let cu_device_get_name: Symbol<'_, unsafe extern "C" fn(*mut u8, c_int, c_int) -> c_ulong> =
+        unsafe { cuda_library.get(b"cuDeviceGetName\0") }.ok()?;
+
+    // Get the number of CUDA devices
+    let mut device_count = MaybeUninit::uninit();
+    if unsafe { cu_device_get_count(device_count.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    let device_count = unsafe { device_count.assume_init() };
+
+    // No devices found
+    if device_count == 0 {
+        return None;
+    }
+
+    // Iterate through all devices to find the minimum compute capability
+    let mut min_arch: Option<CudaArchInfo> = None;
+
+    for device_idx in 0..device_count {
+        // Get device handle
+        let mut device = MaybeUninit::uninit();
+        if unsafe { cu_device_get(device.as_mut_ptr(), device_idx) } != 0 {
+            continue;
+        }
+        let device = unsafe { device.assume_init() };
+
+        // Get compute capability major version
+        let mut cc_major = MaybeUninit::uninit();
+        if unsafe {
+            cu_device_get_attribute(
+                cc_major.as_mut_ptr(),
+                CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
+                device,
+            )
+        } != 0
+        {
+            continue;
+        }
+        let cc_major = unsafe { cc_major.assume_init() } as u32;
+
+        // Get compute capability minor version
+        let mut cc_minor = MaybeUninit::uninit();
+        if unsafe {
+            cu_device_get_attribute(
+                cc_minor.as_mut_ptr(),
+                CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
+                device,
+            )
+        } != 0
+        {
+            continue;
+        }
+        let cc_minor = unsafe { cc_minor.assume_init() } as u32;
+
+        // Check if this is the minimum compute capability so far
+        let is_new_minimum = min_arch.as_ref().is_none_or(|min| {
+            cc_major < min.major || (cc_major == min.major && cc_minor < min.minor)
+        });
+
+        if is_new_minimum {
+            // Get device name
+            let mut name_buffer = [0u8; MAX_DEVICE_NAME_LEN];
+            if unsafe {
+                cu_device_get_name(
+                    name_buffer.as_mut_ptr(),
+                    MAX_DEVICE_NAME_LEN as c_int,
+                    device,
+                )
+            } == 0
+            {
+                // Convert C string to Rust string and sanitize
+                if let Ok(cstr) = CStr::from_bytes_until_nul(&name_buffer) {
+                    if let Ok(device_name) = cstr.to_str() {
+                        min_arch = Some(CudaArchInfo {
+                            major: cc_major,
+                            minor: cc_minor,
+                            device_name: sanitize_device_name(device_name),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    min_arch
 }
 
 /// Attempts to detect the version of CUDA present in the current operating system by employing the
@@ -268,5 +617,135 @@ mod test {
     pub fn doesnt_crash_nvidia_smi() {
         let version = detect_cuda_version_via_nvidia_smi();
         println!("Cuda {version:?}");
+    }
+
+    #[test]
+    pub fn test_cuda_info() {
+        let info = cuda_info();
+        println!("CUDA Info: {info:?}");
+        if let Some(ref arch) = info.arch_info {
+            println!(
+                "  Device: {} (compute {}.{})",
+                arch.device_name, arch.major, arch.minor
+            );
+        }
+    }
+
+    #[test]
+    pub fn test_cuda_arch() {
+        let arch = cuda_arch();
+        println!("CUDA Arch: {arch:?}");
+    }
+
+    #[test]
+    fn test_is_valid_cuda_version_format() {
+        // Valid formats
+        assert!(is_valid_cuda_version_format("8.6"));
+        assert!(is_valid_cuda_version_format("7.5"));
+        assert!(is_valid_cuda_version_format("10.2"));
+        assert!(is_valid_cuda_version_format("0.0"));
+        assert!(is_valid_cuda_version_format("12.0"));
+
+        // Invalid formats - not major.minor
+        assert!(!is_valid_cuda_version_format("8"));
+        assert!(!is_valid_cuda_version_format("8.6.1"));
+        assert!(!is_valid_cuda_version_format("8.6.1.0"));
+        assert!(!is_valid_cuda_version_format(""));
+        assert!(!is_valid_cuda_version_format(".6"));
+        assert!(!is_valid_cuda_version_format("8."));
+        assert!(!is_valid_cuda_version_format("."));
+
+        // Invalid formats - non-digit characters
+        assert!(!is_valid_cuda_version_format("8.6a"));
+        assert!(!is_valid_cuda_version_format("a.6"));
+        assert!(!is_valid_cuda_version_format("8.b"));
+        assert!(!is_valid_cuda_version_format("eight.six"));
+        assert!(!is_valid_cuda_version_format("8-6"));
+        assert!(!is_valid_cuda_version_format("8_6"));
+    }
+
+    #[test]
+    fn test_is_valid_build_string_char() {
+        // Valid characters
+        assert!(is_valid_build_string_char('a'));
+        assert!(is_valid_build_string_char('Z'));
+        assert!(is_valid_build_string_char('0'));
+        assert!(is_valid_build_string_char('9'));
+        assert!(is_valid_build_string_char('_'));
+        assert!(is_valid_build_string_char('.'));
+        assert!(is_valid_build_string_char('+'));
+
+        // Invalid characters
+        assert!(!is_valid_build_string_char(' '));
+        assert!(!is_valid_build_string_char('-'));
+        assert!(!is_valid_build_string_char('/'));
+        assert!(!is_valid_build_string_char('!'));
+        assert!(!is_valid_build_string_char('@'));
+        assert!(!is_valid_build_string_char('#'));
+    }
+
+    #[test]
+    fn test_strip_prefix_ci() {
+        // Exact case match
+        assert_eq!(strip_prefix_ci("NVIDIA RTX", "NVIDIA"), Some(" RTX"));
+
+        // Case insensitive matches
+        assert_eq!(strip_prefix_ci("nvidia RTX", "NVIDIA"), Some(" RTX"));
+        assert_eq!(strip_prefix_ci("Nvidia RTX", "NVIDIA"), Some(" RTX"));
+        assert_eq!(strip_prefix_ci("nVidia RTX", "NVIDIA"), Some(" RTX"));
+        assert_eq!(strip_prefix_ci("NVIDIA RTX", "nvidia"), Some(" RTX"));
+
+        // No match
+        assert_eq!(strip_prefix_ci("AMD RX", "NVIDIA"), None);
+        assert_eq!(strip_prefix_ci("NV RTX", "NVIDIA"), None);
+
+        // Empty and edge cases
+        assert_eq!(strip_prefix_ci("", "NVIDIA"), None);
+        assert_eq!(strip_prefix_ci("NVI", "NVIDIA"), None);
+    }
+
+    #[test]
+    fn test_sanitize_device_name() {
+        // Valid name with NVIDIA prefix
+        assert_eq!(
+            sanitize_device_name("NVIDIA GeForce RTX 3090"),
+            "GeForceRTX3090"
+        );
+
+        // Different NVIDIA case variations
+        assert_eq!(sanitize_device_name("nvidia GeForce"), "GeForce");
+        assert_eq!(sanitize_device_name("Nvidia Tesla"), "Tesla");
+        assert_eq!(sanitize_device_name("NVIDIA RTX"), "RTX");
+
+        // No NVIDIA prefix
+        assert_eq!(
+            sanitize_device_name("AMD Radeon RX 6800"),
+            "AMDRadeonRX6800"
+        );
+        assert_eq!(sanitize_device_name("Tesla V100"), "TeslaV100");
+
+        // Special characters and spaces (hyphen is filtered out, not allowed in CEP-26)
+        assert_eq!(
+            sanitize_device_name("Device-Name_Test.1+2"),
+            "DeviceName_Test.1+2"
+        );
+        assert_eq!(sanitize_device_name("Test @ Device #1!"), "TestDevice1");
+
+        // Length truncation (64 char limit)
+        let long_name = "A".repeat(100);
+        assert_eq!(sanitize_device_name(&long_name).len(), 64);
+
+        let long_with_nvidia = format!("NVIDIA {}", "A".repeat(100));
+        assert_eq!(sanitize_device_name(&long_with_nvidia).len(), 64);
+
+        // Edge cases
+        assert_eq!(sanitize_device_name(""), "");
+        assert_eq!(sanitize_device_name("NVIDIA"), "");
+        assert_eq!(sanitize_device_name("nvidia "), "");
+        assert_eq!(sanitize_device_name("   "), "");
+        assert_eq!(sanitize_device_name("!@#$%"), "");
+
+        // Only valid chars
+        assert_eq!(sanitize_device_name("ABC_123.test+v2"), "ABC_123.test+v2");
     }
 }
