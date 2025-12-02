@@ -180,7 +180,7 @@ pub(super) fn solve_with_unparsable_dependency<T: SolverImpl + Default>() {
         .run::<T>();
 }
 
-/// A reproducer of issue https://github.com/prefix-dev/resolvo/issues/188
+/// A reproducer of issue <https://github.com/prefix-dev/resolvo/issues/188>
 pub(super) fn resolvo_issue_188<T: SolverImpl + Default>() {
     let pkg_a1 = PackageBuilder::new("dependency_package")
         .version("0.1.0")
