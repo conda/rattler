@@ -179,3 +179,25 @@ pub(super) fn solve_with_unparsable_dependency<T: SolverImpl + Default>() {
         .expect_present([("sortme", "1.0.0")])
         .run::<T>();
 }
+
+/// A reproducer of issue https://github.com/prefix-dev/resolvo/issues/188
+pub(super) fn resolvo_issue_188<T: SolverImpl + Default>() {
+    let pkg_a1 = PackageBuilder::new("dependency_package")
+        .version("0.1.0")
+        .build();
+    let pkg_a2 = PackageBuilder::new("dependency_package")
+        .version("0.2.0")
+        .build();
+    let pkg_b1 = PackageBuilder::new("dependent_package")
+        .version("1.0.0")
+        .depends(["dependency_package ==0.2.0"])
+        .build();
+
+    SolverCase::new("solver respects constraints on package versions")
+        .repository([pkg_a1.clone(), pkg_a2.clone(), pkg_b1])
+        .specs(["dependency_package <0.2.0"])
+        .constraints(["dependent_package ==1.0.0"])
+        // `dependent_package` was not requested and thus we expect it to be absent
+        .expect_absent(["dependent_package"])
+        .run::<T>();
+}
