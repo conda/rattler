@@ -92,6 +92,7 @@ fn conda_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
 )]
 fn tar_bz2_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {}
 
+#[cfg(feature = "reqwest")]
 #[template]
 #[rstest]
 #[case::ruff(
