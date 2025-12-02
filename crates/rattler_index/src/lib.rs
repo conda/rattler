@@ -4,6 +4,8 @@
 
 pub mod cache;
 mod utils;
+mod error;
+use error::RepodataError;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -836,7 +838,7 @@ pub async fn write_repodata(
     subdir: Platform,
     op: Operator,
     metadata: &RepodataMetadataCollection,
-) -> Result<()> {
+) -> Result<(), RepodataError> {
     if let Some(repodata_from_packages_metadata) = &metadata.repodata_from_packages {
         let unpatched_repodata_path = format!("{subdir}/{REPODATA_FROM_PACKAGES}");
         tracing::info!("Writing unpatched repodata to {unpatched_repodata_path}");
@@ -848,7 +850,8 @@ pub async fn write_repodata(
             repodata_from_packages_metadata,
             Some(CACHE_CONTROL_REPODATA),
         )
-        .await?;
+        .await
+        .map_err(RepodataError::Opendal)?;
     }
 
     let repodata = if let Some(instructions) = repodata_patch {
@@ -876,7 +879,8 @@ pub async fn write_repodata(
             repodata_zst_metadata,
             Some(CACHE_CONTROL_REPODATA),
         )
-        .await?;
+        .await
+        .map_err(RepodataError::Opendal)?;
     }
 
     // Write main repodata.json with conditional check
@@ -889,46 +893,52 @@ pub async fn write_repodata(
         &metadata.repodata,
         Some(CACHE_CONTROL_REPODATA),
     )
-    .await?;
+    .await
+    .map_err(RepodataError::Opendal)?;
 
     if metadata.repodata_shards.is_some() {
-        // See CEP 16 <https://github.com/conda/ceps/blob/main/cep-0016.md>
         tracing::info!("Creating sharded repodata");
         let mut shards_by_package_names: HashMap<String, Shard> = HashMap::new();
+
         for (k, package_record) in repodata.conda_packages {
-            let package_name = package_record.name.as_normalized();
-            let shard = shards_by_package_names
-                .entry(package_name.into())
-                .or_default();
-            shard.conda_packages.insert(k, package_record);
-        }
-        for (k, package_record) in repodata.packages {
-            let package_name = package_record.name.as_normalized();
-            let shard = shards_by_package_names
-                .entry(package_name.into())
-                .or_default();
-            shard.packages.insert(k, package_record);
-        }
-        for package in repodata.removed {
-            let package_name = ArchiveIdentifier::try_from_filename(package.as_str())
-                .context("Could not determine archive identifier for {package}")?
-                .name;
-            let shard = shards_by_package_names.entry(package_name).or_default();
-            shard.removed.insert(package);
+            let name = package_record.name.as_normalized().to_string();
+            shards_by_package_names
+                .entry(name)
+                .or_default()
+                .conda_packages
+                .insert(k, package_record);
         }
 
-        // calculate digests for shards
+        for (k, package_record) in repodata.packages {
+            let name = package_record.name.as_normalized().to_string();
+            shards_by_package_names
+                .entry(name)
+                .or_default()
+                .packages
+                .insert(k, package_record);
+        }
+
+        for removed in repodata.removed {
+            let ident = ArchiveIdentifier::try_from_filename(&removed)
+                .context("Could not determine archive identifier")?;
+            shards_by_package_names
+                .entry(ident.name)
+                .or_default()
+                .removed
+                .insert(removed);
+        }
+
+        // compute shard digests
         let shards = shards_by_package_names
             .iter()
             .map(|(k, shard)| {
-                serialize_msgpack_zst(shard).map(|encoded| {
-                    let mut hasher = Sha256::new();
-                    hasher.update(&encoded);
-                    let digest: Sha256Hash = hasher.finalize();
-                    (k, (digest, encoded))
-                })
+                let encoded = serialize_msgpack_zst(shard)?;
+                let mut hasher = Sha256::new();
+                hasher.update(&encoded);
+                let digest = hasher.finalize();
+                Ok((k.clone(), (digest, encoded)))
             })
-            .collect::<Result<HashMap<_, _>>>()?;
+            .collect::<Result<HashMap<String, (Sha256Hash, Vec<u8>)>, RepodataError>>()?;
 
         let sharded_repodata = ShardedRepodata {
             info: ShardedSubdirInfo {
@@ -939,56 +949,63 @@ pub async fn write_repodata(
             },
             shards: shards
                 .iter()
-                .map(|(&k, (digest, _))| (k.clone(), *digest))
+                .map(|(k, (digest, _))| (k.clone(), *digest))
                 .collect(),
         };
 
         let mut tasks = FuturesUnordered::new();
-        // todo max parallel
-        for (_, (digest, encoded_shard)) in shards {
+
+        for (_pkg, (digest, encoded)) in shards {
             let op = op.clone();
-            let future = async move || {
-                let shard_path = format!("{subdir}/shards/{digest:x}.msgpack.zst");
-                tracing::trace!("Writing repodata shard to {shard_path}");
-                match op
-                    .write_with(&shard_path, encoded_shard)
+            let subdir = subdir.clone();
+
+            let future = async move {
+                let shard_path =
+                    format!("{subdir}/shards/{:x}.msgpack.zst", digest);
+
+                let result = op
+                    .write_with(&shard_path, encoded)
                     .if_not_exists(true)
                     .cache_control(CACHE_CONTROL_IMMUTABLE)
-                    .await
-                {
+                    .await;
+
+                match result {
+                    Ok(_) => Ok(()),
                     Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
                         tracing::trace!("{shard_path} already exists");
                         Ok(())
                     }
-                    Ok(_metadata) => Ok(()),
-                    Err(e) => Err(e),
+                    Err(e) => Err(RepodataError::Opendal(e)),
                 }
             };
-            tasks.push(tokio::spawn(future()));
+
+            tasks.push(tokio::spawn(future));
         }
+
         while let Some(join_result) = tasks.next().await {
             match join_result {
                 Ok(Ok(_)) => {}
-                Ok(Err(e)) => Err(e)?,
-                Err(join_err) => Err(join_err)?,
+                Ok(Err(e)) => return Err(e),
+                Err(join_err) => return Err(RepodataError::Other(join_err.into())),
             }
         }
 
-        // Write sharded repodata index with conditional check
         if let Some(repodata_shards_metadata) = &metadata.repodata_shards {
             let repodata_shards_path = format!("{subdir}/{REPODATA_SHARDS}");
-            tracing::trace!("Writing repodata shards to {repodata_shards_path}");
-            let sharded_repodata_encoded = serialize_msgpack_zst(&sharded_repodata)?;
+            let encoded = serialize_msgpack_zst(&sharded_repodata)?;
+
             crate::utils::write_with_metadata_check(
                 &op,
                 &repodata_shards_path,
-                sharded_repodata_encoded,
+                encoded,
                 repodata_shards_metadata,
                 Some(CACHE_CONTROL_REPODATA),
             )
-            .await?;
+            .await
+            .map_err(RepodataError::Opendal)?;
         }
     }
+
     Ok(())
 }
 
