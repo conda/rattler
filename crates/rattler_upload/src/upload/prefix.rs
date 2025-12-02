@@ -17,8 +17,9 @@ use url::Url;
 
 use super::opt::{AttestationSource, PrefixData};
 
+#[cfg(feature = "sigstore")]
+use crate::upload::attestation::{create_attestation, AttestationConfig};
 use crate::upload::{
-    attestation::{create_attestation, AttestationConfig},
     default_bytes_style, get_client_with_retry, get_default_client,
     trusted_publishing::{check_trusted_publishing, TrustedPublishResult},
 };
@@ -109,7 +110,17 @@ pub async fn upload_package_to_prefix(
         AttestationSource::GenerateAttestation
     );
 
+    // Check if attestation generation is requested but sigstore feature is not enabled
+    #[cfg(not(feature = "sigstore"))]
+    if wants_generate {
+        return Err(miette::miette!(
+            "Attestation generation was requested, but the 'sigstore' feature is not enabled.\n\
+             Please rebuild with the 'sigstore' feature enabled."
+        ));
+    }
+
     // Check if we're using trusted publishing and if we should generate attestations
+    #[cfg(feature = "sigstore")]
     let (token, should_generate_attestation) = match prefix_data.api_key {
         Some(api_key) => (api_key, false),
         None => match check_trusted_publishing(&client, &prefix_data.url).await {
@@ -138,6 +149,31 @@ pub async fn upload_package_to_prefix(
         },
     };
 
+    #[cfg(not(feature = "sigstore"))]
+    let token = match prefix_data.api_key {
+        Some(api_key) => api_key,
+        None => match check_trusted_publishing(&client, &prefix_data.url).await {
+            TrustedPublishResult::Configured(token) => token.secret().to_string(),
+            TrustedPublishResult::Skipped => {
+                if wants_attestation {
+                    return Err(miette::miette!(
+                        "Attestation was requested, but trusted publishing is not configured"
+                    ));
+                }
+                check_storage()?
+            }
+            TrustedPublishResult::Ignored(err) => {
+                tracing::warn!("Checked for trusted publishing but failed with {err}");
+                if wants_attestation {
+                    return Err(miette::miette!(
+                        "Attestation was requested, but trusted publishing is not configured"
+                    ));
+                }
+                check_storage()?
+            }
+        },
+    };
+
     for package_file in package_files {
         let filename = package_file
             .file_name()
@@ -155,6 +191,7 @@ pub async fn upload_package_to_prefix(
         }
 
         // Generate attestation if we're using trusted publishing and it was requested
+        #[cfg(feature = "sigstore")]
         let attestation_path = if should_generate_attestation {
             let channel_url = prefix_data
                 .url
@@ -198,6 +235,12 @@ pub async fn upload_package_to_prefix(
             Some(path.clone())
         } else {
             None
+        };
+
+        #[cfg(not(feature = "sigstore"))]
+        let attestation_path = match &prefix_data.attestation {
+            AttestationSource::Attestation(path) => Some(path.clone()),
+            _ => None,
         };
 
         let progress_bar = indicatif::ProgressBar::new(file_size)

@@ -136,6 +136,16 @@ jobs:
         run: |
           echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls-tls" >> $GITHUB_OUTPUT
 
+      - name: Disable sigstore on powerpc (not supported)
+        id: sigstore-feature
+        shell: bash
+        run: |
+          if [[ "${{ matrix.target }}" == powerpc* ]]; then
+            echo "EXTRA_FEATURES=" >> $GITHUB_OUTPUT
+          else
+            echo "EXTRA_FEATURES=,sigstore" >> $GITHUB_OUTPUT
+          fi
+
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         if: startsWith(matrix.os, 'ubuntu')
@@ -157,7 +167,7 @@ jobs:
         run: >
           cargo build
           --all-targets
-          --features ${{ env.DEFAULT_FEATURES }}
+          --features ${{ env.DEFAULT_FEATURES }}${{ steps.sigstore-feature.outputs.EXTRA_FEATURES }}
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
 
@@ -182,7 +192,7 @@ jobs:
         run: >
           cargo nextest run
           --workspace
-          --features ${{ env.DEFAULT_FEATURES }}
+          --features ${{ env.DEFAULT_FEATURES }}${{ steps.sigstore-feature.outputs.EXTRA_FEATURES }}
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}
