@@ -7,3 +7,11 @@ pub const ACTIONS_ID_TOKEN_REQUEST_URL: &str = "ACTIONS_ID_TOKEN_REQUEST_URL";
 
 /// This env var contains the oidc request token
 pub const ACTIONS_ID_TOKEN_REQUEST_TOKEN: &str = "ACTIONS_ID_TOKEN_REQUEST_TOKEN";
+
+// GitLab CI environment variables
+/// This env var is set to "true" when run inside a GitLab CI runner
+pub const GITLAB_CI: &str = "GITLAB_CI";
+
+/// The default env var name for the GitLab OIDC ID token with audience "prefix.dev".
+/// Users should configure this in their `.gitlab-ci.yml` using the `id_tokens` keyword.
+pub const PREFIX_ID_TOKEN: &str = "PREFIX_ID_TOKEN";
