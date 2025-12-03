@@ -4,11 +4,12 @@ import os
 from dataclasses import dataclass
 from typing import Iterable, List, Optional
 
-from rattler.channel import Channel
-from rattler.match_spec import MatchSpec
-from rattler.networking import CacheAction, Client
+from rattler.channel.channel import Channel
+from rattler.match_spec.match_spec import MatchSpec
+from rattler.networking.client import Client
+from rattler.networking.fetch_repo_data import CacheAction
 from rattler.package.package_name import PackageName
-from rattler.platform import Platform, PlatformLiteral
+from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
 
