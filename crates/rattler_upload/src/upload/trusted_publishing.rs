@@ -278,13 +278,25 @@ async fn get_github_oidc_token(
 
 /// Get the OIDC token from Google Cloud metadata server.
 /// Works in Cloud Build, Cloud Run, GCE, and GKE with Workload Identity.
+/// Respects the `GCE_METADATA_HOST` environment variable for custom metadata server hostnames.
 async fn get_google_cloud_oidc_token(
     client: &ClientWithMiddleware,
 ) -> Result<String, TrustedPublishingError> {
-    let metadata_url = format!("{}?audience=prefix.dev", consts::GCP_METADATA_IDENTITY_URL);
+    // Use GCE_METADATA_HOST if set, otherwise use the default hostname
+    let metadata_host = env::var(consts::GCE_METADATA_HOST)
+        .unwrap_or_else(|_| consts::GCP_METADATA_HOST_DEFAULT.to_string());
+
+    let metadata_url = format!(
+        "http://{}{}?audience=prefix.dev",
+        metadata_host,
+        consts::GCP_METADATA_IDENTITY_PATH
+    );
     let url = Url::parse(&metadata_url)?;
 
-    tracing::info!("Querying the trusted publishing OIDC token from Google Cloud metadata server");
+    tracing::info!(
+        "Querying the trusted publishing OIDC token from Google Cloud metadata server at {}",
+        metadata_host
+    );
 
     let response = client
         .get(url.clone())

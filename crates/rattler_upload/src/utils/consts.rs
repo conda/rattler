@@ -21,6 +21,10 @@ pub const PREFIX_ID_TOKEN: &str = "PREFIX_ID_TOKEN";
 pub const CLOUD_BUILD_ID: &str = "CLOUD_BUILD_ID";
 /// Set in Cloud Run
 pub const K_SERVICE: &str = "K_SERVICE";
-/// Google Cloud metadata server URL for identity tokens
-pub const GCP_METADATA_IDENTITY_URL: &str =
-    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity";
+/// Environment variable to override the metadata server hostname (used by Google's libraries)
+pub const GCE_METADATA_HOST: &str = "GCE_METADATA_HOST";
+/// Default Google Cloud metadata server hostname
+pub const GCP_METADATA_HOST_DEFAULT: &str = "metadata.google.internal";
+/// Path to get identity tokens from the metadata server
+pub const GCP_METADATA_IDENTITY_PATH: &str =
+    "/computeMetadata/v1/instance/service-accounts/default/identity";
