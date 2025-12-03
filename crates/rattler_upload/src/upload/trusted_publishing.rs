@@ -17,30 +17,30 @@ use crate::utils::consts;
 
 /// Represents the CI provider being used for trusted publishing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CIProvider {
+pub enum CiProvider {
     GitHubActions,
     GitLabCI,
     GoogleCloud,
 }
 
-impl std::fmt::Display for CIProvider {
+impl std::fmt::Display for CiProvider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CIProvider::GitHubActions => write!(f, "GitHub Actions"),
-            CIProvider::GitLabCI => write!(f, "GitLab CI"),
-            CIProvider::GoogleCloud => write!(f, "Google Cloud"),
+            CiProvider::GitHubActions => write!(f, "GitHub Actions"),
+            CiProvider::GitLabCI => write!(f, "GitLab CI"),
+            CiProvider::GoogleCloud => write!(f, "Google Cloud"),
         }
     }
 }
 
 /// Detects which CI provider is being used, if any.
-pub fn detect_ci_provider() -> Option<CIProvider> {
+pub fn detect_ci_provider() -> Option<CiProvider> {
     if github_action_runner() {
-        Some(CIProvider::GitHubActions)
+        Some(CiProvider::GitHubActions)
     } else if gitlab_ci_runner() {
-        Some(CIProvider::GitLabCI)
+        Some(CiProvider::GitLabCI)
     } else if google_cloud_runner() {
-        Some(CIProvider::GoogleCloud)
+        Some(CiProvider::GoogleCloud)
     } else {
         None
     }
@@ -141,11 +141,11 @@ struct MintTokenRequest {
 pub async fn get_token(
     client: &ClientWithMiddleware,
     prefix_url: &Url,
-    provider: CIProvider,
+    provider: CiProvider,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
     // Get the OIDC token based on the CI provider
     let oidc_token = match provider {
-        CIProvider::GitHubActions => {
+        CiProvider::GitHubActions => {
             // If this fails, we can skip the audience request.
             let oidc_token_request_token = env::var(consts::ACTIONS_ID_TOKEN_REQUEST_TOKEN)
                 .map_err(|err| {
@@ -158,11 +158,11 @@ pub async fn get_token(
             // Request 1: Get the OIDC token from GitHub.
             get_github_oidc_token(&oidc_token_request_token, client).await?
         }
-        CIProvider::GitLabCI => {
+        CiProvider::GitLabCI => {
             // Get the OIDC token from GitLab CI environment variable
             get_gitlab_oidc_token()?
         }
-        CIProvider::GoogleCloud => {
+        CiProvider::GoogleCloud => {
             // Get the OIDC token from Google Cloud metadata server
             get_google_cloud_oidc_token(client).await?
         }
@@ -175,15 +175,15 @@ pub async fn get_token(
 
     // Mask the token in CI logs
     match provider {
-        CIProvider::GitHubActions => {
+        CiProvider::GitHubActions => {
             println!("::add-mask::{}", &publish_token.secret());
         }
-        CIProvider::GitLabCI => {
+        CiProvider::GitLabCI => {
             // GitLab CI doesn't have a built-in mask mechanism like GitHub Actions,
             // but the token should be short-lived anyway
             tracing::debug!("Token obtained via GitLab CI trusted publishing");
         }
-        CIProvider::GoogleCloud => {
+        CiProvider::GoogleCloud => {
             // Google Cloud doesn't have a built-in mask mechanism,
             // but the token should be short-lived anyway
             tracing::debug!("Token obtained via Google Cloud trusted publishing");
@@ -199,7 +199,7 @@ pub async fn get_raw_oidc_token(
     client: &ClientWithMiddleware,
 ) -> Result<String, TrustedPublishingError> {
     match detect_ci_provider() {
-        Some(CIProvider::GitHubActions) => {
+        Some(CiProvider::GitHubActions) => {
             let oidc_token_request_token = env::var(consts::ACTIONS_ID_TOKEN_REQUEST_TOKEN)
                 .map_err(|err| {
                     TrustedPublishingError::from_var_err(
@@ -209,8 +209,8 @@ pub async fn get_raw_oidc_token(
                 })?;
             get_github_oidc_token(&oidc_token_request_token, client).await
         }
-        Some(CIProvider::GitLabCI) => get_gitlab_oidc_token(),
-        Some(CIProvider::GoogleCloud) => get_google_cloud_oidc_token(client).await,
+        Some(CiProvider::GitLabCI) => get_gitlab_oidc_token(),
+        Some(CiProvider::GoogleCloud) => get_google_cloud_oidc_token(client).await,
         None => Err(TrustedPublishingError::MissingEnvVar(
             "GITHUB_ACTIONS, GITLAB_CI, or CLOUD_BUILD_ID/K_SERVICE",
         )),
