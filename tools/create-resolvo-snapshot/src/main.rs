@@ -76,6 +76,7 @@ async fn main() {
         None,
         ChannelPriority::default(),
         None,
+        None,
         SolveStrategy::default(),
     )
     .unwrap();

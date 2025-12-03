@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.40](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.39...rattler_menuinst-v0.2.40) - 2025-11-27
+
+### Fixed
+
+- *(menuinst)* respect user-provided CFBundleIdentifier in macOS Info.plist ([#1887](https://github.com/conda/rattler/pull/1887))
+
 ## [0.2.39](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.38...rattler_menuinst-v0.2.39) - 2025-11-25
 
 ### Other

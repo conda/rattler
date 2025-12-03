@@ -12,11 +12,6 @@ from rattler.rattler import PyRecord, ParsePlatformError
 
 if TYPE_CHECKING:
     import networkx as nx
-else:
-    try:
-        import networkx as nx
-    except ImportError:
-        nx = None
 
 
 class PackageRecord:
@@ -122,8 +117,10 @@ class PackageRecord:
 
         Note: Virtual packages (starting with `__`) are skipped.
         """
-        if nx is None:
-            raise ImportError("networkx is not installed")
+        try:
+            import networkx as nx
+        except ImportError:
+            raise ImportError("networkx is not installed") from None
 
         names_to_records = {record.name: record for record in records}
 

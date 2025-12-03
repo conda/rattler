@@ -98,7 +98,7 @@ pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
 pub use conda::{
     CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
-    PackageBuildSource,
+    PackageBuildSource, VariantValue,
 };
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
@@ -571,6 +571,10 @@ mod test {
     #[case::v6_pixi_build_url_source("v6/pixi-build-url-source-lock.yml")]
     #[case::v6_pixi_build_git_tag_source("v6/pixi-build-git-tag-source-lock.yml")]
     #[case::v6_pixi_build_git_rev_only_source("v6/pixi-build-git-rev-only-source-lock.yml")]
+    #[case::v6_source_package_with_variants("v6/source-package-with-variants-lock.yml")]
+    #[case::v6_multiple_source_packages_with_variants(
+        "v6/multiple-source-packages-with-variants-lock.yml"
+    )]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")

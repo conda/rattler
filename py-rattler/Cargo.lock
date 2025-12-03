@@ -136,6 +136,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral-tokio-tar"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec179a06c1769b1e42e1e2cbe74c7dcdb3d6383c838454d063eaac5bbb7ebbe5"
+dependencies = [
+ "filetime",
+ "futures-core",
+ "libc",
+ "portable-atomic",
+ "rustc-hash",
+ "tokio",
+ "tokio-stream",
+ "xattr",
+]
+
+[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4062,7 +4078,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.39.4"
+version = "0.39.5"
 dependencies = [
  "anyhow",
  "console",
@@ -4104,7 +4120,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4135,7 +4151,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.42.1"
+version = "0.42.2"
 dependencies = [
  "ahash",
  "core-foundation 0.10.1",
@@ -4175,7 +4191,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.20"
+version = "0.2.21"
 dependencies = [
  "console",
  "fs-err",
@@ -4208,7 +4224,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.5"
+version = "0.27.6"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4245,7 +4261,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.26.6"
+version = "0.26.7"
 dependencies = [
  "ahash",
  "file_url",
@@ -4277,7 +4293,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.39"
+version = "0.2.40"
 dependencies = [
  "configparser",
  "dirs",
@@ -4305,7 +4321,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.26"
+version = "0.25.27"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4335,8 +4351,10 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.18"
+version = "0.23.19"
 dependencies = [
+ "astral-tokio-tar",
+ "async-compression",
  "bzip2",
  "fs-err",
  "futures-util",
@@ -4384,7 +4402,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.25.4"
+version = "0.25.5"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4438,13 +4456,13 @@ dependencies = [
  "tracing",
  "url",
  "wasmtimer",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
  "zstd",
 ]
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4460,7 +4478,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.12"
+version = "0.25.13"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4478,7 +4496,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "4.0.1"
+version = "4.1.0"
 dependencies = [
  "futures",
  "itertools 0.14.0",
@@ -4494,7 +4512,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.3.1"
+version = "2.3.2"
 dependencies = [
  "archspec",
  "libloading",
@@ -4728,11 +4746,11 @@ dependencies = [
 
 [[package]]
 name = "retry-policies"
-version = "0.4.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5875471e6cab2871bc150ecb8c727db5113c9338cc3354dc5ee3425b6aa40a1c"
+checksum = "46a4bd6027df676bcb752d3724db0ea3c0c5fc1dd0376fec51ac7dcaf9cc69be"
 dependencies = [
- "rand 0.8.5",
+ "rand 0.9.2",
 ]
 
 [[package]]
@@ -5201,9 +5219,9 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
-version = "3.16.0"
+version = "3.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10574371d41b0d9b2cff89418eda27da52bcaff2cc8741db26382a77c29131f1"
+checksum = "4fa237f2807440d238e0364a218270b98f767a00d3dada77b1c53ae88940e2e7"
 dependencies = [
  "base64",
  "chrono",
@@ -5220,9 +5238,9 @@ dependencies = [
 
 [[package]]
 name = "serde_with_macros"
-version = "3.16.0"
+version = "3.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08a72d8216842fdd57820dc78d840bef99248e35fb2554ff923319e60f2d686b"
+checksum = "52a8e3ca0ca629121f70ab50f95249e5a6f925cc0f6ffe8256c45b728875706c"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -5734,6 +5752,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-stream"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eca58d7bba4a75707817a2c44174253f9236b2d5fbd055602e9d5c07c139a047"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
 name = "tokio-util"
 version = "0.7.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5897,9 +5926,9 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "typed-path"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c462d18470a2857aa657d338af5fa67170bb48bcc80a296710ce3b0802a32566"
+checksum = "7922f2cdc51280d47b491af9eafc41eb0cdab85eabcb390c854412fcbf26dbe8"
 
 [[package]]
 name = "typeid"
