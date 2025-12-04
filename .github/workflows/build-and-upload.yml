@@ -1,0 +1,83 @@
+on:
+  workflow_dispatch:
+    inputs:
+      recipe_path:
+        description: "Path to the recipe.yaml file"
+        required: false
+        default: ".github/test-recipe/recipe.yaml"
+      channel:
+        description: "Channel to upload to"
+        required: true
+        default: "wolf-channel"
+
+name: Build and Upload Package with Attestation
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_LOG: info
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-upload:
+    name: Build and Upload with Attestation
+    runs-on: ubuntu-22.04
+
+    # These permissions are needed to create a sigstore certificate for attestation
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        run: |
+          rustup component add rustfmt
+          rustup target add x86_64-unknown-linux-musl
+
+      - name: Install musl tools
+        run: |
+          sudo apt install musl-tools gcc g++
+          sudo ln -s /usr/bin/musl-gcc /usr/bin/musl-g++
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+
+      - name: Show version information (Rust, cargo, GCC)
+        shell: bash
+        run: |
+          gcc --version || true
+          rustup -V
+          rustup toolchain list
+          cargo -V
+          rustc -V
+
+      - name: Build package with rattler-build
+        uses: prefix-dev/rattler-build-action@v0.2.34
+        with:
+          recipe-path: ${{ inputs.recipe_path }}
+          upload-artifact: false
+          build-args: --output-dir ./output
+
+      - name: Find built package
+        run: |
+          echo "Built packages:"
+          find ./output -type f \( -name "*.conda" -o -name "*.tar.bz2" \)
+          # Find and store the package path
+          PACKAGE_PATH=$(find ./output -type f \( -name "*.conda" -o -name "*.tar.bz2" \) | head -n 1)
+          echo "PACKAGE_PATH=$PACKAGE_PATH" >> $GITHUB_ENV
+
+      - name: Upload package with attestation
+        run: |
+          cargo run --bin rattler -- upload prefix \
+            --url https://beta.prefix.dev \
+            --generate-attestation \
+            -c ${{ inputs.channel }} \
+            $PACKAGE_PATH
