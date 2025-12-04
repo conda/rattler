@@ -493,6 +493,10 @@ pub struct MacOS {
 
     /// Required shell script logic to handle opened URL payloads.
     pub event_handler: Option<PlaceholderString>,
+
+    /// Set of extra properties for the Info.plist file.
+    /// These properties are not validated by `menuinst.`
+    pub info_plist_extra: Option<HashMap<String, serde_json::Value>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
