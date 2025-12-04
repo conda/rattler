@@ -1,6 +1,6 @@
 [package]
 name = "rattler_digest"
-version = "1.2.0"
+version = "1.2.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "An simple crate used by rattler crates to compute different hashes from different sources"
