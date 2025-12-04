@@ -86,9 +86,12 @@ jobs:
           echo "PACKAGE_PATH=$PACKAGE_PATH" >> $GITHUB_ENV
 
       - name: Upload package with attestation
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cargo run --bin rattler --features sigstore -- upload prefix \
             --url https://beta.prefix.dev \
             --generate-attestation \
+            --store-github-attestation \
             -c ${{ inputs.channel || 'wolf-channel' }} \
             $PACKAGE_PATH

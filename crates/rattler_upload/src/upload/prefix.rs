@@ -198,12 +198,42 @@ pub async fn upload_package_to_prefix(
                 .join(&prefix_data.channel)
                 .into_diagnostic()?;
 
-            // Build attestation configuration. We deliberately avoid providing a GitHub token
-            // so we always return a Sigstore bundle JSON for uploading to prefix.dev.
-            let config = AttestationConfig {
-                repo_owner: None,
-                repo_name: None,
-                github_token: None,
+            // Build attestation configuration
+            let config = if prefix_data.store_github_attestation {
+                // Parse GITHUB_REPOSITORY (format: "owner/repo")
+                let (repo_owner, repo_name) = std::env::var("GITHUB_REPOSITORY")
+                    .ok()
+                    .and_then(|repo| {
+                        let parts: Vec<&str> = repo.splitn(2, '/').collect();
+                        if parts.len() == 2 {
+                            Some((parts[0].to_string(), parts[1].to_string()))
+                        } else {
+                            None
+                        }
+                    })
+                    .unzip();
+
+                let github_token = std::env::var("GITHUB_TOKEN").ok();
+
+                if github_token.is_none() {
+                    warn!("--store-github-attestation requires GITHUB_TOKEN environment variable");
+                }
+                if repo_owner.is_none() {
+                    warn!("--store-github-attestation requires GITHUB_REPOSITORY environment variable");
+                }
+
+                AttestationConfig {
+                    repo_owner,
+                    repo_name,
+                    github_token,
+                }
+            } else {
+                // Return Sigstore bundle JSON for uploading to prefix.dev
+                AttestationConfig {
+                    repo_owner: None,
+                    repo_name: None,
+                    github_token: None,
+                }
             };
 
             match create_attestation(package_file, channel_url.as_str(), &config, &client).await {
