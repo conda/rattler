@@ -98,11 +98,10 @@ pub async fn create_attestation(
             store_attestation_to_github(&bundle_json, token, owner, repo, client).await?;
 
         tracing::info!("Attestation stored to GitHub with ID: {}", attestation_id);
-        Ok(attestation_id)
-    } else {
-        tracing::info!("GitHub token not provided, returning bundle for direct upload");
-        Ok(bundle_json)
     }
+
+    // Always return the bundle JSON for uploading to prefix.dev
+    Ok(bundle_json)
 }
 
 /// Get an identity token from the ambient CI/CD environment
@@ -187,7 +186,9 @@ async fn store_attestation_to_github(
         ));
     }
 
-    let response_data: AttestationResponse = response.json().await.into_diagnostic()?;
+    let body = response.text().await.into_diagnostic()?;
+    let response_data: AttestationResponse = serde_json::from_str(&body)
+        .map_err(|e| miette::miette!("Failed to parse GitHub response: {}\nBody: {}", e, body))?;
     tracing::info!(
         "Successfully stored attestation with ID: {}",
         response_data.id
