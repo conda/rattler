@@ -25,6 +25,8 @@ jobs:
   build-and-upload:
     name: Build and Upload with Attestation
     runs-on: ubuntu-22.04
+    # Only run on wolfv's fork
+    if: github.repository_owner == 'wolfv'
 
     # These permissions are needed to create a sigstore certificate for attestation
     permissions:
