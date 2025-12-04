@@ -1,4 +1,7 @@
 on:
+  push:
+    branches:
+      - attestation-workflow-test
   workflow_dispatch:
     inputs:
       recipe_path:
