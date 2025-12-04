@@ -489,6 +489,11 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn resolvo_issue_188() {
+            crate::solver_case_tests::resolvo_issue_188::<$T>();
+        }
+
+        #[test]
         fn test_duplicate_record() {
             use rattler_solve::SolverImpl;
 
