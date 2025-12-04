@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.41](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.40...rattler_menuinst-v0.2.41) - 2025-12-04
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.2.40](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.39...rattler_menuinst-v0.2.40) - 2025-11-27
 
 ### Fixed
