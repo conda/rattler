@@ -78,7 +78,7 @@ jobs:
 
       - name: Upload package with attestation
         run: |
-          cargo run --bin rattler -- upload prefix \
+          cargo run --bin rattler --features sigstore -- upload prefix \
             --url https://beta.prefix.dev \
             --generate-attestation \
             -c ${{ inputs.channel }} \
