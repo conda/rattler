@@ -1069,6 +1069,27 @@ pub struct IndexS3Config {
     pub precondition_checks: PreconditionChecks,
 }
 
+fn s3_config(
+    credentials: &ResolvedS3Credentials,
+    channel: &Url,
+) -> Result<S3Config, anyhow::Error> {
+    let mut s3_config = S3Config::default();
+    s3_config.root = Some(channel.path().to_string());
+    s3_config.bucket = channel
+        .host_str()
+        .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
+        .to_string();
+    s3_config.region = Some(credentials.region.clone());
+    s3_config.endpoint = Some(credentials.endpoint_url.to_string());
+    s3_config.secret_access_key = Some(credentials.secret_access_key.clone());
+    s3_config.access_key_id = Some(credentials.access_key_id.clone());
+    s3_config.session_token = credentials.session_token.clone();
+    s3_config.enable_virtual_host_style =
+        credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
+
+    Ok(s3_config)
+}
+
 /// Create a new `repodata.json` for all packages in the channel at the given S3
 /// URL.
 pub async fn index_s3(
@@ -1086,21 +1107,7 @@ pub async fn index_s3(
     }: IndexS3Config,
 ) -> anyhow::Result<()> {
     // Create the S3 configuration for opendal.
-    let mut s3_config = S3Config::default();
-    s3_config.root = Some(channel.path().to_string());
-    s3_config.bucket = channel
-        .host_str()
-        .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
-        .to_string();
-
-    s3_config.region = Some(credentials.region);
-    s3_config.endpoint = Some(credentials.endpoint_url.to_string());
-    s3_config.secret_access_key = Some(credentials.secret_access_key);
-    s3_config.access_key_id = Some(credentials.access_key_id);
-    s3_config.session_token = credentials.session_token;
-    s3_config.enable_virtual_host_style =
-        credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
-
+    let s3_config = s3_config(&credentials, &channel)?;
     let builder = s3_config.into_builder();
     let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
 
@@ -1303,19 +1310,7 @@ pub async fn ensure_channel_initialized_s3(
     channel: &Url,
     credentials: &ResolvedS3Credentials,
 ) -> anyhow::Result<()> {
-    let mut s3_config = S3Config::default();
-    s3_config.root = Some(channel.path().to_string());
-    s3_config.bucket = channel
-        .host_str()
-        .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
-        .to_string();
-    s3_config.region = Some(credentials.region.clone());
-    s3_config.endpoint = Some(credentials.endpoint_url.to_string());
-    s3_config.secret_access_key = Some(credentials.secret_access_key.clone());
-    s3_config.access_key_id = Some(credentials.access_key_id.clone());
-    s3_config.session_token = credentials.session_token.clone();
-    s3_config.enable_virtual_host_style =
-        credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
+    let s3_config = s3_config(&credentials, &channel)?;
 
     let op = Operator::new(s3_config.into_builder())?
         .layer(RetryLayer::new())
