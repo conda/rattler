@@ -61,12 +61,18 @@ jobs:
           cargo -V
           rustc -V
 
+      - name: Generate random build string
+        run: |
+          BUILD_STRING=$(head -c 8 /dev/urandom | xxd -p)
+          echo "BUILD_STRING=$BUILD_STRING" >> $GITHUB_ENV
+          echo "Generated build string: $BUILD_STRING"
+
       - name: Build package with rattler-build
         uses: prefix-dev/rattler-build-action@v0.2.34
         with:
           recipe-path: ${{ inputs.recipe_path }}
           upload-artifact: false
-          build-args: --output-dir ./output
+          build-args: --output-dir ./output --variant build_string=${{ env.BUILD_STRING }}
 
       - name: Find built package
         run: |
