@@ -161,7 +161,7 @@ pub async fn upload_package_to_prefix(
             .into_diagnostic()?;
 
         if prefix_data.force.is_enabled() {
-            url.set_query(Some("force=true"));
+            url.query_pairs_mut().append_pair("force", "true");
         }
 
         // Determine attestation path based on attestation source
