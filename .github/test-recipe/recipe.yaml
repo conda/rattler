@@ -4,7 +4,7 @@ package:
 
 build:
   noarch: generic
-  string: ${{ build_string }}
+  string: ${{ env.get("BUILD_STRING", "default") }}
   script:
     - echo "This is a test package for rattler attestation workflow"
 

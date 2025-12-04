@@ -72,7 +72,7 @@ jobs:
         with:
           recipe-path: ${{ inputs.recipe_path }}
           upload-artifact: false
-          build-args: --output-dir ./output --variant build_string=${{ env.BUILD_STRING }}
+          build-args: --output-dir ./output
 
       - name: Find built package
         run: |
