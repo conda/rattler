@@ -15,10 +15,7 @@ use tokio_util::io::ReaderStream;
 use tracing::{info, warn};
 use url::Url;
 
-use super::opt::{
-    // ← Import from sibling module
-    PrefixData,
-};
+use super::opt::{AttestationSource, PrefixData};
 
 use crate::upload::{
     attestation::{create_attestation_with_cosign, AttestationConfig},
@@ -106,13 +103,19 @@ pub async fn upload_package_to_prefix(
 
     let client = get_client_with_retry().into_diagnostic()?;
 
+    let wants_attestation = !matches!(prefix_data.attestation, AttestationSource::NoAttestation);
+    let wants_generate = matches!(
+        prefix_data.attestation,
+        AttestationSource::GenerateAttestation
+    );
+
     // Check if we're using trusted publishing and if we should generate attestations
     let (token, should_generate_attestation, oidc_token) = match prefix_data.api_key {
         Some(api_key) => (api_key, false, None),
         None => match check_trusted_publishing(&client, &prefix_data.url).await {
             TrustedPublishResult::Configured(token) => {
                 // Get the OIDC token for attestation generation
-                let oidc_token = if prefix_data.generate_attestation {
+                let oidc_token = if wants_generate {
                     match get_raw_oidc_token(&client).await {
                         Ok(token) => Some(token),
                         Err(e) => {
@@ -126,7 +129,7 @@ pub async fn upload_package_to_prefix(
                 (token.secret().to_string(), oidc_token.is_some(), oidc_token)
             }
             TrustedPublishResult::Skipped => {
-                if prefix_data.attestation.is_some() || prefix_data.generate_attestation {
+                if wants_attestation {
                     return Err(miette::miette!(
                         "Attestation was requested, but trusted publishing is not configured"
                     ));
@@ -135,7 +138,7 @@ pub async fn upload_package_to_prefix(
             }
             TrustedPublishResult::Ignored(err) => {
                 tracing::warn!("Checked for trusted publishing but failed with {err}");
-                if prefix_data.attestation.is_some() || prefix_data.generate_attestation {
+                if wants_attestation {
                     return Err(miette::miette!(
                         "Attestation was requested, but trusted publishing is not configured"
                     ));
@@ -152,12 +155,16 @@ pub async fn upload_package_to_prefix(
             .to_string_lossy()
             .to_string();
         let file_size = package_file.metadata().into_diagnostic()?.len();
-        let url = prefix_data
+        let mut url = prefix_data
             .url
             .join(&format!("api/v1/upload/{}", prefix_data.channel))
             .into_diagnostic()?;
 
-        // Generate attestation if we're using trusted publishing and it was requested
+        if prefix_data.force.is_enabled() {
+            url.set_query(Some("force=true"));
+        }
+
+        // Determine attestation path based on attestation source
         let attestation_path = if should_generate_attestation && oidc_token.is_some() {
             let channel_url = prefix_data
                 .url
@@ -207,8 +214,10 @@ pub async fn upload_package_to_prefix(
                     ));
                 }
             }
+        } else if let AttestationSource::Attestation(path) = &prefix_data.attestation {
+            Some(path.clone())
         } else {
-            prefix_data.attestation.clone()
+            None
         };
 
         let progress_bar = indicatif::ProgressBar::new(file_size)
@@ -261,8 +270,8 @@ pub async fn upload_package_to_prefix(
                     return Err(miette::miette!("Authentication error: {}", err));
                 }
                 StatusCode::CONFLICT => {
-                    // skip if package is existed
-                    if prefix_data.skip_existing {
+                    // skip if package already exists
+                    if prefix_data.skip_existing.is_enabled() {
                         progress_bar.finish();
                         info!("Skip existing package: {}", filename);
                         return Ok(());

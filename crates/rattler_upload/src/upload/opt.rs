@@ -7,6 +7,52 @@ use rattler_networking::AuthenticationStorage;
 use tracing::warn;
 use url::Url;
 
+/// Newtype wrapper for the force overwrite flag.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ForceOverwrite(pub bool);
+
+impl ForceOverwrite {
+    /// Returns `true` if force overwrite is enabled.
+    pub fn is_enabled(&self) -> bool {
+        self.0
+    }
+}
+
+impl From<bool> for ForceOverwrite {
+    fn from(value: bool) -> Self {
+        Self(value)
+    }
+}
+
+/// Newtype wrapper for the skip existing flag.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SkipExisting(pub bool);
+
+impl SkipExisting {
+    /// Returns `true` if skip existing is enabled.
+    pub fn is_enabled(&self) -> bool {
+        self.0
+    }
+}
+
+impl From<bool> for SkipExisting {
+    fn from(value: bool) -> Self {
+        Self(value)
+    }
+}
+
+/// Source for attestation when uploading packages.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum AttestationSource {
+    /// Provide an existing attestation file path.
+    Attestation(PathBuf),
+    /// Automatically generate attestation using cosign on CI.
+    GenerateAttestation,
+    /// No attestation.
+    #[default]
+    NoAttestation,
+}
+
 /// Common opts for upload operations
 #[derive(Parser, Clone, Debug, Default)]
 pub struct CommonOpts {
@@ -219,18 +265,24 @@ pub struct PrefixOpts {
     #[arg(short, long, env = "PREFIX_API_KEY")]
     pub api_key: Option<String>,
 
-    /// Upload one or more attestation files alongside the package
+    /// Upload an attestation file alongside the package.
     /// Note: if you add an attestation, you can _only_ upload a single package.
-    #[arg(long, required = false)]
+    /// Mutually exclusive with --generate-attestation.
+    #[arg(long, conflicts_with = "generate_attestation")]
     pub attestation: Option<PathBuf>,
 
-    /// Automatically generate attestations when using trusted publishing
-    #[arg(long, default_value = "false")]
+    /// Automatically generate attestation using cosign in CI.
+    /// Mutually exclusive with --attestation.
+    #[arg(long, conflicts_with = "attestation")]
     pub generate_attestation: bool,
 
-    /// Skip upload if package is existed.
+    /// Skip upload if package already exists.
     #[arg(short, long)]
     pub skip_existing: bool,
+
+    /// Force overwrite existing packages
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Debug)]
@@ -239,20 +291,25 @@ pub struct PrefixData {
     pub url: UrlWithTrailingSlash,
     pub channel: String,
     pub api_key: Option<String>,
-    pub attestation: Option<PathBuf>,
-    pub generate_attestation: bool,
-    pub skip_existing: bool,
+    pub attestation: AttestationSource,
+    pub skip_existing: SkipExisting,
+    pub force: ForceOverwrite,
 }
 
 impl From<PrefixOpts> for PrefixData {
     fn from(value: PrefixOpts) -> Self {
+        let attestation = match (value.attestation, value.generate_attestation) {
+            (Some(path), false) => AttestationSource::Attestation(path),
+            (None, true) => AttestationSource::GenerateAttestation,
+            _ => AttestationSource::NoAttestation,
+        };
         Self::new(
             value.url,
             value.channel,
             value.api_key,
-            value.attestation,
-            value.generate_attestation,
-            value.skip_existing,
+            attestation,
+            value.skip_existing.into(),
+            value.force.into(),
         )
     }
 }
@@ -263,17 +320,17 @@ impl PrefixData {
         url: Url,
         channel: String,
         api_key: Option<String>,
-        attestation: Option<PathBuf>,
-        generate_attestation: bool,
-        skip_existing: bool,
+        attestation: AttestationSource,
+        skip_existing: SkipExisting,
+        force: ForceOverwrite,
     ) -> Self {
         Self {
             url: url.into(),
             channel,
             api_key,
             attestation,
-            generate_attestation,
             skip_existing,
+            force,
         }
     }
 }
@@ -340,7 +397,7 @@ pub struct AnacondaData {
     pub channels: Vec<String>,
     pub api_key: Option<String>,
     pub url: UrlWithTrailingSlash,
-    pub force: bool,
+    pub force: ForceOverwrite,
 }
 
 impl From<AnacondaOpts> for AnacondaData {
@@ -350,19 +407,19 @@ impl From<AnacondaOpts> for AnacondaData {
             value.channels,
             value.api_key,
             value.url,
-            value.force,
+            value.force.into(),
         )
     }
 }
 
 impl AnacondaData {
-    /// Create a new instance of `PrefixData`
+    /// Create a new instance of `AnacondaData`
     pub fn new(
         owner: String,
         channel: Option<Vec<String>>,
         api_key: Option<String>,
         url: Option<Url>,
-        force: bool,
+        force: ForceOverwrite,
     ) -> Self {
         Self {
             owner,
