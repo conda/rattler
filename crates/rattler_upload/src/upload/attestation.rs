@@ -21,7 +21,7 @@ pub struct CondaV1Predicate {
 /// Response from GitHub attestation API
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AttestationResponse {
-    pub id: String,
+    pub id: u64,
 }
 
 /// Configuration for attestation creation
@@ -194,5 +194,5 @@ async fn store_attestation_to_github(
         response_data.id
     );
 
-    Ok(response_data.id)
+    Ok(response_data.id.to_string())
 }
