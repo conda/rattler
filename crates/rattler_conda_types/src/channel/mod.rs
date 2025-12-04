@@ -514,9 +514,9 @@ mod tests {
     #[test]
     fn test_absolute_path() {
         let current_dir = std::env::current_dir().expect("no current dir?");
-        let native_current_dir = typed_path::utils::utf8_current_dir()
-            .expect("")
-            .to_typed_path_buf();
+        let native_current_dir =
+            Utf8TypedPath::derive(typed_path::utils::utf8_current_dir().expect("").as_str())
+                .to_path_buf();
         assert_eq!(
             absolute_path(".", &current_dir).as_ref(),
             Ok(&native_current_dir)

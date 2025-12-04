@@ -1,6 +1,6 @@
 use crate::{project_root, reformat, update, Mode};
 use std::borrow::Cow;
-use tempdir::TempDir;
+use tempfile::TempDir;
 
 const ALLOWED_FUNC_PREFIX: &[&str] = &[
     "map",
@@ -86,7 +86,7 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
     //
     // The behavior of this file might change when we update libsolv so its important to check this
     // with every upgrade.
-    let temp_include_dir = TempDir::new("libsolv")?;
+    let temp_include_dir = TempDir::with_prefix("libsolv")?;
     std::fs::write(
         temp_include_dir.path().join("solvversion.h"),
         r#"#ifndef LIBSOLV_SOLVVERSION_H

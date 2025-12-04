@@ -27,5 +27,4 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }
-tempdir = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
