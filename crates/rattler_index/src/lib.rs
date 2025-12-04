@@ -1310,7 +1310,7 @@ pub async fn ensure_channel_initialized_s3(
     channel: &Url,
     credentials: &ResolvedS3Credentials,
 ) -> anyhow::Result<()> {
-    let s3_config = s3_config(&credentials, &channel)?;
+    let s3_config = s3_config(credentials, channel)?;
 
     let op = Operator::new(s3_config.into_builder())?
         .layer(RetryLayer::new())
