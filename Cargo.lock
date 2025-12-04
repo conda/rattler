@@ -4752,6 +4752,7 @@ dependencies = [
  "sha2",
  "tar",
  "tempfile",
+ "thiserror 1.0.69",
  "tokio",
  "tools",
  "tracing",
