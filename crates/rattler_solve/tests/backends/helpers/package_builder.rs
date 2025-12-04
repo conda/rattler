@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use rattler_conda_types::{
     package::ArchiveType, NoArchType, PackageRecord, RepoDataRecord, Version,
 };
@@ -118,8 +118,8 @@ impl PackageBuilder {
     }
 
     pub fn timestamp(mut self, timestamp: &str) -> Self {
-        let dt: DateTime<Utc> = timestamp.parse().expect("invalid timestamp format");
-        self.record.package_record.timestamp = Some(dt.into());
+        let ts: Timestamp = timestamp.parse().expect("invalid timestamp format");
+        self.record.package_record.timestamp = Some(ts.into());
         self
     }
 

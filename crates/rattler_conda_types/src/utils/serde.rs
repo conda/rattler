@@ -104,46 +104,41 @@ impl<'de> DeserializeAs<'de, String> for MultiLineString {
 /// in seconds or milliseconds format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TimestampMs {
-    datetime: chrono::DateTime<chrono::Utc>,
+    timestamp: jiff::Timestamp,
     /// Whether the original timestamp was in milliseconds (true) or seconds (false)
     is_millis: bool,
 }
 
 impl TimestampMs {
-    /// Create a new `TimestampMs` from a `DateTime` with millisecond precision
-    pub fn from_datetime_millis(datetime: chrono::DateTime<chrono::Utc>) -> Self {
+    /// Create a new `TimestampMs` from a `Timestamp` with millisecond precision
+    pub fn from_timestamp_millis(timestamp: jiff::Timestamp) -> Self {
         Self {
-            datetime,
+            timestamp,
             is_millis: true,
         }
     }
 
-    /// Create a new `TimestampMs` from a `DateTime` with second precision
-    pub fn from_datetime_seconds(datetime: chrono::DateTime<chrono::Utc>) -> Self {
+    /// Create a new `TimestampMs` from a `Timestamp` with second precision
+    pub fn from_timestamp_seconds(timestamp: jiff::Timestamp) -> Self {
         Self {
-            datetime,
+            timestamp,
             is_millis: false,
         }
     }
 
-    /// Get the inner `DateTime`
-    pub fn datetime(&self) -> &chrono::DateTime<chrono::Utc> {
-        &self.datetime
-    }
-
-    /// Convert to the inner `DateTime`
-    pub fn into_datetime(self) -> chrono::DateTime<chrono::Utc> {
-        self.datetime
+    /// Get the inner `Timestamp`
+    pub fn jiff_timestamp(&self) -> jiff::Timestamp {
+        self.timestamp
     }
 
     /// Get the timestamp as seconds since Unix epoch
     pub fn timestamp(&self) -> i64 {
-        self.datetime.timestamp()
+        self.timestamp.as_second()
     }
 
     /// Get the timestamp as milliseconds since Unix epoch
     pub fn timestamp_millis(&self) -> i64 {
-        self.datetime.timestamp_millis()
+        self.timestamp.as_millisecond()
     }
 }
 
@@ -155,33 +150,33 @@ impl PartialOrd for TimestampMs {
 
 impl Ord for TimestampMs {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.datetime.cmp(&other.datetime)
+        self.timestamp.cmp(&other.timestamp)
     }
 }
 
-// Allow comparison with DateTime<Utc>
-impl PartialEq<chrono::DateTime<chrono::Utc>> for TimestampMs {
-    fn eq(&self, other: &chrono::DateTime<chrono::Utc>) -> bool {
-        self.datetime == *other
+// Allow comparison with jiff::Timestamp
+impl PartialEq<jiff::Timestamp> for TimestampMs {
+    fn eq(&self, other: &jiff::Timestamp) -> bool {
+        self.timestamp == *other
     }
 }
 
-impl PartialOrd<chrono::DateTime<chrono::Utc>> for TimestampMs {
-    fn partial_cmp(&self, other: &chrono::DateTime<chrono::Utc>) -> Option<std::cmp::Ordering> {
-        self.datetime.partial_cmp(other)
+impl PartialOrd<jiff::Timestamp> for TimestampMs {
+    fn partial_cmp(&self, other: &jiff::Timestamp) -> Option<std::cmp::Ordering> {
+        self.timestamp.partial_cmp(other)
     }
 }
 
-impl From<chrono::DateTime<chrono::Utc>> for TimestampMs {
-    fn from(datetime: chrono::DateTime<chrono::Utc>) -> Self {
+impl From<jiff::Timestamp> for TimestampMs {
+    fn from(timestamp: jiff::Timestamp) -> Self {
         // Default to millisecond precision for compatibility
-        Self::from_datetime_millis(datetime)
+        Self::from_timestamp_millis(timestamp)
     }
 }
 
-impl From<TimestampMs> for chrono::DateTime<chrono::Utc> {
+impl From<TimestampMs> for jiff::Timestamp {
     fn from(ts: TimestampMs) -> Self {
-        ts.datetime
+        ts.timestamp
     }
 }
 
@@ -193,22 +188,20 @@ impl<'de> Deserialize<'de> for TimestampMs {
         let timestamp = i64::deserialize(deserializer)?;
 
         // Determine if this is milliseconds or seconds based on magnitude
-        let (datetime, is_millis) = if timestamp > 253_402_300_799 {
+        let (ts, is_millis) = if timestamp > 253_402_300_799 {
             // This is milliseconds (year 9999 in seconds is 253402300799)
-            let microseconds = timestamp * 1_000;
-            let dt = chrono::DateTime::from_timestamp_micros(microseconds)
-                .ok_or_else(|| D::Error::custom("got invalid timestamp, timestamp out of range"))?;
-            (dt, true)
+            let ts = jiff::Timestamp::from_millisecond(timestamp)
+                .map_err(|e| D::Error::custom(format!("got invalid timestamp: {e}")))?;
+            (ts, true)
         } else {
             // This is seconds
-            let microseconds = timestamp * 1_000_000;
-            let dt = chrono::DateTime::from_timestamp_micros(microseconds)
-                .ok_or_else(|| D::Error::custom("got invalid timestamp, timestamp out of range"))?;
-            (dt, false)
+            let ts = jiff::Timestamp::from_second(timestamp)
+                .map_err(|e| D::Error::custom(format!("got invalid timestamp: {e}")))?;
+            (ts, false)
         };
 
         Ok(Self {
-            datetime,
+            timestamp: ts,
             is_millis,
         })
     }
@@ -221,9 +214,9 @@ impl Serialize for TimestampMs {
     {
         // Preserve the original format
         let timestamp = if self.is_millis {
-            self.datetime.timestamp_millis()
+            self.timestamp.as_millisecond()
         } else {
-            self.datetime.timestamp()
+            self.timestamp.as_second()
         };
 
         timestamp.serialize(serializer)
@@ -364,30 +357,30 @@ mod tests {
     }
 
     #[test]
-    fn test_timestamp_ms_from_datetime() {
-        let datetime = chrono::DateTime::from_timestamp(1640000000, 0).unwrap();
+    fn test_timestamp_ms_from_timestamp() {
+        let timestamp = jiff::Timestamp::from_second(1640000000).unwrap();
 
-        // Test creating from datetime with milliseconds
-        let ts_millis = TimestampMs::from_datetime_millis(datetime);
+        // Test creating from timestamp with milliseconds
+        let ts_millis = TimestampMs::from_timestamp_millis(timestamp);
         assert!(ts_millis.is_millis);
-        assert_eq!(ts_millis.datetime(), &datetime);
+        assert_eq!(ts_millis.jiff_timestamp(), timestamp);
 
-        // Test creating from datetime with seconds
-        let ts_seconds = TimestampMs::from_datetime_seconds(datetime);
+        // Test creating from timestamp with seconds
+        let ts_seconds = TimestampMs::from_timestamp_seconds(timestamp);
         assert!(!ts_seconds.is_millis);
-        assert_eq!(ts_seconds.datetime(), &datetime);
+        assert_eq!(ts_seconds.jiff_timestamp(), timestamp);
     }
 
     #[test]
     fn test_timestamp_ms_conversion() {
-        let datetime = chrono::DateTime::from_timestamp(1640000000, 0).unwrap();
+        let timestamp = jiff::Timestamp::from_second(1640000000).unwrap();
 
         // Test From trait
-        let ts: TimestampMs = datetime.into();
+        let ts: TimestampMs = timestamp.into();
         assert!(ts.is_millis); // Default is milliseconds
 
         // Test Into trait
-        let converted: chrono::DateTime<chrono::Utc> = ts.into();
-        assert_eq!(converted, datetime);
+        let converted: jiff::Timestamp = ts.into();
+        assert_eq!(converted, timestamp);
     }
 }

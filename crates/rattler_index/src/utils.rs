@@ -1,3 +1,4 @@
+use chrono::{TimeZone, Utc};
 use opendal::Operator;
 
 use crate::RepodataFileMetadata;
@@ -37,7 +38,11 @@ pub async fn read_with_metadata_check(
         }
         // Fall back to last_modified timestamp
         else if let Some(last_modified) = metadata.last_modified {
-            reader = reader.if_unmodified_since(last_modified);
+            // Convert jiff::Timestamp to chrono::DateTime<Utc> for opendal
+            let chrono_dt = Utc.timestamp_millis_opt(last_modified.as_millisecond()).single();
+            if let Some(dt) = chrono_dt {
+                reader = reader.if_unmodified_since(dt);
+            }
         }
         // else: no metadata available, proceed without conditions
     }

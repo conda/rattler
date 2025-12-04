@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, ParseMatchSpecOptions, RepoDataRecord,
 };
@@ -25,7 +25,7 @@ pub struct SolverCase<'a> {
     locked_packages: Vec<RepoDataRecord>,
     pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<Timestamp>,
     min_age: Option<MinimumAgeConfig>,
     strategy: SolveStrategy,
     expect_present: Vec<PkgMatcher>,

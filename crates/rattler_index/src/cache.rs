@@ -10,7 +10,7 @@
 
 use std::{sync::Arc, time::SystemTime};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use opendal::Operator;
 use rattler_conda_types::PackageRecord;
 use rattler_networking::retry_policies::default_retry_policy;
@@ -27,7 +27,7 @@ struct CachedPackage {
     /// The `ETag` when this record was computed (if available)
     etag: Option<String>,
     /// The last modified time when this record was computed (if available)
-    last_modified: Option<DateTime<Utc>>,
+    last_modified: Option<Timestamp>,
 }
 
 /// Result of a cache lookup operation from [`PackageRecordCache::get_or_stat`].
@@ -42,7 +42,7 @@ pub enum CacheResult {
         /// Current `ETag` of the file (if available)
         etag: Option<String>,
         /// Current last modified time of the file (if available)
-        last_modified: Option<DateTime<Utc>>,
+        last_modified: Option<Timestamp>,
     },
 }
 
@@ -86,7 +86,9 @@ impl PackageRecordCache {
         };
 
         let current_etag = metadata.etag().map(str::to_owned);
-        let current_last_modified = metadata.last_modified();
+        let current_last_modified = metadata
+            .last_modified()
+            .and_then(|dt| Timestamp::from_millisecond(dt.timestamp_millis()).ok());
 
         // Check if we have a cached entry
         let cached = {
@@ -155,7 +157,7 @@ impl PackageRecordCache {
         path: &str,
         record: PackageRecord,
         etag: Option<String>,
-        last_modified: Option<DateTime<Utc>>,
+        last_modified: Option<Timestamp>,
     ) {
         let cached = CachedPackage {
             record,
@@ -227,7 +229,9 @@ pub async fn read_package_with_retry(
                         let fresh_metadata = op.stat(path).await?;
                         metadata = RepodataFileMetadata {
                             etag: fresh_metadata.etag().map(str::to_owned),
-                            last_modified: fresh_metadata.last_modified(),
+                            last_modified: fresh_metadata
+                                .last_modified()
+                                .and_then(|dt| Timestamp::from_millisecond(dt.timestamp_millis()).ok()),
                             file_existed: true,
                             precondition_checks: crate::PreconditionChecks::Enabled,
                         };

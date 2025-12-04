@@ -20,7 +20,7 @@ async-trait = { workspace = true, optional = true }
 blake2 = { workspace = true }
 bytes = { workspace = true }
 cache_control = { workspace = true }
-chrono = { workspace = true, features = ["std", "serde", "alloc", "clock"] }
+jiff = { workspace = true }
 dashmap = { workspace = true }
 dirs = { workspace = true }
 file_url = { workspace = true }

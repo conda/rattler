@@ -12,7 +12,7 @@ pub mod resolvo;
 use std::collections::HashSet;
 use std::fmt;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, SolverResult,
 };
@@ -118,7 +118,7 @@ pub struct MinimumAgeConfig {
     /// Packages published after `now - min_age` will be excluded.
     ///
     /// Defaults to the current time when [`MinimumAgeConfig::new`] is called.
-    pub now: DateTime<Utc>,
+    pub now: Timestamp,
 
     /// Packages that are exempt from the minimum release age requirement.
     ///
@@ -137,7 +137,7 @@ impl Default for MinimumAgeConfig {
     fn default() -> Self {
         Self {
             min_age: std::time::Duration::default(),
-            now: Utc::now(),
+            now: Timestamp::now(),
             exempt_packages: HashSet::new(),
             include_unknown_timestamp: false,
         }
@@ -150,14 +150,14 @@ impl MinimumAgeConfig {
     pub fn new(min_age: std::time::Duration) -> Self {
         Self {
             min_age,
-            now: Utc::now(),
+            now: Timestamp::now(),
             exempt_packages: HashSet::new(),
             include_unknown_timestamp: false,
         }
     }
 
     /// Sets the reference time to use when calculating the cutoff date.
-    pub fn with_now(mut self, now: DateTime<Utc>) -> Self {
+    pub fn with_now(mut self, now: Timestamp) -> Self {
         self.now = now;
         self
     }
@@ -191,10 +191,10 @@ impl MinimumAgeConfig {
 
     /// Computes the cutoff time. Packages published after this time will be
     /// excluded (unless exempt).
-    pub fn cutoff(&self) -> DateTime<Utc> {
-        let duration = chrono::Duration::from_std(self.min_age)
+    pub fn cutoff(&self) -> Timestamp {
+        let span = jiff::Span::try_from(self.min_age)
             .expect("min_release_age duration is too large");
-        self.now - duration
+        self.now.checked_sub(span).expect("cutoff time overflow")
     }
 }
 
@@ -263,7 +263,7 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// Exclude any package that has a timestamp newer than the specified
     /// timestamp.
-    pub exclude_newer: Option<DateTime<Utc>>,
+    pub exclude_newer: Option<Timestamp>,
 
     /// Only consider packages that have been published for at least the
     /// specified duration.
