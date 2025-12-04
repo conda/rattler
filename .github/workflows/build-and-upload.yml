@@ -73,7 +73,7 @@ jobs:
       - name: Build package with rattler-build
         uses: prefix-dev/rattler-build-action@v0.2.34
         with:
-          recipe-path: ${{ inputs.recipe_path }}
+          recipe-path: ${{ inputs.recipe_path || '.github/test-recipe/recipe.yaml' }}
           upload-artifact: false
           build-args: --output-dir ./output
 
@@ -90,5 +90,5 @@ jobs:
           cargo run --bin rattler --features sigstore -- upload prefix \
             --url https://beta.prefix.dev \
             --generate-attestation \
-            -c ${{ inputs.channel }} \
+            -c ${{ inputs.channel || 'wolf-channel' }} \
             $PACKAGE_PATH
