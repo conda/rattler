@@ -71,7 +71,7 @@ jobs:
           echo "Generated build string: $BUILD_STRING"
 
       - name: Build package with rattler-build
-        uses: prefix-dev/rattler-build-action@v0.2.34
+        uses: prefix-dev/rattler-build-action@5181e1960c2bbd84537e94b18586475dc1f63309 # v0.2.34
         with:
           recipe-path: ${{ inputs.recipe_path || '.github/test-recipe/recipe.yaml' }}
           upload-artifact: false
