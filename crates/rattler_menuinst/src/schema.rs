@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::render::{BaseMenuItemPlaceholders, PlaceholderString};
@@ -496,7 +497,7 @@ pub struct MacOS {
 
     /// Set of extra properties for the Info.plist file.
     /// These properties are not validated by `menuinst.`
-    pub info_plist_extra: Option<HashMap<String, serde_json::Value>>,
+    pub info_plist_extra: Option<IndexMap<String, serde_json::Value>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -492,8 +492,8 @@ MenuInstSchema {
                             event_handler: None,
                             info_plist_extra: Some(
                                 {
-                                    "NSHighResolutionCapable": Bool(true),
                                     "NSRequiresAquaSystemAppearance": String("NO"),
+                                    "NSHighResolutionCapable": Bool(true),
                                 },
                             ),
                         },
