@@ -41,6 +41,10 @@ pub enum MenuInstError {
     PlistError(#[from] plist::Error),
 
     #[cfg(target_os = "macos")]
+    #[error("duplicate Info.plist property ({0}) found in `info_plist_extra`")]
+    PlistDuplicateError(String),
+
+    #[cfg(target_os = "macos")]
     #[error("failed to sign plist: {0}")]
     SigningFailed(String),
 

@@ -99,6 +99,7 @@ MenuInstSchema {
                             entitlements: None,
                             link_in_bundle: None,
                             event_handler: None,
+                            info_plist_extra: None,
                         },
                     },
                 ),

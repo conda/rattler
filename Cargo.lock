@@ -4817,6 +4817,7 @@ dependencies = [
  "configparser",
  "dirs",
  "fs-err",
+ "indexmap 2.12.1",
  "insta",
  "known-folders",
  "once_cell",
