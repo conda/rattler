@@ -277,7 +277,7 @@ pub struct PrefixOpts {
     pub generate_attestation: bool,
 
     /// Also store the generated attestation to GitHub's attestation API.
-    /// Requires GITHUB_TOKEN environment variable and only works in GitHub Actions.
+    /// Requires `GITHUB_TOKEN` environment variable and only works in GitHub Actions.
     /// The attestation will be associated with the current repository.
     #[arg(long, requires = "generate_attestation")]
     pub store_github_attestation: bool,
