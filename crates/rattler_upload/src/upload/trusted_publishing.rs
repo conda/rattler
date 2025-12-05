@@ -193,30 +193,6 @@ pub async fn get_token(
     Ok(publish_token)
 }
 
-/// Get raw OIDC token for attestation generation.
-/// Returns the OIDC token from the current CI provider.
-pub async fn get_raw_oidc_token(
-    client: &ClientWithMiddleware,
-) -> Result<String, TrustedPublishingError> {
-    match detect_ci_provider() {
-        Some(CiProvider::GitHubActions) => {
-            let oidc_token_request_token = env::var(consts::ACTIONS_ID_TOKEN_REQUEST_TOKEN)
-                .map_err(|err| {
-                    TrustedPublishingError::from_var_err(
-                        consts::ACTIONS_ID_TOKEN_REQUEST_TOKEN,
-                        err,
-                    )
-                })?;
-            get_github_oidc_token(&oidc_token_request_token, client).await
-        }
-        Some(CiProvider::GitLabCI) => get_gitlab_oidc_token(),
-        Some(CiProvider::GoogleCloud) => get_google_cloud_oidc_token(client).await,
-        None => Err(TrustedPublishingError::MissingEnvVar(
-            "GITHUB_ACTIONS, GITLAB_CI, or CLOUD_BUILD_ID/K_SERVICE",
-        )),
-    }
-}
-
 /// Get the OIDC token from GitLab CI.
 /// GitLab CI provides the token via the `PREFIX_ID_TOKEN` environment variable
 /// when configured with `id_tokens` in the `.gitlab-ci.yml` file.

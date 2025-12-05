@@ -276,6 +276,12 @@ pub struct PrefixOpts {
     #[arg(long, conflicts_with = "attestation")]
     pub generate_attestation: bool,
 
+    /// Also store the generated attestation to GitHub's attestation API.
+    /// Requires `GITHUB_TOKEN` environment variable and only works in GitHub Actions.
+    /// The attestation will be associated with the current repository.
+    #[arg(long, requires = "generate_attestation")]
+    pub store_github_attestation: bool,
+
     /// Skip upload if package already exists.
     #[arg(short, long)]
     pub skip_existing: bool,
@@ -294,6 +300,7 @@ pub struct PrefixData {
     pub attestation: AttestationSource,
     pub skip_existing: SkipExisting,
     pub force: ForceOverwrite,
+    pub store_github_attestation: bool,
 }
 
 impl From<PrefixOpts> for PrefixData {
@@ -310,6 +317,7 @@ impl From<PrefixOpts> for PrefixData {
             attestation,
             value.skip_existing.into(),
             value.force.into(),
+            value.store_github_attestation,
         )
     }
 }
@@ -323,6 +331,7 @@ impl PrefixData {
         attestation: AttestationSource,
         skip_existing: SkipExisting,
         force: ForceOverwrite,
+        store_github_attestation: bool,
     ) -> Self {
         Self {
             url: url.into(),
@@ -331,6 +340,7 @@ impl PrefixData {
             attestation,
             skip_existing,
             force,
+            store_github_attestation,
         }
     }
 }
