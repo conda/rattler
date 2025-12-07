@@ -1908,7 +1908,7 @@ mod tests {
     }
 
     /// Test case for disconnected cycle bug
-    /// See: https://github.com/prefix-dev/rattler-build/issues/1967
+    /// See: <https://github.com/prefix-dev/rattler-build/issues/1967>
     ///
     /// The bug occurs when:
     /// 1. There's a root package that doesn't connect to a cycle
