@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.14](https://github.com/conda/rattler/compare/rattler_shell-v0.25.13...rattler_shell-v0.25.14) - 2025-12-08
+
+### Other
+
+- bump crates ([#1902](https://github.com/conda/rattler/pull/1902))
+
 ## [0.25.13](https://github.com/conda/rattler/compare/rattler_shell-v0.25.12...rattler_shell-v0.25.13) - 2025-11-27
 
 ### Other

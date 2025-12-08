@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.7](https://github.com/conda/rattler/compare/rattler_index-v0.27.6...rattler_index-v0.27.7) - 2025-12-08
+
+### Added
+
+- add ensure_channel_initialized for fs and s3 channels ([#1906](https://github.com/conda/rattler/pull/1906))
+
 ## [0.27.6](https://github.com/conda/rattler/compare/rattler_index-v0.27.5...rattler_index-v0.27.6) - 2025-11-27
 
 ### Other

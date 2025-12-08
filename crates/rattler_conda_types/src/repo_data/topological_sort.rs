@@ -167,42 +167,63 @@ fn get_topological_order<T: AsRef<PackageRecord>>(
     let mut order = Vec::new();
     let mut visited_packages: ahash::HashSet<String> = ahash::HashSet::default();
     let mut stack: Vec<_> = roots.into_iter().map(Action::ResolveAndInstall).collect();
-    while let Some(action) = stack.pop() {
-        match action {
-            Action::Install(package_name) => {
-                order.push(package_name);
-            }
-            Action::ResolveAndInstall(package_name) => {
-                let already_visited = !visited_packages.insert(package_name.clone());
-                if already_visited {
-                    continue;
-                }
 
-                let mut deps = match &packages.get(package_name.as_str()) {
-                    Some(p) => p
-                        .as_ref()
-                        .depends
-                        .iter()
-                        .map(|d| package_name_from_match_spec(d).to_string())
-                        .collect::<Vec<_>>(),
-                    None => {
-                        // This is a virtual package, so no real package was found for it
+    loop {
+        while let Some(action) = stack.pop() {
+            match action {
+                Action::Install(package_name) => {
+                    order.push(package_name);
+                }
+                Action::ResolveAndInstall(package_name) => {
+                    let already_visited = !visited_packages.insert(package_name.clone());
+                    if already_visited {
                         continue;
                     }
-                };
 
-                // Remove the edges that form cycles
-                deps.retain(|dep| !cycle_breaks.contains(&(package_name.clone(), dep.clone())));
+                    let mut deps = match &packages.get(package_name.as_str()) {
+                        Some(p) => p
+                            .as_ref()
+                            .depends
+                            .iter()
+                            .map(|d| package_name_from_match_spec(d).to_string())
+                            .collect::<Vec<_>>(),
+                        None => {
+                            // This is a virtual package, so no real package was found for it
+                            continue;
+                        }
+                    };
 
-                // Sorting makes this step deterministic (i.e. the same output is returned, regardless of the
-                // original order of the input)
-                deps.sort();
+                    // Remove the edges that form cycles
+                    deps.retain(|dep| !cycle_breaks.contains(&(package_name.clone(), dep.clone())));
 
-                // Install dependencies, then ourselves (the order is reversed because of the stack)
-                stack.push(Action::Install(package_name));
-                stack.extend(deps.into_iter().map(Action::ResolveAndInstall));
+                    // Sorting makes this step deterministic (i.e. the same output is returned, regardless of the
+                    // original order of the input)
+                    deps.sort();
+
+                    // Install dependencies, then ourselves (the order is reversed because of the stack)
+                    stack.push(Action::Install(package_name));
+                    stack.extend(deps.into_iter().map(Action::ResolveAndInstall));
+                }
             }
         }
+
+        // Check for any unvisited packages (disconnected components).
+        // This can happen when a strongly connected component (cycle) has no incoming edges
+        // from outside the component. After breaking cycle edges, no node in the component
+        // becomes a root, so we need to explicitly add unvisited packages as new roots.
+        let mut unvisited: Vec<_> = packages
+            .keys()
+            .filter(|k| !visited_packages.contains(*k))
+            .cloned()
+            .collect();
+
+        if unvisited.is_empty() {
+            break;
+        }
+
+        // Sort for determinism and add as new roots
+        unvisited.sort();
+        stack.extend(unvisited.into_iter().map(Action::ResolveAndInstall));
     }
 
     // Apply the order we just obtained
@@ -1884,5 +1905,116 @@ mod tests {
         let pip: Vec<RepoDataRecord> = serde_json::from_str(pip).unwrap();
         python.extend(pip);
         python
+    }
+
+    /// Test case for disconnected cycle bug
+    /// See: <https://github.com/prefix-dev/rattler-build/issues/1967>
+    ///
+    /// The bug occurs when:
+    /// 1. There's a root package that doesn't connect to a cycle
+    /// 2. The cycle is a strongly connected component with no external incoming edges
+    /// 3. After breaking one cycle edge, no node in the cycle becomes a root
+    ///    because they all still have incoming edges from within the cycle
+    fn get_packages_with_disconnected_cycle() -> Vec<RepoDataRecord> {
+        let repodata_json = r#"[
+            {
+              "name": "root-pkg",
+              "version": "1.0",
+              "build": "0",
+              "build_number": 0,
+              "subdir": "linux-64",
+              "depends": ["isolated-dep"],
+              "md5": "d7c89558ba9fa0495403155b64376d81",
+              "sha256": "fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726",
+              "size": 100,
+              "fn": "root-pkg-1.0-0.tar.bz2",
+              "url": "https://example.com/root-pkg-1.0-0.tar.bz2",
+              "channel": "https://example.com/"
+            },
+            {
+              "name": "isolated-dep",
+              "version": "1.0",
+              "build": "0",
+              "build_number": 0,
+              "subdir": "linux-64",
+              "depends": [],
+              "md5": "d7c89558ba9fa0495403155b64376d81",
+              "sha256": "fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726",
+              "size": 100,
+              "fn": "isolated-dep-1.0-0.tar.bz2",
+              "url": "https://example.com/isolated-dep-1.0-0.tar.bz2",
+              "channel": "https://example.com/"
+            },
+            {
+              "name": "cycle-a",
+              "version": "1.0",
+              "build": "0",
+              "build_number": 0,
+              "subdir": "linux-64",
+              "depends": ["cycle-b"],
+              "md5": "d7c89558ba9fa0495403155b64376d81",
+              "sha256": "fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726",
+              "size": 100,
+              "fn": "cycle-a-1.0-0.tar.bz2",
+              "url": "https://example.com/cycle-a-1.0-0.tar.bz2",
+              "channel": "https://example.com/"
+            },
+            {
+              "name": "cycle-b",
+              "version": "1.0",
+              "build": "0",
+              "build_number": 0,
+              "subdir": "linux-64",
+              "depends": ["cycle-c"],
+              "md5": "d7c89558ba9fa0495403155b64376d81",
+              "sha256": "fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726",
+              "size": 100,
+              "fn": "cycle-b-1.0-0.tar.bz2",
+              "url": "https://example.com/cycle-b-1.0-0.tar.bz2",
+              "channel": "https://example.com/"
+            },
+            {
+              "name": "cycle-c",
+              "version": "1.0",
+              "build": "0",
+              "build_number": 0,
+              "subdir": "linux-64",
+              "depends": ["cycle-a"],
+              "md5": "d7c89558ba9fa0495403155b64376d81",
+              "sha256": "fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726",
+              "size": 100,
+              "fn": "cycle-c-1.0-0.tar.bz2",
+              "url": "https://example.com/cycle-c-1.0-0.tar.bz2",
+              "channel": "https://example.com/"
+            }
+          ]"#;
+
+        serde_json::from_str(repodata_json).unwrap()
+    }
+
+    #[test]
+    fn test_topological_sort_disconnected_cycle() {
+        // This test reproduces the bug where a disconnected cycle causes packages to be lost
+        // during topological sort.
+        //
+        // Structure:
+        // - root-pkg -> isolated-dep (connected component 1)
+        // - cycle-a -> cycle-b -> cycle-c -> cycle-a (connected component 2, a cycle)
+        //
+        // The cycle component has no incoming edges from outside, so after breaking
+        // one cycle edge, no node becomes a root and the entire cycle is lost.
+        let packages = get_packages_with_disconnected_cycle();
+        let sorted_packages = sort_topologically(packages.clone());
+
+        // The bug causes only 2 packages to be returned instead of 5
+        sanity_check_topological_sort(&sorted_packages, &packages);
+
+        // All 5 packages should be present
+        assert_eq!(
+            sorted_packages.len(),
+            5,
+            "Expected 5 packages, got {}. The disconnected cycle was lost!",
+            sorted_packages.len()
+        );
     }
 }
