@@ -39,6 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.2...rattler_conda_types-v0.42.3) - 2025-12-08
+
+### Fixed
+
+- topological sort looses nodes when they are in independent clusters ([#1913](https://github.com/conda/rattler/pull/1913))
+
+### Other
+
+- bump crates ([#1902](https://github.com/conda/rattler/pull/1902))
+
 ## [0.42.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.1...rattler_conda_types-v0.42.2) - 2025-11-27
 
 ### Other
