@@ -137,5 +137,9 @@ expression: "fs::read_to_string(dirs.location.join(\"Contents/Info.plist\")).unw
 			<string>Default</string>
 		</dict>
 	</array>
+	<key>NSRequiresAquaSystemAppearance</key>
+	<string>NO</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
 </dict>
 </plist>
