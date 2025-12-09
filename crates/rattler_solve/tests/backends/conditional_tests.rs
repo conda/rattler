@@ -209,7 +209,7 @@ pub(super) fn solve_conditional_root_requirement_with_logic<T: SolverImpl + Defa
     .run::<T>();
 }
 
-/// Test for https://github.com/conda/rattler/issues/1917
+/// Test for <https://github.com/conda/rattler/issues/1917>
 /// Solver fails with platform-specific conditional dependencies.
 pub(super) fn rattler_issue_1917_platform_conditionals<T: SolverImpl + Default>() {
     use rattler_conda_types::Version;
@@ -290,7 +290,7 @@ pub(super) fn rattler_issue_1917_platform_conditionals<T: SolverImpl + Default>(
     ]);
 }
 
-/// Test for https://github.com/conda/rattler/issues/1917
+/// Test for <https://github.com/conda/rattler/issues/1917>
 pub(super) fn rattler_issue_1917_version_conditionals<T: SolverImpl + Default>() {
     use rattler_conda_types::Version;
 
