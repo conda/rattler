@@ -208,3 +208,159 @@ pub(super) fn solve_conditional_root_requirement_with_logic<T: SolverImpl + Defa
     .expect_present([("python", "3.9.0")])
     .run::<T>();
 }
+
+/// Test for <https://github.com/conda/rattler/issues/1917>
+/// Solver fails with platform-specific conditional dependencies.
+pub(super) fn rattler_issue_1917_platform_conditionals<T: SolverImpl + Default>() {
+    use rattler_conda_types::Version;
+
+    // Platform-specific conditional dependencies
+    // Package declares platform-specific deps that should resolve when virtual package is present
+    let platform_pkg = PackageBuilder::new("package")
+        .version("1.0.0")
+        .depends([
+            "osx-dependency; if __osx",
+            "linux-dependency; if __linux",
+            "win-dependency; if __win",
+        ])
+        .build();
+
+    let osx_dep = PackageBuilder::new("osx-dependency")
+        .version("1.0.0")
+        .build();
+    let linux_dep = PackageBuilder::new("linux-dependency")
+        .version("1.0.0")
+        .build();
+    let win_dep = PackageBuilder::new("win-dependency")
+        .version("1.0.0")
+        .build();
+
+    let osx_virtual = GenericVirtualPackage {
+        name: "__osx".parse().unwrap(),
+        version: Version::from_str("15.6.1").unwrap(),
+        build_string: "0".to_string(),
+    };
+
+    let linux_virtual = GenericVirtualPackage {
+        name: "__linux".parse().unwrap(),
+        version: Version::from_str("0").unwrap(),
+        build_string: "0".to_string(),
+    };
+
+    let win_virtual = GenericVirtualPackage {
+        name: "__win".parse().unwrap(),
+        version: Version::from_str("0").unwrap(),
+        build_string: "0".to_string(),
+    };
+
+    run_solver_cases::<T>(&[
+        SolverCase::new("platform conditional: osx dependency resolved when __osx present")
+            .repository(vec![
+                platform_pkg.clone(),
+                osx_dep.clone(),
+                linux_dep.clone(),
+                win_dep.clone(),
+            ])
+            .specs(["package"])
+            .virtual_packages(vec![osx_virtual.clone()])
+            .expect_present([&platform_pkg, &osx_dep])
+            .expect_absent([&linux_dep, &win_dep]),
+        SolverCase::new("platform conditional: linux dependency resolved when __linux present")
+            .repository(vec![
+                platform_pkg.clone(),
+                osx_dep.clone(),
+                linux_dep.clone(),
+                win_dep.clone(),
+            ])
+            .specs(["package"])
+            .virtual_packages(vec![linux_virtual])
+            .expect_present([&platform_pkg, &linux_dep])
+            .expect_absent([&osx_dep, &win_dep]),
+        SolverCase::new("platform conditional: win dependency resolved when __win present")
+            .repository(vec![
+                platform_pkg.clone(),
+                osx_dep.clone(),
+                linux_dep.clone(),
+                win_dep.clone(),
+            ])
+            .specs(["package"])
+            .virtual_packages(vec![win_virtual])
+            .expect_present([&platform_pkg, &win_dep])
+            .expect_absent([&osx_dep, &linux_dep]),
+    ]);
+}
+
+/// Test for <https://github.com/conda/rattler/issues/1917>
+pub(super) fn rattler_issue_1917_version_conditionals<T: SolverImpl + Default>() {
+    use rattler_conda_types::Version;
+
+    // conditional-dependency declares: "package; if side-dependency=0.2"
+    // package itself has platform-conditional dependencies
+    let conditional_dep_pkg = PackageBuilder::new("conditional-dependency")
+        .version("1.0.0")
+        .depends(["package; if side-dependency=0.2"])
+        .build();
+
+    // package has its own conditional dependencies (chained conditionals)
+    let package = PackageBuilder::new("package")
+        .version("1.0.0")
+        .depends([
+            "osx-dependency; if __osx",
+            "linux-dependency; if __linux",
+            "win-dependency; if __win",
+        ])
+        .build();
+
+    let osx_dep = PackageBuilder::new("osx-dependency")
+        .version("1.0.0")
+        .build();
+    let linux_dep = PackageBuilder::new("linux-dependency")
+        .version("1.0.0")
+        .build();
+    let win_dep = PackageBuilder::new("win-dependency")
+        .version("1.0.0")
+        .build();
+    let side_dep_v01 = PackageBuilder::new("side-dependency")
+        .version("0.1.0")
+        .build();
+    let side_dep_v02 = PackageBuilder::new("side-dependency")
+        .version("0.2.0")
+        .build();
+
+    let osx_virtual = GenericVirtualPackage {
+        name: "__osx".parse().unwrap(),
+        version: Version::from_str("15.6.1").unwrap(),
+        build_string: "0".to_string(),
+    };
+
+    run_solver_cases::<T>(&[
+        SolverCase::new("chained conditionals: package with nested conditional deps included when side-dependency=0.2")
+            .repository(vec![
+                conditional_dep_pkg.clone(),
+                package.clone(),
+                osx_dep.clone(),
+                linux_dep.clone(),
+                win_dep.clone(),
+                side_dep_v01.clone(),
+                side_dep_v02.clone(),
+            ])
+            .specs(["conditional-dependency", "side-dependency=0.2"])
+            .virtual_packages(vec![osx_virtual.clone()])
+            .expect_present([&conditional_dep_pkg, &package, &osx_dep, &side_dep_v02])
+            .expect_absent([&side_dep_v01, &linux_dep, &win_dep]),
+        SolverCase::new("chained conditionals: package excluded when side-dependency=0.1")
+            .repository(vec![
+                conditional_dep_pkg.clone(),
+                package.clone(),
+                osx_dep.clone(),
+                linux_dep.clone(),
+                win_dep.clone(),
+                side_dep_v01.clone(),
+                side_dep_v02.clone(),
+            ])
+            .specs(["conditional-dependency", "side-dependency=0.1"])
+            .virtual_packages(vec![osx_virtual])
+            .expect_present([&conditional_dep_pkg, &side_dep_v01])
+            .expect_absent([&package, &osx_dep, &linux_dep, &win_dep, &side_dep_v02]),
+    ]);
+}

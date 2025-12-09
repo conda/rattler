@@ -1286,11 +1286,23 @@ pub async fn ensure_channel_initialized(op: &Operator) -> anyhow::Result<()> {
     };
 
     let repodata_bytes = serde_json::to_vec(&empty_repodata)?;
-    op.write_with(&noarch_repodata_path, repodata_bytes)
+    match op
+        .write_with(&noarch_repodata_path, repodata_bytes)
+        .if_not_exists(true)
         .cache_control(CACHE_CONTROL_REPODATA)
-        .await?;
-
-    Ok(())
+        .await
+    {
+        Ok(_) => {
+            tracing::info!("Successfully initialized channel");
+            Ok(())
+        }
+        Err(e) if e.kind() == opendal::ErrorKind::ConditionNotMatch => {
+            // Another process created the file - that's fine, channel is initialized
+            tracing::debug!("Channel already initialized by another process");
+            Ok(())
+        }
+        Err(e) => Err(e.into()),
+    }
 }
 
 /// Ensures that a filesystem channel has a valid `noarch/repodata.json` file.
