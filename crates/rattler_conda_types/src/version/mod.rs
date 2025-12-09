@@ -1327,7 +1327,7 @@ mod test {
         assert!(!Version::from_str("1.0.0_other")
             .unwrap()
             .starts_with(&version));
-        assert!(!Version::from_str("1.0.0_versio")
+        assert!(!Version::from_str("1.0.0_ver")
             .unwrap()
             .starts_with(&version));
 

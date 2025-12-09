@@ -3,8 +3,6 @@ environments:
   default:
     channels:
     - url: https://prefix.dev/conda-forge/
-    options:
-      pypi-prerelease-mode: if-necessary-or-explicit
     packages:
       linux-64:
       - conda: https://prefix.dev/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2
@@ -233,8 +231,6 @@ environments:
   lint:
     channels:
     - url: https://prefix.dev/conda-forge/
-    options:
-      pypi-prerelease-mode: if-necessary-or-explicit
     packages:
       linux-64:
       - conda: https://prefix.dev/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2
@@ -271,7 +267,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/linux-64/keyutils-1.6.3-hb9d3cd8_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/krb5-1.21.3-h659f571_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/ld_impl_linux-64-2.44-h1aa0949_5.conda
-      - conda: https://prefix.dev/conda-forge/linux-64/lefthook-1.13.6-hfc2019e_0.conda
+      - conda: https://prefix.dev/conda-forge/linux-64/lefthook-2.0.9-hfc2019e_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libclang-cpp18.1-18.1.8-default_h99862b1_15.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libcurl-8.17.0-h4e3cde8_0.conda
       - conda: https://prefix.dev/conda-forge/linux-64/libedit-3.1.20250104-pl5321h7949ede_0.conda
@@ -352,7 +348,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/osx-64/krb5-1.21.3-h37d8d59_0.conda
       - conda: https://prefix.dev/conda-forge/osx-64/ld64-955.13-hc3792c1_9.conda
       - conda: https://prefix.dev/conda-forge/osx-64/ld64_osx-64-955.13-llvm19_1_h466f870_9.conda
-      - conda: https://prefix.dev/conda-forge/osx-64/lefthook-1.13.6-hccc6df8_0.conda
+      - conda: https://prefix.dev/conda-forge/osx-64/lefthook-2.0.9-hccc6df8_0.conda
       - conda: https://prefix.dev/conda-forge/osx-64/libclang-cpp19.1-19.1.7-default_hc369343_5.conda
       - conda: https://prefix.dev/conda-forge/osx-64/libcurl-8.17.0-h7dd4100_0.conda
       - conda: https://prefix.dev/conda-forge/osx-64/libcxx-21.1.5-h3d58e20_0.conda
@@ -426,7 +422,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/osx-arm64/krb5-1.21.3-h237132a_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/ld64-955.13-he86490a_9.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/ld64_osx-arm64-955.13-llvm19_1_h6922315_9.conda
-      - conda: https://prefix.dev/conda-forge/osx-arm64/lefthook-1.13.6-h820172f_0.conda
+      - conda: https://prefix.dev/conda-forge/osx-arm64/lefthook-2.0.9-h820172f_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/libclang-cpp19.1-19.1.7-default_h73dfc95_5.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/libcurl-8.17.0-hdece5d2_0.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/libcxx-21.1.5-hf598326_0.conda
@@ -485,7 +481,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/win-64/cmake-3.26.4-h1537add_0.conda
       - conda: https://prefix.dev/conda-forge/win-64/cxx-compiler-1.11.0-h1c1089f_0.conda
       - conda: https://prefix.dev/conda-forge/win-64/dprint-0.50.0-h63977a8_0.conda
-      - conda: https://prefix.dev/conda-forge/win-64/lefthook-1.13.6-h11686cb_0.conda
+      - conda: https://prefix.dev/conda-forge/win-64/lefthook-2.0.9-h11686cb_0.conda
       - conda: https://prefix.dev/conda-forge/win-64/libexpat-2.7.1-hac47afa_0.conda
       - conda: https://prefix.dev/conda-forge/win-64/libffi-3.5.2-h52bdfb6_0.conda
       - conda: https://prefix.dev/conda-forge/win-64/libgcc-15.2.0-h1383e82_7.conda
@@ -523,8 +519,6 @@ environments:
   minio:
     channels:
     - url: https://prefix.dev/conda-forge/
-    options:
-      pypi-prerelease-mode: if-necessary-or-explicit
     packages:
       linux-64:
       - conda: https://prefix.dev/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2
@@ -584,8 +578,6 @@ environments:
   s3:
     channels:
     - url: https://prefix.dev/conda-forge/
-    options:
-      pypi-prerelease-mode: if-necessary-or-explicit
     packages:
       linux-64:
       - conda: https://prefix.dev/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2
@@ -2697,36 +2689,36 @@ packages:
   license: GPL-3.0-only
   size: 741516
   timestamp: 1762674665675
-- conda: https://prefix.dev/conda-forge/linux-64/lefthook-1.13.6-hfc2019e_0.conda
-  sha256: b67c18eded9d992fb78cdf4411d36913698bc402a90bdff9b6bc2cd8a4060601
-  md5: 01a08decf4c133807e2275018f47c562
+- conda: https://prefix.dev/conda-forge/linux-64/lefthook-2.0.9-hfc2019e_0.conda
+  sha256: 25e0535e5ea149c4ebb1a52109adebcc36abec121cc56eeb4adbceddb2875ad0
+  md5: 0d3f800bc12386b9974bd4f65f266686
   license: MIT
   license_family: MIT
-  size: 5775473
-  timestamp: 1759245483773
-- conda: https://prefix.dev/conda-forge/osx-64/lefthook-1.13.6-hccc6df8_0.conda
-  sha256: ac0ec770fa49e67564317939d8df662508c6fbce43a143ed79d4f33ab6e55119
-  md5: 6cd872bdcc8f922299f8675489d66e23
+  size: 5387216
+  timestamp: 1765182952371
+- conda: https://prefix.dev/conda-forge/osx-64/lefthook-2.0.9-hccc6df8_0.conda
+  sha256: 97b4893e9feb324dbe066b9ad7ad16b57fbcdb149fd1dc5d1b0f34a0a7229268
+  md5: 7b694277a076967b491281d7b5d4e864
   constrains:
   - __osx >=10.12
   license: MIT
   license_family: MIT
-  size: 5807338
-  timestamp: 1759245487400
-- conda: https://prefix.dev/conda-forge/osx-arm64/lefthook-1.13.6-h820172f_0.conda
-  sha256: c1f02804a5e164f08869c31d5dbb644b8e86dae3ec71325ee0bf17cf435e51b1
-  md5: 5441c7445807f095d03b158f0ab2c862
+  size: 5421712
+  timestamp: 1765182959102
+- conda: https://prefix.dev/conda-forge/osx-arm64/lefthook-2.0.9-h820172f_0.conda
+  sha256: 2d6db291dadb7408e4a67b25943613edac1172d06a79700af584b8b61aeb0991
+  md5: 4d7721d20e49e16056b838da03c07598
   license: MIT
   license_family: MIT
-  size: 5198465
-  timestamp: 1759245520746
-- conda: https://prefix.dev/conda-forge/win-64/lefthook-1.13.6-h11686cb_0.conda
-  sha256: 93477c6d6af648948814b031c8d70ecf3ff1abb309a7e6b07019dc6c1824e1a1
-  md5: ee047f9620e135f70c7304ca819081bc
+  size: 4859253
+  timestamp: 1765182967957
+- conda: https://prefix.dev/conda-forge/win-64/lefthook-2.0.9-h11686cb_0.conda
+  sha256: 095aaa84dc856ba0d2972e1a0c6b8fe3fc24a616381ccd7d51f6c61ee5ca4b7a
+  md5: 1ea367fe47f74f87239ee3caedadfa62
   license: MIT
   license_family: MIT
-  size: 5705129
-  timestamp: 1759245527546
+  size: 5342302
+  timestamp: 1765182973318
 - conda: https://prefix.dev/conda-forge/linux-64/libclang-cpp18.1-18.1.8-default_h99862b1_15.conda
   sha256: 7e4153509cb55ced7ba37e80da63f204158e84a901c818cb67095ded541eaa76
   md5: 74f928c382525699ea17c204b76a0862
@@ -4386,14 +4378,11 @@ packages:
   version: 0.1.0
   build: h1ec88cb_0
   subdir: osx-arm64
-  variants:
-    rust_compiler_version: 1.88.0
-    target_platform: osx-arm64
   constrains:
   - __osx >=11.0
   license: BSD-3-Clause
   input:
-    hash: cd0d1c7650220e366b865e17d558363e7e4c0d4c07c5f6678ce9a7c57f754317
+    hash: d20f174d88e2fee5e8df0975d2231d2748e5caeb3170ba3d1b0a9f0fe1557c35
     globs:
     - ../../Cargo.toml
     - ../Cargo.toml
@@ -4403,12 +4392,9 @@ packages:
   version: 0.1.0
   build: h6eef762_0
   subdir: win-64
-  variants:
-    rust_compiler_version: 1.88.0
-    target_platform: win-64
   license: BSD-3-Clause
   input:
-    hash: cd0d1c7650220e366b865e17d558363e7e4c0d4c07c5f6678ce9a7c57f754317
+    hash: d20f174d88e2fee5e8df0975d2231d2748e5caeb3170ba3d1b0a9f0fe1557c35
     globs:
     - ../../Cargo.toml
     - ../Cargo.toml
@@ -4418,14 +4404,11 @@ packages:
   version: 0.1.0
   build: h983c4f9_0
   subdir: osx-64
-  variants:
-    rust_compiler_version: 1.88.0
-    target_platform: osx-64
   constrains:
   - __osx >=10.13
   license: BSD-3-Clause
   input:
-    hash: cd0d1c7650220e366b865e17d558363e7e4c0d4c07c5f6678ce9a7c57f754317
+    hash: d20f174d88e2fee5e8df0975d2231d2748e5caeb3170ba3d1b0a9f0fe1557c35
     globs:
     - ../../Cargo.toml
     - ../Cargo.toml
@@ -4435,14 +4418,11 @@ packages:
   version: 0.1.0
   build: hd342602_0
   subdir: linux-64
-  variants:
-    rust_compiler_version: 1.88.0
-    target_platform: linux-64
   constrains:
   - __glibc >=2.17
   license: BSD-3-Clause
   input:
-    hash: cd0d1c7650220e366b865e17d558363e7e4c0d4c07c5f6678ce9a7c57f754317
+    hash: d20f174d88e2fee5e8df0975d2231d2748e5caeb3170ba3d1b0a9f0fe1557c35
     globs:
     - ../../Cargo.toml
     - ../Cargo.toml
@@ -4452,14 +4432,11 @@ packages:
   version: 0.27.7
   build: h1ec88cb_0
   subdir: osx-arm64
-  variants:
-    rust_compiler_version: 1.88.0
-    target_platform: osx-arm64
   constrains:
   - __osx >=11.0
   license: BSD-3-Clause
   input:
-    hash: e3524c1cee9a6b468f3c6b26f1bac6b464f4b64549a01a6e9a6bb8d175963695
+    hash: 7a1a146d0addf18b01e5b035e6d9836fa5814cd02820116af8ad29cc62bde2a9
     globs:
     - ../../Cargo.toml
     - ../Cargo.toml
@@ -4469,12 +4446,9 @@ packages:
   version: 0.27.7
   build: h6eef762_0
   subdir: win-64
-  variants:
-    rust_compiler_version: 1.88.0
-    target_platform: win-64
   license: BSD-3-Clause
   input:
-    hash: e3524c1cee9a6b468f3c6b26f1bac6b464f4b64549a01a6e9a6bb8d175963695
+    hash: 7a1a146d0addf18b01e5b035e6d9836fa5814cd02820116af8ad29cc62bde2a9
     globs:
     - ../../Cargo.toml
     - ../Cargo.toml
@@ -4484,14 +4458,11 @@ packages:
   version: 0.27.7
   build: h983c4f9_0
   subdir: osx-64
-  variants:
-    rust_compiler_version: 1.88.0
-    target_platform: osx-64
   constrains:
   - __osx >=10.13
   license: BSD-3-Clause
   input:
-    hash: e3524c1cee9a6b468f3c6b26f1bac6b464f4b64549a01a6e9a6bb8d175963695
+    hash: 7a1a146d0addf18b01e5b035e6d9836fa5814cd02820116af8ad29cc62bde2a9
     globs:
     - ../../Cargo.toml
     - ../Cargo.toml
@@ -4501,14 +4472,11 @@ packages:
   version: 0.27.7
   build: hd342602_0
   subdir: linux-64
-  variants:
-    rust_compiler_version: 1.88.0
-    target_platform: linux-64
   constrains:
   - __glibc >=2.17
   license: BSD-3-Clause
   input:
-    hash: e3524c1cee9a6b468f3c6b26f1bac6b464f4b64549a01a6e9a6bb8d175963695
+    hash: 7a1a146d0addf18b01e5b035e6d9836fa5814cd02820116af8ad29cc62bde2a9
     globs:
     - ../../Cargo.toml
     - ../Cargo.toml
