@@ -1302,6 +1302,27 @@ mod test {
             .starts_with(&version));
     }
 
+    /// Test for https://github.com/conda/rattler/issues/1914
+    /// Versions with letter suffixes (like openssl 1.0.1c) should match
+    /// prefix patterns (like 1.0.1*).
+    #[test]
+    fn starts_with_letter_suffix() {
+        // openssl versions like 1.0.1c, 1.0.1g, etc. should start with 1.0.1
+        let prefix = Version::from_str("1.0.1").unwrap();
+        assert!(Version::from_str("1.0.1c").unwrap().starts_with(&prefix));
+        assert!(Version::from_str("1.0.1g").unwrap().starts_with(&prefix));
+        assert!(Version::from_str("1.0.1k").unwrap().starts_with(&prefix));
+
+        // Also test 1.0.2 series
+        let prefix_2 = Version::from_str("1.0.2").unwrap();
+        assert!(Version::from_str("1.0.2a").unwrap().starts_with(&prefix_2));
+        assert!(Version::from_str("1.0.2l").unwrap().starts_with(&prefix_2));
+
+        // Negative cases - these should NOT match
+        assert!(!Version::from_str("1.0.2a").unwrap().starts_with(&prefix));
+        assert!(!Version::from_str("1.0.1c").unwrap().starts_with(&prefix_2));
+    }
+
     fn get_hash(spec: &impl Hash) -> u64 {
         let mut s = DefaultHasher::new();
         spec.hash(&mut s);
