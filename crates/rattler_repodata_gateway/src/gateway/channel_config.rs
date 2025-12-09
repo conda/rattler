@@ -35,7 +35,7 @@ impl Default for SourceConfig {
             jlap_enabled: true,
             zstd_enabled: true,
             bz2_enabled: true,
-            sharded_enabled: false,
+            sharded_enabled: true,
             cache_action: CacheAction::default(),
         }
     }
