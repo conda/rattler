@@ -15,17 +15,22 @@ from rattler.repo_data.record import RepoDataRecord
 
 class PackageFormatSelection(Enum):
     """
-    Enum that describes what to do if both a `.tar.bz2` and a `.conda` package is available.
+    Enum that describes what to do if `.tar.bz2`, `.conda` or `.whl` packages are available.
     """
 
     ONLY_TAR_BZ2 = PyPackageFormatSelection.OnlyTarBz2
     """
-    Only use the `.tar.bz2` packages, ignore all `.conda` packages.
+    Only use the `.tar.bz2` packages, ignore all `.conda` and `.whl` packages.
     """
 
     ONLY_CONDA = PyPackageFormatSelection.OnlyConda
     """
-    Only use the `.conda` packages, ignore all `.tar.bz2` packages.
+    Only use the `.conda` packages, ignore all `.tar.bz2` and `.whl` packages.
+    """
+
+    ONLY_WHL = PyPackageFormatSelection.OnlyWhl
+    """
+    Only use the `.whl` packages, ignore all `.tar.bz2` and `.conda` packages.
     """
 
     PREFER_CONDA = PyPackageFormatSelection.PreferConda

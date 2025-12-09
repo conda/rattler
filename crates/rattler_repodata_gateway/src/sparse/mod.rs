@@ -48,6 +48,9 @@ pub enum PackageFormatSelection {
     /// Only the conda packages are used
     OnlyConda,
 
+    /// Only whl packages are used
+    OnlyWhl,
+
     /// Both .tar.bz2 and .conda packages are used, but if a .conda exists that
     /// represents the same content as a .tar.bz2, the .conda package is
     /// selected and the .tar.bz2 is discarded.
@@ -209,15 +212,19 @@ impl SparseRepoData {
         let repo_data = self.inner.borrow_repo_data();
         let tar_baz2_packages = repo_data.packages.iter().map(select_package_name);
         let conda_packages = repo_data.conda_packages.iter().map(select_package_name);
+        let whl_packages = repo_data.whl_packages.iter().map(select_package_name);
 
         match package_format_selection {
             PackageFormatSelection::Both | PackageFormatSelection::PreferConda => {
-                itertools::Either::Left(tar_baz2_packages.merge(conda_packages).dedup())
+                itertools::Either::Left(
+                    tar_baz2_packages.merge(conda_packages).dedup()
+                )
             }
             PackageFormatSelection::OnlyTarBz2 => {
                 itertools::Either::Right(tar_baz2_packages.dedup())
             }
             PackageFormatSelection::OnlyConda => itertools::Either::Right(conda_packages.dedup()),
+            PackageFormatSelection::OnlyWhl => itertools::Either::Right(whl_packages.dedup()),
         }
     }
 
@@ -246,6 +253,7 @@ impl SparseRepoData {
             }
             PackageFormatSelection::OnlyTarBz2 => self.inner.borrow_repo_data().packages.len(),
             PackageFormatSelection::OnlyConda => self.inner.borrow_repo_data().conda_packages.len(),
+            PackageFormatSelection::OnlyWhl => self.inner.borrow_repo_data().whl_packages.len(),
         }
     }
 
@@ -265,6 +273,7 @@ impl SparseRepoData {
                 package_name.and_then(Option::<PackageName>::from).as_ref(),
                 &repo_data.packages,
                 &repo_data.conda_packages,
+                &repo_data.whl_packages,
                 variant_consolidation,
                 base_url,
                 &self.channel,
@@ -294,6 +303,7 @@ impl SparseRepoData {
             Some(package_name),
             &repo_data.packages,
             &repo_data.conda_packages,
+            &repo_data.whl_packages,
             variant_consolidation,
             base_url,
             &self.channel,
@@ -314,6 +324,7 @@ impl SparseRepoData {
             None,
             &repo_data.packages,
             &repo_data.conda_packages,
+            &repo_data.whl_packages,
             variant_consolidation,
             base_url,
             &self.channel,
@@ -361,6 +372,7 @@ impl SparseRepoData {
                     Some(&next_package),
                     &repo_data_packages.packages,
                     &repo_data_packages.conda_packages,
+                    &repo_data_packages.whl_packages,
                     variant_consolidation,
                     base_url,
                     &repo_data.channel,
@@ -419,6 +431,16 @@ struct LazyRepoData<'i> {
         rename = "packages.conda"
     )]
     conda_packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
+
+    /// The wheel packages contained in the repodata.json file (under a
+    /// different key for to keep wheel and conda packages separate)
+    #[serde(
+        borrow,
+        default,
+        deserialize_with = "deserialize_filename_and_raw_record",
+        rename = "packages.whl"
+    )]
+    whl_packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
 }
 
 /// Returns an iterator over the packages in the slice that match the given
@@ -463,6 +485,7 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
     package_name: Option<&PackageName>,
     tar_bz2_packages: &[(PackageFilename<'i>, &'i RawValue)],
     conda_packages: &[(PackageFilename<'i>, &'i RawValue)],
+    whl_packages: &[(PackageFilename<'i>, &'i RawValue)],
     variant_consolidation: PackageFormatSelection,
     base_url: Option<&str>,
     channel: &Channel,
@@ -526,6 +549,17 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
             let conda_packages = find_package_in_slice(conda_packages, package_name);
             parse_records_raw(
                 conda_packages,
+                base_url,
+                channel,
+                subdir,
+                patch_function,
+                filter_function,
+            )
+        }
+        PackageFormatSelection::OnlyWhl => {
+            let whl_packages= find_package_in_slice(whl_packages, package_name);
+            parse_records_raw(
+                whl_packages,
                 base_url,
                 channel,
                 subdir,
@@ -706,7 +740,7 @@ fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
     Ok(entries)
 }
 
-/// A struct that holds both a filename and the part of the filename thats just
+/// A struct that holds both a filename and the part of the filename that's just
 /// the package name.
 #[derive(Copy, Clone)]
 struct PackageFilename<'i> {
