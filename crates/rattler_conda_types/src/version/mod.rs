@@ -1371,7 +1371,7 @@ mod test {
             .starts_with(&Version::from_str("1.1c0.1").unwrap()));
     }
 
-    /// Test for https://github.com/conda/rattler/issues/1914
+    /// Test for <https://github.com/conda/rattler/issues/1914>
     /// Versions with letter suffixes (like openssl 1.0.1c) should match
     /// prefix patterns (like 1.0.1*).
     #[test]
