@@ -631,6 +631,16 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn test_rattler_issue_1917_platform_conditionals() {
+            crate::conditional_tests::rattler_issue_1917_platform_conditionals::<$T>();
+        }
+
+        #[test]
+        fn test_rattler_issue_1917_version_conditionals() {
+            crate::conditional_tests::rattler_issue_1917_version_conditionals::<$T>();
+        }
+
+        #[test]
         fn test_solve_with_unparsable_dependency() {
             crate::solver_case_tests::solve_with_unparsable_dependency::<$T>();
         }
