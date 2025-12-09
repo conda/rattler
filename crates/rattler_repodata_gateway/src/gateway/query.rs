@@ -268,9 +268,7 @@ impl RepoDataQuery {
                             }
                             for dependency in &record.package_record.depends {
                                 // Use only the name for transitive dependencies.
-                                let dependency_name = PackageName::new_unchecked(
-                                    dependency.split_once(' ').unwrap_or((dependency, "")).0,
-                                );
+                                let dependency_name = package_name_from_match_spec_str(dependency);
                                 if seen.insert(dependency_name.clone()) {
                                     pending_package_specs.insert(dependency_name.clone(), SourceSpecs::Transitive);
                                 }
@@ -441,9 +439,9 @@ impl IntoFuture for NamesQuery {
 
 fn package_name_from_match_spec_str(spec: &str) -> PackageName {
     let package_name_str = spec
-        .split_once(|c: char| c.is_whitespace() || matches!(c, '>' | '<' | '=' | '!' | '~'))
+        .split_once(|c: char| c.is_whitespace() || matches!(c, '>' | '<' | '=' | '!' | '~' | ';'))
         .map_or(spec, |(name, _)| name);
-    PackageName::new_unchecked(package_name_str)
+    PackageName::new_unchecked(package_name_str.to_ascii_lowercase())
 }
 
 #[cfg(test)]
@@ -455,6 +453,12 @@ mod test {
     #[case("pillow >=10", "pillow")]
     #[case("pillow>=10,<12", "pillow")]
     #[case("pillow >=10, <12", "pillow")]
+    // Conditional dependency syntax (issue #1917)
+    #[case("package; if __osx", "package")]
+    #[case("osx-dependency; if __osx", "osx-dependency")]
+    #[case("linux-dependency; if __linux", "linux-dependency")]
+    #[case("numpy; if python >=3.9", "numpy")]
+    #[case("pkg-a; if python>=3.8 and python<3.9.5", "pkg-a")]
     fn test_package_name_from_match_spec_str(#[case] spec: &str, #[case] expected: &str) {
         let package_name = super::package_name_from_match_spec_str(spec);
         assert_eq!(package_name.as_source(), expected);
