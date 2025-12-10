@@ -58,6 +58,8 @@ impl ArchiveType {
             Some((path, ArchiveType::Conda))
         } else if let Some(path) = path.strip_suffix(".tar.bz2") {
             Some((path, ArchiveType::TarBz2))
+        } else if let Some(path) = path.strip_suffix(".whl") {
+            Some((path, ArchiveType::Whl))
         } else {
             None
         }
