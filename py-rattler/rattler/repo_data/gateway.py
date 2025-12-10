@@ -32,7 +32,7 @@ class SourceConfig:
     bz2_enabled: bool = True
     """Whether the BZ2 compression is enabled or not."""
 
-    sharded_enabled: bool = False
+    sharded_enabled: bool = True
     """Whether sharded repodata is enabled or not."""
 
     cache_action: CacheAction = "cache-or-fetch"
