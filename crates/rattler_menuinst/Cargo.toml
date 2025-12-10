@@ -23,7 +23,7 @@ regex = { workspace = true }
 tempfile = { workspace = true }
 fs-err = { workspace = true }
 which = { workspace = true }
-chrono = { workspace = true, features = ["clock"] }
+jiff = { workspace = true }
 once_cell = { workspace = true }
 indexmap = { workspace = true }
 

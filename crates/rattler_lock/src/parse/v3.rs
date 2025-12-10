@@ -119,7 +119,7 @@ pub struct CondaLockedPackageV3 {
     pub python_site_packages_path: Option<String>,
     pub size: Option<u64>,
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
-    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    pub timestamp: Option<jiff::Timestamp>,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub purls: BTreeSet<PackageUrl>,
 }

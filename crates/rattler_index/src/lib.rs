@@ -16,7 +16,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use bytes::buf::Buf;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
 use indexmap::IndexMap;
@@ -365,7 +365,7 @@ pub struct RepodataFileMetadata {
     /// The `ETag` of the file, if available
     pub etag: Option<String>,
     /// The last modified timestamp of the file, if available
-    pub last_modified: Option<DateTime<Utc>>,
+    pub last_modified: Option<Timestamp>,
     /// Whether the file existed when metadata was collected
     pub file_existed: bool,
     /// The precondition checks configuration when this metadata was collected
@@ -393,7 +393,9 @@ impl RepodataFileMetadata {
         match op.stat(path).await {
             Ok(metadata) => Ok(Self {
                 etag: metadata.etag().map(str::to_owned),
-                last_modified: metadata.last_modified(),
+                last_modified: metadata
+                    .last_modified()
+                    .and_then(|dt| Timestamp::from_millisecond(dt.timestamp_millis()).ok()),
                 file_existed: true,
                 precondition_checks,
             }),
@@ -935,7 +937,7 @@ pub async fn write_repodata(
                 subdir: subdir.to_string(),
                 base_url: "".into(),
                 shards_base_url: "./shards/".into(),
-                created_at: Some(chrono::Utc::now()),
+                created_at: Some(jiff::Timestamp::now()),
             },
             shards: shards
                 .iter()

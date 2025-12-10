@@ -8,14 +8,14 @@ use std::{
     marker::PhantomData,
 };
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
-    package::ArchiveType, utils::TimestampMs, GenericVirtualPackage, MatchSpec, Matches,
-    NamelessMatchSpec, PackageName, PackageNameMatcher, ParseMatchSpecError, ParseMatchSpecOptions,
-    RepoDataRecord, SolverResult,
+    package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
+    PackageName, PackageNameMatcher, ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord,
+    SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -166,13 +166,13 @@ impl SolverPackageRecord<'_> {
         }
     }
 
-    fn timestamp(&self) -> Option<&chrono::DateTime<chrono::Utc>> {
+    fn timestamp(&self) -> Option<Timestamp> {
         match self {
             SolverPackageRecord::Record(rec) => rec
                 .package_record
                 .timestamp
                 .as_ref()
-                .map(TimestampMs::datetime),
+                .map(|ts| ts.jiff_timestamp()),
             SolverPackageRecord::Extra { .. } | SolverPackageRecord::VirtualPackage(..) => None,
         }
     }
@@ -287,7 +287,7 @@ impl<'a> CondaDependencyProvider<'a> {
         match_specs: &[MatchSpec],
         stop_time: Option<std::time::SystemTime>,
         channel_priority: ChannelPriority,
-        exclude_newer: Option<DateTime<Utc>>,
+        exclude_newer: Option<Timestamp>,
         min_age: Option<&MinimumAgeConfig>,
         strategy: SolveStrategy,
     ) -> Result<Self, SolveError> {
@@ -431,7 +431,9 @@ impl<'a> CondaDependencyProvider<'a> {
                     if !config.is_exempt(&record.package_record.name) {
                         let exclude_reason = match &record.package_record.timestamp {
                             Some(timestamp) if timestamp > cutoff => {
-                                let age = humantime::format_duration(config.min_age);
+                                let age = jiff::Span::try_from(config.min_age)
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_else(|_| format!("{:?}", config.min_age));
                                 Some(format!("the package was published less than {age} ago"))
                             }
                             None if !config.include_unknown_timestamp => {

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use chrono::DateTime;
+use jiff::Timestamp;
 use pyo3::{
     exceptions::PyValueError, pybacked::PyBackedStr, pyclass, pyfunction, pymethods,
     types::PyAnyMethods, Bound, FromPyObject, PyAny, PyErr, PyResult, Python,
@@ -137,7 +137,7 @@ pub fn py_solve(
             .await
             .map_err(PyRattlerError::from)?;
 
-        let exclude_newer = exclude_newer_timestamp_ms.and_then(DateTime::from_timestamp_millis);
+        let exclude_newer = exclude_newer_timestamp_ms.and_then(|ts| Timestamp::from_millisecond(ts).ok());
         let min_age = min_age.map(|config| config.inner);
 
         let solve_result = tokio::task::spawn_blocking(move || {
@@ -216,7 +216,7 @@ pub fn py_solve_with_sparse_repodata<'py>(
         .collect::<Vec<_>>();
 
     future_into_py(py, async move {
-        let exclude_newer = exclude_newer_timestamp_ms.and_then(DateTime::from_timestamp_millis);
+        let exclude_newer = exclude_newer_timestamp_ms.and_then(|ts| Timestamp::from_millisecond(ts).ok());
         let min_age = min_age.map(|config| config.inner);
 
         let solve_result = tokio::task::spawn_blocking(move || {

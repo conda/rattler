@@ -14,8 +14,7 @@ readme.workspace = true
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
 libc = { workspace = true, optional = true }
-chrono = { workspace = true, features = ["clock"] }
-humantime = { workspace = true }
+jiff = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 itertools = { workspace = true }

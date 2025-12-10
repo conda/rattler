@@ -12,7 +12,7 @@ readme.workspace = true
 
 [dependencies]
 bzip2 = { workspace = true }
-chrono = { workspace = true }
+jiff = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"], optional = true }
 futures-util = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }

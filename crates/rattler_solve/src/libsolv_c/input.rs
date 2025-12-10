@@ -3,7 +3,7 @@
 
 use std::{cmp::Ordering, collections::HashMap};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use rattler_conda_types::{package::ArchiveType, GenericVirtualPackage, RepoDataRecord};
 use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseMatchSpecOptions};
 use std::collections::HashSet;
@@ -81,7 +81,7 @@ pub fn add_repodata_records<'a>(
     pool: &Pool,
     repo: &Repo<'_>,
     repo_data: impl IntoIterator<Item = &'a RepoDataRecord>,
-    exclude_newer: Option<&DateTime<Utc>>,
+    exclude_newer: Option<&Timestamp>,
     min_age: Option<&MinimumAgeConfig>,
 ) -> Result<Vec<SolvableId>, SolveError> {
     // Sanity check

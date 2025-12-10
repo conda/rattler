@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use chrono::{Datelike, Timelike};
+use jiff::tz::TimeZone;
 use rattler_conda_types::{compression_level::CompressionLevel, package::PackageMetadata};
 use zip::DateTime;
 
@@ -132,7 +132,7 @@ pub fn write_tar_bz2_package<W: Write>(
     base_path: &Path,
     paths: &[PathBuf],
     compression_level: CompressionLevel,
-    timestamp: Option<&chrono::DateTime<chrono::Utc>>,
+    timestamp: Option<&jiff::Timestamp>,
     progress_bar: Option<Box<dyn ProgressBar>>,
 ) -> Result<(), std::io::Error> {
     let mut archive = tar::Builder::new(bzip2::write::BzEncoder::new(
@@ -169,7 +169,7 @@ fn write_zst_archive<W: Write>(
     paths: &Vec<PathBuf>,
     compression_level: CompressionLevel,
     num_threads: Option<u32>,
-    timestamp: Option<&chrono::DateTime<chrono::Utc>>,
+    timestamp: Option<&jiff::Timestamp>,
     progress_bar: Option<Box<dyn ProgressBar>>,
 ) -> Result<(), std::io::Error> {
     // Create a temporary tar file
@@ -248,20 +248,21 @@ pub fn write_conda_package<W: Write + Seek>(
     compression_level: CompressionLevel,
     compression_num_threads: Option<u32>,
     out_name: &str,
-    timestamp: Option<&chrono::DateTime<chrono::Utc>>,
+    timestamp: Option<&jiff::Timestamp>,
     progress_bar: Option<Box<dyn ProgressBar>>,
 ) -> Result<(), std::io::Error> {
     // first create the outer zip archive that uses no compression
     let mut outer_archive = zip::ZipWriter::new(writer);
 
     let last_modified_time = if let Some(time) = timestamp {
+        let dt = time.to_zoned(TimeZone::UTC).datetime();
         DateTime::from_date_and_time(
-            time.year() as u16,
-            time.month() as u8,
-            time.day() as u8,
-            time.hour() as u8,
-            time.minute() as u8,
-            time.second() as u8,
+            dt.year() as u16,
+            dt.month() as u8,
+            dt.day() as u8,
+            dt.hour() as u8,
+            dt.minute() as u8,
+            dt.second() as u8,
         )
         .expect("time should be in correct range")
     } else {
@@ -316,7 +317,7 @@ pub fn write_conda_package<W: Write + Seek>(
 
 fn prepare_header(
     path: &Path,
-    timestamp: Option<&chrono::DateTime<chrono::Utc>>,
+    timestamp: Option<&jiff::Timestamp>,
 ) -> Result<tar::Header, std::io::Error> {
     let mut header = tar::Header::new_gnu();
     let name = b"././@LongLink";
@@ -326,7 +327,7 @@ fn prepare_header(
     header.set_metadata_in_mode(&stat, tar::HeaderMode::Deterministic);
 
     if let Some(timestamp) = timestamp {
-        header.set_mtime(timestamp.timestamp().unsigned_abs());
+        header.set_mtime(timestamp.as_second().unsigned_abs());
     } else {
         // 1-1-2023 00:00:00 (Fixed date in the past for reproducible builds)
         header.set_mtime(1672531200);
@@ -344,7 +345,7 @@ fn append_path_to_archive(
     archive: &mut tar::Builder<impl Write>,
     base_path: &Path,
     path: &Path,
-    timestamp: Option<&chrono::DateTime<chrono::Utc>>,
+    timestamp: Option<&jiff::Timestamp>,
     progress_bar: &mut ProgressBarReader,
 ) -> Result<(), std::io::Error> {
     // create a tar header
