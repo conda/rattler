@@ -245,6 +245,9 @@ pub fn apply_patches_impl(
                         removed.insert(pkg.clone());
                     }
                 }
+                ArchiveType::Whl=> {
+                    // TODO: add the correct behavior for this condition
+                }
             }
         }
     }

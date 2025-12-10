@@ -217,7 +217,7 @@ impl SparseRepoData {
         match package_format_selection {
             PackageFormatSelection::Both | PackageFormatSelection::PreferConda => {
                 itertools::Either::Left(
-                    tar_baz2_packages.merge(conda_packages).dedup()
+                    tar_baz2_packages.merge(whl_packages).merge(conda_packages).dedup()
                 )
             }
             PackageFormatSelection::OnlyTarBz2 => {
@@ -239,13 +239,19 @@ impl SparseRepoData {
                         .strip_suffix(ArchiveType::TarBz2.extension())
                         .unwrap_or(filename.filename)
                 });
+                let whl_packages = repo_data.whl_packages.iter().map(|(filename, _)| {
+                    filename
+                        .filename
+                        .strip_suffix(ArchiveType::Whl.extension())
+                        .unwrap_or(filename.filename)
+                });
                 let conda_packages = repo_data.conda_packages.iter().map(|(filename, _)| {
                     filename
                         .filename
                         .strip_suffix(ArchiveType::Conda.extension())
                         .unwrap_or(filename.filename)
                 });
-                conda_packages.merge(tar_bz2_packages).dedup().count()
+                conda_packages.merge(tar_bz2_packages).merge(whl_packages).dedup().count()
             }
             PackageFormatSelection::Both => {
                 self.inner.borrow_repo_data().packages.len()
@@ -499,6 +505,10 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
                 find_package_in_slice(tar_bz2_packages, package_name),
                 ArchiveType::TarBz2,
             );
+            let whl_packages = add_stripped_filename(
+                find_package_in_slice(whl_packages, package_name),
+                ArchiveType::Whl,
+            );
             let conda_packages = add_stripped_filename(
                 find_package_in_slice(conda_packages, package_name),
                 ArchiveType::Conda,
@@ -507,6 +517,9 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
                 // Merge the conda and tar.bz2 packages together based on their filename without
                 // extension.
                 .merge_by(tar_bz2_packages, |(_, _, left), (_, _, right)| {
+                    left <= right
+                })
+                .merge_by(whl_packages, |(_, _, left), (_, _, right)| {
                     left <= right
                 })
                 // Deduplicate repeated packages based on their filename without extension. (this
@@ -524,9 +537,10 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
         }
         PackageFormatSelection::Both => {
             let tar_bz2_packages = find_package_in_slice(tar_bz2_packages, package_name);
+            let whl_packages = find_package_in_slice(whl_packages, package_name);
             let conda_packages = find_package_in_slice(conda_packages, package_name);
             parse_records_raw(
-                tar_bz2_packages.chain(conda_packages),
+                tar_bz2_packages.chain(conda_packages).chain(whl_packages),
                 base_url,
                 channel,
                 subdir,
