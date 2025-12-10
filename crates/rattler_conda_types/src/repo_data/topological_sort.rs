@@ -237,9 +237,9 @@ fn get_topological_order<T: AsRef<PackageRecord>>(
 }
 
 /// Helper function to obtain the package name from a match spec
-fn package_name_from_match_spec(d: &str) -> &str {
-    // Unwrap is safe because split always returns at least one value
-    d.split([' ', '=']).next().unwrap()
+fn package_name_from_match_spec(spec: &str) -> &str {
+    spec.split_once(|c: char| c.is_whitespace() || matches!(c, '>' | '<' | '=' | '!' | '~' | ';'))
+        .map_or(spec, |(name, _)| name)
 }
 
 #[cfg(test)]
@@ -328,7 +328,13 @@ mod tests {
     #[case("python >=3.0", "python")]
     #[case("python", "python")]
     #[case("python=*=*", "python")]
+    #[case("python>=3.0,<4.0", "python")]
+    #[case("python!=3.5", "python")]
+    #[case("python~=3.8", "python")]
     #[case("", "")]
+    // Conditional dependency syntax
+    #[case("package; if __osx", "package")]
+    #[case("numpy; if python >=3.9", "numpy")]
     fn test_package_name_from_match_spec(#[case] match_spec: &str, #[case] expected_name: &str) {
         let name = package_name_from_match_spec(match_spec);
         assert_eq!(name, expected_name);
