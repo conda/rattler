@@ -53,6 +53,7 @@ tokio = { workspace = true, features = [
   "rt-multi-thread",
   "process",
 ] }
+sigstore-sign = { workspace = true, optional = true }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 sha2 = { workspace = true, features = ["asm"] }
