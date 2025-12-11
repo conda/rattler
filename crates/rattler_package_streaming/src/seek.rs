@@ -102,6 +102,10 @@ pub fn read_package_file_content<'a>(
             let buf = get_file_from_archive(&mut info_archive, package_path.as_ref())?;
             Ok(buf)
         }
+        ArchiveType::Whl => {
+            // TODO: put correctly handling of wheel here
+            Err(ExtractError::UnsupportedArchiveType)
+        }
     }
 }
 

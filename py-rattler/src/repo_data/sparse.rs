@@ -42,6 +42,7 @@ impl From<SparseRepoData> for PySparseRepoData {
 pub enum PyPackageFormatSelection {
     OnlyTarBz2,
     OnlyConda,
+    OnlyWhl,
     PreferConda,
     Both,
 }
@@ -57,6 +58,7 @@ impl From<PackageFormatSelection> for PyPackageFormatSelection {
         match value {
             PackageFormatSelection::OnlyTarBz2 => PyPackageFormatSelection::OnlyTarBz2,
             PackageFormatSelection::OnlyConda => PyPackageFormatSelection::OnlyConda,
+            PackageFormatSelection::OnlyWhl => PyPackageFormatSelection::OnlyWhl,
             PackageFormatSelection::PreferConda => PyPackageFormatSelection::PreferConda,
             PackageFormatSelection::Both => PyPackageFormatSelection::Both,
         }
@@ -68,6 +70,7 @@ impl From<PyPackageFormatSelection> for PackageFormatSelection {
         match value {
             PyPackageFormatSelection::OnlyTarBz2 => PackageFormatSelection::OnlyTarBz2,
             PyPackageFormatSelection::OnlyConda => PackageFormatSelection::OnlyConda,
+            PyPackageFormatSelection::OnlyWhl => PackageFormatSelection::OnlyWhl,
             PyPackageFormatSelection::PreferConda => PackageFormatSelection::PreferConda,
             PyPackageFormatSelection::Both => PackageFormatSelection::Both,
         }
