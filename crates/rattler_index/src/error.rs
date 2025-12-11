@@ -6,30 +6,30 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum RepodataError {
     /// An error occurred during an I/O operation.
-    #[error("I/O error: {0}")]
+    #[error(transparent)]
     Io(#[from] io::Error),
 
     /// An error occurred while serializing or deserializing JSON.
-    #[error("Serialization error: {0}")]
+    #[error(transparent)]
     Serde(#[from] serde_json::Error),
 
     /// An error occurred while serializing to `MessagePack`.
-    #[error("MessagePack serialization error: {0}")]
+    #[error(transparent)]
     MsgPack(#[from] rmp_serde::encode::Error),
 
     /// An error occurred while applying a patch.
     #[error("Patch error: {0}")]
     Patch(String),
 
-    /// An error occurred during an Opendal operation (e.g., S3 or file access).
-    #[error("Opendal error: {0}")]
+    /// An error occurred during an Opendal operation.
+    #[error(transparent)]
     Opendal(#[from] OpendalError),
 
     /// An error occurred while joining a background task.
-    #[error("Task join error: {0}")]
+    #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
 
-    /// A generic error (used for internal errors or anyhow conversions).
-    #[error("Other error: {0}")]
+    /// A generic error.
+    #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
