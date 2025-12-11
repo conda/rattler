@@ -3,8 +3,11 @@
 #![deny(missing_docs)]
 
 pub mod cache;
+/// Defines errors used in this crate.
+pub mod error;
 mod utils;
 
+use crate::error::RepodataError;
 use std::{
     collections::{HashMap, HashSet},
     io::{BufRead, BufReader, Cursor, Read, Seek},
@@ -24,7 +27,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use opendal::{
     layers::RetryLayer,
     services::{FsConfig, S3Config},
-    Configurator, ErrorKind, Operator,
+    Configurator, Operator,
 };
 use rattler_conda_types::{
     package::{ArchiveIdentifier, ArchiveType, IndexJson, PackageFile, RunExportsJson},
@@ -498,7 +501,7 @@ async fn index_subdir(
     semaphore: Arc<Semaphore>,
     cache: cache::PackageRecordCache,
     precondition_checks: PreconditionChecks,
-) -> Result<SubdirIndexStats> {
+) -> Result<SubdirIndexStats, RepodataError> {
     // Use write_retry_policy for handling lock contention during repodata writes
     // This will retry for 10 minutes with longer backoff durations (10s, 30s, 60s, etc.)
     let retry_policy = write_retry_policy();
@@ -527,58 +530,51 @@ async fn index_subdir(
             }
             Err(e) => {
                 // Check if this is a race condition error that we should retry
-                if let Some(opendal_err) = e.downcast_ref::<opendal::Error>() {
-                    let is_retryable_condition_error = matches!(
-                        opendal_err.kind(),
-                        opendal::ErrorKind::ConditionNotMatch | opendal::ErrorKind::Unexpected
-                    ) && {
-                        // For Unexpected errors, check if it's the HTTP 409 ConditionalRequestConflict
-                        let error_str = format!("{opendal_err:?}");
-                        error_str.contains("ConditionalRequestConflict")
-                            || error_str.contains("status: 409")
-                            || opendal_err.kind() == opendal::ErrorKind::ConditionNotMatch
-                    };
+                let is_retryable_condition_error = match &e {
+                    RepodataError::Opendal(opendal_err) => {
+                        matches!(
+                            opendal_err.kind(),
+                            opendal::ErrorKind::ConditionNotMatch | opendal::ErrorKind::Unexpected
+                        ) && {
+                            // For Unexpected errors, check if it's the HTTP 409 ConditionalRequestConflict
+                            let error_str = format!("{opendal_err:?}");
+                            error_str.contains("ConditionalRequestConflict")
+                                || error_str.contains("status: 409")
+                                || opendal_err.kind() == opendal::ErrorKind::ConditionNotMatch
+                        }
+                    }
+                    _ => false,
+                };
 
-                    if is_retryable_condition_error {
-                        // Race condition detected - should we retry?
-                        match retry_policy.should_retry(request_start_time, current_try as u32) {
-                            RetryDecision::Retry { execute_after } => {
-                                let duration = execute_after
-                                    .duration_since(SystemTime::now())
-                                    .unwrap_or_default();
+                if is_retryable_condition_error {
+                    // Race condition detected - should we retry?
+                    match retry_policy.should_retry(request_start_time, current_try as u32) {
+                        RetryDecision::Retry { execute_after } => {
+                            let duration = execute_after
+                                .duration_since(SystemTime::now())
+                                .unwrap_or_default();
 
-                                // Log with more context to help diagnose the issue
-                                tracing::warn!(
-                                    "Detected concurrent modification of repodata for {} (attempt {}/max). \
-                                    Error: {:?}. Retrying in {:?}. \
-                                    This may indicate multiple indexing processes running simultaneously, \
-                                    or an S3 backend with incomplete precondition support. \
-                                    Consider using PreconditionChecks::Disabled if this persists.",
-                                    subdir,
-                                    current_try + 1,
-                                    opendal_err,
-                                    duration
-                                );
-                                tokio::time::sleep(duration).await;
-                                current_try += 1;
-                                continue;
-                            }
-                            RetryDecision::DoNotRetry => {
-                                tracing::error!(
-                                    "Max retries exceeded for {} due to concurrent modifications. \
-                                    Final error: {:?}. \
-                                    If you're not running concurrent indexing, your S3 backend may not \
-                                    fully support conditional requests. Consider disabling precondition \
-                                    checks by setting precondition_checks to PreconditionChecks::Disabled.",
-                                    subdir,
-                                    opendal_err
-                                );
-                                return Err(e);
-                            }
+                            tracing::warn!(
+                                "Detected concurrent modification of repodata for {} (attempt {}/max). \
+                                 Error: {:?}. Retrying in {:?}.",
+                                subdir,
+                                current_try + 1,
+                                e,
+                                duration
+                            );
+                            tokio::time::sleep(duration).await;
+                            current_try += 1;
+                            continue;
+                        }
+                        RetryDecision::DoNotRetry => {
+                            tracing::error!(
+                                "Max retries exceeded for {subdir}. Final error: {e:?}"
+                            );
+                            return Err(e);
                         }
                     }
                 }
-                // Not a race condition error, or downcast failed - propagate immediately
+                // Not a race condition error, propagate immediately
                 return Err(e);
             }
         }
@@ -597,7 +593,7 @@ async fn index_subdir_inner(
     semaphore: Arc<Semaphore>,
     cache: cache::PackageRecordCache,
     precondition_checks: PreconditionChecks,
-) -> Result<SubdirIndexStats> {
+) -> Result<SubdirIndexStats, RepodataError> {
     // Step 1: Collect ETags/metadata for all critical files upfront
     let metadata = RepodataMetadataCollection::new(
         &op,
@@ -745,7 +741,7 @@ async fn index_subdir_inner(
                     console::style("Failed to index").red(),
                     console::style(subdir.as_str()).dim()
                 ));
-                return Err(e.into());
+                return Err(RepodataError::Other(anyhow::anyhow!(e)));
             }
             Err(join_err) => {
                 tasks.clear();
@@ -755,7 +751,7 @@ async fn index_subdir_inner(
                     console::style("Failed to index").red(),
                     console::style(subdir.as_str()).dim()
                 ));
-                return Err(anyhow::anyhow!("Task panicked: {join_err}"));
+                return Err(join_err.into());
             }
         }
     }
@@ -818,7 +814,7 @@ async fn index_subdir_inner(
     })
 }
 
-fn serialize_msgpack_zst<T>(val: &T) -> Result<Vec<u8>>
+fn serialize_msgpack_zst<T>(val: &T) -> Result<Vec<u8>, RepodataError>
 where
     T: Serialize + ?Sized,
 {
@@ -836,7 +832,7 @@ pub async fn write_repodata(
     subdir: Platform,
     op: Operator,
     metadata: &RepodataMetadataCollection,
-) -> Result<()> {
+) -> Result<(), RepodataError> {
     if let Some(repodata_from_packages_metadata) = &metadata.repodata_from_packages {
         let unpatched_repodata_path = format!("{subdir}/{REPODATA_FROM_PACKAGES}");
         tracing::info!("Writing unpatched repodata to {unpatched_repodata_path}");
@@ -911,7 +907,11 @@ pub async fn write_repodata(
         }
         for package in repodata.removed {
             let package_name = ArchiveIdentifier::try_from_filename(package.as_str())
-                .context("Could not determine archive identifier for {package}")?
+                .ok_or_else(|| {
+                    RepodataError::Other(anyhow::anyhow!(
+                        "Could not determine archive identifier for {package}" // <--- NEW
+                    ))
+                })?
                 .name;
             let shard = shards_by_package_names.entry(package_name).or_default();
             shard.removed.insert(package);
@@ -928,7 +928,7 @@ pub async fn write_repodata(
                     (k, (digest, encoded))
                 })
             })
-            .collect::<Result<HashMap<_, _>>>()?;
+            .collect::<Result<HashMap<_, _>, RepodataError>>()?;
 
         let sharded_repodata = ShardedRepodata {
             info: ShardedSubdirInfo {
@@ -956,7 +956,7 @@ pub async fn write_repodata(
                     .cache_control(CACHE_CONTROL_IMMUTABLE)
                     .await
                 {
-                    Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
+                    Err(e) if e.kind() == opendal::ErrorKind::ConditionNotMatch => {
                         tracing::trace!("{shard_path} already exists");
                         Ok(())
                     }
@@ -1247,7 +1247,7 @@ pub async fn index(
             }
             Err(e) => {
                 tracing::error!("Failed to process subdir: {e}");
-                return Err(e);
+                return Err(e.into());
             }
         }
     }
