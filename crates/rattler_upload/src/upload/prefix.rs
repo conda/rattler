@@ -17,7 +17,7 @@ use url::Url;
 
 use super::opt::{AttestationSource, PrefixData};
 
-#[cfg(feature = "sigstore")]
+#[cfg(feature = "sigstore-sign")]
 use crate::upload::attestation::{create_attestation, AttestationConfig};
 use crate::upload::{
     default_bytes_style, get_client_with_retry, get_default_client,
@@ -111,7 +111,7 @@ pub async fn upload_package_to_prefix(
     );
 
     // Check if attestation generation is requested but sigstore feature is not enabled
-    #[cfg(not(feature = "sigstore"))]
+    #[cfg(not(feature = "sigstore-sign"))]
     if wants_generate {
         return Err(miette::miette!(
             "Attestation generation was requested, but the 'sigstore' feature is not enabled.\n\
@@ -120,7 +120,7 @@ pub async fn upload_package_to_prefix(
     }
 
     // Check if we're using trusted publishing and if we should generate attestations
-    #[cfg(feature = "sigstore")]
+    #[cfg(feature = "sigstore-sign")]
     let (token, should_generate_attestation) = match prefix_data.api_key {
         Some(api_key) => (api_key, false),
         None => match check_trusted_publishing(&client, &prefix_data.url).await {
@@ -149,7 +149,7 @@ pub async fn upload_package_to_prefix(
         },
     };
 
-    #[cfg(not(feature = "sigstore"))]
+    #[cfg(not(feature = "sigstore-sign"))]
     let token = match prefix_data.api_key {
         Some(api_key) => api_key,
         None => match check_trusted_publishing(&client, &prefix_data.url).await {
@@ -191,7 +191,7 @@ pub async fn upload_package_to_prefix(
         }
 
         // Generate attestation if we're using trusted publishing and it was requested
-        #[cfg(feature = "sigstore")]
+        #[cfg(feature = "sigstore-sign")]
         let attestation_path = if should_generate_attestation {
             let channel_url = prefix_data
                 .url
@@ -267,7 +267,7 @@ pub async fn upload_package_to_prefix(
             None
         };
 
-        #[cfg(not(feature = "sigstore"))]
+        #[cfg(not(feature = "sigstore-sign"))]
         let attestation_path = match &prefix_data.attestation {
             AttestationSource::Attestation(path) => Some(path.clone()),
             _ => None,

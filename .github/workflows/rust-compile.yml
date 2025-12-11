@@ -157,7 +157,7 @@ jobs:
         run: >
           cargo build
           --all-targets
-          --features ${{ env.DEFAULT_FEATURES }}${{ !startsWith(matrix.target, 'powerpc') && ',sigstore' || '' }}
+          --features ${{ env.DEFAULT_FEATURES }}${{ !startsWith(matrix.target, 'powerpc') && ',sigstore-sign' || '' }}
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
 
@@ -182,7 +182,7 @@ jobs:
         run: >
           cargo nextest run
           --workspace
-          --features ${{ env.DEFAULT_FEATURES }}${{ !startsWith(matrix.target, 'powerpc') && ',sigstore' || '' }}
+          --features ${{ env.DEFAULT_FEATURES }}${{ !startsWith(matrix.target, 'powerpc') && ',sigstore-sign' || '' }}
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}

@@ -12,7 +12,6 @@ readme.workspace = true
 
 [features]
 s3 = ["rattler_networking/s3", "rattler_s3"]
-sigstore = ["dep:sigstore-sign"]
 
 [package.metadata.docs.rs]
 all-features = true
