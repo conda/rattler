@@ -114,8 +114,8 @@ pub async fn upload_package_to_prefix(
     #[cfg(not(feature = "sigstore-sign"))]
     if wants_generate {
         return Err(miette::miette!(
-            "Attestation generation was requested, but the 'sigstore' feature is not enabled.\n\
-             Please rebuild with the 'sigstore' feature enabled."
+            "Attestation generation was requested, but the 'sigstore-sign' feature is not enabled.\n\
+             Please rebuild with the 'sigstore-sign' feature enabled."
         ));
     }
 
