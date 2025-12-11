@@ -31,40 +31,61 @@ const MAX_BUILD_STRING_LEN: usize = 64;
 
 /// Checks if a character is valid in a conda build string according to CEP-26.
 ///
-/// Valid characters are: alphanumeric (a-z, A-Z, 0-9), underscore (_), period (.), and plus (+).
+/// Valid characters are: alphanumeric only (a-z, A-Z, 0-9).
 fn is_valid_build_string_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '+'
-}
-
-/// Strips a prefix from a string in a case-insensitive manner.
-///
-/// Returns the remainder of the string if it starts with the prefix (ignoring case),
-/// otherwise returns `None`.
-fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
-    if s.len() >= prefix.len() && s[..prefix.len()].eq_ignore_ascii_case(prefix) {
-        Some(&s[prefix.len()..])
-    } else {
-        None
-    }
+    c.is_ascii_alphanumeric()
 }
 
 /// Sanitizes a device name to comply with CEP-26 build string requirements.
 ///
 /// This function:
-/// 1. Removes "NVIDIA" prefix (case-insensitive) to save space
-/// 2. Filters out any characters not allowed in build strings
+/// 1. Filters out any characters not allowed in build strings (keeps only alphanumeric)
+/// 2. Removes "NVIDIA" anywhere in the string (case-insensitive) to save space
 /// 3. Truncates to maximum 64 characters
 ///
 /// Returns the sanitized device name.
 pub(crate) fn sanitize_device_name(name: &str) -> String {
-    // Remove NVIDIA prefix (case-insensitive) and trim whitespace
-    let name = strip_prefix_ci(name, "NVIDIA").unwrap_or(name).trim();
-
-    // Filter valid characters and truncate
-    name.chars()
+    // First, filter to keep only alphanumeric characters
+    let alphanumeric_only: String = name
+        .chars()
         .filter(|c| is_valid_build_string_char(*c))
-        .take(MAX_BUILD_STRING_LEN)
-        .collect()
+        .collect();
+
+    // Remove "NVIDIA" anywhere in the string (case-insensitive)
+    let without_nvidia = remove_nvidia_ci(&alphanumeric_only);
+
+    // Truncate to maximum length
+    without_nvidia.chars().take(MAX_BUILD_STRING_LEN).collect()
+}
+
+/// Removes all case-insensitive occurrences of "NVIDIA" from a string.
+fn remove_nvidia_ci(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        // Check if we're at the start of "NVIDIA" (case-insensitive)
+        if ch.eq_ignore_ascii_case(&'N') {
+            // Peek ahead to see if "VIDIA" follows
+            let upcoming: Vec<char> = chars.clone().take(5).collect();
+            if upcoming.len() == 5
+                && upcoming[0].eq_ignore_ascii_case(&'V')
+                && upcoming[1].eq_ignore_ascii_case(&'I')
+                && upcoming[2].eq_ignore_ascii_case(&'D')
+                && upcoming[3].eq_ignore_ascii_case(&'I')
+                && upcoming[4].eq_ignore_ascii_case(&'A')
+            {
+                // Skip the next 5 characters ("VIDIA")
+                for _ in 0..5 {
+                    chars.next();
+                }
+                continue;
+            }
+        }
+        result.push(ch);
+    }
+
+    result
 }
 
 /// Validates that a string is in the format "major.minor" where both parts are digits.
@@ -666,47 +687,64 @@ mod test {
 
     #[test]
     fn test_is_valid_build_string_char() {
-        // Valid characters
+        // Valid characters - alphanumeric only
         assert!(is_valid_build_string_char('a'));
         assert!(is_valid_build_string_char('Z'));
         assert!(is_valid_build_string_char('0'));
         assert!(is_valid_build_string_char('9'));
-        assert!(is_valid_build_string_char('_'));
-        assert!(is_valid_build_string_char('.'));
-        assert!(is_valid_build_string_char('+'));
 
-        // Invalid characters
+        // Invalid characters - everything else
         assert!(!is_valid_build_string_char(' '));
         assert!(!is_valid_build_string_char('-'));
         assert!(!is_valid_build_string_char('/'));
         assert!(!is_valid_build_string_char('!'));
         assert!(!is_valid_build_string_char('@'));
         assert!(!is_valid_build_string_char('#'));
+        assert!(!is_valid_build_string_char('_'));
+        assert!(!is_valid_build_string_char('.'));
+        assert!(!is_valid_build_string_char('+'));
     }
 
     #[test]
-    fn test_strip_prefix_ci() {
-        // Exact case match
-        assert_eq!(strip_prefix_ci("NVIDIA RTX", "NVIDIA"), Some(" RTX"));
+    fn test_remove_nvidia_ci() {
+        // Remove NVIDIA at the start
+        assert_eq!(remove_nvidia_ci("NVIDIAGeForce"), "GeForce");
+        assert_eq!(remove_nvidia_ci("nvidiaRTX"), "RTX");
 
-        // Case insensitive matches
-        assert_eq!(strip_prefix_ci("nvidia RTX", "NVIDIA"), Some(" RTX"));
-        assert_eq!(strip_prefix_ci("Nvidia RTX", "NVIDIA"), Some(" RTX"));
-        assert_eq!(strip_prefix_ci("nVidia RTX", "NVIDIA"), Some(" RTX"));
-        assert_eq!(strip_prefix_ci("NVIDIA RTX", "nvidia"), Some(" RTX"));
+        // Remove NVIDIA in the middle
+        assert_eq!(remove_nvidia_ci("GeForceNVIDIARTX"), "GeForceRTX");
+        assert_eq!(remove_nvidia_ci("TestNVIDIAGPU"), "TestGPU");
 
-        // No match
-        assert_eq!(strip_prefix_ci("AMD RX", "NVIDIA"), None);
-        assert_eq!(strip_prefix_ci("NV RTX", "NVIDIA"), None);
+        // Remove NVIDIA at the end
+        assert_eq!(remove_nvidia_ci("TeslaNVIDIA"), "Tesla");
+        assert_eq!(remove_nvidia_ci("GPUnvidia"), "GPU");
 
-        // Empty and edge cases
-        assert_eq!(strip_prefix_ci("", "NVIDIA"), None);
-        assert_eq!(strip_prefix_ci("NVI", "NVIDIA"), None);
+        // Multiple occurrences
+        assert_eq!(remove_nvidia_ci("NVIDIATestNVIDIA"), "Test");
+        assert_eq!(remove_nvidia_ci("nvidianvidianvidia"), "");
+
+        // Case variations
+        assert_eq!(remove_nvidia_ci("NvIdIaTest"), "Test");
+        assert_eq!(remove_nvidia_ci("TestNVidia"), "Test");
+
+        // No NVIDIA
+        assert_eq!(remove_nvidia_ci("AMDRadeon"), "AMDRadeon");
+        assert_eq!(remove_nvidia_ci("Intel"), "Intel");
+
+        // Edge cases
+        assert_eq!(remove_nvidia_ci(""), "");
+        assert_eq!(remove_nvidia_ci("NVIDIA"), "");
+        assert_eq!(remove_nvidia_ci("nvidia"), "");
+
+        // Partial matches should not be removed
+        assert_eq!(remove_nvidia_ci("NVID"), "NVID");
+        assert_eq!(remove_nvidia_ci("NVIDI"), "NVIDI");
+        assert_eq!(remove_nvidia_ci("VIDIA"), "VIDIA");
     }
 
     #[test]
     fn test_sanitize_device_name() {
-        // Valid name with NVIDIA prefix
+        // Valid name with NVIDIA prefix - alphanumeric only, NVIDIA removed
         assert_eq!(
             sanitize_device_name("NVIDIA GeForce RTX 3090"),
             "GeForceRTX3090"
@@ -717,6 +755,11 @@ mod test {
         assert_eq!(sanitize_device_name("Nvidia Tesla"), "Tesla");
         assert_eq!(sanitize_device_name("NVIDIA RTX"), "RTX");
 
+        // NVIDIA appearing in the middle or end (not just prefix)
+        assert_eq!(sanitize_device_name("GeForce NVIDIA RTX"), "GeForceRTX");
+        assert_eq!(sanitize_device_name("Tesla NVIDIA"), "Tesla");
+        assert_eq!(sanitize_device_name("nVidia Test nvidia GPU"), "TestGPU");
+
         // No NVIDIA prefix
         assert_eq!(
             sanitize_device_name("AMD Radeon RX 6800"),
@@ -724,10 +767,10 @@ mod test {
         );
         assert_eq!(sanitize_device_name("Tesla V100"), "TeslaV100");
 
-        // Special characters and spaces (hyphen is filtered out, not allowed in CEP-26)
+        // Special characters and spaces - only alphanumeric allowed
         assert_eq!(
             sanitize_device_name("Device-Name_Test.1+2"),
-            "DeviceName_Test.1+2"
+            "DeviceNameTest12"
         );
         assert_eq!(sanitize_device_name("Test @ Device #1!"), "TestDevice1");
 
@@ -745,7 +788,7 @@ mod test {
         assert_eq!(sanitize_device_name("   "), "");
         assert_eq!(sanitize_device_name("!@#$%"), "");
 
-        // Only valid chars
-        assert_eq!(sanitize_device_name("ABC_123.test+v2"), "ABC_123.test+v2");
+        // Only alphanumeric chars allowed now
+        assert_eq!(sanitize_device_name("ABC_123.test+v2"), "ABC123testv2");
     }
 }
