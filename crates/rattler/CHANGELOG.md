@@ -83,6 +83,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.7](https://github.com/conda/rattler/compare/rattler-v0.39.6...rattler-v0.39.7) - 2025-12-12
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
 ## [0.39.6](https://github.com/conda/rattler/compare/rattler-v0.39.5...rattler-v0.39.6) - 2025-12-08
 
 ### Other
