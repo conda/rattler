@@ -149,6 +149,9 @@ smallvec = { version = "1.15.0", features = [
   "union",
 ] }
 sigstore-sign = { version = "0.6.0" }
+sigstore-verify = { version = "0.6.0" }
+sigstore-trust-root = { version = "0.6.0" }
+sigstore-bundle = { version = "0.6.0" }
 strum = { version = "0.27.1", features = ["derive"] }
 superslice = "1.0.0"
 syn = "2.0.101"
