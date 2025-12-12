@@ -167,6 +167,7 @@ sigstore-sign = { version = "0.7.0", default-features = false }
 sigstore-trust-root = { version = "0.7.0", default-features = false, features = [
   "tuf",
 ] }
+sigstore-verify = { version = "0.6.6", default-features = false }
 strum = { version = "0.28", features = ["derive"] }
 superslice = "1.0.0"
 syn = "2.0.101"
