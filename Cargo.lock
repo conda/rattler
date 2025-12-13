@@ -5236,6 +5236,7 @@ dependencies = [
  "rattler_networking",
  "rattler_package_streaming",
  "rattler_redaction",
+ "rattler_sigstore",
  "rayon",
  "reqwest 0.13.3",
  "rstest",
@@ -5717,6 +5718,23 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "rattler_sigstore"
+version = "0.1.0"
+dependencies = [
+ "astral-reqwest-middleware",
+ "chrono",
+ "hex",
+ "miette",
+ "reqwest 0.13.3",
+ "serde",
+ "serde_json",
+ "sigstore-verify",
+ "thiserror 2.0.18",
+ "tracing",
+ "url",
 ]
 
 [[package]]

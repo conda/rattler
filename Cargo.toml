@@ -226,6 +226,7 @@ rattler_repodata_gateway = { path = "crates/rattler_repodata_gateway", version =
 rattler_s3 = { path = "crates/rattler_s3", version = "=0.2.0", default-features = false }
 rattler_sandbox = { path = "crates/rattler_sandbox", version = "=0.2.18", default-features = false }
 rattler_shell = { path = "crates/rattler_shell", version = "=0.27.0", default-features = false }
+rattler_sigstore = { path = "crates/rattler_sigstore", version = "=0.1.0", default-features = false }
 rattler_solve = { path = "crates/rattler_solve", version = "=7.0.0", default-features = false }
 rattler_upload = { path = "crates/rattler_upload", version = "=0.7.0", default-features = false }
 rattler_virtual_packages = { path = "crates/rattler_virtual_packages", version = "=2.3.22", default-features = false }

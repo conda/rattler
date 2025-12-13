@@ -1,13 +1,11 @@
 //! Verify sigstore signatures for conda packages
 
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use chrono::DateTime;
 use miette::{Context, IntoDiagnostic};
-use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
-use reqwest::Client;
-use sigstore_verify::{types::Bundle, VerificationPolicy, Verifier};
 use sigstore_verify::trust_root::TrustedRoot;
+use sigstore_verify::{VerificationPolicy, Verifier, types::Bundle};
 use url::Url;
 
 #[derive(Debug, clap::Parser)]
@@ -31,24 +29,7 @@ pub struct Opt {
 
 /// Creates an HTTP client with authentication middleware
 fn create_authenticated_client() -> miette::Result<reqwest_middleware::ClientWithMiddleware> {
-    let download_client = Client::builder()
-        .no_gzip()
-        .build()
-        .into_diagnostic()
-        .context("Failed to create HTTP client")?;
-
-    let authentication_storage =
-        AuthenticationStorage::from_env_and_defaults().into_diagnostic()?;
-
-    let client = reqwest_middleware::ClientBuilder::new(download_client)
-        .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
-            authentication_storage,
-        )))
-        .with(rattler_networking::OciMiddleware)
-        .with(rattler_networking::GCSMiddleware)
-        .build();
-
-    Ok(client)
+    super::client::create_client_with_middleware()
 }
 
 /// Fetch signatures from URL
