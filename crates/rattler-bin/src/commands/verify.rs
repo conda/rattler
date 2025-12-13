@@ -158,7 +158,10 @@ pub async fn verify(opt: Opt) -> miette::Result<()> {
     } else {
         let path = PathBuf::from(&opt.package);
         if !path.exists() {
-            return Err(miette::miette!("Package file not found: {}", path.display()));
+            return Err(miette::miette!(
+                "Package file not found: {}",
+                path.display()
+            ));
         }
         println!("Reading local package {}...", path.display());
         let digest = compute_file_digest(&path)?;
@@ -235,9 +238,12 @@ pub async fn verify(opt: Opt) -> miette::Result<()> {
                         println!("  Issuer:   {}", issuer);
                     }
                     if let Some(time) = result.integrated_time {
-                        println!("  Signed:   {}", DateTime::from_timestamp(time, 0)
-                            .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-                            .unwrap_or_else(|| time.to_string()));
+                        println!(
+                            "  Signed:   {}",
+                            DateTime::from_timestamp(time, 0)
+                                .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                                .unwrap_or_else(|| time.to_string())
+                        );
                     }
                     if !result.warnings.is_empty() {
                         for warning in &result.warnings {
