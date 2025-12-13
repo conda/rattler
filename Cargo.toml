@@ -209,6 +209,7 @@ rattler_shell = { path = "crates/rattler_shell", version = "=0.25.14", default-f
 rattler_solve = { path = "crates/rattler_solve", version = "=4.1.1", default-features = false }
 rattler_upload = { path = "crates/rattler_upload", version = "=0.4.6", default-features = false }
 rattler_virtual_packages = { path = "crates/rattler_virtual_packages", version = "=2.3.3", default-features = false }
+rattler_sigstore = { path = "crates/rattler_sigstore", version = "=0.1.0", default-features = false }
 
 # This is also a rattler crate, but we only pin it to minor version
 simple_spawn_blocking = { path = "crates/simple_spawn_blocking", version = "1.1", default-features = false }

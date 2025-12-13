@@ -49,6 +49,9 @@ mod reporter;
 pub struct PackageCache {
     inner: Arc<PackageCacheInner>,
     cache_origin: bool,
+    /// Signature verification policy for downloaded packages.
+    #[cfg(feature = "sigstore")]
+    verification_policy: rattler_sigstore::VerificationPolicy,
 }
 
 #[derive(Default)]
@@ -103,6 +106,16 @@ pub enum PackageCacheError {
     /// There are no writable layers to cache package to
     #[error("no writable layers to cache package to")]
     NoWritableLayers,
+
+    /// Signature verification failed for a package
+    #[cfg(feature = "sigstore")]
+    #[error("signature verification failed for {url}: {reason}")]
+    SignatureVerificationFailed {
+        /// The URL of the package that failed verification.
+        url: String,
+        /// The reason for the failure.
+        reason: String,
+    },
 }
 
 /// Errors specific to individual layers in the `PackageCache`
@@ -312,7 +325,26 @@ impl PackageCache {
         Self {
             inner: Arc::new(PackageCacheInner { layers }),
             cache_origin,
+            #[cfg(feature = "sigstore")]
+            verification_policy: rattler_sigstore::VerificationPolicy::Disabled,
         }
+    }
+
+    /// Set the signature verification policy for downloaded packages.
+    ///
+    /// When enabled, packages will be verified against Sigstore signatures
+    /// after download. The policy controls how verification failures are handled:
+    ///
+    /// - `Disabled`: No verification (default)
+    /// - `Warn(config)`: Verify but only warn on failure
+    /// - `Require(config)`: Require valid signatures for installation
+    #[cfg(feature = "sigstore")]
+    pub fn with_verification_policy(
+        mut self,
+        policy: rattler_sigstore::VerificationPolicy,
+    ) -> Self {
+        self.verification_policy = policy;
+        self
     }
 
     /// Returns a tuple containing two sets of layers:
@@ -474,8 +506,17 @@ impl PackageCache {
         let sha256 = cache_key.sha256();
         let md5 = cache_key.md5();
         let download_reporter = reporter.clone();
+
+        // Clone URL for verification later
+        #[cfg(feature = "sigstore")]
+        let verification_url = url.clone();
+        #[cfg(feature = "sigstore")]
+        let verification_policy = self.verification_policy.clone();
+        #[cfg(feature = "sigstore")]
+        let verification_client = client.clone();
+
         // Get or fetch the package, using the specified fetch function
-        self.get_or_fetch(cache_key, move |destination| {
+        let result = self.get_or_fetch(cache_key, move |destination| {
             let url = url.clone();
             let client = client.clone();
             let retry_policy = retry_policy.clone();
@@ -567,7 +608,68 @@ impl PackageCache {
                 }
             }
         }, reporter)
-            .await
+            .await?;
+
+        // Verify package signatures if enabled
+        #[cfg(feature = "sigstore")]
+        if verification_policy.is_enabled() {
+            // Use the SHA256 from the cache metadata for verification
+            if let Some(sha256) = &result.sha256 {
+                let sha256_hex = format!("{sha256:x}");
+                tracing::debug!(
+                    "Verifying signatures for {} (sha256: {})",
+                    verification_url,
+                    sha256_hex
+                );
+
+                let outcome = rattler_sigstore::verify_package_by_digest(
+                    &verification_policy,
+                    &verification_url,
+                    &sha256_hex,
+                    verification_client.client(),
+                )
+                .await;
+
+                match outcome {
+                    Ok(verification_outcome) => {
+                        if verification_outcome.verified {
+                            tracing::info!(
+                                "Package {} signature verified (identity: {:?}, issuer: {:?})",
+                                verification_url,
+                                verification_outcome.identity,
+                                verification_outcome.issuer
+                            );
+                        } else if !verification_outcome.warnings.is_empty() {
+                            for warning in &verification_outcome.warnings {
+                                tracing::warn!(
+                                    "Signature verification warning for {}: {}",
+                                    verification_url,
+                                    warning
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        if verification_policy.is_required() {
+                            // Delete the extracted package since verification failed
+                            let _ = tokio_fs::remove_dir_all(&result.path).await;
+                            return Err(PackageCacheError::SignatureVerificationFailed {
+                                url: verification_url.to_string(),
+                                reason: e.to_string(),
+                            });
+                        } else {
+                            tracing::warn!(
+                                "Signature verification failed for {}: {} (continuing because verification is not required)",
+                                verification_url,
+                                e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(result)
     }
 }
 
