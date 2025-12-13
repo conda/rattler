@@ -20,6 +20,7 @@ path = "src/main.rs"
 default = ["rustls-tls"]
 native-tls = ["reqwest/native-tls", "rattler/native-tls", "rattler_repodata_gateway/native-tls", "rattler_networking/native-tls", "rattler_cache/native-tls"]
 rustls-tls = ["reqwest/rustls-tls", "reqwest/rustls-tls-native-roots", "rattler/rustls-tls", "rattler_repodata_gateway/rustls-tls", "rattler_networking/rustls-tls", "rattler_cache/rustls-tls"]
+sigstore-verify = ["dep:sigstore-verify", "dep:sigstore-trust-root"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -45,6 +46,11 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
 url = { workspace = true }
+sigstore-verify = { workspace = true, optional = true }
+sigstore-trust-root = { workspace = true, optional = true }
+serde_json = { workspace = true }
+rattler_digest = { workspace = true }
+sha2 = { workspace = true }
 
 [package.metadata.release]
 # Dont publish the binary
