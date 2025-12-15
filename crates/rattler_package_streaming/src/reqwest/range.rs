@@ -229,23 +229,23 @@ fn find_info_entry(cd_bytes: &[u8]) -> Option<ZipEntryLocation> {
             break;
         }
 
-        let compressed_size = u32::from_le_bytes([
+        let compressed_size = u64::from(u32::from_le_bytes([
             cd_bytes[offset + 20],
             cd_bytes[offset + 21],
             cd_bytes[offset + 22],
             cd_bytes[offset + 23],
-        ]) as u64;
+        ]));
 
         let filename_len = u16::from_le_bytes([cd_bytes[offset + 28], cd_bytes[offset + 29]]);
         let extra_len = u16::from_le_bytes([cd_bytes[offset + 30], cd_bytes[offset + 31]]);
         let comment_len = u16::from_le_bytes([cd_bytes[offset + 32], cd_bytes[offset + 33]]);
 
-        let local_header_offset = u32::from_le_bytes([
+        let local_header_offset = u64::from(u32::from_le_bytes([
             cd_bytes[offset + 42],
             cd_bytes[offset + 43],
             cd_bytes[offset + 44],
             cd_bytes[offset + 45],
-        ]) as u64;
+        ]));
 
         let filename_start = offset + CD_HEADER_SIZE;
         let filename_end = filename_start + filename_len as usize;
@@ -293,7 +293,7 @@ fn get_data_offset_from_local_header(header_bytes: &[u8]) -> Option<u64> {
     let filename_len = u16::from_le_bytes([header_bytes[26], header_bytes[27]]);
     let extra_len = u16::from_le_bytes([header_bytes[28], header_bytes[29]]);
 
-    Some(LOCAL_HEADER_SIZE as u64 + filename_len as u64 + extra_len as u64)
+    Some(LOCAL_HEADER_SIZE as u64 + u64::from(filename_len) + u64::from(extra_len))
 }
 
 /// Try to extract a slice from tail bytes if the requested range is fully contained within it.
@@ -386,7 +386,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     }
 
     // Step 1: Fetch the tail of the file
-    let range = format!("bytes=-{}", DEFAULT_TAIL_SIZE);
+    let range = format!("bytes=-{DEFAULT_TAIL_SIZE}");
     let tail_result = fetch_range(&client, &url, &range).await?;
 
     let (tail_bytes, content_range) = match tail_result {
@@ -426,8 +426,8 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     }
 
     // Step 3: Check if Central Directory is in our tail bytes
-    let cd_start_in_file = eocd.cd_offset as u64;
-    let cd_size = eocd.cd_size as u64;
+    let cd_start_in_file = u64::from(eocd.cd_offset);
+    let cd_size = u64::from(eocd.cd_size);
 
     let cd_bytes = if let Some(bytes) =
         slice_from_tail(&tail_bytes, tail_start_offset, cd_start_in_file, cd_size)
@@ -507,7 +507,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     extract_file_from_tar::<P>(&tar_bytes)
 }
 
-/// Download full package and extract PackageFile when range requests fail.
+/// Download full package and extract [`PackageFile`] when range requests fail.
 async fn fetch_package_file_full_download<P: PackageFile>(
     client: &ClientWithMiddleware,
     url: &Url,
