@@ -34,6 +34,7 @@ use http::StatusCode;
 use rattler_conda_types::package::{ArchiveType, PackageFile};
 use reqwest_middleware::ClientWithMiddleware;
 use tar::Archive;
+use tracing::debug;
 use url::Url;
 
 use crate::seek::read_package_file_content;
@@ -110,6 +111,8 @@ async fn fetch_range(
     url: &Url,
     range: &str,
 ) -> Result<RangeRequestResult, ExtractError> {
+    debug!("fetching range {range} from {url}");
+
     let response = client
         .get(url.clone())
         .header(http::header::RANGE, range)
@@ -137,18 +140,34 @@ async fn fetch_range(
                 .await
                 .map_err(|e| ExtractError::ReqwestError(e.into()))?;
 
+            debug!(
+                "received {} bytes (range {}-{}/{})",
+                bytes.len(),
+                content_range.start,
+                content_range.start + bytes.len() as u64,
+                content_range.total
+            );
+
             Ok(RangeRequestResult::Success(bytes, content_range))
         }
-        StatusCode::METHOD_NOT_ALLOWED => Ok(RangeRequestResult::NotSupported),
+        StatusCode::METHOD_NOT_ALLOWED => {
+            debug!("server does not support range requests (405)");
+            Ok(RangeRequestResult::NotSupported)
+        }
         StatusCode::OK => {
             // Server doesn't support range requests, returned full content
             let bytes = response
                 .bytes()
                 .await
                 .map_err(|e| ExtractError::ReqwestError(e.into()))?;
+            debug!(
+                "server returned full content ({} bytes) instead of range",
+                bytes.len()
+            );
             Ok(RangeRequestResult::FullContent(bytes))
         }
-        _status => {
+        status => {
+            debug!("range request failed with status {status}");
             let error = response
                 .error_for_status()
                 .expect_err("non-success status should error");
@@ -376,12 +395,19 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     client: ClientWithMiddleware,
     url: Url,
 ) -> Result<P, ExtractError> {
+    debug!(
+        "fetching {} from {} using range requests",
+        P::package_path().display(),
+        url
+    );
+
     // Determine archive type from URL - only .conda supports efficient range requests
     let archive_type = ArchiveType::try_from(std::path::Path::new(url.path()))
         .ok_or(ExtractError::UnsupportedArchiveType)?;
 
     if archive_type != ArchiveType::Conda {
         // .tar.bz2 files don't support efficient range requests, fall back to full download
+        debug!("archive type is .tar.bz2, falling back to full download");
         return fetch_package_file_full_download(&client, &url, archive_type).await;
     }
 
@@ -392,10 +418,12 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     let (tail_bytes, content_range) = match tail_result {
         RangeRequestResult::Success(bytes, range) => (bytes, range),
         RangeRequestResult::NotSupported => {
+            debug!("server does not support range requests, falling back to full download");
             return fetch_package_file_full_download(&client, &url, ArchiveType::Conda).await;
         }
         RangeRequestResult::FullContent(bytes) => {
             // Server returned full content, extract from that
+            debug!("server returned full content, extracting from response");
             let content = read_package_file_content(
                 Cursor::new(&*bytes),
                 ArchiveType::Conda,
@@ -428,13 +456,19 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     // Step 3: Check if Central Directory is in our tail bytes
     let cd_start_in_file = u64::from(eocd.cd_offset);
     let cd_size = u64::from(eocd.cd_size);
+    debug!(
+        "central directory: offset={cd_start_in_file}, size={cd_size}, total_file_size={}",
+        content_range.total
+    );
 
     let cd_bytes = if let Some(bytes) =
         slice_from_tail(&tail_bytes, tail_start_offset, cd_start_in_file, cd_size)
     {
+        debug!("central directory found in tail bytes");
         bytes
     } else {
         // CD is not (fully) in our tail, need to fetch it
+        debug!("central directory not in tail, fetching separately");
         let range = format!(
             "bytes={}-{}",
             cd_start_in_file,
@@ -448,6 +482,10 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
 
     // Step 4: Find the info-*.tar.zst entry in the Central Directory
     let entry = find_info_entry(&cd_bytes).ok_or(ExtractError::MissingComponent)?;
+    debug!(
+        "found info archive entry: local_header_offset={}, compressed_size={}",
+        entry.local_header_offset, entry.compressed_size
+    );
 
     // Step 5: We need to read the local file header to get the actual data offset
     // The local header has variable-length fields that may differ from CD
@@ -463,6 +501,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         bytes
     } else {
         // Need to fetch local header
+        debug!("local header not in tail, fetching separately");
         let range = format!(
             "bytes={}-{}",
             local_header_offset,
@@ -489,9 +528,11 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         data_start,
         entry.compressed_size,
     ) {
+        debug!("info archive data found in tail bytes");
         bytes
     } else {
         // Need to fetch the info archive
+        debug!("info archive data not in tail, fetching separately");
         let range = format!("bytes={}-{}", data_start, data_end - 1);
         match fetch_range(&client, &url, &range).await? {
             RangeRequestResult::Success(bytes, _) => bytes,
@@ -500,8 +541,17 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     };
 
     // Step 7: Decompress zstd
+    debug!(
+        "decompressing {} bytes of zstd-compressed info archive",
+        info_archive_bytes.len()
+    );
     let tar_bytes =
         zstd::decode_all(Cursor::new(&info_archive_bytes[..])).map_err(ExtractError::IoError)?;
+    debug!(
+        "decompressed to {} bytes, extracting {}",
+        tar_bytes.len(),
+        P::package_path().display()
+    );
 
     // Step 8: Extract the specific file from tar
     extract_file_from_tar::<P>(&tar_bytes)
