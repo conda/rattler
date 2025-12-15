@@ -187,6 +187,8 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(package_streaming::extract_tar_bz2, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(package_streaming::extract, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(package_streaming::download_and_extract, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(package_streaming::fetch_index_json_from_url, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(package_streaming::fetch_about_json_from_url, &m).unwrap())?;
 
     // Explicit environment specification
     m.add_class::<PyExplicitEnvironmentSpec>()?;
