@@ -193,6 +193,9 @@ plugins:
   - llmstxt:
       enabled: !ENV [CI, false]
       full_output: llms-full.txt
+      sections:
+        Home:
+          - index.md
 
 watch:
   - rattler
