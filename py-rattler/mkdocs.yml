@@ -83,7 +83,7 @@ markdown_extensions:
         - !relative $config_dir # Relative to the current Markdown file
 
 nav:
-  - First Steps: index.md
+  - Home: index.md
   - References:
       - core:
           - fetch: fetch_repo_data.md
