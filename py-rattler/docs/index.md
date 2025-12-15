@@ -88,4 +88,4 @@ Next, we will see a quick reference summary of all the methods and properties th
 ## Contributing 😍
 
 We would love to have you contribute!
-See the CONTRIBUTION.md for more info. For questions, requests or a casual chat, we are very active on our [discord server](https://discord.gg/kKV8ZxyzY4).
+See the [CONTRIBUTION.md](https://github.com/conda/rattler/blob/main/CONTRIBUTING.md) for more info. For questions, requests or a casual chat, we are very active on our [discord server](https://discord.gg/kKV8ZxyzY4).

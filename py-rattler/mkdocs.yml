@@ -1,17 +1,15 @@
 site_name: "py-rattler"
+repo_url: "https://github.com/conda/rattler/"
+edit_uri: edit/main/py-rattler/docs
+site_url: https://conda.github.io/rattler/py-rattler/
 
 theme:
   name: material
-  site_url: https://prefix.dev
-  font:
-    text: Red Hat Text
-    code: JetBrains Mono
+  custom_dir: docs/overrides
+  logo: assets/rattler-logo.svg
+  favicon: assets/rattler-logo.svg
 
   palette:
-    - primary: yellow
-      accent: yellow
-      scheme: slate
-
     # Palette toggle for automatic mode
     - media: "(prefers-color-scheme)"
       toggle:
@@ -44,7 +42,6 @@ theme:
     - content.code.copy
     - content.action.edit
     - content.code.annotate
-    # - content.code.select Sponsor only
     - navigation.instant
     - navigation.instant.progress
     - navigation.tracking
@@ -54,9 +51,6 @@ theme:
 
 extra_css:
   - stylesheets/extra.css
-
-repo_url: https://github.com/conda/rattler/
-edit_uri: edit/main/py-rattler/docs/
 
 markdown_extensions:
   - admonition
@@ -169,12 +163,16 @@ nav:
 
 extra:
   social:
-    - icon: fontawesome/brands/twitter
-      link: https://twitter.com/prefix_dev
-    - icon: fontawesome/brands/linkedin
-      link: https://www.linkedin.com/company/prefix-dev
     - icon: fontawesome/brands/github
       link: https://github.com/prefix-dev
+    - icon: fontawesome/brands/mastodon
+      link: https://hachyderm.io/@prefix
+    - icon: fontawesome/brands/bluesky
+      link: https://bsky.app/profile/prefix.dev
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/company/prefix-dev
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/prefix_dev
 
 plugins:
   - mkdocstrings:
@@ -187,7 +185,14 @@ plugins:
             show_source: false
 
   - search
-  - social
+  - social:
+      cards_layout_dir: docs/layouts
+      cards_layout: custom
+      # Set debug to true to help troubleshoot social card generation issues
+      debug: false
+  - llmstxt:
+      enabled: !ENV [CI, false]
+      full_output: llms-full.txt
 
 watch:
   - rattler
