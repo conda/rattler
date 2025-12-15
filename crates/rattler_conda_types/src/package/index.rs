@@ -35,7 +35,7 @@ pub struct IndexJson {
     pub constrains: Vec<String>,
 
     /// The dependencies of the package
-    #[serde(default]
+    #[serde(default)]
     pub depends: Vec<String>,
 
     /// Extra dependency groups that can be selected using `foobar[extras=["scientific"]]`
