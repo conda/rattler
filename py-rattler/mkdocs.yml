@@ -191,7 +191,7 @@ plugins:
       # Set debug to true to help troubleshoot social card generation issues
       debug: false
   - llmstxt:
-      enabled: !ENV [CI, true]
+      enabled: !ENV [CI, false]
       full_output: llms-full.txt
       sections:
         Home:
