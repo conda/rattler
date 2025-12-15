@@ -336,18 +336,18 @@ fn extract_file_from_tar<P: PackageFile>(tar_bytes: &[u8]) -> Result<P, ExtractE
     Err(ExtractError::MissingComponent)
 }
 
-/// Fetch a specific [`PackageFile`] from a remote `.conda` package using HTTP range requests.
+/// Fetch a specific [`PackageFile`] from a remote package using HTTP range requests.
 ///
 /// This function fetches only the minimal bytes needed from the package, typically
 /// just the `info/` section which is located at the end of the `.conda` archive.
 ///
-/// If the server returns 405 (Method Not Allowed), the function falls back to
-/// downloading the entire package.
+/// If the server returns 405 (Method Not Allowed) or the package is not a `.conda` file,
+/// the function falls back to downloading the entire package.
 ///
 /// # Arguments
 ///
 /// * `client` - The HTTP client to use for requests
-/// * `url` - The URL of the `.conda` package
+/// * `url` - The URL of the package
 ///
 /// # Returns
 ///
@@ -376,6 +376,15 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     client: ClientWithMiddleware,
     url: Url,
 ) -> Result<P, ExtractError> {
+    // Determine archive type from URL - only .conda supports efficient range requests
+    let archive_type = ArchiveType::try_from(std::path::Path::new(url.path()))
+        .ok_or(ExtractError::UnsupportedArchiveType)?;
+
+    if archive_type != ArchiveType::Conda {
+        // .tar.bz2 files don't support efficient range requests, fall back to full download
+        return fetch_package_file_full_download(&client, &url, archive_type).await;
+    }
+
     // Step 1: Fetch the tail of the file
     let range = format!("bytes=-{}", DEFAULT_TAIL_SIZE);
     let tail_result = fetch_range(&client, &url, &range).await?;
@@ -383,7 +392,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     let (tail_bytes, content_range) = match tail_result {
         RangeRequestResult::Success(bytes, range) => (bytes, range),
         RangeRequestResult::NotSupported => {
-            return fetch_package_file_full_download(&client, &url).await;
+            return fetch_package_file_full_download(&client, &url, ArchiveType::Conda).await;
         }
         RangeRequestResult::FullContent(bytes) => {
             // Server returned full content, extract from that
@@ -433,7 +442,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         );
         match fetch_range(&client, &url, &range).await? {
             RangeRequestResult::Success(bytes, _) => bytes,
-            _ => return fetch_package_file_full_download(&client, &url).await,
+            _ => return fetch_package_file_full_download(&client, &url, ArchiveType::Conda).await,
         }
     };
 
@@ -461,7 +470,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         );
         match fetch_range(&client, &url, &range).await? {
             RangeRequestResult::Success(bytes, _) => bytes,
-            _ => return fetch_package_file_full_download(&client, &url).await,
+            _ => return fetch_package_file_full_download(&client, &url, ArchiveType::Conda).await,
         }
     };
 
@@ -486,7 +495,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         let range = format!("bytes={}-{}", data_start, data_end - 1);
         match fetch_range(&client, &url, &range).await? {
             RangeRequestResult::Success(bytes, _) => bytes,
-            _ => return fetch_package_file_full_download(&client, &url).await,
+            _ => return fetch_package_file_full_download(&client, &url, ArchiveType::Conda).await,
         }
     };
 
@@ -502,6 +511,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
 async fn fetch_package_file_full_download<P: PackageFile>(
     client: &ClientWithMiddleware,
     url: &Url,
+    archive_type: ArchiveType,
 ) -> Result<P, ExtractError> {
     let response = client
         .get(url.clone())
@@ -516,8 +526,7 @@ async fn fetch_package_file_full_download<P: PackageFile>(
         .await
         .map_err(|e| ExtractError::ReqwestError(e.into()))?;
 
-    let content =
-        read_package_file_content(Cursor::new(&*bytes), ArchiveType::Conda, P::package_path())?;
+    let content = read_package_file_content(Cursor::new(&*bytes), archive_type, P::package_path())?;
     P::from_str(&String::from_utf8_lossy(&content))
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
 }
