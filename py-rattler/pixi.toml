@@ -70,6 +70,8 @@ cairosvg = ">=2.8.2,<3"
 pillow = ">=12.0.0,<13"
 ruff = ">=0.14.9,<0.15"
 mkdocs-llmstxt = ">=0.4.0,<0.5"
+python = { build-number = ">10"}
+
 
 [feature.docs.tasks]
 docs = { cmd = "mkdocs serve", description = "Serve the docs locally", depends-on = [
