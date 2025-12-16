@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_lock/src/utils/derived_fields.rs
-expression: fields
+expression: "file:///packages/win-64/x264-1!164.3095-h57fd34a_2.tar.bz2"
 ---
 LocationDerivedFields {
     file_name: Some(
