@@ -656,7 +656,7 @@ mod test {
         let data_path =
             test_data_path.join("channels/dummy-noarch-str-not-empty/linux-64/repodata.json");
         let err = RepoData::from_path(data_path).unwrap_err();
-        insta::assert_snapshot!(err.to_string(), @r#"invalid value: string "notempty-this-should-fail", expected '' at line 26 column 43"#);
+        insta::assert_snapshot!(err.to_string(), @r###"invalid value: string "notempty-this-should-fail", expected '' at line 26 column 43"###);
     }
 
     #[test]
