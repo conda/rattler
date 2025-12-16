@@ -696,6 +696,13 @@ pub fn copy_and_replace_cstring_placeholder(
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
 
+    if new_prefix.len() > old_prefix.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "target prefix cannot be longer than the placeholder prefix",
+        ));
+    }
+
     let finder = memchr::memmem::Finder::new(old_prefix);
 
     loop {
@@ -842,8 +849,6 @@ mod test {
         "cruel",
         b"12345Hello, cruel world!\x00\x00\x00\x006789"
     )]
-    #[case(b"short\x00", "short", "verylong", b"veryl\x00")]
-    #[case(b"short1234\x00", "short", "verylong", b"verylong1\x00")]
     pub fn test_copy_and_replace_binary_placeholder(
         #[case] input: &[u8],
         #[case] prefix_placeholder: &str,
@@ -864,6 +869,26 @@ mod test {
         )
         .unwrap();
         assert_eq!(&output.into_inner(), expected_output);
+    }
+
+    #[rstest]
+    #[case(b"short\x00", "short", "verylong")]
+    #[case(b"short1234\x00", "short", "verylong")]
+    pub fn test_shorter_binary_placeholder(
+        #[case] input: &[u8],
+        #[case] prefix_placeholder: &str,
+        #[case] target_prefix: &str,
+    ) {
+        assert!(target_prefix.len() > prefix_placeholder.len());
+
+        let mut output = Cursor::new(Vec::new());
+        let result = super::copy_and_replace_cstring_placeholder(
+            input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+        );
+        assert!(result.is_err());
     }
 
     #[test]
