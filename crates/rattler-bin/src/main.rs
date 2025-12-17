@@ -48,6 +48,8 @@ enum Command {
     RemoveMenu(commands::menu::InstallOpt),
     Extract(commands::extract::Opt),
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
+    #[cfg(feature = "sigstore-verify")]
+    VerifyPackage(commands::verify::Opt),
 }
 
 /// Entry point of the `rattler` cli.
@@ -88,5 +90,7 @@ async fn main() -> miette::Result<()> {
         Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
         Command::Extract(opts) => commands::extract::extract(opts).await,
         Command::Upload(opts) => rattler_upload::upload_from_args(*opts).await,
+        #[cfg(feature = "sigstore-verify")]
+        Command::VerifyPackage(opts) => commands::verify::verify(opts).await,
     }
 }
