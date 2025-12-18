@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.3...rattler_virtual_packages-v2.3.4) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
 ## [2.3.3](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.2...rattler_virtual_packages-v2.3.3) - 2025-12-08
 
 ### Other

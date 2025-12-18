@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.29](https://github.com/conda/rattler/compare/rattler_networking-v0.25.28...rattler_networking-v0.25.29) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
 ## [0.25.28](https://github.com/conda/rattler/compare/rattler_networking-v0.25.27...rattler_networking-v0.25.28) - 2025-12-08
 
 ### Other
