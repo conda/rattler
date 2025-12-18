@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.7](https://github.com/conda/rattler/compare/rattler_upload-v0.4.6...rattler_upload-v0.4.7) - 2025-12-18
+
+### Added
+
+- integrate sigstore-sign for automatic signing of attestations ([#1897](https://github.com/conda/rattler/pull/1897))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
 ## [0.4.6](https://github.com/conda/rattler/compare/rattler_upload-v0.4.5...rattler_upload-v0.4.6) - 2025-12-08
 
 ### Added

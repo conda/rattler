@@ -83,6 +83,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.7](https://github.com/conda/rattler/compare/rattler-v0.39.6...rattler-v0.39.7) - 2025-12-18
+
+### Fixed
+
+- validate new prefix length against old prefix ([#1938](https://github.com/conda/rattler/pull/1938))
+- always emit depends in index.json ([#1932](https://github.com/conda/rattler/pull/1932))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
 ## [0.39.6](https://github.com/conda/rattler/compare/rattler-v0.39.5...rattler-v0.39.6) - 2025-12-08
 
 ### Other
