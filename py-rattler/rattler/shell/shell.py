@@ -83,6 +83,7 @@ class Shell:
 
     bash = PyShellEnum.Bash
     zsh = PyShellEnum.Zsh
+    sh = PyShellEnum.Sh
     fish = PyShellEnum.Fish
     xonsh = PyShellEnum.Xonsh
     powershell = PyShellEnum.PowerShell
