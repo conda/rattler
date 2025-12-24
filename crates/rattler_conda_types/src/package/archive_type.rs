@@ -11,6 +11,9 @@ pub enum ArchiveType {
 
     /// A file with the `.conda` extension.
     Conda,
+
+    /// A file with the `.whl` extension.
+    Whl,
 }
 
 impl ArchiveType {
@@ -44,6 +47,7 @@ impl ArchiveType {
         match self {
             ArchiveType::TarBz2 => ".tar.bz2",
             ArchiveType::Conda => ".conda",
+            ArchiveType::Whl => ".whl",
         }
     }
 
@@ -54,6 +58,8 @@ impl ArchiveType {
             Some((path, ArchiveType::Conda))
         } else if let Some(path) = path.strip_suffix(".tar.bz2") {
             Some((path, ArchiveType::TarBz2))
+        } else if let Some(path) = path.strip_suffix(".whl") {
+            Some((path, ArchiveType::Whl))
         } else {
             None
         }
@@ -73,6 +79,10 @@ mod test {
         assert_eq!(
             ArchiveType::TarBz2,
             ArchiveType::try_from("my-package.tar.bz2").unwrap()
+        );
+        assert_eq!(
+            ArchiveType::Whl,
+            ArchiveType::try_from("my-package.whl").unwrap()
         );
         assert_eq!(None, ArchiveType::try_from("my-package.zip"));
     }
