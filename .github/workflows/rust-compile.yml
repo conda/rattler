@@ -88,8 +88,8 @@ jobs:
             }
 
           - {
-              name: "Linux-riscv64a23",
-              target: riscv64a23-unknown-linux-gnu,
+              name: "Linux-riscv64gc",
+              target: riscv64gc-unknown-linux-musl,
               os: ubuntu-latest,
               use-cross: true,
               skip-tests: true,
