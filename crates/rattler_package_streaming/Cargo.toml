@@ -11,6 +11,8 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+# https://github.com/Majored/rs-async-zip/issues/173
+astral_async_zip = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
 bzip2 = { workspace = true }
 chrono = { workspace = true }
@@ -62,6 +64,7 @@ reqwest = [
   "dep:fs-err",
   "dep:bytes",
   "dep:http",
+  "dep:astral_async_zip",
 ]
 wasm = ["zstd/wasm"]
 

@@ -192,6 +192,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral_async_zip"
+version = "0.0.17"
+dependencies = [
+ "crc32fast",
+ "futures-lite",
+ "pin-project",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4977,6 +4987,7 @@ version = "0.23.20"
 dependencies = [
  "assert_matches",
  "astral-tokio-tar",
+ "astral_async_zip",
  "async-compression",
  "bytes",
  "bzip2",

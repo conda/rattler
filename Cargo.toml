@@ -27,6 +27,8 @@ ahash = "0.8.12"
 anyhow = "1.0.98"
 archspec = "0.1.3"
 assert_matches = "1.5.0"
+# astral_async_zip = "0.0.17"
+astral_async_zip = { path = "../astral-async-zip" }
 async-compression = { version = "0.4", features = [
   "gzip",
   "tokio",
@@ -53,7 +55,12 @@ chrono = { version = "0.4.41", default-features = false, features = [
   "serde",
   "alloc",
 ] }
-clap = { version = "4.5.38", features = ["derive", "color", "suggestions", "error-context"] }
+clap = { version = "4.5.38", features = [
+  "derive",
+  "color",
+  "suggestions",
+  "error-context",
+] }
 clap-verbosity-flag = "3.0.3"
 cmake = "0.1.54"
 console = { version = "0.16.0", features = ["windows-console-colors"] }

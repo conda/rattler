@@ -29,6 +29,12 @@
 use std::borrow::Cow;
 use std::io::{Cursor, Read};
 
+use async_zip::spec::consts::{
+    CDH_SIGNATURE, EOCDR_LENGTH, EOCDR_SIGNATURE, LFH_SIGNATURE, SIGNATURE_LENGTH,
+};
+use async_zip::spec::header::{
+    CentralDirectoryRecord, EndOfCentralDirectoryHeader, LocalFileHeader,
+};
 use bytes::Bytes;
 use http::StatusCode;
 use rattler_conda_types::package::{ArchiveType, PackageFile};
@@ -45,23 +51,14 @@ use crate::ExtractError;
 /// and often the entire info archive.
 const DEFAULT_TAIL_SIZE: u64 = 64 * 1024;
 
-/// Zip End of Central Directory signature
-const EOCD_SIGNATURE: u32 = 0x06054b50;
+/// Minimum size of EOCD record (signature + fixed fields, without comment)
+const EOCD_MIN_SIZE: usize = SIGNATURE_LENGTH + EOCDR_LENGTH;
 
-/// Zip Central Directory file header signature
-const CD_SIGNATURE: u32 = 0x02014b50;
+/// Size of a Central Directory entry header (signature + fixed fields, without variable fields)
+const CD_HEADER_SIZE: usize = SIGNATURE_LENGTH + 42;
 
-/// Zip Local file header signature
-const LOCAL_HEADER_SIGNATURE: u32 = 0x04034b50;
-
-/// Minimum size of EOCD record (without comment)
-const EOCD_MIN_SIZE: usize = 22;
-
-/// Size of a Central Directory entry header (without variable fields)
-const CD_HEADER_SIZE: usize = 46;
-
-/// Size of a Local file header (without variable fields)
-const LOCAL_HEADER_SIZE: usize = 30;
+/// Size of a Local file header (signature + fixed fields, without variable fields)
+const LOCAL_HEADER_SIZE: usize = SIGNATURE_LENGTH + 26;
 
 /// Information about a zip entry's location in the archive.
 #[derive(Debug)]
@@ -177,14 +174,14 @@ async fn fetch_range(
 }
 
 /// Find the End of Central Directory record in the tail bytes.
-/// Returns the offset within the tail bytes and the parsed EOCD data.
-fn find_eocd(tail_bytes: &[u8]) -> Option<(usize, EocdRecord)> {
+/// Returns the offset within the tail bytes and the parsed EOCD header.
+fn find_eocd(tail_bytes: &[u8]) -> Option<(usize, EndOfCentralDirectoryHeader)> {
     // EOCD can have a variable-length comment, so we need to search backwards
     // Maximum comment length is 65535 bytes, but we limit our search
     let search_start = tail_bytes.len().saturating_sub(EOCD_MIN_SIZE + 65535);
 
     for i in (search_start..=tail_bytes.len().saturating_sub(EOCD_MIN_SIZE)).rev() {
-        if tail_bytes.len() < i + 4 {
+        if tail_bytes.len() < i + SIGNATURE_LENGTH {
             continue;
         }
         let sig = u32::from_le_bytes([
@@ -194,42 +191,24 @@ fn find_eocd(tail_bytes: &[u8]) -> Option<(usize, EocdRecord)> {
             tail_bytes[i + 3],
         ]);
 
-        if sig == EOCD_SIGNATURE {
+        if sig == EOCDR_SIGNATURE {
             // Verify this is a valid EOCD by checking the comment length
             if tail_bytes.len() >= i + EOCD_MIN_SIZE {
-                let comment_len = u16::from_le_bytes([tail_bytes[i + 20], tail_bytes[i + 21]]);
-                let expected_end = i + EOCD_MIN_SIZE + comment_len as usize;
+                // Parse EOCD header using astral_async_zip (after signature)
+                let header_bytes: [u8; EOCDR_LENGTH] = tail_bytes
+                    [i + SIGNATURE_LENGTH..i + EOCD_MIN_SIZE]
+                    .try_into()
+                    .ok()?;
+                let eocd = EndOfCentralDirectoryHeader::from(header_bytes);
+                let expected_end = i + EOCD_MIN_SIZE + eocd.file_comm_length as usize;
 
-                if expected_end == tail_bytes.len() || expected_end <= tail_bytes.len() {
-                    let eocd = EocdRecord {
-                        cd_size: u32::from_le_bytes([
-                            tail_bytes[i + 12],
-                            tail_bytes[i + 13],
-                            tail_bytes[i + 14],
-                            tail_bytes[i + 15],
-                        ]),
-                        cd_offset: u32::from_le_bytes([
-                            tail_bytes[i + 16],
-                            tail_bytes[i + 17],
-                            tail_bytes[i + 18],
-                            tail_bytes[i + 19],
-                        ]),
-                    };
+                if expected_end <= tail_bytes.len() {
                     return Some((i, eocd));
                 }
             }
         }
     }
     None
-}
-
-/// End of Central Directory record data
-#[derive(Debug)]
-struct EocdRecord {
-    /// Size of the central directory
-    cd_size: u32,
-    /// Offset of the central directory from the start of the archive
-    cd_offset: u32,
 }
 
 /// Parse Central Directory entries to find the info-*.tar.zst file.
@@ -244,48 +223,38 @@ fn find_info_entry(cd_bytes: &[u8]) -> Option<ZipEntryLocation> {
             cd_bytes[offset + 3],
         ]);
 
-        if sig != CD_SIGNATURE {
+        if sig != CDH_SIGNATURE {
             break;
         }
 
-        let compressed_size = u64::from(u32::from_le_bytes([
-            cd_bytes[offset + 20],
-            cd_bytes[offset + 21],
-            cd_bytes[offset + 22],
-            cd_bytes[offset + 23],
-        ]));
-
-        let filename_len = u16::from_le_bytes([cd_bytes[offset + 28], cd_bytes[offset + 29]]);
-        let extra_len = u16::from_le_bytes([cd_bytes[offset + 30], cd_bytes[offset + 31]]);
-        let comment_len = u16::from_le_bytes([cd_bytes[offset + 32], cd_bytes[offset + 33]]);
-
-        let local_header_offset = u64::from(u32::from_le_bytes([
-            cd_bytes[offset + 42],
-            cd_bytes[offset + 43],
-            cd_bytes[offset + 44],
-            cd_bytes[offset + 45],
-        ]));
+        // Parse CD record using astral_async_zip (42 bytes after signature)
+        let record_bytes: [u8; 42] = cd_bytes[offset + SIGNATURE_LENGTH..offset + CD_HEADER_SIZE]
+            .try_into()
+            .ok()?;
+        let record = CentralDirectoryRecord::from(record_bytes);
 
         let filename_start = offset + CD_HEADER_SIZE;
-        let filename_end = filename_start + filename_len as usize;
+        let filename_end = filename_start + record.file_name_length as usize;
 
         if filename_end > cd_bytes.len() {
             break;
         }
 
-        let filename = String::from_utf8_lossy(&cd_bytes[filename_start..filename_end]).to_string();
+        let filename = String::from_utf8_lossy(&cd_bytes[filename_start..filename_end]);
 
         // Check if this is the info archive
         if filename.starts_with("info-") && filename.ends_with(".tar.zst") {
             return Some(ZipEntryLocation {
-                local_header_offset,
-                compressed_size,
+                local_header_offset: u64::from(record.lh_offset),
+                compressed_size: u64::from(record.compressed_size),
             });
         }
 
         // Move to next entry
-        offset +=
-            CD_HEADER_SIZE + filename_len as usize + extra_len as usize + comment_len as usize;
+        offset += CD_HEADER_SIZE
+            + record.file_name_length as usize
+            + record.extra_field_length as usize
+            + record.file_comment_length as usize;
     }
 
     None
@@ -305,14 +274,21 @@ fn get_data_offset_from_local_header(header_bytes: &[u8]) -> Option<u64> {
         header_bytes[3],
     ]);
 
-    if sig != LOCAL_HEADER_SIGNATURE {
+    if sig != LFH_SIGNATURE {
         return None;
     }
 
-    let filename_len = u16::from_le_bytes([header_bytes[26], header_bytes[27]]);
-    let extra_len = u16::from_le_bytes([header_bytes[28], header_bytes[29]]);
+    // Parse local file header using astral_async_zip (26 bytes after signature)
+    let lfh_bytes: [u8; 26] = header_bytes[SIGNATURE_LENGTH..LOCAL_HEADER_SIZE]
+        .try_into()
+        .ok()?;
+    let lfh = LocalFileHeader::from(lfh_bytes);
 
-    Some(LOCAL_HEADER_SIZE as u64 + u64::from(filename_len) + u64::from(extra_len))
+    Some(
+        LOCAL_HEADER_SIZE as u64
+            + u64::from(lfh.file_name_length)
+            + u64::from(lfh.extra_field_length),
+    )
 }
 
 /// Try to extract a slice from tail bytes if the requested range is fully contained within it.
@@ -454,8 +430,8 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     }
 
     // Step 3: Check if Central Directory is in our tail bytes
-    let cd_start_in_file = u64::from(eocd.cd_offset);
-    let cd_size = u64::from(eocd.cd_size);
+    let cd_start_in_file = u64::from(eocd.cent_dir_offset);
+    let cd_size = u64::from(eocd.size_cent_dir);
     debug!(
         "central directory: offset={cd_start_in_file}, size={cd_size}, total_file_size={}",
         content_range.total
