@@ -220,12 +220,12 @@ pub fn link_file(
         // We no longer need the file.
         drop(file);
 
-        // Copy over filesystem permissions. We do this to ensure that the destination file has the
-        // same permissions as the source file.
+        // Copy over executable bit permissions from the source file if needed.
+        // We only copy the executable bits, not all permissions, to reduce syscalls.
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-        fs::set_permissions(&destination_path, metadata.permissions())
-            .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+        #[cfg(unix)]
+        copy_executable_permissions(&metadata.permissions(), &destination_path)?;
 
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
         if (has_executable_permissions(&metadata.permissions())
@@ -386,12 +386,11 @@ fn reflink_to_destination(
             Ok(_) => {
                 #[cfg(target_os = "linux")]
                 {
-                    // Copy over filesystem permissions. We do this to ensure that the destination file has the
-                    // same permissions as the source file.
-                    let metadata = fs::metadata(source_path)
+                    // Only copy the executable bit permissions if the source file is executable.
+                    // This optimization reduces syscalls significantly for non-executable files.
+                    let source_metadata = fs::metadata(source_path)
                         .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-                    fs::set_permissions(destination_path, metadata.permissions())
-                        .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+                    copy_executable_permissions(&source_metadata.permissions(), destination_path)?;
                 }
                 return Ok(LinkMethod::Reflink);
             }
@@ -766,6 +765,49 @@ fn has_executable_permissions(permissions: &Permissions) -> bool {
     return false;
     #[cfg(unix)]
     return std::os::unix::fs::PermissionsExt::mode(permissions) & 0o111 != 0;
+}
+
+/// Conditionally copies executable bit permissions from source to destination.
+///
+/// This function optimizes permission copying by:
+/// 1. Only operating if the source file has executable permissions
+/// 2. Only updating if the destination doesn't already have the correct executable bits
+/// 3. Only copying the executable bits (0o111), leaving other permissions intact
+///
+/// This significantly reduces syscalls for non-executable files and files that
+/// already have correct permissions.
+#[cfg(unix)]
+fn copy_executable_permissions(
+    source_permissions: &Permissions,
+    destination_path: &Path,
+) -> Result<(), LinkFileError> {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Only proceed if source file is executable
+    if !has_executable_permissions(source_permissions) {
+        return Ok(());
+    }
+
+    // Get destination metadata to check current permissions
+    let dest_metadata =
+        fs::metadata(destination_path).map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+    let dest_permissions = dest_metadata.permissions();
+
+    let source_mode = source_permissions.mode();
+    let dest_mode = dest_permissions.mode();
+
+    // Copy only the executable bits (0o111 = owner, group, other execute)
+    let new_mode = (dest_mode & !0o111) | (source_mode & 0o111);
+
+    // Only update permissions if they differ
+    if new_mode != dest_mode {
+        let mut new_permissions = dest_permissions;
+        new_permissions.set_mode(new_mode);
+        fs::set_permissions(destination_path, new_permissions)
+            .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+    }
+
+    Ok(())
 }
 
 /// Represents the type of file detected from its content
