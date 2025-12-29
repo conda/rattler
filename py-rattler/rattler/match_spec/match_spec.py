@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 from rattler.channel.channel import Channel
-from rattler.package.package_name import PackageName
+from rattler.package.package_name_matcher import PackageNameMatcher
 from rattler.rattler import PyMatchSpec
 
 if TYPE_CHECKING:
@@ -40,6 +40,7 @@ class MatchSpec:
 
     1. `name` (i.e. "package name") is required, but its value can be '*'. Its
     position is always outside the key-value brackets.
+    It can also be a glob pattern or a regex if `exact_names_only` is `False`.
     2. If `version` is an exact version, it goes outside the key-value brackets and
     is prepended by `==`. If `version` is a "fuzzy" value (e.g. `1.11.*`), it goes
     outside the key-value brackets with the `.*` left off and is prepended by `=`.
@@ -80,35 +81,53 @@ class MatchSpec:
     - build
     """
 
-    def __init__(self, spec: str, strict: bool = False) -> None:
+    def __init__(
+        self,
+        spec: str,
+        strict: bool = False,
+        exact_names_only: bool = True,
+        experimental_extras: bool = False,
+        experimental_conditionals: bool = False,
+    ) -> None:
         """
         Create a new version spec.
 
         When `strict` is `True`, some ambiguous version specs are rejected.
+
+        When `experimental_extras` is `True`, extras syntax is enabled (e.g., `pkg[extras=[foo,bar]]`).
+
+        When `experimental_conditionals` is `True`, conditionals syntax is enabled (e.g., `pkg; if python >=3.6`).
 
         ```python
         >>> MatchSpec("pip >=24.0")
         MatchSpec("pip >=24.0")
         >>> MatchSpec("pip 24")
         MatchSpec("pip ==24")
-        >>> MatchSpec('python[license=MIT]')
+        >>> MatchSpec("python[license=MIT]")
         MatchSpec("python[license="MIT"]")
+        >>> MatchSpec("foo*", strict=True, exact_names_only=False)
+        MatchSpec("foo*")
+        >>> MatchSpec("^foo.*$", strict=True, exact_names_only=True) # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        InvalidMatchSpecException: "^foo.*$" looks like a regex but only exact package names are allowed, package names can only contain 0-9, a-z, A-Z, -, _, or .
         >>>
         ```
         """
         if isinstance(spec, str):
-            self._match_spec = PyMatchSpec(spec, strict)
+            self._match_spec = PyMatchSpec(
+                spec, strict, exact_names_only, experimental_extras, experimental_conditionals
+            )
         else:
             raise TypeError(
                 f"MatchSpec constructor received unsupported type {type(spec).__name__!r} for the 'spec' parameter"
             )
 
     @property
-    def name(self) -> Optional[PackageName]:
+    def name(self) -> Optional[PackageNameMatcher]:
         """
         The name of the package.
         """
-        return PackageName._from_py_package_name(self._match_spec.name)
+        return PackageNameMatcher._from_py_package_name_matcher(self._match_spec.name)
 
     @property
     def version(self) -> Optional[str]:
@@ -161,6 +180,20 @@ class MatchSpec:
         return self._match_spec.namespace
 
     @property
+    def extras(self) -> Optional[list[str]]:
+        """
+        The extras (optional dependencies) of the package.
+        """
+        return self._match_spec.extras
+
+    @property
+    def condition(self) -> Optional[str]:
+        """
+        The condition under which this match spec applies.
+        """
+        return self._match_spec.condition
+
+    @property
     def md5(self) -> Optional[bytes]:
         """
         The md5 hash of the package.
@@ -203,7 +236,7 @@ class MatchSpec:
         MatchSpec("foo ==3.4")
         >>> MatchSpec.from_nameless(spec, "$foo") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        exceptions.InvalidPackageNameException
+        exceptions.PackageNameMatcherParseException
         >>>
         ```
         """

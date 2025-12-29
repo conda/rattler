@@ -39,6 +39,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.3...rattler_conda_types-v0.42.4) - 2025-12-18
+
+### Added
+
+- add common function to extract package name from matchspec ([#1923](https://github.com/conda/rattler/pull/1923))
+
+### Fixed
+
+- always emit depends in index.json ([#1932](https://github.com/conda/rattler/pull/1932))
+- regression in `Version::starts_with` ([#1920](https://github.com/conda/rattler/pull/1920))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.42.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.2...rattler_conda_types-v0.42.3) - 2025-12-08
+
+### Fixed
+
+- topological sort looses nodes when they are in independent clusters ([#1913](https://github.com/conda/rattler/pull/1913))
+
+### Other
+
+- bump crates ([#1902](https://github.com/conda/rattler/pull/1902))
+
+## [0.42.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.1...rattler_conda_types-v0.42.2) - 2025-11-27
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.42.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.0...rattler_conda_types-v0.42.1) - 2025-11-25
+
+### Added
+
+- *(rattler_conda_types)* use `fancy_regex` for matchers ([#1885](https://github.com/conda/rattler/pull/1885))
+
+## [0.42.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.41.2...rattler_conda_types-v0.42.0) - 2025-11-22
+
+### Added
+
+- improve error messages for glob and regex package names ([#1867](https://github.com/conda/rattler/pull/1867))
+
+### Other
+
+- make `extras` and `conditionals` runtime-configurable ([#1816](https://github.com/conda/rattler/pull/1816))
+
+## [0.41.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.41.1...rattler_conda_types-v0.41.2) - 2025-11-20
+
+### Added
+
+- implement From<T> for PackageNameMatcher variants ([#1861](https://github.com/conda/rattler/pull/1861))
+
+## [0.41.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.41.0...rattler_conda_types-v0.41.1) - 2025-11-19
+
+### Added
+
+- add accessor methods to PackageNameMatcher ([#1857](https://github.com/conda/rattler/pull/1857))
+
+## [0.41.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.4...rattler_conda_types-v0.41.0) - 2025-11-13
+
+### Added
+
+- Add glob support for package name in matchspec ([#1480](https://github.com/conda/rattler/pull/1480))
+- expose crate features on docs.rs ([#1835](https://github.com/conda/rattler/pull/1835))
+- parse matchspec conditions and translate to resolvo ([#1545](https://github.com/conda/rattler/pull/1545))
+
+### Fixed
+
+- omit `sha256_in_prefix` when equal to `sha256` ([#1812](https://github.com/conda/rattler/pull/1812))
+- `Version::starts_with` for versions with differing non-final component sizes ([#1791](https://github.com/conda/rattler/pull/1791))
+
+## [0.40.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.3...rattler_conda_types-v0.40.4) - 2025-10-28
+
+### Fixed
+
+- sort packages when serializing repodata ([#1779](https://github.com/conda/rattler/pull/1779))
+- timestamp serialization as milliseconds ([#1776](https://github.com/conda/rattler/pull/1776))
+
+### Other
+
+- Replace fxhash with ahash ([#1674](https://github.com/conda/rattler/pull/1674))
+
 ## [0.40.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.40.2...rattler_conda_types-v0.40.3) - 2025-10-18
 
 ### Added

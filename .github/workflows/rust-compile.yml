@@ -22,7 +22,7 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
-  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,experimental_extras,edit,rattler_config
+  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,edit,rattler_config
 
 jobs:
   check-rustdoc-links:
@@ -33,7 +33,7 @@ jobs:
         with:
           submodules: recursive
       - name: Set up pixi
-        uses: prefix-dev/setup-pixi@28eb668aafebd9dede9d97c4ba1cd9989a4d0004 # v0.9.2
+        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
       - run: pixi r doc
 
   build:
@@ -87,6 +87,14 @@ jobs:
               skip-tests: true,
             }
 
+          - {
+              name: "Linux-riscv64gc",
+              target: riscv64gc-unknown-linux-musl,
+              os: ubuntu-latest,
+              use-cross: true,
+              skip-tests: true,
+            }
+
           - {name: "macOS-x86_64", target: x86_64-apple-darwin, os: macOS-latest}
           - {name: "macOS-aarch64", target: aarch64-apple-darwin, os: macOS-latest}
 
@@ -119,7 +127,7 @@ jobs:
           sudo apt install musl-tools gcc g++
           sudo ln -s /usr/bin/musl-gcc /usr/bin/musl-g++
 
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
 
       - name: Show version information (Rust, cargo, GCC)
         shell: bash
@@ -157,7 +165,7 @@ jobs:
         run: >
           cargo build
           --all-targets
-          --features ${{ env.DEFAULT_FEATURES }}
+          --features ${{ env.DEFAULT_FEATURES }}${{ !startsWith(matrix.target, 'powerpc') && ',sigstore-sign' || '' }}
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
 
@@ -182,7 +190,7 @@ jobs:
         run: >
           cargo nextest run
           --workspace
-          --features ${{ env.DEFAULT_FEATURES }}
+          --features ${{ env.DEFAULT_FEATURES }}${{ !startsWith(matrix.target, 'powerpc') && ',sigstore-sign' || '' }}
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}

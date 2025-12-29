@@ -38,6 +38,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.3...rattler_virtual_packages-v2.3.4) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [2.3.3](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.2...rattler_virtual_packages-v2.3.3) - 2025-12-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.2](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.1...rattler_virtual_packages-v2.3.2) - 2025-11-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.0...rattler_virtual_packages-v2.3.1) - 2025-11-25
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [2.3.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.8...rattler_virtual_packages-v2.3.0) - 2025-11-22
+
+### Added
+
+- improve libc detection using `gnu_get_libc_version()` ([#1868](https://github.com/conda/rattler/pull/1868))
+
+## [2.2.8](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.7...rattler_virtual_packages-v2.2.8) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.2.7](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.6...rattler_virtual_packages-v2.2.7) - 2025-11-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.2.6](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.5...rattler_virtual_packages-v2.2.6) - 2025-11-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.2.5](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.4...rattler_virtual_packages-v2.2.5) - 2025-10-28
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [2.2.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.3...rattler_virtual_packages-v2.2.4) - 2025-10-18
 
 ### Other

@@ -1,10 +1,12 @@
+use fs_err::tokio as tokio_fs;
 use rattler_digest::Sha256;
 use reqwest::blocking::Client;
 use std::time::Instant;
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
+use tempfile::NamedTempFile;
 use thiserror::Error;
 use url::Url;
 
@@ -125,4 +127,116 @@ pub fn download_and_cache_file(url: Url, expected_sha256: &str) -> Result<PathBu
     );
 
     Ok(final_path)
+}
+
+/// Returns the path to the test data directory
+pub fn test_data_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
+}
+
+/// Fetches conda-forge test repodata from rattler-test.pixi.run (blocking version).
+///
+/// This function downloads conda-forge repodata files from rattler-test.pixi.run if they
+/// don't already exist locally. It uses file locking to ensure thread-safety and avoid
+/// duplicate downloads.
+///
+/// # Arguments
+/// * `subdir` - The subdirectory (platform) to fetch, e.g., "linux-64", "noarch"
+///
+/// # Returns
+/// * `Ok(PathBuf)` - Path to the repodata.json file
+/// * `Err(reqwest::Error)` if the download failed
+pub fn fetch_test_conda_forge_repodata(subdir: &str) -> Result<PathBuf, reqwest::Error> {
+    let path = test_data_dir().join(format!("channels/conda-forge/{subdir}/repodata.json"));
+
+    // Early out if the file already exists
+    if path.exists() {
+        return Ok(path);
+    }
+
+    // Create the parent directory if it doesn't exist
+    let parent_dir = path.parent().unwrap();
+    std::fs::create_dir_all(parent_dir).unwrap();
+
+    // Acquire a lock on the file to ensure we don't download the file twice.
+    let mut lock = fslock::LockFile::open(&parent_dir.join(".lock")).unwrap();
+    loop {
+        if lock.try_lock_with_pid().unwrap() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    // Early out if the file was downloaded while we were waiting for the lock
+    if path.is_file() {
+        return Ok(path);
+    }
+
+    // Download the file and persist after download
+    let mut file = NamedTempFile::new_in(parent_dir).unwrap();
+    let mut response = reqwest_client()
+        .get(format!(
+            "https://rattler-test.pixi.run/test-data/channels/conda-forge/{subdir}/repodata.json"
+        ))
+        .send()?
+        .error_for_status()?;
+
+    std::io::copy(&mut response, &mut file).unwrap();
+    file.persist(&path).unwrap();
+
+    Ok(path)
+}
+
+/// Fetches conda-forge test repodata from rattler-test.pixi.run (async version).
+///
+/// This function downloads conda-forge repodata files from rattler-test.pixi.run if they
+/// don't already exist locally. It uses file locking to ensure thread-safety and avoid
+/// duplicate downloads.
+///
+/// # Arguments
+/// * `subdir` - The subdirectory (platform) to fetch, e.g., "linux-64", "noarch"
+///
+/// # Returns
+/// * `Ok(PathBuf)` - Path to the repodata.json file
+/// * `Err(reqwest::Error)` if the download failed
+pub async fn fetch_test_conda_forge_repodata_async(
+    subdir: &str,
+) -> Result<PathBuf, reqwest::Error> {
+    let path = test_data_dir().join(format!("channels/conda-forge/{subdir}/repodata.json"));
+
+    // Early out if the file already exists
+    if path.exists() {
+        return Ok(path);
+    }
+
+    // Create the parent directory if it doesn't exist
+    let parent_dir = path.parent().unwrap();
+    tokio_fs::create_dir_all(parent_dir).await.unwrap();
+
+    // Acquire a lock on the file to ensure we don't download the file twice.
+    let mut lock = fslock::LockFile::open(&parent_dir.join(".lock")).unwrap();
+    loop {
+        if lock.try_lock_with_pid().unwrap() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    // Early out if the file was downloaded while we were waiting for the lock
+    if path.is_file() {
+        return Ok(path);
+    }
+
+    // Download the file and persist after download
+    let mut file = NamedTempFile::new_in(parent_dir).unwrap();
+    let data = reqwest::get(format!(
+        "https://rattler-test.pixi.run/test-data/channels/conda-forge/{subdir}/repodata.json"
+    ))
+    .await?;
+    tokio_fs::write(&mut file, data.bytes().await?)
+        .await
+        .unwrap();
+    file.persist(&path).unwrap();
+
+    Ok(path)
 }

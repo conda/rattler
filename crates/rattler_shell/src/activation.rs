@@ -753,7 +753,7 @@ impl<T: Shell + Clone> Activator<T> {
 mod tests {
     use std::{collections::BTreeMap, str::FromStr};
 
-    use tempdir::TempDir;
+    use tempfile::TempDir;
 
     use super::*;
     #[cfg(unix)]
@@ -763,7 +763,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_post_activation_env_vars_applied_after_scripts_bash() {
-        let temp_dir = TempDir::new("test_post_activation_env_vars").unwrap();
+        let temp_dir = TempDir::with_prefix("test_post_activation_env_vars").unwrap();
 
         // Create a dummy activation script so the activator will run it
         let activate_dir = temp_dir.path().join("etc/conda/activate.d");
@@ -832,7 +832,7 @@ mod tests {
 
     #[test]
     fn test_collect_scripts() {
-        let tdir = TempDir::new("test").unwrap();
+        let tdir = TempDir::with_prefix("test").unwrap();
 
         let path = tdir.path().join("etc/conda/activate.d/");
         fs::create_dir_all(&path).unwrap();
@@ -862,7 +862,7 @@ mod tests {
 
     #[test]
     fn test_collect_env_vars() {
-        let tdir = TempDir::new("test").unwrap();
+        let tdir = TempDir::with_prefix("test").unwrap();
         let path = tdir.path().join("conda-meta/state");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
 
@@ -879,7 +879,7 @@ mod tests {
 
     #[test]
     fn test_collect_env_vars_with_directory() {
-        let tdir = TempDir::new("test").unwrap();
+        let tdir = TempDir::with_prefix("test").unwrap();
         let state_path = tdir.path().join("conda-meta/state");
         fs::create_dir_all(state_path.parent().unwrap()).unwrap();
 
@@ -929,7 +929,7 @@ mod tests {
 
     #[cfg(unix)]
     fn create_temp_dir() -> TempDir {
-        let tempdir = TempDir::new("test").unwrap();
+        let tempdir = TempDir::with_prefix("test").unwrap();
         let path = tempdir.path().join("etc/conda/activate.d/");
         fs::create_dir_all(&path).unwrap();
 
@@ -1206,7 +1206,7 @@ mod tests {
 
     #[test]
     fn test_deactivation() {
-        let tmp_dir = TempDir::new("test_deactivation").unwrap();
+        let tmp_dir = TempDir::with_prefix("test_deactivation").unwrap();
         let tmp_dir_path = tmp_dir.path();
 
         // Create an activator with some test environment variables
@@ -1263,7 +1263,7 @@ mod tests {
 
     #[test]
     fn test_deactivation_when_activated() {
-        let tmp_dir = TempDir::new("test_deactivation").unwrap();
+        let tmp_dir = TempDir::with_prefix("test_deactivation").unwrap();
         let tmp_dir_path = tmp_dir.path();
 
         // Create an activator with some test environment variables
@@ -1329,7 +1329,7 @@ mod tests {
 
     #[test]
     fn test_nested_deactivation() {
-        let tmp_dir = TempDir::new("test_deactivation").unwrap();
+        let tmp_dir = TempDir::with_prefix("test_deactivation").unwrap();
         let tmp_dir_path = tmp_dir.path();
 
         // Create an activator with some test environment variables
@@ -1448,7 +1448,7 @@ mod tests {
 
     #[test]
     fn test_resetting_conda_shlvl() {
-        let tmp_dir = TempDir::new("test_deactivation").unwrap();
+        let tmp_dir = TempDir::with_prefix("test_deactivation").unwrap();
         let tmp_dir_path = tmp_dir.path();
 
         // Create an activator with some test environment variables

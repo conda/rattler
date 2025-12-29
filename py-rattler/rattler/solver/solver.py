@@ -1,17 +1,18 @@
 from __future__ import annotations
+
 import datetime
-from typing import List, Optional, Literal, Sequence
+from typing import List, Literal, Optional, Sequence
 
-from rattler import Channel, Platform, VirtualPackage, SparseRepoData
+from rattler.channel.channel import Channel
+from rattler.channel.channel_priority import ChannelPriority
 from rattler.match_spec.match_spec import MatchSpec
-
-from rattler.channel import ChannelPriority
-from rattler.rattler import py_solve, PyMatchSpec, py_solve_with_sparse_repodata, PyPackageFormatSelection
-
-from rattler.platform.platform import PlatformLiteral
+from rattler.platform.platform import Platform, PlatformLiteral
+from rattler.rattler import PyMatchSpec, PyPackageFormatSelection, py_solve, py_solve_with_sparse_repodata
 from rattler.repo_data.gateway import Gateway
 from rattler.repo_data.record import RepoDataRecord
+from rattler.repo_data.sparse import SparseRepoData
 from rattler.virtual_package.generic import GenericVirtualPackage
+from rattler.virtual_package.virtual_package import VirtualPackage
 
 SolveStrategy = Literal["highest", "lowest", "lowest-direct"]
 """Defines the strategy to use when multiple versions of a package are available during solving."""
@@ -90,7 +91,10 @@ async def solve(
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
                 for platform in platforms
             ],
-            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True) for spec in specs],
+            specs=[
+                spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True, True)
+                for spec in specs
+            ],
             gateway=gateway._gateway,
             locked_packages=[package._record for package in locked_packages or []],
             pinned_packages=[package._record for package in pinned_packages or []],
@@ -107,7 +111,9 @@ async def solve(
             else None,
             strategy=strategy,
             constraints=[
-                constraint._match_spec if isinstance(constraint, MatchSpec) else PyMatchSpec(str(constraint), True)
+                constraint._match_spec
+                if isinstance(constraint, MatchSpec)
+                else PyMatchSpec(str(constraint), True, True)
                 for constraint in constraints
             ]
             if constraints is not None
@@ -181,7 +187,10 @@ async def solve_with_sparse_repodata(
     return [
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in await py_solve_with_sparse_repodata(
-            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True) for spec in specs],
+            specs=[
+                spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True, True)
+                for spec in specs
+            ],
             sparse_repodata=[package._sparse for package in sparse_repodata],
             locked_packages=[package._record for package in locked_packages or []],
             pinned_packages=[package._record for package in pinned_packages or []],
@@ -201,7 +210,9 @@ async def solve_with_sparse_repodata(
             else None,
             strategy=strategy,
             constraints=[
-                constraint._match_spec if isinstance(constraint, MatchSpec) else PyMatchSpec(str(constraint), True)
+                constraint._match_spec
+                if isinstance(constraint, MatchSpec)
+                else PyMatchSpec(str(constraint), True, True)
                 for constraint in constraints
             ]
             if constraints is not None

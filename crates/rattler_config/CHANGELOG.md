@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.23](https://github.com/conda/rattler/compare/rattler_config-v0.2.22...rattler_config-v0.2.23) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.2.22](https://github.com/conda/rattler/compare/rattler_config-v0.2.21...rattler_config-v0.2.22) - 2025-12-08
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.2.21](https://github.com/conda/rattler/compare/rattler_config-v0.2.20...rattler_config-v0.2.21) - 2025-11-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.2.20](https://github.com/conda/rattler/compare/rattler_config-v0.2.19...rattler_config-v0.2.20) - 2025-11-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.2.19](https://github.com/conda/rattler/compare/rattler_config-v0.2.18...rattler_config-v0.2.19) - 2025-11-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.2.18](https://github.com/conda/rattler/compare/rattler_config-v0.2.17...rattler_config-v0.2.18) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.2.17](https://github.com/conda/rattler/compare/rattler_config-v0.2.16...rattler_config-v0.2.17) - 2025-11-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.2.16](https://github.com/conda/rattler/compare/rattler_config-v0.2.15...rattler_config-v0.2.16) - 2025-11-13
+
+### Added
+
+- expose crate features on docs.rs ([#1835](https://github.com/conda/rattler/pull/1835))
+
+## [0.2.15](https://github.com/conda/rattler/compare/rattler_config-v0.2.14...rattler_config-v0.2.15) - 2025-10-28
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [0.2.14](https://github.com/conda/rattler/compare/rattler_config-v0.2.13...rattler_config-v0.2.14) - 2025-10-18
 
 ### Other

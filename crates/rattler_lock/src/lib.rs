@@ -78,7 +78,6 @@
 
 use std::{collections::HashMap, io::Read, path::Path, str::FromStr, sync::Arc};
 
-use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use rattler_conda_types::{Platform, RepoDataRecord};
 
@@ -99,11 +98,11 @@ pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
 pub use conda::{
     CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
-    PackageBuildSource,
+    PackageBuildSource, VariantValue,
 };
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
-pub use options::SolveOptions;
+pub use options::{PypiPrereleaseMode, SolveOptions};
 pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
@@ -136,7 +135,7 @@ struct LockFileInner {
     pypi_packages: Vec<PypiPackageData>,
     pypi_environment_package_data: Vec<PypiPackageEnvironmentData>,
 
-    environment_lookup: FxHashMap<String, usize>,
+    environment_lookup: ahash::HashMap<String, usize>,
 }
 
 /// An package used in an environment. Selects a type of package based on the
@@ -168,7 +167,7 @@ struct EnvironmentData {
 
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
-    packages: FxHashMap<Platform, IndexSet<EnvironmentPackageData>>,
+    packages: ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>>,
 }
 
 impl LockFile {
@@ -282,6 +281,13 @@ impl<'lock> Environment<'lock> {
     /// Starting with version `5` of the format this should not be optional.
     pub fn pypi_indexes(&self) -> Option<&PypiIndexes> {
         self.data().indexes.as_ref()
+    }
+
+    /// Returns the `PyPI` prerelease mode that was used to solve this environment.
+    ///
+    /// Returns `None` if no prerelease mode was explicitly set.
+    pub fn pypi_prerelease_mode(&self) -> Option<PypiPrereleaseMode> {
+        self.data().options.pypi_prerelease_mode
     }
 
     /// Returns the solver options that were used to create this environment.
@@ -565,6 +571,10 @@ mod test {
     #[case::v6_pixi_build_url_source("v6/pixi-build-url-source-lock.yml")]
     #[case::v6_pixi_build_git_tag_source("v6/pixi-build-git-tag-source-lock.yml")]
     #[case::v6_pixi_build_git_rev_only_source("v6/pixi-build-git-rev-only-source-lock.yml")]
+    #[case::v6_source_package_with_variants("v6/source-package-with-variants-lock.yml")]
+    #[case::v6_multiple_source_packages_with_variants(
+        "v6/multiple-source-packages-with-variants-lock.yml"
+    )]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")

@@ -8,11 +8,9 @@ paths:
     original_path: another-clobber.txt
     path_type: hardlink
     sha256: 39c11e390a978044b876c5cd92b4b429330f2eb2a6ed20b1f1e39791c344ec38
-    sha256_in_prefix: 39c11e390a978044b876c5cd92b4b429330f2eb2a6ed20b1f1e39791c344ec38
     size_in_bytes: 10
   - _path: __clobbers__/clobber-2/clobber.txt
     original_path: clobber.txt
     path_type: hardlink
     sha256: 39c11e390a978044b876c5cd92b4b429330f2eb2a6ed20b1f1e39791c344ec38
-    sha256_in_prefix: 39c11e390a978044b876c5cd92b4b429330f2eb2a6ed20b1f1e39791c344ec38
     size_in_bytes: 10

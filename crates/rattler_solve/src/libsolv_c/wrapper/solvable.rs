@@ -41,3 +41,13 @@ pub fn lookup_num(solvable: *mut ffi::Solvable, key: StringId) -> Option<u64> {
         Some(value)
     }
 }
+
+/// Gets an Id associated to this solvable
+pub fn lookup_id(solvable: *mut ffi::Solvable, key: StringId) -> Option<StringId> {
+    let value = unsafe { ffi::solvable_lookup_id(solvable.cast(), key.0) };
+    if value == 0 {
+        None
+    } else {
+        Some(StringId::from_id(value))
+    }
+}

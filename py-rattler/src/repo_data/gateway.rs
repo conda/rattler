@@ -11,7 +11,9 @@ use pyo3::types::PyAnyMethods;
 use pyo3::{pyclass, pymethods, Bound, FromPyObject, PyAny, PyResult, Python};
 use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::{CacheAction, FetchRepoDataOptions, Variant};
-use rattler_repodata_gateway::{ChannelConfig, Gateway, SourceConfig, SubdirSelection};
+use rattler_repodata_gateway::{
+    CacheClearMode, ChannelConfig, Gateway, SourceConfig, SubdirSelection,
+};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use url::Url;
@@ -99,8 +101,22 @@ impl PyGateway {
         })
     }
 
-    pub fn clear_repodata_cache(&self, channel: &PyChannel, subdirs: Wrap<SubdirSelection>) {
-        self.inner.clear_repodata_cache(&channel.inner, subdirs.0);
+    #[pyo3(signature = (channel, subdirs, clear_disk=false))]
+    pub fn clear_repodata_cache(
+        &self,
+        channel: &PyChannel,
+        subdirs: Wrap<SubdirSelection>,
+        clear_disk: bool,
+    ) -> PyResult<()> {
+        let mode = if clear_disk {
+            CacheClearMode::InMemoryAndDisk
+        } else {
+            CacheClearMode::InMemoryOnly
+        };
+        self.inner
+            .clear_repodata_cache(&channel.inner, subdirs.0, mode)
+            .map_err(PyRattlerError::from)?;
+        Ok(())
     }
 
     pub fn query<'a>(

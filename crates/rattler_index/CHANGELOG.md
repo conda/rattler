@@ -62,6 +62,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.8](https://github.com/conda/rattler/compare/rattler_index-v0.27.7...rattler_index-v0.27.8) - 2025-12-18
+
+### Fixed
+
+- add if-not-exists check to prevent concurrency issues when initializing S3 channel ([#1915](https://github.com/conda/rattler/pull/1915))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.27.7](https://github.com/conda/rattler/compare/rattler_index-v0.27.6...rattler_index-v0.27.7) - 2025-12-08
+
+### Added
+
+- add ensure_channel_initialized for fs and s3 channels ([#1906](https://github.com/conda/rattler/pull/1906))
+
+## [0.27.6](https://github.com/conda/rattler/compare/rattler_index-v0.27.5...rattler_index-v0.27.6) - 2025-11-27
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.27.5](https://github.com/conda/rattler/compare/rattler_index-v0.27.4...rattler_index-v0.27.5) - 2025-11-25
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.27.4](https://github.com/conda/rattler/compare/rattler_index-v0.27.3...rattler_index-v0.27.4) - 2025-11-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_config, rattler_networking, rattler_s3
+
+## [0.27.3](https://github.com/conda/rattler/compare/rattler_index-v0.27.2...rattler_index-v0.27.3) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.27.2](https://github.com/conda/rattler/compare/rattler_index-v0.27.1...rattler_index-v0.27.2) - 2025-11-19
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.27.1](https://github.com/conda/rattler/compare/rattler_index-v0.27.0...rattler_index-v0.27.1) - 2025-11-13
+
+### Added
+
+- add cache control for repodata.json / zst and shard index ([#1796](https://github.com/conda/rattler/pull/1796))
+
+## [0.27.0](https://github.com/conda/rattler/compare/rattler_index-v0.26.5...rattler_index-v0.27.0) - 2025-10-28
+
+### Added
+
+- make precondition checks configurable ([#1777](https://github.com/conda/rattler/pull/1777))
+
+### Other
+
+- Replace fxhash with ahash ([#1674](https://github.com/conda/rattler/pull/1674))
+
 ## [0.26.5](https://github.com/conda/rattler/compare/rattler_index-v0.26.4...rattler_index-v0.26.5) - 2025-10-25
 
 ### Other

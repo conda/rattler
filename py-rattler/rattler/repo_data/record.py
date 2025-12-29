@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from rattler.rattler import PyRecord
-from rattler.repo_data import PackageRecord
+from rattler.repo_data.package_record import PackageRecord
 
 
 class RepoDataRecord(PackageRecord):

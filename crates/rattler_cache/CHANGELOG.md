@@ -49,6 +49,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6](https://github.com/conda/rattler/compare/rattler_cache-v0.6.5...rattler_cache-v0.6.6) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.6.5](https://github.com/conda/rattler/compare/rattler_cache-v0.6.4...rattler_cache-v0.6.5) - 2025-12-08
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.6.4](https://github.com/conda/rattler/compare/rattler_cache-v0.6.3...rattler_cache-v0.6.4) - 2025-11-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.6.3](https://github.com/conda/rattler/compare/rattler_cache-v0.6.2...rattler_cache-v0.6.3) - 2025-11-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.6.2](https://github.com/conda/rattler/compare/rattler_cache-v0.6.1...rattler_cache-v0.6.2) - 2025-11-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_networking
+
+## [0.6.1](https://github.com/conda/rattler/compare/rattler_cache-v0.6.0...rattler_cache-v0.6.1) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_package_streaming
+
+## [0.6.0](https://github.com/conda/rattler/compare/rattler_cache-v0.5.0...rattler_cache-v0.6.0) - 2025-11-19
+
+### Added
+
+- cache and reuse `paths.json` and `index.json` from package validation ([#1837](https://github.com/conda/rattler/pull/1837))
+
+## [0.5.0](https://github.com/conda/rattler/compare/rattler_cache-v0.4.1...rattler_cache-v0.5.0) - 2025-11-13
+
+### Added
+
+- add validation mode argument to PackageCache layers ([#1834](https://github.com/conda/rattler/pull/1834))
+
+### Other
+
+- remove cache lock mutex ([#1809](https://github.com/conda/rattler/pull/1809))
+- use global cache lock to reduce per-package lock overhead ([#1818](https://github.com/conda/rattler/pull/1818))
+
+## [0.4.1](https://github.com/conda/rattler/compare/rattler_cache-v0.4.0...rattler_cache-v0.4.1) - 2025-10-28
+
+### Other
+
+- Replace fxhash with ahash ([#1674](https://github.com/conda/rattler/pull/1674))
+
 ## [0.4.0](https://github.com/conda/rattler/compare/rattler_cache-v0.3.41...rattler_cache-v0.4.0) - 2025-10-25
 
 ### Added

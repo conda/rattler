@@ -1,7 +1,10 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use crate::{
-    fetch::{fetch_repo_data, FetchRepoDataError, FetchRepoDataOptions},
+    fetch::{fetch_repo_data, FetchRepoDataError, FetchRepoDataOptions, Variant},
     gateway::{
         error::SubdirNotFoundError, local_subdir::LocalSubdirClient, GatewayError, SourceConfig,
     },
@@ -63,5 +66,51 @@ impl RemoteSubdirClient {
         .await?;
 
         Ok(Self { sparse })
+    }
+
+    /// Clears the on-disk cache for the given channel and platform.
+    ///
+    /// This removes all cached repodata files (JSON and info files) for
+    /// the specified channel and platform combination. The lock file is
+    /// retained to avoid the ABA problem with concurrent processes.
+    ///
+    /// If the cache directory or lock file doesn't exist, this is a no-op
+    /// since there's nothing to clear.
+    pub fn clear_cache(
+        cache_dir: &Path,
+        channel: &Channel,
+        platform: Platform,
+    ) -> Result<(), std::io::Error> {
+        let subdir_url = channel.platform_url(platform);
+        let cache_key = crate::utils::url_to_cache_filename(
+            &subdir_url
+                .join(Variant::default().file_name())
+                .expect("valid filename"),
+        );
+
+        // Acquire a lock before modifying the cache files.
+        // If the lock file doesn't exist (e.g., parent directory doesn't exist),
+        // then there's no cache to clear, so we can return early.
+        let lock_path = cache_dir.join(format!("{cache_key}.lock"));
+        let _lock = match crate::utils::LockedFile::open_rw(&lock_path, "repodata cache clear") {
+            Ok(lock) => lock,
+            Err(_) => {
+                // Lock file doesn't exist or can't be created - no cache to clear
+                return Ok(());
+            }
+        };
+
+        // Remove the cached repodata files (but NOT the lock file)
+        let json_path = cache_dir.join(format!("{cache_key}.json"));
+        let info_path = cache_dir.join(format!("{cache_key}.info.json"));
+
+        for path in [json_path, info_path] {
+            if path.exists() {
+                fs_err::remove_file(&path)?;
+                tracing::debug!("deleted repodata cache file: {:?}", path);
+            }
+        }
+
+        Ok(())
     }
 }

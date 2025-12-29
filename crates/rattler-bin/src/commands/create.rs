@@ -20,7 +20,7 @@ use rattler::{
 };
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
-    ParseStrictness, Platform, PrefixRecord, RepoDataRecord, Version,
+    ParseMatchSpecOptions, Platform, PrefixRecord, RepoDataRecord, Version,
 };
 use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
@@ -30,7 +30,7 @@ use rattler_solve::{
 };
 use reqwest::Client;
 
-use crate::global_multi_progress;
+use crate::{exclude_newer::ExcludeNewer, global_multi_progress};
 
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
@@ -66,6 +66,12 @@ pub struct Opt {
 
     #[clap(long, group = "deps_mode")]
     no_deps: bool,
+
+    /// Exclude packages that have been published after the specified timestamp.
+    /// Can be specified as a timestamp (e.g., "2006-12-02T02:07:43Z") or as a date (e.g., "2006-12-02").
+    /// When using a date, packages from the entire day are included.
+    #[clap(long)]
+    exclude_newer: Option<ExcludeNewer>,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -85,6 +91,7 @@ pub enum SolveStrategy {
 pub enum Solver {
     #[default]
     Resolvo,
+    #[value(name = "libsolv")]
     LibSolv,
 }
 
@@ -122,10 +129,14 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // Parse the specs from the command line. We do this explicitly instead of allow
     // clap to deal with this because we need to parse the `channel_config` when
     // parsing matchspecs.
+    let match_spec_options = ParseMatchSpecOptions::strict()
+        .with_experimental_extras(true)
+        .with_experimental_conditionals(true);
+
     let specs = opt
         .specs
         .iter()
-        .map(|spec| MatchSpec::from_str(spec, ParseStrictness::Strict))
+        .map(|spec| MatchSpec::from_str(spec, match_spec_options))
         .collect::<Result<Vec<_>, _>>()
         .into_diagnostic()?;
 
@@ -266,6 +277,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
         specs: specs.clone(),
         timeout: opt.timeout.map(Duration::from_millis),
         strategy: opt.strategy.map_or_else(Default::default, Into::into),
+        exclude_newer: opt.exclude_newer.map(Into::into),
         ..SolverTask::from_iter(&repo_data)
     };
 

@@ -1,6 +1,9 @@
-use fxhash::FxBuildHasher;
+use std::hash::BuildHasherDefault;
+
 use indexmap::IndexMap;
-use rattler_conda_types::{MatchSpec, NamelessMatchSpec, PackageName};
+use rattler_conda_types::{
+    match_spec::package_name_matcher::PackageNameMatcher, MatchSpec, NamelessMatchSpec, PackageName,
+};
 use serde::{Deserialize, Deserializer};
 use serde_with::{serde_as, DeserializeAs, DisplayFromStr};
 
@@ -17,8 +20,8 @@ impl<'de> DeserializeAs<'de, Vec<String>> for MatchSpecMapOrVec {
         enum MapOrVec {
             Vec(Vec<String>),
             Map(
-                #[serde_as(as = "IndexMap<_, DisplayFromStr, FxBuildHasher>")]
-                IndexMap<PackageName, NamelessMatchSpec, FxBuildHasher>,
+                #[serde_as(as = "IndexMap<_, DisplayFromStr, BuildHasherDefault<ahash::AHasher>>")]
+                IndexMap<PackageName, NamelessMatchSpec, BuildHasherDefault<ahash::AHasher>>,
             ),
         }
 
@@ -26,7 +29,10 @@ impl<'de> DeserializeAs<'de, Vec<String>> for MatchSpecMapOrVec {
             MapOrVec::Vec(v) => v,
             MapOrVec::Map(m) => m
                 .into_iter()
-                .map(|(name, spec)| MatchSpec::from_nameless(spec, Some(name)).to_string())
+                .map(|(name, spec)| {
+                    MatchSpec::from_nameless(spec, Some(PackageNameMatcher::Exact(name)))
+                        .to_string()
+                })
                 .collect(),
         })
     }

@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_lock/src/utils/derived_fields.rs
-expression: fields
+expression: "../source/win-64/"
 ---
 LocationDerivedFields {
     file_name: None,

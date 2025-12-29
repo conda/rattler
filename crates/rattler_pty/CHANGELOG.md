@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8](https://github.com/conda/rattler/compare/rattler_pty-v0.2.7...rattler_pty-v0.2.8) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
 ## [0.2.7](https://github.com/conda/rattler/compare/rattler_pty-v0.2.6...rattler_pty-v0.2.7) - 2025-10-17
 
 ### Added

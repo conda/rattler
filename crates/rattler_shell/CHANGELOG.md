@@ -44,6 +44,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.15](https://github.com/conda/rattler/compare/rattler_shell-v0.25.14...rattler_shell-v0.25.15) - 2025-12-18
+
+### Fixed
+
+- always emit depends in index.json ([#1932](https://github.com/conda/rattler/pull/1932))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.25.14](https://github.com/conda/rattler/compare/rattler_shell-v0.25.13...rattler_shell-v0.25.14) - 2025-12-08
+
+### Other
+
+- bump crates ([#1902](https://github.com/conda/rattler/pull/1902))
+
+## [0.25.13](https://github.com/conda/rattler/compare/rattler_shell-v0.25.12...rattler_shell-v0.25.13) - 2025-11-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.12](https://github.com/conda/rattler/compare/rattler_shell-v0.25.11...rattler_shell-v0.25.12) - 2025-11-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.11](https://github.com/conda/rattler/compare/rattler_shell-v0.25.10...rattler_shell-v0.25.11) - 2025-11-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.10](https://github.com/conda/rattler/compare/rattler_shell-v0.25.9...rattler_shell-v0.25.10) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.9](https://github.com/conda/rattler/compare/rattler_shell-v0.25.8...rattler_shell-v0.25.9) - 2025-11-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.8](https://github.com/conda/rattler/compare/rattler_shell-v0.25.7...rattler_shell-v0.25.8) - 2025-11-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.7](https://github.com/conda/rattler/compare/rattler_shell-v0.25.6...rattler_shell-v0.25.7) - 2025-10-28
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
 ## [0.25.6](https://github.com/conda/rattler/compare/rattler_shell-v0.25.5...rattler_shell-v0.25.6) - 2025-10-25
 
 ### Other

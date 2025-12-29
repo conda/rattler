@@ -187,7 +187,7 @@ impl serde::Serialize for NamedChannelOrUrl {
 }
 
 /// `Channel`s are the primary source of package information.
-#[derive(Debug, Clone, Serialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Serialize, Eq, PartialEq, Hash, Deserialize)]
 pub struct Channel {
     /// The platforms supported by this channel, or None if no explicit
     /// platforms have been specified.
@@ -198,6 +198,7 @@ pub struct Channel {
     pub base_url: ChannelUrl,
 
     /// The name of the channel
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
@@ -513,9 +514,9 @@ mod tests {
     #[test]
     fn test_absolute_path() {
         let current_dir = std::env::current_dir().expect("no current dir?");
-        let native_current_dir = typed_path::utils::utf8_current_dir()
-            .expect("")
-            .to_typed_path_buf();
+        let native_current_dir =
+            Utf8TypedPath::derive(typed_path::utils::utf8_current_dir().expect("").as_str())
+                .to_path_buf();
         assert_eq!(
             absolute_path(".", &current_dir).as_ref(),
             Ok(&native_current_dir)

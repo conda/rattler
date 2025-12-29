@@ -456,4 +456,55 @@ mod test {
         let prefix_record = super::PrefixRecord::from_path(path).unwrap();
         insta::assert_yaml_snapshot!(path_name.replace('.', "_"), prefix_record);
     }
+
+    #[test]
+    fn test_sha256_in_prefix_serialization() {
+        use std::path::PathBuf;
+
+        let hash = rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
+            "a".repeat(64).as_str(),
+        )
+        .unwrap();
+
+        // Test case 1: sha256_in_prefix is None - should NOT be serialized
+        // This is how entries are created when sha256_in_prefix equals sha256
+        let entry_none = super::PathsEntry {
+            relative_path: PathBuf::from("test.txt"),
+            original_path: None,
+            path_type: super::PathType::HardLink,
+            no_link: false,
+            sha256: Some(hash),
+            sha256_in_prefix: None,
+            size_in_bytes: Some(100),
+            file_mode: None,
+            prefix_placeholder: None,
+        };
+
+        let json_none = serde_json::to_string(&entry_none).unwrap();
+        // Should not contain sha256_in_prefix field
+        assert!(!json_none.contains("sha256_in_prefix"));
+
+        // Test case 2: sha256_in_prefix differs from sha256 - SHOULD be serialized
+        // This happens when a file is patched with prefix replacement
+        let hash_different = rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
+            "b".repeat(64).as_str(),
+        )
+        .unwrap();
+        let entry_different = super::PathsEntry {
+            relative_path: PathBuf::from("test.txt"),
+            original_path: None,
+            path_type: super::PathType::HardLink,
+            no_link: false,
+            sha256: Some(hash),
+            sha256_in_prefix: Some(hash_different), // Different from sha256
+            size_in_bytes: Some(100),
+            file_mode: None,
+            prefix_placeholder: None,
+        };
+
+        let json_different = serde_json::to_string(&entry_different).unwrap();
+        // Should contain sha256_in_prefix field
+        assert!(json_different.contains("sha256_in_prefix"));
+        assert!(json_different.contains(&"b".repeat(64)));
+    }
 }

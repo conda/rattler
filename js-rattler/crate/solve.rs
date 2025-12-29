@@ -29,6 +29,7 @@ pub struct SolvedPackage {
     pub build_number: Option<u64>,
     #[wasm_bindgen(js_name = "repoName")]
     pub repo_name: Option<String>,
+    pub size: Option<u64>,
     pub filename: String,
     pub md5: Option<String>,
     pub sha256: Option<String>,
@@ -91,7 +92,7 @@ pub async fn simple_solve(
                     .sha256
                     .as_ref()
                     .and_then(|s| parse_digest_from_hex::<Sha256>(s)),
-                size: None,
+                size: pkg.size,
                 arch: None,
                 platform: None,
                 depends: pkg.depends.unwrap_or_default(),
@@ -162,7 +163,7 @@ pub async fn simple_solve(
 
         if records.package_record.depends.is_empty() {
             if let Some(deps) = repodata_keys.get(&key) {
-                records.package_record.depends = deps.to_vec();
+                records.package_record.depends = (*deps).clone();
             }
         }
     }
@@ -196,6 +197,7 @@ pub async fn simple_solve(
                 .sha256
                 .as_ref()
                 .map(|hash| format!("{hash:x}")),
+            size: r.package_record.size,
             depends: Some(r.package_record.depends.clone()),
             subdir: Some(r.package_record.subdir.clone()),
         })

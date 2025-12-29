@@ -1,67 +1,61 @@
 //! Command-line options.
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
 use clap::{arg, Parser};
-use rattler_conda_types::{
-    utils::url_with_trailing_slash::UrlWithTrailingSlash, NamedChannelOrUrl, Platform,
-};
-#[cfg(feature = "s3")]
-use rattler_networking::s3_middleware;
-use rattler_networking::{mirror_middleware, AuthenticationStorage};
-use rattler_solve::ChannelPriority;
+use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
+use rattler_networking::AuthenticationStorage;
 use tracing::warn;
 use url::Url;
 
-/// The configuration type for rattler-build - just extends rattler / pixi
-/// config and can load the same TOML files.
-pub type Config = rattler_config::config::ConfigBase<()>;
+/// Newtype wrapper for the force overwrite flag.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ForceOverwrite(pub bool);
 
-/// Container for `rattler_solver::ChannelPriority` so that it can be parsed
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ChannelPriorityWrapper {
-    /// The `ChannelPriority` value to be used when building the Configuration
-    pub value: ChannelPriority,
-}
-impl FromStr for ChannelPriorityWrapper {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "strict" => Ok(ChannelPriorityWrapper {
-                value: ChannelPriority::Strict,
-            }),
-            "disabled" => Ok(ChannelPriorityWrapper {
-                value: ChannelPriority::Disabled,
-            }),
-            _ => Err("Channel priority must be either 'strict' or 'disabled'".to_string()),
-        }
+impl ForceOverwrite {
+    /// Returns `true` if force overwrite is enabled.
+    pub fn is_enabled(&self) -> bool {
+        self.0
     }
 }
 
-/// Common opts that are shared between `Rebuild` and `Build` subcommands
-#[derive(Parser, Clone, Debug)]
+impl From<bool> for ForceOverwrite {
+    fn from(value: bool) -> Self {
+        Self(value)
+    }
+}
+
+/// Newtype wrapper for the skip existing flag.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SkipExisting(pub bool);
+
+impl SkipExisting {
+    /// Returns `true` if skip existing is enabled.
+    pub fn is_enabled(&self) -> bool {
+        self.0
+    }
+}
+
+impl From<bool> for SkipExisting {
+    fn from(value: bool) -> Self {
+        Self(value)
+    }
+}
+
+/// Source for attestation when uploading packages.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum AttestationSource {
+    /// Provide an existing attestation file path.
+    Attestation(PathBuf),
+    /// Automatically generate attestation using cosign on CI.
+    GenerateAttestation,
+    /// No attestation.
+    #[default]
+    NoAttestation,
+}
+
+/// Common opts for upload operations
+#[derive(Parser, Clone, Debug, Default)]
 pub struct CommonOpts {
-    /// Output directory for build artifacts.
-    #[clap(
-        long,
-        env = "CONDA_BLD_PATH",
-        verbatim_doc_comment,
-        help_heading = "Modifying result"
-    )]
-    pub output_dir: Option<PathBuf>,
-
-    /// Enable support for repodata.json.zst
-    #[clap(long, env = "RATTLER_ZSTD", default_value = "true", hide = true)]
-    pub use_zstd: bool,
-
-    /// Enable support for repodata.json.bz2
-    #[clap(long, env = "RATTLER_BZ2", default_value = "true", hide = true)]
-    pub use_bz2: bool,
-
-    /// Enable experimental features
-    #[arg(long, env = "RATTLER_BUILD_EXPERIMENTAL")]
-    pub experimental: bool,
-
     /// List of hosts for which SSL certificate verification should be skipped
     #[arg(long, value_delimiter = ',')]
     pub allow_insecure_host: Option<Vec<String>>,
@@ -69,89 +63,27 @@ pub struct CommonOpts {
     /// Path to an auth-file to read authentication information from
     #[clap(long, env = "RATTLER_AUTH_FILE", hide = true)]
     pub auth_file: Option<PathBuf>,
-
-    /// Channel priority to use when solving
-    #[arg(long)]
-    pub channel_priority: Option<ChannelPriorityWrapper>,
 }
 
 #[derive(Clone, Debug)]
 #[allow(missing_docs)]
 pub struct CommonData {
-    pub output_dir: PathBuf,
-    pub experimental: bool,
     pub auth_file: Option<PathBuf>,
-    pub channel_priority: ChannelPriority,
-    pub mirror_config: HashMap<Url, Vec<mirror_middleware::Mirror>>,
     pub allow_insecure_host: Option<Vec<String>>,
-    #[cfg(feature = "s3")]
-    pub s3_config: HashMap<String, s3_middleware::S3Config>,
 }
 
 impl CommonData {
     /// Create a new instance of `CommonData`
-    pub fn new(
-        output_dir: Option<PathBuf>,
-        experimental: bool,
-        auth_file: Option<PathBuf>,
-        config: Config,
-        channel_priority: Option<ChannelPriority>,
-        allow_insecure_host: Option<Vec<String>>,
-    ) -> Self {
-        // mirror config
-        // todo: this is a duplicate in pixi and pixi-pack: do it like in
-        // `compute_s3_config`
-        let mut mirror_config = HashMap::new();
-        tracing::debug!("Using mirrors: {:?}", config.mirrors);
-
-        #[allow(clippy::items_after_statements)]
-        fn ensure_trailing_slash(url: &url::Url) -> url::Url {
-            if url.path().ends_with('/') {
-                url.clone()
-            } else {
-                // Do not use `join` because it removes the last element
-                format!("{url}/")
-                    .parse()
-                    .expect("Failed to add trailing slash to URL")
-            }
-        }
-
-        for (key, value) in &config.mirrors {
-            let mut mirrors = Vec::new();
-            for v in value {
-                mirrors.push(mirror_middleware::Mirror {
-                    url: ensure_trailing_slash(v),
-                    no_jlap: false,
-                    no_bz2: false,
-                    no_zstd: false,
-                    max_failures: None,
-                });
-            }
-            mirror_config.insert(ensure_trailing_slash(key), mirrors);
-        }
-        #[cfg(feature = "s3")]
-        let s3_config = rattler_networking::s3_middleware::compute_s3_config(&config.s3_options.0);
+    pub fn new(auth_file: Option<PathBuf>, allow_insecure_host: Option<Vec<String>>) -> Self {
         Self {
-            output_dir: output_dir.unwrap_or_else(|| PathBuf::from("./output")),
-            experimental,
             auth_file,
-            #[cfg(feature = "s3")]
-            s3_config,
-            mirror_config,
-            channel_priority: channel_priority.unwrap_or(ChannelPriority::Strict),
             allow_insecure_host,
         }
     }
 
-    fn from_opts_and_config(value: CommonOpts, config: Config) -> Self {
-        Self::new(
-            value.output_dir,
-            value.experimental,
-            value.auth_file,
-            config,
-            value.channel_priority.map(|c| c.value),
-            value.allow_insecure_host,
-        )
+    /// Create from `CommonOpts`
+    pub fn from_opts(value: CommonOpts) -> Self {
+        Self::new(value.auth_file, value.allow_insecure_host)
     }
 }
 
@@ -333,14 +265,30 @@ pub struct PrefixOpts {
     #[arg(short, long, env = "PREFIX_API_KEY")]
     pub api_key: Option<String>,
 
-    /// Upload one or more attestation files alongside the package
+    /// Upload an attestation file alongside the package.
     /// Note: if you add an attestation, you can _only_ upload a single package.
-    #[arg(long, required = false)]
+    /// Mutually exclusive with --generate-attestation.
+    #[arg(long, conflicts_with = "generate_attestation")]
     pub attestation: Option<PathBuf>,
 
-    /// Skip upload if package is existed.
+    /// Automatically generate attestation using cosign in CI.
+    /// Mutually exclusive with --attestation.
+    #[arg(long, conflicts_with = "attestation")]
+    pub generate_attestation: bool,
+
+    /// Also store the generated attestation to GitHub's attestation API.
+    /// Requires `GITHUB_TOKEN` environment variable and only works in GitHub Actions.
+    /// The attestation will be associated with the current repository.
+    #[arg(long, requires = "generate_attestation")]
+    pub store_github_attestation: bool,
+
+    /// Skip upload if package already exists.
     #[arg(short, long)]
     pub skip_existing: bool,
+
+    /// Force overwrite existing packages
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Debug)]
@@ -349,18 +297,27 @@ pub struct PrefixData {
     pub url: UrlWithTrailingSlash,
     pub channel: String,
     pub api_key: Option<String>,
-    pub attestation: Option<PathBuf>,
-    pub skip_existing: bool,
+    pub attestation: AttestationSource,
+    pub skip_existing: SkipExisting,
+    pub force: ForceOverwrite,
+    pub store_github_attestation: bool,
 }
 
 impl From<PrefixOpts> for PrefixData {
     fn from(value: PrefixOpts) -> Self {
+        let attestation = match (value.attestation, value.generate_attestation) {
+            (Some(path), false) => AttestationSource::Attestation(path),
+            (None, true) => AttestationSource::GenerateAttestation,
+            _ => AttestationSource::NoAttestation,
+        };
         Self::new(
             value.url,
             value.channel,
             value.api_key,
-            value.attestation,
-            value.skip_existing,
+            attestation,
+            value.skip_existing.into(),
+            value.force.into(),
+            value.store_github_attestation,
         )
     }
 }
@@ -371,8 +328,10 @@ impl PrefixData {
         url: Url,
         channel: String,
         api_key: Option<String>,
-        attestation: Option<PathBuf>,
-        skip_existing: bool,
+        attestation: AttestationSource,
+        skip_existing: SkipExisting,
+        force: ForceOverwrite,
+        store_github_attestation: bool,
     ) -> Self {
         Self {
             url: url.into(),
@@ -380,6 +339,8 @@ impl PrefixData {
             api_key,
             attestation,
             skip_existing,
+            force,
+            store_github_attestation,
         }
     }
 }
@@ -446,7 +407,7 @@ pub struct AnacondaData {
     pub channels: Vec<String>,
     pub api_key: Option<String>,
     pub url: UrlWithTrailingSlash,
-    pub force: bool,
+    pub force: ForceOverwrite,
 }
 
 impl From<AnacondaOpts> for AnacondaData {
@@ -456,19 +417,19 @@ impl From<AnacondaOpts> for AnacondaData {
             value.channels,
             value.api_key,
             value.url,
-            value.force,
+            value.force.into(),
         )
     }
 }
 
 impl AnacondaData {
-    /// Create a new instance of `PrefixData`
+    /// Create a new instance of `AnacondaData`
     pub fn new(
         owner: String,
         channel: Option<Vec<String>>,
         api_key: Option<String>,
         url: Option<Url>,
-        force: bool,
+        force: ForceOverwrite,
     ) -> Self {
         Self {
             owner,
@@ -572,83 +533,6 @@ impl CondaForgeData {
             }),
             provider,
             dry_run,
-        }
-    }
-}
-
-/// Debug options
-#[derive(Parser)]
-pub struct DebugOpts {
-    /// Recipe file to debug
-    #[arg(short, long)]
-    pub recipe: PathBuf,
-
-    /// Output directory for build artifacts
-    #[arg(short, long)]
-    pub output: Option<PathBuf>,
-
-    /// The target platform to build for
-    #[arg(long)]
-    pub target_platform: Option<Platform>,
-
-    /// The host platform to build for (defaults to `target_platform`)
-    #[arg(long)]
-    pub host_platform: Option<Platform>,
-
-    /// The build platform to build for (defaults to current platform)
-    #[arg(long)]
-    pub build_platform: Option<Platform>,
-
-    /// Channels to use when building
-    #[arg(short = 'c', long = "channel")]
-    pub channels: Option<Vec<NamedChannelOrUrl>>,
-
-    /// Common options
-    #[clap(flatten)]
-    pub common: CommonOpts,
-
-    /// Name of the specific output to debug (only required when a recipe has
-    /// multiple outputs)
-    #[arg(long, help = "Name of the specific output to debug")]
-    pub output_name: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-/// Data structure containing the configuration for debugging a recipe
-pub struct DebugData {
-    /// Path to the recipe file to debug
-    pub recipe_path: PathBuf,
-    /// Directory where build artifacts will be stored
-    pub output_dir: PathBuf,
-    /// Platform where the build is being executed
-    pub build_platform: Platform,
-    /// Target platform for the build
-    pub target_platform: Platform,
-    /// Host platform for runtime dependencies
-    pub host_platform: Platform,
-    /// List of channels to search for dependencies
-    pub channels: Option<Vec<NamedChannelOrUrl>>,
-    /// Common configuration options
-    pub common: CommonData,
-    /// Name of the specific output to debug (if recipe has multiple outputs)
-    pub output_name: Option<String>,
-}
-
-impl DebugData {
-    /// Generate a new `TestData` struct from `TestOpts` and an optional pixi
-    /// config. `TestOpts` have higher priority than the pixi config.
-    pub fn from_opts_and_config(opts: DebugOpts, config: Option<Config>) -> Self {
-        Self {
-            recipe_path: opts.recipe,
-            output_dir: opts.output.unwrap_or_else(|| PathBuf::from("./output")),
-            build_platform: opts.build_platform.unwrap_or(Platform::current()),
-            target_platform: opts.target_platform.unwrap_or(Platform::current()),
-            host_platform: opts
-                .host_platform
-                .unwrap_or_else(|| opts.target_platform.unwrap_or(Platform::current())),
-            channels: opts.channels,
-            common: CommonData::from_opts_and_config(opts.common, config.unwrap_or_default()),
-            output_name: opts.output_name,
         }
     }
 }

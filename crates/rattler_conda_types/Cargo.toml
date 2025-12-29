@@ -1,6 +1,6 @@
 [package]
 name = "rattler_conda_types"
-version = "0.40.3"
+version = "0.42.4"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for common types used within the Conda ecosystem"
@@ -12,12 +12,14 @@ readme.workspace = true
 
 [features]
 default = ["rayon"]
-experimental_extras = []
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
+ahash = { workspace = true }
 chrono = { workspace = true }
 file_url = { workspace = true }
-fxhash = { workspace = true }
 glob = { workspace = true }
 hex = { workspace = true }
 itertools = { workspace = true }
@@ -30,6 +32,7 @@ rattler_digest = { workspace = true, default-features = false, features = [
 ] }
 rattler_macros = { workspace = true, default-features = false }
 rattler_redaction = { workspace = true, default-features = false }
+fancy-regex = { workspace = true }
 regex = { workspace = true }
 simd-json = { workspace = true, features = ["serde_impl"] }
 serde = { workspace = true, features = ["derive", "rc"] }

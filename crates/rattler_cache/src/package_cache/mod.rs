@@ -12,8 +12,8 @@ use std::{
 };
 
 pub use cache_key::CacheKey;
-pub use cache_lock::CacheLock;
-use cache_lock::CacheRwLock;
+use cache_lock::CacheMetadataFile;
+pub use cache_lock::{CacheGlobalLock, CacheMetadata};
 use dashmap::DashMap;
 use fs_err::tokio as tokio_fs;
 use futures::TryFutureExt;
@@ -59,6 +59,7 @@ struct PackageCacheInner {
 pub struct PackageCacheLayer {
     path: PathBuf,
     packages: DashMap<BucketKey, Arc<tokio::sync::Mutex<Entry>>>,
+    validation_mode: ValidationMode,
 }
 
 /// A key that defines the actual location of the package in the cache.
@@ -164,7 +165,7 @@ impl PackageCacheLayer {
     pub async fn try_validate(
         &self,
         cache_key: &CacheKey,
-    ) -> Result<CacheLock, PackageCacheLayerError> {
+    ) -> Result<CacheMetadata, PackageCacheLayerError> {
         let cache_entry = self
             .packages
             .get(&cache_key.clone().into())
@@ -183,13 +184,14 @@ impl PackageCacheLayer {
             cache_key.sha256.as_ref(),
             None,
             None,
+            self.validation_mode,
         )
         .await
         {
-            Ok(cache_lock) => {
-                cache_entry.last_revision = Some(cache_lock.revision);
-                cache_entry.last_sha256 = cache_lock.sha256;
-                Ok(cache_lock)
+            Ok(cache_metadata) => {
+                cache_entry.last_revision = Some(cache_metadata.revision);
+                cache_entry.last_sha256 = cache_metadata.sha256;
+                Ok(cache_metadata)
             }
             Err(err) => Err(err),
         }
@@ -201,7 +203,7 @@ impl PackageCacheLayer {
         fetch: F,
         cache_key: &CacheKey,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<CacheLock, PackageCacheLayerError>
+    ) -> Result<CacheMetadata, PackageCacheLayerError>
     where
         F: (Fn(PathBuf) -> Fut) + Send + 'static,
         Fut: Future<Output = Result<(), E>> + Send + 'static,
@@ -222,13 +224,14 @@ impl PackageCacheLayer {
             cache_key.sha256.as_ref(),
             Some(fetch),
             reporter,
+            self.validation_mode,
         )
         .await
         {
-            Ok(cache_lock) => {
-                cache_entry.last_revision = Some(cache_lock.revision);
-                cache_entry.last_sha256 = cache_lock.sha256;
-                Ok(cache_lock)
+            Ok(cache_metadata) => {
+                cache_entry.last_revision = Some(cache_metadata.revision);
+                cache_entry.last_sha256 = cache_metadata.sha256;
+                Ok(cache_metadata)
             }
             Err(e) => Err(e),
         }
@@ -238,7 +241,11 @@ impl PackageCacheLayer {
 impl PackageCache {
     /// Constructs a new [`PackageCache`] with only one layer.
     pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self::new_layered(std::iter::once(path.into()), false)
+        Self::new_layered(
+            std::iter::once(path.into()),
+            false,
+            ValidationMode::default(),
+        )
     }
 
     /// Adds the origin (url or path) to the cache key to avoid unwanted cache
@@ -250,10 +257,45 @@ impl PackageCache {
         }
     }
 
+    /// Acquires a global lock on the package cache.
+    ///
+    /// This lock can be used to coordinate multiple package operations,
+    /// reducing the overhead of acquiring individual locks for each package.
+    /// The lock is held until the returned `CacheGlobalLock` is dropped.
+    ///
+    /// This is particularly useful when installing many packages at once,
+    /// as it significantly reduces the number of file locking syscalls.
+    pub async fn acquire_global_lock(&self) -> Result<CacheGlobalLock, PackageCacheError> {
+        // Use the first writable layer's path for the global cache lock
+        let (_, writable_layers) = self.split_layers();
+        let cache_layer = writable_layers
+            .first()
+            .ok_or(PackageCacheError::NoWritableLayers)?;
+
+        let lock_file_path = cache_layer.path.join(".cache.lock");
+
+        // Ensure the directory exists
+        tokio_fs::create_dir_all(&cache_layer.path)
+            .await
+            .map_err(|e| {
+                PackageCacheError::LayerError(Box::new(PackageCacheLayerError::LockError(
+                    format!(
+                        "failed to create cache directory: '{}'",
+                        cache_layer.path.display()
+                    ),
+                    e,
+                )))
+            })?;
+
+        CacheGlobalLock::acquire(&lock_file_path)
+            .await
+            .map_err(|e| PackageCacheError::LayerError(Box::new(e)))
+    }
+
     /// Constructs a new [`PackageCache`] located at the specified paths.
     /// Layers are queried in the order they are provided.
     /// The first writable layer is written to.
-    pub fn new_layered<I>(paths: I, cache_origin: bool) -> Self
+    pub fn new_layered<I>(paths: I, cache_origin: bool, validation_mode: ValidationMode) -> Self
     where
         I: IntoIterator,
         I::Item: Into<PathBuf>,
@@ -263,6 +305,7 @@ impl PackageCache {
             .map(|path| PackageCacheLayer {
                 path: path.into(),
                 packages: DashMap::default(),
+                validation_mode,
             })
             .collect();
 
@@ -306,7 +349,7 @@ impl PackageCache {
         pkg: impl Into<CacheKey>,
         fetch: F,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<CacheLock, PackageCacheError>
+    ) -> Result<CacheMetadata, PackageCacheError>
     where
         F: (Fn(PathBuf) -> Fut) + Send + 'static,
         Fut: Future<Output = Result<(), E>> + Send + 'static,
@@ -346,7 +389,7 @@ impl PackageCache {
         tracing::debug!("no matches in all layers. writing to first writable layer");
         if let Some(layer) = writable_layers.first() {
             return match layer.validate_or_fetch(fetch, &cache_key, reporter).await {
-                Ok(cache_lock) => Ok(cache_lock),
+                Ok(cache_metadata) => Ok(cache_metadata),
                 Err(e) => Err(e.into()),
             };
         }
@@ -365,7 +408,7 @@ impl PackageCache {
         url: Url,
         client: LazyClient,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<CacheLock, PackageCacheError> {
+    ) -> Result<CacheMetadata, PackageCacheError> {
         self.get_or_fetch_from_url_with_retry(pkg, url, client, DoNotRetryPolicy, reporter)
             .await
     }
@@ -379,7 +422,7 @@ impl PackageCache {
         &self,
         path: &Path,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<CacheLock, PackageCacheError> {
+    ) -> Result<CacheMetadata, PackageCacheError> {
         let path_buf = path.to_path_buf();
         let mut cache_key: CacheKey = ArchiveIdentifier::try_from_path(&path_buf).unwrap().into();
         if self.cache_origin {
@@ -420,7 +463,7 @@ impl PackageCache {
         client: LazyClient,
         retry_policy: impl RetryPolicy + Send + 'static + Clone,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<CacheLock, PackageCacheError> {
+    ) -> Result<CacheMetadata, PackageCacheError> {
         let request_start = SystemTime::now();
         // Convert into cache key
         let mut cache_key = pkg.into();
@@ -535,14 +578,15 @@ async fn validate_package_common<F, Fut, E>(
     given_sha: Option<&Sha256Hash>,
     fetch: Option<F>,
     reporter: Option<Arc<dyn CacheReporter>>,
-) -> Result<CacheLock, PackageCacheLayerError>
+    validation_mode: ValidationMode,
+) -> Result<CacheMetadata, PackageCacheLayerError>
 where
     F: Fn(PathBuf) -> Fut + Send,
     Fut: Future<Output = Result<(), E>> + 'static,
     E: Error + Send + Sync + 'static,
 {
-    // Acquire a read lock on the cache entry. This ensures that no other process is
-    // currently writing to the cache.
+    // Open the cache metadata file to read/write revision and hash information.
+    // Concurrent access is coordinated via the global cache lock.
     let lock_file_path = {
         // Append the `.lock` extension to the cache path to create the lock file path.
         let mut path_str = path.as_os_str().to_owned();
@@ -562,122 +606,109 @@ where
             .await?;
     }
 
-    let mut validated_revision = known_valid_revision;
+    let mut metadata = CacheMetadataFile::acquire(&lock_file_path).await?;
+    let cache_revision = metadata.read_revision()?;
+    let locked_sha256 = metadata.read_sha256()?;
 
-    loop {
-        let mut read_lock = CacheRwLock::acquire_read(&lock_file_path).await?;
-        let cache_revision = read_lock.read_revision()?;
-        let locked_sha256 = read_lock.read_sha256()?;
+    let hash_mismatch = match (given_sha, &locked_sha256) {
+        (Some(given_hash), Some(locked_sha256)) => given_hash != locked_sha256,
+        _ => false,
+    };
 
-        let hash_mismatch = match (given_sha, &locked_sha256) {
-            (Some(given_hash), Some(locked_sha256)) => given_hash != locked_sha256,
-            _ => false,
-        };
+    let cache_dir_exists = path.is_dir();
+    if cache_dir_exists && !hash_mismatch {
+        let path_inner = path.clone();
 
-        let cache_dir_exists = path.is_dir();
-        if cache_dir_exists && !hash_mismatch {
-            let path_inner = path.clone();
+        let reporter = reporter.as_deref().map(|r| (r, r.on_validate_start()));
 
-            let reporter = reporter.as_deref().map(|r| (r, r.on_validate_start()));
-
-            // If we know the revision is already valid we can return immediately.
-            if validated_revision == Some(cache_revision) {
-                if let Some((reporter, index)) = reporter {
-                    reporter.on_validate_complete(index);
-                }
-                return Ok(CacheLock {
-                    _lock: read_lock,
-                    revision: cache_revision,
-                    sha256: locked_sha256,
-                    path: path_inner,
-                });
-            }
-
-            // Validate the package directory.
-            let validation_result = tokio::task::spawn_blocking(move || {
-                validate_package_directory(&path_inner, ValidationMode::Fast)
-            })
-            .await;
-
+        // If we know the revision is already valid we can return immediately.
+        if known_valid_revision == Some(cache_revision) {
             if let Some((reporter, index)) = reporter {
                 reporter.on_validate_complete(index);
             }
-
-            match validation_result {
-                Ok(Ok(_)) => {
-                    tracing::debug!("validation succeeded");
-                    return Ok(CacheLock {
-                        _lock: read_lock,
-                        revision: cache_revision,
-                        sha256: locked_sha256,
-                        path,
-                    });
-                }
-                Ok(Err(e)) => {
-                    tracing::warn!("validation for {path:?} failed: {e}");
-                    if let Some(cause) = e.source() {
-                        tracing::debug!(
-                            "  Caused by: {}",
-                            std::iter::successors(Some(cause), |e| (*e).source())
-                                .format("\n  Caused by: ")
-                        );
-                    }
-                }
-                Err(e) => {
-                    if let Ok(panic) = e.try_into_panic() {
-                        std::panic::resume_unwind(panic)
-                    }
-                }
-            }
-        } else if !cache_dir_exists {
-            tracing::debug!("cache directory does not exist");
-        } else if hash_mismatch {
-            tracing::warn!(
-                "hash mismatch, wanted a package at location {} with hash {} but the cached package has hash {}, fetching package",
-                path.display(),
-                given_sha.map_or(String::from("<unknown>"), |s| format!("{s:x}")),
-                locked_sha256.map_or(String::from("<unknown>"), |s| format!("{s:x}"))
-            );
+            return Ok(CacheMetadata {
+                revision: cache_revision,
+                sha256: locked_sha256,
+                path: path_inner,
+                index_json: None,
+                paths_json: None,
+            });
         }
 
-        // If the cache is stale, we need to fetch the package again. We have to acquire
-        // a write lock on the cache entry. However, we can't do that while we have a
-        // read lock on the cache lock file. So we release the read lock and acquire a
-        // write lock on the cache lock file. In the meantime, another process might
-        // have already fetched the package. To guard against this we read a revision
-        // from the lock-file while we have the read lock, then we acquire the write
-        // lock and check if the revision has changed. If it has, we assume that
-        // another process has already fetched the package and we restart the
-        // validation process.
-        if let Some(ref fetch_fn) = fetch {
-            drop(read_lock);
+        // Validate the package directory.
+        let validation_result = tokio::task::spawn_blocking(move || {
+            validate_package_directory(&path_inner, validation_mode)
+        })
+        .await;
 
-            let mut write_lock = CacheRwLock::acquire_write(&lock_file_path).await?;
-
-            let read_revision = write_lock.read_revision()?;
-            if read_revision != cache_revision {
-                tracing::debug!(
-                    "cache revisions don't match '{}', retrying to acquire lock file.",
-                    lock_file_path.display()
-                );
-                continue;
-            }
-
-            // Write the new revision
-            let new_revision = cache_revision + 1;
-            write_lock
-                .write_revision_and_sha(new_revision, given_sha)
-                .await?;
-
-            // Fetch the package.
-            fetch_fn(path.clone())
-                .await
-                .map_err(|e| PackageCacheLayerError::FetchError(Arc::new(e)))?;
-
-            validated_revision = Some(new_revision);
-        } else {
-            return Err(PackageCacheLayerError::InvalidPackage);
+        if let Some((reporter, index)) = reporter {
+            reporter.on_validate_complete(index);
         }
+
+        match validation_result {
+            Ok(Ok((index_json, paths_json))) => {
+                tracing::debug!("validation succeeded");
+                return Ok(CacheMetadata {
+                    revision: cache_revision,
+                    sha256: locked_sha256,
+                    path,
+                    index_json: Some(index_json),
+                    paths_json: Some(paths_json),
+                });
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("validation for {path:?} failed: {e}");
+                if let Some(cause) = e.source() {
+                    tracing::debug!(
+                        "  Caused by: {}",
+                        std::iter::successors(Some(cause), |e| (*e).source())
+                            .format("\n  Caused by: ")
+                    );
+                }
+            }
+            Err(e) => {
+                if let Ok(panic) = e.try_into_panic() {
+                    std::panic::resume_unwind(panic)
+                }
+            }
+        }
+    } else if !cache_dir_exists {
+        tracing::debug!("cache directory does not exist");
+    } else if hash_mismatch {
+        tracing::warn!(
+            "hash mismatch, wanted a package at location {} with hash {} but the cached package has hash {}, fetching package",
+            path.display(),
+            given_sha.map_or(String::from("<unknown>"), |s| format!("{s:x}")),
+            locked_sha256.map_or(String::from("<unknown>"), |s| format!("{s:x}"))
+        );
+    }
+
+    // If the cache is stale, we need to fetch the package again.
+    // Since we hold the global cache lock, we can safely update the metadata
+    // and fetch the package without worrying about concurrent modifications.
+    if let Some(ref fetch_fn) = fetch {
+        // Write the new revision
+        let new_revision = cache_revision + 1;
+        metadata
+            .write_revision_and_sha(new_revision, given_sha)
+            .await?;
+
+        // Fetch the package.
+        fetch_fn(path.clone())
+            .await
+            .map_err(|e| PackageCacheLayerError::FetchError(Arc::new(e)))?;
+
+        // After fetching, return the cache metadata with the new revision.
+        // We don't need to re-validate since we just fetched it.
+        Ok(CacheMetadata {
+            revision: new_revision,
+            sha256: given_sha.copied(),
+            path,
+            index_json: None,
+            paths_json: None,
+        })
+    } else {
+        Err(PackageCacheLayerError::InvalidPackage)
     }
 }
 
@@ -780,7 +811,7 @@ mod test {
         let cache = PackageCache::new(packages_dir.path());
 
         // Get the package to the cache
-        let cache_lock = cache
+        let cache_metadata = cache
             .get_or_fetch(
                 ArchiveIdentifier::try_from_path(&tar_archive_path).unwrap(),
                 move |destination| {
@@ -801,7 +832,7 @@ mod test {
 
         // Validate the contents of the package
         let (_, current_paths) =
-            validate_package_directory(cache_lock.path(), ValidationMode::Full).unwrap();
+            validate_package_directory(cache_metadata.path(), ValidationMode::Full).unwrap();
 
         // Make sure that the paths are the same as what we would expect from the
         // original tar archive.
@@ -1029,20 +1060,20 @@ mod test {
 
         let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
 
-        let cache_lock_with_origin_hash = package_cache_with_origin_hash
+        let cache_metadata_with_origin_hash = package_cache_with_origin_hash
             .get_or_fetch_from_path(&package_path, None)
             .await
             .unwrap();
 
-        let file_name = get_file_name_from_path(cache_lock_with_origin_hash.path());
+        let file_name = get_file_name_from_path(cache_metadata_with_origin_hash.path());
         assert_eq!(file_name, "clobber-python-0.1.0-cpython");
 
-        let cache_lock_without_origin_hash = package_cache_without_origin_hash
+        let cache_metadata_without_origin_hash = package_cache_without_origin_hash
             .get_or_fetch_from_path(&package_path, None)
             .await
             .unwrap();
 
-        let file_name = get_file_name_from_path(cache_lock_without_origin_hash.path());
+        let file_name = get_file_name_from_path(cache_metadata_without_origin_hash.path());
         let path_hash = compute_bytes_digest::<Sha256>(package_path.to_string_lossy().as_bytes());
         let expected_file_name = format!("clobber-python-0.1.0-cpython-{path_hash:x}");
         assert_eq!(file_name, expected_file_name);
@@ -1071,7 +1102,7 @@ mod test {
 
         // Get the package to the cache
         let cloned_archive_path = tar_archive_path.clone();
-        let cache_lock = cache
+        let cache_metadata = cache
             .get_or_fetch(
                 key.clone(),
                 move |destination| {
@@ -1090,8 +1121,8 @@ mod test {
             .await
             .unwrap();
 
-        let sha_1 = cache_lock.sha256.expect("expected sha256 to be set");
-        drop(cache_lock);
+        let sha_1 = cache_metadata.sha256.expect("expected sha256 to be set");
+        drop(cache_metadata);
 
         let new_sha = parse_digest_from_hex::<Sha256>(
             "5dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc9",
@@ -1102,7 +1133,7 @@ mod test {
         // And expect the package to be replaced
         let should_run = Arc::new(AtomicBool::new(false));
         let cloned = should_run.clone();
-        let cache_lock = cache
+        let cache_metadata = cache
             .get_or_fetch(
                 key.clone(),
                 move |destination| {
@@ -1127,7 +1158,7 @@ mod test {
         );
         assert_ne!(
             sha_1,
-            cache_lock.sha256.expect("expected sha256 to be set"),
+            cache_metadata.sha256.expect("expected sha256 to be set"),
             "expected sha256 to be different"
         );
     }
@@ -1166,6 +1197,7 @@ mod test {
         let cache = PackageCache::new_layered(
             all_layers_paths.iter().map(|dir| dir.path().to_path_buf()),
             false,
+            ValidationMode::default(),
         );
 
         let (readonly_layers, writable_layers) = cache.inner.layers.split_at(readonly_layer_count);

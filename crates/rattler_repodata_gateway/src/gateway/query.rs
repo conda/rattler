@@ -6,7 +6,7 @@ use std::{
 
 use futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
-use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, Platform};
+use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform};
 
 use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
 use crate::Reporter;
@@ -112,15 +112,19 @@ impl RepoDataQuery {
         let mut seen = HashSet::new();
         let mut pending_package_specs = HashMap::new();
         let mut direct_url_specs = vec![];
+        // TODO: allow glob/regex package names as well
         for spec in self.specs {
             if let Some(url) = spec.url.clone() {
                 let name = spec
                     .name
                     .clone()
-                    .ok_or(GatewayError::MatchSpecWithoutName(Box::new(spec.clone())))?;
+                    .and_then(Option::<PackageName>::from)
+                    .ok_or(GatewayError::MatchSpecWithoutExactName(Box::new(
+                        spec.clone(),
+                    )))?;
                 seen.insert(name.clone());
-                direct_url_specs.push((spec.clone(), url, name));
-            } else if let Some(name) = &spec.name {
+                direct_url_specs.push((spec.clone(), url, name.clone()));
+            } else if let Some(PackageNameMatcher::Exact(name)) = &spec.name {
                 seen.insert(name.clone());
                 let pending = pending_package_specs
                     .entry(name.clone())
@@ -264,9 +268,7 @@ impl RepoDataQuery {
                             }
                             for dependency in &record.package_record.depends {
                                 // Use only the name for transitive dependencies.
-                                let dependency_name = PackageName::new_unchecked(
-                                    dependency.split_once(' ').unwrap_or((dependency, "")).0,
-                                );
+                                let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
                                 if seen.insert(dependency_name.clone()) {
                                     pending_package_specs.insert(dependency_name.clone(), SourceSpecs::Transitive);
                                 }
@@ -274,7 +276,7 @@ impl RepoDataQuery {
 
                             for (_, dependencies) in record.package_record.experimental_extra_depends.iter() {
                                 for dependency in dependencies {
-                                    let dependency_name = package_name_from_match_spec_str(dependency);
+                                    let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
                                     if seen.insert(dependency_name.clone()) {
                                         pending_package_specs.insert(dependency_name.clone(), SourceSpecs::Transitive);
                                     }
@@ -432,27 +434,5 @@ impl IntoFuture for NamesQuery {
 
     fn into_future(self) -> Self::IntoFuture {
         box_future(self.execute())
-    }
-}
-
-fn package_name_from_match_spec_str(spec: &str) -> PackageName {
-    let package_name_str = spec
-        .split_once(|c: char| c.is_whitespace() || matches!(c, '>' | '<' | '=' | '!' | '~'))
-        .map_or(spec, |(name, _)| name);
-    PackageName::new_unchecked(package_name_str)
-}
-
-#[cfg(test)]
-mod test {
-    use rstest::*;
-
-    #[rstest]
-    #[case("pillow", "pillow")]
-    #[case("pillow >=10", "pillow")]
-    #[case("pillow>=10,<12", "pillow")]
-    #[case("pillow >=10, <12", "pillow")]
-    fn test_package_name_from_match_spec_str(#[case] spec: &str, #[case] expected: &str) {
-        let package_name = super::package_name_from_match_spec_str(spec);
-        assert_eq!(package_name.as_source(), expected);
     }
 }

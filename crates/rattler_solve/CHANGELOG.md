@@ -42,6 +42,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.2](https://github.com/conda/rattler/compare/rattler_solve-v4.1.1...rattler_solve-v4.1.2) - 2025-12-18
+
+### Fixed
+
+- split on ';' when fetching dependencies in repodata ([#1919](https://github.com/conda/rattler/pull/1919))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [4.1.1](https://github.com/conda/rattler/compare/rattler_solve-v4.1.0...rattler_solve-v4.1.1) - 2025-12-08
+
+### Other
+
+- added resolvo #188 reproducer ([#1898](https://github.com/conda/rattler/pull/1898))
+
+## [4.1.0](https://github.com/conda/rattler/compare/rattler_solve-v4.0.1...rattler_solve-v4.1.0) - 2025-11-27
+
+### Added
+
+- *(solver)* add minimum package age filter for security ([#1890](https://github.com/conda/rattler/pull/1890))
+- add condition dependency and `extras` support for libsolv ([#1836](https://github.com/conda/rattler/pull/1836))
+
+## [4.0.1](https://github.com/conda/rattler/compare/rattler_solve-v4.0.0...rattler_solve-v4.0.1) - 2025-11-25
+
+### Fixed
+
+- *(rattler_solve)* handle unparsable dependencies gracefully in sorting ([#1884](https://github.com/conda/rattler/pull/1884))
+- *(solver)* conditionals on root requirements ([#1880](https://github.com/conda/rattler/pull/1880))
+
+## [4.0.0](https://github.com/conda/rattler/compare/rattler_solve-v3.1.2...rattler_solve-v4.0.0) - 2025-11-22
+
+### Other
+
+- make `extras` and `conditionals` runtime-configurable ([#1816](https://github.com/conda/rattler/pull/1816))
+
+## [3.1.2](https://github.com/conda/rattler/compare/rattler_solve-v3.1.1...rattler_solve-v3.1.2) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.1.1](https://github.com/conda/rattler/compare/rattler_solve-v3.1.0...rattler_solve-v3.1.1) - 2025-11-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.1.0](https://github.com/conda/rattler/compare/rattler_solve-v3.0.9...rattler_solve-v3.1.0) - 2025-11-13
+
+### Added
+
+- Add glob support for package name in matchspec ([#1480](https://github.com/conda/rattler/pull/1480))
+- move repodata fetch logic to tools crate ([#1820](https://github.com/conda/rattler/pull/1820))
+- parse matchspec conditions and translate to resolvo ([#1545](https://github.com/conda/rattler/pull/1545))
+
+## [3.0.9](https://github.com/conda/rattler/compare/rattler_solve-v3.0.8...rattler_solve-v3.0.9) - 2025-10-28
+
+### Fixed
+
+- timestamp serialization as milliseconds ([#1776](https://github.com/conda/rattler/pull/1776))
+
 ## [3.0.8](https://github.com/conda/rattler/compare/rattler_solve-v3.0.7...rattler_solve-v3.0.8) - 2025-10-18
 
 ### Other

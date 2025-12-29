@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.42](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.41...rattler_menuinst-v0.2.42) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.2.41](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.40...rattler_menuinst-v0.2.41) - 2025-12-08
+
+### Added
+
+- Add support for `info_plist_extra` property in menuinst ([#1911](https://github.com/conda/rattler/pull/1911))
+
+## [0.2.40](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.39...rattler_menuinst-v0.2.40) - 2025-11-27
+
+### Fixed
+
+- *(menuinst)* respect user-provided CFBundleIdentifier in macOS Info.plist ([#1887](https://github.com/conda/rattler/pull/1887))
+
+## [0.2.39](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.38...rattler_menuinst-v0.2.39) - 2025-11-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.38](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.37...rattler_menuinst-v0.2.38) - 2025-11-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.37](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.36...rattler_menuinst-v0.2.37) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.36](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.35...rattler_menuinst-v0.2.36) - 2025-11-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.35](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.34...rattler_menuinst-v0.2.35) - 2025-11-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
+## [0.2.34](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.33...rattler_menuinst-v0.2.34) - 2025-10-28
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_shell
+
 ## [0.2.33](https://github.com/conda/rattler/compare/rattler_menuinst-v0.2.32...rattler_menuinst-v0.2.33) - 2025-10-25
 
 ### Other

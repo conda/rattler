@@ -119,6 +119,30 @@ impl Pool {
         unsafe { ffi::pool_rel2id(self.raw_ptr(), id1, id2, ffi::REL_EQ as i32, 1) }
     }
 
+    /// Interns a `REL_AND` relation between `id1` and `id2`
+    pub fn rel_and(&self, id1: Id, id2: Id) -> Id {
+        unsafe { ffi::pool_rel2id(self.raw_ptr(), id1, id2, ffi::REL_AND as i32, 1) }
+    }
+
+    /// Interns a `REL_OR` relation between `id1` and `id2`
+    pub fn rel_or(&self, id1: Id, id2: Id) -> Id {
+        unsafe { ffi::pool_rel2id(self.raw_ptr(), id1, id2, ffi::REL_OR as i32, 1) }
+    }
+
+    /// Interns a `REL_COND` relation (conditional dependency)
+    /// This creates a conditional dependency: `dependency` is required if `condition` is true
+    pub fn rel_cond(&self, dependency: Id, condition: Id) -> Id {
+        unsafe {
+            ffi::pool_rel2id(
+                self.raw_ptr(),
+                dependency,
+                condition,
+                ffi::REL_COND as i32,
+                1,
+            )
+        }
+    }
+
     /// Interns the provided matchspec
     pub fn conda_matchspec(&self, matchspec: &CStr) -> Id {
         unsafe { ffi::pool_conda_matchspec(self.raw_ptr(), matchspec.as_ptr()) }
@@ -237,6 +261,11 @@ impl Pool {
 pub struct StringId(pub(super) Id);
 
 impl StringId {
+    /// Creates a `StringId` from a raw libsolv Id.
+    pub fn from_id(id: Id) -> Self {
+        Self(id)
+    }
+
     /// Resolves the id to the interned string, if present in the pool
     ///
     /// Note: string ids are basically indexes in an array, so using a [`StringId`] from one pool in
@@ -264,7 +293,7 @@ impl From<StringId> for Id {
 
 /// Wrapper for the match spec type of libsolv
 #[derive(Copy, Clone)]
-pub struct MatchSpecId(Id);
+pub struct MatchSpecId(pub(crate) Id);
 
 /// Conversion to [`Id`]
 impl From<MatchSpecId> for Id {
