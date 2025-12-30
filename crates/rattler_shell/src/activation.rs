@@ -1513,7 +1513,7 @@ mod tests {
         }
     }
 
-    /// Test that run_activation_fast_path and run_activation produce equivalent results
+    /// Test that `run_activation_fast_path` and `run_activation` produce equivalent results
     /// when there are no activation scripts.
     #[test]
     fn test_fast_path_vs_normal_activation_no_scripts() {
@@ -1566,7 +1566,7 @@ mod tests {
         assert_eq!(fast_path_result, normal_result);
     }
 
-    /// Test that run_activation_fast_path and run_activation produce equivalent results
+    /// Test that `run_activation_fast_path` and `run_activation` produce equivalent results
     /// with post-activation environment variables.
     #[test]
     fn test_fast_path_vs_normal_activation_with_post_env_vars() {
@@ -1616,7 +1616,7 @@ mod tests {
         assert_eq!(fast_path_result, normal_result);
     }
 
-    /// Test that run_activation_fast_path and run_activation produce equivalent results
+    /// Test that `run_activation_fast_path` and `run_activation` produce equivalent results
     /// with environment overrides.
     #[test]
     fn test_fast_path_vs_normal_activation_with_env_overrides() {
@@ -1651,7 +1651,6 @@ mod tests {
         };
 
         // Create environment overrides
-        use std::ffi::OsStr;
         let override_key = OsStr::new("OVERRIDE_ME");
         let override_val = OsStr::new("overridden");
         let extra_key = OsStr::new("EXTRA_VAR");
