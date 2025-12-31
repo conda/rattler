@@ -83,6 +83,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.8](https://github.com/conda/rattler/compare/rattler-v0.39.7...rattler-v0.39.8) - 2025-12-31
+
+### Fixed
+
+- preserve entitlements when codesigning on macOS ([#1950](https://github.com/conda/rattler/pull/1950))
+
 ## [0.39.7](https://github.com/conda/rattler/compare/rattler-v0.39.6...rattler-v0.39.7) - 2025-12-18
 
 ### Fixed
