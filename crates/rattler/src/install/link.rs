@@ -92,6 +92,10 @@ pub enum LinkFileError {
     #[error("could not update destination file permissions")]
     FailedToUpdateDestinationFilePermissions(#[source] std::io::Error),
 
+    /// The atime/mtime could not be updated on the destination file.
+    #[error("could not update file modification and access time")]
+    FailedToUpdateDestinationFileTimestamps(#[source] std::io::Error),
+
     /// The binary (dylib or executable) could not be signed (codesign -f -s -) on
     /// macOS ARM64 (Apple Silicon).
     #[error("failed to sign Apple binary")]
@@ -220,13 +224,8 @@ pub fn link_file(
         // We no longer need the file.
         drop(file);
 
-        // Copy over filesystem permissions. We do this to ensure that the destination file has the
-        // same permissions as the source file.
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-        fs::set_permissions(&destination_path, metadata.permissions())
-            .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
-
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
         // This is required for all macOS platforms because prefix replacement modifies the binary
         // content, which invalidates existing signatures. We need to preserve entitlements.
@@ -265,6 +264,14 @@ pub fn link_file(
                 );
             }
         }
+
+        // Copy file permissions and timestamps
+        fs::set_permissions(&destination_path, metadata.permissions())
+            .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+        let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+        filetime::set_file_times(&destination_path, file_time, file_time)
+            .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+
         LinkMethod::Patched(*file_mode)
     } else if path_json_entry.path_type == PathType::HardLink && allow_ref_links {
         reflink_to_destination(&source_path, &destination_path, allow_hard_links)?
@@ -386,15 +393,19 @@ fn reflink_to_destination(
     loop {
         match reflink(source_path, destination_path) {
             Ok(_) => {
-                #[cfg(target_os = "linux")]
+                #[cfg(not(target_os = "macos"))]
                 {
-                    // Copy over filesystem permissions. We do this to ensure that the destination file has the
-                    // same permissions as the source file.
-                    let metadata = fs::metadata(source_path)
+                    // Mac is documented to clone the file attributes and extended attributes. Linux and Windows
+                    // both do not guarantee that, so copy permissions and timestamps
+                    let metadata = fs::symlink_metadata(source_path)
                         .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
                     fs::set_permissions(destination_path, metadata.permissions())
                         .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+                    let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+                    filetime::set_file_times(destination_path, file_time, file_time)
+                        .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
                 }
+
                 return Ok(LinkMethod::Reflink);
             }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
@@ -427,7 +438,10 @@ fn hardlink_to_destination(
 ) -> Result<LinkMethod, LinkFileError> {
     loop {
         match fs::hard_link(source_path, destination_path) {
-            Ok(_) => return Ok(LinkMethod::Hardlink),
+            Ok(_) => {
+                // No need to copy file permissions, hard links share those anyway
+                return Ok(LinkMethod::Hardlink);
+            }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
                 fs::remove_file(destination_path).map_err(|err| {
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
@@ -455,7 +469,16 @@ fn symlink_to_destination(
         .map_err(LinkFileError::FailedToReadSymlink)?;
     loop {
         match symlink(&linked_path, destination_path) {
-            Ok(_) => return Ok(LinkMethod::Softlink),
+            Ok(_) => {
+                // Copy timestamps as permissions are not relevant on soft links
+                let metadata = fs::symlink_metadata(source_path)
+                    .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+                let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+                filetime::set_symlink_file_times(destination_path, file_time, file_time)
+                    .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+
+                return Ok(LinkMethod::Softlink);
+            }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
                 fs::remove_file(destination_path).map_err(|err| {
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
@@ -486,7 +509,16 @@ fn copy_to_destination(
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
                 })?;
             }
-            Ok(_) => return Ok(LinkMethod::Copy),
+            Ok(_) => {
+                // Copy file modification times, fs::copy transfers file permissions automatically
+                let metadata = fs::symlink_metadata(source_path)
+                    .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+                let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+                filetime::set_file_times(destination_path, file_time, file_time)
+                    .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+
+                return Ok(LinkMethod::Copy);
+            }
             Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),
         }
     }
