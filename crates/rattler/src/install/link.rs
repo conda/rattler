@@ -154,7 +154,7 @@ pub fn link_file(
     let destination_path = target_dir.path().join(&destination_relative_path);
 
     // Temporary variables to store intermediate computations in. If we already computed the file
-    // size or the sha hash we dont have to recompute them at the end of the function.
+    // size or the sha hash we don't have to recompute them at the end of the function.
     let mut sha256 = None;
     let mut file_size = path_json_entry.size_in_bytes;
 
@@ -276,7 +276,7 @@ pub fn link_file(
         copy_to_destination(&source_path, &destination_path)?
     };
 
-    // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.
+    // Compute the final SHA256 if we didn't already or if its not stored in the paths.json entry.
     let sha256 = if let Some(sha256) = sha256 {
         sha256
     } else if link_method == LinkMethod::Softlink {
@@ -303,7 +303,7 @@ pub fn link_file(
         Sha256Hash::default()
     };
 
-    // Compute the final file size if we didnt already.
+    // Compute the final file size if we didn't already.
     let file_size = if let Some(file_size) = file_size {
         file_size
     } else if let Some(size_in_bytes) = path_json_entry.size_in_bytes {
