@@ -13,7 +13,7 @@ PlatformLiteral = Literal[
     "linux-aarch64",
     "linux-armv6l",
     "linux-armv7l",
-    "linux-loong64",
+    "linux-loongarch64",
     "linux-ppc64le",
     "linux-ppc64",
     "linux-ppc",
