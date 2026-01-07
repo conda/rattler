@@ -228,9 +228,11 @@ pub fn link_file(
             .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
 
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
+        // This is required for all macOS platforms because prefix replacement modifies the binary
+        // content, which invalidates existing signatures. We need to preserve entitlements.
         if (has_executable_permissions(&metadata.permissions())
             || file_type == Some(FileType::MachO))
-            && target_platform == Platform::OsxArm64
+            && target_platform.is_osx()
             && *file_mode == FileMode::Binary
         {
             // Did the binary actually change?
