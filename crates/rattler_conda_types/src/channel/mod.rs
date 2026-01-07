@@ -63,20 +63,13 @@ impl ChannelConfig {
     /// `https://conda.anaconda.org/conda-forge` when the channel alias is
     /// `https://conda.anaconda.org`).
     pub fn strip_channel_alias(&self, base_url: &Url) -> Option<String> {
-        let base_str = base_url.as_str();
-        let alias_str = self.channel_alias.as_str();
-
-        // Clippy fix: Use strip_prefix instead of starts_with + manual slicing
-        if let Some(res) = base_str.strip_prefix(alias_str) {
-            let name = res.trim_matches('/');
-            return if name.is_empty() {
-                None
-            } else {
-                Some(name.to_string())
-            };
-        }
-        None
+        base_url
+            .as_str()
+            .strip_prefix(self.channel_alias.as_str())
+            .map(|s| s.trim_matches('/').to_string())
+            .filter(|s| !s.is_empty())
     }
+
     /// Returns the canonical name of a channel with the given base url.
     pub fn canonical_name(&self, base_url: &Url) -> String {
         if let Some(stripped) = self.strip_channel_alias(base_url) {
@@ -220,17 +213,13 @@ impl Channel {
 
         let channel = if parse_scheme(channel).is_some() {
             let url = Url::parse(channel)?;
-            if let Some(name) = config.strip_channel_alias(&url) {
-                Channel {
-                    platforms,
-                    base_url: url.into(),
-                    name: Some(name),
-                }
-            } else {
-                Channel {
-                    platforms,
-                    ..Channel::from_url(url)
-                }
+            let name = config.strip_channel_alias(&url);
+            let base_channel = Channel::from_url(url);
+
+            Channel {
+                name: name.or(base_channel.name),
+                platforms,
+                ..base_channel
             }
         } else if is_path(channel) {
             #[cfg(target_arch = "wasm32")]
