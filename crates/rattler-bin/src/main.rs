@@ -52,8 +52,23 @@ enum Command {
 }
 
 /// Entry point of the `rattler` cli.
-#[tokio::main]
-async fn main() -> miette::Result<()> {
+fn main() -> miette::Result<()> {
+    let num_cores = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(2)
+        .max(2);
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(num_cores / 2)
+        .max_blocking_threads(num_cores)
+        .enable_all()
+        .build()
+        .into_diagnostic()?;
+
+    runtime.block_on(async_main())
+}
+
+async fn async_main() -> miette::Result<()> {
     // Parse the command line arguments
     let opt = Opt::parse();
 
