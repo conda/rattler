@@ -16,27 +16,22 @@ pub enum AppleCodeSignBehavior {
     Fail,
 }
 
-/// Sign a binary using the `codesign` tool with an ad-hoc certificate on macOS.
+/// Sign a binary with an ad-hoc certificate on macOS.
 /// This is required for binaries to run on macOS when their signature has been invalidated
 /// by prefix replacement (modifying binary content). The function preserves existing entitlements.
 pub(crate) fn codesign(destination_path: &Path) -> Result<(), LinkFileError> {
-    let status = std::process::Command::new("/usr/bin/codesign")
-        .arg("--sign")
-        // Use an ad-hoc certificate (`-`)
-        .arg("-")
-        // replace any existing signature
-        .arg("--force")
-        // preserve entitlements from the original binary
-        .arg("--preserve-metadata=entitlements")
-        .arg(destination_path)
-        .stdout(std::process::Stdio::null()) // Suppress stdout
-        .stderr(std::process::Stdio::null()) // Suppress stderr
-        .status()
-        .map_err(|err| LinkFileError::IoError(String::from("invoking /usr/bin/codesign"), err))?;
+    use goblin_ext::{adhoc_sign_file, AdhocSignOptions, Entitlements};
 
-    if !status.success() {
-        return Err(LinkFileError::FailedToSignAppleBinary);
-    }
+    // Get identifier from filename
+    let identifier = destination_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("binary");
 
-    Ok(())
+    // Sign with ad-hoc signature, preserving existing entitlements
+    let options = AdhocSignOptions::new(identifier).with_entitlements(Entitlements::Preserve);
+
+    adhoc_sign_file(destination_path, &options).map_err(|err| {
+        LinkFileError::IoError(format!("signing {}", destination_path.display()), err)
+    })
 }

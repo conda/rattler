@@ -59,6 +59,9 @@ uuid = { workspace = true, features = ["v4", "fast-rng"] }
 console = { workspace = true, optional = true }
 serde_json.workspace = true
 
+[target.'cfg(target_os = "macos")'.dependencies]
+goblin-ext = { path = "../../../goblin-ext", default-features = false, features = ["std", "mach", "codesign"] }
+
 [dev-dependencies]
 assert_matches = { workspace = true }
 rand = { workspace = true }
