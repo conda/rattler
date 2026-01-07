@@ -24,7 +24,7 @@ pub enum Platform {
     LinuxAarch64,
     LinuxArmV6l,
     LinuxArmV7l,
-    LinuxLoong64,
+    LinuxLoongArch64,
     LinuxPpc64le,
     LinuxPpc64,
     LinuxPpc,
@@ -72,7 +72,7 @@ pub enum Arch {
     Arm64,
     ArmV6l,
     ArmV7l,
-    Loong64,
+    LoongArch64,
     Ppc64le,
     Ppc64,
     Ppc,
@@ -107,7 +107,7 @@ impl Platform {
             }
 
             #[cfg(target_arch = "loongarch64")]
-            return Platform::LinuxLoong64;
+            return Platform::LinuxLoongArch64;
 
             #[cfg(all(target_arch = "powerpc64", target_endian = "little"))]
             return Platform::LinuxPpc64le;
@@ -227,7 +227,7 @@ impl Platform {
                 | Platform::LinuxAarch64
                 | Platform::LinuxArmV6l
                 | Platform::LinuxArmV7l
-                | Platform::LinuxLoong64
+                | Platform::LinuxLoongArch64
                 | Platform::LinuxPpc64le
                 | Platform::LinuxPpc64
                 | Platform::LinuxPpc
@@ -251,7 +251,7 @@ impl Platform {
             | Platform::LinuxAarch64
             | Platform::LinuxArmV6l
             | Platform::LinuxArmV7l
-            | Platform::LinuxLoong64
+            | Platform::LinuxLoongArch64
             | Platform::LinuxPpc64le
             | Platform::LinuxPpc64
             | Platform::LinuxPpc
@@ -297,7 +297,7 @@ impl FromStr for Platform {
             "linux-aarch64" => Platform::LinuxAarch64,
             "linux-armv6l" => Platform::LinuxArmV6l,
             "linux-armv7l" => Platform::LinuxArmV7l,
-            "linux-loong64" => Platform::LinuxLoong64,
+            "linux-loongarch64" => Platform::LinuxLoongArch64,
             "linux-ppc64le" => Platform::LinuxPpc64le,
             "linux-ppc64" => Platform::LinuxPpc64,
             "linux-ppc" => Platform::LinuxPpc,
@@ -331,7 +331,7 @@ impl From<Platform> for &'static str {
             Platform::LinuxAarch64 => "linux-aarch64",
             Platform::LinuxArmV6l => "linux-armv6l",
             Platform::LinuxArmV7l => "linux-armv7l",
-            Platform::LinuxLoong64 => "linux-loong64",
+            Platform::LinuxLoongArch64 => "linux-loongarch64",
             Platform::LinuxPpc64le => "linux-ppc64le",
             Platform::LinuxPpc64 => "linux-ppc64",
             Platform::LinuxPpc => "linux-ppc",
@@ -362,7 +362,7 @@ impl Platform {
             Platform::Unknown | Platform::NoArch => None,
             Platform::LinuxArmV6l => Some(Arch::ArmV6l),
             Platform::LinuxArmV7l => Some(Arch::ArmV7l),
-            Platform::LinuxLoong64 => Some(Arch::Loong64),
+            Platform::LinuxLoongArch64 => Some(Arch::LoongArch64),
             Platform::LinuxPpc64le => Some(Arch::Ppc64le),
             Platform::LinuxPpc64 => Some(Arch::Ppc64),
             Platform::LinuxPpc => Some(Arch::Ppc),
@@ -439,7 +439,7 @@ impl FromStr for Arch {
             "arm64" => Arch::Arm64,
             "armv6l" => Arch::ArmV6l,
             "armv7l" => Arch::ArmV7l,
-            "loong64" => Arch::Loong64,
+            "loongarch64" => Arch::LoongArch64,
             "ppc64le" => Arch::Ppc64le,
             "ppc64" => Arch::Ppc64,
             "ppc" => Arch::Ppc,
@@ -466,7 +466,7 @@ impl From<Arch> for &'static str {
             Arch::Aarch64 => "aarch64",
             Arch::ArmV6l => "armv6l",
             Arch::ArmV7l => "armv7l",
-            Arch::Loong64 => "loong64",
+            Arch::LoongArch64 => "loongarch64",
             Arch::Ppc64le => "ppc64le",
             Arch::Ppc64 => "ppc64",
             Arch::Ppc => "ppc",
@@ -559,7 +559,7 @@ mod tests {
         assert_eq!(Platform::LinuxAarch64.arch(), Some(Arch::Aarch64));
         assert_eq!(Platform::LinuxArmV6l.arch(), Some(Arch::ArmV6l));
         assert_eq!(Platform::LinuxArmV7l.arch(), Some(Arch::ArmV7l));
-        assert_eq!(Platform::LinuxLoong64.arch(), Some(Arch::Loong64));
+        assert_eq!(Platform::LinuxLoongArch64.arch(), Some(Arch::LoongArch64));
         assert_eq!(Platform::LinuxPpc64le.arch(), Some(Arch::Ppc64le));
         assert_eq!(Platform::LinuxPpc64.arch(), Some(Arch::Ppc64));
         assert_eq!(Platform::LinuxPpc.arch(), Some(Arch::Ppc));
