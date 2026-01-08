@@ -65,6 +65,7 @@ dirs = "6.0.0"
 dunce = "1.0.5"
 enum_dispatch = "0.3.13"
 fancy-regex = "0.16.0"
+filetime = "0.2.26"
 fs-err = { version = "3.1.0" }
 fslock = "0.2.1"
 futures = "0.3.31"

@@ -10,6 +10,7 @@ ArchLiteral = Literal[
     "aarch64",
     "armv6l",
     "armv7l",
+    "loongarch64",
     "ppc64le",
     "ppc64",
     "s390x",

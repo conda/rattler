@@ -25,6 +25,7 @@ anyhow = { workspace = true }
 clap = { workspace = true, optional = true }
 digest = { workspace = true }
 dirs = { workspace = true }
+filetime = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 humantime = { workspace = true }
