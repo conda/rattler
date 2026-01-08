@@ -47,12 +47,28 @@ enum Command {
     InstallMenu(commands::menu::InstallOpt),
     RemoveMenu(commands::menu::InstallOpt),
     Extract(commands::extract::Opt),
+    Link(commands::link::Opt),
     Upload(Box<rattler_upload::upload::opt::UploadOpts>),
 }
 
 /// Entry point of the `rattler` cli.
-#[tokio::main]
-async fn main() -> miette::Result<()> {
+fn main() -> miette::Result<()> {
+    let num_cores = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(2)
+        .max(2);
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(num_cores / 2)
+        .max_blocking_threads(num_cores)
+        .enable_all()
+        .build()
+        .into_diagnostic()?;
+
+    runtime.block_on(async_main())
+}
+
+async fn async_main() -> miette::Result<()> {
     // Parse the command line arguments
     let opt = Opt::parse();
 
@@ -87,6 +103,7 @@ async fn main() -> miette::Result<()> {
         Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
         Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
         Command::Extract(opts) => commands::extract::extract(opts).await,
+        Command::Link(opts) => commands::link::link(opts).await,
         Command::Upload(opts) => rattler_upload::upload_from_args(*opts).await,
     }
 }

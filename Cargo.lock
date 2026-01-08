@@ -4490,6 +4490,7 @@ dependencies = [
  "console 0.16.2",
  "digest",
  "dirs",
+ "filetime",
  "fs-err",
  "futures",
  "humantime",
