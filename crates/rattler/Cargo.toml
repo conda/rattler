@@ -59,6 +59,8 @@ url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "fast-rng"] }
 console = { workspace = true, optional = true }
 serde_json.workspace = true
+serde = { workspace = true, features = ["derive"] }
+webbrowser = "1.0"
 
 [dev-dependencies]
 assert_matches = { workspace = true }

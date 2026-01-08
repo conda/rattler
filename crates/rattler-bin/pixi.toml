@@ -5,6 +5,6 @@ name = "rattler"
 name = "pixi-build-rust"
 version = "0.4.*"
 channels = [
-    "https://prefix.dev/pixi-build-backends",
-    "https://prefix.dev/conda-forge"
+  "https://prefix.dev/pixi-build-backends",
+  "https://prefix.dev/conda-forge",
 ]
