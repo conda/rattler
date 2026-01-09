@@ -5,6 +5,7 @@ use anyhow::Context;
 use clap::{arg, Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Platform;
+#[cfg(feature = "rattler_config")]
 use rattler_config::config::concurrency::default_max_concurrent_solves;
 use rattler_index::{index_fs, IndexFsConfig};
 #[cfg(feature = "s3")]
@@ -107,6 +108,7 @@ enum Commands {
 
 /// The configuration type for rattler-index - just extends rattler config and
 /// can load the same TOML files as pixi.
+#[cfg(feature = "rattler_config")]
 pub type Config = rattler_config::config::ConfigBase<()>;
 
 /// Entry point of the `rattler-index` cli.
@@ -121,15 +123,19 @@ async fn main() -> anyhow::Result<()> {
 
     let multi_progress = indicatif::MultiProgress::new();
 
+    #[cfg(feature = "rattler_config")]
     let config = if let Some(config_path) = cli.config {
         Some(Config::load_from_files(vec![config_path])?)
     } else {
         None
     };
+    #[cfg(feature = "rattler_config")]
     let max_parallel = cli
         .max_parallel
         .or(config.as_ref().map(|c| c.concurrency.downloads))
         .unwrap_or_else(default_max_concurrent_solves);
+    #[cfg(not(feature = "rattler_config"))]
+    let max_parallel = cli.max_parallel.unwrap_or(10);
 
     #[cfg(feature = "s3")]
     let precondition_checks = if cli.disable_precondition_checks {
@@ -157,16 +163,19 @@ async fn main() -> anyhow::Result<()> {
             channel,
             mut credentials,
         } => {
-            let bucket = channel.host().context("Invalid S3 url")?.to_string();
-            let s3_config = config
-                .as_ref()
-                .and_then(|config| config.s3_options.0.get(&bucket));
+            #[cfg(feature = "rattler_config")]
+            {
+                let bucket = channel.host().context("Invalid S3 url")?.to_string();
+                let s3_config = config
+                    .as_ref()
+                    .and_then(|config| config.s3_options.0.get(&bucket));
 
-            // Fill in missing credentials from config file if not provided on command line
-            credentials.region = credentials.region.or(s3_config.map(|c| c.region.clone()));
-            credentials.endpoint_url = credentials
-                .endpoint_url
-                .or(s3_config.map(|c| c.endpoint_url.clone()));
+                // Fill in missing credentials from config file if not provided on command line
+                credentials.region = credentials.region.or(s3_config.map(|c| c.region.clone()));
+                credentials.endpoint_url = credentials
+                    .endpoint_url
+                    .or(s3_config.map(|c| c.endpoint_url.clone()));
+            }
 
             // Resolve the credentials
             let credentials = match Option::<S3Credentials>::from(credentials) {
