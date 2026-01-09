@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.9](https://github.com/conda/rattler/compare/rattler_index-v0.27.8...rattler_index-v0.27.9) - 2026-01-09
+
+### Other
+
+- Make s3 optional for rattler_index ([#1965](https://github.com/conda/rattler/pull/1965))
+
 ## [0.27.8](https://github.com/conda/rattler/compare/rattler_index-v0.27.7...rattler_index-v0.27.8) - 2025-12-18
 
 ### Fixed
