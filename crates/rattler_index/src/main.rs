@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-#[cfg(feature = "s3")]
+#[cfg(all(feature = "s3", feature = "rattler_config"))]
 use anyhow::Context;
 use clap::{arg, Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
@@ -161,7 +161,10 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(feature = "s3")]
         Commands::S3 {
             channel,
+            #[cfg(feature = "rattler_config")]
             mut credentials,
+            #[cfg(not(feature = "rattler_config"))]
+            credentials,
         } => {
             #[cfg(feature = "rattler_config")]
             {
