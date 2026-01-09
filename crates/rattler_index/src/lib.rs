@@ -21,11 +21,11 @@ use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
 use indexmap::IndexMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use opendal::{
-    layers::RetryLayer,
-    services::{FsConfig, S3Config},
-    Configurator, ErrorKind, Operator,
-};
+#[cfg(feature = "s3")]
+use opendal::layers::RetryLayer;
+#[cfg(feature = "s3")]
+use opendal::services::S3Config;
+use opendal::{services::FsConfig, Configurator, ErrorKind, Operator};
 use rattler_conda_types::{
     package::{ArchiveIdentifier, ArchiveType, IndexJson, PackageFile, RunExportsJson},
     ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
@@ -36,12 +36,14 @@ use rattler_package_streaming::{
     read,
     seek::{self, stream_conda_content},
 };
+#[cfg(feature = "s3")]
 use rattler_s3::ResolvedS3Credentials;
 use retry_policies::{policies::ExponentialBackoff, Jitter, RetryDecision, RetryPolicy};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tracing::Instrument;
+#[cfg(feature = "s3")]
 use url::Url;
 
 /// Configuration for precondition checks during file operations.
@@ -1046,6 +1048,7 @@ pub async fn index_fs(
 }
 
 /// Configuration for `index_s3`
+#[cfg(feature = "s3")]
 pub struct IndexS3Config {
     /// The channel to index.
     pub channel: Url,
@@ -1069,6 +1072,7 @@ pub struct IndexS3Config {
     pub precondition_checks: PreconditionChecks,
 }
 
+#[cfg(feature = "s3")]
 fn s3_config(
     credentials: &ResolvedS3Credentials,
     channel: &Url,
@@ -1092,6 +1096,7 @@ fn s3_config(
 
 /// Create a new `repodata.json` for all packages in the channel at the given S3
 /// URL.
+#[cfg(feature = "s3")]
 pub async fn index_s3(
     IndexS3Config {
         channel,
@@ -1318,6 +1323,7 @@ pub async fn ensure_channel_initialized_fs(channel: &Path) -> anyhow::Result<()>
 /// Ensures that an S3 channel has a valid `noarch/repodata.json` file.
 ///
 /// See [`ensure_channel_initialized`] for details.
+#[cfg(feature = "s3")]
 pub async fn ensure_channel_initialized_s3(
     channel: &Url,
     credentials: &ResolvedS3Credentials,

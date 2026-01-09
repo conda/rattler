@@ -1,15 +1,22 @@
 use std::path::PathBuf;
 
+#[cfg(feature = "s3")]
 use anyhow::Context;
 use clap::{arg, Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Platform;
 use rattler_config::config::concurrency::default_max_concurrent_solves;
-use rattler_index::{index_fs, index_s3, IndexFsConfig, IndexS3Config, PreconditionChecks};
+use rattler_index::{index_fs, IndexFsConfig};
+#[cfg(feature = "s3")]
+use rattler_index::{index_s3, IndexS3Config, PreconditionChecks};
+#[cfg(feature = "s3")]
 use rattler_networking::AuthenticationStorage;
+#[cfg(feature = "s3")]
 use rattler_s3::S3Credentials;
+#[cfg(feature = "s3")]
 use url::Url;
 
+#[cfg(feature = "s3")]
 fn parse_s3_url(value: &str) -> Result<Url, String> {
     let url: Url = Url::parse(value).map_err(|e| format!("`{value}` isn't a valid URL: {e}"))?;
     if url.scheme() == "s3" && url.host_str().is_some() {
@@ -64,6 +71,7 @@ struct Cli {
     /// Use this flag if your S3 backend doesn't fully support conditional requests,
     /// or if you're certain no concurrent indexing processes are running.
     /// Warning: Disabling this removes protection against concurrent modifications.
+    #[cfg(feature = "s3")]
     #[arg(long, default_value = "false", global = true)]
     disable_precondition_checks: bool,
 
@@ -86,6 +94,7 @@ enum Commands {
     },
 
     /// Index a channel stored in an S3 bucket.
+    #[cfg(feature = "s3")]
     S3 {
         /// The S3 channel URL, e.g. `s3://my-bucket/my-channel`.
         #[arg(value_parser = parse_s3_url)]
@@ -122,6 +131,7 @@ async fn main() -> anyhow::Result<()> {
         .or(config.as_ref().map(|c| c.concurrency.downloads))
         .unwrap_or_else(default_max_concurrent_solves);
 
+    #[cfg(feature = "s3")]
     let precondition_checks = if cli.disable_precondition_checks {
         PreconditionChecks::Disabled
     } else {
@@ -142,6 +152,7 @@ async fn main() -> anyhow::Result<()> {
             })
             .await
         }
+        #[cfg(feature = "s3")]
         Commands::S3 {
             channel,
             mut credentials,
