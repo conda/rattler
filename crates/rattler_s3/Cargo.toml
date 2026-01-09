@@ -9,6 +9,14 @@ license.workspace = true
 edition.workspace = true
 readme.workspace = true
 
+[features]
+default = ["rustls-tls"]
+# Note: aws-smithy-http-client does not support native-tls, only rustls variants.
+# This feature is provided for API compatibility with other rattler crates but
+# will use rustls under the hood.
+native-tls = ["rustls-tls"]
+rustls-tls = ["aws-smithy-http-client/rustls-ring"]
+
 [dependencies]
 clap = { workspace = true, optional = true }
 thiserror = { workspace = true }
@@ -22,7 +30,7 @@ aws-config = { workspace = true, features = [
   "credentials-login",
 ] }
 aws-sdk-s3 = { workspace = true, features = ["rt-tokio"] }
-aws-smithy-http-client = { workspace = true, features = ["rustls-ring"] }
+aws-smithy-http-client = { workspace = true }
 aws-credential-types = { workspace = true }
 
 rattler_networking = { workspace = true, default-features = false }
