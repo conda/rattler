@@ -13,4 +13,3 @@ environments:
       - conda: https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2
 packages:
 - conda: https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2
-  channel: null
