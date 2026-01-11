@@ -624,7 +624,7 @@ mod test {
             variants: None,
             package_build_source: None,
             input: None,
-            sources: Default::default(),
+            sources: std::collections::BTreeMap::default(),
         };
 
         // 3. Build the LockFile
