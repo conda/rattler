@@ -87,7 +87,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub experimental_extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
 
     // Additional properties (in semi alphabetic order but grouped by commonality)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "skip_channel")]
     pub channel: Option<Cow<'a, Option<Url>>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -327,5 +327,11 @@ fn strip_trailing_slash(url: &Url) -> Cow<'_, Url> {
         Cow::Owned(updated_url)
     } else {
         Cow::Borrowed(url)
+    }
+}
+fn skip_channel(channel: &Option<Cow<'_, Option<Url>>>) -> bool {
+    match channel {
+        Some(c) => c.is_none(),
+        None => true,
     }
 }
