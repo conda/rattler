@@ -603,13 +603,15 @@ mod test {
 
         let binary_data = CondaBinaryData {
             package_record: binary_pkg_record,
-            // CHANGED: Use a local path so Rattler cannot infer a channel URL from it
-            location: UrlOrPath::from_str("/tmp/binary-pkg-1.0.0.tar.bz2").unwrap(),
+            location: UrlOrPath::from_str(
+                "https://conda.anaconda.org/conda-forge/linux-64/binary-pkg-1.0.0.tar.bz2",
+            )
+            .unwrap(),
             file_name: "binary-pkg-1.0.0.tar.bz2".to_string(),
-            channel: None, // Explicitly None!
+            channel: None,
         };
 
-        // 2. Setup a Source Package (which should naturally have None)
+        // 2. Setup a Source Package (which should naturally have no channel)
         let source_pkg_record = PackageRecord::new(
             PackageName::new_unchecked("source-pkg"),
             Version::from_str("1.0.0").unwrap(),
@@ -642,15 +644,18 @@ mod test {
         // 4. Serialize to String
         let serialized = lock_file.render_to_string().unwrap();
 
-        // ASSERTION 1: Ensure "channel: null" is NOT present in the output
-        assert!(
-            !serialized.contains("channel: null"),
-            "Output should not contain 'channel: null'"
+        // ASSERTION 1:
+        // The Binary package (standard URL) MUST have "channel: null" to override inference.
+        // The Source package MUST NOT have "channel: null".
+        // Therefore, we expect exactly 1 occurrence.
+        assert_eq!(
+            serialized.matches("channel: null").count(),
+            1,
+            "Output should contain exactly one 'channel: null' (for the binary pkg only)"
         );
 
         // 5. Roundtrip (Deserialize)
         let parsed = LockFile::from_str(&serialized).unwrap();
-
         let env = parsed
             .environment("default")
             .expect("Environment 'default' should exist");
