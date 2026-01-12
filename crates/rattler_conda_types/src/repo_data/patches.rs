@@ -3,7 +3,6 @@
 use std::{collections::BTreeSet, io, path::Path};
 
 use indexmap::IndexMap;
-use itertools::multipeek;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
