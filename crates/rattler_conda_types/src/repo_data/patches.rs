@@ -3,6 +3,7 @@
 use std::{collections::BTreeSet, io, path::Path};
 
 use indexmap::IndexMap;
+use itertools::multipeek;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
@@ -168,6 +169,14 @@ pub struct PatchInstructions {
         skip_serializing_if = "ahash::HashMap::is_empty"
     )]
     pub conda_packages: ahash::HashMap<String, PackageRecordPatch>,
+
+    /// Patches for package records
+    #[serde(
+        default,
+        rename = "packages.whl",
+        skip_serializing_if = "ahash::HashMap::is_empty"
+    )]
+    pub whl_packages: ahash::HashMap<String, PackageRecordPatch>,
 }
 
 impl PackageRecord {
@@ -202,6 +211,7 @@ impl PackageRecord {
 pub fn apply_patches_impl(
     packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
     conda_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
+    whl_packages:&mut IndexMap<String, PackageRecord, ahash::RandomState>,
     removed: &mut ahash::HashSet<String>,
     instructions: &PatchInstructions,
 ) {
@@ -221,6 +231,12 @@ pub fn apply_patches_impl(
 
     for (pkg, patch) in instructions.conda_packages.iter() {
         if let Some(record) = conda_packages.get_mut(pkg) {
+            record.apply_patch(patch);
+        }
+    }
+
+    for (pkg, patch) in instructions.whl_packages.iter() {
+        if let Some(record) = whl_packages.get_mut(pkg) {
             record.apply_patch(patch);
         }
     }
@@ -245,6 +261,11 @@ pub fn apply_patches_impl(
                         removed.insert(pkg.clone());
                     }
                 }
+                ArchiveType::Whl=> {
+                    if conda_packages.shift_remove_entry(pkg).is_some() {
+                        removed.insert(pkg.clone());
+                    }
+                }
             }
         }
     }
@@ -257,6 +278,7 @@ impl RepoData {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.whl_packages,
             &mut self.removed,
             instructions,
         );
@@ -270,6 +292,7 @@ impl Shard {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.whl_packages,
             &mut self.removed,
             instructions,
         );

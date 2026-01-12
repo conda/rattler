@@ -53,6 +53,14 @@ pub struct RepoData {
     )]
     pub conda_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
+    /// The wheel packages contained in the repodata.json file
+    #[serde(
+        default,
+        rename = "packages.whl",
+        serialize_with = "sort_index_map_alphabetically"
+    )]
+    pub whl_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
+
     /// removed packages (files are still accessible, but they are not
     /// installable like regular packages)
     #[serde(
