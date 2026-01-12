@@ -603,10 +603,8 @@ mod test {
 
         let binary_data = CondaBinaryData {
             package_record: binary_pkg_record,
-            location: UrlOrPath::from_str(
-                "https://conda.anaconda.org/conda-forge/linux-64/binary-pkg-1.0.0.tar.bz2",
-            )
-            .unwrap(),
+            // CHANGED: Use a local path so Rattler cannot infer a channel URL from it
+            location: UrlOrPath::from_str("/tmp/binary-pkg-1.0.0.tar.bz2").unwrap(),
             file_name: "binary-pkg-1.0.0.tar.bz2".to_string(),
             channel: None, // Explicitly None!
         };
@@ -628,7 +626,6 @@ mod test {
         };
 
         // 3. Build the LockFile
-        // We use `with_conda_package` to allow method chaining (fluent API)
         let lock_file = LockFile::builder()
             .with_conda_package(
                 "default",
@@ -654,7 +651,6 @@ mod test {
         // 5. Roundtrip (Deserialize)
         let parsed = LockFile::from_str(&serialized).unwrap();
 
-        // FIX: Correctly call the methods to get packages
         let env = parsed
             .environment("default")
             .expect("Environment 'default' should exist");
@@ -666,14 +662,25 @@ mod test {
         // ASSERTION 2: Verify we have 2 packages
         assert_eq!(packages.len(), 2, "Should have 2 packages after roundtrip");
 
-        // ASSERTION 3: Verify specific packages are present
+        // ASSERTION 3: Verify Binary Package channel is STILL None
+        let binary_pkg = packages
+            .iter()
+            .find(|p| p.name() == "binary-pkg")
+            .expect("binary-pkg missing")
+            .as_binary_conda()
+            .expect("should be binary package");
+
         assert!(
-            packages.iter().any(|p| p.name() == "binary-pkg"),
-            "binary-pkg missing"
+            binary_pkg.channel.is_none(),
+            "Binary package channel should be None (local file path prevented inference)"
         );
-        assert!(
-            packages.iter().any(|p| p.name() == "source-pkg"),
-            "source-pkg missing"
-        );
+
+        // ASSERTION 4: Verify Source Package
+        let _source_pkg = packages
+            .iter()
+            .find(|p| p.name() == "source-pkg")
+            .expect("source-pkg missing")
+            .as_source_conda()
+            .expect("should be source package");
     }
 }
