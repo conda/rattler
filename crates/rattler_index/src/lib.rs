@@ -24,11 +24,11 @@ use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
 use indexmap::IndexMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use opendal::{
-    layers::RetryLayer,
-    services::{FsConfig, S3Config},
-    Configurator, Operator,
-};
+#[cfg(feature = "s3")]
+use opendal::layers::RetryLayer;
+#[cfg(feature = "s3")]
+use opendal::services::S3Config;
+use opendal::{services::FsConfig, Configurator, Operator};
 use rattler_conda_types::{
     package::{ArchiveIdentifier, ArchiveType, IndexJson, PackageFile, RunExportsJson},
     ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
@@ -39,12 +39,14 @@ use rattler_package_streaming::{
     read,
     seek::{self, stream_conda_content},
 };
+#[cfg(feature = "s3")]
 use rattler_s3::ResolvedS3Credentials;
 use retry_policies::{policies::ExponentialBackoff, Jitter, RetryDecision, RetryPolicy};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tracing::Instrument;
+#[cfg(feature = "s3")]
 use url::Url;
 
 /// Configuration for precondition checks during file operations.
@@ -1046,6 +1048,7 @@ pub async fn index_fs(
 }
 
 /// Configuration for `index_s3`
+#[cfg(feature = "s3")]
 pub struct IndexS3Config {
     /// The channel to index.
     pub channel: Url,
@@ -1069,8 +1072,31 @@ pub struct IndexS3Config {
     pub precondition_checks: PreconditionChecks,
 }
 
+#[cfg(feature = "s3")]
+fn s3_config(
+    credentials: &ResolvedS3Credentials,
+    channel: &Url,
+) -> Result<S3Config, anyhow::Error> {
+    let mut s3_config = S3Config::default();
+    s3_config.root = Some(channel.path().to_string());
+    s3_config.bucket = channel
+        .host_str()
+        .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
+        .to_string();
+    s3_config.region = Some(credentials.region.clone());
+    s3_config.endpoint = Some(credentials.endpoint_url.to_string());
+    s3_config.secret_access_key = Some(credentials.secret_access_key.clone());
+    s3_config.access_key_id = Some(credentials.access_key_id.clone());
+    s3_config.session_token = credentials.session_token.clone();
+    s3_config.enable_virtual_host_style =
+        credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
+
+    Ok(s3_config)
+}
+
 /// Create a new `repodata.json` for all packages in the channel at the given S3
 /// URL.
+#[cfg(feature = "s3")]
 pub async fn index_s3(
     IndexS3Config {
         channel,
@@ -1086,21 +1112,7 @@ pub async fn index_s3(
     }: IndexS3Config,
 ) -> anyhow::Result<()> {
     // Create the S3 configuration for opendal.
-    let mut s3_config = S3Config::default();
-    s3_config.root = Some(channel.path().to_string());
-    s3_config.bucket = channel
-        .host_str()
-        .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
-        .to_string();
-
-    s3_config.region = Some(credentials.region);
-    s3_config.endpoint = Some(credentials.endpoint_url.to_string());
-    s3_config.secret_access_key = Some(credentials.secret_access_key);
-    s3_config.access_key_id = Some(credentials.access_key_id);
-    s3_config.session_token = credentials.session_token;
-    s3_config.enable_virtual_host_style =
-        credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
-
+    let s3_config = s3_config(&credentials, &channel)?;
     let builder = s3_config.into_builder();
     let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
 
@@ -1245,4 +1257,81 @@ pub async fn index(
         }
     }
     Ok(stats)
+}
+
+/// Ensures that a channel has a valid `noarch/repodata.json` file.
+///
+/// If `noarch/repodata.json` doesn't exist, creates an empty one.
+/// This is useful when publishing to a new channel to ensure it's
+/// immediately usable.
+pub async fn ensure_channel_initialized(op: &Operator) -> anyhow::Result<()> {
+    let noarch_repodata_path = format!("{}/{REPODATA}", Platform::NoArch.as_str());
+
+    if op.exists(&noarch_repodata_path).await? {
+        tracing::debug!("Channel already initialized");
+        return Ok(());
+    }
+
+    tracing::info!("Initializing channel with empty noarch/repodata.json");
+
+    let noarch_path = format!("{}/", Platform::NoArch.as_str());
+    if !op.exists(&noarch_path).await? {
+        op.create_dir(&noarch_path).await?;
+    }
+
+    let empty_repodata = RepoData {
+        info: Some(ChannelInfo {
+            subdir: Some(Platform::NoArch.to_string()),
+            base_url: None,
+        }),
+        packages: IndexMap::default(),
+        conda_packages: IndexMap::default(),
+        removed: HashSet::default(),
+        version: Some(2),
+    };
+
+    let repodata_bytes = serde_json::to_vec(&empty_repodata)?;
+    match op
+        .write_with(&noarch_repodata_path, repodata_bytes)
+        .if_not_exists(true)
+        .cache_control(CACHE_CONTROL_REPODATA)
+        .await
+    {
+        Ok(_) => {
+            tracing::info!("Successfully initialized channel");
+            Ok(())
+        }
+        Err(e) if e.kind() == opendal::ErrorKind::ConditionNotMatch => {
+            // Another process created the file - that's fine, channel is initialized
+            tracing::debug!("Channel already initialized by another process");
+            Ok(())
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Ensures that a filesystem channel has a valid `noarch/repodata.json` file.
+///
+/// See [`ensure_channel_initialized`] for details.
+pub async fn ensure_channel_initialized_fs(channel: &Path) -> anyhow::Result<()> {
+    let mut config = FsConfig::default();
+    config.root = Some(channel.canonicalize()?.to_string_lossy().to_string());
+    let op = Operator::new(config.into_builder())?.finish();
+    ensure_channel_initialized(&op).await
+}
+
+/// Ensures that an S3 channel has a valid `noarch/repodata.json` file.
+///
+/// See [`ensure_channel_initialized`] for details.
+#[cfg(feature = "s3")]
+pub async fn ensure_channel_initialized_s3(
+    channel: &Url,
+    credentials: &ResolvedS3Credentials,
+) -> anyhow::Result<()> {
+    let s3_config = s3_config(credentials, channel)?;
+
+    let op = Operator::new(s3_config.into_builder())?
+        .layer(RetryLayer::new())
+        .finish();
+    ensure_channel_initialized(&op).await
 }

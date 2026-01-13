@@ -188,8 +188,14 @@ impl<'a> SolverCase<'a> {
         };
 
         let solution = T::default().solve(task).unwrap_or_else(|err| {
-            panic!("solver case '{}' failed: {err:?}", self.name);
+            panic!("solver case '{}' failed:\n{err}", self.name);
         });
+
+        println!(
+            "solver case '{}': solution = [{}]",
+            self.name,
+            format_records(&solution.records)
+        );
 
         assert_expectations(self.name, &solution.records, &self.expect_present, true);
         assert_expectations(self.name, &solution.records, &self.expect_absent, false);

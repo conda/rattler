@@ -42,6 +42,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.2](https://github.com/conda/rattler/compare/rattler_solve-v4.1.1...rattler_solve-v4.1.2) - 2025-12-18
+
+### Fixed
+
+- split on ';' when fetching dependencies in repodata ([#1919](https://github.com/conda/rattler/pull/1919))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [4.1.1](https://github.com/conda/rattler/compare/rattler_solve-v4.1.0...rattler_solve-v4.1.1) - 2025-12-08
+
+### Other
+
+- added resolvo #188 reproducer ([#1898](https://github.com/conda/rattler/pull/1898))
+
 ## [4.1.0](https://github.com/conda/rattler/compare/rattler_solve-v4.0.1...rattler_solve-v4.1.0) - 2025-11-27
 
 ### Added

@@ -1,12 +1,4 @@
-<a href="https://github.com/conda/rattler/">
-    <picture>
-      <source srcset="https://github.com/conda/rattler/assets/4995967/8f5a9786-f75c-4b55-8043-69c551b22459" type="image/webp">
-      <source srcset="https://github.com/conda/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" type="image/png">
-      <img src="https://github.com/conda/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" alt="banner">
-    </picture>
-</a>
-
-## What is this?
+## What is rattler?
 
 Rattler is a library that provides common functionality used within the conda ecosystem ([what is conda & conda-forge?](#what-is-conda-conda-forge)).
 The goal of the library is to enable programs and other libraries to easily interact with the conda ecosystem without being dependent on Python.
@@ -88,4 +80,4 @@ Next, we will see a quick reference summary of all the methods and properties th
 ## Contributing 😍
 
 We would love to have you contribute!
-See the CONTRIBUTION.md for more info. For questions, requests or a casual chat, we are very active on our [discord server](https://discord.gg/kKV8ZxyzY4).
+See the [CONTRIBUTION.md](https://github.com/conda/rattler/blob/main/CONTRIBUTING.md) for more info. For questions, requests or a casual chat, we are very active on our [discord server](https://discord.gg/kKV8ZxyzY4).

@@ -1,0 +1,97 @@
+{
+  "info": {
+    "subdir": "noarch"
+  },
+  "packages": {
+    "package-0.1.0-py27_0.tar.bz2": {
+      "build": "py27_0",
+      "build_number": 0,
+      "timestamp": 1765213400949,
+      "depends": [
+        "linux-dependency; if __linux",
+        "osx-dependency; if __osx",
+        "win-dependency; if __win"
+      ],
+      "license": "MIT",
+      "md5": "abcd0123abcd0123abcd0123abcd0123",
+      "name": "package",
+      "size": 10000,
+      "subdir": "noarch",
+      "version": "0.1.0"
+    },
+    "linux-dependency-0.1.0-0.tar.bz2": {
+      "build": "0",
+      "build_number": 0,
+      "timestamp": 1765213400949,
+      "depends": [],
+      "license": "MIT",
+      "md5": "abcd0123abcd0123abcd0123abcd0124",
+      "name": "linux-dependency",
+      "size": 10000,
+      "subdir": "noarch",
+      "version": "0.1.0"
+    },
+    "osx-dependency-0.1.0-0.tar.bz2": {
+      "build": "0",
+      "build_number": 0,
+      "timestamp": 1765213400949,
+      "depends": [],
+      "license": "MIT",
+      "md5": "abcd0123abcd0123abcd0123abcd0125",
+      "name": "osx-dependency",
+      "size": 10000,
+      "subdir": "noarch",
+      "version": "0.1.0"
+    },
+    "win-dependency-0.1.0-0.tar.bz2": {
+      "build": "0",
+      "build_number": 0,
+      "timestamp": 1765213400949,
+      "depends": [],
+      "license": "MIT",
+      "md5": "abcd0123abcd0123abcd0123abcd0126",
+      "name": "win-dependency",
+      "size": 10000,
+      "subdir": "noarch",
+      "version": "0.1.0"
+    },
+    "conditional-dependency-0.1.0-0.tar.bz2": {
+      "build": "0",
+      "build_number": 0,
+      "timestamp": 1765213400949,
+      "depends": ["package; if side-dependency=0.2"],
+      "license": "MIT",
+      "md5": "abcd0123abcd0123abcd0123abcd0127",
+      "name": "conditional-dependency",
+      "size": 10000,
+      "subdir": "noarch",
+      "version": "0.1.0"
+    },
+    "side-dependency-0.1.0-0.tar.bz2": {
+      "build": "0",
+      "build_number": 0,
+      "timestamp": 1765213400949,
+      "depends": [],
+      "license": "MIT",
+      "md5": "abcd0123abcd0123abcd0123abcd0128",
+      "name": "side-dependency",
+      "size": 10000,
+      "subdir": "noarch",
+      "version": "0.1.0"
+    },
+    "side-dependency-0.2.0-0.tar.bz2": {
+      "build": "0",
+      "build_number": 0,
+      "timestamp": 1765213400949,
+      "depends": [],
+      "license": "MIT",
+      "md5": "abcd0123abcd0123abcd0123abcd0129",
+      "name": "side-dependency",
+      "size": 10000,
+      "subdir": "noarch",
+      "version": "0.2.0"
+    }
+  },
+  "packages.conda": {},
+  "repodata_version": 2
+}

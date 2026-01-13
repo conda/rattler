@@ -3,14 +3,16 @@ from __future__ import annotations
 import datetime
 from typing import List, Literal, Optional, Sequence
 
-from rattler import Channel, Platform, SparseRepoData, VirtualPackage
-from rattler.channel import ChannelPriority
+from rattler.channel.channel import Channel
+from rattler.channel.channel_priority import ChannelPriority
 from rattler.match_spec.match_spec import MatchSpec
-from rattler.platform.platform import PlatformLiteral
+from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyMatchSpec, PyPackageFormatSelection, py_solve, py_solve_with_sparse_repodata
 from rattler.repo_data.gateway import Gateway
 from rattler.repo_data.record import RepoDataRecord
+from rattler.repo_data.sparse import SparseRepoData
 from rattler.virtual_package.generic import GenericVirtualPackage
+from rattler.virtual_package.virtual_package import VirtualPackage
 
 SolveStrategy = Literal["highest", "lowest", "lowest-direct"]
 """Defines the strategy to use when multiple versions of a package are available during solving."""

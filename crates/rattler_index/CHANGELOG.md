@@ -62,6 +62,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.8](https://github.com/conda/rattler/compare/rattler_index-v0.27.7...rattler_index-v0.27.8) - 2025-12-18
+
+### Fixed
+
+- add if-not-exists check to prevent concurrency issues when initializing S3 channel ([#1915](https://github.com/conda/rattler/pull/1915))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.27.7](https://github.com/conda/rattler/compare/rattler_index-v0.27.6...rattler_index-v0.27.7) - 2025-12-08
+
+### Added
+
+- add ensure_channel_initialized for fs and s3 channels ([#1906](https://github.com/conda/rattler/pull/1906))
+
 ## [0.27.6](https://github.com/conda/rattler/compare/rattler_index-v0.27.5...rattler_index-v0.27.6) - 2025-11-27
 
 ### Other

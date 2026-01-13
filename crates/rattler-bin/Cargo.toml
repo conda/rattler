@@ -17,9 +17,24 @@ name = "rattler"
 path = "src/main.rs"
 
 [features]
-default = ["rustls-tls"]
-native-tls = ["reqwest/native-tls", "rattler/native-tls", "rattler_repodata_gateway/native-tls", "rattler_networking/native-tls", "rattler_cache/native-tls"]
-rustls-tls = ["reqwest/rustls-tls", "reqwest/rustls-tls-native-roots", "rattler/rustls-tls", "rattler_repodata_gateway/rustls-tls", "rattler_networking/rustls-tls", "rattler_cache/rustls-tls"]
+default = ["rustls-tls", "s3", "gcs"]
+native-tls = [
+  "reqwest/native-tls",
+  "rattler/native-tls",
+  "rattler_repodata_gateway/native-tls",
+  "rattler_networking/native-tls",
+  "rattler_cache/native-tls",
+]
+rustls-tls = [
+  "reqwest/rustls-tls",
+  "reqwest/rustls-tls-native-roots",
+  "rattler/rustls-tls",
+  "rattler_repodata_gateway/rustls-tls",
+  "rattler_networking/rustls-tls",
+  "rattler_cache/rustls-tls",
+]
+s3 = ["rattler_networking/s3", "rattler_upload/s3"]
+gcs = ["rattler_networking/gcs"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -31,14 +46,24 @@ miette = { workspace = true }
 once_cell = { workspace = true }
 rattler = { workspace = true, features = ["indicatif", "cli-tools"] }
 rattler_conda_types = { workspace = true, default-features = false }
-rattler_networking = { workspace = true, default-features = false, features = ["gcs", "s3", "system-integration", "netrc-rs"] }
-rattler_repodata_gateway = { workspace = true, default-features = false, features = ["gateway"] }
-rattler_solve = { workspace = true, default-features = false, features = ["resolvo", "libsolv_c"] }
+rattler_networking = { workspace = true, default-features = false, features = [
+  "system-integration",
+  "netrc-rs",
+] }
+rattler_repodata_gateway = { workspace = true, default-features = false, features = [
+  "gateway",
+] }
+rattler_solve = { workspace = true, default-features = false, features = [
+  "resolvo",
+  "libsolv_c",
+] }
 rattler_virtual_packages = { workspace = true, default-features = false }
 rattler_cache = { workspace = true, default-features = false }
 rattler_menuinst = { workspace = true, default-features = false }
-rattler_package_streaming = { workspace = true, default-features = false, features = ["reqwest"] }
-rattler_upload = { workspace = true, features = ["s3"]}
+rattler_package_streaming = { workspace = true, default-features = false, features = [
+  "reqwest",
+] }
+rattler_upload = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 reqwest-middleware = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

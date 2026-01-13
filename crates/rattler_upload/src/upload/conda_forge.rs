@@ -5,7 +5,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{upload::get_default_client, CondaForgeData};
+use crate::{
+    upload::{get_default_client, opt::ForceOverwrite},
+    CondaForgeData,
+};
 use fs_err::tokio as fs;
 use miette::{miette, IntoDiagnostic};
 use tracing::{debug, info};
@@ -94,7 +97,7 @@ pub async fn upload_packages_to_conda_forge(
                 .upload_file(
                     &conda_forge_data.staging_channel,
                     &[channel.clone()],
-                    false,
+                    ForceOverwrite(false),
                     &package,
                 )
                 .await?;

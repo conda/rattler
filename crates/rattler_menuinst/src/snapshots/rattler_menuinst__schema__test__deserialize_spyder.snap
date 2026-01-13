@@ -490,6 +490,12 @@ MenuInstSchema {
                                 },
                             ),
                             event_handler: None,
+                            info_plist_extra: Some(
+                                {
+                                    "NSRequiresAquaSystemAppearance": String("NO"),
+                                    "NSHighResolutionCapable": Bool(true),
+                                },
+                            ),
                         },
                     },
                 ),

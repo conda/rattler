@@ -51,7 +51,8 @@
             "UTImportedTypeDeclarations": null,
             "entitlements": null,
             "link_in_bundle": null,
-            "event_handler": null
+            "event_handler": null,
+            "info_plist_extra": null
           },
           "win": {
             "desktop": true,

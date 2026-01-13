@@ -57,7 +57,7 @@ clap = { version = "4.5.38", features = ["derive", "color", "suggestions", "erro
 clap-verbosity-flag = "3.0.3"
 cmake = "0.1.54"
 console = { version = "0.16.0", features = ["windows-console-colors"] }
-criterion = "0.7"
+criterion = "0.8"
 dashmap = "6.1.0"
 difference = "2.0.0"
 digest = "0.10.7"
@@ -65,6 +65,7 @@ dirs = "6.0.0"
 dunce = "1.0.5"
 enum_dispatch = "0.3.13"
 fancy-regex = "0.16.0"
+filetime = "0.2.26"
 fs-err = { version = "3.1.0" }
 fslock = "0.2.1"
 futures = "0.3.31"
@@ -81,13 +82,13 @@ aws-smithy-http-client = { version = "1.1.2", default-features = false }
 aws-credential-types = { version = "1.2.10", default-features = false }
 hex = "0.4.3"
 hex-literal = "1.0.0"
-http = "1.3"
+http = "1.4"
 http-cache-semantics = "2.1.0"
 humansize = "2.1.3"
 humantime = "2.2.0"
-indexmap = "2.10.0"
+indexmap = "2.12.0"
 indicatif = "0.18.0"
-insta = { version = "1.43.1" }
+insta = { version = "1.44.3" }
 itertools = "0.14.0"
 json-patch = "4.0.0"
 keyring = "3.6.2"
@@ -121,13 +122,13 @@ reflink-copy = "0.1.26"
 regex = "1.11.1"
 reqwest = { version = "0.12.15", default-features = false }
 reqwest-middleware = "0.4.2"
-reqwest-retry = "0.7.0"
+reqwest-retry = "0.8.0"
 resolvo = { version = "0.10.0" }
 # hold back at 0.4.0 until `reqwest-retry` is updated
-retry-policies = { version = "0.4.0", default-features = false }
+retry-policies = { version = "0.5.0", default-features = false }
 rmp = { version = "0.8.14" }
 rmp-serde = { version = "1.3.0" }
-rstest = { version = "0.25.0" }
+rstest = { version = "0.26.1" }
 rstest_reuse = "0.7.0"
 simd-json = { version = "0.17.0", features = ["serde_impl"] }
 self_cell = "1.2.0"
@@ -136,7 +137,7 @@ serde_bytes = { version = "0.11.19" }
 serde_json = { version = "1.0.140" }
 serde_repr = "0.1"
 serde-value = "0.7.0"
-serde_with = "3.12.0"
+serde_with = "3.16.1"
 serde_yaml = "0.9.34"
 serde-untagged = "0.1.7"
 sha2 = "0.10.9"
@@ -148,12 +149,13 @@ smallvec = { version = "1.15.0", features = [
   "const_generics",
   "union",
 ] }
+sigstore-sign = { version = "0.6.0" }
 strum = { version = "0.27.1", features = ["derive"] }
 superslice = "1.0.0"
 syn = "2.0.101"
-sysinfo = "0.36.0"
+sysinfo = "0.37.2"
 tar = "0.4.44"
-tempdir = "0.3.7"
+astral-tokio-tar = "0.5.3"
 tempfile = "3.20.0"
 temp-env = { version = "0.3.6", features = ["async_closure"] }
 test-log = "0.2.17"
@@ -168,43 +170,43 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", default-features = false }
 tracing-test = { version = "0.2.5" }
 trybuild = { version = "1.0.105" }
-typed-path = { version = "0.11.0" }
+typed-path = { version = "0.12.0" }
 url = { version = "2.5.4" }
 unicode-normalization = "0.1.24"
 uuid = { version = "1.17.0", default-features = false }
 walkdir = "2.5.0"
 wasmtimer = "0.4.1"
 which = "8.0.0"
-windows-sys = { version = "0.60.2", default-features = false }
+windows-sys = { version = "0.61.2", default-features = false }
 winver = { version = "1.0.0" }
 zip = { version = "6.0.0", default-features = false }
 zstd = { version = "0.13.3", default-features = false }
 
 # These are the all the crates defined in the workspace. We pin all of them together because they are always updated in tendem.
 coalesced_map = { path = "crates/coalesced_map", version = "=0.1.2", default-features = false }
-file_url = { path = "crates/file_url", version = "=0.2.6", default-features = false }
-path_resolver = { path = "crates/path_resolver", version = "=0.2.2", default-features = false }
-rattler = { path = "crates/rattler", version = "=0.39.5", default-features = false }
-rattler_cache = { path = "crates/rattler_cache", version = "=0.6.4", default-features = false }
-rattler_conda_types = { path = "crates/rattler_conda_types", version = "=0.42.2", default-features = false }
-rattler_config = { path = "crates/rattler_config", version = "=0.2.21", default-features = false }
-rattler_digest = { path = "crates/rattler_digest", version = "=1.2.0", default-features = false }
-rattler_index = { path = "crates/rattler_index", version = "=0.27.6", default-features = false }
-rattler_libsolv_c = { path = "crates/rattler_libsolv_c", version = "=1.3.0", default-features = false }
-rattler_lock = { path = "crates/rattler_lock", version = "=0.26.7", default-features = false }
-rattler_macros = { path = "crates/rattler_macros", version = "=1.0.11", default-features = false }
-rattler_menuinst = { path = "crates/rattler_menuinst", version = "=0.2.40", default-features = false }
-rattler_networking = { path = "crates/rattler_networking", version = "=0.25.27", default-features = false }
-rattler_package_streaming = { path = "crates/rattler_package_streaming", version = "=0.23.19", default-features = false }
-rattler_pty = { path = "crates/rattler_pty", version = "=0.2.7", default-features = false }
-rattler_redaction = { path = "crates/rattler_redaction", version = "=0.1.12", default-features = false }
-rattler_repodata_gateway = { path = "crates/rattler_repodata_gateway", version = "=0.25.5", default-features = false }
-rattler_s3 = { path = "crates/rattler_s3", version = "=0.1.16", default-features = false }
-rattler_sandbox = { path = "crates/rattler_sandbox", version = "=0.2.8", default-features = false }
-rattler_shell = { path = "crates/rattler_shell", version = "=0.25.13", default-features = false }
-rattler_solve = { path = "crates/rattler_solve", version = "=4.1.0", default-features = false }
-rattler_upload = { path = "crates/rattler_upload", version = "=0.4.5", default-features = false }
-rattler_virtual_packages = { path = "crates/rattler_virtual_packages", version = "=2.3.2", default-features = false }
+file_url = { path = "crates/file_url", version = "=0.2.7", default-features = false }
+path_resolver = { path = "crates/path_resolver", version = "=0.2.4", default-features = false }
+rattler = { path = "crates/rattler", version = "=0.39.7", default-features = false }
+rattler_cache = { path = "crates/rattler_cache", version = "=0.6.6", default-features = false }
+rattler_conda_types = { path = "crates/rattler_conda_types", version = "=0.42.4", default-features = false }
+rattler_config = { path = "crates/rattler_config", version = "=0.2.23", default-features = false }
+rattler_digest = { path = "crates/rattler_digest", version = "=1.2.2", default-features = false }
+rattler_index = { path = "crates/rattler_index", version = "=0.27.8", default-features = false }
+rattler_libsolv_c = { path = "crates/rattler_libsolv_c", version = "=1.3.1", default-features = false }
+rattler_lock = { path = "crates/rattler_lock", version = "=0.26.9", default-features = false }
+rattler_macros = { path = "crates/rattler_macros", version = "=1.0.12", default-features = false }
+rattler_menuinst = { path = "crates/rattler_menuinst", version = "=0.2.42", default-features = false }
+rattler_networking = { path = "crates/rattler_networking", version = "=0.25.29", default-features = false }
+rattler_package_streaming = { path = "crates/rattler_package_streaming", version = "=0.23.21", default-features = false }
+rattler_pty = { path = "crates/rattler_pty", version = "=0.2.8", default-features = false }
+rattler_redaction = { path = "crates/rattler_redaction", version = "=0.1.13", default-features = false }
+rattler_repodata_gateway = { path = "crates/rattler_repodata_gateway", version = "=0.25.7", default-features = false }
+rattler_s3 = { path = "crates/rattler_s3", version = "=0.1.18", default-features = false }
+rattler_sandbox = { path = "crates/rattler_sandbox", version = "=0.2.10", default-features = false }
+rattler_shell = { path = "crates/rattler_shell", version = "=0.25.15", default-features = false }
+rattler_solve = { path = "crates/rattler_solve", version = "=4.1.2", default-features = false }
+rattler_upload = { path = "crates/rattler_upload", version = "=0.4.7", default-features = false }
+rattler_virtual_packages = { path = "crates/rattler_virtual_packages", version = "=2.3.4", default-features = false }
 
 # This is also a rattler crate, but we only pin it to minor version
 simple_spawn_blocking = { path = "crates/simple_spawn_blocking", version = "1.1", default-features = false }

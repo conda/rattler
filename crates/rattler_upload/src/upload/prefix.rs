@@ -15,15 +15,13 @@ use tokio_util::io::ReaderStream;
 use tracing::{info, warn};
 use url::Url;
 
-use super::opt::{
-    // ← Import from sibling module
-    PrefixData,
-};
+use super::opt::{AttestationSource, PrefixData};
 
+#[cfg(feature = "sigstore-sign")]
+use crate::upload::attestation::{create_attestation, AttestationConfig};
 use crate::upload::{
-    attestation::{create_attestation_with_cosign, AttestationConfig},
     default_bytes_style, get_client_with_retry, get_default_client,
-    trusted_publishing::{check_trusted_publishing, get_raw_oidc_token, TrustedPublishResult},
+    trusted_publishing::{check_trusted_publishing, TrustedPublishResult},
 };
 
 use super::package::sha256_sum;
@@ -106,41 +104,72 @@ pub async fn upload_package_to_prefix(
 
     let client = get_client_with_retry().into_diagnostic()?;
 
+    let wants_attestation = !matches!(prefix_data.attestation, AttestationSource::NoAttestation);
+    let wants_generate = matches!(
+        prefix_data.attestation,
+        AttestationSource::GenerateAttestation
+    );
+
+    // Check if attestation generation is requested but sigstore feature is not enabled
+    #[cfg(not(feature = "sigstore-sign"))]
+    if wants_generate {
+        return Err(miette::miette!(
+            "Attestation generation was requested, but the 'sigstore-sign' feature is not enabled.\n\
+             Please rebuild with the 'sigstore-sign' feature enabled."
+        ));
+    }
+
     // Check if we're using trusted publishing and if we should generate attestations
-    let (token, should_generate_attestation, oidc_token) = match prefix_data.api_key {
-        Some(api_key) => (api_key, false, None),
+    #[cfg(feature = "sigstore-sign")]
+    let (token, should_generate_attestation) = match prefix_data.api_key {
+        Some(api_key) => (api_key, false),
         None => match check_trusted_publishing(&client, &prefix_data.url).await {
             TrustedPublishResult::Configured(token) => {
-                // Get the OIDC token for attestation generation
-                let oidc_token = if prefix_data.generate_attestation {
-                    match get_raw_oidc_token(&client).await {
-                        Ok(token) => Some(token),
-                        Err(e) => {
-                            tracing::warn!("Failed to get OIDC token for attestation: {e}");
-                            None
-                        }
-                    }
-                } else {
-                    None
-                };
-                (token.secret().to_string(), oidc_token.is_some(), oidc_token)
+                // When using trusted publishing, we can generate attestations
+                // Note: sigstore-sign handles OIDC token retrieval internally
+                (token.secret().to_string(), wants_generate)
             }
             TrustedPublishResult::Skipped => {
-                if prefix_data.attestation.is_some() || prefix_data.generate_attestation {
+                if wants_attestation {
                     return Err(miette::miette!(
                         "Attestation was requested, but trusted publishing is not configured"
                     ));
                 }
-                (check_storage()?, false, None)
+                (check_storage()?, false)
             }
             TrustedPublishResult::Ignored(err) => {
                 tracing::warn!("Checked for trusted publishing but failed with {err}");
-                if prefix_data.attestation.is_some() || prefix_data.generate_attestation {
+                if wants_attestation {
                     return Err(miette::miette!(
                         "Attestation was requested, but trusted publishing is not configured"
                     ));
                 }
-                (check_storage()?, false, None)
+                (check_storage()?, false)
+            }
+        },
+    };
+
+    #[cfg(not(feature = "sigstore-sign"))]
+    let token = match prefix_data.api_key {
+        Some(api_key) => api_key,
+        None => match check_trusted_publishing(&client, &prefix_data.url).await {
+            TrustedPublishResult::Configured(token) => token.secret().to_string(),
+            TrustedPublishResult::Skipped => {
+                if wants_attestation {
+                    return Err(miette::miette!(
+                        "Attestation was requested, but trusted publishing is not configured"
+                    ));
+                }
+                check_storage()?
+            }
+            TrustedPublishResult::Ignored(err) => {
+                tracing::warn!("Checked for trusted publishing but failed with {err}");
+                if wants_attestation {
+                    return Err(miette::miette!(
+                        "Attestation was requested, but trusted publishing is not configured"
+                    ));
+                }
+                check_storage()?
             }
         },
     };
@@ -152,36 +181,62 @@ pub async fn upload_package_to_prefix(
             .to_string_lossy()
             .to_string();
         let file_size = package_file.metadata().into_diagnostic()?.len();
-        let url = prefix_data
+        let mut url = prefix_data
             .url
             .join(&format!("api/v1/upload/{}", prefix_data.channel))
             .into_diagnostic()?;
 
+        if prefix_data.force.is_enabled() {
+            url.query_pairs_mut().append_pair("force", "true");
+        }
+
         // Generate attestation if we're using trusted publishing and it was requested
-        let attestation_path = if should_generate_attestation && oidc_token.is_some() {
+        #[cfg(feature = "sigstore-sign")]
+        let attestation_path = if should_generate_attestation {
             let channel_url = prefix_data
                 .url
                 .join(&prefix_data.channel)
                 .into_diagnostic()?;
 
-            // Build attestation configuration. We deliberately avoid providing a GitHub token
-            // so we always return a Sigstore bundle JSON for uploading to prefix.dev.
-            let config = AttestationConfig {
-                repo_owner: None,
-                repo_name: None,
-                github_token: None,
-                use_github_oidc: true,
-                cosign_private_key: std::env::var("COSIGN_KEY_PATH").ok(),
+            // Build attestation configuration
+            let config = if prefix_data.store_github_attestation {
+                // Parse GITHUB_REPOSITORY (format: "owner/repo")
+                let (repo_owner, repo_name) = std::env::var("GITHUB_REPOSITORY")
+                    .ok()
+                    .and_then(|repo| {
+                        let parts: Vec<&str> = repo.splitn(2, '/').collect();
+                        if parts.len() == 2 {
+                            Some((parts[0].to_string(), parts[1].to_string()))
+                        } else {
+                            None
+                        }
+                    })
+                    .unzip();
+
+                let github_token = std::env::var("GITHUB_TOKEN").ok();
+
+                if github_token.is_none() {
+                    warn!("--store-github-attestation requires GITHUB_TOKEN environment variable");
+                }
+                if repo_owner.is_none() {
+                    warn!("--store-github-attestation requires GITHUB_REPOSITORY environment variable");
+                }
+
+                AttestationConfig {
+                    repo_owner,
+                    repo_name,
+                    github_token,
+                }
+            } else {
+                // Return Sigstore bundle JSON for uploading to prefix.dev
+                AttestationConfig {
+                    repo_owner: None,
+                    repo_name: None,
+                    github_token: None,
+                }
             };
 
-            match create_attestation_with_cosign(
-                package_file,
-                channel_url.as_str(),
-                &config,
-                &client,
-            )
-            .await
-            {
+            match create_attestation(package_file, channel_url.as_str(), &config, &client).await {
                 Ok(attestation_bundle_json) => {
                     // Save attestation bundle JSON to a file next to the package
                     tracing::info!("Generated attestation: {}", attestation_bundle_json);
@@ -199,16 +254,23 @@ pub async fn upload_package_to_prefix(
                          Upload aborted because attestation generation was requested but failed.\n\
                          \n\
                          Troubleshooting:\n\
-                         1. Ensure cosign is installed: pixi global install cosign\n\
-                         2. Check that you're running in GitHub Actions with 'id-token: write' permission\n\
-                         3. Verify OIDC token is available and valid\n\
-                         4. Check cosign logs above for specific errors",
+                         1. Check that you're running in a supported CI environment (GitHub Actions, GitLab CI, etc.)\n\
+                         2. For GitHub Actions, ensure you have 'id-token: write' permission\n\
+                         3. Verify OIDC token is available and valid",
                         filename, e
                     ));
                 }
             }
+        } else if let AttestationSource::Attestation(path) = &prefix_data.attestation {
+            Some(path.clone())
         } else {
-            prefix_data.attestation.clone()
+            None
+        };
+
+        #[cfg(not(feature = "sigstore-sign"))]
+        let attestation_path = match &prefix_data.attestation {
+            AttestationSource::Attestation(path) => Some(path.clone()),
+            _ => None,
         };
 
         let progress_bar = indicatif::ProgressBar::new(file_size)
@@ -261,8 +323,8 @@ pub async fn upload_package_to_prefix(
                     return Err(miette::miette!("Authentication error: {}", err));
                 }
                 StatusCode::CONFLICT => {
-                    // skip if package is existed
-                    if prefix_data.skip_existing {
+                    // skip if package already exists
+                    if prefix_data.skip_existing.is_enabled() {
                         progress_bar.finish();
                         info!("Skip existing package: {}", filename);
                         return Ok(());

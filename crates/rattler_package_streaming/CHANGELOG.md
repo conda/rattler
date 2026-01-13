@@ -44,6 +44,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.21](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.20...rattler_package_streaming-v0.23.21) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.23.20](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.19...rattler_package_streaming-v0.23.20) - 2025-12-08
+
+### Other
+
+- replace async `.tar.bz2` with `astral-tokio-tar`. ([#1808](https://github.com/conda/rattler/pull/1808))
+
 ## [0.23.19](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.18...rattler_package_streaming-v0.23.19) - 2025-11-27
 
 ### Other

@@ -87,6 +87,14 @@ jobs:
               skip-tests: true,
             }
 
+          - {
+              name: "Linux-riscv64gc",
+              target: riscv64gc-unknown-linux-musl,
+              os: ubuntu-latest,
+              use-cross: true,
+              skip-tests: true,
+            }
+
           - {name: "macOS-x86_64", target: x86_64-apple-darwin, os: macOS-latest}
           - {name: "macOS-aarch64", target: aarch64-apple-darwin, os: macOS-latest}
 
@@ -157,7 +165,7 @@ jobs:
         run: >
           cargo build
           --all-targets
-          --features ${{ env.DEFAULT_FEATURES }}
+          --features ${{ env.DEFAULT_FEATURES }}${{ !startsWith(matrix.target, 'powerpc') && ',sigstore-sign' || '' }}
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
 
@@ -182,7 +190,7 @@ jobs:
         run: >
           cargo nextest run
           --workspace
-          --features ${{ env.DEFAULT_FEATURES }}
+          --features ${{ env.DEFAULT_FEATURES }}${{ !startsWith(matrix.target, 'powerpc') && ',sigstore-sign' || '' }}
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}

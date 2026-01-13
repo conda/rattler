@@ -489,6 +489,11 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn resolvo_issue_188() {
+            crate::solver_case_tests::resolvo_issue_188::<$T>();
+        }
+
+        #[test]
         fn test_duplicate_record() {
             use rattler_solve::SolverImpl;
 
@@ -623,6 +628,16 @@ macro_rules! solver_backend_tests {
         #[test]
         fn test_conditional_root_requirement_with_logic() {
             crate::conditional_tests::solve_conditional_root_requirement_with_logic::<$T>();
+        }
+
+        #[test]
+        fn test_rattler_issue_1917_platform_conditionals() {
+            crate::conditional_tests::rattler_issue_1917_platform_conditionals::<$T>();
+        }
+
+        #[test]
+        fn test_rattler_issue_1917_version_conditionals() {
+            crate::conditional_tests::rattler_issue_1917_version_conditionals::<$T>();
         }
 
         #[test]

@@ -44,6 +44,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.7](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.25.6...rattler_repodata_gateway-v0.25.7) - 2025-12-18
+
+### Added
+
+- add common function to extract package name from matchspec ([#1923](https://github.com/conda/rattler/pull/1923))
+- enable sharded repodata by default ([#1922](https://github.com/conda/rattler/pull/1922))
+
+### Fixed
+
+- always emit depends in index.json ([#1932](https://github.com/conda/rattler/pull/1932))
+- split on ';' when fetching dependencies in repodata ([#1919](https://github.com/conda/rattler/pull/1919))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.25.6](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.25.5...rattler_repodata_gateway-v0.25.6) - 2025-12-08
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.25.5](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.25.4...rattler_repodata_gateway-v0.25.5) - 2025-11-27
 
 ### Other

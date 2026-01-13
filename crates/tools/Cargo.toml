@@ -14,7 +14,6 @@ anyhow = { workspace = true }
 bindgen = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 difference = { workspace = true }
-tempdir = { workspace = true }
 url = { workspace = true }
 fslock = { workspace = true }
 dirs = { workspace = true }
