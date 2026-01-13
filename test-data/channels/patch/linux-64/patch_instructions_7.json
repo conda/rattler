@@ -1,0 +1,9 @@
+{
+    "packages.whl": {
+        "requests-2.32.5-py3-none-any.whl": {
+            "depends": [
+                "python>=3.10"
+            ]
+        }
+    }
+}

@@ -21,6 +21,9 @@ packages.conda:
     size: 51596
     subdir: win-64
     timestamp: 1744247964462
+    track_features: pytorch-cpu
     version: 2.6.0
 packages.whl: {}
+removed:
+  - requests-2.32.5-py3-none-any.whl
 repodata_version: 1

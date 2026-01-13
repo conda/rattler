@@ -261,7 +261,7 @@ pub fn apply_patches_impl(
                     }
                 }
                 ArchiveType::Whl=> {
-                    if conda_packages.shift_remove_entry(pkg).is_some() {
+                    if whl_packages.shift_remove_entry(pkg).is_some() {
                         removed.insert(pkg.clone());
                     }
                 }
@@ -385,6 +385,32 @@ mod test {
         // test data
         let mut repodata = load_test_repodata("repodata_from_packages_5.json");
         let patch_instructions = load_patch_instructions("patch_instructions_5.json");
+
+        // apply patch
+        repodata.apply_patches(&patch_instructions);
+
+        // check result
+        insta::assert_yaml_snapshot!(repodata);
+    }
+
+    #[test]
+    fn test_patch_modify_wheels() {
+        // test data
+        let mut repodata = load_test_repodata("repodata_from_packages_with_wheels.json");
+        let patch_instructions = load_patch_instructions("patch_instructions_7.json");
+
+        // apply patch
+        repodata.apply_patches(&patch_instructions);
+
+        // check result
+        insta::assert_yaml_snapshot!(repodata);
+    }
+
+    #[test]
+    fn test_patch_remove_wheels() {
+        // test data
+        let mut repodata = load_test_repodata("repodata_from_packages_with_wheels.json");
+        let patch_instructions = load_patch_instructions("patch_instructions_6.json");
 
         // apply patch
         repodata.apply_patches(&patch_instructions);
