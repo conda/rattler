@@ -84,5 +84,6 @@ pub async fn extract(archive: &Path, destination: &Path) -> Result<ExtractResult
     match ArchiveType::try_from(archive).ok_or(ExtractError::UnsupportedArchiveType)? {
         ArchiveType::TarBz2 => extract_tar_bz2(archive, destination).await,
         ArchiveType::Conda => extract_conda(archive, destination).await,
+        ArchiveType::Whl => todo!(),
     }
 }

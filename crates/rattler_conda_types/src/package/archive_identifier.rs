@@ -15,12 +15,13 @@ pub struct ArchiveIdentifier {
     pub version: String,
     /// The build string of the package.
     pub build_string: String,
-    /// The archive type of the package (tar.bz2 or conda)
+    /// The archive type of the package (tar.bz2, conda or whl)
     pub archive_type: ArchiveType,
 }
 
 impl ArchiveIdentifier {
     /// Converts the archive identifier into a filename for a Conda package.
+    /// TODO: this doesn't handle ArchiveType:Whl correctly
     pub fn to_file_name(&self) -> String {
         self.to_string()
     }
@@ -33,8 +34,19 @@ impl ArchiveIdentifier {
         // Strip the suffix from the filename
         let (filename_without_ext, archive_type) = ArchiveType::split_str(filename)?;
 
-        // Filename is in the form of: <name>-<version>-<build>
-        let (build_string, version, name) = filename_without_ext.rsplitn(3, '-').next_tuple()?;
+        let version;
+        let name;
+        let build_string;
+
+        if archive_type == ArchiveType::Whl {
+            // Filename is in the form of: {distribution}-{version}(-{build tag})?-{python tag}-{abi tag}-{platform tag}
+            // Build string is intentionally ignored
+            (name, version) = filename_without_ext.splitn(3, '-').next_tuple()?;
+            build_string = "0";
+        } else {
+            // Filename is in the form of: <name>-<version>-<build>
+            (build_string, version, name) = filename_without_ext.rsplitn(3, '-').next_tuple()?;
+        }
 
         Some(Self {
             name: name.to_owned(),
@@ -101,6 +113,28 @@ mod test {
                 version: String::from("9.0.1"),
                 build_string: String::from("cling_v0.9_hd1e6b3a_3"),
                 archive_type: ArchiveType::Conda
+            })
+        );
+
+        // Pure Python wheel
+        assert_eq!(
+            ArchiveIdentifier::try_from_filename("flask-3.1.1-py3-none-any.whl"),
+            Some(ArchiveIdentifier {
+                name: String::from("flask"),
+                version: String::from("3.1.1"),
+                build_string: String::from("0"),
+                archive_type: ArchiveType::Whl
+            })
+        );
+
+        // Platform specific wheel
+        assert_eq!(
+            ArchiveIdentifier::try_from_filename("numpy-2.4.1-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"),
+            Some(ArchiveIdentifier {
+                name: String::from("numpy"),
+                version: String::from("2.4.1"),
+                build_string: String::from("0"),
+                archive_type: ArchiveType::Whl
             })
         );
 

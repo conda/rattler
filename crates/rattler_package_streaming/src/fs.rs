@@ -50,5 +50,6 @@ pub fn extract(archive: &Path, destination: &Path) -> Result<ExtractResult, Extr
     match ArchiveType::try_from(archive).ok_or(ExtractError::UnsupportedArchiveType)? {
         ArchiveType::TarBz2 => extract_tar_bz2(archive, destination),
         ArchiveType::Conda => extract_conda(archive, destination),
+        ArchiveType::Whl => todo!()
     }
 }

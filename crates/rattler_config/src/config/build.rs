@@ -75,6 +75,9 @@ impl FromStr for PackageFormatAndCompression {
                             );
                         }
                     }
+                    ArchiveType::Whl => {
+                        todo!()
+                    }
                 }
                 CompressionLevel::Numeric(number)
             }
@@ -96,6 +99,7 @@ impl Serialize for PackageFormatAndCompression {
         let package_format = match self.archive_type {
             ArchiveType::TarBz2 => "tarbz2",
             ArchiveType::Conda => "conda",
+            ArchiveType::Whl => "whl",
         };
         let compression_level = match self.compression_level {
             CompressionLevel::Default => "default",

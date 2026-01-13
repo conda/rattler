@@ -620,6 +620,7 @@ mod test {
             info: None,
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
+            whl_packages: IndexMap::default(),
             removed: ["xyz", "foo", "bar", "baz", "qux", "aux", "quux"]
                 .iter()
                 .map(|s| (*s).to_string())
@@ -852,6 +853,7 @@ mod test {
             info: None,
             packages,
             conda_packages,
+            whl_packages: IndexMap::default(),
             removed: ahash::HashSet::default(),
         };
 
