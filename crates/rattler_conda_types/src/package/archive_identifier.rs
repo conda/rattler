@@ -42,7 +42,7 @@ impl ArchiveIdentifier {
         if archive_type == ArchiveType::Whl {
             // Filename is in the form of: {distribution}-{version}(-{build tag})?-{python tag}-{abi tag}-{platform tag}
             // Build string is intentionally ignored
-            (name, version) = filename_without_ext.splitn(3, '-').next_tuple()?;
+            (name, version) = filename_without_ext.split('-').next_tuple()?;
             build_string = "0";
         } else {
             // Filename is in the form of: <name>-<version>-<build>
@@ -130,7 +130,9 @@ mod test {
 
         // Platform specific wheel
         assert_eq!(
-            ArchiveIdentifier::try_from_filename("numpy-2.4.1-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"),
+            ArchiveIdentifier::try_from_filename(
+                "numpy-2.4.1-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
+            ),
             Some(ArchiveIdentifier {
                 name: String::from("numpy"),
                 version: String::from("2.4.1"),

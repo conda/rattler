@@ -62,9 +62,9 @@ impl FromStr for PackageFormatAndCompression {
             number if number.parse::<i32>().is_ok() => {
                 let number = number.parse::<i32>().unwrap_or_default();
                 match archive_type {
-                    ArchiveType::TarBz2 => {
+                    ArchiveType::TarBz2 | ArchiveType::Whl => {
                         if !(1..=9).contains(&number) {
-                            return Err("Compression level for .tar.bz2 must be between 1 and 9"
+                            return Err("Compression level for .tar.bz2 and .whl must be between 1 and 9"
                                 .to_string());
                         }
                     }
@@ -74,9 +74,6 @@ impl FromStr for PackageFormatAndCompression {
                                 "Compression level for conda packages (zstd) must be between -7 and 22".to_string()
                             );
                         }
-                    }
-                    ArchiveType::Whl => {
-                        todo!()
                     }
                 }
                 CompressionLevel::Numeric(number)

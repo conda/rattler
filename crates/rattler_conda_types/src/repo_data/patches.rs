@@ -210,7 +210,7 @@ impl PackageRecord {
 pub fn apply_patches_impl(
     packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
     conda_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
-    whl_packages:&mut IndexMap<String, PackageRecord, ahash::RandomState>,
+    whl_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
     removed: &mut ahash::HashSet<String>,
     instructions: &PatchInstructions,
 ) {
@@ -260,7 +260,7 @@ pub fn apply_patches_impl(
                         removed.insert(pkg.clone());
                     }
                 }
-                ArchiveType::Whl=> {
+                ArchiveType::Whl => {
                     if whl_packages.shift_remove_entry(pkg).is_some() {
                         removed.insert(pkg.clone());
                     }
