@@ -1206,7 +1206,7 @@ pub async fn index(
                     "Only .conda packages are supported for repodata patches. Got: {path}",
                 ))
             }
-            Some(ArchiveType::Whl) | None => {
+            Some(ArchiveType::Whl) => {
                 return Err(anyhow::anyhow!(
                     "Only .conda packages are supported for repodata patches. Got: {path}",
                 ))
