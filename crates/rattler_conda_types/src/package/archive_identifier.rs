@@ -21,7 +21,8 @@ pub struct ArchiveIdentifier {
 
 impl ArchiveIdentifier {
     /// Converts the archive identifier into a filename for a Conda package.
-    /// TODO: this doesn't handle ArchiveType:Whl correctly
+    /// TODO: This doesn't handle ArchiveType:Whl correctly because we don't
+    ///       have enough information to properly reconstruct the filename.
     pub fn to_file_name(&self) -> String {
         self.to_string()
     }
