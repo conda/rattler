@@ -236,7 +236,6 @@ pub fn parse_v3_or_lower(
                         requires_python: pkg.requires_python,
                         location: Verbatim::new(UrlOrPath::Url(pkg.url)),
                         hash: pkg.hash,
-                        editable: false,
                     })
                     .0;
                 EnvironmentPackageData::Pypi(
