@@ -87,6 +87,14 @@ jobs:
               skip-tests: true,
             }
 
+          - {
+              name: "Linux-riscv64gc",
+              target: riscv64gc-unknown-linux-musl,
+              os: ubuntu-latest,
+              use-cross: true,
+              skip-tests: true,
+            }
+
           - {name: "macOS-x86_64", target: x86_64-apple-darwin, os: macOS-latest}
           - {name: "macOS-aarch64", target: aarch64-apple-darwin, os: macOS-latest}
 

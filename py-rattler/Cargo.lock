@@ -3432,7 +3432,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "path_resolver"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "ahash",
  "fs-err",
@@ -4028,7 +4028,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.39.6"
+version = "0.39.7"
 dependencies = [
  "anyhow",
  "console",
@@ -4070,7 +4070,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.5"
+version = "0.6.6"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4101,7 +4101,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.42.3"
+version = "0.42.4"
 dependencies = [
  "ahash",
  "chrono",
@@ -4141,7 +4141,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.2.22"
+version = "0.2.23"
 dependencies = [
  "console",
  "fs-err",
@@ -4157,7 +4157,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "blake2",
  "digest",
@@ -4174,7 +4174,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.7"
+version = "0.27.8"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4210,7 +4210,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.26.8"
+version = "0.26.9"
 dependencies = [
  "ahash",
  "chrono",
@@ -4234,7 +4234,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_macros"
-version = "1.0.11"
+version = "1.0.12"
 dependencies = [
  "quote",
  "syn",
@@ -4242,7 +4242,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.41"
+version = "0.2.42"
 dependencies = [
  "chrono",
  "configparser",
@@ -4271,7 +4271,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.25.28"
+version = "0.25.29"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -4301,7 +4301,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.20"
+version = "0.23.21"
 dependencies = [
  "astral-tokio-tar",
  "async-compression",
@@ -4333,7 +4333,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_pty"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "libc",
  "nix 0.30.1",
@@ -4343,7 +4343,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "reqwest",
  "reqwest-middleware",
@@ -4352,7 +4352,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.25.6"
+version = "0.25.7"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -4412,7 +4412,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.17"
+version = "0.1.18"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -4428,7 +4428,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.25.14"
+version = "0.25.15"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -4446,7 +4446,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "4.1.1"
+version = "4.1.2"
 dependencies = [
  "chrono",
  "futures",
@@ -4463,7 +4463,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.3.3"
+version = "2.3.4"
 dependencies = [
  "archspec",
  "libloading",
@@ -5124,16 +5124,16 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.145"
+version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"
+checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
 dependencies = [
  "indexmap 2.12.1",
  "itoa",
  "memchr",
- "ryu",
  "serde",
  "serde_core",
+ "zmij",
 ]
 
 [[package]]
@@ -6976,6 +6976,12 @@ name = "zlib-rs"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f06ae92f42f5e5c42443fd094f245eb656abf56dd7cce9b8b263236565e00f2"
+
+[[package]]
+name = "zmij"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fc5a66a20078bf1251bde995aa2fdcc4b800c70b5d92dd2c62abc5c60f679f8"
 
 [[package]]
 name = "zopfli"

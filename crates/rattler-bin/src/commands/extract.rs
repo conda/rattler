@@ -41,11 +41,17 @@ fn create_authenticated_client() -> miette::Result<reqwest_middleware::ClientWit
 
     let client = reqwest_middleware::ClientBuilder::new(download_client)
         .with_arc(Arc::new(AuthenticationMiddleware::from_auth_storage(
-            authentication_storage,
+            authentication_storage.clone(),
         )))
-        .with(rattler_networking::OciMiddleware)
-        .with(rattler_networking::GCSMiddleware)
-        .build();
+        .with(rattler_networking::OciMiddleware);
+    #[cfg(feature = "s3")]
+    let client = client.with(rattler_networking::S3Middleware::new(
+        std::collections::HashMap::new(),
+        authentication_storage,
+    ));
+    #[cfg(feature = "gcs")]
+    let client = client.with(rattler_networking::GCSMiddleware);
+    let client = client.build();
 
     Ok(client)
 }

@@ -232,19 +232,20 @@ pub struct InstallOptions {
     /// [`InstallError::MissingPythonInfo`].
     pub python_info: Option<PythonInfo>,
 
-    /// For binaries on macOS ARM64 (Apple Silicon), binaries need to be signed
-    /// with an ad-hoc certificate to properly work. This field controls
-    /// whether or not to do that. Code signing is only executed when the
-    /// target platform is macOS ARM64. By default, codesigning will fail
-    /// the installation if it fails. This behavior can be changed by setting
+    /// For binaries on macOS (both Intel and Apple Silicon), binaries need to be signed
+    /// with an ad-hoc certificate to properly work when their signature has been invalidated
+    /// by prefix replacement (modifying binary content). This field controls whether or not to do that.
+    /// Code signing is executed when the target platform is macOS. By default, codesigning
+    /// will fail the installation if it fails. This behavior can be changed by setting
     /// this field to `AppleCodeSignBehavior::Ignore` or
     /// `AppleCodeSignBehavior::DoNothing`.
     ///
     /// To sign the binaries, the `/usr/bin/codesign` executable is called with
-    /// `--force` and `--sign -` arguments. The `--force` argument is used
-    /// to overwrite existing signatures, and the `--sign -` argument is
-    /// used to sign with an ad-hoc certificate. Ad-hoc signing does not use
-    /// an identity at all, and identifies exactly one instance of code.
+    /// `--force`, `--sign -`, and `--preserve-metadata=entitlements` arguments.
+    /// The `--force` argument is used to overwrite existing signatures, the `--sign -`
+    /// argument is used to sign with an ad-hoc certificate (which does not use an identity
+    /// at all), and `--preserve-metadata=entitlements` preserves the original entitlements
+    /// from the binary (required for programs that need specific permissions like virtualization).
     pub apple_codesign_behavior: AppleCodeSignBehavior,
 }
 
