@@ -384,12 +384,6 @@ impl PyLockedPackage {
         self.as_pypi().version.to_string()
     }
 
-    /// Whether the package is installed in editable mode or not.
-    #[getter]
-    pub fn pypi_is_editable(&self) -> bool {
-        self.as_pypi().editable
-    }
-
     // Hashes of the file pointed to by `url`.
     #[getter]
     pub fn hashes(&self) -> Option<PyPackageHashes> {
@@ -514,12 +508,6 @@ impl PyPypiPackageData {
     #[getter]
     pub fn location(&self) -> String {
         self.inner.location.to_string()
-    }
-
-    /// Whether the package is installed in editable mode or not.
-    #[getter]
-    pub fn is_editable(&self) -> bool {
-        self.inner.editable
     }
 
     /// Hashes of the file pointed to by `url`.
