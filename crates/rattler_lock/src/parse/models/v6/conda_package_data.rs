@@ -5,7 +5,6 @@ use std::{
 
 use super::source_data::{PackageBuildSourceSerializer, SourceLocationSerializer};
 use crate::{
-    conda,
     conda::{CondaBinaryData, CondaSourceData, PackageBuildSource, VariantValue},
     source::SourceLocation,
     utils::{derived_fields, derived_fields::LocationDerivedFields},
@@ -236,10 +235,6 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                 location: value.location,
                 variants: value.variants.map(Cow::into_owned).unwrap_or_default(),
                 package_build_source: value.package_build_source,
-                input: value.input.map(|input| conda::InputHash {
-                    hash: input.hash,
-                    globs: input.globs.into_owned(),
-                }),
                 sources: value.sources,
             }))
         }
