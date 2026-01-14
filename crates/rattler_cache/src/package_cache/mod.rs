@@ -693,20 +693,76 @@ where
             .write_revision_and_sha(new_revision, given_sha)
             .await?;
 
-        // Fetch the package.
-        fetch_fn(path.clone())
-            .await
-            .map_err(|e| PackageCacheLayerError::FetchError(Arc::new(e)))?;
+        // Create a temporary directory in the same parent folder for atomic extraction.
+        // Using the same parent ensures the rename operation is atomic (same filesystem).
+        let parent_dir = path.parent().ok_or_else(|| {
+            PackageCacheLayerError::OtherError(Box::new(std::io::Error::other(format!(
+                "cache path '{}' has no parent directory",
+                path.display()
+            ))))
+        })?;
 
-        // After fetching, return the cache metadata with the new revision.
-        // We don't need to re-validate since we just fetched it.
-        Ok(CacheMetadata {
-            revision: new_revision,
-            sha256: given_sha.copied(),
-            path,
-            index_json: None,
-            paths_json: None,
-        })
+        let prefix = path.file_name().and_then(|n| n.to_str()).unwrap_or("pkg");
+
+        // Use tempfile::Builder to create a temp directory with automatic cleanup on failure
+        let temp_dir = tempfile::Builder::new()
+            .prefix(&format!(".{prefix}"))
+            .tempdir_in(parent_dir)
+            .map_err(|e| {
+                PackageCacheLayerError::OtherError(Box::new(std::io::Error::other(format!(
+                    "failed to create temp directory in '{}': {}",
+                    parent_dir.display(),
+                    e
+                ))))
+            })?;
+
+        // Fetch/extract the package to the temporary directory.
+        let fetch_result = fetch_fn(temp_dir.path().to_path_buf()).await;
+
+        // Handle fetch result
+        match fetch_result {
+            Ok(()) => {
+                // Take ownership of the temp directory path so it won't be auto-deleted
+                let temp_path = temp_dir.keep();
+
+                // Remove any existing (potentially corrupted) directory at the final path
+                if path.is_dir() {
+                    tokio_fs::remove_dir_all(&path).await.map_err(|e| {
+                        PackageCacheLayerError::OtherError(Box::new(std::io::Error::other(
+                            format!(
+                                "failed to remove existing cache directory '{}': {}",
+                                path.display(),
+                                e
+                            ),
+                        )))
+                    })?;
+                }
+
+                // Atomically rename the temp directory to the final destination
+                tokio_fs::rename(&temp_path, &path).await.map_err(|e| {
+                    PackageCacheLayerError::OtherError(Box::new(std::io::Error::other(format!(
+                        "failed to rename temp directory '{}' to '{}': {}",
+                        temp_path.display(),
+                        path.display(),
+                        e
+                    ))))
+                })?;
+
+                // After fetching, return the cache metadata with the new revision.
+                // We don't need to re-validate since we just fetched it.
+                Ok(CacheMetadata {
+                    revision: new_revision,
+                    sha256: given_sha.copied(),
+                    path,
+                    index_json: None,
+                    paths_json: None,
+                })
+            }
+            Err(e) => {
+                // temp_dir is dropped here, automatically cleaning up the directory
+                Err(PackageCacheLayerError::FetchError(Arc::new(e)))
+            }
+        }
     } else {
         Err(PackageCacheLayerError::InvalidPackage)
     }
