@@ -1,11 +1,13 @@
 use std::borrow::Cow;
 
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::PackageName;
+use pep508_rs::{PackageName, VersionOrUrl};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
-use crate::{parse::deserialize::PypiPackageDataRaw, PackageHashes, UrlOrPath, Verbatim};
+use crate::{
+    parse::deserialize::PypiPackageDataRaw, PackageHashes, PypiPackageData, UrlOrPath, Verbatim,
+};
 
 /// A helper struct that wraps all fields of a [`crate::PypiPackageData`] and
 /// allows for easy conversion between the two.
@@ -60,4 +62,70 @@ impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
             editable: value.editable,
         }
     }
+}
+
+impl<'a> From<&'a PypiPackageData> for PypiPackageDataModel<'a> {
+    fn from(value: &'a PypiPackageData) -> Self {
+        let requires_dist = value
+            .requires_dist
+            .iter()
+            .map(requirement_to_string)
+            .collect::<Vec<_>>();
+        Self {
+            name: Cow::Borrowed(&value.name),
+            version: Cow::Borrowed(&value.version),
+            location: Cow::Borrowed(&value.location),
+            hash: Cow::Borrowed(&value.hash),
+            requires_dist: requires_dist.into(),
+            requires_python: Cow::Borrowed(&value.requires_python),
+            editable: value.editable,
+        }
+    }
+}
+
+/// This code is heavily inspired from the `Display::fmt` implementation of `pep508_rs`
+/// (under Apache-2.0 or BSD-2-clause license).
+///
+/// This uses the `given()` of the URL if it exists though, so that we keep relative
+/// paths intact.
+fn requirement_to_string(req: &pep508_rs::Requirement) -> String {
+    let extras = (!req.extras.is_empty())
+        .then_some(format!(
+            "[{}]",
+            req.extras
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        ))
+        .unwrap_or_default();
+
+    let version_or_url = req
+        .version_or_url
+        .as_ref()
+        .map(|version_or_url| {
+            match version_or_url {
+                VersionOrUrl::VersionSpecifier(version_specifier) => {
+                    let version_specifier: Vec<String> =
+                        version_specifier.iter().map(ToString::to_string).collect();
+                    version_specifier.join(",")
+                }
+                VersionOrUrl::Url(url) => {
+                    if let Some(g) = url.given() {
+                        format!(" @ {g}")
+                    } else {
+                        // We add the space for markers later if necessary
+                        format!(" @ {url}")
+                    }
+                }
+            }
+        })
+        .unwrap_or_default();
+    let marker = req
+        .marker
+        .contents()
+        .map(|c| format!(" ; {c}"))
+        .unwrap_or_default();
+
+    format!("{}{extras}{version_or_url}{marker}", req.name)
 }
