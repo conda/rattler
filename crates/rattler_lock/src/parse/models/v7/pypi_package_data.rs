@@ -40,14 +40,6 @@ pub(crate) struct PypiPackageDataModel<'a> {
     pub requires_dist: Cow<'a, [String]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requires_python: Cow<'a, Option<VersionSpecifiers>>,
-    #[serde(default, skip_serializing_if = "should_skip_serializing_editable")]
-    pub editable: bool,
-}
-
-/// Used in `skip_serializing_if` to skip serializing the `editable` field if it
-/// is `false`.
-fn should_skip_serializing_editable(editable: &bool) -> bool {
-    !*editable
 }
 
 impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
@@ -59,7 +51,6 @@ impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
             hash: value.hash.into_owned(),
             requires_dist: value.requires_dist.into_owned(),
             requires_python: value.requires_python.into_owned(),
-            editable: value.editable,
         }
     }
 }
@@ -78,7 +69,6 @@ impl<'a> From<&'a PypiPackageData> for PypiPackageDataModel<'a> {
             hash: Cow::Borrowed(&value.hash),
             requires_dist: requires_dist.into(),
             requires_python: Cow::Borrowed(&value.requires_python),
-            editable: value.editable,
         }
     }
 }
