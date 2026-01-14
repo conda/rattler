@@ -57,7 +57,6 @@ impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
             hash: value.hash.into_owned(),
             requires_dist: value.requires_dist.into_owned(),
             requires_python: value.requires_python.into_owned(),
-            editable: value.editable,
         }
     }
 }
