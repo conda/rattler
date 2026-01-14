@@ -259,9 +259,6 @@ pub struct CondaSourceData {
     /// Package build source location for reproducible builds
     pub package_build_source: Option<PackageBuildSource>,
 
-    /// The input hash of the package
-    pub input: Option<InputHash>,
-
     /// Information about packages that should be built from source instead of binary.
     /// This maps from a normalized package name to location of the source.
     pub sources: BTreeMap<String, SourceLocation>,

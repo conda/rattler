@@ -14,7 +14,6 @@ use url::Url;
 
 use super::source_data::{PackageBuildSourceSerializer, SourceLocationSerializer};
 use crate::{
-    conda,
     conda::{CondaBinaryData, CondaSourceData, PackageBuildSource, VariantValue},
     source::SourceLocation,
     utils::{derived_fields, derived_fields::LocationDerivedFields},
@@ -115,9 +114,6 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub input: Option<InputHash<'a>>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<PackageBuildSourceSerializer>")]
     pub package_build_source: Option<PackageBuildSource>,
 
@@ -127,14 +123,6 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
-}
-
-#[serde_as]
-#[derive(Serialize, Deserialize, Eq, PartialEq)]
-pub(crate) struct InputHash<'a> {
-    #[serde_as(as = "SerializableHash::<rattler_digest::Sha256>")]
-    pub hash: Sha256Hash,
-    pub globs: Cow<'a, [String]>,
 }
 
 impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
@@ -234,10 +222,6 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                 location: value.location,
                 variants: value.variants.map(Cow::into_owned).unwrap_or_default(),
                 package_build_source: value.package_build_source,
-                input: value.input.map(|input| conda::InputHash {
-                    hash: input.hash,
-                    globs: input.globs.into_owned(),
-                }),
                 sources: value.sources,
             }))
         }
@@ -260,7 +244,6 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
         let variants = value.as_source().and_then(|source| {
             (!source.variants.is_empty()).then_some(Cow::Borrowed(&source.variants))
         });
-        let input = value.as_source().and_then(|source| source.input.as_ref());
         let package_build_source = value
             .as_source()
             .and_then(|source| source.package_build_source.as_ref());
@@ -309,10 +292,6 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             license: Cow::Borrowed(&package_record.license),
             license_family: Cow::Borrowed(&package_record.license_family),
             python_site_packages_path: Cow::Borrowed(&package_record.python_site_packages_path),
-            input: input.map(|input| InputHash {
-                hash: input.hash,
-                globs: Cow::Borrowed(&input.globs),
-            }),
             package_build_source: package_build_source.cloned(),
             sources,
         }
