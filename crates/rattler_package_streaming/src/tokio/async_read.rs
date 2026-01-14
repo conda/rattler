@@ -183,6 +183,20 @@ pub async fn extract_conda_via_buffering(
     .await
 }
 
+/// Extracts the contents of a `.whl` package archive.
+/// This will perform on-the-fly decompression by streaming the reader.
+pub async fn extract_whl(
+    reader: impl AsyncRead + Send + 'static,
+    destination: &Path,
+) -> Result<ExtractResult, ExtractError> {
+    extract_conda_internal(
+        reader,
+        destination,
+        crate::read::extract_whl_via_streaming,
+    )
+    .await
+}
+
 /// Extracts the contents of a `.conda` package archive using the provided
 /// extraction function
 async fn extract_conda_internal(
