@@ -5,12 +5,13 @@ use std::{
 };
 
 use fs_err::tokio as tokio_fs;
-use rattler_conda_types::package::IndexJson;
+use rattler_conda_types::package::{ArchiveType, IndexJson};
 use rattler_package_streaming::{
     read::{
         extract_conda_via_buffering, extract_conda_via_streaming, extract_tar_bz2,
         extract_whl_via_streaming,
     },
+    seek::read_package_file_content,
     ExtractError,
 };
 use rstest::rstest;
@@ -179,6 +180,19 @@ fn read_package_file(#[case] input: Url, #[case] sha256: &str, #[case] _md5: &st
         .starts_with(&name));
 }
 
+#[apply(whl_archives)]
+fn test_read_whl_package_file(#[case] input: Url, #[case] sha256: &str, #[case] _md5: &str) {
+    let file_path = tools::download_and_cache_file(input.clone(), sha256).unwrap();
+    let archive_path = test_data_dir().join(&file_path);
+
+    let file = File::open(archive_path).unwrap();
+    let content = read_package_file_content(file, ArchiveType::Whl, "requests/__init__.py").unwrap();
+
+    // Verify the file was successfully read from the archive.
+    // Note: Some __init__.py files can be empty, but requests' contains content.
+    assert!(!content.is_empty(), "File content should not be empty");
+}
+
 #[apply(tar_bz2_archives)]
 fn test_extract_tar_bz2(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
@@ -261,7 +275,6 @@ fn test_extract_whl(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str)
     assert_eq!(&format!("{:x}", result.sha256), sha256);
     assert_eq!(&format!("{:x}", result.md5), md5);
 
-    // Verify that files were actually extracted
     assert!(target_dir.exists(), "Destination directory should exist");
     assert!(target_dir.is_dir(), "Destination should be a directory");
 }
@@ -288,7 +301,6 @@ async fn test_extract_whl_async(#[case] input: Url, #[case] sha256: &str, #[case
     assert_eq!(&format!("{:x}", result.sha256), sha256);
     assert_eq!(&format!("{:x}", result.md5), md5);
 
-    // Verify that files were actually extracted
     assert!(target_dir.exists(), "Destination directory should exist");
     assert!(target_dir.is_dir(), "Destination should be a directory");
 }
@@ -302,13 +314,11 @@ fn test_extract_whl_fs(#[case] input: Url, #[case] sha256: &str, #[case] md5: &s
     let archive_path = test_data_dir().join(&file_path);
     let target_dir = temp_dir.join(file_path.file_stem().unwrap());
 
-    // Use the public API: fs::extract_whl (takes a Path, opens file internally)
     let result = rattler_package_streaming::fs::extract_whl(&archive_path, &target_dir).unwrap();
 
     assert_eq!(&format!("{:x}", result.sha256), sha256);
     assert_eq!(&format!("{:x}", result.md5), md5);
 
-    // Verify that files were actually extracted
     assert!(target_dir.exists(), "Destination directory should exist");
     assert!(target_dir.is_dir(), "Destination should be a directory");
 }
@@ -325,7 +335,6 @@ async fn test_extract_whl_tokio_fs(#[case] input: Url, #[case] sha256: &str, #[c
     let archive_path = test_data_dir().join(&file_path);
     let target_dir = temp_dir.join(file_path.file_stem().unwrap());
 
-    // Use the public API: tokio::fs::extract_whl (takes a Path, opens file internally)
     let result = rattler_package_streaming::tokio::fs::extract_whl(&archive_path, &target_dir)
         .await
         .unwrap();
@@ -333,7 +342,43 @@ async fn test_extract_whl_tokio_fs(#[case] input: Url, #[case] sha256: &str, #[c
     assert_eq!(&format!("{:x}", result.sha256), sha256);
     assert_eq!(&format!("{:x}", result.md5), md5);
 
-    // Verify that files were actually extracted
+    assert!(target_dir.exists(), "Destination directory should exist");
+    assert!(target_dir.is_dir(), "Destination should be a directory");
+}
+
+#[cfg(feature = "reqwest")]
+#[apply(whl_archives)]
+#[tokio::test]
+async fn test_extract_whl_http(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    use reqwest::Client;
+    use reqwest_middleware::ClientWithMiddleware;
+
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
+    println!("Target dir: {}", temp_dir.display());
+
+    let filename = input
+        .path_segments()
+        .and_then(Iterator::last)
+        .expect("URL should have a filename");
+    let name = Path::new(filename);
+    println!("Name: {}", name.display());
+
+    let target_dir = temp_dir.join(name);
+    let client = ClientWithMiddleware::from(Client::new());
+
+    let result = rattler_package_streaming::reqwest::tokio::extract_whl(
+        client,
+        input,
+        &target_dir,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
     assert!(target_dir.exists(), "Destination directory should exist");
     assert!(target_dir.is_dir(), "Destination should be a directory");
 }
