@@ -7,7 +7,7 @@ use std::{
 use fs_err::tokio as tokio_fs;
 use rattler_conda_types::package::IndexJson;
 use rattler_package_streaming::{
-    read::{extract_conda_via_buffering, extract_conda_via_streaming, extract_tar_bz2},
+    read::{extract_conda_via_buffering, extract_conda_via_streaming, extract_tar_bz2, extract_whl_via_streaming},
     ExtractError,
 };
 use rstest::rstest;
@@ -91,6 +91,15 @@ fn conda_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
     "8415564d07857a1069c0cd74e7eeb369"
 )]
 fn tar_bz2_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {}
+
+#[template]
+#[rstest]
+#[case::requests(
+    "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl",
+    "2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6",
+    "bd126794a95616a0da6192b288f9bb88"
+)]
+fn whl_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {}
 
 #[cfg(feature = "reqwest")]
 #[template]
@@ -231,6 +240,27 @@ async fn test_extract_conda_async(#[case] input: Url, #[case] sha256: &str, #[ca
 
     assert_eq!(&format!("{:x}", result.sha256), sha256);
     assert_eq!(&format!("{:x}", result.md5), md5);
+}
+
+#[apply(whl_archives)]
+fn test_extract_whl(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+
+    println!("Target dir: {}", temp_dir.display());
+    let file_path = tools::download_and_cache_file(input, sha256).unwrap();
+    let target_dir = temp_dir.join(file_path.file_stem().unwrap());
+    let result = extract_whl_via_streaming(
+        File::open(test_data_dir().join(file_path)).unwrap(),
+        &target_dir,
+    )
+    .unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    // Verify that files were actually extracted
+    assert!(target_dir.exists(), "Destination directory should exist");
+    assert!(target_dir.is_dir(), "Destination should be a directory");
 }
 
 #[cfg(feature = "reqwest")]
