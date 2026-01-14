@@ -138,8 +138,8 @@ fn extract_whl_zipfile<R: std::io::Read>(
 
     let path = file.mangled_name();
 
-    // Skip directories (they end with '/')
-    if path.as_os_str().to_string_lossy().ends_with('/') {
+    // Skip directories
+    if file.is_dir() {
         // Manually read to the end of the stream
         std::io::copy(&mut *file, &mut std::io::sink())?;
     } else {
