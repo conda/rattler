@@ -10,7 +10,7 @@ use ahash::HashMapExt;
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::ExtraName;
-use rattler_conda_types::{PackageName, Platform, VersionWithSource};
+use rattler_conda_types::{PackageName, VersionWithSource};
 use serde::{de::Error, Deserialize, Deserializer};
 use serde_with::{serde_as, DeserializeAs};
 use serde_yaml::Value;
@@ -125,7 +125,7 @@ struct DeserializableEnvironment {
     indexes: Option<PypiIndexes>,
     #[serde(default)]
     options: SolveOptions,
-    packages: BTreeMap<Platform, Vec<DeserializablePackageSelector>>,
+    packages: BTreeMap<rattler_conda_types::Platform, Vec<DeserializablePackageSelector>>,
 }
 
 /// Environment struct for legacy (V4-V6) deserialization.
@@ -139,7 +139,7 @@ struct LegacyEnvironment {
     indexes: Option<PypiIndexes>,
     #[serde(default)]
     options: SolveOptions,
-    packages: BTreeMap<Platform, Vec<LegacyPackageSelector>>,
+    packages: BTreeMap<rattler_conda_types::Platform, Vec<LegacyPackageSelector>>,
 }
 
 impl<'de> DeserializeAs<'de, LegacyPackageData> for V5 {
@@ -399,7 +399,7 @@ fn legacy_package_matches_selector(
 #[allow(clippy::too_many_arguments)]
 fn resolve_legacy_conda_package(
     file_version: FileFormatVersion,
-    platform: Platform,
+    platform: rattler_conda_types::Platform,
     name: Option<&PackageName>,
     version: Option<&VersionWithSource>,
     build: Option<&str>,
@@ -641,8 +641,10 @@ fn parse_from_lock<P>(
         ahash::HashMap::with_capacity(num_environments);
 
     for (env_name, env) in raw.environments {
-        let mut env_packages: ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>> =
-            ahash::HashMap::with_capacity(env.packages.len());
+        let mut env_packages: ahash::HashMap<
+            rattler_conda_types::Platform,
+            IndexSet<EnvironmentPackageData>,
+        > = ahash::HashMap::with_capacity(env.packages.len());
 
         for (platform, selectors) in env.packages {
             let mut resolved = IndexSet::with_capacity(selectors.len());
@@ -691,7 +693,7 @@ fn parse_from_lock<P>(
 fn resolve_package_selector(
     selector: DeserializablePackageSelector,
     env_name: &str,
-    platform: Platform,
+    platform: rattler_conda_types::Platform,
     binary_url_lookup: &ahash::HashMap<UrlOrPath, usize>,
     source_identifier_lookup: &ahash::HashMap<SourceIdentifier, usize>,
     pypi_url_lookup: &ahash::HashMap<&Verbatim<UrlOrPath>, usize>,
