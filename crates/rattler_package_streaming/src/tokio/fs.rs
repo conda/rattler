@@ -86,8 +86,7 @@ pub async fn extract_whl(
     // Spawn a block task to perform the extraction
     let destination = destination.to_owned();
     let archive = archive.to_owned();
-    match tokio::task::spawn_blocking(move || crate::fs::extract_whl(&archive, &destination))
-        .await
+    match tokio::task::spawn_blocking(move || crate::fs::extract_whl(&archive, &destination)).await
     {
         Ok(result) => result,
         Err(err) => {

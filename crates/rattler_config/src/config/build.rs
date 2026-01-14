@@ -64,8 +64,10 @@ impl FromStr for PackageFormatAndCompression {
                 match archive_type {
                     ArchiveType::TarBz2 | ArchiveType::Whl => {
                         if !(1..=9).contains(&number) {
-                            return Err("Compression level for .tar.bz2 and .whl must be between 1 and 9"
-                                .to_string());
+                            return Err(
+                                "Compression level for .tar.bz2 and .whl must be between 1 and 9"
+                                    .to_string(),
+                            );
                         }
                     }
                     ArchiveType::Conda => {

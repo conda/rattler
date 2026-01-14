@@ -108,10 +108,12 @@ pub fn read_package_file_content<'a>(
             let zip_path = package_path
                 .as_ref()
                 .to_str()
-                .ok_or_else(|| ExtractError::IoError(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "package path contains invalid UTF-8",
-                )))?
+                .ok_or_else(|| {
+                    ExtractError::IoError(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "package path contains invalid UTF-8",
+                    ))
+                })?
                 .replace('\\', "/");
             let mut archive = zip::ZipArchive::new(file)?;
             let mut file_entry = archive.by_name(&zip_path)?;

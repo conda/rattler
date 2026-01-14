@@ -7,7 +7,10 @@ use std::{
 use fs_err::tokio as tokio_fs;
 use rattler_conda_types::package::IndexJson;
 use rattler_package_streaming::{
-    read::{extract_conda_via_buffering, extract_conda_via_streaming, extract_tar_bz2, extract_whl_via_streaming},
+    read::{
+        extract_conda_via_buffering, extract_conda_via_streaming, extract_tar_bz2,
+        extract_whl_via_streaming,
+    },
     ExtractError,
 };
 use rstest::rstest;

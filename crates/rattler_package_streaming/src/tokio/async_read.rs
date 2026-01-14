@@ -189,12 +189,7 @@ pub async fn extract_whl(
     reader: impl AsyncRead + Send + 'static,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    extract_conda_internal(
-        reader,
-        destination,
-        crate::read::extract_whl_via_streaming,
-    )
-    .await
+    extract_conda_internal(reader, destination, crate::read::extract_whl_via_streaming).await
 }
 
 /// Extracts the contents of a `.conda` package archive using the provided

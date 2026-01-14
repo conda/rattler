@@ -268,8 +268,6 @@ pub async fn extract(
         ArchiveType::Conda => {
             extract_conda(client, url, destination, expected_sha256, reporter).await
         }
-        ArchiveType::Whl => {
-            extract_whl(client, url, destination, expected_sha256, reporter).await
-        }
+        ArchiveType::Whl => extract_whl(client, url, destination, expected_sha256, reporter).await,
     }
 }

@@ -279,7 +279,9 @@ fn parse_package_buffer(buffer: opendal::Buffer, filename: &str) -> std::io::Res
     match archive_type {
         ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
         ArchiveType::Conda => package_record_from_conda_reader(reader),
-        ArchiveType::Whl => Err(std::io::Error::other("Package type \".whl\" not yet supported.")),
+        ArchiveType::Whl => Err(std::io::Error::other(
+            "Package type \".whl\" not yet supported.",
+        )),
     }
 }
 
@@ -1201,12 +1203,7 @@ pub async fn index(
     let repodata_patch = if let Some(path) = repodata_patch {
         match ArchiveType::try_from(path.clone()) {
             Some(ArchiveType::Conda) => {}
-            Some(ArchiveType::TarBz2) | None => {
-                return Err(anyhow::anyhow!(
-                    "Only .conda packages are supported for repodata patches. Got: {path}",
-                ))
-            }
-            Some(ArchiveType::Whl) => {
+            Some(ArchiveType::TarBz2 | ArchiveType::Whl) | None => {
                 return Err(anyhow::anyhow!(
                     "Only .conda packages are supported for repodata patches. Got: {path}",
                 ))

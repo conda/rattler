@@ -50,7 +50,6 @@ pub fn extract_whl(archive: &Path, destination: &Path) -> Result<ExtractResult, 
     crate::read::extract_whl_via_streaming(file, destination)
 }
 
-
 /// Extracts the contents a package archive at the specified path to a directory. The type of
 /// package is determined based on the file extension of the archive path.
 ///
