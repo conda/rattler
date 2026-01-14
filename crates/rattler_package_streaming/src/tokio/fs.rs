@@ -65,6 +65,40 @@ pub async fn extract_conda(
     }
 }
 
+/// Extracts the contents a `.whl` package archive at the specified path to a directory.
+///
+/// ```rust,no_run
+/// # use std::path::Path;
+/// # #[tokio::main]
+/// # async fn main() {
+/// use rattler_package_streaming::tokio::fs::extract_whl;
+/// let _ = extract_whl(
+///     Path::new("requests-2.32.5-py3-none-any.whl"),
+///     Path::new("/tmp"))
+///     .await
+///     .unwrap();
+/// # }
+/// ```
+pub async fn extract_whl(
+    archive: &Path,
+    destination: &Path,
+) -> Result<ExtractResult, ExtractError> {
+    // Spawn a block task to perform the extraction
+    let destination = destination.to_owned();
+    let archive = archive.to_owned();
+    match tokio::task::spawn_blocking(move || crate::fs::extract_whl(&archive, &destination))
+        .await
+    {
+        Ok(result) => result,
+        Err(err) => {
+            if let Ok(reason) = err.try_into_panic() {
+                std::panic::resume_unwind(reason);
+            }
+            Err(ExtractError::Cancelled)
+        }
+    }
+}
+
 /// Extracts the contents a package archive at the specified path to a directory. The type of
 /// package is determined based on the file extension of the archive path.
 ///
@@ -84,6 +118,6 @@ pub async fn extract(archive: &Path, destination: &Path) -> Result<ExtractResult
     match ArchiveType::try_from(archive).ok_or(ExtractError::UnsupportedArchiveType)? {
         ArchiveType::TarBz2 => extract_tar_bz2(archive, destination).await,
         ArchiveType::Conda => extract_conda(archive, destination).await,
-        ArchiveType::Whl => todo!(),
+        ArchiveType::Whl => extract_whl(archive, destination).await,
     }
 }
