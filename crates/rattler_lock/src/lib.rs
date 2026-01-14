@@ -79,7 +79,6 @@
 use std::{collections::HashMap, io::Read, path::Path, sync::Arc};
 
 use indexmap::IndexSet;
-use rattler_conda_types::{Platform, RepoDataRecord};
 
 mod builder;
 mod channel;
@@ -108,7 +107,7 @@ pub use options::{PypiPrereleaseMode, SolveOptions};
 pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
-pub use rattler_conda_types::Matches;
+pub use rattler_conda_types::{Matches, RepoDataRecord};
 pub use source_identifier::{ParseSourceIdentifierError, SourceIdentifier};
 pub use url_or_path::UrlOrPath;
 pub use verbatim::Verbatim;
@@ -171,7 +170,7 @@ struct EnvironmentData {
 
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
-    packages: ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>>,
+    packages: ahash::HashMap<rattler_conda_types::Platform, IndexSet<EnvironmentPackageData>>,
 }
 
 impl LockFile {
@@ -278,7 +277,7 @@ impl<'lock> Environment<'lock> {
     }
 
     /// Returns all the platforms for which we have a locked-down environment.
-    pub fn platforms(&self) -> impl ExactSizeIterator<Item = Platform> + '_ {
+    pub fn platforms(&self) -> impl ExactSizeIterator<Item = rattler_conda_types::Platform> + '_ {
         self.data().packages.keys().copied()
     }
 
@@ -314,7 +313,7 @@ impl<'lock> Environment<'lock> {
     /// Returns all the packages for a specific platform in this environment.
     pub fn packages(
         &self,
-        platform: Platform,
+        platform: rattler_conda_types::Platform,
     ) -> Option<impl DoubleEndedIterator<Item = LockedPackageRef<'lock>> + ExactSizeIterator + '_>
     {
         Some(
@@ -340,7 +339,7 @@ impl<'lock> Environment<'lock> {
         &self,
     ) -> impl ExactSizeIterator<
         Item = (
-            Platform,
+            rattler_conda_types::Platform,
             impl DoubleEndedIterator<Item = LockedPackageRef<'lock>> + ExactSizeIterator + '_,
         ),
     > + '_ {
@@ -366,7 +365,7 @@ impl<'lock> Environment<'lock> {
         &self,
     ) -> impl ExactSizeIterator<
         Item = (
-            Platform,
+            rattler_conda_types::Platform,
             impl DoubleEndedIterator<Item = (&'lock PypiPackageData, &'lock PypiPackageEnvironmentData)>,
         ),
     > + '_ {
@@ -388,7 +387,7 @@ impl<'lock> Environment<'lock> {
         &self,
     ) -> impl ExactSizeIterator<
         Item = (
-            Platform,
+            rattler_conda_types::Platform,
             impl DoubleEndedIterator<Item = &'lock CondaPackageData> + '_,
         ),
     > + '_ {
@@ -400,7 +399,7 @@ impl<'lock> Environment<'lock> {
     /// [`RepoDataRecord`].
     pub fn conda_repodata_records_by_platform(
         &self,
-    ) -> Result<HashMap<Platform, Vec<RepoDataRecord>>, ConversionError> {
+    ) -> Result<HashMap<rattler_conda_types::Platform, Vec<RepoDataRecord>>, ConversionError> {
         self.conda_packages_by_platform()
             .map(|(platform, packages)| {
                 Ok((
@@ -417,7 +416,7 @@ impl<'lock> Environment<'lock> {
     /// Returns all conda packages for a specific platform.
     pub fn conda_packages(
         &self,
-        platform: Platform,
+        platform: rattler_conda_types::Platform,
     ) -> Option<impl DoubleEndedIterator<Item = &'lock CondaPackageData> + '_> {
         self.packages(platform)
             .map(|packages| packages.filter_map(LockedPackageRef::as_conda))
@@ -432,7 +431,7 @@ impl<'lock> Environment<'lock> {
     /// records.
     pub fn conda_repodata_records(
         &self,
-        platform: Platform,
+        platform: rattler_conda_types::Platform,
     ) -> Result<Option<Vec<RepoDataRecord>>, ConversionError> {
         self.conda_packages(platform)
             .map(|packages| {
@@ -449,7 +448,7 @@ impl<'lock> Environment<'lock> {
     /// defined for this environment.
     pub fn pypi_packages(
         &self,
-        platform: Platform,
+        platform: rattler_conda_types::Platform,
     ) -> Option<
         impl DoubleEndedIterator<Item = (&'lock PypiPackageData, &'lock PypiPackageEnvironmentData)>
             + '_,
@@ -459,7 +458,7 @@ impl<'lock> Environment<'lock> {
     }
 
     /// Returns whether this environment has any pypi packages for the specified platform.
-    pub fn has_pypi_packages(&self, platform: Platform) -> bool {
+    pub fn has_pypi_packages(&self, platform: rattler_conda_types::Platform) -> bool {
         self.pypi_packages(platform)
             .is_some_and(|mut packages| packages.next().is_some())
     }
@@ -558,7 +557,7 @@ impl<'lock> LockedPackageRef<'lock> {
 mod test {
     use std::path::{Path, PathBuf};
 
-    use rattler_conda_types::{Platform, RepoDataRecord};
+    use rattler_conda_types::RepoDataRecord;
     use rstest::*;
 
     use super::{LockFile, DEFAULT_ENVIRONMENT_NAME};
@@ -660,7 +659,7 @@ mod test {
         insta::assert_yaml_snapshot!(conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
-            .packages(Platform::Linux64)
+            .packages(rattler_conda_types::Platform::Linux64)
             .unwrap()
             .map(|p| p.location().to_string())
             .collect::<Vec<_>>());
@@ -668,7 +667,7 @@ mod test {
         insta::assert_yaml_snapshot!(conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
-            .packages(Platform::Osx64)
+            .packages(rattler_conda_types::Platform::Osx64)
             .unwrap()
             .map(|p| p.location().to_string())
             .collect::<Vec<_>>());
@@ -685,7 +684,7 @@ mod test {
         assert!(conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
-            .has_pypi_packages(Platform::Linux64));
+            .has_pypi_packages(rattler_conda_types::Platform::Linux64));
 
         // v6
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -696,7 +695,7 @@ mod test {
         assert!(conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
-            .has_pypi_packages(Platform::OsxArm64));
+            .has_pypi_packages(rattler_conda_types::Platform::OsxArm64));
 
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
@@ -706,7 +705,7 @@ mod test {
         assert!(!conda_lock
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
-            .has_pypi_packages(Platform::OsxArm64));
+            .has_pypi_packages(rattler_conda_types::Platform::OsxArm64));
     }
 
     #[test]
@@ -740,7 +739,7 @@ mod test {
         let lock_file = LockFile::builder()
             .with_conda_package(
                 DEFAULT_ENVIRONMENT_NAME,
-                Platform::Linux64,
+                rattler_conda_types::Platform::Linux64,
                 repodata_record.clone().into(),
             )
             .finish();
@@ -755,7 +754,7 @@ mod test {
         let repodata_records = parsed_lock_file
             .environment(DEFAULT_ENVIRONMENT_NAME)
             .unwrap()
-            .conda_repodata_records(Platform::Linux64)
+            .conda_repodata_records(rattler_conda_types::Platform::Linux64)
             .unwrap()
             .unwrap();
 

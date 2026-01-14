@@ -5,7 +5,6 @@ mod v3;
 
 use std::path::Path;
 
-use rattler_conda_types::Platform;
 use serde::de::Error;
 use serde_yaml::Value;
 use v3::parse_v3_or_lower;
@@ -29,7 +28,7 @@ pub enum ParseCondaLockError {
     },
 
     #[error("environment {0} and platform {1} refers to a package that does not exist: {2}")]
-    MissingPackage(String, Platform, String),
+    MissingPackage(String, rattler_conda_types::Platform, String),
 
     #[error("Python requirement parsing failed")]
     Pep508Error(#[from] pep508_rs::Pep508Error),

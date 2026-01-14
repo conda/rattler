@@ -19,9 +19,7 @@ use crate::{
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{ExtraName, Requirement};
-use rattler_conda_types::{
-    NoArchType, PackageName, PackageRecord, PackageUrl, Platform, VersionWithSource,
-};
+use rattler_conda_types::{NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource};
 use serde::Deserialize;
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use url::Url;
@@ -39,12 +37,12 @@ struct LockMetaV3 {
     pub channels: Vec<Channel>,
     /// The platforms this lock file supports
     #[serde_as(as = "crate::utils::serde::Ordered<_>")]
-    pub platforms: Vec<Platform>,
+    pub platforms: Vec<rattler_conda_types::Platform>,
 }
 
 #[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 struct LockedPackageV3 {
-    pub platform: Platform,
+    pub platform: rattler_conda_types::Platform,
     #[serde(flatten)]
     pub kind: LockedPackageKindV3,
 }
@@ -138,8 +136,10 @@ pub fn parse_v3_or_lower(
     let mut conda_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_runtime_configs = IndexSet::with_capacity(lock_file.package.len());
-    let mut per_platform: ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>> =
-        ahash::HashMap::default();
+    let mut per_platform: ahash::HashMap<
+        rattler_conda_types::Platform,
+        IndexSet<EnvironmentPackageData>,
+    > = ahash::HashMap::default();
     for package in lock_file.package {
         let LockedPackageV3 { platform, kind } = package;
 
@@ -166,7 +166,7 @@ pub fn parse_v3_or_lower(
                             .path_segments()
                             .and_then(|split| split.rev().nth(1))
                     })
-                    .and_then(|subdir_str| Platform::from_str(subdir_str).ok())
+                    .and_then(|subdir_str| rattler_conda_types::Platform::from_str(subdir_str).ok())
                     .unwrap_or(platform);
 
                 let location = UrlOrPath::Url(value.url).normalize().into_owned();

@@ -8,7 +8,7 @@ use std::{
 
 use indexmap::{IndexMap, IndexSet};
 use pep508_rs::ExtraName;
-use rattler_conda_types::{Platform, Version};
+use rattler_conda_types::Version;
 
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
@@ -204,7 +204,7 @@ impl LockFileBuilder {
     pub fn add_conda_package(
         &mut self,
         environment: impl Into<String>,
-        platform: Platform,
+        platform: rattler_conda_types::Platform,
         locked_package: CondaPackageData,
     ) -> &mut Self {
         let unique_identifier = UniqueCondaIdentifier::from(&locked_package);
@@ -238,7 +238,7 @@ impl LockFileBuilder {
     pub fn add_pypi_package(
         &mut self,
         environment: impl Into<String>,
-        platform: Platform,
+        platform: rattler_conda_types::Platform,
         locked_package: PypiPackageData,
         environment_data: PypiPackageEnvironmentData,
     ) -> &mut Self {
@@ -267,7 +267,7 @@ impl LockFileBuilder {
     pub fn with_conda_package(
         mut self,
         environment: impl Into<String>,
-        platform: Platform,
+        platform: rattler_conda_types::Platform,
         locked_package: CondaPackageData,
     ) -> Self {
         self.add_conda_package(environment, platform, locked_package);
@@ -279,7 +279,7 @@ impl LockFileBuilder {
     pub fn with_package(
         mut self,
         environment: impl Into<String>,
-        platform: Platform,
+        platform: rattler_conda_types::Platform,
         locked_package: LockedPackage,
     ) -> Self {
         self.add_package(environment, platform, locked_package);
@@ -291,7 +291,7 @@ impl LockFileBuilder {
     pub fn add_package(
         &mut self,
         environment: impl Into<String>,
-        platform: Platform,
+        platform: rattler_conda_types::Platform,
         locked_package: LockedPackage,
     ) -> &mut Self {
         match locked_package {
@@ -310,7 +310,7 @@ impl LockFileBuilder {
     pub fn with_pypi_package(
         mut self,
         environment: impl Into<String>,
-        platform: Platform,
+        platform: rattler_conda_types::Platform,
         locked_package: PypiPackageData,
         environment_data: PypiPackageEnvironmentData,
     ) -> Self {
@@ -422,7 +422,7 @@ mod test {
     use std::str::FromStr;
 
     use rattler_conda_types::{
-        package::DistArchiveIdentifier, PackageName, PackageRecord, Platform, Version,
+        package::DistArchiveIdentifier, PackageName, PackageRecord, Version,
     };
     use url::Url;
 
@@ -451,7 +451,7 @@ mod test {
         let lock_file = LockFile::builder()
             .with_conda_package(
                 "default",
-                Platform::Linux64,
+                rattler_conda_types::Platform::Linux64,
                 CondaBinaryData {
                     package_record: record.clone(),
                     location: Url::parse(
@@ -468,7 +468,7 @@ mod test {
             )
             .with_conda_package(
                 "default",
-                Platform::Linux64,
+                rattler_conda_types::Platform::Linux64,
                 CondaBinaryData {
                     package_record: record.clone(),
                     location: Url::parse(
@@ -485,7 +485,7 @@ mod test {
             )
             .with_conda_package(
                 "foobar",
-                Platform::Linux64,
+                rattler_conda_types::Platform::Linux64,
                 CondaBinaryData {
                     package_record: record_with_purls,
                     location: Url::parse(
@@ -518,7 +518,7 @@ mod test {
         let lock_file = LockFile::builder()
             .with_conda_package(
                 "default",
-                Platform::Linux64,
+                rattler_conda_types::Platform::Linux64,
                 CondaBinaryData {
                     package_record: record.clone(),
                     location: Url::parse(
@@ -566,7 +566,7 @@ mod test {
             let lock_file = LockFile::builder()
                 .with_conda_package(
                     "default",
-                    Platform::Linux64,
+                    rattler_conda_types::Platform::Linux64,
                     CondaBinaryData {
                         package_record: record.clone(),
                         location: Url::parse(

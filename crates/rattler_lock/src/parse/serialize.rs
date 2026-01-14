@@ -6,7 +6,6 @@ use std::{
 
 use itertools::Itertools;
 use pep508_rs::ExtraName;
-use rattler_conda_types::Platform;
 use serde::{Serialize, Serializer};
 use serde_with::{serde_as, SerializeAs};
 use url::Url;
@@ -38,7 +37,7 @@ struct SerializableEnvironment<'a> {
     indexes: Option<&'a PypiIndexes>,
     #[serde(default, skip_serializing_if = "crate::utils::serde::is_default")]
     options: SolveOptions,
-    packages: BTreeMap<Platform, Vec<SerializablePackageSelector<'a>>>,
+    packages: BTreeMap<rattler_conda_types::Platform, Vec<SerializablePackageSelector<'a>>>,
 }
 
 impl<'a> SerializableEnvironment<'a> {
