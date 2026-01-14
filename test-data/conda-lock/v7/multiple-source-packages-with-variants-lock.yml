@@ -1,16 +1,20 @@
----
-source: crates/rattler_lock/src/lib.rs
-expression: conda_lock
----
-version: 7
+# V6 lock file with source packages that have variants as optional metadata
+#
+# This tests that variants can be included in V6 as optional metadata
+# in the package definitions. Note that variants cannot be used in the
+# package selectors in V6 (that would be a breaking change), so packages
+# must be distinguishable by other means (name, version, etc.).
+
+version: 6
 environments:
   default:
     channels:
-      - url: "https://conda.anaconda.org/conda-forge/"
+      - url: https://conda.anaconda.org/conda-forge/
     packages:
       linux-64:
         - conda: my-package-linux
         - conda: my-package-win
+
 packages:
   - conda: my-package-linux
     name: my-package
