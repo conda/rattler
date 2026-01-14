@@ -11,7 +11,7 @@ use crate::{
         LocationDerivedFields,
     },
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
+    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath, Verbatim,
     DEFAULT_ENVIRONMENT_NAME,
 };
 use indexmap::IndexSet;
@@ -241,7 +241,7 @@ pub fn parse_v3_or_lower(
                         version: pkg.version,
                         requires_dist: pkg.requires_dist,
                         requires_python: pkg.requires_python,
-                        location: UrlOrPath::Url(pkg.url),
+                        location: Verbatim::new(UrlOrPath::Url(pkg.url)),
                         hash: pkg.hash,
                         editable: false,
                     })
