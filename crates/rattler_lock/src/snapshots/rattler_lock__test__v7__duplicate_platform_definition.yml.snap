@@ -1,0 +1,5 @@
+---
+source: crates/rattler_lock/src/lib.rs
+expression: error_message
+---
+"Duplicate platform name `DUPLICATE` found"

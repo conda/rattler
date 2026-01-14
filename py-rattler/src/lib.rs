@@ -39,9 +39,9 @@ use error::{
     EnvironmentCreationException, ExtractException, FetchRepoDataException,
     InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
     InvalidUrlException, InvalidVersionException, InvalidVersionSpecException, IoException,
-    LinkException, PackageNameMatcherParseException, ParseArchException, ParsePlatformException,
-    PyRattlerError, SolverException, TransactionException, ValidatePackageRecordsException,
-    VersionBumpException,
+    LinkException, LockFileException, PackageNameMatcherParseException, ParseArchException,
+    ParsePlatformException, PyRattlerError, SolverException, TransactionException,
+    ValidatePackageRecordsException, VersionBumpException,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -49,8 +49,8 @@ use index::{py_index_fs, py_index_s3};
 use index_json::PyIndexJson;
 use installer::py_install;
 use lock::{
-    PyEnvironment, PyLockChannel, PyLockFile, PyLockedPackage, PyPackageHashes, PyPypiPackageData,
-    PyPypiPackageEnvironmentData,
+    PyEnvironment, PyLockChannel, PyLockFile, PyLockPlatform, PyLockedPackage, PyPackageHashes,
+    PyPypiPackageData, PyPypiPackageEnvironmentData,
 };
 use match_spec::PyMatchSpec;
 use meta::get_rattler_version;
@@ -162,6 +162,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyLockFile>()?;
     m.add_class::<PyEnvironment>()?;
     m.add_class::<PyLockChannel>()?;
+    m.add_class::<PyLockPlatform>()?;
     m.add_class::<PyLockedPackage>()?;
     m.add_class::<PyPypiPackageData>()?;
     m.add_class::<PyPypiPackageEnvironmentData>()?;
@@ -248,6 +249,8 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         "EnvironmentCreationError",
         py.get_type::<EnvironmentCreationException>(),
     )?;
+
+    m.add("LockFileError", py.get_type::<LockFileException>())?;
 
     m.add("ExtractError", py.get_type::<ExtractException>())?;
 

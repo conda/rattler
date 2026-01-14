@@ -1237,7 +1237,8 @@ mod test {
             .default_environment()
             .expect("no default environment in lock file");
 
-        let Some(packages) = lock_env.packages(current_platform) else {
+        let packages_platform = lock.platform(current_platform.as_str()).unwrap();
+        let Some(packages) = lock_env.packages(packages_platform) else {
             panic!(
                 "the platform for which the explicit lock file was created does not match the current platform"
             )

@@ -3,6 +3,7 @@ source: crates/rattler_lock/src/lib.rs
 expression: conda_lock
 ---
 version: 7
+platforms: []
 environments:
   with-channel-priority:
     channels: []
