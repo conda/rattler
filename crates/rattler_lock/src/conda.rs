@@ -255,7 +255,7 @@ pub struct CondaSourceData {
     /// Conda-build variants used to disambiguate between multiple source packages
     /// at the same location. This is a map from variant name to variant value.
     /// Optional field added in lock file format V6 (made required in V7).
-    pub variants: Option<BTreeMap<String, VariantValue>>,
+    pub variants: BTreeMap<String, VariantValue>,
 
     /// Package build source location for reproducible builds
     pub package_build_source: Option<PackageBuildSource>,
