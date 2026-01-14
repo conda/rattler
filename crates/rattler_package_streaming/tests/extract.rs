@@ -293,6 +293,51 @@ async fn test_extract_whl_async(#[case] input: Url, #[case] sha256: &str, #[case
     assert!(target_dir.is_dir(), "Destination should be a directory");
 }
 
+#[apply(whl_archives)]
+fn test_extract_whl_fs(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+
+    println!("Target dir: {}", temp_dir.display());
+    let file_path = tools::download_and_cache_file(input, sha256).unwrap();
+    let archive_path = test_data_dir().join(&file_path);
+    let target_dir = temp_dir.join(file_path.file_stem().unwrap());
+
+    // Use the public API: fs::extract_whl (takes a Path, opens file internally)
+    let result = rattler_package_streaming::fs::extract_whl(&archive_path, &target_dir).unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    // Verify that files were actually extracted
+    assert!(target_dir.exists(), "Destination directory should exist");
+    assert!(target_dir.is_dir(), "Destination should be a directory");
+}
+
+#[apply(whl_archives)]
+#[tokio::test]
+async fn test_extract_whl_tokio_fs(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
+    println!("Target dir: {}", temp_dir.display());
+
+    let file_path = tools::download_and_cache_file_async(input, sha256)
+        .await
+        .unwrap();
+    let archive_path = test_data_dir().join(&file_path);
+    let target_dir = temp_dir.join(file_path.file_stem().unwrap());
+
+    // Use the public API: tokio::fs::extract_whl (takes a Path, opens file internally)
+    let result = rattler_package_streaming::tokio::fs::extract_whl(&archive_path, &target_dir)
+        .await
+        .unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    // Verify that files were actually extracted
+    assert!(target_dir.exists(), "Destination directory should exist");
+    assert!(target_dir.is_dir(), "Destination should be a directory");
+}
+
 #[cfg(feature = "reqwest")]
 #[apply(url_archives)]
 #[tokio::test]
