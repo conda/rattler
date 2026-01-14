@@ -576,7 +576,7 @@ mod test {
             let rendered = lock_file.render_to_string().unwrap();
 
             // Parse again
-            let parsed = LockFile::from_str(&rendered).unwrap();
+            let parsed = LockFile::from_str_with_base_directory(&rendered, None).unwrap();
 
             // Verify the prerelease mode roundtrips correctly
             assert_eq!(
