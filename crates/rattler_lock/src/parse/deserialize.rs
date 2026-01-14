@@ -18,8 +18,8 @@ use serde_yaml::Value;
 use crate::{
     file_format_version::FileFormatVersion,
     parse::{
-        models::{self, v6},
-        V5, V6,
+        models::{self, v6, v7},
+        V5, V6, V7,
     },
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     PackageHashes, ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData,
@@ -159,6 +159,47 @@ impl<'de> DeserializeAs<'de, PackageData> for V6 {
     }
 }
 
+impl<'de> DeserializeAs<'de, PackageData> for V7 {
+    fn deserialize_as<D>(deserializer: D) -> Result<PackageData, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Discriminant {
+            Conda {
+                #[serde(rename = "conda")]
+                _conda: String,
+            },
+            Pypi {
+                #[serde(rename = "pypi")]
+                _pypi: String,
+            },
+        }
+
+        let value = serde_value::Value::deserialize(deserializer)?;
+        let Ok(discriminant) = Discriminant::deserialize(
+            serde_value::ValueDeserializer::<D::Error>::new(value.clone()),
+        ) else {
+            return Err(D::Error::custom(
+                "expected at least `conda` or `pypi` field",
+            ));
+        };
+
+        let deserializer = serde_value::ValueDeserializer::<D::Error>::new(value);
+        Ok(match discriminant {
+            Discriminant::Conda { .. } => PackageData::Conda(
+                v7::CondaPackageDataModel::deserialize(deserializer)?
+                    .try_into()
+                    .map_err(D::Error::custom)?,
+            ),
+            Discriminant::Pypi { .. } => {
+                PackageData::Pypi(v7::PypiPackageDataModel::deserialize(deserializer)?.into())
+            }
+        })
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(untagged, rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant)]
@@ -201,15 +242,24 @@ pub fn parse_from_document_v5(
     parse_from_lock(version, raw, None)
 }
 
-pub fn parse_from_document_v6_and_v7(
+pub fn parse_from_document_v6(
     document: Value,
-    version: FileFormatVersion,
     base_dir: Option<&Path>,
 ) -> Result<LockFile, ParseCondaLockError> {
     let raw: DeserializableLockFile<V6> =
         serde_yaml::from_value::<DeserializableLockFile<V6>>(document)
             .map_err(ParseCondaLockError::ParseError)?;
-    parse_from_lock(version, raw, base_dir)
+    parse_from_lock(FileFormatVersion::V6, raw, base_dir)
+}
+
+pub fn parse_from_document_v7(
+    document: Value,
+    base_dir: Option<&Path>,
+) -> Result<LockFile, ParseCondaLockError> {
+    let raw: DeserializableLockFile<V7> =
+        serde_yaml::from_value::<DeserializableLockFile<V7>>(document)
+            .map_err(ParseCondaLockError::ParseError)?;
+    parse_from_lock(FileFormatVersion::V7, raw, base_dir)
 }
 
 fn convert_raw_pypi_package(
