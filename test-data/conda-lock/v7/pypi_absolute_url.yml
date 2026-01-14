@@ -1,0 +1,32 @@
+version: 7
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - pypi: ./
+        - pypi: ../my_subdir
+      osx-64:
+        - pypi: ./
+        - pypi: ../my_subdir
+      osx-arm64:
+        - pypi: ./
+        - pypi: ../my_subdir
+      win-64:
+        - pypi: ./
+        - pypi: ../my_subdir
+packages:
+  - pypi: ../my_subdir
+    name: my-subdir
+    version: 0.1.0
+    sha256: c16866cba9a8ec2cfe83bff0f8e36f376ad719ddb21e9a01a8e7699fa28bb2cb
+  - pypi: ./
+    name: pixi-repro
+    version: 0.1.0
+    sha256: 0c8c8ad3d4764ea68d2b5951866ba0ca61d2bfbc49c1af1d53ae7b8f3d841039
+    requires_dist:
+      - my-subdir @ file:///foobar/my_subdir
+    editable: true
