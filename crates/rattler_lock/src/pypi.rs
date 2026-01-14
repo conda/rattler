@@ -27,9 +27,6 @@ pub struct PypiPackageData {
 
     /// The python version that this package requires.
     pub requires_python: Option<VersionSpecifiers>,
-
-    /// Whether the projects should be installed in editable mode or not.
-    pub editable: bool,
 }
 
 /// Additional runtime configuration of a package. Multiple environments/platforms might refer to
