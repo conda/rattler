@@ -87,6 +87,7 @@ mod file_format_version;
 mod hash;
 pub mod options;
 mod parse;
+mod platform;
 mod pypi;
 mod pypi_indexes;
 pub mod source;

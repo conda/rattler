@@ -3,6 +3,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     marker::PhantomData,
     path::Path,
+    str::FromStr as _,
     sync::Arc,
 };
 
@@ -31,6 +32,8 @@ use crate::{
 #[derive(Deserialize)]
 #[serde(bound(deserialize = "P: DeserializeAs<'de, PackageData>"))]
 struct DeserializableLockFile<P> {
+    #[serde(default)]
+    platforms: Vec<DeserializablePlatform>,
     environments: BTreeMap<String, DeserializableEnvironment>,
     #[serde_as(as = "Vec<P>")]
     packages: Vec<PackageData>,
@@ -51,6 +54,36 @@ struct DeserializableLockFileLegacy<P> {
     packages: Vec<LegacyPackageData>,
     #[serde(skip)]
     _data: PhantomData<P>,
+}
+
+#[derive(Deserialize)]
+struct DeserializablePlatform {
+    name: String,
+    subdir: String,
+    #[serde(default)]
+    virtual_packages: Vec<String>,
+}
+
+impl From<&rattler_conda_types::Platform> for DeserializablePlatform {
+    fn from(value: &rattler_conda_types::Platform) -> Self {
+        Self {
+            name: value.to_string(),
+            subdir: value.to_string(),
+            virtual_packages: Vec::new(),
+        }
+    }
+}
+
+impl TryFrom<&DeserializablePlatform> for crate::platform::Platform {
+    type Error = crate::platform::ParsePlatformError;
+
+    fn try_from(value: &DeserializablePlatform) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: crate::platform::PlatformName::try_from(value.name.clone())?,
+            subdir: rattler_conda_types::Platform::from_str(&value.subdir)?,
+            virtual_packages: value.virtual_packages.clone(),
+        })
+    }
 }
 
 /// A pinned Pypi package
@@ -592,12 +625,45 @@ fn parse_from_lock_legacy<P>(
     })
 }
 
+/// Extract a `Vec<Platform>` from the lock file. Generate the data based on
+/// defined environments if no platform data is found in the lock file (which
+/// means a lockfile < v7)
+fn retrieve_or_create_platforms<P>(
+    file_version: FileFormatVersion,
+    raw: &DeserializableLockFile<P>,
+) -> Result<Vec<crate::platform::Platform>, ParseCondaLockError> {
+    if raw.platforms.is_empty() {
+        Ok(raw
+            .environments
+            .iter()
+            .flat_map(|(_, env)| env.packages.keys())
+            .map(|p| -> Result<_, ParseCondaLockError> {
+                Ok(crate::platform::Platform {
+                    name: crate::platform::PlatformName::try_from(p.to_string())?,
+                    subdir: *p,
+                    virtual_packages: Vec::new(),
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?)
+    } else if file_version < FileFormatVersion::V7 {
+        return Err(ParseCondaLockError::UnexpectedPlatforms(file_version));
+    } else {
+        Ok(raw
+            .platforms
+            .iter()
+            .map(crate::platform::Platform::try_from)
+            .collect::<Result<Vec<_>, _>>()?)
+    }
+}
+
 /// Parses a V7+ lock file directly to `CondaPackageData`.
 fn parse_from_lock<P>(
     file_version: FileFormatVersion,
     raw: DeserializableLockFile<P>,
     base_dir: Option<&Path>,
 ) -> Result<LockFile, ParseCondaLockError> {
+    let _platforms = retrieve_or_create_platforms(file_version, &raw)?;
+
     // Split the packages into conda and pypi packages, building lookups as we go.
     // Binary packages are uniquely identified by URL.
     // Source packages are uniquely identified by SourceIdentifier (name[hash] @ location).

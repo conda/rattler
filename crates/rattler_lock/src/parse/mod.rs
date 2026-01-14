@@ -36,8 +36,14 @@ pub enum ParseCondaLockError {
     #[error(transparent)]
     InvalidPypiPackageName(#[from] pep508_rs::InvalidNameError),
 
+    #[error(transparent)]
+    InvalidPlatform(#[from] crate::platform::ParsePlatformError),
+
     #[error("missing field `{0}` for package {1}")]
     MissingField(String, UrlOrPath),
+
+    #[error("`platforms` were not supported in lockfile version {0}")]
+    UnexpectedPlatforms(FileFormatVersion),
 
     /// The location of the conda package cannot be converted to a URL
     #[error(transparent)]
