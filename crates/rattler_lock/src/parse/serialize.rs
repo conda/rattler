@@ -13,7 +13,7 @@ use url::Url;
 
 use crate::{
     file_format_version::FileFormatVersion,
-    parse::{models::v6, V6},
+    parse::{models::v7, V7},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
 };
@@ -79,12 +79,12 @@ impl<'a> SerializableEnvironment<'a> {
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Eq, PartialEq)]
 #[serde(untagged)]
-enum SerializablePackageDataV6<'a> {
-    Conda(v6::CondaPackageDataModel<'a>),
-    Pypi(v6::PypiPackageDataModel<'a>),
+enum SerializablePackageDataV7<'a> {
+    Conda(v7::CondaPackageDataModel<'a>),
+    Pypi(v7::PypiPackageDataModel<'a>),
 }
 
-impl<'a> From<PackageData<'a>> for SerializablePackageDataV6<'a> {
+impl<'a> From<PackageData<'a>> for SerializablePackageDataV7<'a> {
     fn from(package: PackageData<'a>) -> Self {
         match package {
             PackageData::Conda(p) => Self::Conda(p.into()),
@@ -319,12 +319,12 @@ fn compare_url_by_location(a: &UrlOrPath, b: &UrlOrPath) -> Ordering {
     }
 }
 
-impl<'a> SerializeAs<PackageData<'a>> for V6 {
+impl<'a> SerializeAs<PackageData<'a>> for V7 {
     fn serialize_as<S>(source: &PackageData<'a>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        SerializablePackageDataV6::from(*source).serialize(serializer)
+        SerializablePackageDataV7::from(*source).serialize(serializer)
     }
 }
 
@@ -393,7 +393,7 @@ impl Serialize for LockFile {
             version: FileFormatVersion::LATEST,
             environments,
             packages: packages.collect(),
-            _version: PhantomData::<V6>,
+            _version: PhantomData::<V7>,
         };
 
         raw.serialize(serializer)
@@ -440,7 +440,7 @@ impl Serialize for CondaPackageData {
     where
         S: Serializer,
     {
-        SerializablePackageDataV6::Conda(v6::CondaPackageDataModel::from(self))
+        SerializablePackageDataV7::Conda(v7::CondaPackageDataModel::from(self))
             .serialize(serializer)
     }
 }
@@ -450,6 +450,6 @@ impl Serialize for PypiPackageData {
     where
         S: Serializer,
     {
-        SerializablePackageDataV6::Pypi(v6::PypiPackageDataModel::from(self)).serialize(serializer)
+        SerializablePackageDataV7::Pypi(v7::PypiPackageDataModel::from(self)).serialize(serializer)
     }
 }
