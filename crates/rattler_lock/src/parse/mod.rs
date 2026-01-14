@@ -70,22 +70,21 @@ pub(crate) fn from_str_with_base_directory(
             FileFormatVersion::try_from(v)
         })?;
 
-    if version <= FileFormatVersion::V3 {
-        parse_v3_or_lower(document, version)
-    } else if version <= FileFormatVersion::V5 {
-        parse_from_document_v5(document, version)
-    } else {
-        deserialize::parse_from_document_v6_and_v7(document, version, base_dir)
+    match version {
+        FileFormatVersion::V1 | FileFormatVersion::V2 | FileFormatVersion::V3 => {
+            parse_v3_or_lower(document, version)
+        }
+        FileFormatVersion::V4 | FileFormatVersion::V5 => parse_from_document_v5(document, version),
+        FileFormatVersion::V6 => deserialize::parse_from_document_v6(document, base_dir),
+        FileFormatVersion::V7 => deserialize::parse_from_document_v7(document, base_dir),
     }
 }
 
-/// A helper struct to differentiate between the serde code paths for different
+/// A helper structs to differentiate between the serde code paths for different
 /// versions.
 struct V5;
-
-/// A helper struct to differentiate between the serde code paths for different
-/// versions.
 struct V6;
+struct V7;
 
 #[cfg(test)]
 mod test {
