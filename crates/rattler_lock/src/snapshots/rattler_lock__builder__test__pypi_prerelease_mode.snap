@@ -2,7 +2,7 @@
 source: crates/rattler_lock/src/builder.rs
 expression: lock_file.render_to_string().unwrap()
 ---
-version: 6
+version: 7
 environments:
   default:
     channels: []
