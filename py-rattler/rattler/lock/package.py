@@ -209,26 +209,6 @@ class PypiLockedPackage(LockedPackage):
         return self._package.pypi_requires_python
 
     @property
-    def is_editable(self) -> bool:
-        """
-        Whether the package should be installed in editable mode or not.
-
-        Examples
-        --------
-        ```python
-        >>> from rattler import LockFile, Platform
-        >>> lock_file = LockFile.from_path("../test-data/test.lock")
-        >>> env = lock_file.default_environment()
-        >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages[Platform("osx-arm64")][0]
-        >>> data.is_editable
-        False
-        >>>
-        ```
-        """
-        return self._package.pypi_is_editable
-
-    @property
     def extras(self) -> Set[str]:
         """
         The extras enabled for the package.

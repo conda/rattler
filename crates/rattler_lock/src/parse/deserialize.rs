@@ -57,9 +57,6 @@ pub struct PypiPackageDataRaw {
 
     /// The python version that this package requires.
     pub requires_python: Option<VersionSpecifiers>,
-
-    /// Whether the projects should be installed in editable mode or not.
-    pub editable: bool,
 }
 
 impl From<PypiPackageData> for PypiPackageDataRaw {
@@ -77,7 +74,6 @@ impl From<PypiPackageData> for PypiPackageDataRaw {
             hash: value.hash.clone(),
             requires_dist,
             requires_python: value.requires_python.clone(),
-            editable: value.editable,
         }
     }
 }
@@ -294,7 +290,6 @@ fn convert_raw_pypi_package(
         hash: raw_package.hash,
         requires_dist,
         requires_python: raw_package.requires_python,
-        editable: raw_package.editable,
     })
 }
 
