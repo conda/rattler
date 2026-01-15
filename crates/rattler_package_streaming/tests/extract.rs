@@ -191,7 +191,8 @@ fn test_read_whl_package_file(#[case] input: Url, #[case] sha256: &str, #[case] 
     let archive_path = test_data_dir().join(&file_path);
 
     let file = File::open(archive_path).unwrap();
-    let content = read_package_file_content(file, ArchiveType::Whl, "requests/__init__.py").unwrap();
+    let content =
+        read_package_file_content(file, ArchiveType::Whl, "requests/__init__.py").unwrap();
 
     // Verify the file was successfully read from the archive.
     // Note: Some __init__.py files can be empty, but requests' contains content.
@@ -372,7 +373,11 @@ fn test_extract_generic_fs(#[case] input: Url, #[case] sha256: &str, #[case] md5
 
 #[apply(whl_archives)]
 #[tokio::test]
-async fn test_extract_generic_tokio_fs(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+async fn test_extract_generic_tokio_fs(
+    #[case] input: Url,
+    #[case] sha256: &str,
+    #[case] md5: &str,
+) {
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
     println!("Target dir: {}", temp_dir.display());
 
