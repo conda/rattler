@@ -106,6 +106,7 @@ pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
 pub use options::{PypiPrereleaseMode, SolveOptions};
 pub use parse::ParseCondaLockError;
+pub use platform::Platform;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
 pub use rattler_conda_types::{Matches, RepoDataRecord};
@@ -134,6 +135,7 @@ pub struct LockFile {
 #[derive(Default, Debug)]
 struct LockFileInner {
     version: FileFormatVersion,
+    platforms: Vec<Platform>,
     environments: Vec<EnvironmentData>,
     conda_packages: Vec<CondaPackageData>,
     pypi_packages: Vec<PypiPackageData>,

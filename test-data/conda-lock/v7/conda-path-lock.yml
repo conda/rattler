@@ -1,4 +1,10 @@
 version: 7
+platforms:
+  - name: linux-64-foobar
+    subdir: linux-64
+    virtual-packages:
+      - __libc >= 32
+  - name: win-64
 environments:
   default:
     channels:
