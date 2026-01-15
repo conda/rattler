@@ -9,9 +9,9 @@ use serde_with::serde_as;
 use url::Url;
 
 use crate::{
-    conda::CondaBinaryData,
+    parse::models::legacy::{LegacyCondaBinaryData, LegacyCondaPackageData},
     utils::derived_fields::{derive_arch_and_platform, derive_channel_from_location},
-    CondaPackageData, UrlOrPath,
+    UrlOrPath,
 };
 
 fn is_default<T: Default + Eq>(value: &T) -> bool {
@@ -92,7 +92,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
+impl<'a> From<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
     fn from(value: CondaPackageDataModel<'a>) -> Self {
         let location = UrlOrPath::Url(value.url.into_owned());
         let subdir = value.subdir.into_owned();
@@ -111,7 +111,7 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
                 )
             });
 
-        Self::Binary(CondaBinaryData {
+        Self::Binary(LegacyCondaBinaryData {
             package_record: PackageRecord {
                 build: value.build.into_owned(),
                 build_number: value.build_number,

@@ -12,12 +12,13 @@ use serde::Deserialize;
 use serde_with::serde_as;
 use url::Url;
 
+use super::super::legacy::{LegacyCondaBinaryData, LegacyCondaPackageData, LegacyCondaSourceData};
 use super::source_data::{PackageBuildSourceSerializer, SourceLocationSerializer};
 use crate::{
-    conda::{CondaBinaryData, CondaSourceData, PackageBuildSource, VariantValue},
+    conda::{PackageBuildSource, VariantValue},
     source::SourceLocation,
     utils::{derived_fields, derived_fields::LocationDerivedFields},
-    CondaPackageData, ConversionError, UrlOrPath,
+    ConversionError, UrlOrPath,
 };
 
 /// A helper struct that wraps all fields of a [`crate::CondaPackageData`] and
@@ -136,7 +137,7 @@ pub(crate) struct InputHash<'a> {
     pub globs: Cow<'a, [String]>,
 }
 
-impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
+impl<'a> TryFrom<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
     type Error = ConversionError;
 
     fn try_from(value: CondaPackageDataModel<'a>) -> Result<Self, Self::Error> {
@@ -206,7 +207,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             .file_name()
             .is_some_and(|name| ArchiveIdentifier::try_from_filename(name).is_some())
         {
-            Ok(CondaPackageData::Binary(CondaBinaryData {
+            Ok(LegacyCondaPackageData::Binary(LegacyCondaBinaryData {
                 location: value.location,
                 file_name: value
                     .file_name
@@ -228,7 +229,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                 package_record,
             }))
         } else {
-            Ok(CondaPackageData::Source(CondaSourceData {
+            Ok(LegacyCondaPackageData::Source(LegacyCondaSourceData {
                 package_record,
                 location: value.location,
                 variants: value.variants.unwrap_or_default().into_owned(),
