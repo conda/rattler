@@ -1,4 +1,6 @@
 version: 7
+platforms:
+  - name: osx-arm64
 environments:
   default:
     channels:

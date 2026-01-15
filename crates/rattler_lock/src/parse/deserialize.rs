@@ -56,31 +56,27 @@ struct DeserializableLockFileLegacy<P> {
     _data: PhantomData<P>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
 struct DeserializablePlatform {
     name: String,
-    subdir: String,
+    #[serde(default)]
+    subdir: Option<String>,
     #[serde(default)]
     virtual_packages: Vec<String>,
-}
-
-impl From<&rattler_conda_types::Platform> for DeserializablePlatform {
-    fn from(value: &rattler_conda_types::Platform) -> Self {
-        Self {
-            name: value.to_string(),
-            subdir: value.to_string(),
-            virtual_packages: Vec::new(),
-        }
-    }
 }
 
 impl TryFrom<&DeserializablePlatform> for crate::platform::Platform {
     type Error = crate::platform::ParsePlatformError;
 
     fn try_from(value: &DeserializablePlatform) -> Result<Self, Self::Error> {
+        let subdir = value.subdir.as_ref().map_or_else(
+            || rattler_conda_types::Platform::from_str(&value.name),
+            |s| rattler_conda_types::Platform::from_str(s),
+        )?;
         Ok(Self {
             name: crate::platform::PlatformName::try_from(value.name.clone())?,
-            subdir: rattler_conda_types::Platform::from_str(&value.subdir)?,
+            subdir,
             virtual_packages: value.virtual_packages.clone(),
         })
     }
@@ -497,6 +493,8 @@ fn parse_from_lock_legacy<P>(
     raw: DeserializableLockFileLegacy<P>,
     base_dir: Option<&Path>,
 ) -> Result<LockFile, ParseCondaLockError> {
+    let platforms = create_platforms(&raw)?;
+
     // Split the packages into conda and pypi packages using legacy intermediate types.
     let mut legacy_conda_packages: Vec<LegacyCondaPackageData> = Vec::new();
     let mut pypi_packages = Vec::new();
@@ -613,6 +611,7 @@ fn parse_from_lock_legacy<P>(
     Ok(LockFile {
         inner: Arc::new(LockFileInner {
             version: file_version,
+            platforms,
             environments,
             environment_lookup,
             conda_packages,
@@ -625,35 +624,35 @@ fn parse_from_lock_legacy<P>(
     })
 }
 
-/// Extract a `Vec<Platform>` from the lock file. Generate the data based on
-/// defined environments if no platform data is found in the lock file (which
-/// means a lockfile < v7)
-fn retrieve_or_create_platforms<P>(
-    file_version: FileFormatVersion,
+/// Create a new `Vec<Platform>` from a legacy lock file.
+///
+/// Iterate over the environments and take the `rattler_conda_types::Platform`
+/// listed there and turn those into `Platform`.
+fn create_platforms<P>(
+    raw: &DeserializableLockFileLegacy<P>,
+) -> Result<Vec<crate::platform::Platform>, ParseCondaLockError> {
+    raw.environments
+        .iter()
+        .flat_map(|(_, env)| env.packages.keys())
+        .map(|p| -> Result<_, ParseCondaLockError> {
+            Ok(crate::platform::Platform {
+                name: crate::platform::PlatformName::try_from(p.to_string())?,
+                subdir: *p,
+                virtual_packages: Vec::new(),
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()
+}
+
+/// Extract a `Vec<Platform>` from the lock file.
+fn retrieve_platforms<P>(
     raw: &DeserializableLockFile<P>,
 ) -> Result<Vec<crate::platform::Platform>, ParseCondaLockError> {
-    if raw.platforms.is_empty() {
-        Ok(raw
-            .environments
-            .iter()
-            .flat_map(|(_, env)| env.packages.keys())
-            .map(|p| -> Result<_, ParseCondaLockError> {
-                Ok(crate::platform::Platform {
-                    name: crate::platform::PlatformName::try_from(p.to_string())?,
-                    subdir: *p,
-                    virtual_packages: Vec::new(),
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?)
-    } else if file_version < FileFormatVersion::V7 {
-        return Err(ParseCondaLockError::UnexpectedPlatforms(file_version));
-    } else {
-        Ok(raw
-            .platforms
-            .iter()
-            .map(crate::platform::Platform::try_from)
-            .collect::<Result<Vec<_>, _>>()?)
-    }
+    Ok(raw
+        .platforms
+        .iter()
+        .map(crate::platform::Platform::try_from)
+        .collect::<Result<Vec<_>, _>>()?)
 }
 
 /// Parses a V7+ lock file directly to `CondaPackageData`.
@@ -662,7 +661,7 @@ fn parse_from_lock<P>(
     raw: DeserializableLockFile<P>,
     base_dir: Option<&Path>,
 ) -> Result<LockFile, ParseCondaLockError> {
-    let _platforms = retrieve_or_create_platforms(file_version, &raw)?;
+    let platforms = retrieve_platforms(&raw)?;
 
     // Split the packages into conda and pypi packages, building lookups as we go.
     // Binary packages are uniquely identified by URL.
@@ -743,6 +742,7 @@ fn parse_from_lock<P>(
     Ok(LockFile {
         inner: Arc::new(LockFileInner {
             version: file_version,
+            platforms,
             environments,
             environment_lookup,
             conda_packages,

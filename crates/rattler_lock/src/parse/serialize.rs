@@ -14,8 +14,8 @@ use crate::{
     file_format_version::FileFormatVersion,
     parse::{models::v7, V7},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, SourceIdentifier,
-    UrlOrPath,
+    Platform, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
+    SourceIdentifier, UrlOrPath,
 };
 
 #[serde_as]
@@ -23,11 +23,34 @@ use crate::{
 #[serde(bound(serialize = "V: SerializeAs<PackageData<'a>>"))]
 struct SerializableLockFile<'a, V> {
     version: FileFormatVersion,
+    platforms: Vec<SerializablePlatform<'a>>,
     environments: BTreeMap<&'a String, SerializableEnvironment<'a>>,
     #[serde_as(as = "Vec<V>")]
     packages: Vec<PackageData<'a>>,
     #[serde(skip)]
     _version: PhantomData<V>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "kebab-case")]
+struct SerializablePlatform<'a> {
+    name: &'a str,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    subdir: Option<&'static str>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    virtual_packages: &'a [String],
+}
+
+impl<'a> SerializablePlatform<'a> {
+    fn from_platform(platform: &'a Platform) -> Self {
+        let subdir = (platform.subdir.as_str() != platform.name.as_str())
+            .then_some(platform.subdir.as_str());
+        Self {
+            name: platform.name.as_str(),
+            subdir,
+            virtual_packages: &platform.virtual_packages,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -322,6 +345,11 @@ impl Serialize for LockFile {
 
         let raw = SerializableLockFile {
             version: FileFormatVersion::LATEST,
+            platforms: inner
+                .platforms
+                .iter()
+                .map(SerializablePlatform::from_platform)
+                .collect(),
             environments,
             packages: packages.collect(),
             _version: PhantomData::<V7>,

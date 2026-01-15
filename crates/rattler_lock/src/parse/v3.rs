@@ -261,6 +261,7 @@ pub fn parse_v3_or_lower(
     Ok(LockFile {
         inner: Arc::new(LockFileInner {
             version,
+            platforms: Vec::new(), // These will get filled in later
             conda_packages: conda_packages
                 .into_iter()
                 .map(CondaPackageData::from)
