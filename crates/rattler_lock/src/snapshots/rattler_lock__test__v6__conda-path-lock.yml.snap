@@ -9,14 +9,14 @@ environments:
       - url: "https://conda.anaconda.org/conda-forge/"
     packages:
       linux-64:
-        - conda: "../minimal-project"
+        - source: "../minimal-project"
           subdir: linux-64
       win-64:
-        - conda: "../a-python-project"
+        - source: "../a-python-project"
           name: a-python-project
-        - conda: "../a-python-project"
+        - source: "../a-python-project"
           name: b-python-project
-        - conda: "../minimal-project"
+        - source: "../minimal-project"
           build: first
           subdir: win-64
   second:
@@ -24,35 +24,38 @@ environments:
       - url: "https://conda.anaconda.org/conda-forge/"
     packages:
       win-64:
-        - conda: "../minimal-project"
+        - source: "../minimal-project"
           build: second
 packages:
-  - conda: "../a-python-project"
+  - source: "../a-python-project"
     name: a-python-project
     version: "0.1"
     build: py38
+    build_number: 38
     subdir: noarch
-  - conda: "../a-python-project"
+    noarch: python
+  - source: "../a-python-project"
     name: b-python-project
     version: "0.1"
     build: h398123
+    build_number: 398123
     subdir: noarch
     noarch: python
-  - conda: "../minimal-project"
+  - source: "../minimal-project"
     name: minimal-project
     version: "0.1"
     build: first
     subdir: linux-64
     depends:
       - __unix
-  - conda: "../minimal-project"
+  - source: "../minimal-project"
     name: minimal-project
     version: "0.1"
     build: first
     subdir: win-64
     depends:
       - __win
-  - conda: "../minimal-project"
+  - source: "../minimal-project"
     name: minimal-project
     version: "0.1"
     build: second

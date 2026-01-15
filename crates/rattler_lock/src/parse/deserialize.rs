@@ -44,7 +44,7 @@ struct DeserializableLockFile<P> {
 #[derive(Deserialize)]
 #[serde(bound(deserialize = "P: DeserializeAs<'de, LegacyPackageData>"))]
 struct DeserializableLockFileLegacy<P> {
-    environments: BTreeMap<String, DeserializableEnvironment>,
+    environments: BTreeMap<String, LegacyEnvironment>,
     #[serde_as(as = "Vec<P>")]
     packages: Vec<LegacyPackageData>,
     #[serde(skip)]
@@ -108,6 +108,7 @@ enum LegacyPackageData {
     Pypi(PypiPackageDataRaw),
 }
 
+/// Environment struct for V7+ deserialization.
 #[derive(Deserialize)]
 struct DeserializableEnvironment {
     channels: Vec<Channel>,
@@ -116,6 +117,20 @@ struct DeserializableEnvironment {
     #[serde(default)]
     options: SolveOptions,
     packages: BTreeMap<Platform, Vec<DeserializablePackageSelector>>,
+}
+
+/// Environment struct for legacy (V4-V6) deserialization.
+///
+/// Uses `LegacyPackageSelector` which only supports `conda` and `pypi` keys,
+/// not the `source` key introduced in V7.
+#[derive(Deserialize)]
+struct LegacyEnvironment {
+    channels: Vec<Channel>,
+    #[serde(flatten)]
+    indexes: Option<PypiIndexes>,
+    #[serde(default)]
+    options: SolveOptions,
+    packages: BTreeMap<Platform, Vec<LegacyPackageSelector>>,
 }
 
 impl<'de> DeserializeAs<'de, LegacyPackageData> for V5 {
@@ -191,6 +206,10 @@ impl<'de> DeserializeAs<'de, PackageData> for V7 {
                 #[serde(rename = "conda")]
                 _conda: String,
             },
+            Source {
+                #[serde(rename = "source")]
+                _source: String,
+            },
             Pypi {
                 #[serde(rename = "pypi")]
                 _pypi: String,
@@ -202,7 +221,7 @@ impl<'de> DeserializeAs<'de, PackageData> for V7 {
             serde_value::ValueDeserializer::<D::Error>::new(value.clone()),
         ) else {
             return Err(D::Error::custom(
-                "expected at least `conda` or `pypi` field",
+                "expected at least `conda`, `source`, or `pypi` field",
             ));
         };
 
@@ -213,6 +232,11 @@ impl<'de> DeserializeAs<'de, PackageData> for V7 {
                     .try_into()
                     .map_err(D::Error::custom)?,
             ),
+            Discriminant::Source { .. } => PackageData::Conda(
+                v7::SourcePackageDataModel::deserialize(deserializer)?
+                    .try_into()
+                    .map_err(D::Error::custom)?,
+            ),
             Discriminant::Pypi { .. } => {
                 PackageData::Pypi(v7::PypiPackageDataModel::deserialize(deserializer)?.into())
             }
@@ -220,10 +244,41 @@ impl<'de> DeserializeAs<'de, PackageData> for V7 {
     }
 }
 
+/// Package selector for V7+ environments.
+///
+/// Supports `conda`, `source`, and `pypi` keys.
 #[derive(Deserialize)]
 #[serde(untagged, rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant)]
 enum DeserializablePackageSelector {
+    Conda {
+        conda: UrlOrPath,
+        name: Option<PackageName>,
+        version: Option<VersionWithSource>,
+        build: Option<String>,
+        subdir: Option<String>,
+    },
+    Source {
+        source: UrlOrPath,
+        name: Option<PackageName>,
+        version: Option<VersionWithSource>,
+        build: Option<String>,
+        subdir: Option<String>,
+    },
+    Pypi {
+        pypi: Verbatim<UrlOrPath>,
+        #[serde(flatten)]
+        runtime: DeserializablePypiPackageEnvironmentData,
+    },
+}
+
+/// Package selector for legacy (V4-V6) environments.
+///
+/// Only supports `conda` and `pypi` keys. The `source` key was introduced in V7.
+#[derive(Deserialize)]
+#[serde(untagged, rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)]
+enum LegacyPackageSelector {
     Conda {
         conda: UrlOrPath,
         name: Option<PackageName>,
@@ -452,7 +507,7 @@ fn parse_from_lock_legacy<P>(
                                 .into_iter()
                                 .map(|p| {
                                     Ok(match p {
-                                        DeserializablePackageSelector::Conda {
+                                        LegacyPackageSelector::Conda {
                                             conda,
                                             name,
                                             version,
@@ -484,7 +539,7 @@ fn parse_from_lock_legacy<P>(
                                                 })?,
                                             )
                                         }
-                                        DeserializablePackageSelector::Pypi { pypi, runtime } => {
+                                        LegacyPackageSelector::Pypi { pypi, runtime } => {
                                             EnvironmentPackageData::Pypi(
                                                 *pypi_url_lookup.get(&pypi).ok_or_else(|| {
                                                     ParseCondaLockError::MissingPackage(
@@ -620,6 +675,44 @@ fn parse_from_lock<P>(
                                                         environment_name.clone(),
                                                         platform,
                                                         conda,
+                                                    )
+                                                })?,
+                                            )
+                                        }
+                                        DeserializablePackageSelector::Source {
+                                            source,
+                                            name,
+                                            version,
+                                            build,
+                                            subdir,
+                                        } => {
+                                            let all_packages = conda_url_lookup
+                                                .get(&source)
+                                                .map_or(&[] as &[usize], Vec::as_slice);
+
+                                            // V7+ uses exact field matching for disambiguation
+                                            let package_index = all_packages
+                                                .iter()
+                                                .find(|&idx| {
+                                                    let conda_package = &conda_packages[*idx];
+                                                    name.as_ref().is_none_or(|name| {
+                                                        name == &conda_package.record().name
+                                                    }) && version.as_ref().is_none_or(|version| {
+                                                        version == &conda_package.record().version
+                                                    }) && build.as_ref().is_none_or(|build| {
+                                                        build == &conda_package.record().build
+                                                    }) && subdir.as_ref().is_none_or(|subdir| {
+                                                        subdir == &conda_package.record().subdir
+                                                    })
+                                                })
+                                                .copied();
+
+                                            EnvironmentPackageData::Conda(
+                                                package_index.ok_or_else(|| {
+                                                    ParseCondaLockError::MissingPackage(
+                                                        environment_name.clone(),
+                                                        platform,
+                                                        source,
                                                     )
                                                 })?,
                                             )

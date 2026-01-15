@@ -81,13 +81,15 @@ impl<'a> SerializableEnvironment<'a> {
 #[serde(untagged)]
 enum SerializablePackageDataV7<'a> {
     Conda(v7::CondaPackageDataModel<'a>),
+    Source(v7::SourcePackageDataModel<'a>),
     Pypi(v7::PypiPackageDataModel<'a>),
 }
 
 impl<'a> From<PackageData<'a>> for SerializablePackageDataV7<'a> {
     fn from(package: PackageData<'a>) -> Self {
         match package {
-            PackageData::Conda(p) => Self::Conda(p.into()),
+            PackageData::Conda(CondaPackageData::Binary(binary)) => Self::Conda(binary.into()),
+            PackageData::Conda(CondaPackageData::Source(source)) => Self::Source(source.into()),
             PackageData::Pypi(p) => Self::Pypi(p.into()),
         }
     }
@@ -98,6 +100,17 @@ impl<'a> From<PackageData<'a>> for SerializablePackageDataV7<'a> {
 enum SerializablePackageSelector<'a> {
     Conda {
         conda: &'a UrlOrPath,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name: Option<&'a PackageName>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        version: Option<&'a VersionWithSource>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        build: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        subdir: Option<&'a str>,
+    },
+    Source {
+        source: &'a UrlOrPath,
         #[serde(skip_serializing_if = "Option::is_none")]
         name: Option<&'a PackageName>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -215,12 +228,22 @@ impl<'a> SerializablePackageSelector<'a> {
             }
         }
 
-        Self::Conda {
-            conda: package.location(),
-            name,
-            version,
-            build,
-            subdir,
+        // Return the appropriate selector based on package type
+        match package {
+            CondaPackageData::Binary(_) => Self::Conda {
+                conda: package.location(),
+                name,
+                version,
+                build,
+                subdir,
+            },
+            CondaPackageData::Source(_) => Self::Source {
+                source: package.location(),
+                name,
+                version,
+                build,
+                subdir,
+            },
         }
     }
 
@@ -245,21 +268,23 @@ impl PartialOrd for SerializablePackageSelector<'_> {
 
 impl Ord for SerializablePackageSelector<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
+        // Helper to get package type ordering: Conda (0) < Source (1) < Pypi (2)
+        fn type_order(selector: &SerializablePackageSelector<'_>) -> u8 {
+            match selector {
+                SerializablePackageSelector::Conda { .. } => 0,
+                SerializablePackageSelector::Source { .. } => 1,
+                SerializablePackageSelector::Pypi { .. } => 2,
+            }
+        }
+
+        // First compare by type
+        let type_cmp = type_order(self).cmp(&type_order(other));
+        if type_cmp != Ordering::Equal {
+            return type_cmp;
+        }
+
+        // Same type, compare by content
         match (self, other) {
-            (
-                SerializablePackageSelector::Conda { .. },
-                SerializablePackageSelector::Pypi { .. },
-            ) => {
-                // Sort conda packages before pypi packages
-                Ordering::Less
-            }
-            (
-                SerializablePackageSelector::Pypi { .. },
-                SerializablePackageSelector::Conda { .. },
-            ) => {
-                // Sort Pypi packages after conda packages
-                Ordering::Greater
-            }
             (
                 SerializablePackageSelector::Conda {
                     conda: a,
@@ -281,9 +306,31 @@ impl Ord for SerializablePackageSelector<'_> {
                 .then_with(|| build_a.cmp(build_b))
                 .then_with(|| subdir_a.cmp(subdir_b)),
             (
+                SerializablePackageSelector::Source {
+                    source: a,
+                    name: name_a,
+                    build: build_a,
+                    version: version_a,
+                    subdir: subdir_a,
+                },
+                SerializablePackageSelector::Source {
+                    source: b,
+                    name: name_b,
+                    build: build_b,
+                    version: version_b,
+                    subdir: subdir_b,
+                },
+            ) => compare_url_by_location(a, b)
+                .then_with(|| name_a.cmp(name_b))
+                .then_with(|| version_a.cmp(version_b))
+                .then_with(|| build_a.cmp(build_b))
+                .then_with(|| subdir_a.cmp(subdir_b)),
+            (
                 SerializablePackageSelector::Pypi { pypi: a, .. },
                 SerializablePackageSelector::Pypi { pypi: b, .. },
             ) => compare_url_by_location(a, b),
+            // Different types are already handled by type_cmp above
+            _ => unreachable!(),
         }
     }
 }
@@ -440,8 +487,16 @@ impl Serialize for CondaPackageData {
     where
         S: Serializer,
     {
-        SerializablePackageDataV7::Conda(v7::CondaPackageDataModel::from(self))
-            .serialize(serializer)
+        match self {
+            CondaPackageData::Binary(binary) => {
+                SerializablePackageDataV7::Conda(v7::CondaPackageDataModel::from(binary))
+                    .serialize(serializer)
+            }
+            CondaPackageData::Source(source) => {
+                SerializablePackageDataV7::Source(v7::SourcePackageDataModel::from(source))
+                    .serialize(serializer)
+            }
+        }
     }
 }
 

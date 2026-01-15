@@ -6,9 +6,9 @@ environments:
     packages:
       win-64:
         - conda: https://conda.anaconda.org/conda-forge/win-64/python-3.12.0-h2628c8c_0_cpython.conda
-        - conda: child-package
+        - source: child-package
 packages:
-  - conda: child-package
+  - source: child-package
     name: child-package
     version: 0.1.0
     build: pyhbf21a9e_0

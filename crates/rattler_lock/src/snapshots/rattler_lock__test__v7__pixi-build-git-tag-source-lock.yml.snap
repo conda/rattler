@@ -9,9 +9,9 @@ environments:
       - url: "https://conda.anaconda.org/conda-forge/"
     packages:
       linux-64:
-        - conda: pixi-tag-package
+        - source: pixi-tag-package
 packages:
-  - conda: pixi-tag-package
+  - source: pixi-tag-package
     name: pixi-tag-package
     version: 1.2.0
     build: pyhbf21a9e_0
