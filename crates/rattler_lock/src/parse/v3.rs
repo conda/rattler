@@ -2,9 +2,11 @@
 
 use std::{collections::BTreeSet, ops::Not, str::FromStr, sync::Arc};
 
-use super::ParseCondaLockError;
+use super::{
+    models::legacy::{LegacyCondaBinaryData, LegacyCondaPackageData},
+    ParseCondaLockError,
+};
 use crate::{
-    conda::CondaBinaryData,
     file_format_version::FileFormatVersion,
     utils::derived_fields::{
         derive_arch_and_platform, derive_build_number_from_build, derive_noarch_type,
@@ -17,9 +19,6 @@ use crate::{
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{ExtraName, Requirement};
-use rattler_conda_types::package::{
-    ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
-};
 use rattler_conda_types::{
     NoArchType, PackageName, PackageRecord, PackageUrl, Platform, VersionWithSource,
 };
@@ -189,19 +188,14 @@ pub fn parse_v3_or_lower(
                     derive_arch_and_platform(derived.subdir.as_deref().unwrap_or(subdir.as_str()));
 
                 let deduplicated_idx = conda_packages
-                    .insert_full(CondaPackageData::Binary(CondaBinaryData {
-                        channel: derived
-                            .channel
-                            .unwrap_or_else(|| Url::parse("https://example.com").unwrap().into())
-                            .into(),
-                        file_name: derived.identifier.unwrap_or_else(|| DistArchiveIdentifier {
-                            identifier: ArchiveIdentifier {
-                                name: value.name.clone(),
-                                version: value.version.to_string(),
-                                build_string: build.clone(),
-                            },
-                            archive_type: DistArchiveType::Conda(CondaArchiveType::Conda),
-                        }),
+                    .insert_full(LegacyCondaPackageData::Binary(LegacyCondaBinaryData {
+                        channel: derived.channel,
+                        file_name: derived
+                            .identifier
+                            .map(|id| id.to_file_name())
+                            .unwrap_or_else(|| {
+                                format!("{}-{}-{}.conda", value.name, value.version, build)
+                            }),
                         package_record: PackageRecord {
                             arch: value.arch.or(derived_arch),
                             build,
@@ -269,7 +263,10 @@ pub fn parse_v3_or_lower(
     Ok(LockFile {
         inner: Arc::new(LockFileInner {
             version,
-            conda_packages: conda_packages.into_iter().collect(),
+            conda_packages: conda_packages
+                .into_iter()
+                .map(CondaPackageData::from)
+                .collect(),
             pypi_packages: pypi_packages.into_iter().collect(),
             pypi_environment_package_data: pypi_runtime_configs
                 .into_iter()

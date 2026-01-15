@@ -1,18 +1,14 @@
-use std::{
-    borrow::Cow,
-    collections::{BTreeMap, BTreeSet},
+use super::{
+    super::legacy::{LegacyCondaBinaryData, LegacyCondaPackageData, LegacyCondaSourceData},
+    source_data::{PackageBuildSourceSerializer, SourceLocationSerializer},
 };
-
-use super::source_data::{PackageBuildSourceSerializer, SourceLocationSerializer};
 use crate::{
-    conda::{CondaBinaryData, CondaSourceData, PackageBuildSource, VariantValue},
+    conda::{PackageBuildSource, VariantValue},
     source::SourceLocation,
     utils::{derived_fields, derived_fields::LocationDerivedFields},
-    CondaPackageData, ConversionError, UrlOrPath,
+    ConversionError, UrlOrPath,
 };
-use rattler_conda_types::package::{
-    ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
-};
+use rattler_conda_types::package::DistArchiveIdentifier;
 use rattler_conda_types::{
     package::CondaArchiveIdentifier, BuildNumber, ChannelUrl, NoArchType, PackageName,
     PackageRecord, PackageUrl, VersionWithSource,
@@ -20,6 +16,10 @@ use rattler_conda_types::{
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::Deserialize;
 use serde_with::serde_as;
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+};
 use url::Url;
 
 /// A helper struct that wraps all fields of a [`crate::CondaPackageData`] and
@@ -138,7 +138,7 @@ pub(crate) struct InputHash<'a> {
     pub globs: Cow<'a, [String]>,
 }
 
-impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
+impl<'a> TryFrom<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
     type Error = ConversionError;
 
     fn try_from(value: CondaPackageDataModel<'a>) -> Result<Self, Self::Error> {
@@ -208,20 +208,14 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             .file_name()
             .is_some_and(|name| CondaArchiveIdentifier::try_from_filename(name).is_some())
         {
-            Ok(CondaPackageData::Binary(CondaBinaryData {
+            let file_name = value
+                .location
+                .file_name()
+                .expect("if checked this")
+                .to_owned();
+            Ok(LegacyCondaPackageData::Binary(LegacyCondaBinaryData {
                 location: value.location,
-                file_name: value
-                    .file_name
-                    .map(Cow::into_owned)
-                    .unwrap_or(derived.identifier)
-                    .unwrap_or_else(|| DistArchiveIdentifier {
-                        identifier: ArchiveIdentifier {
-                            name: package_record.name.as_normalized().to_owned(),
-                            version: package_record.version.to_string(),
-                            build_string: package_record.build.clone(),
-                        },
-                        archive_type: DistArchiveType::Conda(CondaArchiveType::Conda),
-                    }),
+                file_name,
                 channel: value
                     .channel
                     .map(Cow::into_owned)
@@ -230,7 +224,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                 package_record,
             }))
         } else {
-            Ok(CondaPackageData::Source(CondaSourceData {
+            Ok(LegacyCondaPackageData::Source(LegacyCondaSourceData {
                 package_record,
                 location: value.location,
                 variants: value.variants.map(Cow::into_owned).unwrap_or_default(),
