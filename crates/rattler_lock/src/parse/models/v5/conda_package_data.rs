@@ -1,11 +1,11 @@
 use std::{borrow::Cow, collections::BTreeSet};
 
+use super::super::legacy::{LegacyCondaBinaryData, LegacyCondaPackageData};
 use crate::{
-    conda::CondaBinaryData,
     utils::derived_fields::{
         derive_arch_and_platform, derive_build_number_from_build, derive_channel_from_location,
     },
-    CondaPackageData, UrlOrPath,
+    UrlOrPath,
 };
 use rattler_conda_types::package::{
     ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
@@ -94,10 +94,10 @@ pub(crate) struct CondaPackageDataModel<'a> {
 fn find_build_and_build_number(
     read_build: &str,
     read_build_number: u64,
-    file_name: &DistArchiveIdentifier,
+    file_id: &DistArchiveIdentifier,
 ) -> (String, u64) {
     let build = if read_build.is_empty() {
-        file_name.identifier.build_string.clone()
+        file_id.identifier.build_string.clone()
     } else {
         read_build.to_string()
     };
@@ -110,13 +110,13 @@ fn find_build_and_build_number(
     (build, build_number)
 }
 
-impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
+impl<'a> From<CondaPackageDataModel<'a>> for LegacyCondaPackageData {
     fn from(value: CondaPackageDataModel<'a>) -> Self {
         let location = UrlOrPath::Url(value.url.into_owned());
         let subdir = value.subdir.into_owned();
         let (derived_arch, derived_platform) = derive_arch_and_platform(&subdir);
 
-        let file_name = value
+        let file_id = value
             .file_name
             .into_owned()
             .or_else(|| location.file_name().and_then(|f| f.parse().ok()))
@@ -128,11 +128,12 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
                 },
                 archive_type: DistArchiveType::Conda(CondaArchiveType::Conda),
             });
+        let file_name = file_id.to_file_name();
 
         let (build, build_number) =
-            find_build_and_build_number(&value.build, value.build_number, &file_name);
+            find_build_and_build_number(&value.build, value.build_number, &file_id);
 
-        Self::Binary(CondaBinaryData {
+        Self::Binary(LegacyCondaBinaryData {
             package_record: PackageRecord {
                 build,
                 build_number,
