@@ -6,7 +6,7 @@ use std::{
 
 use itertools::Itertools;
 use pep508_rs::ExtraName;
-use rattler_conda_types::{PackageName, Platform, VersionWithSource};
+use rattler_conda_types::Platform;
 use serde::{Serialize, Serializer};
 use serde_with::{serde_as, SerializeAs};
 use url::Url;
@@ -15,7 +15,8 @@ use crate::{
     file_format_version::FileFormatVersion,
     parse::{models::v7, V7},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
+    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, SourceIdentifier,
+    UrlOrPath,
 };
 
 #[serde_as]
@@ -44,7 +45,6 @@ impl<'a> SerializableEnvironment<'a> {
     fn from_environment(
         inner: &'a LockFileInner,
         env_data: &'a EnvironmentData,
-        used_conda_packages: &HashSet<usize>,
         used_pypi_packages: &HashSet<usize>,
     ) -> Self {
         SerializableEnvironment {
@@ -63,7 +63,6 @@ impl<'a> SerializableEnvironment<'a> {
                                 SerializablePackageSelector::from_lock_file(
                                     inner,
                                     package_data,
-                                    used_conda_packages,
                                     used_pypi_packages,
                                 )
                             })
@@ -95,31 +94,18 @@ impl<'a> From<PackageData<'a>> for SerializablePackageDataV7<'a> {
     }
 }
 
+/// Package selector for V7+ environments.
+///
+/// For V7+, binary conda packages are uniquely identified by their URL (which includes the
+/// filename), and source packages use `SourceIdentifier` with an embedded hash.
 #[derive(Serialize, Eq, PartialEq)]
 #[serde(untagged, rename_all = "snake_case")]
 enum SerializablePackageSelector<'a> {
-    Conda {
-        conda: &'a UrlOrPath,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        name: Option<&'a PackageName>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        version: Option<&'a VersionWithSource>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        build: Option<&'a str>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        subdir: Option<&'a str>,
-    },
-    Source {
-        source: &'a UrlOrPath,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        name: Option<&'a PackageName>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        version: Option<&'a VersionWithSource>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        build: Option<&'a str>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        subdir: Option<&'a str>,
-    },
+    /// Binary conda packages are uniquely identified by their URL.
+    Conda { conda: &'a UrlOrPath },
+    /// Source packages use `SourceIdentifier` which uniquely identifies the package
+    /// via the format `name[hash] @ location`. No additional disambiguation fields needed.
+    Source { source: SourceIdentifier },
     Pypi {
         pypi: &'a UrlOrPath,
         #[serde(skip_serializing_if = "BTreeSet::is_empty")]
@@ -127,40 +113,14 @@ enum SerializablePackageSelector<'a> {
     },
 }
 
-#[derive(Copy, Clone)]
-enum CondaDisambiguityFilter {
-    Name,
-    Version,
-    Build,
-    Subdir,
-}
-
-impl CondaDisambiguityFilter {
-    fn all() -> [CondaDisambiguityFilter; 4] {
-        [Self::Name, Self::Version, Self::Build, Self::Subdir]
-    }
-
-    fn filter(&self, package: &CondaPackageData, other: &CondaPackageData) -> bool {
-        match self {
-            Self::Name => package.record().name == other.record().name,
-            Self::Version => package.record().version == other.record().version,
-            Self::Build => package.record().build == other.record().build,
-            Self::Subdir => package.record().subdir == other.record().subdir,
-        }
-    }
-}
-
 impl<'a> SerializablePackageSelector<'a> {
     fn from_lock_file(
         inner: &'a LockFileInner,
         package: EnvironmentPackageData,
-        used_conda_packages: &HashSet<usize>,
         used_pypi_packages: &HashSet<usize>,
     ) -> Self {
         match package {
-            EnvironmentPackageData::Conda(idx) => {
-                Self::from_conda(inner, &inner.conda_packages[idx], used_conda_packages)
-            }
+            EnvironmentPackageData::Conda(idx) => Self::from_conda(&inner.conda_packages[idx]),
             EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Self::from_pypi(
                 inner,
                 &inner.pypi_packages[pkg_data_idx],
@@ -170,79 +130,15 @@ impl<'a> SerializablePackageSelector<'a> {
         }
     }
 
-    fn from_conda(
-        inner: &'a LockFileInner,
-        package: &'a CondaPackageData,
-        used_conda_packages: &HashSet<usize>,
-    ) -> Self {
-        // Find all packages that share the same location
-        let mut similar_packages = inner
-            .conda_packages
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, p)| used_conda_packages.contains(&idx).then_some(p))
-            .filter(|p| p.location() == package.location())
-            .collect::<Vec<_>>();
-
-        // Iterate over other distinguishing factors and reduce the set of possible
-        // packages to a minimum with the least number of keys added.
-        let mut name = None;
-        let mut version = None;
-        let mut build = None;
-        let mut subdir = None;
-        while similar_packages.len() > 1 {
-            let (filter, similar) = CondaDisambiguityFilter::all()
-                .into_iter()
-                .map(|filter| {
-                    (
-                        filter,
-                        similar_packages
-                            .iter()
-                            .copied()
-                            .filter(|p| filter.filter(package, p))
-                            .collect_vec(),
-                    )
-                })
-                .min_by_key(|(_filter, set)| set.len())
-                .expect("cannot be empty because the set should always contain `package`");
-
-            if similar.len() == similar_packages.len() {
-                // No further disambiguation possible. Assume that the package is a duplicate.
-                break;
-            }
-
-            similar_packages = similar;
-            match filter {
-                CondaDisambiguityFilter::Name => {
-                    name = Some(&package.record().name);
-                }
-                CondaDisambiguityFilter::Version => {
-                    version = Some(&package.record().version);
-                }
-                CondaDisambiguityFilter::Build => {
-                    build = Some(package.record().build.as_str());
-                }
-                CondaDisambiguityFilter::Subdir => {
-                    subdir = Some(package.record().subdir.as_str());
-                }
-            }
-        }
-
-        // Return the appropriate selector based on package type
+    fn from_conda(package: &'a CondaPackageData) -> Self {
         match package {
-            CondaPackageData::Binary(_) => Self::Conda {
-                conda: package.location(),
-                name,
-                version,
-                build,
-                subdir,
+            // Source packages use SourceIdentifier with an embedded hash
+            CondaPackageData::Source(source_data) => Self::Source {
+                source: SourceIdentifier::from_source_data(source_data),
             },
-            CondaPackageData::Source(_) => Self::Source {
-                source: package.location(),
-                name,
-                version,
-                build,
-                subdir,
+            // Binary packages are uniquely identified by their URL
+            CondaPackageData::Binary(binary_data) => Self::Conda {
+                conda: &binary_data.location,
             },
         }
     }
@@ -286,46 +182,21 @@ impl Ord for SerializablePackageSelector<'_> {
         // Same type, compare by content
         match (self, other) {
             (
-                SerializablePackageSelector::Conda {
-                    conda: a,
-                    name: name_a,
-                    build: build_a,
-                    version: version_a,
-                    subdir: subdir_a,
-                },
-                SerializablePackageSelector::Conda {
-                    conda: b,
-                    name: name_b,
-                    build: build_b,
-                    version: version_b,
-                    subdir: subdir_b,
-                },
-            ) => compare_url_by_location(a, b)
-                .then_with(|| name_a.cmp(name_b))
-                .then_with(|| version_a.cmp(version_b))
-                .then_with(|| build_a.cmp(build_b))
-                .then_with(|| subdir_a.cmp(subdir_b)),
+                SerializablePackageSelector::Source { source: a },
+                SerializablePackageSelector::Source { source: b },
+            ) => {
+                // Compare by name first, then by hash, then by location
+                a.name()
+                    .cmp(b.name())
+                    .then_with(|| a.hash().cmp(b.hash()))
+                    .then_with(|| compare_url_by_location(a.location(), b.location()))
+            }
+            // Conda and Pypi both compare by location
             (
-                SerializablePackageSelector::Source {
-                    source: a,
-                    name: name_a,
-                    build: build_a,
-                    version: version_a,
-                    subdir: subdir_a,
-                },
-                SerializablePackageSelector::Source {
-                    source: b,
-                    name: name_b,
-                    build: build_b,
-                    version: version_b,
-                    subdir: subdir_b,
-                },
-            ) => compare_url_by_location(a, b)
-                .then_with(|| name_a.cmp(name_b))
-                .then_with(|| version_a.cmp(version_b))
-                .then_with(|| build_a.cmp(build_b))
-                .then_with(|| subdir_a.cmp(subdir_b)),
-            (
+                SerializablePackageSelector::Conda { conda: a },
+                SerializablePackageSelector::Conda { conda: b },
+            )
+            | (
                 SerializablePackageSelector::Pypi { pypi: a, .. },
                 SerializablePackageSelector::Pypi { pypi: b, .. },
             ) => compare_url_by_location(a, b),
@@ -410,19 +281,33 @@ impl Serialize for LockFile {
                     SerializableEnvironment::from_environment(
                         inner,
                         &inner.environments[*env_idx],
-                        &used_conda_packages,
                         &used_pypi_packages,
                     ),
                 )
             })
             .collect::<BTreeMap<_, _>>();
 
-        // Get all packages.
+        // Get all packages, deduplicating binary packages by location.
+        // V7 identifies binary packages by URL uniquely, so we deduplicate here
+        // to handle older formats that may have had duplicate entries.
+        // Source packages are NOT deduplicated because they use SourceIdentifier
+        // which includes a hash to distinguish different configurations at the same location.
+        let mut seen_binary_locations = HashSet::new();
         let conda_packages = inner
             .conda_packages
             .iter()
             .enumerate()
             .filter(|(idx, _)| used_conda_packages.contains(idx))
+            .filter(|(_, p)| {
+                match p {
+                    // Deduplicate binary packages by location
+                    CondaPackageData::Binary(binary) => {
+                        seen_binary_locations.insert(binary.location.clone())
+                    }
+                    // Don't deduplicate source packages
+                    CondaPackageData::Source(_) => true,
+                }
+            })
             .map(|(_, p)| PackageData::Conda(p));
 
         let pypi_packages = inner

@@ -114,7 +114,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub python_site_packages_path: Cow<'a, Option<String>>,
 }
 
-impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
+impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
     type Error = ConversionError;
 
     fn try_from(value: CondaPackageDataModel<'a>) -> Result<Self, Self::Error> {
@@ -188,7 +188,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             return Err(ConversionError::InvalidBinaryPackageLocation);
         }
 
-        Ok(CondaPackageData::Binary(CondaBinaryData {
+        Ok(CondaBinaryData {
             location: value.location,
             file_name: value
                 .file_name
@@ -208,7 +208,15 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
                 .map(|m| m.map(ChannelUrl::from))
                 .unwrap_or(derived.channel),
             package_record,
-        }))
+        })
+    }
+}
+
+impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
+    type Error = ConversionError;
+
+    fn try_from(value: CondaPackageDataModel<'a>) -> Result<Self, Self::Error> {
+        Ok(CondaPackageData::Binary(value.try_into()?))
     }
 }
 

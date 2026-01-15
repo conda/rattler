@@ -1,13 +1,14 @@
 use std::{
-    fmt::{Display, Formatter},
+    fmt::{Display, Formatter, Write as _},
     str::FromStr,
 };
 
 use rattler_conda_types::PackageName;
+use rattler_digest::{Sha256, Sha256Hash};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
-use crate::UrlOrPath;
+use crate::{CondaSourceData, UrlOrPath};
 
 /// A unique identifier for a source package in the lock file.
 ///
@@ -35,6 +36,9 @@ pub struct SourceIdentifier {
     location: UrlOrPath,
 }
 
+/// The number of hex characters to use for the short hash.
+const SHORT_HASH_LENGTH: usize = 8;
+
 impl SourceIdentifier {
     /// Creates a new source identifier.
     ///
@@ -48,6 +52,21 @@ impl SourceIdentifier {
             name,
             hash: hash.into(),
             location,
+        }
+    }
+
+    /// Creates a source identifier from a `CondaSourceData`.
+    ///
+    /// The hash is computed from the package record fields that uniquely identify
+    /// the package configuration (name, version, build, `build_number`, subdir, and variants).
+    pub fn from_source_data(source_data: &CondaSourceData) -> Self {
+        let hash = compute_source_hash(source_data);
+        let short_hash = format_short_hash(&hash);
+
+        Self {
+            name: source_data.package_record.name.clone(),
+            hash: short_hash,
+            location: source_data.location.clone(),
         }
     }
 
@@ -110,6 +129,53 @@ pub enum ParseSourceIdentifierError {
     /// Empty hash.
     #[error("hash cannot be empty")]
     EmptyHash,
+}
+
+/// Computes a SHA-256 hash from the source package data.
+///
+/// The hash is computed from fields that uniquely identify the package configuration:
+/// - name
+/// - version
+/// - build
+/// - `build_number`
+/// - subdir
+/// - variants (sorted for determinism)
+fn compute_source_hash(source_data: &CondaSourceData) -> Sha256Hash {
+    use rattler_digest::digest::Digest;
+
+    let record = &source_data.package_record;
+    let mut hasher = Sha256::default();
+
+    // Hash the identifying fields
+    hasher.update(record.name.as_normalized().as_bytes());
+    hasher.update(b"\0");
+    hasher.update(record.version.to_string().as_bytes());
+    hasher.update(b"\0");
+    hasher.update(record.build.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(record.build_number.to_string().as_bytes());
+    hasher.update(b"\0");
+    hasher.update(record.subdir.as_bytes());
+    hasher.update(b"\0");
+
+    // Hash variants (sorted for determinism)
+    for (key, value) in &source_data.variants {
+        hasher.update(key.as_bytes());
+        hasher.update(b"=");
+        hasher.update(value.to_string().as_bytes());
+        hasher.update(b"\0");
+    }
+
+    hasher.finalize()
+}
+
+/// Formats a SHA-256 hash as a short hex string.
+fn format_short_hash(hash: &Sha256Hash) -> String {
+    let mut result = String::with_capacity(SHORT_HASH_LENGTH);
+    for byte in hash.iter().take(SHORT_HASH_LENGTH / 2) {
+        write!(result, "{byte:02x}").expect("writing to string cannot fail");
+    }
+    result
 }
 
 impl FromStr for SourceIdentifier {
@@ -264,5 +330,239 @@ mod tests {
         let deserialized: SourceIdentifier = serde_yaml::from_str(&serialized).unwrap();
 
         assert_eq!(id, deserialized);
+    }
+
+    #[test]
+    fn test_from_source_data() {
+        use std::collections::BTreeMap;
+
+        use rattler_conda_types::{PackageRecord, VersionWithSource};
+
+        use crate::CondaSourceData;
+
+        let mut package_record = PackageRecord::new(
+            PackageName::from_str("numba-cuda").unwrap(),
+            VersionWithSource::from_str("0.23.0").unwrap(),
+            "py310h3ca6f64_0".to_string(),
+        );
+        package_record.subdir = "linux-64".to_string();
+
+        let source_data = CondaSourceData {
+            package_record,
+            location: UrlOrPath::from_str(".").unwrap(),
+            variants: BTreeMap::new(),
+            package_build_source: None,
+            sources: BTreeMap::new(),
+        };
+
+        let id = SourceIdentifier::from_source_data(&source_data);
+
+        assert_eq!(id.name().as_source(), "numba-cuda");
+        assert_eq!(id.hash().len(), 8);
+        assert_eq!(id.location().as_str(), ".");
+
+        // Verify the hash is deterministic
+        let id2 = SourceIdentifier::from_source_data(&source_data);
+        assert_eq!(id.hash(), id2.hash());
+    }
+
+    #[test]
+    fn test_from_source_data_with_variants() {
+        use std::collections::BTreeMap;
+
+        use rattler_conda_types::{PackageRecord, VersionWithSource};
+
+        use crate::{CondaSourceData, VariantValue};
+
+        let mut package_record = PackageRecord::new(
+            PackageName::from_str("numba-cuda").unwrap(),
+            VersionWithSource::from_str("0.23.0").unwrap(),
+            "py310h3ca6f64_0".to_string(),
+        );
+        package_record.subdir = "linux-aarch64".to_string();
+
+        let mut variants = BTreeMap::new();
+        variants.insert(
+            "python".to_string(),
+            VariantValue::String("3.10.*".to_string()),
+        );
+        variants.insert(
+            "target_platform".to_string(),
+            VariantValue::String("linux-aarch64".to_string()),
+        );
+
+        let source_data = CondaSourceData {
+            package_record,
+            location: UrlOrPath::from_str(".").unwrap(),
+            variants,
+            package_build_source: None,
+            sources: BTreeMap::new(),
+        };
+
+        let id = SourceIdentifier::from_source_data(&source_data);
+
+        // The hash should be different from the one without variants
+        assert_eq!(id.name().as_source(), "numba-cuda");
+        assert_eq!(id.hash().len(), 8);
+    }
+
+    #[test]
+    fn compute_test_data_hashes() {
+        use std::collections::BTreeMap;
+
+        use rattler_conda_types::{PackageRecord, VersionWithSource};
+
+        use crate::CondaSourceData;
+
+        fn print_hash(name: &str, version: &str, build: &str, subdir: &str, location: &str) {
+            let mut package_record = PackageRecord::new(
+                PackageName::from_str(name).unwrap(),
+                VersionWithSource::from_str(version).unwrap(),
+                build.to_string(),
+            );
+            package_record.subdir = subdir.to_string();
+
+            let source_data = CondaSourceData {
+                package_record,
+                location: UrlOrPath::from_str(location).unwrap(),
+                variants: BTreeMap::new(),
+                package_build_source: None,
+                sources: BTreeMap::new(),
+            };
+
+            let id = SourceIdentifier::from_source_data(&source_data);
+            println!("  {name}: {id}");
+        }
+
+        println!("Computed hashes for test data:");
+
+        // sources-lock.yml, derived-channel-lock.yml
+        print_hash(
+            "child-package",
+            "0.1.0",
+            "pyhbf21a9e_0",
+            "noarch",
+            "child-package",
+        );
+
+        // conda-path-lock.yml
+        print_hash(
+            "minimal-project",
+            "0.1",
+            "first",
+            "linux-64",
+            "../minimal-project",
+        );
+        print_hash(
+            "minimal-project",
+            "0.1",
+            "first",
+            "win-64",
+            "../minimal-project",
+        );
+        print_hash(
+            "minimal-project",
+            "0.1",
+            "second",
+            "win-64",
+            "../minimal-project",
+        );
+        print_hash(
+            "a-python-project",
+            "0.1",
+            "py38",
+            "noarch",
+            "../a-python-project",
+        );
+        print_hash(
+            "b-python-project",
+            "0.1",
+            "h398123",
+            "noarch",
+            "../a-python-project",
+        );
+
+        // pixi-build-*.yml files
+        print_hash(
+            "pixi-build-package",
+            "1.0.0",
+            "pyhbf21a9e_0",
+            "noarch",
+            "pixi-build-package",
+        );
+        print_hash(
+            "pixi-url-package",
+            "2.0.0",
+            "pyhbf21a9e_0",
+            "noarch",
+            "pixi-url-package",
+        );
+        print_hash(
+            "pixi-tag-package",
+            "1.2.0",
+            "pyhbf21a9e_0",
+            "noarch",
+            "pixi-tag-package",
+        );
+        print_hash(
+            "pixi-rev-package",
+            "0.5.0",
+            "pyhbf21a9e_0",
+            "noarch",
+            "pixi-rev-package",
+        );
+    }
+
+    #[test]
+    fn test_different_variants_produce_different_hashes() {
+        use std::collections::BTreeMap;
+
+        use rattler_conda_types::{PackageRecord, VersionWithSource};
+
+        use crate::{CondaSourceData, VariantValue};
+
+        let mut package_record = PackageRecord::new(
+            PackageName::from_str("my-package").unwrap(),
+            VersionWithSource::from_str("1.0.0").unwrap(),
+            "h0000000_0".to_string(),
+        );
+        package_record.subdir = "linux-64".to_string();
+
+        // First variant: python 3.10
+        let mut variants1 = BTreeMap::new();
+        variants1.insert(
+            "python".to_string(),
+            VariantValue::String("3.10".to_string()),
+        );
+
+        let source_data1 = CondaSourceData {
+            package_record: package_record.clone(),
+            location: UrlOrPath::from_str(".").unwrap(),
+            variants: variants1,
+            package_build_source: None,
+            sources: BTreeMap::new(),
+        };
+
+        // Second variant: python 3.11
+        let mut variants2 = BTreeMap::new();
+        variants2.insert(
+            "python".to_string(),
+            VariantValue::String("3.11".to_string()),
+        );
+
+        let source_data2 = CondaSourceData {
+            package_record,
+            location: UrlOrPath::from_str(".").unwrap(),
+            variants: variants2,
+            package_build_source: None,
+            sources: BTreeMap::new(),
+        };
+
+        let id1 = SourceIdentifier::from_source_data(&source_data1);
+        let id2 = SourceIdentifier::from_source_data(&source_data2);
+
+        // Same name, but different hashes due to different variants
+        assert_eq!(id1.name(), id2.name());
+        assert_ne!(id1.hash(), id2.hash());
     }
 }

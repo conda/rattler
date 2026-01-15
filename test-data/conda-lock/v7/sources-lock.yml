@@ -5,10 +5,9 @@ environments:
       - url: https://conda.anaconda.org/conda-forge/
     packages:
       win-64:
-        - source: child-package
+        - source: "child-package[87dc0b8a] @ child-package"
 packages:
-  - source: child-package
-    name: child-package
+  - source: "child-package[87dc0b8a] @ child-package"
     version: 0.1.0
     build: pyhbf21a9e_0
     subdir: noarch

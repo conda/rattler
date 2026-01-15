@@ -4,8 +4,7 @@ use std::{
 };
 
 use rattler_conda_types::{
-    utils::TimestampMs, BuildNumber, NoArchType, PackageName, PackageRecord, PackageUrl,
-    VersionWithSource,
+    utils::TimestampMs, BuildNumber, NoArchType, PackageRecord, PackageUrl, VersionWithSource,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -15,7 +14,7 @@ use crate::{
     conda::{CondaSourceData, PackageBuildSource, VariantValue},
     source::SourceLocation,
     utils::derived_fields,
-    CondaPackageData, ConversionError, UrlOrPath,
+    CondaPackageData, ConversionError, SourceIdentifier,
 };
 
 /// A model struct for source packages in V7 lock files.
@@ -25,16 +24,21 @@ use crate::{
 /// - Always converts to `CondaPackageData::Source`
 /// - Does not include binary-specific fields (file_name, channel, hashes)
 /// - Includes source-specific fields (variants, package_build_source, sources)
-/// - Does not use derived fields from location (source paths don't have structured names)
+/// - Uses `SourceIdentifier` format: `name[hash] @ location`
+///
+/// The `source` field contains a unique identifier that includes:
+/// - Package name
+/// - A short hash computed from the package record
+/// - The source location (URL or path)
 #[serde_as]
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
 pub(crate) struct SourcePackageDataModel<'a> {
-    /// The location of the source package. This is the discriminator key.
+    /// The source identifier in the format `name[hash] @ location`.
+    /// This is the discriminator key and uniquely identifies the package.
     #[serde(rename = "source")]
-    pub location: UrlOrPath,
+    pub identifier: SourceIdentifier,
 
-    // Required identification fields (source packages don't derive these from location)
-    pub name: Cow<'a, PackageName>,
+    // Version is required (not embedded in identifier)
     pub version: Cow<'a, VersionWithSource>,
 
     // Optional identification fields
@@ -98,49 +102,64 @@ fn is_zero(value: &BuildNumber) -> bool {
     *value == 0
 }
 
+impl<'a> SourcePackageDataModel<'a> {
+    /// Converts into `(SourceIdentifier, CondaSourceData)`.
+    ///
+    /// This method preserves the deserialized `SourceIdentifier` so it can be used
+    /// directly for lookups without recomputing the hash.
+    pub fn into_parts(self) -> Result<(SourceIdentifier, CondaSourceData), ConversionError> {
+        // Extract name and location from the identifier, preserving the identifier itself
+        let (name, _hash, location) = self.identifier.clone().into_parts();
+
+        let subdir = self.subdir.into_owned();
+        let build = self.build.into_owned();
+        let (arch, platform) = derived_fields::derive_arch_and_platform(&subdir);
+
+        let package_record = PackageRecord {
+            name,
+            version: self.version.into_owned(),
+            subdir,
+            build,
+            build_number: self.build_number,
+            noarch: self.noarch,
+            arch,
+            platform,
+            constrains: self.constrains.into_owned(),
+            depends: self.depends.into_owned(),
+            experimental_extra_depends: self.experimental_extra_depends.into_owned(),
+            features: self.features.into_owned(),
+            legacy_bz2_md5: None,
+            legacy_bz2_size: None,
+            license: self.license.into_owned(),
+            license_family: self.license_family.into_owned(),
+            md5: None,
+            purls: self.purls.into_owned(),
+            sha256: None,
+            size: self.size.into_owned(),
+            timestamp: self.timestamp.map(Into::into),
+            track_features: self.track_features.into_owned(),
+            run_exports: None,
+            python_site_packages_path: self.python_site_packages_path.into_owned(),
+        };
+
+        let source_data = CondaSourceData {
+            package_record,
+            location,
+            variants: self.variants.map(Cow::into_owned).unwrap_or_default(),
+            package_build_source: self.package_build_source,
+            sources: self.sources,
+        };
+
+        Ok((self.identifier, source_data))
+    }
+}
+
 impl<'a> TryFrom<SourcePackageDataModel<'a>> for CondaPackageData {
     type Error = ConversionError;
 
     fn try_from(value: SourcePackageDataModel<'a>) -> Result<Self, Self::Error> {
-        let subdir = value.subdir.into_owned();
-        let build = value.build.into_owned();
-        let (arch, platform) = derived_fields::derive_arch_and_platform(&subdir);
-
-        let package_record = PackageRecord {
-            name: value.name.into_owned(),
-            version: value.version.into_owned(),
-            subdir,
-            build,
-            build_number: value.build_number,
-            noarch: value.noarch,
-            arch,
-            platform,
-            constrains: value.constrains.into_owned(),
-            depends: value.depends.into_owned(),
-            experimental_extra_depends: value.experimental_extra_depends.into_owned(),
-            features: value.features.into_owned(),
-            legacy_bz2_md5: None,
-            legacy_bz2_size: None,
-            license: value.license.into_owned(),
-            license_family: value.license_family.into_owned(),
-            md5: None,
-            purls: value.purls.into_owned(),
-            sha256: None,
-            size: value.size.into_owned(),
-            timestamp: value.timestamp.map(Into::into),
-            track_features: value.track_features.into_owned(),
-            run_exports: None,
-            python_site_packages_path: value.python_site_packages_path.into_owned(),
-        };
-
-        // Source packages always convert to CondaPackageData::Source
-        Ok(CondaPackageData::Source(CondaSourceData {
-            package_record,
-            location: value.location,
-            variants: value.variants.map(Cow::into_owned).unwrap_or_default(),
-            package_build_source: value.package_build_source,
-            sources: value.sources,
-        }))
+        let (_identifier, source_data) = value.into_parts()?;
+        Ok(CondaPackageData::Source(source_data))
     }
 }
 
@@ -149,9 +168,11 @@ impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
         let package_record = &value.package_record;
         let variants = (!value.variants.is_empty()).then_some(Cow::Borrowed(&value.variants));
 
+        // Create the source identifier with computed hash
+        let identifier = SourceIdentifier::from_source_data(value);
+
         Self {
-            location: value.location.clone(),
-            name: Cow::Borrowed(&package_record.name),
+            identifier,
             version: Cow::Borrowed(&package_record.version),
             subdir: Cow::Borrowed(&package_record.subdir),
             build: Cow::Borrowed(&package_record.build),
