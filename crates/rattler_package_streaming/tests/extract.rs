@@ -123,6 +123,11 @@ fn whl_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {}
     "a3332e80c633be1ee20a41c7dd8810260a2132cf7d03f363d83752cad907bcfd",
     "b35241079152e5cc891c99368395b2c6"
 )]
+#[case::requests_whl(
+    "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl",
+    "2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6",
+    "bd126794a95616a0da6192b288f9bb88"
+)]
 fn url_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {}
 
 #[apply(conda_archives)]
@@ -336,6 +341,49 @@ async fn test_extract_whl_tokio_fs(#[case] input: Url, #[case] sha256: &str, #[c
     let target_dir = temp_dir.join(file_path.file_stem().unwrap());
 
     let result = rattler_package_streaming::tokio::fs::extract_whl(&archive_path, &target_dir)
+        .await
+        .unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    assert!(target_dir.exists(), "Destination directory should exist");
+    assert!(target_dir.is_dir(), "Destination should be a directory");
+}
+
+#[apply(whl_archives)]
+fn test_extract_generic_fs(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+
+    println!("Target dir: {}", temp_dir.display());
+    let file_path = tools::download_and_cache_file(input, sha256).unwrap();
+    let archive_path = test_data_dir().join(&file_path);
+    let target_dir = temp_dir.join(file_path.file_stem().unwrap());
+
+    // Use the generic extract function (automatically detects archive type from extension)
+    let result = rattler_package_streaming::fs::extract(&archive_path, &target_dir).unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    assert!(target_dir.exists(), "Destination directory should exist");
+    assert!(target_dir.is_dir(), "Destination should be a directory");
+}
+
+#[apply(whl_archives)]
+#[tokio::test]
+async fn test_extract_generic_tokio_fs(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
+    println!("Target dir: {}", temp_dir.display());
+
+    let file_path = tools::download_and_cache_file_async(input, sha256)
+        .await
+        .unwrap();
+    let archive_path = test_data_dir().join(&file_path);
+    let target_dir = temp_dir.join(file_path.file_stem().unwrap());
+
+    // Use the generic extract function (automatically detects archive type from extension)
+    let result = rattler_package_streaming::tokio::fs::extract(&archive_path, &target_dir)
         .await
         .unwrap();
 
