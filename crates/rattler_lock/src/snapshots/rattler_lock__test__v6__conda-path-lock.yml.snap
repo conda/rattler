@@ -6,7 +6,6 @@ version: 7
 platforms:
   - name: linux-64
   - name: win-64
-  - name: win-64
 environments:
   default:
     channels:
