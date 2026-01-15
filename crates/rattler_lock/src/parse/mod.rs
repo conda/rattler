@@ -39,6 +39,9 @@ pub enum ParseCondaLockError {
     #[error(transparent)]
     InvalidPlatform(#[from] crate::platform::ParsePlatformError),
 
+    #[error("Duplicate platform name `{0}` found")]
+    DuplicatePlatformName(String),
+
     #[error("missing field `{0}` for package {1}")]
     MissingField(String, UrlOrPath),
 
