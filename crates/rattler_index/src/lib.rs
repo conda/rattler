@@ -1206,8 +1206,10 @@ pub async fn index(
     let repodata_patch = if let Some(path) = repodata_patch {
         match ArchiveType::try_from(path.clone()) {
             Some(ArchiveType::Conda(CondaArchiveType::Conda)) => {}
-            Some(ArchiveType::Conda(CondaArchiveType::TarBz2))
-            | Some(ArchiveType::Dist(DistArchiveType::Whl))
+            Some(
+                ArchiveType::Conda(CondaArchiveType::TarBz2)
+                | ArchiveType::Dist(DistArchiveType::Whl),
+            )
             | None => {
                 return Err(anyhow::anyhow!(
                     "Only .conda packages are supported for repodata patches. Got: {path}",
