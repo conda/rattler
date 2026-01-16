@@ -3,33 +3,30 @@ use std::{
     collections::{BTreeMap, BTreeSet},
 };
 
-use super::source_data::{PackageBuildSourceSerializer, SourceLocationSerializer};
-use crate::{
-    conda::{CondaBinaryData, CondaSourceData, PackageBuildSource, VariantValue},
-    source::SourceLocation,
-    utils::{derived_fields, derived_fields::LocationDerivedFields},
-    CondaPackageData, ConversionError, UrlOrPath,
-};
-
 use rattler_conda_types::{
-    package::{
-        ArchiveIdentifier, CondaArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier,
-        DistArchiveType,
-    },
-    utils::TimestampMs,
-    BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource,
+    package::DistArchiveIdentifier, utils::TimestampMs, BuildNumber, ChannelUrl, NoArchType,
+    PackageName, PackageRecord, PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use url::Url;
 
+use crate::{
+    conda::CondaBinaryData,
+    utils::derived_fields::{self, LocationDerivedFields},
+    CondaPackageData, ConversionError, UrlOrPath, VariantValue,
+};
+
 fn skip_variant_serialization(input: &Option<Cow<'_, BTreeMap<String, VariantValue>>>) -> bool {
     !matches!(input, Some(variants) if !variants.is_empty())
 }
 
-/// A helper struct that wraps all fields of a [`crate::CondaPackageData`] and
-/// allows for easy conversion between the two.
+/// A model struct for binary conda packages in V7 lock files.
+///
+/// This type is used for packages identified by the `- conda:` key.
+/// It only supports binary packages (those with valid archive filenames
+/// like `.conda` or `.tar.bz2`). For source packages, use `SourcePackageDataModel`.
 ///
 /// This type provides full control over the order of the fields when
 /// serializing. This is important because one of the design goals is that it
@@ -39,7 +36,7 @@ fn skip_variant_serialization(input: &Option<Cow<'_, BTreeMap<String, VariantVal
 ///
 /// So note that for reproducibility the order of these fields should not change
 /// or should be reflected in a version change.
-//
+///
 /// This type also adds more default values (e.g. for `build_number` and
 /// `build_string`).
 ///
@@ -122,18 +119,10 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[serde_as(as = "Option<PackageBuildSourceSerializer>")]
-    pub package_build_source: Option<PackageBuildSource>,
-
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[serde_as(as = "BTreeMap<_, SourceLocationSerializer>")]
-    pub sources: BTreeMap<String, SourceLocation>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
 }
 
-impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
+impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaBinaryData {
     type Error = ConversionError;
 
     fn try_from(value: CondaPackageDataModel<'a>) -> Result<Self, Self::Error> {
@@ -198,61 +187,50 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             python_site_packages_path: value.python_site_packages_path.into_owned(),
         };
 
+        // Binary packages require a valid archive filename
         if value
             .location
             .file_name()
-            .is_some_and(|name| CondaArchiveIdentifier::try_from_filename(name).is_some())
+            .is_none_or(|name| DistArchiveIdentifier::try_from_filename(name).is_none())
         {
-            let archive_type = if value
-                .location
-                .file_name()
-                .unwrap_or(".conda")
-                .ends_with(".conda")
-            {
-                CondaArchiveType::Conda
-            } else {
-                CondaArchiveType::TarBz2
-            };
-
-            Ok(CondaPackageData::Binary(CondaBinaryData {
-                location: value.location,
-                file_name: value.file_name.map_or_else(
-                    || DistArchiveIdentifier {
-                        identifier: ArchiveIdentifier {
-                            name: package_record.name.as_normalized().to_owned(),
-                            version: package_record.version.to_string(),
-                            build_string: package_record.build.clone(),
-                        },
-                        archive_type: DistArchiveType::Conda(archive_type),
-                    },
-                    Cow::into_owned,
-                ),
-                channel: value
-                    .channel
-                    .map(Cow::into_owned)
-                    .map(|m| m.map(ChannelUrl::from))
-                    .unwrap_or(derived.channel),
-                package_record,
-            }))
-        } else {
-            Ok(CondaPackageData::Source(CondaSourceData {
-                package_record,
-                location: value.location,
-                variants: value
-                    .variants
-                    .map(std::borrow::Cow::into_owned)
-                    .unwrap_or_default(),
-                package_build_source: value.package_build_source,
-                sources: value.sources,
-            }))
+            return Err(ConversionError::InvalidBinaryPackageLocation);
         }
+
+        let file_name = {
+            if let Some(value) = value.file_name.map(Cow::into_owned) {
+                Ok(value)
+            } else if let Some(value) = derived.identifier {
+                Ok(value)
+            } else {
+                Err(ConversionError::Missing("file_name".to_string()))
+            }
+        }?;
+
+        Ok(CondaBinaryData {
+            location: value.location,
+            file_name,
+            channel: value
+                .channel
+                .map(Cow::into_owned)
+                .map(|m| m.map(ChannelUrl::from))
+                .unwrap_or(derived.channel),
+            package_record,
+        })
     }
 }
 
-impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
-    fn from(value: &'a CondaPackageData) -> Self {
-        let package_record = value.record();
-        let derived = LocationDerivedFields::new(value.location());
+impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
+    type Error = ConversionError;
+
+    fn try_from(value: CondaPackageDataModel<'a>) -> Result<Self, Self::Error> {
+        Ok(CondaPackageData::Binary(value.try_into()?))
+    }
+}
+
+impl<'a> From<&'a CondaBinaryData> for CondaPackageDataModel<'a> {
+    fn from(value: &'a CondaBinaryData) -> Self {
+        let package_record = &value.package_record;
+        let derived = LocationDerivedFields::new(&value.location);
         let derived_build_number =
             derived_fields::derive_build_number_from_build(&package_record.build).unwrap_or(0);
         let derived_noarch = derived_fields::derive_noarch_type(
@@ -260,30 +238,14 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             derived.build.as_deref().unwrap_or(&package_record.build),
         );
 
-        let channel = value.as_binary().and_then(|binary| binary.channel.as_ref());
-        let file_name = value
-            .as_binary()
-            .map(|binary| Cow::Borrowed(&binary.file_name));
-        let variants = value.as_source().and_then(|source| {
-            if source.variants.is_empty() {
-                None
-            } else {
-                Some(Cow::Borrowed(&source.variants))
-            }
-        });
-        let package_build_source = value
-            .as_source()
-            .and_then(|source| source.package_build_source.as_ref());
-        let sources = value
-            .as_source()
-            .map_or_else(BTreeMap::new, |source| source.sources.clone());
-
-        let normalized_channel = channel
+        let normalized_channel = value
+            .channel
+            .as_ref()
             .map(|channel| strip_trailing_slash(channel.as_ref()))
             .map(Cow::into_owned);
 
         Self {
-            location: value.location().clone(),
+            location: value.location.clone(),
             name: (Some(package_record.name.as_source())
                 != derived.name.as_ref().map(PackageName::as_source))
             .then_some(Cow::Borrowed(&package_record.name)),
@@ -299,14 +261,12 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                 .then_some(Cow::Borrowed(&package_record.subdir)),
             noarch: (package_record.noarch != derived_noarch)
                 .then_some(Cow::Borrowed(&package_record.noarch)),
-            variants,
-            channel: (channel != derived.channel.as_ref())
+            channel: (value.channel.as_ref() != derived.channel.as_ref())
                 .then_some(Cow::Owned(normalized_channel)),
-            file_name: if file_name.as_deref() == derived.identifier.as_ref() {
-                None
-            } else {
-                file_name
-            },
+            file_name: (Some(value.file_name.to_file_name())
+                != derived.identifier.map(|i| i.to_file_name()))
+            .then_some(Cow::Owned(value.file_name.clone())),
+            // >>>>>>> conflict 7 of 7 ends
             purls: Cow::Borrowed(&package_record.purls),
             depends: Cow::Borrowed(&package_record.depends),
             constrains: Cow::Borrowed(&package_record.constrains),
@@ -322,8 +282,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             license: Cow::Borrowed(&package_record.license),
             license_family: Cow::Borrowed(&package_record.license_family),
             python_site_packages_path: Cow::Borrowed(&package_record.python_site_packages_path),
-            package_build_source: package_build_source.cloned(),
-            sources,
+            variants: None,
         }
     }
 }

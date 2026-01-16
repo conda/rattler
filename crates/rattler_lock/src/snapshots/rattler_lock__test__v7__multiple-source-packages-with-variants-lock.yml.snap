@@ -9,23 +9,23 @@ environments:
       - url: "https://conda.anaconda.org/conda-forge/"
     packages:
       linux-64:
-        - conda: my-package-linux
-        - conda: my-package-win
+        - source: "my-package[94aa70fc] @ my-package-linux"
+        - source: "my-package[fb69f8df] @ my-package-win"
 packages:
-  - conda: my-package-linux
-    name: my-package
+  - source: "my-package[94aa70fc] @ my-package-linux"
     version: 1.0.0
     subdir: noarch
+    noarch: generic
     variants:
       python: "3.11"
       target_platform: linux-64
     depends:
       - python >=3.8
     license: MIT
-  - conda: my-package-win
-    name: my-package
+  - source: "my-package[fb69f8df] @ my-package-win"
     version: 1.0.0
     subdir: noarch
+    noarch: generic
     variants:
       python: "3.11"
       target_platform: win-64
