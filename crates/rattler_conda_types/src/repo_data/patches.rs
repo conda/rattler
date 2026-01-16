@@ -202,6 +202,7 @@ impl PackageRecord {
 pub fn apply_patches_impl(
     packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
     conda_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
+    whl_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
     removed: &mut ahash::HashSet<String>,
     instructions: &PatchInstructions,
 ) {
@@ -245,6 +246,13 @@ pub fn apply_patches_impl(
                         removed.insert(pkg.clone());
                     }
                 }
+                ArchiveType::Whl => {
+                    // Wheel packages are not yet fully supported in patching
+                    // For now, just try to remove if it exists
+                    if whl_packages.shift_remove_entry(pkg).is_some() {
+                        removed.insert(pkg.clone());
+                    }
+                }
             }
         }
     }
@@ -257,6 +265,7 @@ impl RepoData {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.whl_packages,
             &mut self.removed,
             instructions,
         );
@@ -270,6 +279,7 @@ impl Shard {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.whl_packages,
             &mut self.removed,
             instructions,
         );
