@@ -595,6 +595,10 @@ fn parse_record_raw<'i>(
     if package_record.subdir.is_empty() {
         package_record.subdir = subdir.to_owned();
     }
+    let package_filename = package_record
+        .filename
+        .take()
+        .unwrap_or_else(|| filename.filename.to_owned());
     let mut record = RepoDataRecord {
         url: compute_package_url(
             &channel
@@ -607,7 +611,7 @@ fn parse_record_raw<'i>(
         ),
         channel: channel_name.clone(),
         package_record,
-        file_name: filename.filename.to_owned(),
+        file_name: package_filename,
     };
 
     // Apply the patch function if one was specified
@@ -851,17 +855,11 @@ impl<'de> TryFrom<&'de str> for PackageFilename<'de> {
     type Error = PackageFilenameError;
 
     fn try_from(s: &'de str) -> Result<Self, Self::Error> {
-        let package = if s.ends_with(".whl") {
-            // Wheel format: {distribution}-{version}(-{build})?-{python}-{abi}-{platform}.whl
-            // Extract package name by finding where version starts
-            extract_wheel_package_name(s)?
-        } else {
-            // Conda format: {name}-{version}-{build}.{ext}
-            // Extract package name using existing logic
-            s.rsplitn(3, '-')
-                .nth(2)
-                .ok_or(PackageFilenameError::NotEnoughDashes(s.to_string()))?
-        };
+        // Conda format: {name}-{version}-{build}.{ext}
+        // Extract package name using existing logic
+        let package = s.rsplitn(3, '-')
+            .nth(2)
+            .ok_or(PackageFilenameError::NotEnoughDashes(s.to_string()))?;
 
         Ok(PackageFilename {
             package,

@@ -154,6 +154,7 @@ pub fn package_record_from_index_json<T: Read>(
         legacy_bz2_size: None,
         purls: index.purls,
         run_exports: None,
+        filename: None,
     };
 
     Ok(package_record)
