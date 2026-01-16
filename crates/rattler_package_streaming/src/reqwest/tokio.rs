@@ -231,5 +231,9 @@ pub async fn extract(
         ArchiveType::Conda => {
             extract_conda(client, url, destination, expected_sha256, reporter).await
         }
+        ArchiveType::Whl => {
+            // TODO: put correct handling of wheel file here
+            Err(ExtractError::UnsupportedArchiveType)
+        }
     }
 }

@@ -154,6 +154,7 @@ pub fn package_record_from_index_json<T: Read>(
         legacy_bz2_size: None,
         purls: index.purls,
         run_exports: None,
+        filename: None,
     };
 
     Ok(package_record)
@@ -282,6 +283,10 @@ fn parse_package_buffer(buffer: opendal::Buffer, filename: &str) -> std::io::Res
     match archive_type {
         ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
         ArchiveType::Conda => package_record_from_conda_reader(reader),
+        ArchiveType::Whl => {
+            // TODO: put correct handling of wheel file here
+            Err(std::io::ErrorKind::InvalidInput.into())
+        }
     }
 }
 
@@ -1199,6 +1204,9 @@ pub async fn index(
     let repodata_patch = if let Some(path) = repodata_patch {
         match ArchiveType::try_from(path.clone()) {
             Some(ArchiveType::Conda) => {}
+            Some(ArchiveType::Whl) => {
+                // TODO: put correct handling of wheel file here
+            }
             Some(ArchiveType::TarBz2) | None => {
                 return Err(anyhow::anyhow!(
                     "Only .conda packages are supported for repodata patches. Got: {path}",

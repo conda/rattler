@@ -130,6 +130,11 @@ pub struct PackageRecord {
     /// mutually exclusive features.
     pub features: Option<String>,
 
+    /// Optionally the filename of the package
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "fn")]
+    pub filename: Option<String>,
+
     /// A deprecated md5 hash
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub legacy_bz2_md5: Option<Md5Hash>,
@@ -333,6 +338,7 @@ impl PackageRecord {
             constrains: vec![],
             depends: vec![],
             features: None,
+            filename: None,
             legacy_bz2_md5: None,
             legacy_bz2_size: None,
             license: None,
@@ -555,6 +561,7 @@ impl PackageRecord {
             constrains: index.constrains,
             depends: index.depends,
             features: index.features,
+            filename: None,
             legacy_bz2_md5: None,
             legacy_bz2_size: None,
             license: index.license,
