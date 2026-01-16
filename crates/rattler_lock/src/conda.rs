@@ -383,6 +383,10 @@ pub enum ConversionError {
     /// The location of the conda package cannot be converted to a URL
     #[error(transparent)]
     LocationToUrlConversionError(#[from] file_url::FileURLParseError),
+
+    /// The location does not have a valid binary package filename (e.g., `.conda` or `.tar.bz2`)
+    #[error("binary package location must have a valid archive filename (.conda or .tar.bz2)")]
+    InvalidBinaryPackageLocation,
 }
 
 impl CondaPackageData {
