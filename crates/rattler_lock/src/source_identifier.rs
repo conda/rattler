@@ -140,6 +140,9 @@ pub enum ParseSourceIdentifierError {
 /// - `build_number`
 /// - subdir
 /// - variants (sorted for determinism)
+// TODO: This hash computation is fragile - any changes to the hashed fields or
+// their string representations will invalidate existing lock files. Consider a
+// more stable approach (e.g., versioned hashing) if this becomes a problem.
 fn compute_source_hash(source_data: &CondaSourceData) -> Sha256Hash {
     use rattler_digest::digest::Digest;
 
