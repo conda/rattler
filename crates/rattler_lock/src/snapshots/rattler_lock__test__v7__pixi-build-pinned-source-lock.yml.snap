@@ -9,10 +9,9 @@ environments:
       - url: "https://conda.anaconda.org/conda-forge/"
     packages:
       linux-64:
-        - conda: pixi-build-package
+        - source: "pixi-build-package[b8881f54] @ pixi-build-package"
 packages:
-  - conda: pixi-build-package
-    name: pixi-build-package
+  - source: "pixi-build-package[b8881f54] @ pixi-build-package"
     version: 1.0.0
     build: pyhbf21a9e_0
     subdir: noarch

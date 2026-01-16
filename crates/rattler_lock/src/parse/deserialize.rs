@@ -6,6 +6,7 @@ use std::{
     sync::Arc,
 };
 
+use ahash::HashMapExt;
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::ExtraName;
@@ -20,9 +21,10 @@ use crate::{
         models::{self, legacy::LegacyCondaPackageData, v6, v7},
         V5, V6, V7,
     },
-    Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PackageHashes, ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData,
-    SolveOptions, UrlOrPath, Verbatim,
+    Channel, CondaBinaryData, CondaPackageData, CondaSourceData, EnvironmentData,
+    EnvironmentPackageData, LockFile, LockFileInner, PackageHashes, ParseCondaLockError,
+    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, SourceIdentifier,
+    UrlOrPath, Verbatim,
 };
 
 #[serde_as]
@@ -44,7 +46,7 @@ struct DeserializableLockFile<P> {
 #[derive(Deserialize)]
 #[serde(bound(deserialize = "P: DeserializeAs<'de, LegacyPackageData>"))]
 struct DeserializableLockFileLegacy<P> {
-    environments: BTreeMap<String, DeserializableEnvironment>,
+    environments: BTreeMap<String, LegacyEnvironment>,
     #[serde_as(as = "Vec<P>")]
     packages: Vec<LegacyPackageData>,
     #[serde(skip)]
@@ -92,9 +94,16 @@ impl From<PypiPackageData> for PypiPackageDataRaw {
     }
 }
 
+/// Package data enum used during V7+ deserialization.
+///
+/// Source packages carry their `SourceIdentifier` separately so we can use it
+/// directly for lookups without recomputing the hash.
 #[allow(clippy::large_enum_variant)]
 enum PackageData {
-    Conda(CondaPackageData),
+    /// Binary conda package.
+    Conda(CondaBinaryData),
+    /// Source conda package with its identifier for lookup.
+    CondaSource(SourceIdentifier, CondaSourceData),
     Pypi(PypiPackageDataRaw),
 }
 
@@ -108,6 +117,7 @@ enum LegacyPackageData {
     Pypi(PypiPackageDataRaw),
 }
 
+/// Environment struct for V7+ deserialization.
 #[derive(Deserialize)]
 struct DeserializableEnvironment {
     channels: Vec<Channel>,
@@ -116,6 +126,20 @@ struct DeserializableEnvironment {
     #[serde(default)]
     options: SolveOptions,
     packages: BTreeMap<Platform, Vec<DeserializablePackageSelector>>,
+}
+
+/// Environment struct for legacy (V4-V6) deserialization.
+///
+/// Uses `LegacyPackageSelector` which only supports `conda` and `pypi` keys,
+/// not the `source` key introduced in V7.
+#[derive(Deserialize)]
+struct LegacyEnvironment {
+    channels: Vec<Channel>,
+    #[serde(flatten)]
+    indexes: Option<PypiIndexes>,
+    #[serde(default)]
+    options: SolveOptions,
+    packages: BTreeMap<Platform, Vec<LegacyPackageSelector>>,
 }
 
 impl<'de> DeserializeAs<'de, LegacyPackageData> for V5 {
@@ -191,6 +215,10 @@ impl<'de> DeserializeAs<'de, PackageData> for V7 {
                 #[serde(rename = "conda")]
                 _conda: String,
             },
+            Source {
+                #[serde(rename = "source")]
+                _source: String,
+            },
             Pypi {
                 #[serde(rename = "pypi")]
                 _pypi: String,
@@ -202,7 +230,7 @@ impl<'de> DeserializeAs<'de, PackageData> for V7 {
             serde_value::ValueDeserializer::<D::Error>::new(value.clone()),
         ) else {
             return Err(D::Error::custom(
-                "expected at least `conda` or `pypi` field",
+                "expected at least `conda`, `source`, or `pypi` field",
             ));
         };
 
@@ -213,6 +241,13 @@ impl<'de> DeserializeAs<'de, PackageData> for V7 {
                     .try_into()
                     .map_err(D::Error::custom)?,
             ),
+            Discriminant::Source { .. } => {
+                let (identifier, source_data) =
+                    v7::SourcePackageDataModel::deserialize(deserializer)?
+                        .into_parts()
+                        .map_err(D::Error::custom)?;
+                PackageData::CondaSource(identifier, source_data)
+            }
             Discriminant::Pypi { .. } => {
                 PackageData::Pypi(v7::PypiPackageDataModel::deserialize(deserializer)?.into())
             }
@@ -220,10 +255,34 @@ impl<'de> DeserializeAs<'de, PackageData> for V7 {
     }
 }
 
+/// Package selector for V7+ environments.
+///
+/// Supports `conda`, `source`, and `pypi` keys.
+/// For V7+, binary conda packages are uniquely identified by their URL (which includes the
+/// filename), and source packages use `SourceIdentifier` with an embedded hash.
 #[derive(Deserialize)]
 #[serde(untagged, rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant)]
 enum DeserializablePackageSelector {
+    /// Binary conda packages are uniquely identified by their URL.
+    Conda { conda: UrlOrPath },
+    /// Source packages use `SourceIdentifier` format: `name[hash] @ location`.
+    /// The hash uniquely identifies the package, so no additional disambiguation fields needed.
+    Source { source: SourceIdentifier },
+    Pypi {
+        pypi: Verbatim<UrlOrPath>,
+        #[serde(flatten)]
+        runtime: DeserializablePypiPackageEnvironmentData,
+    },
+}
+
+/// Package selector for legacy (V4-V6) environments.
+///
+/// Only supports `conda` and `pypi` keys. The `source` key was introduced in V7.
+#[derive(Deserialize)]
+#[serde(untagged, rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)]
+enum LegacyPackageSelector {
     Conda {
         conda: UrlOrPath,
         name: Option<PackageName>,
@@ -452,7 +511,7 @@ fn parse_from_lock_legacy<P>(
                                 .into_iter()
                                 .map(|p| {
                                     Ok(match p {
-                                        DeserializablePackageSelector::Conda {
+                                        LegacyPackageSelector::Conda {
                                             conda,
                                             name,
                                             version,
@@ -479,18 +538,18 @@ fn parse_from_lock_legacy<P>(
                                                     ParseCondaLockError::MissingPackage(
                                                         environment_name.clone(),
                                                         platform,
-                                                        conda,
+                                                        conda.to_string(),
                                                     )
                                                 })?,
                                             )
                                         }
-                                        DeserializablePackageSelector::Pypi { pypi, runtime } => {
+                                        LegacyPackageSelector::Pypi { pypi, runtime } => {
                                             EnvironmentPackageData::Pypi(
                                                 *pypi_url_lookup.get(&pypi).ok_or_else(|| {
                                                     ParseCondaLockError::MissingPackage(
                                                         environment_name.clone(),
                                                         platform,
-                                                        pypi.inner().clone(),
+                                                        pypi.inner().to_string(),
                                                     )
                                                 })?,
                                                 pypi_runtime_lookup.insert_full(runtime).0,
@@ -539,120 +598,79 @@ fn parse_from_lock<P>(
     raw: DeserializableLockFile<P>,
     base_dir: Option<&Path>,
 ) -> Result<LockFile, ParseCondaLockError> {
-    // Split the packages into conda and pypi packages.
-    let mut conda_packages = Vec::new();
-    let mut pypi_packages = Vec::new();
+    // Split the packages into conda and pypi packages, building lookups as we go.
+    // Binary packages are uniquely identified by URL.
+    // Source packages are uniquely identified by SourceIdentifier (name[hash] @ location).
+    let num_packages = raw.packages.len();
+    let mut conda_packages: Vec<CondaPackageData> = Vec::with_capacity(num_packages);
+    let mut pypi_packages = Vec::with_capacity(num_packages);
+    let mut binary_url_lookup: ahash::HashMap<UrlOrPath, usize> =
+        ahash::HashMap::with_capacity(num_packages);
+    let mut source_identifier_lookup: ahash::HashMap<SourceIdentifier, usize> =
+        ahash::HashMap::with_capacity(num_packages);
 
     for package in raw.packages {
         match package {
-            PackageData::Conda(p) => conda_packages.push(p),
+            PackageData::Conda(binary) => {
+                let idx = conda_packages.len();
+                binary_url_lookup.insert(binary.location.clone(), idx);
+                conda_packages.push(CondaPackageData::Binary(binary));
+            }
+            PackageData::CondaSource(identifier, source_data) => {
+                let idx = conda_packages.len();
+                source_identifier_lookup.insert(identifier, idx);
+                conda_packages.push(CondaPackageData::Source(source_data));
+            }
             PackageData::Pypi(p) => {
                 pypi_packages.push(convert_raw_pypi_package(file_version, p, base_dir)?);
             }
         }
     }
 
-    // Determine the indices of the packages by url
-    let mut conda_url_lookup: ahash::HashMap<UrlOrPath, Vec<_>> = ahash::HashMap::default();
-    for (idx, conda_package) in conda_packages.iter().enumerate() {
-        conda_url_lookup
-            .entry(conda_package.location().clone())
-            .or_default()
-            .push(idx);
-    }
-
-    let pypi_url_lookup = pypi_packages
+    let pypi_url_lookup: ahash::HashMap<_, _> = pypi_packages
         .iter()
         .enumerate()
         .map(|(idx, p)| (&p.location, idx))
-        .collect::<ahash::HashMap<_, _>>();
-    let mut pypi_runtime_lookup = IndexSet::new();
+        .collect();
+    let mut pypi_runtime_lookup = IndexSet::with_capacity(pypi_packages.len());
 
-    let environments = raw
-        .environments
-        .into_iter()
-        .map(|(environment_name, env)| {
-            Ok((
-                environment_name.clone(),
-                EnvironmentData {
-                    channels: env.channels,
-                    indexes: env.indexes,
-                    options: env.options,
-                    packages: env
-                        .packages
-                        .into_iter()
-                        .map(|(platform, packages)| {
-                            let packages = packages
-                                .into_iter()
-                                .map(|p| {
-                                    Ok(match p {
-                                        DeserializablePackageSelector::Conda {
-                                            conda,
-                                            name,
-                                            version,
-                                            build,
-                                            subdir,
-                                        } => {
-                                            let all_packages = conda_url_lookup
-                                                .get(&conda)
-                                                .map_or(&[] as &[usize], Vec::as_slice);
+    // Parse environments
+    let num_environments = raw.environments.len();
+    let mut environments = Vec::with_capacity(num_environments);
+    let mut environment_lookup: ahash::HashMap<String, usize> =
+        ahash::HashMap::with_capacity(num_environments);
 
-                                            // V7+ uses exact field matching for disambiguation
-                                            let package_index = all_packages
-                                                .iter()
-                                                .find(|&idx| {
-                                                    let conda_package = &conda_packages[*idx];
-                                                    name.as_ref().is_none_or(|name| {
-                                                        name == &conda_package.record().name
-                                                    }) && version.as_ref().is_none_or(|version| {
-                                                        version == &conda_package.record().version
-                                                    }) && build.as_ref().is_none_or(|build| {
-                                                        build == &conda_package.record().build
-                                                    }) && subdir.as_ref().is_none_or(|subdir| {
-                                                        subdir == &conda_package.record().subdir
-                                                    })
-                                                })
-                                                .copied();
+    for (env_name, env) in raw.environments {
+        let mut env_packages: ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>> =
+            ahash::HashMap::with_capacity(env.packages.len());
 
-                                            EnvironmentPackageData::Conda(
-                                                package_index.ok_or_else(|| {
-                                                    ParseCondaLockError::MissingPackage(
-                                                        environment_name.clone(),
-                                                        platform,
-                                                        conda,
-                                                    )
-                                                })?,
-                                            )
-                                        }
-                                        DeserializablePackageSelector::Pypi { pypi, runtime } => {
-                                            EnvironmentPackageData::Pypi(
-                                                *pypi_url_lookup.get(&pypi).ok_or_else(|| {
-                                                    ParseCondaLockError::MissingPackage(
-                                                        environment_name.clone(),
-                                                        platform,
-                                                        pypi.inner().clone(),
-                                                    )
-                                                })?,
-                                                pypi_runtime_lookup.insert_full(runtime).0,
-                                            )
-                                        }
-                                    })
-                                })
-                                .collect::<Result<_, ParseCondaLockError>>()?;
+        for (platform, selectors) in env.packages {
+            let mut resolved = IndexSet::with_capacity(selectors.len());
 
-                            Ok((platform, packages))
-                        })
-                        .collect::<Result<_, ParseCondaLockError>>()?,
-                },
-            ))
-        })
-        .collect::<Result<BTreeMap<_, _>, ParseCondaLockError>>()?;
+            for selector in selectors {
+                let package_data = resolve_package_selector(
+                    selector,
+                    &env_name,
+                    platform,
+                    &binary_url_lookup,
+                    &source_identifier_lookup,
+                    &pypi_url_lookup,
+                    &mut pypi_runtime_lookup,
+                )?;
+                resolved.insert(package_data);
+            }
 
-    let (environment_lookup, environments) = environments
-        .into_iter()
-        .enumerate()
-        .map(|(idx, (name, env))| ((name, idx), env))
-        .unzip();
+            env_packages.insert(platform, resolved);
+        }
+
+        environment_lookup.insert(env_name, environments.len());
+        environments.push(EnvironmentData {
+            channels: env.channels,
+            indexes: env.indexes,
+            options: env.options,
+            packages: env_packages,
+        });
+    }
 
     Ok(LockFile {
         inner: Arc::new(LockFileInner {
@@ -667,4 +685,49 @@ fn parse_from_lock<P>(
                 .collect(),
         }),
     })
+}
+
+/// Resolves a package selector to an `EnvironmentPackageData`.
+fn resolve_package_selector(
+    selector: DeserializablePackageSelector,
+    env_name: &str,
+    platform: Platform,
+    binary_url_lookup: &ahash::HashMap<UrlOrPath, usize>,
+    source_identifier_lookup: &ahash::HashMap<SourceIdentifier, usize>,
+    pypi_url_lookup: &ahash::HashMap<&Verbatim<UrlOrPath>, usize>,
+    pypi_runtime_lookup: &mut IndexSet<DeserializablePypiPackageEnvironmentData>,
+) -> Result<EnvironmentPackageData, ParseCondaLockError> {
+    match selector {
+        DeserializablePackageSelector::Conda { conda } => {
+            let idx = binary_url_lookup.get(&conda).ok_or_else(|| {
+                ParseCondaLockError::MissingPackage(
+                    env_name.to_owned(),
+                    platform,
+                    conda.to_string(),
+                )
+            })?;
+            Ok(EnvironmentPackageData::Conda(*idx))
+        }
+        DeserializablePackageSelector::Source { source } => {
+            let idx = source_identifier_lookup.get(&source).ok_or_else(|| {
+                ParseCondaLockError::MissingPackage(
+                    env_name.to_owned(),
+                    platform,
+                    source.to_string(),
+                )
+            })?;
+            Ok(EnvironmentPackageData::Conda(*idx))
+        }
+        DeserializablePackageSelector::Pypi { pypi, runtime } => {
+            let idx = pypi_url_lookup.get(&pypi).ok_or_else(|| {
+                ParseCondaLockError::MissingPackage(
+                    env_name.to_owned(),
+                    platform,
+                    pypi.inner().to_string(),
+                )
+            })?;
+            let runtime_idx = pypi_runtime_lookup.insert_full(runtime).0;
+            Ok(EnvironmentPackageData::Pypi(*idx, runtime_idx))
+        }
+    }
 }
