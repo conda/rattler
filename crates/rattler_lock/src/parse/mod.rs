@@ -27,8 +27,12 @@ pub enum ParseCondaLockError {
         max_supported_version: FileFormatVersion,
     },
 
-    #[error("environment {0} and platform {1} refers to a package that does not exist: {2}")]
-    MissingPackage(String, rattler_conda_types::Platform, String),
+    #[error("environment {environment} and platform {platform} refers to a package that does not exist: {location}")]
+    MissingPackage {
+        environment: String,
+        platform: String,
+        location: String,
+    },
 
     #[error("Python requirement parsing failed")]
     Pep508Error(#[from] pep508_rs::Pep508Error),
@@ -47,6 +51,12 @@ pub enum ParseCondaLockError {
 
     #[error("`platforms` were not supported in lockfile version {0}")]
     UnexpectedPlatforms(FileFormatVersion),
+
+    #[error("Environment `{environment}` is using an unregistered platform `{platform}`")]
+    UnknownPlatform {
+        environment: String,
+        platform: String,
+    },
 
     /// The location of the conda package cannot be converted to a URL
     #[error(transparent)]

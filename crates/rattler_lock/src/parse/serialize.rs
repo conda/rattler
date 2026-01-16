@@ -14,7 +14,7 @@ use crate::{
     file_format_version::FileFormatVersion,
     parse::{models::v7, V7},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    Platform, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
+    PlatformData, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
     SourceIdentifier, UrlOrPath,
 };
 
@@ -42,7 +42,7 @@ struct SerializablePlatform<'a> {
 }
 
 impl<'a> SerializablePlatform<'a> {
-    fn from_platform(platform: &'a Platform) -> Self {
+    fn from_platform(platform: &'a PlatformData) -> Self {
         let subdir = (platform.subdir.as_str() != platform.name.as_str())
             .then_some(platform.subdir.as_str());
         Self {
@@ -60,7 +60,7 @@ struct SerializableEnvironment<'a> {
     indexes: Option<&'a PypiIndexes>,
     #[serde(default, skip_serializing_if = "crate::utils::serde::is_default")]
     options: SolveOptions,
-    packages: BTreeMap<rattler_conda_types::Platform, Vec<SerializablePackageSelector<'a>>>,
+    packages: BTreeMap<String, Vec<SerializablePackageSelector<'a>>>,
 }
 
 impl<'a> SerializableEnvironment<'a> {
@@ -77,8 +77,14 @@ impl<'a> SerializableEnvironment<'a> {
                 .packages
                 .iter()
                 .map(|(platform, packages)| {
+                    let platform_name = inner
+                        .platforms
+                        .get(*platform)
+                        .expect("Platform indices are valid")
+                        .name
+                        .to_string();
                     (
-                        *platform,
+                        platform_name,
                         packages
                             .iter()
                             .map(|&package_data| {
