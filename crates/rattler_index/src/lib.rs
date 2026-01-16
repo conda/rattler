@@ -282,6 +282,9 @@ fn parse_package_buffer(buffer: opendal::Buffer, filename: &str) -> std::io::Res
     match archive_type {
         ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
         ArchiveType::Conda => package_record_from_conda_reader(reader),
+        ArchiveType::Whl => Err(std::io::Error::other(
+            "Package type \".whl\" not yet supported.",
+        )),
     }
 }
 
@@ -796,6 +799,7 @@ async fn index_subdir_inner(
         }),
         packages,
         conda_packages,
+        whl_packages: IndexMap::default(),
         removed: HashSet::default(),
         version: Some(2),
     };
@@ -1199,7 +1203,7 @@ pub async fn index(
     let repodata_patch = if let Some(path) = repodata_patch {
         match ArchiveType::try_from(path.clone()) {
             Some(ArchiveType::Conda) => {}
-            Some(ArchiveType::TarBz2) | None => {
+            Some(ArchiveType::TarBz2 | ArchiveType::Whl) | None => {
                 return Err(anyhow::anyhow!(
                     "Only .conda packages are supported for repodata patches. Got: {path}",
                 ))
@@ -1286,6 +1290,7 @@ pub async fn ensure_channel_initialized(op: &Operator) -> anyhow::Result<()> {
         }),
         packages: IndexMap::default(),
         conda_packages: IndexMap::default(),
+        whl_packages: IndexMap::default(),
         removed: HashSet::default(),
         version: Some(2),
     };

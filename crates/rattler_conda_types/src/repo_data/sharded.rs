@@ -55,6 +55,10 @@ pub struct Shard {
     #[serde(rename = "packages.conda", default)]
     pub conda_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
+    /// The records for all `.whl` packages
+    #[serde(rename = "packages.whl", default)]
+    pub whl_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
+
     /// The file names of all removed for this shard
     #[serde(default)]
     pub removed: ahash::HashSet<String>,
