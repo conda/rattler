@@ -3,8 +3,8 @@
 
 use crate::read::{stream_tar_bz2, stream_tar_zst};
 use crate::ExtractError;
-use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::package::PackageFile;
+use rattler_conda_types::package::{ArchiveType, CondaArchiveType, DistArchiveType};
 use std::fs::File;
 use std::io::Write;
 use std::{
@@ -92,17 +92,17 @@ pub fn read_package_file_content<'a>(
     package_path: impl AsRef<Path>,
 ) -> Result<Vec<u8>, ExtractError> {
     match archive_type {
-        ArchiveType::TarBz2 => {
+        ArchiveType::Conda(CondaArchiveType::TarBz2) => {
             let mut archive = stream_tar_bz2(file);
             let buf = get_file_from_archive(&mut archive, package_path.as_ref())?;
             Ok(buf)
         }
-        ArchiveType::Conda => {
+        ArchiveType::Conda(CondaArchiveType::Conda) => {
             let mut info_archive = stream_conda_info(file).unwrap();
             let buf = get_file_from_archive(&mut info_archive, package_path.as_ref())?;
             Ok(buf)
         }
-        ArchiveType::Whl => Err(ExtractError::UnsupportedArchiveType),
+        ArchiveType::Dist(DistArchiveType::Whl) => Err(ExtractError::UnsupportedArchiveType),
     }
 }
 

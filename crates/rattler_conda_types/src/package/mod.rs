@@ -19,7 +19,7 @@ use std::path::Path;
 pub use {
     about::AboutJson,
     archive_identifier::ArchiveIdentifier,
-    archive_type::ArchiveType,
+    archive_type::{ArchiveType, CondaArchiveType, DistArchiveType},
     entry_point::EntryPoint,
     files::Files,
     has_prefix::HasPrefix,

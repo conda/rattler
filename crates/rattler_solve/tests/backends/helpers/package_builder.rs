@@ -3,7 +3,8 @@ use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{
-    package::ArchiveType, NoArchType, PackageRecord, RepoDataRecord, Version,
+    package::{ArchiveType, CondaArchiveType},
+    NoArchType, PackageRecord, RepoDataRecord, Version,
 };
 use url::Url;
 
@@ -17,7 +18,7 @@ pub struct PackageBuilder {
 
 impl PackageBuilder {
     pub fn new(name: &str) -> Self {
-        let archive_type = ArchiveType::Conda;
+        let archive_type = ArchiveType::Conda(CondaArchiveType::Conda);
         Self {
             record: RepoDataRecord {
                 url: Url::from_str("http://example.com").unwrap(),
