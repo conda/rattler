@@ -1,6 +1,6 @@
 //! Query language for conda packages.
 use crate::match_spec::condition::MatchSpecCondition;
-use crate::package::ArchiveIdentifier;
+use crate::package::CondaArchiveIdentifier;
 use crate::{
     build_spec::BuildNumberSpec, GenericVirtualPackage, PackageName, PackageRecord, RepoDataRecord,
     VersionSpec,
@@ -613,7 +613,7 @@ impl TryFrom<Url> for MatchSpec {
             .and_then(Iterator::last)
             .ok_or(MatchSpecUrlError::MissingFilename)?;
 
-        let archive_identifier = ArchiveIdentifier::try_from_filename(filename)
+        let archive_identifier = CondaArchiveIdentifier::try_from_filename(filename)
             .ok_or(MatchSpecUrlError::InvalidFilename(filename.to_string()))?;
 
         spec.name = Some(
