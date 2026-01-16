@@ -172,6 +172,20 @@ pub struct MatchSpec {
     pub track_features: Option<Vec<String>>,
 }
 
+/// Escapes a string value for use in bracket syntax.
+/// Escapes double quotes and backslashes.
+fn escape_bracket_value(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '"' => result.push_str("\\\""),
+            '\\' => result.push_str("\\\\"),
+            _ => result.push(c),
+        }
+    }
+    result
+}
+
 impl Display for MatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(channel) = &self.channel {
@@ -239,12 +253,13 @@ impl Display for MatchSpec {
             ));
         }
 
-        if !keys.is_empty() {
-            write!(f, "[{}]", keys.join(", "))?;
+        if let Some(condition) = &self.condition {
+            let condition_str = condition.to_string();
+            keys.push(format!("when=\"{}\"", escape_bracket_value(&condition_str)));
         }
 
-        if let Some(condition) = &self.condition {
-            write!(f, "; if {condition}")?;
+        if !keys.is_empty() {
+            write!(f, "[{}]", keys.join(", "))?;
         }
 
         Ok(())
@@ -358,12 +373,13 @@ impl Display for NamelessMatchSpec {
             keys.push(format!("sha256={sha256:x}"));
         }
 
-        if !keys.is_empty() {
-            write!(f, "[{}]", keys.join(", "))?;
+        if let Some(condition) = &self.condition {
+            let condition_str = condition.to_string();
+            keys.push(format!("when=\"{}\"", escape_bracket_value(&condition_str)));
         }
 
-        if let Some(condition) = &self.condition {
-            write!(f, "; if {condition}")?;
+        if !keys.is_empty() {
+            write!(f, "[{}]", keys.join(", "))?;
         }
 
         Ok(())
