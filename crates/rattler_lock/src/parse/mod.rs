@@ -29,7 +29,7 @@ pub enum ParseCondaLockError {
     },
 
     #[error("environment {0} and platform {1} refers to a package that does not exist: {2}")]
-    MissingPackage(String, Platform, UrlOrPath),
+    MissingPackage(String, Platform, String),
 
     #[error("Python requirement parsing failed")]
     Pep508Error(#[from] pep508_rs::Pep508Error),

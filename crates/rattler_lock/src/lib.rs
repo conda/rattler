@@ -91,6 +91,7 @@ mod parse;
 mod pypi;
 mod pypi_indexes;
 pub mod source;
+mod source_identifier;
 mod url_or_path;
 mod utils;
 mod verbatim;
@@ -108,6 +109,7 @@ pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
 pub use rattler_conda_types::Matches;
+pub use source_identifier::{ParseSourceIdentifierError, SourceIdentifier};
 pub use url_or_path::UrlOrPath;
 pub use verbatim::Verbatim;
 
