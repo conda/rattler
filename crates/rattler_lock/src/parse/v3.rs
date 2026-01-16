@@ -8,13 +8,14 @@ use super::{
 };
 use crate::{
     file_format_version::FileFormatVersion,
+    platform::PlatformName,
     utils::derived_fields::{
         derive_arch_and_platform, derive_build_number_from_build, derive_noarch_type,
         LocationDerivedFields,
     },
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath, Verbatim,
-    DEFAULT_ENVIRONMENT_NAME,
+    PackageHashes, PlatformData, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
+    UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
 };
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
@@ -121,6 +122,45 @@ pub struct CondaLockedPackageV3 {
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub purls: BTreeSet<PackageUrl>,
+}
+
+fn create_platforms_and_packages(
+    mut per_package: ahash::HashMap<
+        rattler_conda_types::Platform,
+        IndexSet<EnvironmentPackageData>,
+    >,
+) -> (
+    Vec<PlatformData>,
+    ahash::HashMap<usize, IndexSet<EnvironmentPackageData>>,
+) {
+    let mut unique_platforms = ahash::HashSet::default();
+
+    let mut platforms = per_package
+        .keys()
+        .filter(|platform| unique_platforms.insert(**platform))
+        .map(|platform| PlatformData {
+            name: PlatformName::try_from(platform.to_string())
+                .expect("All `rattler_conda_types::Platform` are valid platform names"),
+            subdir: *platform,
+            virtual_packages: Vec::new(),
+        })
+        .collect::<Vec<_>>();
+
+    platforms.sort_by_key(|p| p.name.to_string());
+
+    let packages = per_package
+        .drain()
+        .map(|(k, v)| {
+            (
+                platforms
+                    .iter()
+                    .position(|p| p.name.as_str() == k.as_str())
+                    .expect("All Platforms in this hashmap were added before"),
+                v,
+            )
+        })
+        .collect();
+    (platforms, packages)
 }
 
 /// A function that enables parsing of lock files version 3 or lower.
@@ -252,18 +292,19 @@ pub fn parse_v3_or_lower(
             .insert(pkg);
     }
 
+    let (platforms, packages) = create_platforms_and_packages(per_platform);
     // Construct the default environment
     let default_environment = EnvironmentData {
         channels: lock_file.metadata.channels,
         indexes: None,
-        packages: per_platform,
+        packages,
         options: SolveOptions::default(),
     };
 
     Ok(LockFile {
         inner: Arc::new(LockFileInner {
             version,
-            platforms: Vec::new(), // These will get filled in later
+            platforms,
             conda_packages: conda_packages
                 .into_iter()
                 .map(CondaPackageData::from)

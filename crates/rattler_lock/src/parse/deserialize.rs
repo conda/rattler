@@ -33,7 +33,7 @@ use crate::{
 #[serde(bound(deserialize = "P: DeserializeAs<'de, PackageData>"))]
 struct DeserializableLockFile<P> {
     #[serde(default)]
-    platforms: Vec<DeserializablePlatform>,
+    platforms: Vec<DeserializablePlatformData>,
     environments: BTreeMap<String, DeserializableEnvironment>,
     #[serde_as(as = "Vec<P>")]
     packages: Vec<PackageData>,
@@ -58,7 +58,7 @@ struct DeserializableLockFileLegacy<P> {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
-struct DeserializablePlatform {
+struct DeserializablePlatformData {
     name: String,
     #[serde(default)]
     subdir: Option<String>,
@@ -66,14 +66,15 @@ struct DeserializablePlatform {
     virtual_packages: Vec<String>,
 }
 
-impl TryFrom<&DeserializablePlatform> for crate::platform::Platform {
+impl TryFrom<&DeserializablePlatformData> for crate::platform::PlatformData {
     type Error = crate::platform::ParsePlatformError;
 
-    fn try_from(value: &DeserializablePlatform) -> Result<Self, Self::Error> {
+    fn try_from(value: &DeserializablePlatformData) -> Result<Self, Self::Error> {
         let subdir = value.subdir.as_ref().map_or_else(
             || rattler_conda_types::Platform::from_str(&value.name),
             |s| rattler_conda_types::Platform::from_str(s),
         )?;
+
         Ok(Self {
             name: crate::platform::PlatformName::try_from(value.name.clone())?,
             subdir,
@@ -154,7 +155,7 @@ struct DeserializableEnvironment {
     indexes: Option<PypiIndexes>,
     #[serde(default)]
     options: SolveOptions,
-    packages: BTreeMap<rattler_conda_types::Platform, Vec<DeserializablePackageSelector>>,
+    packages: BTreeMap<String, Vec<DeserializablePackageSelector>>,
 }
 
 /// Environment struct for legacy (V4-V6) deserialization.
@@ -428,7 +429,7 @@ fn legacy_package_matches_selector(
 #[allow(clippy::too_many_arguments)]
 fn resolve_legacy_conda_package(
     file_version: FileFormatVersion,
-    platform: rattler_conda_types::Platform,
+    platform_name: &str,
     name: Option<&PackageName>,
     version: Option<&VersionWithSource>,
     build: Option<&str>,
@@ -451,7 +452,7 @@ fn resolve_legacy_conda_package(
     // the same URL but have different metadata.
     let packages_for_platform: Vec<_> = candidate_indices
         .iter()
-        .filter(|&&idx| packages[idx].record().subdir.as_str() == platform.as_str())
+        .filter(|&&idx| packages[idx].record().subdir.as_str() == platform_name)
         .copied()
         .collect();
 
@@ -527,9 +528,9 @@ fn parse_from_lock_legacy<P>(
     let environments = raw
         .environments
         .into_iter()
-        .map(|(environment_name, env)| {
+        .map(|(env_name, env)| {
             Ok((
-                environment_name.clone(),
+                env_name.clone(),
                 EnvironmentData {
                     channels: env.channels,
                     indexes: env.indexes,
@@ -538,6 +539,18 @@ fn parse_from_lock_legacy<P>(
                         .packages
                         .into_iter()
                         .map(|(platform, packages)| {
+                            let platform_name = platform.to_string();
+                            let Some((platform_index, _)) = platforms
+                                .iter()
+                                .enumerate()
+                                .find(|(_, p)| p.name.as_str() == platform_name.as_str())
+                            else {
+                                return Err(ParseCondaLockError::UnknownPlatform {
+                                    environment: env_name.clone(),
+                                    platform: platform_name,
+                                });
+                            };
+
                             let packages = packages
                                 .into_iter()
                                 .map(|p| {
@@ -555,7 +568,7 @@ fn parse_from_lock_legacy<P>(
 
                                             let package_index = resolve_legacy_conda_package(
                                                 file_version,
-                                                platform,
+                                                platform.as_str(),
                                                 name.as_ref(),
                                                 version.as_ref(),
                                                 build.as_deref(),
@@ -566,22 +579,22 @@ fn parse_from_lock_legacy<P>(
 
                                             EnvironmentPackageData::Conda(
                                                 package_index.ok_or_else(|| {
-                                                    ParseCondaLockError::MissingPackage(
-                                                        environment_name.clone(),
-                                                        platform,
-                                                        conda.to_string(),
-                                                    )
+                                                    ParseCondaLockError::MissingPackage {
+                                                        environment: env_name.clone(),
+                                                        platform: platform_name.clone(),
+                                                        location: conda.to_string(),
+                                                    }
                                                 })?,
                                             )
                                         }
                                         LegacyPackageSelector::Pypi { pypi, runtime } => {
                                             EnvironmentPackageData::Pypi(
                                                 *pypi_url_lookup.get(&pypi).ok_or_else(|| {
-                                                    ParseCondaLockError::MissingPackage(
-                                                        environment_name.clone(),
-                                                        platform,
-                                                        pypi.inner().to_string(),
-                                                    )
+                                                    ParseCondaLockError::MissingPackage {
+                                                        environment: env_name.clone(),
+                                                        platform: platform_name.clone(),
+                                                        location: pypi.inner().to_string(),
+                                                    }
                                                 })?,
                                                 pypi_runtime_lookup.insert_full(runtime).0,
                                             )
@@ -590,7 +603,7 @@ fn parse_from_lock_legacy<P>(
                                 })
                                 .collect::<Result<_, ParseCondaLockError>>()?;
 
-                            Ok((platform, packages))
+                            Ok((platform_index, packages))
                         })
                         .collect::<Result<_, ParseCondaLockError>>()?,
                 },
@@ -630,16 +643,22 @@ fn parse_from_lock_legacy<P>(
 /// listed there and turn those into `Platform`.
 fn create_legacy_platforms<P>(
     raw: &DeserializableLockFileLegacy<P>,
-) -> Result<Vec<crate::platform::Platform>, ParseCondaLockError> {
+) -> Result<Vec<crate::platform::PlatformData>, ParseCondaLockError> {
     let mut unique_platforms = ahash::HashSet::default();
     raw.environments
         .iter()
-        .flat_map(|(_, env)| env.packages.keys())
-        .filter(move |platform| unique_platforms.insert(*platform))
-        .map(|p| -> Result<_, ParseCondaLockError> {
-            Ok(crate::platform::Platform {
-                name: crate::platform::PlatformName::try_from(p.to_string())?,
-                subdir: *p,
+        .flat_map(|(env_name, env)| {
+            env.packages
+                .keys()
+                .map(move |platform| (env_name, platform))
+        })
+        .filter(move |(_, platform)| unique_platforms.insert(*platform))
+        .map(|(_, subdir)| -> Result<_, ParseCondaLockError> {
+            let name = crate::platform::PlatformName::try_from(subdir.as_str())?;
+
+            Ok(crate::platform::PlatformData {
+                name,
+                subdir: *subdir,
                 virtual_packages: Vec::new(),
             })
         })
@@ -649,11 +668,11 @@ fn create_legacy_platforms<P>(
 /// Extract a `Vec<Platform>` from the lock file.
 fn read_platforms<P>(
     raw: &DeserializableLockFile<P>,
-) -> Result<Vec<crate::platform::Platform>, ParseCondaLockError> {
+) -> Result<Vec<crate::platform::PlatformData>, ParseCondaLockError> {
     let mut unique_platforms = ahash::HashSet::default();
     raw.platforms
         .iter()
-        .map(crate::platform::Platform::try_from)
+        .map(crate::platform::PlatformData::try_from)
         .map(move |platform| match platform {
             Ok(platform) => {
                 if unique_platforms.insert(platform.name.clone()) {
@@ -720,19 +739,28 @@ fn parse_from_lock<P>(
         ahash::HashMap::with_capacity(num_environments);
 
     for (env_name, env) in raw.environments {
-        let mut env_packages: ahash::HashMap<
-            rattler_conda_types::Platform,
-            IndexSet<EnvironmentPackageData>,
-        > = ahash::HashMap::with_capacity(env.packages.len());
+        let mut env_packages: ahash::HashMap<usize, IndexSet<EnvironmentPackageData>> =
+            ahash::HashMap::with_capacity(env.packages.len());
 
-        for (platform, selectors) in env.packages {
+        for (platform_name, selectors) in env.packages {
+            let Some((platform_index, platform_data)) = platforms
+                .iter()
+                .enumerate()
+                .find(|(_, p)| p.name.as_str() == platform_name)
+            else {
+                return Err(ParseCondaLockError::UnknownPlatform {
+                    environment: env_name.clone(),
+                    platform: platform_name,
+                });
+            };
+
             let mut resolved = IndexSet::with_capacity(selectors.len());
 
             for selector in selectors {
                 let package_data = resolve_package_selector(
                     selector,
                     &env_name,
-                    platform,
+                    platform_data.subdir,
                     &binary_url_lookup,
                     &source_identifier_lookup,
                     &pypi_url_lookup,
@@ -741,7 +769,7 @@ fn parse_from_lock<P>(
                 resolved.insert(package_data);
             }
 
-            env_packages.insert(platform, resolved);
+            env_packages.insert(platform_index, resolved);
         }
 
         environment_lookup.insert(env_name, environments.len());
@@ -782,32 +810,33 @@ fn resolve_package_selector(
     match selector {
         DeserializablePackageSelector::Conda { conda } => {
             let idx = binary_url_lookup.get(&conda).ok_or_else(|| {
-                ParseCondaLockError::MissingPackage(
-                    env_name.to_owned(),
-                    platform,
-                    conda.to_string(),
-                )
+                ParseCondaLockError::MissingPackage {
+                    environment: env_name.to_owned(),
+                    platform: platform.to_string(),
+                    location: conda.to_string(),
+                }
             })?;
             Ok(EnvironmentPackageData::Conda(*idx))
         }
         DeserializablePackageSelector::Source { source } => {
             let idx = source_identifier_lookup.get(&source).ok_or_else(|| {
-                ParseCondaLockError::MissingPackage(
-                    env_name.to_owned(),
-                    platform,
-                    source.to_string(),
-                )
+                ParseCondaLockError::MissingPackage {
+                    environment: env_name.to_owned(),
+                    platform: platform.to_string(),
+                    location: source.to_string(),
+                }
             })?;
             Ok(EnvironmentPackageData::Conda(*idx))
         }
         DeserializablePackageSelector::Pypi { pypi, runtime } => {
-            let idx = pypi_url_lookup.get(&pypi).ok_or_else(|| {
-                ParseCondaLockError::MissingPackage(
-                    env_name.to_owned(),
-                    platform,
-                    pypi.inner().to_string(),
-                )
-            })?;
+            let idx =
+                pypi_url_lookup
+                    .get(&pypi)
+                    .ok_or_else(|| ParseCondaLockError::MissingPackage {
+                        environment: env_name.to_owned(),
+                        platform: platform.to_string(),
+                        location: pypi.inner().to_string(),
+                    })?;
             let runtime_idx = pypi_runtime_lookup.insert_full(runtime).0;
             Ok(EnvironmentPackageData::Pypi(*idx, runtime_idx))
         }

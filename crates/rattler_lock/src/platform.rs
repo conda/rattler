@@ -28,6 +28,14 @@ impl std::convert::TryFrom<String> for PlatformName {
     }
 }
 
+impl std::convert::TryFrom<&str> for PlatformName {
+    type Error = ParsePlatformError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::try_from(value.to_string())
+    }
+}
+
 impl std::fmt::Display for PlatformName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -58,9 +66,63 @@ impl std::ops::Deref for PlatformName {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct Platform<'lock> {
+    pub(crate) index: usize,
+    pub(crate) lock_file_inner: &'lock crate::LockFileInner,
+}
+
+impl<'lock> std::hash::Hash for Platform<'lock> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.index.hash(state);
+        std::ptr::from_ref(self.lock_file_inner).hash(state);
+    }
+}
+
+impl<'lock> PartialEq for Platform<'lock> {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index
+            && std::ptr::from_ref(self.lock_file_inner) == std::ptr::from_ref(other.lock_file_inner)
+    }
+}
+
+impl<'lock> Eq for Platform<'lock> {}
+
+impl<'lock> Platform<'lock> {
+    pub(crate) fn new(lock_file: &'lock crate::LockFileInner, index: usize) -> Self {
+        Self {
+            index,
+            lock_file_inner: lock_file,
+        }
+    }
+
+    fn data(&self) -> &PlatformData {
+        self.lock_file_inner
+            .platforms
+            .get(self.index)
+            .expect("Platform is always valid")
+    }
+
+    pub fn name(&self) -> &PlatformName {
+        &self.data().name
+    }
+
+    pub fn subdir(&self) -> rattler_conda_types::Platform {
+        self.data().subdir
+    }
+
+    pub fn virtual_packages(&self) -> &[String] {
+        &self.data().virtual_packages
+    }
+}
+
+pub(crate) fn find_index_by_name(platforms: &[PlatformData], name: &str) -> Option<usize> {
+    platforms.iter().position(|p| p.name.as_str() == name)
+}
+
 /// Represents a package with platform-specific information.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Platform {
+pub struct PlatformData {
     /// The name of the platform.
     pub name: PlatformName,
     /// The subdir of the platform.
@@ -69,11 +131,41 @@ pub struct Platform {
     pub virtual_packages: Vec<String>,
 }
 
-impl std::hash::Hash for Platform {
+impl std::hash::Hash for PlatformData {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.name.hash(state);
     }
 }
+
+pub(crate) struct PlatformIterator<'lock> {
+    indices: Vec<Platform<'lock>>,
+    current_index_pos: usize,
+}
+
+impl<'lock> PlatformIterator<'lock> {
+    pub fn new(indices: Vec<Platform<'lock>>) -> Self {
+        Self {
+            indices,
+            current_index_pos: 0,
+        }
+    }
+}
+
+impl<'lock> Iterator for PlatformIterator<'lock> {
+    type Item = Platform<'lock>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = self.current_index_pos.saturating_add(1);
+        self.current_index_pos = current;
+        self.indices.get(current).copied()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.indices.len(), Some(self.indices.len()))
+    }
+}
+
+impl<'lock> ExactSizeIterator for PlatformIterator<'lock> {}
 
 #[cfg(test)]
 mod tests {
