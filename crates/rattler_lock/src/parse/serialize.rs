@@ -1,11 +1,10 @@
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, HashSet},
     marker::PhantomData,
 };
 
 use itertools::Itertools;
-use pep508_rs::ExtraName;
 use rattler_conda_types::Platform;
 use serde::{Serialize, Serializer};
 use serde_with::{serde_as, SerializeAs};
@@ -15,8 +14,7 @@ use crate::{
     file_format_version::FileFormatVersion,
     parse::{models::v7, V7},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, SourceIdentifier,
-    UrlOrPath,
+    PypiIndexes, PypiPackageData, SolveOptions, SourceIdentifier, UrlOrPath,
 };
 
 #[serde_as]
@@ -42,11 +40,7 @@ struct SerializableEnvironment<'a> {
 }
 
 impl<'a> SerializableEnvironment<'a> {
-    fn from_environment(
-        inner: &'a LockFileInner,
-        env_data: &'a EnvironmentData,
-        used_pypi_packages: &HashSet<usize>,
-    ) -> Self {
+    fn from_environment(inner: &'a LockFileInner, env_data: &'a EnvironmentData) -> Self {
         SerializableEnvironment {
             channels: &env_data.channels,
             indexes: env_data.indexes.as_ref(),
@@ -60,11 +54,7 @@ impl<'a> SerializableEnvironment<'a> {
                         packages
                             .iter()
                             .map(|&package_data| {
-                                SerializablePackageSelector::from_lock_file(
-                                    inner,
-                                    package_data,
-                                    used_pypi_packages,
-                                )
+                                SerializablePackageSelector::from_lock_file(inner, package_data)
                             })
                             .sorted()
                             .collect(),
@@ -106,27 +96,17 @@ enum SerializablePackageSelector<'a> {
     /// Source packages use `SourceIdentifier` which uniquely identifies the package
     /// via the format `name[hash] @ location`. No additional disambiguation fields needed.
     Source { source: SourceIdentifier },
-    Pypi {
-        pypi: &'a UrlOrPath,
-        #[serde(skip_serializing_if = "BTreeSet::is_empty")]
-        extras: &'a BTreeSet<ExtraName>,
-    },
+    /// Pypi packages are uniquely identified by their URL.
+    Pypi { pypi: &'a UrlOrPath },
 }
 
 impl<'a> SerializablePackageSelector<'a> {
-    fn from_lock_file(
-        inner: &'a LockFileInner,
-        package: EnvironmentPackageData,
-        used_pypi_packages: &HashSet<usize>,
-    ) -> Self {
+    fn from_lock_file(inner: &'a LockFileInner, package: EnvironmentPackageData) -> Self {
         match package {
             EnvironmentPackageData::Conda(idx) => Self::from_conda(&inner.conda_packages[idx]),
-            EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Self::from_pypi(
-                inner,
-                &inner.pypi_packages[pkg_data_idx],
-                &inner.pypi_environment_package_data[env_data_idx],
-                used_pypi_packages,
-            ),
+            EnvironmentPackageData::Pypi(pkg_data_idx) => {
+                Self::from_pypi(&inner.pypi_packages[pkg_data_idx])
+            }
         }
     }
 
@@ -143,15 +123,9 @@ impl<'a> SerializablePackageSelector<'a> {
         }
     }
 
-    fn from_pypi(
-        _inner: &'a LockFileInner,
-        package: &'a PypiPackageData,
-        env: &'a PypiPackageEnvironmentData,
-        _used_pypi_packages: &HashSet<usize>,
-    ) -> Self {
+    fn from_pypi(package: &'a PypiPackageData) -> Self {
         Self::Pypi {
             pypi: &package.location,
-            extras: &env.extras,
         }
     }
 }
@@ -263,7 +237,7 @@ impl Serialize for LockFile {
                         EnvironmentPackageData::Conda(idx) => {
                             used_conda_packages.insert(*idx);
                         }
-                        EnvironmentPackageData::Pypi(pkg_idx, _env_idx) => {
+                        EnvironmentPackageData::Pypi(pkg_idx) => {
                             used_pypi_packages.insert(*pkg_idx);
                         }
                     }
@@ -278,11 +252,7 @@ impl Serialize for LockFile {
             .map(|(name, env_idx)| {
                 (
                     name,
-                    SerializableEnvironment::from_environment(
-                        inner,
-                        &inner.environments[*env_idx],
-                        &used_pypi_packages,
-                    ),
+                    SerializableEnvironment::from_environment(inner, &inner.environments[*env_idx]),
                 )
             })
             .collect::<BTreeMap<_, _>>();

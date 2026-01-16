@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC
-from typing import Optional, Set, List
+from typing import Optional, List
 
 from rattler import PackageRecord, Version, RepoDataRecord
 
@@ -207,27 +207,6 @@ class PypiLockedPackage(LockedPackage):
         ```
         """
         return self._package.pypi_requires_python
-
-    @property
-    def extras(self) -> Set[str]:
-        """
-        The extras enabled for the package.
-        Note that the order doesn't matter.
-
-        Examples
-        --------
-        ```python
-        >>> from rattler import LockFile, Platform
-        >>> lock_file = LockFile.from_path("../test-data/test.lock")
-        >>> env = lock_file.default_environment()
-        >>> pypi_packages = env.pypi_packages()
-        >>> env_data = pypi_packages[Platform("osx-arm64")][0]
-        >>> env_data.extras
-        set()
-        >>>
-        ```
-        """
-        return self._package.pypi_extras
 
     def satisfies(self, spec: str) -> bool:
         """
