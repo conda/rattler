@@ -6,7 +6,10 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
-use crate::{package::ArchiveType, PackageRecord, PackageUrl, RepoData, Shard};
+use crate::{
+    package::{ArchiveType, CondaArchiveType, DistArchiveType},
+    PackageRecord, PackageUrl, RepoData, Shard,
+};
 
 /// Represents a Conda repodata patch.
 ///
@@ -202,6 +205,7 @@ impl PackageRecord {
 pub fn apply_patches_impl(
     packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
     conda_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
+    whl_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
     removed: &mut ahash::HashSet<String>,
     instructions: &PatchInstructions,
 ) {
@@ -212,7 +216,7 @@ pub fn apply_patches_impl(
 
         // also apply the patch to the conda packages
         if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
-            assert!(archive_type == ArchiveType::TarBz2);
+            assert!(archive_type == ArchiveType::Conda(CondaArchiveType::TarBz2));
             if let Some(record) = conda_packages.get_mut(&format!("{pkg_name}.conda")) {
                 record.apply_patch(patch);
             }
@@ -229,7 +233,7 @@ pub fn apply_patches_impl(
     for pkg in instructions.remove.iter() {
         if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
             match archive_type {
-                ArchiveType::TarBz2 => {
+                ArchiveType::Conda(CondaArchiveType::TarBz2) => {
                     if packages.shift_remove_entry(pkg).is_some() {
                         removed.insert(pkg.clone());
                     }
@@ -240,8 +244,15 @@ pub fn apply_patches_impl(
                         removed.insert(conda_pkg_name);
                     }
                 }
-                ArchiveType::Conda => {
+                ArchiveType::Conda(CondaArchiveType::Conda) => {
                     if conda_packages.shift_remove_entry(pkg).is_some() {
+                        removed.insert(pkg.clone());
+                    }
+                }
+                ArchiveType::Dist(DistArchiveType::Whl) => {
+                    // Wheel packages are not yet fully supported in patching
+                    // For now, just try to remove if it exists
+                    if whl_packages.shift_remove_entry(pkg).is_some() {
                         removed.insert(pkg.clone());
                     }
                 }
@@ -257,6 +268,7 @@ impl RepoData {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.whl_packages,
             &mut self.removed,
             instructions,
         );
@@ -270,6 +282,7 @@ impl Shard {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.whl_packages,
             &mut self.removed,
             instructions,
         );

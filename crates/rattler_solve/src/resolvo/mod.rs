@@ -13,9 +13,10 @@ use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
-    package::ArchiveType, utils::TimestampMs, GenericVirtualPackage, MatchSpec, Matches,
-    NamelessMatchSpec, PackageName, PackageNameMatcher, ParseMatchSpecError, ParseMatchSpecOptions,
-    RepoDataRecord, SolverResult,
+    package::{ArchiveType, CondaArchiveType},
+    utils::TimestampMs,
+    GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageNameMatcher,
+    ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -359,7 +360,10 @@ impl<'a> CondaDependencyProvider<'a> {
                 let excluded = excluded_by_newer || excluded_by_age;
 
                 let (file_name, archive_type) = ArchiveType::split_str(&record.file_name)
-                    .unwrap_or((&record.file_name, ArchiveType::TarBz2));
+                    .unwrap_or((
+                        &record.file_name,
+                        ArchiveType::Conda(CondaArchiveType::TarBz2),
+                    ));
                 match package_to_type.get_mut(file_name) {
                     None => {
                         let idx = ordered_repodata.len();

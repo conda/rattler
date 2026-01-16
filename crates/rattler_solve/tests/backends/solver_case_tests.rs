@@ -1,6 +1,7 @@
 //! Tests migrated to use the `SolverCase` helper for improved readability and consistency.
 
 use super::helpers::{PackageBuilder, SolverCase};
+use rattler_conda_types::package::CondaArchiveType;
 use rattler_solve::SolverImpl;
 
 /// Test that already-installed packages are favored when solving.
@@ -63,13 +64,13 @@ pub(super) fn solve_exclude_newer<T: SolverImpl + Default>() {
     let foo_tarbz2 = PackageBuilder::new("foo")
         .version("3.0")
         .build_string("build_1")
-        .archive_type(ArchiveType::TarBz2)
+        .archive_type(ArchiveType::Conda(CondaArchiveType::TarBz2))
         .timestamp("2021-06-01T00:00:00Z")
         .build();
     let foo_conda = PackageBuilder::new("foo")
         .version("3.0")
         .build_string("build_1")
-        .archive_type(ArchiveType::Conda)
+        .archive_type(ArchiveType::Conda(CondaArchiveType::Conda))
         .timestamp("2022-06-01T00:00:00Z")
         .build();
     let foo_newer_version = PackageBuilder::new("foo")
