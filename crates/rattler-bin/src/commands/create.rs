@@ -22,7 +22,9 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Matches, PackageName,
     ParseMatchSpecOptions, Platform, PrefixRecord, RepoDataRecord, Version,
 };
-use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
+use rattler_networking::AuthenticationMiddleware;
+#[cfg(feature = "s3")]
+use rattler_networking::AuthenticationStorage;
 use rattler_repodata_gateway::{Gateway, RepoData, SourceConfig};
 use rattler_solve::{
     libsolv_c::{self},
@@ -174,13 +176,15 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
         .with_arc(Arc::new(
             AuthenticationMiddleware::from_env_and_defaults().into_diagnostic()?,
         ))
-        .with(rattler_networking::OciMiddleware)
-        .with(rattler_networking::S3Middleware::new(
-            HashMap::new(),
-            AuthenticationStorage::from_env_and_defaults().into_diagnostic()?,
-        ))
-        .with(rattler_networking::GCSMiddleware)
-        .build();
+        .with(rattler_networking::OciMiddleware);
+    #[cfg(feature = "s3")]
+    let download_client = download_client.with(rattler_networking::S3Middleware::new(
+        HashMap::new(),
+        AuthenticationStorage::from_env_and_defaults().into_diagnostic()?,
+    ));
+    #[cfg(feature = "gcs")]
+    let download_client = download_client.with(rattler_networking::GCSMiddleware);
+    let download_client = download_client.build();
 
     // Get the package names from the matchspecs so we can only load the package
     // records that we need.

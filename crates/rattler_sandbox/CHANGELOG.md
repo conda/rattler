@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10](https://github.com/conda/rattler/compare/rattler_sandbox-v0.2.9...rattler_sandbox-v0.2.10) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
 ## [0.2.9](https://github.com/conda/rattler/compare/rattler_sandbox-v0.2.8...rattler_sandbox-v0.2.9) - 2025-12-08
 
 ### Other

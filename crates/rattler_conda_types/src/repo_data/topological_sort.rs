@@ -1,4 +1,6 @@
-use crate::PackageRecord;
+use std::borrow::Cow;
+
+use crate::{PackageName, PackageRecord};
 
 /// Sorts the packages topologically
 ///
@@ -68,8 +70,8 @@ fn dfs<T: AsRef<PackageRecord>>(
 
     if let Some(package) = packages.get(node) {
         for dependency in package.as_ref().depends.iter() {
-            let dependency = package_name_from_match_spec(dependency);
-            dfs(dependency, packages, visited, path, all_cycles);
+            let dependency = PackageName::normalized_name_from_matchspec_str(dependency);
+            dfs(&dependency, packages, visited, path, all_cycles);
         }
     }
 
@@ -83,22 +85,22 @@ fn get_graph_roots<T: AsRef<PackageRecord>>(
     records: &[T],
     cycle_breaks: &ahash::HashSet<(String, String)>,
 ) -> Vec<String> {
-    let all_packages: ahash::HashSet<_> = records
+    let all_packages: ahash::HashSet<Cow<'_, str>> = records
         .iter()
-        .map(|r| r.as_ref().name.as_normalized())
+        .map(|r| Cow::Borrowed(r.as_ref().name.as_normalized()))
         .collect();
 
-    let dependencies: ahash::HashSet<_> = records
+    let dependencies: ahash::HashSet<Cow<'_, str>> = records
         .iter()
         .flat_map(|r| {
             r.as_ref()
                 .depends
                 .iter()
-                .map(|d| package_name_from_match_spec(d))
+                .map(|d| PackageName::normalized_name_from_matchspec_str(d))
                 .filter(|d| {
                     // filter out circular dependencies
                     !cycle_breaks
-                        .contains(&(r.as_ref().name.as_normalized().to_owned(), (*d).to_string()))
+                        .contains(&(r.as_ref().name.as_normalized().to_owned(), d.to_string()))
                 })
         })
         .collect();
@@ -185,7 +187,7 @@ fn get_topological_order<T: AsRef<PackageRecord>>(
                             .as_ref()
                             .depends
                             .iter()
-                            .map(|d| package_name_from_match_spec(d).to_string())
+                            .map(|d| PackageName::normalized_name_from_matchspec_str(d).to_string())
                             .collect::<Vec<_>>(),
                         None => {
                             // This is a virtual package, so no real package was found for it
@@ -234,12 +236,6 @@ fn get_topological_order<T: AsRef<PackageRecord>>(
     }
 
     output
-}
-
-/// Helper function to obtain the package name from a match spec
-fn package_name_from_match_spec(d: &str) -> &str {
-    // Unwrap is safe because split always returns at least one value
-    d.split([' ', '=']).next().unwrap()
 }
 
 #[cfg(test)]
@@ -306,13 +302,13 @@ mod tests {
 
             // All the package's dependencies must have already been installed
             for dep in deps {
-                let dep_name = package_name_from_match_spec(dep);
+                let dep_name = PackageName::normalized_name_from_matchspec_str(dep);
 
-                if circular_dependencies.contains(&(name, dep_name)) {
+                if circular_dependencies.contains(&(name, &*dep_name)) {
                     // Ignore circular dependencies
                 } else {
                     assert!(
-                        installed.contains(dep_name),
+                        installed.contains(&*dep_name),
                         "attempting to install {name} (package {i} of {}) but dependency {dep_name} is not yet installed",
                         sorted_packages.len()
                     );
@@ -322,16 +318,6 @@ mod tests {
             // Now mark this package as installed too
             installed.insert(name);
         }
-    }
-
-    #[rstest]
-    #[case("python >=3.0", "python")]
-    #[case("python", "python")]
-    #[case("python=*=*", "python")]
-    #[case("", "")]
-    fn test_package_name_from_match_spec(#[case] match_spec: &str, #[case] expected_name: &str) {
-        let name = package_name_from_match_spec(match_spec);
-        assert_eq!(name, expected_name);
     }
 
     #[rstest]

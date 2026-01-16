@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/repo_data/mod.rs
-assertion_line: 438
 expression: repodata
 ---
 info: ~
@@ -15,4 +14,3 @@ removed:
   - qux
   - xyz
 repodata_version: 2
-

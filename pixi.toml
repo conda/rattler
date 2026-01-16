@@ -11,6 +11,7 @@ channels = ["https://prefix.dev/conda-forge"]
 platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
 license = "BSD-3-Clause"
 preview = ["pixi-build"]
+requires-pixi = ">=0.62.0"
 
 [workspace.build-variants]
 # Use the same Rust version everywhere
@@ -47,7 +48,7 @@ scripts = ["scripts/activate_linux.sh"]
 ruff = ">=0.14.1,<0.15"
 typos = ">=1.23.1,<2"
 dprint = ">=0.50.0,<0.51"
-lefthook = ">=2.0.9,<3"
+lefthook = ">=2.0.11,<3"
 actionlint = ">=1.7.7,<2"
 shellcheck = ">=0.10.0,<0.11"
 

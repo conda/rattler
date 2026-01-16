@@ -46,6 +46,21 @@ impl PyPackageName {
         PackageName::new_unchecked(normalized).into()
     }
 
+    /// Parses the package name part from a matchspec string without parsing the entire matchspec.
+    #[staticmethod]
+    pub fn from_matchspec_str(spec: &str) -> pyo3::PyResult<Self> {
+        Ok(PackageName::from_matchspec_str(spec)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
+    }
+
+    /// Parses the package name part from a matchspec string without parsing the entire matchspec.
+    /// This function assumes the matchspec string is a valid matchspec.
+    #[staticmethod]
+    pub fn from_matchspec_str_unchecked(spec: &str) -> Self {
+        PackageName::from_matchspec_str_unchecked(spec).into()
+    }
+
     /// Returns the source representation of the package name. This is the string from which this
     /// instance was created.
     #[getter]

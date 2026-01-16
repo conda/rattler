@@ -1,10 +1,5 @@
-<a href="https://github.com/conda/rattler/">
-    <picture>
-      <source srcset="https://github.com/user-attachments/assets/6f3f05bc-6363-4974-9517-fe5c0fcffd1a" type="image/jpeg">
-      <source srcset="https://github.com/user-attachments/assets/dc30403d-6392-460a-b923-986c2164ef79" type="image/webp">
-      <source srcset="https://github.com/user-attachments/assets/bfd64756-061d-49f5-af4e-388743bdb855" type="image/png">
-      <img src="https://github.com/user-attachments/assets/bfd64756-061d-49f5-af4e-388743bdb855" alt="banner">
-    </picture>
+<a href="https://prefix.dev/tools/rattler/">
+  <img src="https://github.com/user-attachments/assets/73dee0d8-b372-4462-bce1-f004c5f907b5" alt="banner">
 </a>
 
 # Rattler: Rust crates for fast handling of conda packages

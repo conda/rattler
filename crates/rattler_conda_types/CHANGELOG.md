@@ -39,6 +39,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.3...rattler_conda_types-v0.42.4) - 2025-12-18
+
+### Added
+
+- add common function to extract package name from matchspec ([#1923](https://github.com/conda/rattler/pull/1923))
+
+### Fixed
+
+- always emit depends in index.json ([#1932](https://github.com/conda/rattler/pull/1932))
+- regression in `Version::starts_with` ([#1920](https://github.com/conda/rattler/pull/1920))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
 ## [0.42.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.2...rattler_conda_types-v0.42.3) - 2025-12-08
 
 ### Fixed
