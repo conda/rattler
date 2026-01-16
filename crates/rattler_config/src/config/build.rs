@@ -1,4 +1,7 @@
-use rattler_conda_types::{compression_level::CompressionLevel, package::ArchiveType};
+use rattler_conda_types::{
+    compression_level::CompressionLevel,
+    package::{ArchiveType, CondaArchiveType, DistArchiveType},
+};
 use serde::{de::Error, Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -50,8 +53,8 @@ impl FromStr for PackageFormatAndCompression {
             .collect::<String>();
 
         let archive_type = match package_format.to_lowercase().as_str() {
-            "tarbz2" => ArchiveType::TarBz2,
-            "conda" => ArchiveType::Conda,
+            "tarbz2" => ArchiveType::Conda(CondaArchiveType::TarBz2),
+            "conda" => ArchiveType::Conda(CondaArchiveType::Conda),
             _ => return Err(format!("Unknown package format: {package_format}")),
         };
 
@@ -62,20 +65,20 @@ impl FromStr for PackageFormatAndCompression {
             number if number.parse::<i32>().is_ok() => {
                 let number = number.parse::<i32>().unwrap_or_default();
                 match archive_type {
-                    ArchiveType::TarBz2 => {
+                    ArchiveType::Conda(CondaArchiveType::TarBz2) => {
                         if !(1..=9).contains(&number) {
                             return Err("Compression level for .tar.bz2 must be between 1 and 9"
                                 .to_string());
                         }
                     }
-                    ArchiveType::Conda => {
+                    ArchiveType::Conda(CondaArchiveType::Conda) => {
                         if !(-7..=22).contains(&number) {
                             return Err(
                                 "Compression level for conda packages (zstd) must be between -7 and 22".to_string()
                             );
                         }
                     }
-                    ArchiveType::Whl => {
+                    ArchiveType::Dist(DistArchiveType::Whl) => {
                         return Err(
                             "Compression level is not applicable for .whl packages".to_string()
                         );
@@ -99,9 +102,9 @@ impl Serialize for PackageFormatAndCompression {
         S: serde::Serializer,
     {
         let package_format = match self.archive_type {
-            ArchiveType::TarBz2 => "tarbz2",
-            ArchiveType::Conda => "conda",
-            ArchiveType::Whl => "whl",
+            ArchiveType::Conda(CondaArchiveType::TarBz2) => "tarbz2",
+            ArchiveType::Conda(CondaArchiveType::Conda) => "conda",
+            ArchiveType::Dist(DistArchiveType::Whl) => "whl",
         };
         let compression_level = match self.compression_level {
             CompressionLevel::Default => "default",

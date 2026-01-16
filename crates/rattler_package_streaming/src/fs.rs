@@ -1,7 +1,7 @@
 //! Functions to extracting or stream a Conda package from a file on disk.
 
 use crate::{ExtractError, ExtractResult};
-use rattler_conda_types::package::ArchiveType;
+use rattler_conda_types::package::{ArchiveType, CondaArchiveType, DistArchiveType};
 use std::fs::File;
 use std::path::Path;
 
@@ -48,8 +48,8 @@ pub fn extract_conda(archive: &Path, destination: &Path) -> Result<ExtractResult
 /// ```
 pub fn extract(archive: &Path, destination: &Path) -> Result<ExtractResult, ExtractError> {
     match ArchiveType::try_from(archive).ok_or(ExtractError::UnsupportedArchiveType)? {
-        ArchiveType::TarBz2 => extract_tar_bz2(archive, destination),
-        ArchiveType::Conda => extract_conda(archive, destination),
-        ArchiveType::Whl => Err(ExtractError::UnsupportedArchiveType),
+        ArchiveType::Conda(CondaArchiveType::TarBz2) => extract_tar_bz2(archive, destination),
+        ArchiveType::Conda(CondaArchiveType::Conda) => extract_conda(archive, destination),
+        ArchiveType::Dist(DistArchiveType::Whl) => Err(ExtractError::UnsupportedArchiveType),
     }
 }
