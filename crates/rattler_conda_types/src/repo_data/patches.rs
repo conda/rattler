@@ -168,6 +168,14 @@ pub struct PatchInstructions {
         skip_serializing_if = "ahash::HashMap::is_empty"
     )]
     pub conda_packages: ahash::HashMap<String, PackageRecordPatch>,
+
+    /// Patches for package records
+    #[serde(
+        default,
+        rename = "packages.whl",
+        skip_serializing_if = "ahash::HashMap::is_empty"
+    )]
+    pub whl_packages: ahash::HashMap<String, PackageRecordPatch>,
 }
 
 impl PackageRecord {
@@ -202,6 +210,7 @@ impl PackageRecord {
 pub fn apply_patches_impl(
     packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
     conda_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
+    whl_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
     removed: &mut ahash::HashSet<String>,
     instructions: &PatchInstructions,
 ) {
@@ -221,6 +230,12 @@ pub fn apply_patches_impl(
 
     for (pkg, patch) in instructions.conda_packages.iter() {
         if let Some(record) = conda_packages.get_mut(pkg) {
+            record.apply_patch(patch);
+        }
+    }
+
+    for (pkg, patch) in instructions.whl_packages.iter() {
+        if let Some(record) = whl_packages.get_mut(pkg) {
             record.apply_patch(patch);
         }
     }
@@ -245,6 +260,11 @@ pub fn apply_patches_impl(
                         removed.insert(pkg.clone());
                     }
                 }
+                ArchiveType::Whl => {
+                    if whl_packages.shift_remove_entry(pkg).is_some() {
+                        removed.insert(pkg.clone());
+                    }
+                }
             }
         }
     }
@@ -257,6 +277,7 @@ impl RepoData {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.whl_packages,
             &mut self.removed,
             instructions,
         );
@@ -270,6 +291,7 @@ impl Shard {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.whl_packages,
             &mut self.removed,
             instructions,
         );
@@ -363,6 +385,32 @@ mod test {
         // test data
         let mut repodata = load_test_repodata("repodata_from_packages_5.json");
         let patch_instructions = load_patch_instructions("patch_instructions_5.json");
+
+        // apply patch
+        repodata.apply_patches(&patch_instructions);
+
+        // check result
+        insta::assert_yaml_snapshot!(repodata);
+    }
+
+    #[test]
+    fn test_patch_modify_wheels() {
+        // test data
+        let mut repodata = load_test_repodata("repodata_from_packages_with_wheels.json");
+        let patch_instructions = load_patch_instructions("patch_instructions_7.json");
+
+        // apply patch
+        repodata.apply_patches(&patch_instructions);
+
+        // check result
+        insta::assert_yaml_snapshot!(repodata);
+    }
+
+    #[test]
+    fn test_patch_remove_wheels() {
+        // test data
+        let mut repodata = load_test_repodata("repodata_from_packages_with_wheels.json");
+        let patch_instructions = load_patch_instructions("patch_instructions_6.json");
 
         // apply patch
         repodata.apply_patches(&patch_instructions);

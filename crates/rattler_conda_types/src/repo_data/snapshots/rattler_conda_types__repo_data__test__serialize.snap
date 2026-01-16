@@ -5,6 +5,7 @@ expression: repodata
 info: ~
 packages: {}
 packages.conda: {}
+packages.whl: {}
 removed:
   - aux
   - bar

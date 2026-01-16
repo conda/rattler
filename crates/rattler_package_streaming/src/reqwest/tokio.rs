@@ -194,6 +194,43 @@ pub async fn extract_conda(
     }
 }
 
+/// Extracts the contents a `.whl` package archive from the specified remote
+/// location.
+///
+/// ```rust,no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # use std::path::Path;
+/// use url::Url;
+/// use rattler_package_streaming::reqwest::tokio::extract_whl;
+/// use reqwest::Client;
+/// use reqwest_middleware::ClientWithMiddleware;
+/// let _ = extract_whl(
+///     ClientWithMiddleware::from(Client::new()),
+///     Url::parse("https://files.pythonhosted.org/packages/requests-2.32.5-py3-none-any.whl").unwrap(),
+///     Path::new("/tmp"),
+///     None,
+///     None)
+///     .await
+///     .unwrap();
+/// # }
+/// ```
+pub async fn extract_whl(
+    client: reqwest_middleware::ClientWithMiddleware,
+    url: Url,
+    destination: &Path,
+    expected_sha256: Option<Sha256Hash>,
+    reporter: Option<Arc<dyn DownloadReporter>>,
+) -> Result<ExtractResult, ExtractError> {
+    let reader = get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
+    // The `response` is used to stream in the package data
+    let result = crate::tokio::async_read::extract_whl(reader, destination).await?;
+    if let Some(reporter) = &reporter {
+        reporter.on_download_complete();
+    }
+    Ok(result)
+}
+
 /// Extracts the contents a package archive from the specified remote location.
 /// The type of package is determined based on the path of the url.
 ///
@@ -231,5 +268,6 @@ pub async fn extract(
         ArchiveType::Conda => {
             extract_conda(client, url, destination, expected_sha256, reporter).await
         }
+        ArchiveType::Whl => extract_whl(client, url, destination, expected_sha256, reporter).await,
     }
 }

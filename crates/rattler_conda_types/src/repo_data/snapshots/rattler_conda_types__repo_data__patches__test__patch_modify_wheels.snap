@@ -21,6 +21,19 @@ packages.conda:
     size: 51596
     subdir: win-64
     timestamp: 1744247964462
+    track_features: pytorch-cpu
     version: 2.6.0
-packages.whl: {}
+packages.whl:
+  requests-2.32.5-py3-none-any.whl:
+    build: py3_0
+    build_number: 0
+    depends:
+      - python>=3.10
+    name: requests
+    noarch: python
+    sha256: 78820a3e5d9d3b25ce8e1c99c1c89cd19caa904a92973a3e50f8426009e8a4b3
+    size: 6899
+    subdir: noarch
+    timestamp: 1764005009
+    version: 2.32.5
 repodata_version: 1

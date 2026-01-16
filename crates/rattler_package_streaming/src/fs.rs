@@ -35,6 +35,21 @@ pub fn extract_conda(archive: &Path, destination: &Path) -> Result<ExtractResult
     crate::read::extract_conda_via_streaming(file, destination)
 }
 
+/// Extracts the contents a `.whl` package archive at the specified path to a directory.
+///
+/// ```rust,no_run
+/// # use std::path::Path;
+/// use rattler_package_streaming::fs::extract_whl;
+/// let _ = extract_whl(
+///     Path::new("conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.whl"),
+///     Path::new("/tmp"))
+///     .unwrap();
+/// ```
+pub fn extract_whl(archive: &Path, destination: &Path) -> Result<ExtractResult, ExtractError> {
+    let file = File::open(archive)?;
+    crate::read::extract_whl_via_streaming(file, destination)
+}
+
 /// Extracts the contents a package archive at the specified path to a directory. The type of
 /// package is determined based on the file extension of the archive path.
 ///
@@ -50,5 +65,6 @@ pub fn extract(archive: &Path, destination: &Path) -> Result<ExtractResult, Extr
     match ArchiveType::try_from(archive).ok_or(ExtractError::UnsupportedArchiveType)? {
         ArchiveType::TarBz2 => extract_tar_bz2(archive, destination),
         ArchiveType::Conda => extract_conda(archive, destination),
+        ArchiveType::Whl => extract_whl(archive, destination),
     }
 }

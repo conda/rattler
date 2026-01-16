@@ -5,9 +5,13 @@ use std::{
 };
 
 use fs_err::tokio as tokio_fs;
-use rattler_conda_types::package::IndexJson;
+use rattler_conda_types::package::{ArchiveType, IndexJson};
 use rattler_package_streaming::{
-    read::{extract_conda_via_buffering, extract_conda_via_streaming, extract_tar_bz2},
+    read::{
+        extract_conda_via_buffering, extract_conda_via_streaming, extract_tar_bz2,
+        extract_whl_via_streaming,
+    },
+    seek::read_package_file_content,
     ExtractError,
 };
 use rstest::rstest;
@@ -92,6 +96,15 @@ fn conda_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
 )]
 fn tar_bz2_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {}
 
+#[template]
+#[rstest]
+#[case::requests(
+    "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl",
+    "2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6",
+    "bd126794a95616a0da6192b288f9bb88"
+)]
+fn whl_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {}
+
 #[cfg(feature = "reqwest")]
 #[template]
 #[rstest]
@@ -109,6 +122,11 @@ fn tar_bz2_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str)
     "https://conda.anaconda.org/conda-forge/linux-64/openmp-8.0.1-0.tar.bz2",
     "a3332e80c633be1ee20a41c7dd8810260a2132cf7d03f363d83752cad907bcfd",
     "b35241079152e5cc891c99368395b2c6"
+)]
+#[case::requests_whl(
+    "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl",
+    "2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6",
+    "bd126794a95616a0da6192b288f9bb88"
 )]
 fn url_archives(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {}
 
@@ -165,6 +183,20 @@ fn read_package_file(#[case] input: Url, #[case] sha256: &str, #[case] _md5: &st
         .and_then(Iterator::last)
         .unwrap()
         .starts_with(&name));
+}
+
+#[apply(whl_archives)]
+fn test_read_whl_package_file(#[case] input: Url, #[case] sha256: &str, #[case] _md5: &str) {
+    let file_path = tools::download_and_cache_file(input.clone(), sha256).unwrap();
+    let archive_path = test_data_dir().join(&file_path);
+
+    let file = File::open(archive_path).unwrap();
+    let content =
+        read_package_file_content(file, ArchiveType::Whl, "requests/__init__.py").unwrap();
+
+    // Verify the file was successfully read from the archive.
+    // Note: Some __init__.py files can be empty, but requests' contains content.
+    assert!(!content.is_empty(), "File content should not be empty");
 }
 
 #[apply(tar_bz2_archives)]
@@ -231,6 +263,177 @@ async fn test_extract_conda_async(#[case] input: Url, #[case] sha256: &str, #[ca
 
     assert_eq!(&format!("{:x}", result.sha256), sha256);
     assert_eq!(&format!("{:x}", result.md5), md5);
+}
+
+#[apply(whl_archives)]
+fn test_extract_whl(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+
+    println!("Target dir: {}", temp_dir.display());
+    let file_path = tools::download_and_cache_file(input, sha256).unwrap();
+    let target_dir = temp_dir.join(file_path.file_stem().unwrap());
+    let result = extract_whl_via_streaming(
+        File::open(test_data_dir().join(file_path)).unwrap(),
+        &target_dir,
+    )
+    .unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    assert!(target_dir.exists(), "Destination directory should exist");
+    assert!(target_dir.is_dir(), "Destination should be a directory");
+}
+
+#[apply(whl_archives)]
+#[tokio::test]
+async fn test_extract_whl_async(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
+    println!("Target dir: {}", temp_dir.display());
+
+    let file_path = tools::download_and_cache_file_async(input, sha256)
+        .await
+        .unwrap();
+    let target_dir = temp_dir.join(file_path.file_stem().unwrap());
+    let result = rattler_package_streaming::tokio::async_read::extract_whl(
+        tokio_fs::File::open(&test_data_dir().join(file_path))
+            .await
+            .unwrap(),
+        &target_dir,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    assert!(target_dir.exists(), "Destination directory should exist");
+    assert!(target_dir.is_dir(), "Destination should be a directory");
+}
+
+#[apply(whl_archives)]
+fn test_extract_whl_fs(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+
+    println!("Target dir: {}", temp_dir.display());
+    let file_path = tools::download_and_cache_file(input, sha256).unwrap();
+    let archive_path = test_data_dir().join(&file_path);
+    let target_dir = temp_dir.join(file_path.file_stem().unwrap());
+
+    let result = rattler_package_streaming::fs::extract_whl(&archive_path, &target_dir).unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    assert!(target_dir.exists(), "Destination directory should exist");
+    assert!(target_dir.is_dir(), "Destination should be a directory");
+}
+
+#[apply(whl_archives)]
+#[tokio::test]
+async fn test_extract_whl_tokio_fs(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
+    println!("Target dir: {}", temp_dir.display());
+
+    let file_path = tools::download_and_cache_file_async(input, sha256)
+        .await
+        .unwrap();
+    let archive_path = test_data_dir().join(&file_path);
+    let target_dir = temp_dir.join(file_path.file_stem().unwrap());
+
+    let result = rattler_package_streaming::tokio::fs::extract_whl(&archive_path, &target_dir)
+        .await
+        .unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    assert!(target_dir.exists(), "Destination directory should exist");
+    assert!(target_dir.is_dir(), "Destination should be a directory");
+}
+
+#[apply(whl_archives)]
+fn test_extract_generic_fs(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+
+    println!("Target dir: {}", temp_dir.display());
+    let file_path = tools::download_and_cache_file(input, sha256).unwrap();
+    let archive_path = test_data_dir().join(&file_path);
+    let target_dir = temp_dir.join(file_path.file_stem().unwrap());
+
+    // Use the generic extract function (automatically detects archive type from extension)
+    let result = rattler_package_streaming::fs::extract(&archive_path, &target_dir).unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    assert!(target_dir.exists(), "Destination directory should exist");
+    assert!(target_dir.is_dir(), "Destination should be a directory");
+}
+
+#[apply(whl_archives)]
+#[tokio::test]
+async fn test_extract_generic_tokio_fs(
+    #[case] input: Url,
+    #[case] sha256: &str,
+    #[case] md5: &str,
+) {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
+    println!("Target dir: {}", temp_dir.display());
+
+    let file_path = tools::download_and_cache_file_async(input, sha256)
+        .await
+        .unwrap();
+    let archive_path = test_data_dir().join(&file_path);
+    let target_dir = temp_dir.join(file_path.file_stem().unwrap());
+
+    // Use the generic extract function (automatically detects archive type from extension)
+    let result = rattler_package_streaming::tokio::fs::extract(&archive_path, &target_dir)
+        .await
+        .unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    assert!(target_dir.exists(), "Destination directory should exist");
+    assert!(target_dir.is_dir(), "Destination should be a directory");
+}
+
+#[cfg(feature = "reqwest")]
+#[apply(whl_archives)]
+#[tokio::test]
+async fn test_extract_whl_http(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    use reqwest::Client;
+    use reqwest_middleware::ClientWithMiddleware;
+
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
+    println!("Target dir: {}", temp_dir.display());
+
+    let filename = input
+        .path_segments()
+        .and_then(Iterator::last)
+        .expect("URL should have a filename");
+    let name = Path::new(filename);
+    println!("Name: {}", name.display());
+
+    let target_dir = temp_dir.join(name);
+    let client = ClientWithMiddleware::from(Client::new());
+
+    let result = rattler_package_streaming::reqwest::tokio::extract_whl(
+        client,
+        input,
+        &target_dir,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    assert!(target_dir.exists(), "Destination directory should exist");
+    assert!(target_dir.is_dir(), "Destination should be a directory");
 }
 
 #[cfg(feature = "reqwest")]
