@@ -66,6 +66,11 @@ impl std::ops::Deref for PlatformName {
     }
 }
 
+/// A reference to a platform in a lock file.
+///
+/// This type provides access to platform-specific information stored in the
+/// lock file, including the platform name, the underlying conda subdir, and
+/// any virtual packages associated with the platform.
 #[derive(Clone, Copy)]
 pub struct Platform<'lock> {
     pub(crate) index: usize,
@@ -103,16 +108,48 @@ impl<'lock> Platform<'lock> {
             .expect("Platform is always valid")
     }
 
+    /// Returns the name of the platform (e.g., "linux-64", "osx-arm64").
     pub fn name(&self) -> &PlatformName {
         &self.data().name
     }
 
+    /// Returns the underlying conda subdir/platform.
     pub fn subdir(&self) -> rattler_conda_types::Platform {
         self.data().subdir
     }
 
+    /// Returns the list of virtual packages for this platform.
     pub fn virtual_packages(&self) -> &[String] {
         &self.data().virtual_packages
+    }
+
+    /// Creates an owned version of this platform reference.
+    pub fn to_owned(self, lock_file: &crate::LockFile) -> OwnedPlatform {
+        OwnedPlatform {
+            lock_file: lock_file.clone(),
+            index: self.index,
+        }
+    }
+}
+
+/// An owned version of a [`Platform`].
+///
+/// Use [`OwnedPlatform::as_ref`] to get a reference to the platform data.
+#[derive(Clone)]
+pub struct OwnedPlatform {
+    lock_file: crate::LockFile,
+    index: usize,
+}
+
+impl OwnedPlatform {
+    /// Returns a reference to the platform data.
+    pub fn as_ref(&self) -> Platform<'_> {
+        Platform::new(&self.lock_file.inner, self.index)
+    }
+
+    /// Returns the lock-file this platform is part of.
+    pub fn lock_file(&self) -> crate::LockFile {
+        self.lock_file.clone()
     }
 }
 
