@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 from rattler.lock.channel import LockChannel
 from rattler.lock.package import LockedPackage, PypiLockedPackage
@@ -7,6 +7,9 @@ from rattler.platform.platform import Platform
 
 from rattler.rattler import PyEnvironment
 from rattler.repo_data.record import RepoDataRecord
+
+if TYPE_CHECKING:
+    from rattler.lock.platform import LockPlatform
 
 
 class Environment:
@@ -31,7 +34,7 @@ class Environment:
             channels=[channel._channel for channel in channels],
         )
 
-    def platforms(self) -> List[Platform]:
+    def platforms(self) -> List[LockPlatform]:
         """
         Returns all the platforms for which we have a locked-down environment.
 
@@ -46,7 +49,9 @@ class Environment:
         >>>
         ```
         """
-        return [Platform._from_py_platform(p) for p in self._env.platforms()]
+        from rattler.lock.platform import LockPlatform
+
+        return [LockPlatform._from_py_lock_platform(p) for p in self._env.platforms()]
 
     def channels(self) -> List[LockChannel]:
         """
@@ -67,17 +72,18 @@ class Environment:
         """
         return [LockChannel._from_py_lock_channel(c) for c in self._env.channels()]
 
-    def packages(self, platform: Platform) -> Optional[List[LockedPackage]]:
+    def packages(self, platform: LockPlatform) -> Optional[List[LockedPackage]]:
         """
         Returns all the packages for a specific platform in this environment.
 
         Examples
         --------
         ```python
-        >>> from rattler import Platform, LockFile
+        >>> from rattler import LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
-        >>> env.packages(Platform("osx-arm64"))[0]
+        >>> platform = env.platforms()[0]
+        >>> env.packages(platform)[0]
         CondaLockedBinaryPackage(name='tzdata',location='https://conda.anaconda.org/conda-forge/noarch/tzdata-2024a-h0c530f3_0.conda')
         >>>
         ```
@@ -86,7 +92,7 @@ class Environment:
             return [LockedPackage._from_py_locked_package(p) for p in packages]
         return None
 
-    def packages_by_platform(self) -> Dict[Platform, List[LockedPackage]]:
+    def packages_by_platform(self) -> Dict[LockPlatform, List[LockedPackage]]:
         """
         Returns a list of all packages and platforms defined for this environment.
 
@@ -98,41 +104,47 @@ class Environment:
         >>> env = lock_file.default_environment()
         >>> pkgs = env.packages_by_platform()
         >>> list(pkgs.keys())
-        [Platform(...)]
+        [LockPlatform(...)]
         >>>
         ```
         """
+        from rattler.lock.platform import LockPlatform
+
         return {
-            Platform._from_py_platform(platform): [LockedPackage._from_py_locked_package(p) for p in packages]
+            LockPlatform._from_py_lock_platform(platform): [LockedPackage._from_py_locked_package(p) for p in packages]
             for (platform, packages) in self._env.packages_by_platform()
         }
 
     def pypi_packages(
         self,
-    ) -> Dict[Platform, List[PypiLockedPackage]]:
+    ) -> Dict[str, List[PypiLockedPackage]]:
         """
         Returns all pypi packages for all platforms.
+
+        The keys are platform names (e.g., "linux-64", "osx-arm64").
 
         Examples
         --------
         ```python
-        >>> from rattler import LockFile, Platform
+        >>> from rattler import LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> pypi_packages[Platform("osx-arm64")][0]
+        >>> pypi_packages["osx-arm64"][0]
         PypiLockedPackage(name='charset-normalizer',location='https://files.pythonhosted.org/packages/3a/52/9f9d17c3b54dc238de384c4cb5a2ef0e27985b42a0e5cc8e8a31d918d48d/charset_normalizer-3.3.2-cp312-cp312-macosx_11_0_arm64.whl#sha256=55086ee1064215781fff39a1af09518bc9255b50d6333f2e4c74ca09fac6a8f6')
         >>>
         ```
         """
         return {
-            Platform._from_py_platform(platform): [PypiLockedPackage._from_py_locked_package(pypi) for pypi in pypi_tup]
-            for (platform, pypi_tup) in self._env.pypi_packages().items()
+            platform_name: [PypiLockedPackage._from_py_locked_package(pypi) for pypi in pypi_tup]
+            for (platform_name, pypi_tup) in self._env.pypi_packages().items()
         }
 
-    def conda_repodata_records(self) -> Dict[Platform, List[RepoDataRecord]]:
+    def conda_repodata_records(self) -> Dict[str, List[RepoDataRecord]]:
         """
         Returns all conda packages for all platforms.
+
+        The keys are platform names (e.g., "linux-64", "osx-arm64").
 
         Examples
         --------
@@ -146,11 +158,11 @@ class Environment:
         ```
         """
         return {
-            platform.name: [RepoDataRecord._from_py_record(r) for r in records]
-            for (platform, records) in self._env.conda_repodata_records().items()
+            platform_name: [RepoDataRecord._from_py_record(r) for r in records]
+            for (platform_name, records) in self._env.conda_repodata_records().items()
         }
 
-    def conda_repodata_records_for_platform(self, platform: Platform) -> Optional[List[RepoDataRecord]]:
+    def conda_repodata_records_for_platform(self, platform: LockPlatform) -> Optional[List[RepoDataRecord]]:
         """
         Takes all the conda packages, converts them to [`RepoDataRecord`] and returns them or
         returns an error if the conversion failed. Returns `None` if the specified platform is not
@@ -159,10 +171,11 @@ class Environment:
         Examples
         --------
         ```python
-        >>> from rattler import LockFile, Platform
+        >>> from rattler import LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
-        >>> rdr = env.conda_repodata_records_for_platform(Platform("osx-arm64"))
+        >>> platform = env.platforms()[0]
+        >>> rdr = env.conda_repodata_records_for_platform(platform)
         >>> rdr
         [...]
         >>> rdr[0]
@@ -174,7 +187,7 @@ class Environment:
             return [RepoDataRecord._from_py_record(r) for r in records]
         return None
 
-    def pypi_packages_for_platform(self, platform: Platform) -> Optional[List[PypiLockedPackage]]:
+    def pypi_packages_for_platform(self, platform: LockPlatform) -> Optional[List[PypiLockedPackage]]:
         """
         Returns all the pypi packages and their associated environment data for the specified
         platform. Returns `None` if the platform is not defined for this environment.
@@ -182,10 +195,11 @@ class Environment:
         Examples
         --------
         ```python
-        >>> from rattler import LockFile, Platform
+        >>> from rattler import LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
-        >>> osx_pypi_pkgs = env.pypi_packages_for_platform(Platform("osx-arm64"))
+        >>> platform = env.platforms()[0]
+        >>> osx_pypi_pkgs = env.pypi_packages_for_platform(platform)
         >>> osx_pypi_pkgs
         [...]
         >>> osx_pypi_pkgs[0]
