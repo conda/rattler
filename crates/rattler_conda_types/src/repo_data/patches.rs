@@ -69,7 +69,7 @@ pub struct PackageRecordPatch {
     /// Track features are nowadays only used to downweight packages (ie. give
     /// them less priority). To that effect, the number of track features is
     /// counted (number of commas) and the package is downweighted
-    /// by the number of track_features.
+    /// by the number of `track_features`.
     ///
     /// This field is double wrapped to be able to express the value `null`
     /// separate from it being missing from the JSON.
