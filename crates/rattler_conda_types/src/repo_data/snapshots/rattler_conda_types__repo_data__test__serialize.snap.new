@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/repo_data/mod.rs
+assertion_line: 629
 expression: repodata
 ---
 info: ~

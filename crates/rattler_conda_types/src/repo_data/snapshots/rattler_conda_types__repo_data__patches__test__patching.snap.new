@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/repo_data/patches.rs
+assertion_line: 341
 expression: repodata
 ---
 info:
@@ -8,19 +9,17 @@ packages:
   cross-python_emscripten-32-3.10.1-h60d57d3_8.tar.bz2:
     build: h60d57d3_8
     build_number: 8
+    constrains:
+      - curl >5.0
     depends:
       - coreutils
       - crossenv >=1.2
       - emscripten_emscripten-32
       - pip
-      - python 3.10.*
-      - rsync
-      - sed
-      - setuptools
+      - wolfssl 12.0
+    license: WOLF LICENSE
     md5: 07b8bdf69566cd63e6e49759033830ad
     name: cross-python_emscripten-32
-    purls:
-      - "pkg:pypi/cross-python@3.10.1"
     sha256: 50064d294599734090b9a33a2194a94f5d3743325d5bae61fab3fa5151acf0f9
     size: 7069
     subdir: linux-64
@@ -42,19 +41,17 @@ packages.conda:
   cross-python_emscripten-32-3.10.1-h60d57d3_8.conda:
     build: h60d57d3_8
     build_number: 8
+    constrains:
+      - curl >5.0
     depends:
       - coreutils
       - crossenv >=1.2
       - emscripten_emscripten-32
       - pip
-      - python 3.10.*
-      - rsync
-      - sed
-      - setuptools
+      - wolfssl 12.0
+    license: WOLF LICENSE
     md5: 07b8bdf69566cd63e6e49759033830ad
     name: cross-python_emscripten-32
-    purls:
-      - "pkg:pypi/cross-python@3.10.1"
     sha256: 12064d294599734090b9a33a2194a94f5d3743325d5bae61fab3fa5151acf0f9
     size: 7069
     subdir: linux-64
@@ -72,6 +69,7 @@ packages.conda:
       - rsync
       - sed
       - setuptools
+    license: WOLF LICENSE II
     md5: 07b8bdf69566cd63e6e49759033830ad
     name: cross-python_emscripten-32
     sha256: 12064d294599734090b9a33a2194a94f5d3743325d5bae61fab3fa5151acf0f9
