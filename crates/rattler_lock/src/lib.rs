@@ -800,6 +800,7 @@ mod test {
                 subdir: rattler_conda_types::Platform::Linux64,
                 virtual_packages: Vec::new(),
             }])
+            .unwrap()
             .with_conda_package(
                 DEFAULT_ENVIRONMENT_NAME,
                 "linux-64",
