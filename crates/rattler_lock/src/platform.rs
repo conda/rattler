@@ -192,13 +192,14 @@ impl<'lock> Iterator for PlatformIterator<'lock> {
     type Item = Platform<'lock>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let current = self.current_index_pos.saturating_add(1);
-        self.current_index_pos = current;
+        let current = self.current_index_pos;
+        self.current_index_pos = current.saturating_add(1);
         self.indices.get(current).copied()
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.indices.len(), Some(self.indices.len()))
+        let remaining = self.indices.len().saturating_sub(self.current_index_pos);
+        (remaining, Some(remaining))
     }
 }
 
