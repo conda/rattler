@@ -1,7 +1,7 @@
 //! Functions to extracting or stream a Conda package from a file on disk.
 
 use crate::{ExtractError, ExtractResult};
-use rattler_conda_types::package::{ArchiveType, CondaArchiveType, DistArchiveType};
+use rattler_conda_types::package::CondaArchiveType;
 use std::path::Path;
 
 /// Extracts the contents a `.tar.bz2` package archive at the specified path to a directory.
@@ -81,9 +81,8 @@ pub async fn extract_conda(
 /// # }
 /// ```
 pub async fn extract(archive: &Path, destination: &Path) -> Result<ExtractResult, ExtractError> {
-    match ArchiveType::try_from(archive).ok_or(ExtractError::UnsupportedArchiveType)? {
-        ArchiveType::Conda(CondaArchiveType::TarBz2) => extract_tar_bz2(archive, destination).await,
-        ArchiveType::Conda(CondaArchiveType::Conda) => extract_conda(archive, destination).await,
-        ArchiveType::Dist(DistArchiveType::Whl) => Err(ExtractError::UnsupportedArchiveType),
+    match CondaArchiveType::try_from(archive).ok_or(ExtractError::UnsupportedArchiveType)? {
+        CondaArchiveType::TarBz2 => extract_tar_bz2(archive, destination).await,
+        CondaArchiveType::Conda => extract_conda(archive, destination).await,
     }
 }

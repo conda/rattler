@@ -19,7 +19,7 @@ use fs_err::tokio as tokio_fs;
 use futures::TryFutureExt;
 use itertools::Itertools;
 use parking_lot::Mutex;
-use rattler_conda_types::package::ArchiveIdentifier;
+use rattler_conda_types::package::CondaArchiveIdentifier;
 use rattler_digest::Sha256Hash;
 use rattler_networking::{
     retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy},
@@ -424,7 +424,9 @@ impl PackageCache {
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheMetadata, PackageCacheError> {
         let path_buf = path.to_path_buf();
-        let mut cache_key: CacheKey = ArchiveIdentifier::try_from_path(&path_buf).unwrap().into();
+        let mut cache_key: CacheKey = CondaArchiveIdentifier::try_from_path(&path_buf)
+            .unwrap()
+            .into();
         if self.cache_origin {
             cache_key = cache_key.with_path(path);
         }
@@ -825,7 +827,7 @@ mod test {
     };
     use bytes::Bytes;
     use futures::stream;
-    use rattler_conda_types::package::{ArchiveIdentifier, PackageFile, PathsJson};
+    use rattler_conda_types::package::{CondaArchiveIdentifier, PackageFile, PathsJson};
     use rattler_digest::{compute_bytes_digest, parse_digest_from_hex, Sha256};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use reqwest::Client;
@@ -869,7 +871,7 @@ mod test {
         // Get the package to the cache
         let cache_metadata = cache
             .get_or_fetch(
-                ArchiveIdentifier::try_from_path(&tar_archive_path).unwrap(),
+                CondaArchiveIdentifier::try_from_path(&tar_archive_path).unwrap(),
                 move |destination| {
                     let tar_archive_path = tar_archive_path.clone();
                     async move {
@@ -1010,7 +1012,7 @@ mod test {
         // Do the first request without
         let result = cache
             .get_or_fetch_from_url_with_retry(
-                ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
+                CondaArchiveIdentifier::try_from_filename(archive_name).unwrap(),
                 server_url.join(archive_name).unwrap(),
                 client.clone().into(),
                 DoNotRetryPolicy,
@@ -1033,7 +1035,7 @@ mod test {
         // The second one should fail after the 2nd try
         let result = cache
             .get_or_fetch_from_url_with_retry(
-                ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
+                CondaArchiveIdentifier::try_from_filename(archive_name).unwrap(),
                 server_url.join(archive_name).unwrap(),
                 client.into(),
                 retry_policy,
@@ -1146,7 +1148,7 @@ mod test {
         let cache = PackageCache::new(packages_dir.path());
 
         // Set the sha256 of the package
-        let key: CacheKey = ArchiveIdentifier::try_from_path(&tar_archive_path)
+        let key: CacheKey = CondaArchiveIdentifier::try_from_path(&tar_archive_path)
             .unwrap()
             .into();
         let key = key.with_sha256(
@@ -1270,7 +1272,7 @@ mod test {
                     .await
                     .unwrap();
 
-            let key: CacheKey = ArchiveIdentifier::try_from_path(&tar_archive_path)
+            let key: CacheKey = CondaArchiveIdentifier::try_from_path(&tar_archive_path)
                 .unwrap()
                 .into();
             let key =
@@ -1330,7 +1332,7 @@ mod test {
         )
         .await;
 
-        let cache_key = CacheKey::from(ArchiveIdentifier::try_from_url(&url).unwrap());
+        let cache_key = CacheKey::from(CondaArchiveIdentifier::try_from_url(&url).unwrap());
         let cache_key = cache_key.with_sha256(parse_digest_from_hex::<Sha256>(&sha).unwrap());
 
         let should_run = Arc::new(AtomicBool::new(false));
@@ -1372,7 +1374,7 @@ mod test {
         )
         .await;
 
-        let cache_key = CacheKey::from(ArchiveIdentifier::try_from_url(&url).unwrap());
+        let cache_key = CacheKey::from(CondaArchiveIdentifier::try_from_url(&url).unwrap());
         let cache_key = cache_key.with_sha256(parse_digest_from_hex::<Sha256>(&sha).unwrap());
 
         let should_run = Arc::new(AtomicBool::new(false));
@@ -1422,7 +1424,7 @@ mod test {
         let other_sha =
             "c172acdf9cb7655dd224879b30361a657b09bb084b65f151e36a2b51e51a080a".to_string();
 
-        let cache_key = CacheKey::from(ArchiveIdentifier::try_from_url(&other_url).unwrap());
+        let cache_key = CacheKey::from(CondaArchiveIdentifier::try_from_url(&other_url).unwrap());
         let cache_key = cache_key.with_sha256(parse_digest_from_hex::<Sha256>(&other_sha).unwrap());
 
         let should_run = Arc::new(AtomicBool::new(false));

@@ -3,8 +3,8 @@
 
 use crate::read::{stream_tar_bz2, stream_tar_zst};
 use crate::ExtractError;
+use rattler_conda_types::package::CondaArchiveType;
 use rattler_conda_types::package::PackageFile;
-use rattler_conda_types::package::{ArchiveType, CondaArchiveType, DistArchiveType};
 use std::fs::File;
 use std::io::Write;
 use std::{
@@ -88,21 +88,20 @@ fn get_file_from_archive(
 /// Read a package file content from archive based on the path
 pub fn read_package_file_content<'a>(
     file: impl Read + Seek + 'a,
-    archive_type: ArchiveType,
+    archive_type: CondaArchiveType,
     package_path: impl AsRef<Path>,
 ) -> Result<Vec<u8>, ExtractError> {
     match archive_type {
-        ArchiveType::Conda(CondaArchiveType::TarBz2) => {
+        CondaArchiveType::TarBz2 => {
             let mut archive = stream_tar_bz2(file);
             let buf = get_file_from_archive(&mut archive, package_path.as_ref())?;
             Ok(buf)
         }
-        ArchiveType::Conda(CondaArchiveType::Conda) => {
+        CondaArchiveType::Conda => {
             let mut info_archive = stream_conda_info(file).unwrap();
             let buf = get_file_from_archive(&mut info_archive, package_path.as_ref())?;
             Ok(buf)
         }
-        ArchiveType::Dist(DistArchiveType::Whl) => Err(ExtractError::UnsupportedArchiveType),
     }
 }
 
@@ -124,7 +123,7 @@ pub fn read_package_file<P: PackageFile>(path: impl AsRef<Path>) -> Result<P, Ex
     let file = File::open(&path)?;
     let content = read_package_file_content(
         &file,
-        ArchiveType::try_from(&path).ok_or(ExtractError::UnsupportedArchiveType)?,
+        CondaArchiveType::try_from(&path).ok_or(ExtractError::UnsupportedArchiveType)?,
         P::package_path(),
     )?;
 
@@ -140,7 +139,7 @@ pub fn extract_package_file<'a, P: PackageFile>(
 ) -> Result<(), ExtractError> {
     let content = read_package_file_content(
         reader,
-        ArchiveType::try_from(location).ok_or(ExtractError::UnsupportedArchiveType)?,
+        CondaArchiveType::try_from(location).ok_or(ExtractError::UnsupportedArchiveType)?,
         P::package_path(),
     )?;
 

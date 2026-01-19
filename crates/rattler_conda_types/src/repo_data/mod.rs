@@ -56,10 +56,10 @@ pub struct RepoData {
     /// The wheel packages contained in the repodata.json file
     #[serde(
         default,
-        rename = "packages.whl",
+        rename = "experimental_packages.whl",
         serialize_with = "sort_index_map_alphabetically"
     )]
-    pub whl_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
+    pub experimental_whl_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
 
     /// removed packages (files are still accessible, but they are not
     /// installable like regular packages)
@@ -620,7 +620,7 @@ mod test {
             info: None,
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
-            whl_packages: IndexMap::default(),
+            experimental_whl_packages: IndexMap::default(),
             removed: ["xyz", "foo", "bar", "baz", "qux", "aux", "quux"]
                 .iter()
                 .map(|s| (*s).to_string())
@@ -853,7 +853,7 @@ mod test {
             info: None,
             packages,
             conda_packages,
-            whl_packages: IndexMap::default(),
+            experimental_whl_packages: IndexMap::default(),
             removed: ahash::HashSet::default(),
         };
 

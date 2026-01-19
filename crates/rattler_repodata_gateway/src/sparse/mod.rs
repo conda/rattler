@@ -15,9 +15,8 @@ use bytes::Bytes;
 use fs_err as fs;
 use itertools::Itertools;
 use rattler_conda_types::{
-    compute_package_url,
-    package::{ArchiveType, CondaArchiveType},
-    Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord,
+    compute_package_url, package::CondaArchiveType, Channel, ChannelInfo, MatchSpec, Matches,
+    PackageName, PackageRecord, RepoDataRecord,
 };
 use rattler_redaction::Redact;
 use serde::{
@@ -230,13 +229,13 @@ impl SparseRepoData {
                 let tar_bz2_packages = repo_data.packages.iter().map(|(filename, _)| {
                     filename
                         .filename
-                        .strip_suffix(ArchiveType::Conda(CondaArchiveType::TarBz2).extension())
+                        .strip_suffix(CondaArchiveType::TarBz2.extension())
                         .unwrap_or(filename.filename)
                 });
                 let conda_packages = repo_data.conda_packages.iter().map(|(filename, _)| {
                     filename
                         .filename
-                        .strip_suffix(ArchiveType::Conda(CondaArchiveType::Conda).extension())
+                        .strip_suffix(CondaArchiveType::Conda.extension())
                         .unwrap_or(filename.filename)
                 });
                 conda_packages.merge(tar_bz2_packages).dedup().count()
@@ -442,7 +441,7 @@ fn find_package_in_slice<'a, 'i: 'a>(
 /// iterator that also includes the filename without an extension.
 fn add_stripped_filename<'i>(
     slice: impl Iterator<Item = (PackageFilename<'i>, &'i RawValue)>,
-    ext: ArchiveType,
+    ext: CondaArchiveType,
 ) -> impl Iterator<Item = (PackageFilename<'i>, &'i RawValue, &'i str)> {
     slice.map(move |(filename, raw_json)| {
         (
@@ -473,11 +472,11 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
         PackageFormatSelection::PreferConda => {
             let tar_bz2_packages = add_stripped_filename(
                 find_package_in_slice(tar_bz2_packages, package_name),
-                ArchiveType::Conda(CondaArchiveType::TarBz2),
+                CondaArchiveType::TarBz2,
             );
             let conda_packages = add_stripped_filename(
                 find_package_in_slice(conda_packages, package_name),
-                ArchiveType::Conda(CondaArchiveType::Conda),
+                CondaArchiveType::Conda,
             );
             let deduplicated_packages = conda_packages
                 // Merge the conda and tar.bz2 packages together based on their filename without

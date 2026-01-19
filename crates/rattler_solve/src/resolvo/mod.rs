@@ -13,7 +13,7 @@ use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
-    package::{ArchiveType, CondaArchiveType},
+    package::{CondaArchiveType, DistArchiveType},
     utils::TimestampMs,
     GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageNameMatcher,
     ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, SolverResult,
@@ -338,7 +338,7 @@ impl<'a> CondaDependencyProvider<'a> {
             // records. This guarantees that the order of records remains the same over
             // runs.
             let mut ordered_repodata = Vec::with_capacity(repo_data.records.len());
-            let mut package_to_type: HashMap<&str, (ArchiveType, usize, bool)> =
+            let mut package_to_type: HashMap<&str, (DistArchiveType, usize, bool)> =
                 HashMap::with_capacity(repo_data.records.len());
 
             for record in repo_data.records {
@@ -359,10 +359,10 @@ impl<'a> CondaDependencyProvider<'a> {
 
                 let excluded = excluded_by_newer || excluded_by_age;
 
-                let (file_name, archive_type) = ArchiveType::split_str(&record.file_name)
+                let (file_name, archive_type) = DistArchiveType::split_str(&record.file_name)
                     .unwrap_or((
                         &record.file_name,
-                        ArchiveType::Conda(CondaArchiveType::TarBz2),
+                        DistArchiveType::Conda(CondaArchiveType::TarBz2),
                     ));
                 match package_to_type.get_mut(file_name) {
                     None => {

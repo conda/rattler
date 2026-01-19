@@ -819,9 +819,7 @@ mod tests {
         assert_eq!(
             config.build.package_format,
             Some(PackageFormatAndCompression {
-                archive_type: rattler_conda_types::package::ArchiveType::Conda(
-                    rattler_conda_types::package::CondaArchiveType::TarBz2
-                ),
+                archive_type: rattler_conda_types::package::CondaArchiveType::TarBz2,
                 compression_level:
                     rattler_conda_types::compression_level::CompressionLevel::Numeric(3)
             })

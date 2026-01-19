@@ -31,8 +31,8 @@ use opendal::services::S3Config;
 use opendal::{services::FsConfig, Configurator, Operator};
 use rattler_conda_types::{
     package::{
-        ArchiveIdentifier, ArchiveType, CondaArchiveType, DistArchiveType, IndexJson, PackageFile,
-        RunExportsJson,
+        CondaArchiveIdentifier, CondaArchiveType, DistArchiveType, IndexJson, PackageFile,
+        RunExportsJson, WheelArchiveType,
     },
     ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
     ShardedSubdirInfo,
@@ -281,11 +281,13 @@ pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result
 /// Returns the parsed `PackageRecord`.
 fn parse_package_buffer(buffer: opendal::Buffer, filename: &str) -> std::io::Result<PackageRecord> {
     let reader = buffer.reader();
-    let archive_type = ArchiveType::try_from(filename).unwrap();
+    let archive_type = DistArchiveType::try_from(filename).unwrap();
     match archive_type {
-        ArchiveType::Conda(CondaArchiveType::TarBz2) => package_record_from_tar_bz2_reader(reader),
-        ArchiveType::Conda(CondaArchiveType::Conda) => package_record_from_conda_reader(reader),
-        ArchiveType::Dist(DistArchiveType::Whl) => Err(std::io::Error::other(
+        DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
+            package_record_from_tar_bz2_reader(reader)
+        }
+        DistArchiveType::Conda(CondaArchiveType::Conda) => package_record_from_conda_reader(reader),
+        DistArchiveType::Wheel(WheelArchiveType::Whl) => Err(std::io::Error::other(
             "Package type \".whl\" not yet supported.",
         )),
     }
@@ -657,7 +659,7 @@ async fn index_subdir_inner(
             if entry.metadata().mode().is_file() {
                 let filename = entry.name().to_string();
                 // Check if the file is an archive package file.
-                ArchiveType::try_from(&filename).map(|_| filename)
+                DistArchiveType::try_from(&filename).map(|_| filename)
             } else {
                 None
             }
@@ -783,11 +785,11 @@ async fn index_subdir_inner(
     let mut conda_packages: IndexMap<String, PackageRecord, ahash::RandomState> =
         IndexMap::default();
     for (filename, package) in registered_packages {
-        match ArchiveType::try_from(&filename) {
-            Some(ArchiveType::Conda(CondaArchiveType::TarBz2)) => {
+        match DistArchiveType::try_from(&filename) {
+            Some(DistArchiveType::Conda(CondaArchiveType::TarBz2)) => {
                 packages.insert(filename, package);
             }
-            Some(ArchiveType::Conda(CondaArchiveType::Conda)) => {
+            Some(DistArchiveType::Conda(CondaArchiveType::Conda)) => {
                 conda_packages.insert(filename, package);
             }
             _ => panic!("Unknown archive type"),
@@ -802,7 +804,7 @@ async fn index_subdir_inner(
         }),
         packages,
         conda_packages,
-        whl_packages: IndexMap::default(),
+        experimental_whl_packages: IndexMap::default(),
         removed: HashSet::default(),
         version: Some(2),
     };
@@ -915,7 +917,7 @@ pub async fn write_repodata(
             shard.packages.insert(k, package_record);
         }
         for package in repodata.removed {
-            let package_name = ArchiveIdentifier::try_from_filename(package.as_str())
+            let package_name = CondaArchiveIdentifier::try_from_filename(package.as_str())
                 .ok_or_else(|| {
                     RepodataError::Other(anyhow::anyhow!(
                         "Could not determine archive identifier for {package}" // <--- NEW
@@ -1204,11 +1206,11 @@ pub async fn index(
     }
 
     let repodata_patch = if let Some(path) = repodata_patch {
-        match ArchiveType::try_from(path.clone()) {
-            Some(ArchiveType::Conda(CondaArchiveType::Conda)) => {}
+        match DistArchiveType::try_from(path.clone()) {
+            Some(DistArchiveType::Conda(CondaArchiveType::Conda)) => {}
             Some(
-                ArchiveType::Conda(CondaArchiveType::TarBz2)
-                | ArchiveType::Dist(DistArchiveType::Whl),
+                DistArchiveType::Conda(CondaArchiveType::TarBz2)
+                | DistArchiveType::Wheel(WheelArchiveType::Whl),
             )
             | None => {
                 return Err(anyhow::anyhow!(
@@ -1297,7 +1299,7 @@ pub async fn ensure_channel_initialized(op: &Operator) -> anyhow::Result<()> {
         }),
         packages: IndexMap::default(),
         conda_packages: IndexMap::default(),
-        whl_packages: IndexMap::default(),
+        experimental_whl_packages: IndexMap::default(),
         removed: HashSet::default(),
         version: Some(2),
     };

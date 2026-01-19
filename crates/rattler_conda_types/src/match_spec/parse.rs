@@ -24,7 +24,7 @@ use crate::match_spec::condition::parse_condition;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
     match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError},
-    package::ArchiveIdentifier,
+    package::CondaArchiveIdentifier,
     utils::{path::is_absolute_path, url::parse_scheme},
     version_spec::{
         is_start_of_version_constraint,
@@ -718,7 +718,7 @@ pub(crate) fn matchspec_parser(
     // 4. Parse as url
     if nameless_match_spec.url.is_none() {
         if let Some(url) = parse_url_like(&input)? {
-            let archive = ArchiveIdentifier::try_from_url(&url);
+            let archive = CondaArchiveIdentifier::try_from_url(&url);
             let name = archive.and_then(|a| PackageNameMatcher::from_str(&a.name).ok());
 
             // TODO: This should also work without a proper name from the url filename
