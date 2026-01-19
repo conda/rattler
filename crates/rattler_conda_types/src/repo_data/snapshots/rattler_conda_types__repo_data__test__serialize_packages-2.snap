@@ -443,6 +443,6 @@ expression: json
       "version": "2.1"
     }
   },
-  "experimental_packages.whl": {},
+  "packages.whl": {},
   "repodata_version": 2
 }

@@ -56,7 +56,7 @@ pub struct RepoData {
     /// The wheel packages contained in the repodata.json file
     #[serde(
         default,
-        rename = "experimental_packages.whl",
+        rename = "packages.whl",
         serialize_with = "sort_index_map_alphabetically"
     )]
     pub experimental_whl_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
