@@ -1,4 +1,4 @@
-use rattler_conda_types::package::ArchiveIdentifier;
+use rattler_conda_types::package::CondaArchiveIdentifier;
 use rattler_conda_types::PackageRecord;
 use rattler_digest::{compute_bytes_digest, compute_url_digest, Md5Hash, Sha256, Sha256Hash};
 use std::{
@@ -70,8 +70,8 @@ impl CacheKey {
     }
 }
 
-impl From<ArchiveIdentifier> for CacheKey {
-    fn from(pkg: ArchiveIdentifier) -> Self {
+impl From<CondaArchiveIdentifier> for CacheKey {
+    fn from(pkg: CondaArchiveIdentifier) -> Self {
         CacheKey {
             name: pkg.name,
             version: pkg.version,

@@ -3,8 +3,7 @@ use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{
-    package::{ArchiveType, CondaArchiveType},
-    NoArchType, PackageRecord, RepoDataRecord, Version,
+    package::CondaArchiveType, NoArchType, PackageRecord, RepoDataRecord, Version,
 };
 use url::Url;
 
@@ -13,12 +12,12 @@ use super::super::{dummy_md5_hash, dummy_sha256_hash};
 #[derive(Clone)]
 pub struct PackageBuilder {
     record: RepoDataRecord,
-    archive_type: ArchiveType,
+    archive_type: CondaArchiveType,
 }
 
 impl PackageBuilder {
     pub fn new(name: &str) -> Self {
-        let archive_type = ArchiveType::Conda(CondaArchiveType::Conda);
+        let archive_type = CondaArchiveType::Conda;
         Self {
             record: RepoDataRecord {
                 url: Url::from_str("http://example.com").unwrap(),
@@ -97,7 +96,7 @@ impl PackageBuilder {
     }
 
     /// Sets the archive type (defaults to `.conda`).
-    pub fn archive_type(mut self, archive_type: ArchiveType) -> Self {
+    pub fn archive_type(mut self, archive_type: CondaArchiveType) -> Self {
         self.archive_type = archive_type;
         self.update_filename();
         self

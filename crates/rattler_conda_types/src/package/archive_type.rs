@@ -41,6 +41,12 @@ impl CondaArchiveType {
         }
     }
 
+    /// Tries to determine the type of conda archive from its filename.
+    pub fn try_from(path: impl AsRef<Path>) -> Option<CondaArchiveType> {
+        Self::split_str(path.as_ref().to_string_lossy().as_ref())
+            .map(|(_, archive_type)| archive_type)
+    }
+
     /// Split the given string into its filename and archive type, removing the extension.
     /// Only recognizes conda package extensions.
     #[allow(clippy::manual_map)]
@@ -55,50 +61,20 @@ impl CondaArchiveType {
     }
 }
 
-/// Describes the type of a non-conda distributable package archive.
+/// Describes any type of distributable package archive (conda packages or wheels).
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(untagged)]
 pub enum DistArchiveType {
+    /// A conda package archive (`.tar.bz2` or `.conda`)
+    Conda(CondaArchiveType),
+
     /// A Python wheel package (`.whl`)
-    Whl,
+    Wheel(WheelArchiveType),
 }
 
 impl DistArchiveType {
-    /// Returns the file extension for this archive type.
-    pub fn extension(self) -> &'static str {
-        match self {
-            DistArchiveType::Whl => ".whl",
-        }
-    }
-
-    /// Split the given string into its filename and archive type, removing the extension.
-    /// Only recognizes distribution package extensions.
-    #[allow(clippy::manual_map)]
-    pub fn split_str(path: &str) -> Option<(&str, DistArchiveType)> {
-        if let Some(path) = path.strip_suffix(".whl") {
-            Some((path, DistArchiveType::Whl))
-        } else {
-            None
-        }
-    }
-}
-
-/// Describes any type of distributable package archive (conda packages or wheels).
-#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", untagged)]
-pub enum ArchiveType {
-    /// A conda package archive (`.tar.bz2` or `.conda`)
-    #[serde(rename_all = "snake_case")]
-    Conda(CondaArchiveType),
-
-    /// A distribution package archive (`.whl`, etc.)
-    #[serde(rename_all = "snake_case")]
-    Dist(DistArchiveType),
-}
-
-impl ArchiveType {
     /// Tries to determine the type of archive from its filename.
-    pub fn try_from(path: impl AsRef<Path>) -> Option<ArchiveType> {
+    pub fn try_from(path: impl AsRef<Path>) -> Option<DistArchiveType> {
         Self::split_str(path.as_ref().to_string_lossy().as_ref())
             .map(|(_, archive_type)| archive_type)
     }
@@ -106,18 +82,58 @@ impl ArchiveType {
     /// Returns the file extension for this archive type.
     pub fn extension(self) -> &'static str {
         match self {
-            ArchiveType::Conda(conda_type) => conda_type.extension(),
-            ArchiveType::Dist(dist_type) => dist_type.extension(),
+            DistArchiveType::Conda(conda_type) => conda_type.extension(),
+            DistArchiveType::Wheel(wheel_type) => wheel_type.extension(),
         }
     }
 
     /// Split the given string into its filename and archive type, removing the extension.
     #[allow(clippy::manual_map)]
-    pub fn split_str(path: &str) -> Option<(&str, ArchiveType)> {
+    pub fn split_str(path: &str) -> Option<(&str, DistArchiveType)> {
         if let Some((path, conda_type)) = CondaArchiveType::split_str(path) {
-            Some((path, ArchiveType::Conda(conda_type)))
-        } else if let Some((path, dist_type)) = DistArchiveType::split_str(path) {
-            Some((path, ArchiveType::Dist(dist_type)))
+            Some((path, DistArchiveType::Conda(conda_type)))
+        } else if let Some((path, wheel_type)) = WheelArchiveType::split_str(path) {
+            Some((path, DistArchiveType::Wheel(wheel_type)))
+        } else {
+            None
+        }
+    }
+}
+
+impl From<CondaArchiveType> for DistArchiveType {
+    fn from(conda_type: CondaArchiveType) -> Self {
+        DistArchiveType::Conda(conda_type)
+    }
+}
+
+impl From<WheelArchiveType> for DistArchiveType {
+    fn from(wheel_type: WheelArchiveType) -> Self {
+        DistArchiveType::Wheel(wheel_type)
+    }
+}
+
+/// Describes the type of a wheel package archive.
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WheelArchiveType {
+    /// A Python wheel package (`.whl`)
+    Whl,
+}
+
+impl WheelArchiveType {
+    /// Returns the file extension for this archive type.
+    pub fn extension(self) -> &'static str {
+        match self {
+            WheelArchiveType::Whl => ".whl",
+        }
+    }
+
+    /// Split the given string into its filename and archive type, removing the extension.
+    /// Only recognizes wheel package extensions.
+    #[allow(clippy::manual_map)]
+    pub fn split_str(path: &str) -> Option<(&str, WheelArchiveType)> {
+        if let Some(path) = path.strip_suffix(".whl") {
+            Some((path, WheelArchiveType::Whl))
         } else {
             None
         }
@@ -142,30 +158,30 @@ mod test {
     }
 
     #[test]
-    fn test_dist_archive_type() {
+    fn test_wheel_archive_type() {
         assert_eq!(
-            DistArchiveType::split_str("my-package.whl"),
-            Some(("my-package", DistArchiveType::Whl))
+            WheelArchiveType::split_str("my-package.whl"),
+            Some(("my-package", WheelArchiveType::Whl))
         );
-        assert_eq!(DistArchiveType::split_str("my-package.conda"), None);
-        assert_eq!(DistArchiveType::split_str("my-package.tar.bz2"), None);
+        assert_eq!(WheelArchiveType::split_str("my-package.conda"), None);
+        assert_eq!(WheelArchiveType::split_str("my-package.tar.bz2"), None);
     }
 
     #[test]
     fn test_try_from() {
         assert_eq!(
-            ArchiveType::Conda(CondaArchiveType::Conda),
-            ArchiveType::try_from("my-package.conda").unwrap()
+            DistArchiveType::Conda(CondaArchiveType::Conda),
+            DistArchiveType::try_from("my-package.conda").unwrap()
         );
         assert_eq!(
-            ArchiveType::Conda(CondaArchiveType::TarBz2),
-            ArchiveType::try_from("my-package.tar.bz2").unwrap()
+            DistArchiveType::Conda(CondaArchiveType::TarBz2),
+            DistArchiveType::try_from("my-package.tar.bz2").unwrap()
         );
         assert_eq!(
-            ArchiveType::Dist(DistArchiveType::Whl),
-            ArchiveType::try_from("my-package.whl").unwrap()
+            DistArchiveType::Wheel(WheelArchiveType::Whl),
+            DistArchiveType::try_from("my-package.whl").unwrap()
         );
-        assert_eq!(None, ArchiveType::try_from("my-package.zip"));
+        assert_eq!(None, DistArchiveType::try_from("my-package.zip"));
     }
 
     #[test]
@@ -186,47 +202,66 @@ mod test {
     }
 
     #[test]
-    fn test_is_conda() {
-        assert!(matches!(
-            ArchiveType::Conda(CondaArchiveType::Conda),
-            ArchiveType::Conda(_)
-        ));
-        assert!(matches!(
-            ArchiveType::Conda(CondaArchiveType::TarBz2),
-            ArchiveType::Conda(_)
-        ));
-        assert!(!matches!(
-            ArchiveType::Dist(DistArchiveType::Whl),
-            ArchiveType::Conda(_)
-        ));
-    }
-
-    #[test]
-    fn test_is_wheel() {
-        assert!(!matches!(
-            ArchiveType::Conda(CondaArchiveType::Conda),
-            ArchiveType::Dist(DistArchiveType::Whl)
-        ));
-        assert!(!matches!(
-            ArchiveType::Conda(CondaArchiveType::TarBz2),
-            ArchiveType::Dist(DistArchiveType::Whl)
-        ));
-        assert!(matches!(
-            ArchiveType::Dist(DistArchiveType::Whl),
-            ArchiveType::Dist(DistArchiveType::Whl)
-        ));
-    }
-
-    #[test]
     fn test_extension() {
         assert_eq!(
-            ArchiveType::Conda(CondaArchiveType::Conda).extension(),
+            DistArchiveType::Conda(CondaArchiveType::Conda).extension(),
             ".conda"
         );
         assert_eq!(
-            ArchiveType::Conda(CondaArchiveType::TarBz2).extension(),
+            DistArchiveType::Conda(CondaArchiveType::TarBz2).extension(),
             ".tar.bz2"
         );
-        assert_eq!(ArchiveType::Dist(DistArchiveType::Whl).extension(), ".whl");
+        assert_eq!(
+            DistArchiveType::Wheel(WheelArchiveType::Whl).extension(),
+            ".whl"
+        );
+    }
+
+    #[test]
+    fn test_serialization() {
+        // Test that DistArchiveType serializes using the inner type's serialization
+        // (i.e., "tar_bz2", "conda", "whl" rather than {"Conda": "tar_bz2"}, etc.)
+
+        // CondaArchiveType variants
+        let conda = DistArchiveType::Conda(CondaArchiveType::Conda);
+        let conda_json = serde_json::to_string(&conda).unwrap();
+        assert_eq!(conda_json, r#""conda""#);
+
+        let tar_bz2 = DistArchiveType::Conda(CondaArchiveType::TarBz2);
+        let tar_bz2_json = serde_json::to_string(&tar_bz2).unwrap();
+        assert_eq!(tar_bz2_json, r#""tar_bz2""#);
+
+        // WheelArchiveType variants
+        let whl = DistArchiveType::Wheel(WheelArchiveType::Whl);
+        let whl_json = serde_json::to_string(&whl).unwrap();
+        assert_eq!(whl_json, r#""whl""#);
+    }
+
+    #[test]
+    fn test_deserialization() {
+        // Test that DistArchiveType deserializes from the inner type's format
+
+        let conda: DistArchiveType = serde_json::from_str(r#""conda""#).unwrap();
+        assert_eq!(conda, DistArchiveType::Conda(CondaArchiveType::Conda));
+
+        let tar_bz2: DistArchiveType = serde_json::from_str(r#""tar_bz2""#).unwrap();
+        assert_eq!(tar_bz2, DistArchiveType::Conda(CondaArchiveType::TarBz2));
+
+        let whl: DistArchiveType = serde_json::from_str(r#""whl""#).unwrap();
+        assert_eq!(whl, DistArchiveType::Wheel(WheelArchiveType::Whl));
+    }
+
+    #[test]
+    fn test_from_implementations() {
+        // Test From<CondaArchiveType> for DistArchiveType
+        let conda: DistArchiveType = CondaArchiveType::Conda.into();
+        assert_eq!(conda, DistArchiveType::Conda(CondaArchiveType::Conda));
+
+        let tar_bz2: DistArchiveType = CondaArchiveType::TarBz2.into();
+        assert_eq!(tar_bz2, DistArchiveType::Conda(CondaArchiveType::TarBz2));
+
+        // Test From<WheelArchiveType> for DistArchiveType
+        let whl: DistArchiveType = WheelArchiveType::Whl.into();
+        assert_eq!(whl, DistArchiveType::Wheel(WheelArchiveType::Whl));
     }
 }

@@ -6,10 +6,10 @@ use url::Url;
 
 /// A conda package archive identifier contains the `name`, `version`, `build_string` and `archive_type`
 /// of a conda package archive. This information can be derived from the filename of a conda package
-/// archive using the [`ArchiveIdentifier::try_from_filename`] and [`ArchiveIdentifier::try_from_url`]
+/// archive using the [`CondaArchiveIdentifier::try_from_filename`] and [`CondaArchiveIdentifier::try_from_url`]
 /// functions.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct ArchiveIdentifier {
+pub struct CondaArchiveIdentifier {
     /// The name of the package.
     pub name: String,
     /// The version of the package.
@@ -20,13 +20,13 @@ pub struct ArchiveIdentifier {
     pub archive_type: CondaArchiveType,
 }
 
-impl ArchiveIdentifier {
+impl CondaArchiveIdentifier {
     /// Converts the archive identifier into a filename for a Conda package.
     pub fn to_file_name(&self) -> String {
         self.to_string()
     }
 
-    /// Tries to convert the specified filename into an [`ArchiveIdentifier`].
+    /// Tries to convert the specified filename into an [`CondaArchiveIdentifier`].
     ///
     /// Since Conda archives have a format for file names (see [`Self::to_file_name`]) we can
     /// reverse engineer the information that went into it. This function tries to do just that.
@@ -44,7 +44,7 @@ impl ArchiveIdentifier {
         })
     }
 
-    /// Tries to convert the specified path into an [`ArchiveIdentifier`].
+    /// Tries to convert the specified path into an [`CondaArchiveIdentifier`].
     ///
     /// Since Conda archives have a format for file names (see [`Self::to_file_name`]) we can
     /// reverse engineer the information that went into it. This function tries to do just that.
@@ -52,7 +52,7 @@ impl ArchiveIdentifier {
         Self::try_from_filename(path.as_ref().file_name()?.to_str()?)
     }
 
-    /// Tries to convert a [`Url`] into an [`ArchiveIdentifier`].
+    /// Tries to convert a [`Url`] into an [`CondaArchiveIdentifier`].
     ///
     /// Since Conda archives have a format for file names (see [`Self::to_file_name`]) we can
     /// reverse engineer the information that went into it. This function tries to do just that.
@@ -62,7 +62,7 @@ impl ArchiveIdentifier {
     }
 }
 
-impl Display for ArchiveIdentifier {
+impl Display for CondaArchiveIdentifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -77,16 +77,16 @@ impl Display for ArchiveIdentifier {
 
 #[cfg(test)]
 mod test {
-    use super::ArchiveIdentifier;
+    use super::CondaArchiveIdentifier;
     use crate::package::CondaArchiveType;
 
     #[test]
     pub fn test_from_filename() {
         assert_eq!(
-            ArchiveIdentifier::try_from_filename(
+            CondaArchiveIdentifier::try_from_filename(
                 "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2"
             ),
-            Some(ArchiveIdentifier {
+            Some(CondaArchiveIdentifier {
                 name: String::from("ros-noetic-rosbridge-suite"),
                 version: String::from("0.11.14"),
                 build_string: String::from("py39h6fdeb60_14"),
@@ -95,8 +95,8 @@ mod test {
         );
 
         assert_eq!(
-            ArchiveIdentifier::try_from_filename("clangdev-9.0.1-cling_v0.9_hd1e6b3a_3.conda"),
-            Some(ArchiveIdentifier {
+            CondaArchiveIdentifier::try_from_filename("clangdev-9.0.1-cling_v0.9_hd1e6b3a_3.conda"),
+            Some(CondaArchiveIdentifier {
                 name: String::from("clangdev"),
                 version: String::from("9.0.1"),
                 build_string: String::from("cling_v0.9_hd1e6b3a_3"),
@@ -105,7 +105,7 @@ mod test {
         );
 
         assert_eq!(
-            ArchiveIdentifier::try_from_filename("clangdev-9.0.1-cling_v0.9_hd1e6b3a_3.conda")
+            CondaArchiveIdentifier::try_from_filename("clangdev-9.0.1-cling_v0.9_hd1e6b3a_3.conda")
                 .unwrap()
                 .to_file_name(),
             "clangdev-9.0.1-cling_v0.9_hd1e6b3a_3.conda"
@@ -113,7 +113,7 @@ mod test {
 
         // Wheel packages should return None
         assert_eq!(
-            ArchiveIdentifier::try_from_filename("numpy-1.24.0-cp39-cp39-linux_x86_64.whl"),
+            CondaArchiveIdentifier::try_from_filename("numpy-1.24.0-cp39-cp39-linux_x86_64.whl"),
             None
         );
     }

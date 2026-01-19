@@ -4,7 +4,7 @@
 use std::{cmp::Ordering, collections::HashMap};
 
 use chrono::{DateTime, Utc};
-use rattler_conda_types::{package::ArchiveType, GenericVirtualPackage, RepoDataRecord};
+use rattler_conda_types::{package::DistArchiveType, GenericVirtualPackage, RepoDataRecord};
 use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseMatchSpecOptions};
 use std::collections::HashSet;
 
@@ -105,7 +105,7 @@ pub fn add_repodata_records<'a>(
     let solvable_index_id = pool.intern_str(SOLVABLE_REPODATA_RECORD_INDEX);
 
     // Keeps a mapping from packages added to the repo to the type and solvable
-    let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
+    let mut package_to_type: HashMap<&str, (DistArchiveType, SolvableId)> = HashMap::new();
 
     // Through `data` we can manipulate solvables (see the `Repodata` docs for
     // details)
@@ -340,11 +340,11 @@ fn add_or_reuse_solvable<'a>(
     pool: &Pool,
     repo: &Repo<'_>,
     data: &Repodata<'_>,
-    package_to_type: &mut HashMap<&'a str, (ArchiveType, SolvableId)>,
+    package_to_type: &mut HashMap<&'a str, (DistArchiveType, SolvableId)>,
     repo_data: &'a RepoDataRecord,
 ) -> Result<Option<SolvableId>, SolveError> {
     // Sometimes we can reuse an existing solvable
-    if let Some((filename, archive_type)) = ArchiveType::split_str(&repo_data.file_name) {
+    if let Some((filename, archive_type)) = DistArchiveType::split_str(&repo_data.file_name) {
         if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(filename) {
             match archive_type.cmp(&other_package_type) {
                 Ordering::Less => {

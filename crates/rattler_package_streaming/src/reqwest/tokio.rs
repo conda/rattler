@@ -5,7 +5,7 @@ use std::{path::Path, sync::Arc};
 
 use fs_err::tokio as tokio_fs;
 use futures_util::stream::TryStreamExt;
-use rattler_conda_types::package::{ArchiveType, CondaArchiveType, DistArchiveType};
+use rattler_conda_types::package::CondaArchiveType;
 use rattler_digest::Sha256Hash;
 use reqwest::Response;
 use tokio::io::BufReader;
@@ -222,15 +222,14 @@ pub async fn extract(
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
-    match ArchiveType::try_from(Path::new(url.path()))
+    match CondaArchiveType::try_from(Path::new(url.path()))
         .ok_or(ExtractError::UnsupportedArchiveType)?
     {
-        ArchiveType::Conda(CondaArchiveType::TarBz2) => {
+        CondaArchiveType::TarBz2 => {
             extract_tar_bz2(client, url, destination, expected_sha256, reporter).await
         }
-        ArchiveType::Conda(CondaArchiveType::Conda) => {
+        CondaArchiveType::Conda => {
             extract_conda(client, url, destination, expected_sha256, reporter).await
         }
-        ArchiveType::Dist(DistArchiveType::Whl) => Err(ExtractError::UnsupportedArchiveType),
     }
 }

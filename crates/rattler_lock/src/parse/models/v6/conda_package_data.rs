@@ -4,7 +4,7 @@ use std::{
 };
 
 use rattler_conda_types::{
-    package::ArchiveIdentifier, utils::TimestampMs, BuildNumber, ChannelUrl, NoArchType,
+    package::CondaArchiveIdentifier, utils::TimestampMs, BuildNumber, ChannelUrl, NoArchType,
     PackageName, PackageRecord, PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
@@ -205,7 +205,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
         if value
             .location
             .file_name()
-            .is_some_and(|name| ArchiveIdentifier::try_from_filename(name).is_some())
+            .is_some_and(|name| CondaArchiveIdentifier::try_from_filename(name).is_some())
         {
             Ok(CondaPackageData::Binary(CondaBinaryData {
                 location: value.location,
