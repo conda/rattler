@@ -1116,7 +1116,7 @@ fn parse_condition(
             if condition_ids.is_empty() {
                 panic!("match spec condition must have at least one version set");
             } else if condition_ids.len() == 1 {
-                return condition_ids[0];
+                condition_ids[0]
             } else {
                 // Otherwise, create a union of the conditions
                 let mut result = condition_ids[0];
