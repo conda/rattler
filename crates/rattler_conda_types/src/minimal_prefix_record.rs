@@ -235,6 +235,7 @@ impl MinimalPrefixRecord {
             depends: Vec::new(),
             constrains: Vec::new(),
             features: None,
+            filename: None,
             legacy_bz2_size: None,
             license: None,
             license_family: None,
