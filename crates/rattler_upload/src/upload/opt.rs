@@ -1,7 +1,7 @@
 //! Command-line options.
 use std::path::PathBuf;
 
-use clap::{arg, Parser};
+use clap::Parser;
 use rattler_conda_types::utils::url_with_trailing_slash::UrlWithTrailingSlash;
 use rattler_networking::AuthenticationStorage;
 use tracing::warn;

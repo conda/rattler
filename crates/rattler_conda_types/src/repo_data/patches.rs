@@ -72,7 +72,7 @@ pub struct PackageRecordPatch {
     /// Track features are nowadays only used to downweight packages (ie. give
     /// them less priority). To that effect, the number of track features is
     /// counted (number of commas) and the package is downweighted
-    /// by the number of track_features.
+    /// by the number of `track_features`.
     ///
     /// This field is double wrapped to be able to express the value `null`
     /// separate from it being missing from the JSON.
@@ -164,13 +164,21 @@ pub struct PatchInstructions {
     #[serde(default, skip_serializing_if = "ahash::HashMap::is_empty")]
     pub packages: ahash::HashMap<String, PackageRecordPatch>,
 
-    /// Patches for package records
+    /// Patches for conda package records
     #[serde(
         default,
         rename = "packages.conda",
         skip_serializing_if = "ahash::HashMap::is_empty"
     )]
     pub conda_packages: ahash::HashMap<String, PackageRecordPatch>,
+
+    /// Patches for wheel package records (experimental)
+    #[serde(
+        default,
+        rename = "packages.whl",
+        skip_serializing_if = "ahash::HashMap::is_empty"
+    )]
+    pub experimental_whl_packages: ahash::HashMap<String, PackageRecordPatch>,
 }
 
 impl PackageRecord {
@@ -215,8 +223,8 @@ pub fn apply_patches_impl(
         }
 
         // also apply the patch to the conda packages
-        if let Some((pkg_name, archive_type)) = DistArchiveType::split_str(pkg) {
-            assert!(archive_type == DistArchiveType::Conda(CondaArchiveType::TarBz2));
+        if let Some((pkg_name, archive_type)) = CondaArchiveType::split_str(pkg) {
+            assert!(archive_type == CondaArchiveType::TarBz2);
             if let Some(record) = conda_packages.get_mut(&format!("{pkg_name}.conda")) {
                 record.apply_patch(patch);
             }
@@ -230,13 +238,9 @@ pub fn apply_patches_impl(
     }
 
     // Apply patches to wheel packages
-    for (pkg, patch) in instructions.packages.iter() {
-        if let Some((_, archive_type)) = DistArchiveType::split_str(pkg) {
-            if matches!(archive_type, DistArchiveType::Wheel(_)) {
-                if let Some(record) = experimental_whl_packages.get_mut(pkg) {
-                    record.apply_patch(patch);
-                }
-            }
+    for (pkg, patch) in instructions.experimental_whl_packages.iter() {
+        if let Some(record) = experimental_whl_packages.get_mut(pkg) {
+            record.apply_patch(patch);
         }
     }
 

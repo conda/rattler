@@ -370,7 +370,17 @@ fn parse_bracket_vec_into_components(
                 match_spec.subdir = match_spec.subdir.or(subdir);
             }
             "license" => match_spec.license = Some(value.to_string()),
-            // TODO: Still need to add `track_features`, `features`, and `license_family`
+            "track_features" => {
+                match_spec.track_features = Some(
+                    value
+                        .split([',', ' ']) // Split on BOTH comma and space
+                        .map(str::trim) // Remove surrounding whitespace
+                        .filter(|s| !s.is_empty()) // Filter out empty strings from "a, b"
+                        .map(ToString::to_string)
+                        .collect(),
+                );
+            }
+            // TODO: Still need to add `features` and `license_family`
             // to the match spec.
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
         }
@@ -1471,6 +1481,24 @@ mod tests {
     }
 
     #[test]
+    fn test_parsing_track_features() {
+        let cases = vec![
+            "python[track_features=\"pypy debug\"]",  // Space
+            "python[track_features=\"pypy,debug\"]",  // Comma
+            "python[track_features=\"pypy, debug\"]", // Comma + Space
+        ];
+
+        for case in cases {
+            let spec = MatchSpec::from_str(case, Strict).unwrap();
+            assert_eq!(
+                spec.track_features,
+                Some(vec!["pypy".to_string(), "debug".to_string()]),
+                "Failed on syntax: {case}",
+            );
+        }
+    }
+
+    #[test]
     fn test_issue_717() {
         assert_matches!(
             MatchSpec::from_str("ray[default,data] >=2.9.0,<3.0.0", Strict),
@@ -1557,6 +1585,7 @@ mod tests {
             ),
             license: Some("MIT".into()),
             condition: None,
+            track_features: None,
         });
 
         // insta check all the strings

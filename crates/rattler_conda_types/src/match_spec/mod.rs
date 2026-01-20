@@ -40,13 +40,13 @@ use package_name_matcher::PackageNameMatcher;
 /// values -- by including wildcard `*` and `>`/`<` ranges--where supported. Any non-specified field
 /// is the equivalent of a full wildcard match.
 ///
-/// MatchSpecs can also be composed using a single positional argument, with optional
+/// `MatchSpecs` can also be composed using a single positional argument, with optional
 /// keyword arguments. Keyword arguments also override any conflicting information provided in
 /// the positional argument. Conda has historically had several string representations for equivalent
-/// MatchSpecs.
+/// `MatchSpecs`.
 ///
 /// A series of rules are now followed for creating the canonical string representation of a
-/// MatchSpec instance. The canonical string representation can generically be
+/// `MatchSpec` instance. The canonical string representation can generically be
 /// represented by
 ///
 /// (channel(/subdir):(namespace):)name(version(build))[key1=value1,key2=value2]
@@ -168,6 +168,8 @@ pub struct MatchSpec {
     pub license: Option<String>,
     /// The condition under which this match spec applies.
     pub condition: Option<MatchSpecCondition>,
+    /// The track features of the package
+    pub track_features: Option<Vec<String>>,
 }
 
 impl Display for MatchSpec {
@@ -230,6 +232,13 @@ impl Display for MatchSpec {
             keys.push(format!("license=\"{license}\""));
         }
 
+        if let Some(track_features) = &self.track_features {
+            keys.push(format!(
+                "track_features=\"{}\"",
+                track_features.iter().format(" ")
+            ));
+        }
+
         if !keys.is_empty() {
             write!(f, "[{}]", keys.join(", "))?;
         }
@@ -261,6 +270,7 @@ impl MatchSpec {
                 url: self.url,
                 license: self.license,
                 condition: self.condition,
+                track_features: self.track_features,
             },
         )
     }
@@ -323,6 +333,8 @@ pub struct NamelessMatchSpec {
     pub license: Option<String>,
     /// The condition under which this match spec applies.
     pub condition: Option<MatchSpecCondition>,
+    /// The track features of the package
+    pub track_features: Option<Vec<String>>,
 }
 
 impl Display for NamelessMatchSpec {
@@ -374,6 +386,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             url: spec.url,
             license: spec.license,
             condition: spec.condition,
+            track_features: spec.track_features,
         }
     }
 }
@@ -396,6 +409,7 @@ impl MatchSpec {
             url: spec.url,
             license: spec.license,
             condition: spec.condition,
+            track_features: spec.track_features,
         }
     }
 }
@@ -469,6 +483,14 @@ impl Matches<PackageRecord> for NamelessMatchSpec {
             }
         }
 
+        if let Some(track_features) = self.track_features.as_ref() {
+            for feature in track_features {
+                if !other.track_features.contains(feature) {
+                    return false;
+                }
+            }
+        }
+
         true
     }
 }
@@ -515,6 +537,14 @@ impl Matches<PackageRecord> for MatchSpec {
         if let Some(license) = self.license.as_ref() {
             if Some(license) != other.license.as_ref() {
                 return false;
+            }
+        }
+
+        if let Some(track_features) = self.track_features.as_ref() {
+            for feature in track_features {
+                if !other.track_features.contains(feature) {
+                    return false;
+                }
             }
         }
 
