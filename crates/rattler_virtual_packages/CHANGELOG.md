@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.5](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.4...rattler_virtual_packages-v2.3.5) - 2026-01-20
+
+### Other
+
+- rename `loong64` to `loongarch64` ([#1957](https://github.com/conda/rattler/pull/1957))
+
 ## [2.3.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.3...rattler_virtual_packages-v2.3.4) - 2025-12-18
 
 ### Other

@@ -49,6 +49,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.7](https://github.com/conda/rattler/compare/rattler_cache-v0.6.6...rattler_cache-v0.6.7) - 2026-01-20
+
+### Added
+
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/conda/rattler/pull/1988))
+- allow skipping validation completely and add atomic extraction ([#1972](https://github.com/conda/rattler/pull/1972))
+
 ## [0.6.6](https://github.com/conda/rattler/compare/rattler_cache-v0.6.5...rattler_cache-v0.6.6) - 2025-12-18
 
 ### Other

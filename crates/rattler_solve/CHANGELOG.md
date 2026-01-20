@@ -42,6 +42,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.2.0](https://github.com/conda/rattler/compare/rattler_solve-v4.1.2...rattler_solve-v4.2.0) - 2026-01-20
+
+### Added
+
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/conda/rattler/pull/1988))
+
+### Other
+
+- Run `cargo clippy --fix` (from nightly) ([#1992](https://github.com/conda/rattler/pull/1992))
+
 ## [4.1.2](https://github.com/conda/rattler/compare/rattler_solve-v4.1.1...rattler_solve-v4.1.2) - 2025-12-18
 
 ### Fixed

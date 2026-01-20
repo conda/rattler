@@ -83,6 +83,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.8](https://github.com/conda/rattler/compare/rattler-v0.39.7...rattler-v0.39.8) - 2026-01-20
+
+### Added
+
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/conda/rattler/pull/1988))
+
+### Fixed
+
+- more reproducible builds with pixi install and source date epoch ([#1956](https://github.com/conda/rattler/pull/1956))
+- preserve entitlements when codesigning on macOS ([#1950](https://github.com/conda/rattler/pull/1950))
+
 ## [0.39.7](https://github.com/conda/rattler/compare/rattler-v0.39.6...rattler-v0.39.7) - 2025-12-18
 
 ### Fixed
