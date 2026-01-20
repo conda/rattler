@@ -11,7 +11,8 @@ from rattler import (
     Gateway,
     SparseRepoData,
     MatchSpec,
-    solve_with_sparse_repodata, PackageFormatSelection,
+    solve_with_sparse_repodata,
+    PackageFormatSelection,
 )
 
 
@@ -333,14 +334,14 @@ async def test_solve_with_sparse_repodata_with_wheels() -> None:
             GenericVirtualPackage(PackageName("__unix"), Version("15"), "0"),
             GenericVirtualPackage(PackageName("__linux"), Version("0"), "0"),
         ],
-        package_format_selection_override=PackageFormatSelection.PREFER_CONDA_WITH_WHL
+        package_format_selection_override=PackageFormatSelection.PREFER_CONDA_WITH_WHL,
     )
 
     whl_files = sum(r.file_name.endswith(".whl") for r in solved_data)
     conda_files = sum(r.file_name.endswith(".conda") for r in solved_data)
     tar_bz2_files = sum(r.file_name.endswith(".tar.bz2") for r in solved_data)
 
-    assert whl_files== 10
+    assert whl_files == 10
     assert conda_files == 21
     assert tar_bz2_files == 4
 
