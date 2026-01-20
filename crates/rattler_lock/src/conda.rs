@@ -1,21 +1,21 @@
-use crate::source::SourceLocation;
-use crate::UrlOrPath;
 use rattler_conda_types::package::DistArchiveIdentifier;
+use std::{borrow::Cow, cmp::Ordering, collections::BTreeMap, fmt::Display, hash::Hash};
+
 use rattler_conda_types::{
     ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, RepoDataRecord,
 };
 use rattler_digest::Sha256Hash;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::{borrow::Cow, cmp::Ordering, fmt::Display, hash::Hash};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
+
+use crate::{source::SourceLocation, UrlOrPath};
 
 /// Represents a conda-build variant value.
 ///
 /// Variants are used in conda-build to specify different build configurations.
-/// They can be strings (e.g., "3.11" for python version), integers (e.g., 1 for feature flags),
-/// or booleans (e.g., true/false for optional features).
+/// They can be strings (e.g., "3.11" for python version), integers (e.g., 1 for
+/// feature flags), or booleans (e.g., true/false for optional features).
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum VariantValue {
@@ -89,10 +89,21 @@ impl CondaPackageData {
     }
 
     /// Returns the dependency information of the package.
-    pub fn record(&self) -> &PackageRecord {
+    ///
+    /// For binary packages, this always returns `Some`. For source packages,
+    /// the record may not be present if the metadata hasn't been evaluated yet.
+    pub fn record(&self) -> Option<&PackageRecord> {
         match self {
-            CondaPackageData::Binary(data) => &data.package_record,
-            CondaPackageData::Source(data) => &data.package_record,
+            CondaPackageData::Binary(data) => Some(&data.package_record),
+            CondaPackageData::Source(data) => data.package_record.as_ref(),
+        }
+    }
+
+    /// Returns the name of the package.
+    pub fn name(&self) -> &rattler_conda_types::PackageName {
+        match self {
+            CondaPackageData::Binary(data) => &data.package_record.name,
+            CondaPackageData::Source(data) => &data.name,
         }
     }
 
@@ -128,27 +139,6 @@ impl CondaPackageData {
             Self::Binary(_) => None,
             Self::Source(data) => Some(data),
         }
-    }
-
-    /// Performs the best effort merge of two conda packages.
-    /// Some fields in the packages are optional, if one of the packages
-    /// contain an optional field they are merged.
-    pub(crate) fn merge(&self, other: &Self) -> Cow<'_, Self> {
-        match (self, other) {
-            (CondaPackageData::Binary(left), CondaPackageData::Binary(right)) => {
-                if let Cow::Owned(merged) = left.merge(right) {
-                    return Cow::Owned(merged.into());
-                }
-            }
-            (CondaPackageData::Source(left), CondaPackageData::Source(right)) => {
-                if let Cow::Owned(merged) = left.merge(right) {
-                    return Cow::Owned(merged.into());
-                }
-            }
-            _ => {}
-        }
-
-        Cow::Borrowed(self)
     }
 }
 
@@ -197,7 +187,7 @@ impl CondaBinaryData {
 /// branch `main` to branch `dev`) even if the current commit hash is the same.
 /// Without this information, we wouldn't know if the lock file needs to be
 /// updated when the requested branch/tag changes.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum GitShallowSpec {
     /// A git branch reference (e.g., "main", "develop")
     Branch(String),
@@ -212,7 +202,7 @@ pub enum GitShallowSpec {
 /// This stores the exact source location information needed to
 /// reproducibly build a package from source. Used by pixi build
 /// and other package building tools.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PackageBuildSource {
     /// Git repository source with specific revision.
     Git {
@@ -246,52 +236,36 @@ pub enum PackageBuildSource {
 /// Information about a source package stored in the lock-file.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CondaSourceData {
-    /// The package record.
-    pub package_record: PackageRecord,
-
     /// The location of the package. This can be a URL or a local path.
     pub location: UrlOrPath,
-
-    /// Conda-build variants used to disambiguate between multiple source packages
-    /// at the same location. This is a map from variant name to variant value.
-    /// Optional field added in lock file format V6 (made required in V7).
-    pub variants: BTreeMap<String, VariantValue>,
 
     /// Package build source location for reproducible builds
     pub package_build_source: Option<PackageBuildSource>,
 
-    /// Information about packages that should be built from source instead of binary.
-    /// This maps from a normalized package name to location of the source.
+    /// The name of the output to use from the source.
+    pub name: rattler_conda_types::PackageName,
+
+    /// Conda-build variants used to disambiguate between multiple source
+    /// packages at the same location. This is a map from variant name to
+    /// variant value. Optional field added in lock file format V6 (made
+    /// required in V7).
+    pub variants: BTreeMap<String, VariantValue>,
+
+    /// Optionally, the evaluated package record.
+    ///
+    /// We either force all metadata to be present for a source package or None.
+    /// If the data is not present, it should be retrieved at runtime.
+    pub package_record: Option<PackageRecord>,
+
+    /// Information about packages that should be built from source instead of
+    /// binary. This maps from a normalized package name to the location of the
+    /// source.
     pub sources: BTreeMap<String, SourceLocation>,
 }
 
 impl From<CondaSourceData> for CondaPackageData {
     fn from(value: CondaSourceData) -> Self {
         Self::Source(value)
-    }
-}
-
-impl CondaSourceData {
-    pub(crate) fn merge(&self, other: &Self) -> Cow<'_, Self> {
-        if self.location == other.location {
-            let package_record_merge =
-                merge_package_record(&self.package_record, &other.package_record);
-            let package_build_source_merge =
-                merge_package_build_source(&self.package_build_source, &other.package_build_source);
-
-            // Return an owned version if either merge produced an owned result
-            if matches!(package_record_merge, Cow::Owned(_))
-                || matches!(package_build_source_merge, Cow::Owned(_))
-            {
-                return Cow::Owned(Self {
-                    package_record: package_record_merge.into_owned(),
-                    package_build_source: package_build_source_merge.into_owned(),
-                    ..self.clone()
-                });
-            }
-        }
-
-        Cow::Borrowed(self)
     }
 }
 
@@ -306,15 +280,6 @@ pub struct InputHash {
     pub globs: Vec<String>,
 }
 
-impl AsRef<PackageRecord> for CondaPackageData {
-    fn as_ref(&self) -> &PackageRecord {
-        match self {
-            Self::Binary(data) => &data.package_record,
-            Self::Source(data) => &data.package_record,
-        }
-    }
-}
-
 impl PartialOrd<Self> for CondaPackageData {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -323,17 +288,30 @@ impl PartialOrd<Self> for CondaPackageData {
 
 impl Ord for CondaPackageData {
     fn cmp(&self, other: &Self) -> Ordering {
-        let pkg_a: &PackageRecord = self.as_ref();
-        let pkg_b: &PackageRecord = other.as_ref();
-        let location_a = self.location();
-        let location_b = other.location();
-
-        location_a
-            .cmp(location_b)
-            .then_with(|| pkg_a.name.cmp(&pkg_b.name))
-            .then_with(|| pkg_a.version.cmp(&pkg_b.version))
-            .then_with(|| pkg_a.build.cmp(&pkg_b.build))
-            .then_with(|| pkg_a.subdir.cmp(&pkg_b.subdir))
+        // Compare by location first
+        self.location()
+            .cmp(other.location())
+            // Then by name
+            .then_with(|| self.name().cmp(other.name()))
+            // Then by additional fields from package records if available
+            .then_with(|| match (self.record(), other.record()) {
+                (Some(pkg_a), Some(pkg_b)) => pkg_a
+                    .version
+                    .cmp(&pkg_b.version)
+                    .then_with(|| pkg_a.build.cmp(&pkg_b.build))
+                    .then_with(|| pkg_a.subdir.cmp(&pkg_b.subdir)),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            })
+            // For source packages, also compare by variants and build source as tiebreakers
+            .then_with(|| match (self.as_source(), other.as_source()) {
+                (Some(src_a), Some(src_b)) => src_a
+                    .variants
+                    .cmp(&src_b.variants)
+                    .then_with(|| src_a.package_build_source.cmp(&src_b.package_build_source)),
+                _ => Ordering::Equal,
+            })
     }
 }
 
@@ -384,7 +362,8 @@ pub enum ConversionError {
     #[error(transparent)]
     LocationToUrlConversionError(#[from] file_url::FileURLParseError),
 
-    /// The location does not have a valid binary package filename (e.g., `.conda` or `.tar.bz2`)
+    /// The location does not have a valid binary package filename (e.g.,
+    /// `.conda` or `.tar.bz2`)
     #[error("binary package location must have a valid archive filename (.conda or .tar.bz2)")]
     InvalidBinaryPackageLocation,
 }
@@ -400,7 +379,7 @@ impl Matches<MatchSpec> for CondaPackageData {
     fn matches(&self, spec: &MatchSpec) -> bool {
         // Check if the name matches
         if let Some(name) = &spec.name {
-            if !name.matches(&self.record().name) {
+            if !name.matches(self.name()) {
                 return false;
             }
         }
@@ -421,8 +400,20 @@ impl Matches<MatchSpec> for CondaPackageData {
             }
         }
 
-        // Check if the record matches
-        spec.matches(self.record())
+        // Check if the record matches (if available)
+        match self.record() {
+            Some(record) => spec.matches(record),
+            None => {
+                // Source packages without a record can only match if the spec
+                // only constrains the name (which we already checked above)
+                spec.version.is_none()
+                    && spec.build.is_none()
+                    && spec.build_number.is_none()
+                    && spec.subdir.is_none()
+                    && spec.md5.is_none()
+                    && spec.sha256.is_none()
+            }
+        }
     }
 }
 
@@ -444,8 +435,20 @@ impl Matches<NamelessMatchSpec> for CondaPackageData {
             }
         }
 
-        // Check if the record matches
-        spec.matches(self.record())
+        // Check if the record matches (if available)
+        match self.record() {
+            Some(record) => spec.matches(record),
+            None => {
+                // Source packages without a record can only match if the spec
+                // has no constraints
+                spec.version.is_none()
+                    && spec.build.is_none()
+                    && spec.build_number.is_none()
+                    && spec.subdir.is_none()
+                    && spec.md5.is_none()
+                    && spec.sha256.is_none()
+            }
+        }
     }
 }
 
@@ -487,19 +490,4 @@ fn merge_package_record<'a>(
     }
 
     result
-}
-
-fn merge_package_build_source<'a>(
-    left: &'a Option<PackageBuildSource>,
-    right: &Option<PackageBuildSource>,
-) -> Cow<'a, Option<PackageBuildSource>> {
-    if left == right {
-        Cow::Borrowed(left)
-    } else if let Some(right_source) = right {
-        // New data takes precedence
-        Cow::Owned(Some(right_source.clone()))
-    } else {
-        // Right is None, keep left unchanged
-        Cow::Borrowed(left)
-    }
 }
