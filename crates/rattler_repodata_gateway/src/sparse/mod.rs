@@ -14,9 +14,10 @@ use std::{
 use bytes::Bytes;
 use fs_err as fs;
 use itertools::Itertools;
+use rattler_conda_types::package::DistArchiveType;
 use rattler_conda_types::{
-    compute_package_url, package::CondaArchiveType, package::WheelArchiveType, Channel, ChannelInfo, MatchSpec, Matches,
-    PackageName, PackageRecord, RepoDataRecord,
+    compute_package_url, package::CondaArchiveType, package::WheelArchiveType, Channel,
+    ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord,
 };
 use rattler_redaction::Redact;
 use serde::{
@@ -26,7 +27,6 @@ use serde::{
 use serde_json::value::RawValue;
 use superslice::Ext;
 use thiserror::Error;
-use rattler_conda_types::package::DistArchiveType;
 
 /// Defines how different variants of packages are consolidated.
 #[derive(
@@ -215,19 +215,31 @@ impl SparseRepoData {
         let repo_data = self.inner.borrow_repo_data();
         let tar_bz2_packages = repo_data.packages.iter().map(select_package_name);
         let conda_packages = repo_data.conda_packages.iter().map(select_package_name);
-        let whl_packages = repo_data.experimental_whl_packages.iter().map(select_package_name);
+        let whl_packages = repo_data
+            .experimental_whl_packages
+            .iter()
+            .map(select_package_name);
 
         match package_format_selection {
             PackageFormatSelection::Both | PackageFormatSelection::PreferConda => {
-                itertools::Either::Left(itertools::Either::Left(tar_bz2_packages.merge(conda_packages).dedup()))
+                itertools::Either::Left(itertools::Either::Left(
+                    tar_bz2_packages.merge(conda_packages).dedup(),
+                ))
             }
             PackageFormatSelection::PreferCondaWithWhl => {
-                itertools::Either::Left(itertools::Either::Right(tar_bz2_packages.merge(whl_packages).merge(conda_packages).dedup()))
+                itertools::Either::Left(itertools::Either::Right(
+                    tar_bz2_packages
+                        .merge(whl_packages)
+                        .merge(conda_packages)
+                        .dedup(),
+                ))
             }
             PackageFormatSelection::OnlyTarBz2 => {
                 itertools::Either::Right(itertools::Either::Left(tar_bz2_packages.dedup()))
             }
-            PackageFormatSelection::OnlyConda => itertools::Either::Right(itertools::Either::Right(conda_packages.dedup())),
+            PackageFormatSelection::OnlyConda => {
+                itertools::Either::Right(itertools::Either::Right(conda_packages.dedup()))
+            }
         }
     }
 
@@ -250,13 +262,21 @@ impl SparseRepoData {
                 });
                 // Add wheel files if specified
                 if package_format_selection == PackageFormatSelection::PreferCondaWithWhl {
-                    let whl_packages= repo_data.experimental_whl_packages.iter().map(|(filename, _)| {
-                        filename
-                            .filename
-                            .strip_suffix(WheelArchiveType::Whl.extension())
-                            .unwrap_or(filename.filename)
-                    });
-                    conda_packages.merge(tar_bz2_packages).merge(whl_packages).dedup().count()
+                    let whl_packages =
+                        repo_data
+                            .experimental_whl_packages
+                            .iter()
+                            .map(|(filename, _)| {
+                                filename
+                                    .filename
+                                    .strip_suffix(WheelArchiveType::Whl.extension())
+                                    .unwrap_or(filename.filename)
+                            });
+                    conda_packages
+                        .merge(tar_bz2_packages)
+                        .merge(whl_packages)
+                        .dedup()
+                        .count()
                 } else {
                     conda_packages.merge(tar_bz2_packages).dedup().count()
                 }
@@ -497,7 +517,7 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
     package_name: Option<&PackageName>,
     tar_bz2_packages: &[(PackageFilename<'i>, &'i RawValue)],
     conda_packages: &[(PackageFilename<'i>, &'i RawValue)],
-    whl_packages:  &[(PackageFilename<'i>, &'i RawValue)],
+    whl_packages: &[(PackageFilename<'i>, &'i RawValue)],
     variant_consolidation: PackageFormatSelection,
     base_url: Option<&str>,
     channel: &Channel,
@@ -550,9 +570,7 @@ fn parse_records<'i, F: Fn(&RepoDataRecord) -> bool>(
             let deduplicated_packages = conda_packages
                 // Merge conda, whl, and tar.bz2 packages together based on their filename without
                 // extension. The order ensures .conda packages override both .whl and .tar.bz2.
-                .merge_by(whl_packages, |(_, _, left), (_, _, right)| {
-                    left <= right
-                })
+                .merge_by(whl_packages, |(_, _, left), (_, _, right)| left <= right)
                 .merge_by(tar_bz2_packages, |(_, _, left), (_, _, right)| {
                     left <= right
                 })

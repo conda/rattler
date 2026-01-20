@@ -134,7 +134,7 @@ async def solve_with_sparse_repodata(
     strategy: SolveStrategy = "highest",
     constraints: Optional[Sequence[MatchSpec | str]] = None,
     use_only_tar_bz2: bool = False,
-    package_format_selection: PackageFormatSelection = None
+    package_format_selection: Optional[PackageFormatSelection] = None,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
