@@ -3,7 +3,7 @@ use std::{future::IntoFuture, sync::Arc};
 use futures::FutureExt;
 use rattler_cache::package_cache::{CacheKey, PackageCache, PackageCacheError};
 use rattler_conda_types::{
-    package::{ArchiveIdentifier, IndexJson, PackageFile},
+    package::{CondaArchiveIdentifier, IndexJson, PackageFile},
     ConvertSubdirError, PackageRecord, RepoDataRecord,
 };
 use rattler_digest::{Md5Hash, Sha256Hash};
@@ -73,7 +73,7 @@ impl DirectUrlQuery {
             }
         } else {
             // Convert the url to an archive identifier.
-            let Some(archive_identifier) = ArchiveIdentifier::try_from_url(&self.url) else {
+            let Some(archive_identifier) = CondaArchiveIdentifier::try_from_url(&self.url) else {
                 let filename = self.url.path_segments().and_then(Iterator::last);
                 return Err(DirectUrlQueryError::InvalidFilename(
                     filename.unwrap_or("").to_string(),

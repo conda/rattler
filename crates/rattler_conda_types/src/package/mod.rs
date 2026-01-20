@@ -18,8 +18,8 @@ use std::io::Read;
 use std::path::Path;
 pub use {
     about::AboutJson,
-    archive_identifier::ArchiveIdentifier,
-    archive_type::ArchiveType,
+    archive_identifier::CondaArchiveIdentifier,
+    archive_type::{CondaArchiveType, DistArchiveType, WheelArchiveType},
     entry_point::EntryPoint,
     files::Files,
     has_prefix::HasPrefix,

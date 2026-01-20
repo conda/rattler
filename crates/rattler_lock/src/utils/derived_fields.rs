@@ -13,7 +13,7 @@ use std::fmt::{Debug, Formatter};
 use std::str::FromStr;
 
 use rattler_conda_types::{
-    package::ArchiveIdentifier, BuildNumber, ChannelUrl, NoArchType, PackageName, Platform,
+    package::CondaArchiveIdentifier, BuildNumber, ChannelUrl, NoArchType, PackageName, Platform,
     VersionWithSource,
 };
 use url::Url;
@@ -50,7 +50,7 @@ impl LocationDerivedFields {
     pub fn new(location: &UrlOrPath) -> Self {
         let (file_name, archive_identifier) = location
             .file_name()
-            .and_then(|f| ArchiveIdentifier::try_from_filename(f).map(|a| (f.to_string(), a)))
+            .and_then(|f| CondaArchiveIdentifier::try_from_filename(f).map(|a| (f.to_string(), a)))
             .map_or((None, None), |(f, a)| (Some(f), Some(a)));
         let (name, version, build) = archive_identifier
             .and_then(|a| {
@@ -108,7 +108,7 @@ pub fn derive_subdir_from_url(url: &Url) -> Option<&str> {
 
     // Try to parse the archive string as an archive identifier. If it fails we
     // can't derive the subdir.
-    let _ = ArchiveIdentifier::try_from_filename(archive_str)?;
+    let _ = CondaArchiveIdentifier::try_from_filename(archive_str)?;
 
     // Parse the subdir as a platform, if it fails we can't derive the subdir.
     Platform::from_str(subdir_str).is_ok().then_some(subdir_str)

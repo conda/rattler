@@ -1,14 +1,14 @@
-use rattler_conda_types::{compression_level::CompressionLevel, package::ArchiveType};
+use rattler_conda_types::{compression_level::CompressionLevel, package::CondaArchiveType};
 use serde::{de::Error, Deserialize, Serialize};
 use std::str::FromStr;
 
 use crate::config::{Config, MergeError, ValidationError};
 
-/// Container for the package format and compression level
+/// Container for the conda package format and compression level
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct PackageFormatAndCompression {
-    /// The archive type that is selected
-    pub archive_type: ArchiveType,
+    /// The conda archive type that is selected
+    pub archive_type: CondaArchiveType,
     /// The compression level that is selected
     pub compression_level: CompressionLevel,
 }
@@ -50,8 +50,8 @@ impl FromStr for PackageFormatAndCompression {
             .collect::<String>();
 
         let archive_type = match package_format.to_lowercase().as_str() {
-            "tarbz2" => ArchiveType::TarBz2,
-            "conda" => ArchiveType::Conda,
+            "tarbz2" => CondaArchiveType::TarBz2,
+            "conda" => CondaArchiveType::Conda,
             _ => return Err(format!("Unknown package format: {package_format}")),
         };
 
@@ -62,13 +62,13 @@ impl FromStr for PackageFormatAndCompression {
             number if number.parse::<i32>().is_ok() => {
                 let number = number.parse::<i32>().unwrap_or_default();
                 match archive_type {
-                    ArchiveType::TarBz2 => {
+                    CondaArchiveType::TarBz2 => {
                         if !(1..=9).contains(&number) {
                             return Err("Compression level for .tar.bz2 must be between 1 and 9"
                                 .to_string());
                         }
                     }
-                    ArchiveType::Conda => {
+                    CondaArchiveType::Conda => {
                         if !(-7..=22).contains(&number) {
                             return Err(
                                 "Compression level for conda packages (zstd) must be between -7 and 22".to_string()
@@ -94,8 +94,8 @@ impl Serialize for PackageFormatAndCompression {
         S: serde::Serializer,
     {
         let package_format = match self.archive_type {
-            ArchiveType::TarBz2 => "tarbz2",
-            ArchiveType::Conda => "conda",
+            CondaArchiveType::TarBz2 => "tarbz2",
+            CondaArchiveType::Conda => "conda",
         };
         let compression_level = match self.compression_level {
             CompressionLevel::Default => "default",

@@ -6,7 +6,10 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
-use crate::{package::ArchiveType, PackageRecord, PackageUrl, RepoData, Shard};
+use crate::{
+    package::{CondaArchiveType, DistArchiveType, WheelArchiveType},
+    PackageRecord, PackageUrl, RepoData, Shard,
+};
 
 /// Represents a Conda repodata patch.
 ///
@@ -161,13 +164,21 @@ pub struct PatchInstructions {
     #[serde(default, skip_serializing_if = "ahash::HashMap::is_empty")]
     pub packages: ahash::HashMap<String, PackageRecordPatch>,
 
-    /// Patches for package records
+    /// Patches for conda package records
     #[serde(
         default,
         rename = "packages.conda",
         skip_serializing_if = "ahash::HashMap::is_empty"
     )]
     pub conda_packages: ahash::HashMap<String, PackageRecordPatch>,
+
+    /// Patches for wheel package records (experimental)
+    #[serde(
+        default,
+        rename = "packages.whl",
+        skip_serializing_if = "ahash::HashMap::is_empty"
+    )]
+    pub experimental_whl_packages: ahash::HashMap<String, PackageRecordPatch>,
 }
 
 impl PackageRecord {
@@ -202,6 +213,7 @@ impl PackageRecord {
 pub fn apply_patches_impl(
     packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
     conda_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
+    experimental_whl_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
     removed: &mut ahash::HashSet<String>,
     instructions: &PatchInstructions,
 ) {
@@ -211,8 +223,8 @@ pub fn apply_patches_impl(
         }
 
         // also apply the patch to the conda packages
-        if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
-            assert!(archive_type == ArchiveType::TarBz2);
+        if let Some((pkg_name, archive_type)) = CondaArchiveType::split_str(pkg) {
+            assert!(archive_type == CondaArchiveType::TarBz2);
             if let Some(record) = conda_packages.get_mut(&format!("{pkg_name}.conda")) {
                 record.apply_patch(patch);
             }
@@ -225,11 +237,18 @@ pub fn apply_patches_impl(
         }
     }
 
+    // Apply patches to wheel packages
+    for (pkg, patch) in instructions.experimental_whl_packages.iter() {
+        if let Some(record) = experimental_whl_packages.get_mut(pkg) {
+            record.apply_patch(patch);
+        }
+    }
+
     // remove packages that have been removed
     for pkg in instructions.remove.iter() {
-        if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
+        if let Some((pkg_name, archive_type)) = DistArchiveType::split_str(pkg) {
             match archive_type {
-                ArchiveType::TarBz2 => {
+                DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
                     if packages.shift_remove_entry(pkg).is_some() {
                         removed.insert(pkg.clone());
                     }
@@ -240,8 +259,13 @@ pub fn apply_patches_impl(
                         removed.insert(conda_pkg_name);
                     }
                 }
-                ArchiveType::Conda => {
+                DistArchiveType::Conda(CondaArchiveType::Conda) => {
                     if conda_packages.shift_remove_entry(pkg).is_some() {
+                        removed.insert(pkg.clone());
+                    }
+                }
+                DistArchiveType::Wheel(WheelArchiveType::Whl) => {
+                    if experimental_whl_packages.shift_remove_entry(pkg).is_some() {
                         removed.insert(pkg.clone());
                     }
                 }
@@ -257,6 +281,7 @@ impl RepoData {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.experimental_whl_packages,
             &mut self.removed,
             instructions,
         );
@@ -270,6 +295,7 @@ impl Shard {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.experimental_whl_packages,
             &mut self.removed,
             instructions,
         );

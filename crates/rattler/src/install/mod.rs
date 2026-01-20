@@ -1193,7 +1193,7 @@ mod test {
     };
     use futures::{stream, StreamExt};
     use rattler_conda_types::{
-        package::ArchiveIdentifier, ExplicitEnvironmentSpec, Platform, Version,
+        package::CondaArchiveIdentifier, ExplicitEnvironmentSpec, Platform, Version,
     };
     use rattler_lock::LockFile;
     use rattler_networking::LazyClient;
@@ -1280,7 +1280,7 @@ mod test {
                 let prefix_path = prefix_path.clone();
                 async move {
                     // Populate the cache
-                    let package_info = ArchiveIdentifier::try_from_url(&package_url).unwrap();
+                    let package_info = CondaArchiveIdentifier::try_from_url(&package_url).unwrap();
                     let package_cache_lock = package_cache
                         .get_or_fetch_from_url(
                             package_info,
