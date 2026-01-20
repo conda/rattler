@@ -31,4 +31,5 @@ packages:
     subdir: linux-64
     version: "1"
 packages.conda: {}
+packages.whl: {}
 repodata_version: 2

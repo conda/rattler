@@ -102,6 +102,25 @@ pub fn read_package_file_content<'a>(
             let buf = get_file_from_archive(&mut info_archive, package_path.as_ref())?;
             Ok(buf)
         }
+        ArchiveType::Whl => {
+            // WHL files are ZIP archives, so we can read files directly from the ZIP
+            // ZIP files use forward slashes as path separators regardless of platform
+            let zip_path = package_path
+                .as_ref()
+                .to_str()
+                .ok_or_else(|| {
+                    ExtractError::IoError(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "package path contains invalid UTF-8",
+                    ))
+                })?
+                .replace('\\', "/");
+            let mut archive = zip::ZipArchive::new(file)?;
+            let mut file_entry = archive.by_name(&zip_path)?;
+            let mut buf = Vec::with_capacity(file_entry.size() as usize);
+            std::io::copy(&mut file_entry, &mut buf)?;
+            Ok(buf)
+        }
     }
 }
 

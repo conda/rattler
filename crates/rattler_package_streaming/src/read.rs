@@ -51,6 +51,22 @@ pub fn extract_conda_via_streaming(
     })
 }
 
+/// Extracts the contents of a `.whl` package archive.
+pub fn extract_whl_via_streaming(
+    reader: impl Read,
+    destination: &Path,
+) -> Result<ExtractResult, ExtractError> {
+    // Construct the destination path if it doesnt exist yet
+    std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
+
+    process_with_hashing(reader, |reader| {
+        while let Some(file) = read_zipfile_from_stream(reader)? {
+            extract_whl_zipfile(file, destination)?;
+        }
+        Ok(())
+    })
+}
+
 /// Extracts the contents of a .conda package archive by fully reading the stream and then decompressing
 pub fn extract_conda_via_buffering(
     reader: impl Read,
@@ -76,7 +92,10 @@ pub fn extract_conda_via_buffering(
         Ok(())
     })
 }
-
+/// Extracts a zip file entry from a `.conda` package archive.
+///
+/// This function is specifically designed for `.conda` files, which contain nested `.tar.zst`
+/// archives. It extracts only `.tar.zst` entries and discards other entries (metadata files).
 fn extract_zipfile<R: std::io::Read>(
     zip_file: ZipFile<'_, R>,
     destination: &Path,
@@ -96,6 +115,45 @@ fn extract_zipfile<R: std::io::Read>(
     } else {
         // Manually read to the end of the stream if that didn't happen.
         std::io::copy(&mut *file, &mut std::io::sink())?;
+    }
+
+    // Take the file out of the [`ManuallyDrop`] to properly drop it.
+    let _ = ManuallyDrop::into_inner(file);
+
+    Ok(())
+}
+
+/// Extracts a zip file entry from a `.whl` package archive.
+///
+/// This function is specifically designed for `.whl` (Python wheel) files, which are standard
+/// ZIP archives containing regular files and directories. It extracts all entries to disk.
+fn extract_whl_zipfile<R: std::io::Read>(
+    zip_file: ZipFile<'_, R>,
+    destination: &Path,
+) -> Result<(), ExtractError> {
+    // If an error occurs while we are reading the contents of the zip we don't want to
+    // seek to the end of the file. Using [`ManuallyDrop`] we prevent `drop` to be called on
+    // the `file` in case the stack unwinds.
+    let mut file = ManuallyDrop::new(zip_file);
+
+    let path = file.mangled_name();
+
+    // Skip directories
+    if file.is_dir() {
+        // Manually read to the end of the stream
+        std::io::copy(&mut *file, &mut std::io::sink())?;
+    } else {
+        // Construct the full destination path
+        let full_path = destination.join(&path);
+
+        // Create parent directories if they don't exist
+        if let Some(parent) = full_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        // Extract the file
+        let mut outfile = std::fs::File::create(&full_path)?;
+        std::io::copy(&mut *file, &mut outfile)?;
     }
 
     // Take the file out of the [`ManuallyDrop`] to properly drop it.
