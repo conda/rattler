@@ -116,7 +116,7 @@ impl<'a> SourcePackageDataModel<'a> {
         let (arch, platform) = derived_fields::derive_arch_and_platform(&subdir);
 
         let package_record = PackageRecord {
-            name,
+            name: name.clone(),
             version: self.version.into_owned(),
             subdir,
             build,
@@ -143,7 +143,8 @@ impl<'a> SourcePackageDataModel<'a> {
         };
 
         let source_data = CondaSourceData {
-            package_record,
+            name,
+            package_record: Some(package_record),
             location,
             variants: self.variants.map(Cow::into_owned).unwrap_or_default(),
             package_build_source: self.package_build_source,
@@ -165,7 +166,10 @@ impl<'a> TryFrom<SourcePackageDataModel<'a>> for CondaPackageData {
 
 impl<'a> From<&'a CondaSourceData> for SourcePackageDataModel<'a> {
     fn from(value: &'a CondaSourceData) -> Self {
-        let package_record = &value.package_record;
+        let package_record = value
+            .package_record
+            .as_ref()
+            .expect("cannot serialize CondaSourceData to V7 format without a package_record");
         let variants = (!value.variants.is_empty()).then_some(Cow::Borrowed(&value.variants));
 
         // Create the source identifier with computed hash
