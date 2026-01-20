@@ -134,7 +134,7 @@ async def solve_with_sparse_repodata(
     strategy: SolveStrategy = "highest",
     constraints: Optional[Sequence[MatchSpec | str]] = None,
     use_only_tar_bz2: bool = False,
-    package_format_selection: Optional[PackageFormatSelection] = None,
+    package_format_selection_override: Optional[PackageFormatSelection] = None,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -187,9 +187,11 @@ async def solve_with_sparse_repodata(
     """
     if use_only_tar_bz2:
         package_format_selection = PyPackageFormatSelection.OnlyTarBz2
+    else:
+        package_format_selection = PackageFormatSelection.PREFER_CONDA.value
 
-    if package_format_selection is not None:
-        package_format_selection = package_format_selection.value
+    if package_format_selection_override is not None:
+        package_format_selection = package_format_selection_override.value
 
     return [
         RepoDataRecord._from_py_record(solved_package)
