@@ -59,12 +59,13 @@ impl SourceIdentifier {
     ///
     /// The hash is computed from the package record fields that uniquely identify
     /// the package configuration (name, version, build, `build_number`, subdir, and variants).
+    /// If the package record is not present, only the name and variants are used.
     pub fn from_source_data(source_data: &CondaSourceData) -> Self {
         let hash = compute_source_hash(source_data);
         let short_hash = format_short_hash(&hash);
 
         Self {
-            name: source_data.package_record.name.clone(),
+            name: source_data.name.clone(),
             hash: short_hash,
             location: source_data.location.clone(),
         }
@@ -134,11 +135,11 @@ pub enum ParseSourceIdentifierError {
 /// Computes a SHA-256 hash from the source package data.
 ///
 /// The hash is computed from fields that uniquely identify the package configuration:
-/// - name
-/// - version
-/// - build
-/// - `build_number`
-/// - subdir
+/// - name (always included)
+/// - version (if package record present)
+/// - build (if package record present)
+/// - `build_number` (if package record present)
+/// - subdir (if package record present)
 /// - variants (sorted for determinism)
 // TODO: This hash computation is fragile - any changes to the hashed fields or
 // their string representations will invalidate existing lock files. Consider a
@@ -146,20 +147,23 @@ pub enum ParseSourceIdentifierError {
 fn compute_source_hash(source_data: &CondaSourceData) -> Sha256Hash {
     use rattler_digest::digest::Digest;
 
-    let record = &source_data.package_record;
     let mut hasher = Sha256::default();
 
-    // Hash the identifying fields
-    hasher.update(record.name.as_normalized().as_bytes());
+    // Always hash the name
+    hasher.update(source_data.name.as_normalized().as_bytes());
     hasher.update(b"\0");
-    hasher.update(record.version.to_string().as_bytes());
-    hasher.update(b"\0");
-    hasher.update(record.build.as_bytes());
-    hasher.update(b"\0");
-    hasher.update(record.build_number.to_string().as_bytes());
-    hasher.update(b"\0");
-    hasher.update(record.subdir.as_bytes());
-    hasher.update(b"\0");
+
+    // Hash package record fields if present
+    if let Some(record) = &source_data.package_record {
+        hasher.update(record.version.to_string().as_bytes());
+        hasher.update(b"\0");
+        hasher.update(record.build.as_bytes());
+        hasher.update(b"\0");
+        hasher.update(record.build_number.to_string().as_bytes());
+        hasher.update(b"\0");
+        hasher.update(record.subdir.as_bytes());
+        hasher.update(b"\0");
+    }
 
     // Hash variants (sorted for determinism)
     for (key, value) in &source_data.variants {
@@ -343,15 +347,17 @@ mod tests {
 
         use crate::CondaSourceData;
 
+        let name = PackageName::from_str("numba-cuda").unwrap();
         let mut package_record = PackageRecord::new(
-            PackageName::from_str("numba-cuda").unwrap(),
+            name.clone(),
             VersionWithSource::from_str("0.23.0").unwrap(),
             "py310h3ca6f64_0".to_string(),
         );
         package_record.subdir = "linux-64".to_string();
 
         let source_data = CondaSourceData {
-            package_record,
+            name,
+            package_record: Some(package_record),
             location: UrlOrPath::from_str(".").unwrap(),
             variants: BTreeMap::new(),
             package_build_source: None,
@@ -377,8 +383,9 @@ mod tests {
 
         use crate::{CondaSourceData, VariantValue};
 
+        let name = PackageName::from_str("numba-cuda").unwrap();
         let mut package_record = PackageRecord::new(
-            PackageName::from_str("numba-cuda").unwrap(),
+            name.clone(),
             VersionWithSource::from_str("0.23.0").unwrap(),
             "py310h3ca6f64_0".to_string(),
         );
@@ -395,7 +402,8 @@ mod tests {
         );
 
         let source_data = CondaSourceData {
-            package_record,
+            name,
+            package_record: Some(package_record),
             location: UrlOrPath::from_str(".").unwrap(),
             variants,
             package_build_source: None,
@@ -418,15 +426,17 @@ mod tests {
         use crate::CondaSourceData;
 
         fn print_hash(name: &str, version: &str, build: &str, subdir: &str, location: &str) {
+            let pkg_name = PackageName::from_str(name).unwrap();
             let mut package_record = PackageRecord::new(
-                PackageName::from_str(name).unwrap(),
+                pkg_name.clone(),
                 VersionWithSource::from_str(version).unwrap(),
                 build.to_string(),
             );
             package_record.subdir = subdir.to_string();
 
             let source_data = CondaSourceData {
-                package_record,
+                name: pkg_name,
+                package_record: Some(package_record),
                 location: UrlOrPath::from_str(location).unwrap(),
                 variants: BTreeMap::new(),
                 package_build_source: None,
@@ -524,8 +534,9 @@ mod tests {
 
         use crate::{CondaSourceData, VariantValue};
 
+        let name = PackageName::from_str("my-package").unwrap();
         let mut package_record = PackageRecord::new(
-            PackageName::from_str("my-package").unwrap(),
+            name.clone(),
             VersionWithSource::from_str("1.0.0").unwrap(),
             "h0000000_0".to_string(),
         );
@@ -539,7 +550,8 @@ mod tests {
         );
 
         let source_data1 = CondaSourceData {
-            package_record: package_record.clone(),
+            name: name.clone(),
+            package_record: Some(package_record.clone()),
             location: UrlOrPath::from_str(".").unwrap(),
             variants: variants1,
             package_build_source: None,
@@ -554,7 +566,8 @@ mod tests {
         );
 
         let source_data2 = CondaSourceData {
-            package_record,
+            name,
+            package_record: Some(package_record),
             location: UrlOrPath::from_str(".").unwrap(),
             variants: variants2,
             package_build_source: None,
