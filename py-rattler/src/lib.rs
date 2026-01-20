@@ -50,7 +50,6 @@ use index_json::PyIndexJson;
 use installer::py_install;
 use lock::{
     PyEnvironment, PyLockChannel, PyLockFile, PyLockedPackage, PyPackageHashes, PyPypiPackageData,
-    PyPypiPackageEnvironmentData,
 };
 use match_spec::PyMatchSpec;
 use meta::get_rattler_version;
@@ -163,7 +162,6 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyLockChannel>()?;
     m.add_class::<PyLockedPackage>()?;
     m.add_class::<PyPypiPackageData>()?;
-    m.add_class::<PyPypiPackageEnvironmentData>()?;
     m.add_class::<PyPackageHashes>()?;
 
     m.add_class::<PyAboutJson>()?;

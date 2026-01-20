@@ -1,20 +1,14 @@
 //! Builder for the creation of lock files.
 
-use std::{
-    borrow::Cow,
-    collections::{BTreeSet, HashMap},
-    sync::Arc,
-};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use indexmap::{IndexMap, IndexSet};
-use pep508_rs::ExtraName;
 use rattler_conda_types::{Platform, Version};
 
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
     CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
-    UrlOrPath,
+    LockedPackageRef, PypiIndexes, PypiPackageData, SolveOptions, UrlOrPath,
 };
 
 /// Information about a single locked package in an environment.
@@ -25,14 +19,14 @@ pub enum LockedPackage {
     Conda(CondaPackageData),
 
     /// A pypi package in an environment
-    Pypi(PypiPackageData, PypiPackageEnvironmentData),
+    Pypi(PypiPackageData),
 }
 
 impl From<LockedPackageRef<'_>> for LockedPackage {
     fn from(value: LockedPackageRef<'_>) -> Self {
         match value {
             LockedPackageRef::Conda(data) => LockedPackage::Conda(data.clone()),
-            LockedPackageRef::Pypi(data, env) => LockedPackage::Pypi(data.clone(), env.clone()),
+            LockedPackageRef::Pypi(data) => LockedPackage::Pypi(data.clone()),
         }
     }
 }
@@ -43,9 +37,9 @@ impl From<CondaPackageData> for LockedPackage {
     }
 }
 
-impl From<(PypiPackageData, PypiPackageEnvironmentData)> for LockedPackage {
-    fn from((data, env): (PypiPackageData, PypiPackageEnvironmentData)) -> Self {
-        LockedPackage::Pypi(data, env)
+impl From<PypiPackageData> for LockedPackage {
+    fn from(data: PypiPackageData) -> Self {
+        LockedPackage::Pypi(data)
     }
 }
 
@@ -55,7 +49,7 @@ impl LockedPackage {
     pub fn name(&self) -> &str {
         match self {
             LockedPackage::Conda(data) => data.record().name.as_source(),
-            LockedPackage::Pypi(data, _) => data.name.as_ref(),
+            LockedPackage::Pypi(data) => data.name.as_ref(),
         }
     }
 
@@ -63,7 +57,7 @@ impl LockedPackage {
     pub fn location(&self) -> &UrlOrPath {
         match self {
             LockedPackage::Conda(data) => data.location(),
-            LockedPackage::Pypi(data, _) => &data.location,
+            LockedPackage::Pypi(data) => &data.location,
         }
     }
 
@@ -71,15 +65,15 @@ impl LockedPackage {
     pub fn as_conda(&self) -> Option<&CondaPackageData> {
         match self {
             LockedPackage::Conda(data) => Some(data),
-            LockedPackage::Pypi(..) => None,
+            LockedPackage::Pypi(_) => None,
         }
     }
 
     /// Returns the pypi package data if this is a pypi package.
-    pub fn as_pypi(&self) -> Option<(&PypiPackageData, &PypiPackageEnvironmentData)> {
+    pub fn as_pypi(&self) -> Option<&PypiPackageData> {
         match self {
-            LockedPackage::Conda(..) => None,
-            LockedPackage::Pypi(data, env) => Some((data, env)),
+            LockedPackage::Conda(_) => None,
+            LockedPackage::Pypi(data) => Some(data),
         }
     }
 
@@ -99,15 +93,15 @@ impl LockedPackage {
     pub fn into_conda(self) -> Option<CondaPackageData> {
         match self {
             LockedPackage::Conda(data) => Some(data),
-            LockedPackage::Pypi(..) => None,
+            LockedPackage::Pypi(_) => None,
         }
     }
 
     /// Returns the pypi package data if this is a pypi package.
-    pub fn into_pypi(self) -> Option<(PypiPackageData, PypiPackageEnvironmentData)> {
+    pub fn into_pypi(self) -> Option<PypiPackageData> {
         match self {
-            LockedPackage::Conda(..) => None,
-            LockedPackage::Pypi(data, env) => Some((data, env)),
+            LockedPackage::Conda(_) => None,
+            LockedPackage::Pypi(data) => Some(data),
         }
     }
 }
@@ -121,7 +115,6 @@ pub struct LockFileBuilder {
     /// A list of all package metadata stored in the lock file.
     conda_packages: IndexMap<UniqueCondaIdentifier, CondaPackageData>,
     pypi_packages: IndexSet<PypiPackageData>,
-    pypi_runtime_configurations: IndexSet<HashablePypiPackageEnvironmentData>,
 }
 
 /// A unique identifier for a conda package. This is used to deduplicate
@@ -240,21 +233,16 @@ impl LockFileBuilder {
         environment: impl Into<String>,
         platform: Platform,
         locked_package: PypiPackageData,
-        environment_data: PypiPackageEnvironmentData,
     ) -> &mut Self {
         // Add the package to the list of packages.
         let package_idx = self.pypi_packages.insert_full(locked_package).0;
-        let runtime_idx = self
-            .pypi_runtime_configurations
-            .insert_full(environment_data.into())
-            .0;
 
         // Add the package to the environment that it is intended for.
         self.environment_data(environment)
             .packages
             .entry(platform)
             .or_default()
-            .insert(EnvironmentPackageData::Pypi(package_idx, runtime_idx));
+            .insert(EnvironmentPackageData::Pypi(package_idx));
 
         self
     }
@@ -296,9 +284,7 @@ impl LockFileBuilder {
     ) -> &mut Self {
         match locked_package {
             LockedPackage::Conda(p) => self.add_conda_package(environment, platform, p),
-            LockedPackage::Pypi(data, env_data) => {
-                self.add_pypi_package(environment, platform, data, env_data)
-            }
+            LockedPackage::Pypi(data) => self.add_pypi_package(environment, platform, data),
         }
     }
 
@@ -312,9 +298,8 @@ impl LockFileBuilder {
         environment: impl Into<String>,
         platform: Platform,
         locked_package: PypiPackageData,
-        environment_data: PypiPackageEnvironmentData,
     ) -> Self {
-        self.add_pypi_package(environment, platform, locked_package, environment_data);
+        self.add_pypi_package(environment, platform, locked_package);
         self
     }
 
@@ -383,36 +368,9 @@ impl LockFileBuilder {
                 version: FileFormatVersion::LATEST,
                 conda_packages: self.conda_packages.into_values().collect(),
                 pypi_packages: self.pypi_packages.into_iter().collect(),
-                pypi_environment_package_data: self
-                    .pypi_runtime_configurations
-                    .into_iter()
-                    .map(Into::into)
-                    .collect(),
                 environments,
                 environment_lookup,
             }),
-        }
-    }
-}
-
-/// Similar to [`PypiPackageEnvironmentData`] but hashable.
-#[derive(Hash, PartialEq, Eq)]
-struct HashablePypiPackageEnvironmentData {
-    extras: BTreeSet<ExtraName>,
-}
-
-impl From<HashablePypiPackageEnvironmentData> for PypiPackageEnvironmentData {
-    fn from(value: HashablePypiPackageEnvironmentData) -> Self {
-        Self {
-            extras: value.extras.into_iter().collect(),
-        }
-    }
-}
-
-impl From<PypiPackageEnvironmentData> for HashablePypiPackageEnvironmentData {
-    fn from(value: PypiPackageEnvironmentData) -> Self {
-        Self {
-            extras: value.extras.into_iter().collect(),
         }
     }
 }
