@@ -288,6 +288,12 @@ impl super::SolverImpl for Solver {
             goal.install(id, true);
         }
 
+        // Specify the soft requirements (try to install, don't fail if can't)
+        for spec in task.soft_requirements {
+            let id = pool.intern_matchspec(&spec);
+            goal.install(id, true);
+        }
+
         // Add virtual packages to the queue. We want to install these as part of the
         // solution as well. This ensures that if a package only has a constraint on a
         // virtual package, the virtual package is installed.

@@ -964,9 +964,45 @@ impl super::SolverImpl for Solver {
             })
             .collect();
 
+        // Collect soft requirement solvables (all matching versions)
+        let soft_requirement_solvables: Vec<SolvableId> = task
+            .soft_requirements
+            .iter()
+            .flat_map(|spec| {
+                let (Some(PackageNameMatcher::Exact(name)), nameless) =
+                    spec.clone().into_nameless()
+                else {
+                    unimplemented!("only exact package names are supported");
+                };
+                let name_id = provider.pool.intern_package_name(&name);
+
+                // Get candidates for this package name
+                let Some(package_candidates) = provider.records.get(&name_id) else {
+                    return vec![];
+                };
+
+                // Filter candidates matching the spec
+                package_candidates
+                    .candidates
+                    .iter()
+                    .copied()
+                    .filter(|&solvable_id| {
+                        let solvable = provider.pool.resolve_solvable(solvable_id);
+                        match &solvable.record {
+                            SolverPackageRecord::Record(rec) => {
+                                nameless.matches(&rec.package_record)
+                            }
+                            _ => false,
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
         let problem = Problem::new()
             .requirements(all_requirements.clone())
-            .constraints(root_constraints);
+            .constraints(root_constraints)
+            .soft_requirements(soft_requirement_solvables);
 
         // Construct a solver and solve the problems in the queue
         let mut solver = LibSolvRsSolver::new(provider);
