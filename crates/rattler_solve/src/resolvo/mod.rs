@@ -965,7 +965,7 @@ impl super::SolverImpl for Solver {
             .collect();
 
         // Collect soft requirement solvables (all matching versions)
-        let soft_requirement_solvables: Vec<SolvableId> = task
+        let soft_requirement_solvables = task
             .soft_requirements
             .iter()
             .flat_map(|spec| {
@@ -997,7 +997,7 @@ impl super::SolverImpl for Solver {
                     })
                     .collect::<Vec<_>>()
             })
-            .collect();
+            .collect_vec();
 
         let problem = Problem::new()
             .requirements(all_requirements.clone())
