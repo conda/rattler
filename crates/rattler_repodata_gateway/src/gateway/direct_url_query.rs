@@ -3,7 +3,7 @@ use std::{future::IntoFuture, sync::Arc};
 use futures::FutureExt;
 use rattler_cache::package_cache::{CacheKey, PackageCache, PackageCacheError};
 use rattler_conda_types::{
-    package::{CondaArchiveIdentifier, IndexJson, PackageFile},
+    package::{CondaArchiveIdentifier, DistArchiveIdentifier, IndexJson, PackageFile},
     ConvertSubdirError, PackageRecord, RepoDataRecord,
 };
 use rattler_digest::{Md5Hash, Sha256Hash};
@@ -111,10 +111,12 @@ impl DirectUrlQuery {
 
         tracing::debug!("Package record build from direct url: {:?}", package_record);
 
+        let identifier = DistArchiveIdentifier::try_from_url(&self.url)
+            .ok_or_else(|| DirectUrlQueryError::InvalidFilename(self.url.to_string()))?;
+
         Ok(Arc::new([RepoDataRecord {
             package_record,
-            // File name is the same as the url.
-            file_name: self.url.clone().to_string(),
+            identifier,
             url: self.url.clone(),
             channel: None,
         }]))

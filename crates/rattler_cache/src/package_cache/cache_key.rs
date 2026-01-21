@@ -73,9 +73,9 @@ impl CacheKey {
 impl From<CondaArchiveIdentifier> for CacheKey {
     fn from(pkg: CondaArchiveIdentifier) -> Self {
         CacheKey {
-            name: pkg.name,
-            version: pkg.version,
-            build_string: pkg.build_string,
+            name: pkg.identifier.name,
+            version: pkg.identifier.version,
+            build_string: pkg.identifier.build_string,
             sha256: None,
             md5: None,
             origin_hash: None,

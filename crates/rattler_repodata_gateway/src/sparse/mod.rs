@@ -15,8 +15,9 @@ use bytes::Bytes;
 use fs_err as fs;
 use itertools::Itertools;
 use rattler_conda_types::{
-    compute_package_url, package::CondaArchiveType, Channel, ChannelInfo, MatchSpec, Matches,
-    PackageName, PackageRecord, RepoDataRecord,
+    compute_package_url,
+    package::{CondaArchiveType, DistArchiveIdentifier},
+    Channel, ChannelInfo, MatchSpec, Matches, PackageName, PackageRecord, RepoDataRecord,
 };
 use rattler_redaction::Redact;
 use serde::{
@@ -547,6 +548,12 @@ fn parse_record_raw<'i>(
     if package_record.subdir.is_empty() {
         package_record.subdir = subdir.to_owned();
     }
+    let identifier: DistArchiveIdentifier = filename.filename.parse().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("invalid archive identifier '{}': {}", filename.filename, e),
+        )
+    })?;
     let mut record = RepoDataRecord {
         url: compute_package_url(
             &channel
@@ -559,7 +566,7 @@ fn parse_record_raw<'i>(
         ),
         channel: channel_name.clone(),
         package_record,
-        file_name: filename.filename.to_owned(),
+        identifier,
     };
 
     // Apply the patch function if one was specified
@@ -1045,7 +1052,7 @@ mod test {
             .load_records(&PackageName::try_from("bors").unwrap(), variant)
             .unwrap()
             .into_iter()
-            .map(|record| record.file_name)
+            .map(|record| record.identifier.to_file_name())
             .collect::<Vec<_>>();
 
         insta::with_settings!({snapshot_suffix => variant.to_string()}, {
@@ -1079,7 +1086,7 @@ mod test {
             )
             .unwrap()
             .into_iter()
-            .map(|record| record.file_name)
+            .map(|record| record.identifier.to_file_name())
             .collect::<Vec<_>>();
 
         insta::assert_snapshot!(records.join("\n"), @r###"
@@ -1101,7 +1108,7 @@ mod test {
             )
             .unwrap()
             .into_iter()
-            .map(|record| record.file_name)
+            .map(|record| record.identifier.to_file_name())
             .collect::<Vec<_>>();
 
         insta::assert_snapshot!(records.join("\n"), @"cuda-version-12.5-hd4f0392_3.conda");

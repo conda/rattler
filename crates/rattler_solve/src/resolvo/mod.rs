@@ -13,7 +13,7 @@ use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
-    package::{CondaArchiveType, DistArchiveType},
+    package::{ArchiveIdentifier, DistArchiveType},
     utils::TimestampMs,
     GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageNameMatcher,
     ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, SolverResult,
@@ -338,7 +338,7 @@ impl<'a> CondaDependencyProvider<'a> {
             // records. This guarantees that the order of records remains the same over
             // runs.
             let mut ordered_repodata = Vec::with_capacity(repo_data.records.len());
-            let mut package_to_type: HashMap<&str, (DistArchiveType, usize, bool)> =
+            let mut package_to_type: HashMap<&ArchiveIdentifier, (DistArchiveType, usize, bool)> =
                 HashMap::with_capacity(repo_data.records.len());
 
             for record in repo_data.records {
@@ -359,16 +359,13 @@ impl<'a> CondaDependencyProvider<'a> {
 
                 let excluded = excluded_by_newer || excluded_by_age;
 
-                let (file_name, archive_type) = DistArchiveType::split_str(&record.file_name)
-                    .unwrap_or((
-                        &record.file_name,
-                        DistArchiveType::Conda(CondaArchiveType::TarBz2),
-                    ));
-                match package_to_type.get_mut(file_name) {
+                let identifier = &record.identifier.identifier;
+                let archive_type = record.identifier.archive_type;
+                match package_to_type.get_mut(identifier) {
                     None => {
                         let idx = ordered_repodata.len();
                         ordered_repodata.push(record);
-                        package_to_type.insert(file_name, (archive_type, idx, excluded));
+                        package_to_type.insert(identifier, (archive_type, idx, excluded));
                     }
                     Some((prev_archive_type, idx, previous_excluded)) => {
                         if *previous_excluded && !excluded {
@@ -399,7 +396,7 @@ impl<'a> CondaDependencyProvider<'a> {
                                 }
                                 Ordering::Equal => {
                                     return Err(SolveError::DuplicateRecords(
-                                        record.file_name.clone(),
+                                        record.identifier.to_string(),
                                     ));
                                 }
                             }
@@ -713,7 +710,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                     tracing::debug!(
                         "{}/{} from {} has invalid dependency '{}': {}, this variant will be ignored",
                         record.package_record.subdir,
-                        record.file_name,
+                        record.identifier,
                         record.channel.as_deref().unwrap_or("unknown"),
                         depends,
                         e
@@ -751,7 +748,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                     tracing::debug!(
                             "{}/{} from {} has invalid constraint '{}': {}, this variant will be ignored",
                             record.package_record.subdir,
-                            record.file_name,
+                            record.identifier,
                             record.channel.as_deref().unwrap_or("unknown"),
                             constrains,
                             e
@@ -786,7 +783,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                     tracing::debug!(
                         "{}/{} from {} has invalid extra dependency '{}': {}, this variant will be ignored",
                         record.package_record.subdir,
-                        record.file_name,
+                        record.identifier,
                         record.channel.as_deref().unwrap_or("unknown"),
                         matchspec,
                         e

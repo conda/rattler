@@ -1,5 +1,13 @@
 use std::{borrow::Cow, collections::BTreeSet};
 
+use crate::{
+    conda::CondaBinaryData,
+    utils::derived_fields::{derive_arch_and_platform, derive_channel_from_location},
+    CondaPackageData, UrlOrPath,
+};
+use rattler_conda_types::package::{
+    ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
+};
 use rattler_conda_types::{
     BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource,
 };
@@ -7,12 +15,6 @@ use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use url::Url;
-
-use crate::{
-    conda::CondaBinaryData,
-    utils::derived_fields::{derive_arch_and_platform, derive_channel_from_location},
-    CondaPackageData, UrlOrPath,
-};
 
 fn is_default<T: Default + Eq>(value: &T) -> bool {
     value == &T::default()
@@ -70,7 +72,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub track_features: Cow<'a, [String]>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub file_name: Cow<'a, Option<String>>,
+    pub file_name: Cow<'a, Option<DistArchiveIdentifier>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
@@ -101,14 +103,14 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
         let file_name = value
             .file_name
             .into_owned()
-            .or_else(|| location.file_name().map(ToString::to_string))
-            .unwrap_or_else(|| {
-                format!(
-                    "{}-{}-{}.conda",
-                    value.name.as_normalized(),
-                    value.version,
-                    value.build
-                )
+            .or_else(|| location.file_name().and_then(|f| f.parse().ok()))
+            .unwrap_or_else(|| DistArchiveIdentifier {
+                identifier: ArchiveIdentifier {
+                    name: value.name.as_normalized().to_owned(),
+                    version: value.version.to_string(),
+                    build_string: value.build.to_string(),
+                },
+                archive_type: DistArchiveType::Conda(CondaArchiveType::Conda),
             });
 
         Self::Binary(CondaBinaryData {

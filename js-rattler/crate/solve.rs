@@ -114,7 +114,7 @@ pub async fn simple_solve(
 
             Ok(RepoDataRecord {
                 url,
-                file_name: pkg.filename,
+                identifier: pkg.filename,
                 channel: pkg.repo_name,
                 package_record: rec.clone(),
             })
@@ -185,7 +185,7 @@ pub async fn simple_solve(
             build: r.package_record.build.clone(),
             build_number: Some(r.package_record.build_number),
             repo_name: r.channel,
-            filename: r.file_name,
+            filename: r.identifier,
             version: r.package_record.version.to_string(),
             md5: r
                 .package_record

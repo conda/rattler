@@ -719,7 +719,7 @@ pub(crate) fn matchspec_parser(
     if nameless_match_spec.url.is_none() {
         if let Some(url) = parse_url_like(&input)? {
             let archive = CondaArchiveIdentifier::try_from_url(&url);
-            let name = archive.and_then(|a| PackageNameMatcher::from_str(&a.name).ok());
+            let name = archive.and_then(|a| PackageNameMatcher::from_str(&a.identifier.name).ok());
 
             // TODO: This should also work without a proper name from the url filename
             if name.is_none() {
