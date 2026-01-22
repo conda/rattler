@@ -103,7 +103,6 @@ pub async fn simple_solve(
                 constrains: vec![],
                 track_features: vec![],
                 features: None,
-                filename: None,
                 noarch: NoArchType::none(),
                 license: None,
                 license_family: None,
