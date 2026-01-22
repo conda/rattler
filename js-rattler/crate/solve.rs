@@ -116,8 +116,8 @@ pub async fn simple_solve(
 
             Ok(RepoDataRecord {
                 url,
-                identifier: pkg.filename.parse().unwrap_or_else(|| {
-                    let archive_type = DistArchiveType::from_str(&pkg.filename)
+                identifier: pkg.filename.parse().unwrap_or_else(|_| {
+                    let archive_type = DistArchiveType::try_from(&pkg.filename)
                         .unwrap_or(CondaArchiveType::Conda.into());
                     DistArchiveIdentifier {
                         identifier: ArchiveIdentifier {
