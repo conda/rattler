@@ -328,7 +328,7 @@ async def test_solve_with_sparse_repodata_with_wheels() -> None:
     # Test: Version-conditional dependency - when side-dependency=0.2 is requested,
     # "package" should be included due to the conditional "package; if side-dependency=0.2"
     solved_data = await solve_with_sparse_repodata(
-        [MatchSpec("abqpy")],
+        [MatchSpec("starlette")],
         [noarch_data, linux_64_data],
         virtual_packages=[
             GenericVirtualPackage(PackageName("__unix"), Version("15"), "0"),
@@ -341,12 +341,12 @@ async def test_solve_with_sparse_repodata_with_wheels() -> None:
     conda_files = sum(r.file_name.endswith(".conda") for r in solved_data)
     tar_bz2_files = sum(r.file_name.endswith(".tar.bz2") for r in solved_data)
 
-    assert whl_files == 10
+    assert whl_files == 2
     assert conda_files == 21
     assert tar_bz2_files == 4
 
     assert isinstance(solved_data, list)
     package_names = [r.name.normalized for r in solved_data]
     # solve needs to include these two packages
-    assert "abqpy" in package_names
+    assert "starlette" in package_names
     assert "python" in package_names

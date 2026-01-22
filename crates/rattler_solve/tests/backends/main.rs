@@ -129,7 +129,6 @@ impl PackageBuilder {
                     constrains: Vec::new(),
                     track_features: Vec::new(),
                     features: None,
-                    filename: None,
                     noarch: NoArchType::default(),
                     license: None,
                     license_family: None,

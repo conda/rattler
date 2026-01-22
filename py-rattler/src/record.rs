@@ -170,7 +170,6 @@ impl PyRecord {
                 depends: Vec::new(),
                 experimental_extra_depends: BTreeMap::new(),
                 features: None,
-                filename: None,
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,
                 license: None,
