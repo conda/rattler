@@ -176,6 +176,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             depends: value.depends.into_owned(),
             experimental_extra_depends: value.experimental_extra_depends.into_owned(),
             features: value.features.into_owned(),
+            filename: None,
             legacy_bz2_md5: value.legacy_bz2_md5,
             legacy_bz2_size: value.legacy_bz2_size.into_owned(),
             license: value.license.into_owned(),

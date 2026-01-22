@@ -33,6 +33,12 @@ class PackageFormatSelection(Enum):
     Only use the `.conda` packages if there are both a `.tar.bz2` and a `.conda` package available.
     """
 
+    PREFER_CONDA_WITH_WHL = PyPackageFormatSelection.PreferCondaWithWhl
+    """
+    Only use the `.conda` packages if there are both a `.tar.bz2` and a `.conda` package available.
+    Also adds `.whl` files if available.
+    """
+
     BOTH = PyPackageFormatSelection.Both
     """
     Use both the `.tar.bz2` and the `.conda` packages.

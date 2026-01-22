@@ -10,7 +10,7 @@ from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyMatchSpec, PyPackageFormatSelection, py_solve, py_solve_with_sparse_repodata
 from rattler.repo_data.gateway import Gateway
 from rattler.repo_data.record import RepoDataRecord
-from rattler.repo_data.sparse import SparseRepoData
+from rattler.repo_data.sparse import SparseRepoData, PackageFormatSelection
 from rattler.virtual_package.generic import GenericVirtualPackage
 from rattler.virtual_package.virtual_package import VirtualPackage
 
@@ -134,6 +134,7 @@ async def solve_with_sparse_repodata(
     strategy: SolveStrategy = "highest",
     constraints: Optional[Sequence[MatchSpec | str]] = None,
     use_only_tar_bz2: bool = False,
+    package_format_selection_override: Optional[PackageFormatSelection] = None,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -179,10 +180,18 @@ async def solve_with_sparse_repodata(
             Packages included in the `constraints` are not necessarily installed,
             but they must be satisfied by the solution.
         use_only_tar_bz2: If `True` only `.tar.bz2` packages are used. If `False` `.conda` packages are preferred.
+        package_format_selection: If defined, will override `use_only_tar_bz2` and use the desired package selection.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
     """
+    if use_only_tar_bz2:
+        package_format_selection = PyPackageFormatSelection.OnlyTarBz2
+    else:
+        package_format_selection = PackageFormatSelection.PREFER_CONDA.value
+
+    if package_format_selection_override is not None:
+        package_format_selection = package_format_selection_override.value
 
     return [
         RepoDataRecord._from_py_record(solved_package)
@@ -202,9 +211,7 @@ async def solve_with_sparse_repodata(
             ],
             channel_priority=channel_priority.value,
             timeout=int(timeout / datetime.timedelta(microseconds=1)) if timeout else None,
-            package_format_selection=PyPackageFormatSelection.OnlyTarBz2
-            if use_only_tar_bz2
-            else PyPackageFormatSelection.PreferConda,
+            package_format_selection=package_format_selection,
             exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
             if exclude_newer
             else None,

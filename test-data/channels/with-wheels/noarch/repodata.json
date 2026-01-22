@@ -1,0 +1,391 @@
+{
+  "info": {
+    "subdir": "noarch"
+  },
+  "packages": {},
+  "packages.conda": {},
+  "removed": [],
+  "repodata_version": 1,
+  "signatures": {},
+  "packages.whl": {
+    "requests-2.32.5-py3_none_any_0": {
+      "record_version": 3,
+      "name": "requests",
+      "version": "2.32.5",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "charset-normalizer <4,>=2",
+        "idna <4,>=2.5",
+        "urllib3 <3,>=1.21.1",
+        "certifi >=2017.4.17",
+        "python >=3.9"
+      ],
+      "fn": "requests-2.32.5-py3-none-any.whl",
+      "sha256": "78820a3e5d9d3b25ce8e1c99c1c89cd19caa904a92973a3e50f8426009e8a4b3",
+      "size": 6899,
+      "subdir": "noarch",
+      "timestamp": 1764005009,
+      "noarch": "python"
+    },
+    "abqpy-2023.7.10-py3_none_any_0": {
+      "record_version": 3,
+      "name": "abqpy",
+      "version": "2023.7.10",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "auto-all",
+        "fire",
+        "pydantic",
+        "typeguard",
+        "typing_extensions",
+        "python >=3.8"
+      ],
+      "fn": "abqpy-2023.7.10-py3-none-any.whl",
+      "sha256": "33c73e3bc07412bbf192d79216256a5bbae7542280c1be6f5626f9ef88e54130",
+      "size": 4094,
+      "subdir": "noarch",
+      "timestamp": 1763676339,
+      "noarch": "python"
+    },
+    "anyio-4.9.0-py3_none_any_0": {
+      "record_version": 3,
+      "name": "anyio",
+      "version": "4.9.0",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "exceptiongroup >=1.0.2",
+        "idna >=2.8",
+        "sniffio >=1.1",
+        "typing_extensions >=4.5",
+        "python >=3.9"
+      ],
+      "fn": "anyio-4.9.0-py3-none-any.whl",
+      "sha256": "9bfa976fc6e5613bc5b9b626caf5409bd3ec086d90118cd92b410cb2cdc76e77",
+      "size": 3927,
+      "subdir": "noarch",
+      "timestamp": 1756406576,
+      "noarch": "python"
+    },
+    "setuptools-78.1.1-py3_none_any_0": {
+      "record_version": 3,
+      "name": "setuptools",
+      "version": "78.1.1",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "python >=3.9"
+      ],
+      "fn": "setuptools-78.1.1-py3-none-any.whl",
+      "sha256": "02e24f231af619ba2f02f6e0bdf2998b4c2638fcf12e4ee7e954920a41c63db4",
+      "size": 4825,
+      "subdir": "noarch",
+      "timestamp": 1756405218,
+      "noarch": "python"
+    },
+    "starlette-0.47.2-py3_none_any_0": {
+      "record_version": 3,
+      "name": "starlette",
+      "version": "0.47.2",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "anyio <5,>=3.6.2",
+        "typing_extensions >=4.10.0",
+        "python >=3.9"
+      ],
+      "fn": "starlette-0.47.2-py3-none-any.whl",
+      "sha256": "eed9895bba5c1d7f63f6be007c567c288893e791fd865a9ecfa536e89812bf81",
+      "size": 4412,
+      "subdir": "noarch",
+      "timestamp": 1756405214,
+      "noarch": "python"
+    },
+    "typing_extensions-4.14.1-py3_none_any_0": {
+      "record_version": 3,
+      "name": "typing_extensions",
+      "version": "4.14.1",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "python >=3.9"
+      ],
+      "fn": "typing_extensions-4.14.1-py3-none-any.whl",
+      "sha256": "eefe7d0f85db6c44f9726bbd4c4a540157ea968667fba03037d5a3f120eb8946",
+      "size": 6741,
+      "subdir": "noarch",
+      "timestamp": 1756405213,
+      "noarch": "python"
+    },
+    "wheel-0.45.1-py3_none_any_0": {
+      "record_version": 3,
+      "name": "wheel",
+      "version": "0.45.1",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "python >=3.8"
+      ],
+      "fn": "wheel-0.45.1-py3-none-any.whl",
+      "sha256": "b1a16f3146a0b0430e7a37608093b36fa9eab3372607b9c94d33817466dd6494",
+      "size": 2992,
+      "subdir": "noarch",
+      "timestamp": 1756405212,
+      "noarch": "python"
+    },
+    "sniffio-1.3.1-py3_none_any_0": {
+      "record_version": 3,
+      "name": "sniffio",
+      "version": "1.3.1",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "python >=3.7"
+      ],
+      "fn": "sniffio-1.3.1-py3-none-any.whl",
+      "sha256": "5fd298eda47ffc0b196347fbd50dd37206e6c172f2dac1f030a95b8bb389b87c",
+      "size": 7765,
+      "subdir": "noarch",
+      "timestamp": 1756405209,
+      "noarch": "python"
+    },
+    "typing-inspection-0.4.1-py3_none_any_0": {
+      "record_version": 3,
+      "name": "typing-inspection",
+      "version": "0.4.1",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "typing_extensions >=4.12.0",
+        "python >=3.9"
+      ],
+      "fn": "typing_inspection-0.4.1-py3-none-any.whl",
+      "sha256": "967b8416a07553aa0ca73fa73be57f4af8e96676563bbdf1d6ebaccc6e3a0a89",
+      "size": 2672,
+      "subdir": "noarch",
+      "timestamp": 1756405207,
+      "noarch": "python"
+    },
+    "annotated-types-0.7.0-py3_none_any_0": {
+      "record_version": 3,
+      "name": "annotated-types",
+      "version": "0.7.0",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "typing_extensions >=4.0.0",
+        "python >=3.8"
+      ],
+      "fn": "annotated_types-0.7.0-py3-none-any.whl",
+      "sha256": "15593bfa1dfbf7a0d73018a86aa6b1e802bb7eab00eee50b4bde9e42d3b9bf1a",
+      "size": 7557,
+      "subdir": "noarch",
+      "timestamp": 1756405206,
+      "noarch": "python"
+    },
+    "fastapi-0.116.1-py3_none_any_0": {
+      "record_version": 3,
+      "name": "fastapi",
+      "version": "0.116.1",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "starlette <0.48.0,>=0.40.0",
+        "pydantic !=1.8,!=1.8.1,!=2.0.0,!=2.0.1,!=2.1.0,<3.0.0,>=1.7.4",
+        "typing_extensions >=4.8.0",
+        "python >=3.8"
+      ],
+      "fn": "fastapi-0.116.1-py3-none-any.whl",
+      "sha256": "0fa0e8157f257b9e34bd534228a38ec8c4f748599942a02de89f01759b821019",
+      "size": 10603,
+      "subdir": "noarch",
+      "timestamp": 1753436542,
+      "noarch": "python"
+    },
+    "pydantic-core-2.33.2-py3_none_any_0": {
+      "record_version": 3,
+      "name": "pydantic-core",
+      "version": "2.33.2",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "typing_extensions !=4.7.0,>=4.6.0",
+        "python >=3.9"
+      ],
+      "fn": "pydantic_core-2.33.2-cp313-cp313-macosx_11_0_arm64.whl",
+      "sha256": "5b2f4042ae3de324b40a50a7a1b5070406573e14fd3acdf64b01c78b2361bfc2",
+      "size": 4349,
+      "subdir": "noarch",
+      "timestamp": 1753436541,
+      "noarch": "python"
+    },
+    "idna-3.10-py3_none_any_0": {
+      "record_version": 3,
+      "name": "idna",
+      "version": "3.10",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "python >=3.6"
+      ],
+      "fn": "idna-3.10-py3-none-any.whl",
+      "sha256": "b49df1a1923a9398542b6a713875dcea6d8cd80b3c5b9ca68ecf1d76bcf1ff3e",
+      "size": 5718,
+      "subdir": "noarch",
+      "timestamp": 1753436539,
+      "noarch": "python"
+    },
+    "pydantic-2.11.7-py3_none_any_0": {
+      "record_version": 3,
+      "name": "pydantic",
+      "version": "2.11.7",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "annotated-types >=0.6.0",
+        "pydantic-core ==2.33.2",
+        "typing_extensions >=4.12.2",
+        "typing-inspection >=0.4.0",
+        "python >=3.9"
+      ],
+      "fn": "pydantic-2.11.7-py3-none-any.whl",
+      "sha256": "f5d6d391c0c800e155cf8998bdffa9fb27b3e07761f8e2f492dd997e7bddc662",
+      "size": 14200,
+      "subdir": "noarch",
+      "timestamp": 1753436538,
+      "noarch": "python"
+    },
+    "charset_normalizer-3.3.2-py3_none_any_0": {
+      "record_version": 3,
+      "name": "charset-normalizer",
+      "version": "3.3.2",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "python >=3.7"
+      ],
+      "fn": "charset_normalizer-3.3.2-py3-none-any.whl",
+      "sha256": "a06147890c8f0b67c4d0c8defc6c8f8e858e2ac7e94c6d5b2b89a8e5b6d72b35",
+      "size": 5000,
+      "subdir": "noarch",
+      "timestamp": 1700000000,
+      "noarch": "python"
+    },
+    "urllib3-2.2.3-py3_none_any_0": {
+      "record_version": 3,
+      "name": "urllib3",
+      "version": "2.2.3",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "python >=3.8"
+      ],
+      "fn": "urllib3-2.2.3-py3-none-any.whl",
+      "sha256": "70fb53c3e7e7de7e6f0b5df9d8ac8e5c4dfe5a0fa8d5c38e6e5b2f6d3f2e1c9b",
+      "size": 5000,
+      "subdir": "noarch",
+      "timestamp": 1700000000,
+      "noarch": "python"
+    },
+    "certifi-2024.12.14-py3_none_any_0": {
+      "record_version": 3,
+      "name": "certifi",
+      "version": "2024.12.14",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "python >=3.6"
+      ],
+      "fn": "certifi-2024.12.14-py3-none-any.whl",
+      "sha256": "9d2f77c8f998c8f8bce6b29e59c5e9f7e5c4e2c6a3e4f7c8c5e2e8a6c4d9b3f1",
+      "size": 5000,
+      "subdir": "noarch",
+      "timestamp": 1700000000,
+      "noarch": "python"
+    },
+    "auto-all-1.4.1-py3_none_any_0": {
+      "record_version": 3,
+      "name": "auto-all",
+      "version": "1.4.1",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "python >=3.7"
+      ],
+      "fn": "auto_all-1.4.1-py3-none-any.whl",
+      "sha256": "2c8f5e6d3b7a4e9f1c0d8b6e4f2a9c7e1d5b3f8a6c4e2d9f7b5a3c1e8d6f4b27",
+      "size": 5000,
+      "subdir": "noarch",
+      "timestamp": 1700000000,
+      "noarch": "python"
+    },
+    "fire-0.7.1-py3_none_any_0": {
+      "record_version": 3,
+      "name": "fire",
+      "version": "0.7.1",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "termcolor",
+        "python >=3.7"
+      ],
+      "fn": "fire-0.7.1-py3-none-any.whl",
+      "sha256": "8e4a9c2f1d3b5a7e9f0c2d4b6e8a1f3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d56",
+      "size": 5000,
+      "subdir": "noarch",
+      "timestamp": 1700000000,
+      "noarch": "python"
+    },
+    "typeguard-4.4.1-py3_none_any_0": {
+      "record_version": 3,
+      "name": "typeguard",
+      "version": "4.4.1",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "typing_extensions >=4.10.0",
+        "python >=3.9"
+      ],
+      "fn": "typeguard-4.4.1-py3-none-any.whl",
+      "sha256": "f7a3c8d2e9b6f1c4e8d5a7f2c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3c5e7",
+      "size": 5000,
+      "subdir": "noarch",
+      "timestamp": 1700000000,
+      "noarch": "python"
+    },
+    "exceptiongroup-1.2.2-py3_none_any_0": {
+      "record_version": 3,
+      "name": "exceptiongroup",
+      "version": "1.2.2",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "python >=3.7"
+      ],
+      "fn": "exceptiongroup-1.2.2-py3-none-any.whl",
+      "sha256": "3f8c6b2c7a1e4f5d6b9c8e7f3a2d5c9e4b7f1a6d3c8e5b2f9a7c4e1d6b3f8a59",
+      "size": 5000,
+      "subdir": "noarch",
+      "timestamp": 1700000000,
+      "noarch": "python"
+    },
+    "termcolor-2.5.0-py3_none_any_0": {
+      "record_version": 3,
+      "name": "termcolor",
+      "version": "2.5.0",
+      "build": "py3_none_any_0",
+      "build_number": 0,
+      "depends": [
+        "python >=3.8"
+      ],
+      "fn": "termcolor-2.5.0-py3-none-any.whl",
+      "sha256": "c5b2a9f7e3d4b1f8a6c7e9d2f3a5b8c1e4d7f9a2c5e8b1d4f7a9c2e5b8d1f4a7",
+      "size": 5000,
+      "subdir": "noarch",
+      "timestamp": 1700000000,
+      "noarch": "python"
+    }
+  }
+}
