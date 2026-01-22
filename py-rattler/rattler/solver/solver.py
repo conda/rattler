@@ -7,7 +7,13 @@ from rattler.channel.channel import Channel
 from rattler.channel.channel_priority import ChannelPriority
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.platform.platform import Platform, PlatformLiteral
-from rattler.rattler import PyMatchSpec, PyPackageFormatSelection, py_solve, py_solve_with_records, py_solve_with_sparse_repodata
+from rattler.rattler import (
+    PyMatchSpec,
+    PyPackageFormatSelection,
+    py_solve,
+    py_solve_with_records,
+    py_solve_with_sparse_repodata,
+)
 from rattler.repo_data.gateway import Gateway
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.sparse import SparseRepoData
