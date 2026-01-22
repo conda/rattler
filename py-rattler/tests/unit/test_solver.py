@@ -6,6 +6,7 @@ import pytest
 from rattler import (
     solve,
     ChannelPriority,
+    RepoData,
     RepoDataRecord,
     Channel,
     Gateway,
@@ -303,26 +304,17 @@ async def test_solve_with_sparse_repodata_version_conditional_dependencies() -> 
 
 
 @pytest.mark.asyncio
-async def test_solve_with_records(gateway: Gateway, dummy_channel: Channel) -> None:
-    """Test solve_with_records by first fetching records via gateway, then solving with them directly."""
-    # First, solve using the gateway to get records
-    initial_solved = await solve(
-        [dummy_channel],
-        ["foobar"],
-        platforms=["linux-64"],
-        gateway=gateway,
-    )
+async def test_solve_with_records(test_data_dir: str) -> None:
+    """Test solve_with_records by loading records from RepoData."""
+    # Load repodata from disk using RepoData
+    repodata_path = os.path.join(test_data_dir, "channels/dummy/linux-64/repodata.json")
+    repo_data = RepoData(repodata_path)
 
-    # Now we need to get all available records from the channel
-    # We can use the gateway to query for all packages we might need
-    all_records = await solve(
-        [dummy_channel],
-        ["foobar", "bors"],  # Request all packages that might be needed
-        platforms=["linux-64"],
-        gateway=gateway,
-    )
+    # Convert to list of RepoDataRecords
+    channel = Channel("dummy")
+    all_records = repo_data.into_repo_data(channel)
 
-    # Use solve_with_records with the records we got
+    # Use solve_with_records with the records we loaded
     # Passing records as a single "channel" (list of records)
     solved_data = await solve_with_records(
         [MatchSpec("foobar")],
@@ -337,45 +329,3 @@ async def test_solve_with_records(gateway: Gateway, dummy_channel: Channel) -> N
     package_names = [r.name.normalized for r in solved_data]
     assert "foobar" in package_names
     assert "bors" in package_names
-
-
-@pytest.mark.asyncio
-async def test_solve_with_records_from_sparse_repodata() -> None:
-    """Test solve_with_records using records loaded from SparseRepoData."""
-    linux64_chan = Channel("conda-forge")
-    data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
-    linux64_path = os.path.join(data_dir, "channels/dummy/linux-64/repodata.json")
-    linux64_data = SparseRepoData(
-        channel=linux64_chan,
-        subdir="linux-64",
-        path=linux64_path,
-    )
-
-    # First solve with sparse repodata to get the records
-    sparse_solved = await solve_with_sparse_repodata(
-        [MatchSpec("foobar")],
-        [linux64_data],
-    )
-
-    # Now solve with the records directly
-    # We need to provide all available records, not just the solved ones
-    # Get all records by solving for all packages we might need
-    all_records = await solve_with_sparse_repodata(
-        [MatchSpec("foobar"), MatchSpec("bors")],
-        [linux64_data],
-    )
-
-    solved_data = await solve_with_records(
-        [MatchSpec("foobar")],
-        [all_records],
-    )
-
-    assert isinstance(solved_data, list)
-    assert isinstance(solved_data[0], RepoDataRecord)
-    assert len(solved_data) == 2
-
-    # Verify the results match what we got from sparse repodata
-    assert len(solved_data) == len(sparse_solved)
-    solved_names = sorted([r.name.normalized for r in solved_data])
-    sparse_names = sorted([r.name.normalized for r in sparse_solved])
-    assert solved_names == sparse_names
