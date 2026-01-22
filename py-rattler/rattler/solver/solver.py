@@ -178,7 +178,7 @@ async def solve_with_sparse_repodata(
         constraints: Additional constraints that should be satisfied by the solver.
             Packages included in the `constraints` are not necessarily installed,
             but they must be satisfied by the solution.
-        package_format_selection: If defined, will override `use_only_tar_bz2` and use the desired package selection.
+        package_format_selection: Defines which package formats are selected
 
     Returns:
         Resolved list of `RepoDataRecord`s.
