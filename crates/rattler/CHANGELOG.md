@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.10](https://github.com/conda/rattler/compare/rattler-v0.39.9...rattler-v0.39.10) - 2026-01-22
+
+### Fixed
+
+- expose `LinkOptions` in `rattler::Installer` ([#1994](https://github.com/conda/rattler/pull/1994))
+
 ## [0.39.9](https://github.com/baszalmstra/rattler/compare/rattler-v0.39.8...rattler-v0.39.9) - 2026-01-22
 
 ### Fixed
