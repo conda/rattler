@@ -8,24 +8,27 @@ mod topological_sort;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
+    hash::{Hash, Hasher},
     path::Path,
+    str::FromStr,
 };
 
 use indexmap::IndexMap;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none};
+use serde_with::{serde_as, skip_serializing_none, DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 use url::Url;
 
-use crate::package::DistArchiveIdentifier;
 use crate::{
     build_spec::BuildNumber,
-    package::{IndexJson, RunExportsJson},
+    package::{DistArchiveIdentifier, IndexJson, RunExportsJson},
     utils::{
-        serde::sort_index_map_alphabetically, serde::sort_map_alphabetically,
-        serde::DeserializeFromStrUnchecked, UrlWithTrailingSlash,
+        serde::{
+            sort_index_map_alphabetically, sort_map_alphabetically, DeserializeFromStrUnchecked,
+        },
+        UrlWithTrailingSlash,
     },
     Arch, Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
     ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
@@ -61,7 +64,7 @@ pub struct RepoData {
         serialize_with = "sort_index_map_alphabetically"
     )]
     pub experimental_whl_packages:
-        IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
+        IndexMap<DistArchiveIdentifier, WhlPackageRecord, ahash::RandomState>,
 
     /// removed packages (files are still accessible, but they are not
     /// installable like regular packages)
@@ -224,6 +227,72 @@ pub struct PackageRecord {
     //pub package_type: ?
 }
 
+/// A record in the `packages.whl` section of the `repodata.json`.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Hash)]
+pub struct WhlPackageRecord {
+    /// The conda metadata
+    #[serde(flatten)]
+    pub package_record: PackageRecord,
+
+    /// Where to get the package from. This is a required field.
+    pub url: UrlOrPath,
+}
+
+impl AsRef<PackageRecord> for WhlPackageRecord {
+    fn as_ref(&self) -> &PackageRecord {
+        self.package_record.as_ref()
+    }
+}
+
+/// Represents either an absolute URL or a relative path to the base url of a
+/// channel
+#[derive(Debug, DeserializeFromStr, SerializeDisplay, Eq, PartialEq, Clone)]
+pub enum UrlOrPath {
+    /// A relative path to the base url of the channel
+    Path(String),
+
+    /// An absolute URL
+    Url(Url),
+}
+
+impl UrlOrPath {
+    /// Returns the string representation of the URL or path.
+    pub fn as_str(&self) -> &str {
+        match self {
+            UrlOrPath::Path(path) => path,
+            UrlOrPath::Url(url) => url.as_str(),
+        }
+    }
+}
+
+impl Hash for UrlOrPath {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
+    }
+}
+
+impl Display for UrlOrPath {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UrlOrPath::Path(path) => write!(f, "{path}"),
+            UrlOrPath::Url(url) => write!(f, "{url}"),
+        }
+    }
+}
+
+impl FromStr for UrlOrPath {
+    type Err = url::ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // First try to parse the string as a path.
+        if s.contains("://") {
+            Ok(UrlOrPath::Url(s.parse()?))
+        } else {
+            Ok(UrlOrPath::Path(s.to_owned()))
+        }
+    }
+}
+
 impl Display for PackageRecord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.build.is_empty() {
@@ -289,6 +358,37 @@ impl RepoData {
                 identifier,
             });
         }
+
+        // Determine the base_url of the channel
+        for (
+            identifier,
+            WhlPackageRecord {
+                url,
+                package_record,
+            },
+        ) in self.experimental_whl_packages
+        {
+            let url = match url {
+                UrlOrPath::Path(path) => compute_package_url(
+                    &channel
+                        .base_url
+                        .url()
+                        .join(&package_record.subdir)
+                        .expect("cannot join channel base_url and subdir"),
+                    base_url.as_deref(),
+                    &path,
+                ),
+                UrlOrPath::Url(url) => url,
+            };
+
+            records.push(RepoDataRecord {
+                url,
+                channel: Some(channel.base_url.as_str().to_string()),
+                package_record,
+                identifier,
+            });
+        }
+
         records
     }
 }
@@ -598,8 +698,8 @@ fn sort_set_alphabetically<K: Ord + Serialize, S: serde::Serializer>(
 mod test {
     use indexmap::IndexMap;
 
-    use crate::package::DistArchiveIdentifier;
     use crate::{
+        package::DistArchiveIdentifier,
         repo_data::{compute_package_url, determine_subdir},
         Channel, ChannelConfig, PackageRecord, RepoData,
     };
@@ -660,10 +760,11 @@ mod test {
 
     #[test]
     fn test_deserialize_no_noarch_empty_str() {
-        // This test covers the case where a repodata entry may contain a "noarch" key set to an empty string.
-        // Packages with such metadata have been observed on private conda channels.
-        // This likely was passed from older versions of conda-build that would pass this key
-        // from the recipe even if it was incorrect.
+        // This test covers the case where a repodata entry may contain a "noarch" key
+        // set to an empty string. Packages with such metadata have been
+        // observed on private conda channels. This likely was passed from older
+        // versions of conda-build that would pass this key from the recipe even
+        // if it was incorrect.
         let repodata =
             deserialize_json_from_test_data("channels/dummy-noarch-str/linux-64/repodata.json");
         insta::assert_yaml_snapshot!(repodata);

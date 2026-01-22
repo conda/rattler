@@ -8,7 +8,7 @@ use serde_with::{serde_as, skip_serializing_none};
 
 use crate::{
     package::{CondaArchiveType, DistArchiveIdentifier, DistArchiveType, WheelArchiveType},
-    PackageRecord, PackageUrl, RepoData, Shard,
+    PackageRecord, PackageUrl, RepoData, Shard, WhlPackageRecord,
 };
 
 /// Represents a Conda repodata patch.
@@ -215,7 +215,7 @@ pub fn apply_patches_impl(
     conda_packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
     experimental_whl_packages: &mut IndexMap<
         DistArchiveIdentifier,
-        PackageRecord,
+        WhlPackageRecord,
         ahash::RandomState,
     >,
     removed: &mut ahash::HashSet<DistArchiveIdentifier>,
@@ -241,7 +241,7 @@ pub fn apply_patches_impl(
     // Apply patches to wheel packages
     for (identifier, patch) in instructions.experimental_whl_packages.iter() {
         if let Some(record) = experimental_whl_packages.get_mut(identifier) {
-            record.apply_patch(patch);
+            record.package_record.apply_patch(patch);
         }
     }
 
