@@ -188,7 +188,7 @@ file_url = { path = "crates/file_url", version = "=0.2.7", default-features = fa
 path_resolver = { path = "crates/path_resolver", version = "=0.2.4", default-features = false }
 rattler = { path = "crates/rattler", version = "=0.39.8", default-features = false }
 rattler_cache = { path = "crates/rattler_cache", version = "=0.6.7", default-features = false }
-rattler_conda_types = { path = "crates/rattler_conda_types", version = "=0.42.5", default-features = false }
+rattler_conda_types = { path = "crates/rattler_conda_types", version = "=0.43.0", default-features = false }
 rattler_config = { path = "crates/rattler_config", version = "=0.2.24", default-features = false }
 rattler_digest = { path = "crates/rattler_digest", version = "=1.2.2", default-features = false }
 rattler_index = { path = "crates/rattler_index", version = "=0.27.9", default-features = false }
