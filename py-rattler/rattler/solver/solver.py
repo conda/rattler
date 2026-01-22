@@ -133,8 +133,7 @@ async def solve_with_sparse_repodata(
     exclude_newer: Optional[datetime.datetime] = None,
     strategy: SolveStrategy = "highest",
     constraints: Optional[Sequence[MatchSpec | str]] = None,
-    use_only_tar_bz2: bool = False,
-    package_format_selection_override: Optional[PackageFormatSelection] = None,
+    package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -179,20 +178,11 @@ async def solve_with_sparse_repodata(
         constraints: Additional constraints that should be satisfied by the solver.
             Packages included in the `constraints` are not necessarily installed,
             but they must be satisfied by the solution.
-        use_only_tar_bz2: If `True` only `.tar.bz2` packages are used. If `False` `.conda` packages are preferred.
         package_format_selection: If defined, will override `use_only_tar_bz2` and use the desired package selection.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
     """
-    if use_only_tar_bz2:
-        package_format_selection = PyPackageFormatSelection.OnlyTarBz2
-    else:
-        package_format_selection = PackageFormatSelection.PREFER_CONDA.value
-
-    if package_format_selection_override is not None:
-        package_format_selection = package_format_selection_override.value
-
     return [
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in await py_solve_with_sparse_repodata(
@@ -211,7 +201,7 @@ async def solve_with_sparse_repodata(
             ],
             channel_priority=channel_priority.value,
             timeout=int(timeout / datetime.timedelta(microseconds=1)) if timeout else None,
-            package_format_selection=package_format_selection,
+            package_format_selection=package_format_selection.value,
             exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
             if exclude_newer
             else None,

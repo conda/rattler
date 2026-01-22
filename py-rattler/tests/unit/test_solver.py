@@ -334,7 +334,7 @@ async def test_solve_with_sparse_repodata_with_wheels() -> None:
             GenericVirtualPackage(PackageName("__unix"), Version("15"), "0"),
             GenericVirtualPackage(PackageName("__linux"), Version("0"), "0"),
         ],
-        package_format_selection_override=PackageFormatSelection.PREFER_CONDA_WITH_WHL,
+        package_format_selection=PackageFormatSelection.PREFER_CONDA_WITH_WHL,
     )
 
     whl_files = sum(r.file_name.endswith(".whl") for r in solved_data)

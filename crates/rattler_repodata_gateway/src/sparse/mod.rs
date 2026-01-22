@@ -1267,7 +1267,7 @@ mod test {
     #[rstest]
     #[case::both(PackageFormatSelection::Both, 6)]
     #[case::prefer_conda(PackageFormatSelection::PreferConda, 6)]
-    #[case::prefer_conda_with_whl(PackageFormatSelection::PreferCondaWithWhl, 49)]
+    #[case::prefer_conda_with_whl(PackageFormatSelection::PreferCondaWithWhl, 51)]
     #[case::only_tar_bz2(PackageFormatSelection::OnlyTarBz2, 3)]
     #[case::only_conda(PackageFormatSelection::OnlyConda, 3)]
     fn test_record_count_with_wheels(
