@@ -170,7 +170,7 @@ impl TryFrom<CondaArchiveIdentifier> for PackageName {
     type Error = InvalidPackageNameError;
 
     fn try_from(value: CondaArchiveIdentifier) -> Result<Self, Self::Error> {
-        value.name.try_into()
+        value.identifier.name.try_into()
     }
 }
 

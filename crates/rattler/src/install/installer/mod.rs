@@ -536,7 +536,10 @@ impl Installer {
                         .map(move |r| (r, r.on_unlink_start(operation_idx, record)));
                     driver.clobber_registry().unregister_paths(record);
                     unlink_package(prefix, record).await.map_err(|e| {
-                        InstallerError::UnlinkError(record.repodata_record.file_name.clone(), e)
+                        InstallerError::UnlinkError(
+                            record.repodata_record.identifier.to_string(),
+                            e,
+                        )
                     })?;
                     if let Some((reporter, index)) = reporter {
                         reporter.on_unlink_complete(index);
@@ -721,7 +724,7 @@ async fn link_package(
                 clobber_registry,
                 install_options,
             )
-            .map_err(|e| InstallerError::LinkError(record.file_name.clone(), e))?;
+            .map_err(|e| InstallerError::LinkError(record.identifier.to_string(), e))?;
 
             // Construct a PrefixRecord for the package
             let prefix_record = PrefixRecord {
@@ -801,7 +804,7 @@ async fn populate_cache(
             }),
         )
         .await
-        .map_err(|e| InstallerError::FailedToFetch(record.file_name.clone(), e))
+        .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
 }
 
 /// Updates only the `requested_specs` fields in a conda-meta JSON file.
@@ -972,14 +975,13 @@ fn update_existing_records<'p>(
 mod tests {
     use std::path::Path;
 
+    use super::*;
     use rattler_conda_types::{
         package::IndexJson, prefix::Prefix, MatchSpec, PackageName, ParseStrictness::Strict,
     };
     use rattler_package_streaming::seek::read_package_file;
     use tempfile::TempDir;
     use url::Url;
-
-    use super::*;
 
     /// Creates a test environment with a temporary directory and prefix
     fn create_test_environment() -> (TempDir, Prefix) {
@@ -1004,7 +1006,7 @@ mod tests {
                 None, // md5 unknown
             )
             .unwrap(),
-            file_name: "empty-0.1.0-h4616a5c_0.conda".to_string(),
+            identifier: "empty-0.1.0-h4616a5c_0.conda".parse().unwrap(),
             url: Url::from_file_path(package_path).unwrap(),
             channel: Some("local".to_string()),
         }

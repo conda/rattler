@@ -2,16 +2,6 @@
 
 use std::{collections::BTreeSet, ops::Not, str::FromStr, sync::Arc};
 
-use indexmap::IndexSet;
-use pep440_rs::VersionSpecifiers;
-use pep508_rs::{ExtraName, Requirement};
-use rattler_conda_types::{
-    NoArchType, PackageName, PackageRecord, PackageUrl, Platform, VersionWithSource,
-};
-use serde::Deserialize;
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
-use url::Url;
-
 use super::ParseCondaLockError;
 use crate::{
     conda::CondaBinaryData,
@@ -24,6 +14,18 @@ use crate::{
     PackageHashes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
     DEFAULT_ENVIRONMENT_NAME,
 };
+use indexmap::IndexSet;
+use pep440_rs::VersionSpecifiers;
+use pep508_rs::{ExtraName, Requirement};
+use rattler_conda_types::package::{
+    ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
+};
+use rattler_conda_types::{
+    NoArchType, PackageName, PackageRecord, PackageUrl, Platform, VersionWithSource,
+};
+use serde::Deserialize;
+use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use url::Url;
 
 #[derive(Deserialize)]
 struct LockFileV3 {
@@ -192,8 +194,13 @@ pub fn parse_v3_or_lower(
                             .channel
                             .unwrap_or_else(|| Url::parse("https://example.com").unwrap().into())
                             .into(),
-                        file_name: derived.file_name.unwrap_or_else(|| {
-                            format!("{}-{}-{}.conda", value.name, value.version, build)
+                        file_name: derived.identifier.unwrap_or_else(|| DistArchiveIdentifier {
+                            identifier: ArchiveIdentifier {
+                                name: value.name.clone(),
+                                version: value.version.to_string(),
+                                build_string: build.clone(),
+                            },
+                            archive_type: DistArchiveType::Conda(CondaArchiveType::Conda),
                         }),
                         package_record: PackageRecord {
                             arch: value.arch.or(derived_arch),

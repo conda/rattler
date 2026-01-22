@@ -31,7 +31,7 @@ use opendal::services::S3Config;
 use opendal::{services::FsConfig, Configurator, Operator};
 use rattler_conda_types::{
     package::{
-        CondaArchiveIdentifier, CondaArchiveType, DistArchiveType, IndexJson, PackageFile,
+        CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
         RunExportsJson, WheelArchiveType,
     },
     ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
@@ -618,7 +618,7 @@ async fn index_subdir_inner(
     // Step 2: Read any previous repodata.json files with conditional check.
     // This file already contains a lot of information about the packages that we
     // can reuse.
-    let mut registered_packages: ahash::HashMap<String, PackageRecord> = if force {
+    let mut registered_packages: ahash::HashMap<DistArchiveIdentifier, PackageRecord> = if force {
         HashMap::default()
     } else {
         let (repodata_path, read_metadata) = if repodata_patch.is_some() {
@@ -651,7 +651,7 @@ async fn index_subdir_inner(
     };
 
     // List all the packages in the subdirectory.
-    let uploaded_packages: HashSet<String> = op
+    let uploaded_packages: HashSet<DistArchiveIdentifier> = op
         .list_with(&format!("{}/", subdir.as_str()))
         .await?
         .iter()
@@ -659,7 +659,7 @@ async fn index_subdir_inner(
             if entry.metadata().mode().is_file() {
                 let filename = entry.name().to_string();
                 // Check if the file is an archive package file.
-                DistArchiveType::try_from(&filename).map(|_| filename)
+                DistArchiveIdentifier::try_from_filename(&filename)
             } else {
                 None
             }
@@ -731,10 +731,11 @@ async fn index_subdir_inner(
                     console::style(&filename).dim()
                 ));
 
-                let record = read_and_parse_package(&op, &cache, subdir, &filename).await?;
+                let record =
+                    read_and_parse_package(&op, &cache, subdir, &filename.to_file_name()).await?;
 
                 pb.inc(1);
-                Ok::<(String, PackageRecord), std::io::Error>((filename, record))
+                Ok::<(DistArchiveIdentifier, PackageRecord), std::io::Error>((filename, record))
             }
         };
         tasks.push(tokio::spawn(task));
@@ -781,15 +782,16 @@ async fn index_subdir_inner(
         registered_packages.insert(filename, record);
     }
 
-    let mut packages: IndexMap<String, PackageRecord, ahash::RandomState> = IndexMap::default();
-    let mut conda_packages: IndexMap<String, PackageRecord, ahash::RandomState> =
+    let mut packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
+        IndexMap::default();
+    let mut conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
         IndexMap::default();
     for (filename, package) in registered_packages {
-        match DistArchiveType::try_from(&filename) {
-            Some(DistArchiveType::Conda(CondaArchiveType::TarBz2)) => {
+        match filename.archive_type {
+            DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
                 packages.insert(filename, package);
             }
-            Some(DistArchiveType::Conda(CondaArchiveType::Conda)) => {
+            DistArchiveType::Conda(CondaArchiveType::Conda) => {
                 conda_packages.insert(filename, package);
             }
             _ => panic!("Unknown archive type"),
@@ -917,13 +919,7 @@ pub async fn write_repodata(
             shard.packages.insert(k, package_record);
         }
         for package in repodata.removed {
-            let package_name = CondaArchiveIdentifier::try_from_filename(package.as_str())
-                .ok_or_else(|| {
-                    RepodataError::Other(anyhow::anyhow!(
-                        "Could not determine archive identifier for {package}" // <--- NEW
-                    ))
-                })?
-                .name;
+            let package_name = package.identifier.name.clone();
             let shard = shards_by_package_names.entry(package_name).or_default();
             shard.removed.insert(package);
         }

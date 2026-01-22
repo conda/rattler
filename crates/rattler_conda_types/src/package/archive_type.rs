@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{cmp::Ordering, path::Path};
 
 use serde::{Deserialize, Serialize};
 
@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CondaArchiveType {
-    /// A file with the `.tar.bz2` extension.
-    TarBz2,
-
     /// A file with the `.conda` extension.
     Conda,
+
+    /// A file with the `.tar.bz2` extension.
+    TarBz2,
 }
 
 impl CondaArchiveType {
@@ -47,8 +47,8 @@ impl CondaArchiveType {
             .map(|(_, archive_type)| archive_type)
     }
 
-    /// Split the given string into its filename and archive type, removing the extension.
-    /// Only recognizes conda package extensions.
+    /// Split the given string into its filename and archive type, removing the
+    /// extension. Only recognizes conda package extensions.
     #[allow(clippy::manual_map)]
     pub fn split_str(path: &str) -> Option<(&str, CondaArchiveType)> {
         if let Some(path) = path.strip_suffix(".conda") {
@@ -61,7 +61,8 @@ impl CondaArchiveType {
     }
 }
 
-/// Describes any type of distributable package archive (conda packages or wheels).
+/// Describes any type of distributable package archive (conda packages or
+/// wheels).
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DistArchiveType {
@@ -73,6 +74,24 @@ pub enum DistArchiveType {
 }
 
 impl DistArchiveType {
+    /// Compares this archive type against another returning which one is
+    /// preferred over another if there are two archive types that represent the
+    /// same package.
+    ///
+    /// The order returned by this function is that `.conda` packages are
+    /// preferred over all others and that `.tar.bz2` packages are preferred
+    /// over `.whl` packages.
+    pub fn cmp_preference(self, other: DistArchiveType) -> std::cmp::Ordering {
+        match (self, other) {
+            (a, b) if a == b => Ordering::Equal,
+            (DistArchiveType::Conda(CondaArchiveType::Conda), _) => Ordering::Greater,
+            (_, DistArchiveType::Conda(CondaArchiveType::Conda)) => Ordering::Less,
+            (DistArchiveType::Conda(CondaArchiveType::TarBz2), _) => Ordering::Greater,
+            (_, DistArchiveType::Conda(CondaArchiveType::TarBz2)) => Ordering::Less,
+            (DistArchiveType::Wheel(WheelArchiveType::Whl), _) => Ordering::Greater,
+        }
+    }
+
     /// Tries to determine the type of archive from its filename.
     pub fn try_from(path: impl AsRef<Path>) -> Option<DistArchiveType> {
         Self::split_str(path.as_ref().to_string_lossy().as_ref())
@@ -87,7 +106,8 @@ impl DistArchiveType {
         }
     }
 
-    /// Split the given string into its filename and archive type, removing the extension.
+    /// Split the given string into its filename and archive type, removing the
+    /// extension.
     #[allow(clippy::manual_map)]
     pub fn split_str(path: &str) -> Option<(&str, DistArchiveType)> {
         if let Some((path, conda_type)) = CondaArchiveType::split_str(path) {
@@ -128,8 +148,8 @@ impl WheelArchiveType {
         }
     }
 
-    /// Split the given string into its filename and archive type, removing the extension.
-    /// Only recognizes wheel package extensions.
+    /// Split the given string into its filename and archive type, removing the
+    /// extension. Only recognizes wheel package extensions.
     #[allow(clippy::manual_map)]
     pub fn split_str(path: &str) -> Option<(&str, WheelArchiveType)> {
         if let Some(path) = path.strip_suffix(".whl") {
