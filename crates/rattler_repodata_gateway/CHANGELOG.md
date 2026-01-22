@@ -44,6 +44,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.8](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.25.7...rattler_repodata_gateway-v0.25.8) - 2026-01-22
+
+### Added
+
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/conda/rattler/pull/1988))
+
+### Other
+
+- add type for archive file name ([#1999](https://github.com/conda/rattler/pull/1999))
+
 ## [0.25.7](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.25.6...rattler_repodata_gateway-v0.25.7) - 2025-12-18
 
 ### Added

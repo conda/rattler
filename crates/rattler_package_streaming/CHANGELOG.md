@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.22](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.21...rattler_package_streaming-v0.23.22) - 2026-01-22
+
+### Added
+
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/conda/rattler/pull/1988))
+
 ## [0.23.21](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.20...rattler_package_streaming-v0.23.21) - 2025-12-18
 
 ### Other
