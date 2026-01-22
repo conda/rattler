@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.43.0...rattler_conda_types-v0.43.1) - 2026-01-22
+
+### Added
+
+- add support for `packages.whl` to repodata parsing ([#1996](https://github.com/conda/rattler/pull/1996))
+
 ## [0.43.0](https://github.com/baszalmstra/rattler/releases/tag/rattler_conda_types-v0.43.0) - 2026-01-22
 
 ### Added
