@@ -352,7 +352,7 @@ fn add_or_reuse_solvable<'a>(
     let archive_type = repo_data.identifier.archive_type;
 
     if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(identifier) {
-        match archive_type.cmp(&other_package_type) {
+        match archive_type.cmp_preference(other_package_type) {
             Ordering::Less => {
                 // A previous package that we already stored is actually a package of a better
                 // "type" so we'll just use that instead (.conda > .tar.bz)

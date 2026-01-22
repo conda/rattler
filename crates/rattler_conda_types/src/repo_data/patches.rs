@@ -225,7 +225,9 @@ pub fn apply_patches_impl(
         if let Some(record) = packages.get_mut(identifier) {
             record.apply_patch(patch);
         }
-        if let Some(record) = conda_packages.get_mut(identifier) {
+
+        let conda_identifier = identifier.with_archive_type(CondaArchiveType::Conda.into());
+        if let Some(record) = conda_packages.get_mut(&conda_identifier) {
             record.apply_patch(patch);
         }
     }
@@ -252,10 +254,7 @@ pub fn apply_patches_impl(
                 }
 
                 // also remove equivalent .conda package if it exists
-                let conda_identifier = DistArchiveIdentifier {
-                    archive_type: CondaArchiveType::Conda.into(),
-                    ..identifier.clone()
-                };
+                let conda_identifier = identifier.with_archive_type(CondaArchiveType::Conda.into());
                 if conda_packages
                     .shift_remove_entry(&conda_identifier)
                     .is_some()

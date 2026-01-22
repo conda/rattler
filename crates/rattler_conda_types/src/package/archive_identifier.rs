@@ -127,6 +127,14 @@ pub struct DistArchiveIdentifier {
 }
 
 impl DistArchiveIdentifier {
+    /// Returns a new version but with a different archive type.
+    pub fn with_archive_type(&self, archive_type: DistArchiveType) -> Self {
+        Self {
+            identifier: self.identifier.clone(),
+            archive_type,
+        }
+    }
+
     /// Converts the archive identifier into a filename for a Conda package.
     pub fn to_file_name(&self) -> String {
         self.to_string()

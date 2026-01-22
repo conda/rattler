@@ -380,7 +380,7 @@ impl<'a> CondaDependencyProvider<'a> {
                             // this one will, so we'll keep the previous one
                             // regardless of the type.
                         } else {
-                            match archive_type.cmp(prev_archive_type) {
+                            match archive_type.cmp_preference(*prev_archive_type) {
                                 Ordering::Greater => {
                                     // A previous package has a worse package "type", we'll use the
                                     // current record instead.

@@ -3,7 +3,7 @@ source: crates/rattler_lock/src/utils/derived_fields.rs
 expression: "../source/win-64"
 ---
 LocationDerivedFields {
-    file_name: None,
+    identifier: None,
     name: None,
     version: None,
     build: None,
