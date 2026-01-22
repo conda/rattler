@@ -4962,7 +4962,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_sandbox"
-version = "0.2.10"
+version = "0.2.11"
 dependencies = [
  "birdcage",
  "clap",

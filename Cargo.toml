@@ -202,7 +202,7 @@ rattler_pty = { path = "crates/rattler_pty", version = "=0.2.9", default-feature
 rattler_redaction = { path = "crates/rattler_redaction", version = "=0.1.13", default-features = false }
 rattler_repodata_gateway = { path = "crates/rattler_repodata_gateway", version = "=0.25.8", default-features = false }
 rattler_s3 = { path = "crates/rattler_s3", version = "=0.1.19", default-features = false }
-rattler_sandbox = { path = "crates/rattler_sandbox", version = "=0.2.10", default-features = false }
+rattler_sandbox = { path = "crates/rattler_sandbox", version = "=0.2.11", default-features = false }
 rattler_shell = { path = "crates/rattler_shell", version = "=0.25.16", default-features = false }
 rattler_solve = { path = "crates/rattler_solve", version = "=4.2.0", default-features = false }
 rattler_upload = { path = "crates/rattler_upload", version = "=0.4.8", default-features = false }
