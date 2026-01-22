@@ -42,7 +42,7 @@ from rattler.lock import (
     CondaLockedPackage,
     PypiLockedPackage,
 )
-from rattler.solver import solve, solve_with_sparse_repodata
+from rattler.solver import solve, solve_with_records, solve_with_sparse_repodata
 
 __version__ = _get_rattler_version()
 del _get_rattler_version
@@ -83,6 +83,7 @@ __all__ = [
     "CondaLockedPackage",
     "PypiLockedPackage",
     "solve",
+    "solve_with_records",
     "solve_with_sparse_repodata",
     "Platform",
     "install",

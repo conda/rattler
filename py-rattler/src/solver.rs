@@ -294,3 +294,85 @@ pub fn py_solve_with_sparse_repodata<'py>(
         }
     })
 }
+
+#[allow(clippy::too_many_arguments)]
+#[pyfunction]
+#[pyo3(signature = (specs, available_packages, constraints, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, strategy=None, min_age=None)
+)]
+pub fn py_solve_with_records(
+    py: Python<'_>,
+    specs: Vec<PyMatchSpec>,
+    available_packages: Vec<Vec<PyRecord>>,
+    constraints: Vec<PyMatchSpec>,
+    locked_packages: Vec<PyRecord>,
+    pinned_packages: Vec<PyRecord>,
+    virtual_packages: Vec<PyGenericVirtualPackage>,
+    channel_priority: PyChannelPriority,
+    timeout: Option<u64>,
+    exclude_newer_timestamp_ms: Option<i64>,
+    strategy: Option<Wrap<SolveStrategy>>,
+    min_age: Option<PyMinimumAgeConfig>,
+) -> PyResult<Bound<'_, PyAny>> {
+    future_into_py(py, async move {
+        let exclude_newer = exclude_newer_timestamp_ms.and_then(DateTime::from_timestamp_millis);
+        let min_age = min_age.map(|config| config.inner);
+
+        let solve_result = tokio::task::spawn_blocking(move || {
+            // Convert Vec<Vec<PyRecord>> to Vec<Vec<RepoDataRecord>>
+            let available_packages: Vec<Vec<_>> = available_packages
+                .into_iter()
+                .map(|channel_records| {
+                    channel_records
+                        .into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<PyResult<Vec<_>>>()
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+
+            let task = SolverTask {
+                available_packages: available_packages
+                    .iter()
+                    .map(RepoDataIter)
+                    .collect::<Vec<_>>(),
+                locked_packages: locked_packages
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<PyResult<Vec<_>>>()?,
+                pinned_packages: pinned_packages
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<PyResult<Vec<_>>>()?,
+                virtual_packages: virtual_packages.into_iter().map(Into::into).collect(),
+                specs: specs.into_iter().map(Into::into).collect(),
+                constraints: constraints.into_iter().map(Into::into).collect(),
+                timeout: timeout.map(std::time::Duration::from_micros),
+                channel_priority: channel_priority.into(),
+                exclude_newer,
+                min_age,
+                strategy: strategy.map_or_else(Default::default, |v| v.0),
+            };
+
+            Ok::<_, PyErr>(
+                Solver
+                    .solve(task)
+                    .map(|res| {
+                        res.records
+                            .into_iter()
+                            .map(Into::into)
+                            .collect::<Vec<PyRecord>>()
+                    })
+                    .map_err(PyRattlerError::from)?,
+            )
+        })
+        .await;
+
+        match solve_result.map_err(JoinError::try_into_panic) {
+            Ok(solve_result) => Ok(solve_result?),
+            Err(Ok(payload)) => std::panic::resume_unwind(payload),
+            Err(Err(_err)) => Err(PyRattlerError::IoError(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "solver task was cancelled",
+            )))?,
+        }
+    })
+}

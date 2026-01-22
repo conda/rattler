@@ -76,7 +76,7 @@ use repo_data::{
 };
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
-use solver::{py_solve, py_solve_with_sparse_repodata, PyMinimumAgeConfig};
+use solver::{py_solve, py_solve_with_records, py_solve_with_sparse_repodata, PyMinimumAgeConfig};
 use version::{PyVersion, PyVersionSpec};
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
 
@@ -179,6 +179,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyMinimumAgeConfig>()?;
     m.add_function(wrap_pyfunction!(py_solve, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_solve_with_sparse_repodata, &m).unwrap())?;
+    m.add_function(wrap_pyfunction!(py_solve_with_records, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(get_rattler_version, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_install, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_index_fs, &m).unwrap())?;
