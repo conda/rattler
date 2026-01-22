@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.0](https://github.com/baszalmstra/rattler/releases/tag/rattler_conda_types-v0.43.0) - 2026-01-22
+
+### Added
+
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/baszalmstra/rattler/pull/1988))
+- add support for track_features in matchspec brackets (Fixes #1964) ([#1968](https://github.com/baszalmstra/rattler/pull/1968))
+
+### Fixed
+
+- changelog
+- correctly handle channel_alias with path segments ([#1953](https://github.com/baszalmstra/rattler/pull/1953)) ([#1954](https://github.com/baszalmstra/rattler/pull/1954))
+
+### Other
+
+- release ([#2001](https://github.com/baszalmstra/rattler/pull/2001))
+- add type for archive file name ([#1999](https://github.com/baszalmstra/rattler/pull/1999))
+- Run `cargo clippy --fix` (from nightly) ([#1992](https://github.com/baszalmstra/rattler/pull/1992))
+- rename `loong64` to `loongarch64` ([#1957](https://github.com/baszalmstra/rattler/pull/1957))
+
 ## [0.42.5](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.4...rattler_conda_types-v0.42.5) - 2026-01-22
 
 ### Added

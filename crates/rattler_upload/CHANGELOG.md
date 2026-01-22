@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.9](https://github.com/baszalmstra/rattler/compare/rattler_upload-v0.4.8...rattler_upload-v0.4.9) - 2026-01-22
+
+### Other
+
+- updated the following local packages: rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
 ## [0.4.8](https://github.com/conda/rattler/compare/rattler_upload-v0.4.7...rattler_upload-v0.4.8) - 2026-01-22
 
 ### Added

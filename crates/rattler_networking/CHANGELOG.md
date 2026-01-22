@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.31](https://github.com/baszalmstra/rattler/compare/rattler_networking-v0.25.30...rattler_networking-v0.25.31) - 2026-01-22
+
+### Fixed
+
+- changelog
+
 ## [0.25.30](https://github.com/conda/rattler/compare/rattler_networking-v0.25.29...rattler_networking-v0.25.30) - 2026-01-22
 
 ### Other

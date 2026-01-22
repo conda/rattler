@@ -1,6 +1,6 @@
 [package]
 name = "rattler_cache"
-version = "0.6.7"
+version = "0.6.8"
 description = "A crate to manage the caching of data in rattler"
 categories = { workspace = true }
 homepage = { workspace = true }
