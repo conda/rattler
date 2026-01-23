@@ -243,55 +243,53 @@ impl Middleware for AddHeadersMiddleware {
 
         // Call the Python callback with host and path
         let callback = self.callback.clone();
-        let headers_to_add: Option<HashMap<String, String>> =
-            Python::with_gil(
-                |py| -> reqwest_middleware::Result<Option<HashMap<String, String>>> {
-                    let result =
-                        callback
-                            .call1(py, (host.as_str(), path.as_str()))
-                            .map_err(|e| {
-                                reqwest_middleware::Error::Middleware(anyhow::anyhow!(
-                                    "Python callback failed: {e}"
-                                ))
-                            })?;
-
-                    // Check if the result is None
-                    if result.is_none(py) {
-                        return Ok(None);
-                    }
-
-                    // Try to extract as a dictionary
-                    let dict = result.downcast_bound::<PyDict>(py).map_err(|_| {
-                        let type_name = result
-                            .bind(py)
-                            .get_type()
-                            .name()
-                            .map(|n| n.to_string())
-                            .unwrap_or_else(|_| "unknown".to_string());
+        let headers_to_add: Option<HashMap<String, String>> = Python::with_gil(
+            |py| -> reqwest_middleware::Result<Option<HashMap<String, String>>> {
+                let result = callback
+                    .call1(py, (host.as_str(), path.as_str()))
+                    .map_err(|e| {
                         reqwest_middleware::Error::Middleware(anyhow::anyhow!(
-                            "Python callback must return a dict or None, got: {type_name}",
+                            "Python callback failed: {e}"
                         ))
                     })?;
 
-                    // Convert the dict to a HashMap<String, String>
-                    let mut headers = HashMap::new();
-                    for (key, value) in dict.iter() {
-                        let key_str: String = key.extract().map_err(|e| {
-                            reqwest_middleware::Error::Middleware(anyhow::anyhow!(
-                                "Header key must be a string: {e}"
-                            ))
-                        })?;
-                        let value_str: String = value.extract().map_err(|e| {
-                            reqwest_middleware::Error::Middleware(anyhow::anyhow!(
-                                "Header value must be a string: {e}"
-                            ))
-                        })?;
-                        headers.insert(key_str, value_str);
-                    }
+                // Check if the result is None
+                if result.is_none(py) {
+                    return Ok(None);
+                }
 
-                    Ok(Some(headers))
-                },
-            )?;
+                // Try to extract as a dictionary
+                let dict = result.downcast_bound::<PyDict>(py).map_err(|_| {
+                    let type_name = result
+                        .bind(py)
+                        .get_type()
+                        .name()
+                        .map(|n| n.to_string())
+                        .unwrap_or_else(|_| "unknown".to_string());
+                    reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                        "Python callback must return a dict or None, got: {type_name}",
+                    ))
+                })?;
+
+                // Convert the dict to a HashMap<String, String>
+                let mut headers = HashMap::new();
+                for (key, value) in dict.iter() {
+                    let key_str: String = key.extract().map_err(|e| {
+                        reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                            "Header key must be a string: {e}"
+                        ))
+                    })?;
+                    let value_str: String = value.extract().map_err(|e| {
+                        reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                            "Header value must be a string: {e}"
+                        ))
+                    })?;
+                    headers.insert(key_str, value_str);
+                }
+
+                Ok(Some(headers))
+            },
+        )?;
 
         // Add the headers to the request
         if let Some(headers) = headers_to_add {
@@ -302,12 +300,11 @@ impl Middleware for AddHeadersMiddleware {
                             "Invalid header name '{key}': {e}"
                         ))
                     })?;
-                let header_value =
-                    reqwest::header::HeaderValue::from_str(&value).map_err(|e| {
-                        reqwest_middleware::Error::Middleware(anyhow::anyhow!(
-                            "Invalid header value for '{key}': {e}"
-                        ))
-                    })?;
+                let header_value = reqwest::header::HeaderValue::from_str(&value).map_err(|e| {
+                    reqwest_middleware::Error::Middleware(anyhow::anyhow!(
+                        "Invalid header value for '{key}': {e}"
+                    ))
+                })?;
                 req.headers_mut().insert(header_name, header_value);
             }
         }

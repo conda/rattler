@@ -218,9 +218,7 @@ class AddHeadersMiddleware:
     ```
     """
 
-    def __init__(
-        self, callback: Callable[[str, str], dict[str, str] | None]
-    ) -> None:
+    def __init__(self, callback: Callable[[str, str], dict[str, str] | None]) -> None:
         """
         Create a new AddHeadersMiddleware instance.
 
