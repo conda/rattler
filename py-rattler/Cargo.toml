@@ -67,6 +67,8 @@ tokio = { version = "1.46.1" }
 
 reqwest = { version = "0.12.15", default-features = false }
 reqwest-middleware = "0.4.2"
+async-trait = "0.1"
+http = "1.2"
 
 thiserror = "2.0.12"
 url = "2.5.4"

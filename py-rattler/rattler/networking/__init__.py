@@ -1,6 +1,7 @@
 from rattler.networking.client import Client
 from rattler.networking.fetch_repo_data import fetch_repo_data, CacheAction, FetchRepoDataOptions
 from rattler.networking.middleware import (
+    AddHeadersMiddleware,
     AuthenticationMiddleware,
     GCSMiddleware,
     MirrorMiddleware,
@@ -12,6 +13,7 @@ __all__ = [
     "FetchRepoDataOptions",
     "CacheAction",
     "Client",
+    "AddHeadersMiddleware",
     "MirrorMiddleware",
     "AuthenticationMiddleware",
     "S3Middleware",

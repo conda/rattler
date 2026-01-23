@@ -3726,8 +3726,10 @@ name = "py-rattler"
 version = "0.20.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "futures",
+ "http 1.4.0",
  "nix 0.30.1",
  "openssl",
  "parking_lot",
@@ -4034,6 +4036,7 @@ dependencies = [
  "console",
  "digest",
  "dirs",
+ "filetime",
  "fs-err",
  "futures",
  "humantime",
@@ -4201,6 +4204,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tar",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
  "tracing-subscriber",

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from typing import Callable
+
 from rattler.rattler import (
+    PyAddHeadersMiddleware,
     PyAuthenticationMiddleware,
     PyGCSMiddleware,
     PyMirrorMiddleware,
@@ -186,6 +189,48 @@ class S3Middleware:
         if config is None:
             config = dict()
         self._middleware = PyS3Middleware({k: v._config for k, v in config.items()})
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}()"
+
+
+class AddHeadersMiddleware:
+    """
+    Middleware that adds headers to requests based on a callback function.
+
+    The callback receives the host and path of the request URL and should return
+    a dictionary of headers to add, or None to add no headers.
+
+    Examples
+    --------
+    ```python
+    >>> from rattler.networking import Client, AddHeadersMiddleware
+    >>> def my_callback(host: str, path: str) -> dict[str, str] | None:
+    ...     if host == "private.example.com":
+    ...         return {"Authorization": "Bearer my-token"}
+    ...     return None
+    >>> middleware = AddHeadersMiddleware(my_callback)
+    >>> middleware
+    AddHeadersMiddleware()
+    >>> Client([middleware])
+    Client()
+    >>>
+    ```
+    """
+
+    def __init__(
+        self, callback: Callable[[str, str], dict[str, str] | None]
+    ) -> None:
+        """
+        Create a new AddHeadersMiddleware instance.
+
+        Args:
+            callback: A callable that takes (host, path) and returns a dictionary
+                of headers to add to the request, or None to add no headers.
+                The host is the hostname of the request URL (e.g., "conda.anaconda.org").
+                The path is the path component of the URL (e.g., "/conda-forge/linux-64/repodata.json").
+        """
+        self._middleware = PyAddHeadersMiddleware(callback)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"
