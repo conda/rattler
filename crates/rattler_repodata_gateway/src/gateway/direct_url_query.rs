@@ -2,8 +2,9 @@ use std::{future::IntoFuture, sync::Arc};
 
 use futures::FutureExt;
 use rattler_cache::package_cache::{CacheKey, PackageCache, PackageCacheError};
+use rattler_conda_types::package::{ArchiveIdentifier, CondaArchiveType};
 use rattler_conda_types::{
-    package::{ArchiveIdentifier, IndexJson, PackageFile},
+    package::{CondaArchiveIdentifier, DistArchiveIdentifier, IndexJson, PackageFile},
     ConvertSubdirError, PackageRecord, RepoDataRecord,
 };
 use rattler_digest::{Md5Hash, Sha256Hash};
@@ -56,9 +57,18 @@ impl DirectUrlQuery {
     /// Execute the Repodata query using the cache as a source for the
     /// index.json
     pub async fn execute(self) -> Result<Arc<[RepoDataRecord]>, DirectUrlQueryError> {
-        let index_json: IndexJson = if let Ok(file_path) = self.url.to_file_path() {
+        let (index_json, archive_type): (IndexJson, CondaArchiveType) = if let Ok(file_path) =
+            self.url.to_file_path()
+        {
+            // Determine the type of the archive
+            let Some(archive_type) = CondaArchiveType::try_from(&file_path) else {
+                return Err(DirectUrlQueryError::InvalidFilename(
+                    file_path.display().to_string(),
+                ));
+            };
+
             match rattler_package_streaming::seek::read_package_file(&file_path) {
-                Ok(index_json) => index_json,
+                Ok(index_json) => (index_json, archive_type),
                 Err(ExtractError::IoError(io)) => return Err(DirectUrlQueryError::IndexJson(io)),
                 Err(ExtractError::UnsupportedArchiveType) => {
                     return Err(DirectUrlQueryError::InvalidFilename(
@@ -73,7 +83,7 @@ impl DirectUrlQuery {
             }
         } else {
             // Convert the url to an archive identifier.
-            let Some(archive_identifier) = ArchiveIdentifier::try_from_url(&self.url) else {
+            let Some(archive_identifier) = CondaArchiveIdentifier::try_from_url(&self.url) else {
                 let filename = self.url.path_segments().and_then(Iterator::last);
                 return Err(DirectUrlQueryError::InvalidFilename(
                     filename.unwrap_or("").to_string(),
@@ -81,6 +91,7 @@ impl DirectUrlQuery {
             };
 
             // Construct a cache key
+            let archive_type = archive_identifier.archive_type;
             let cache_key = CacheKey::from(archive_identifier)
                 .with_opt_sha256(self.sha256)
                 .with_opt_md5(self.md5);
@@ -99,8 +110,22 @@ impl DirectUrlQuery {
                 .await?;
 
             // Extract package record from index json
-            IndexJson::from_package_directory(cache_lock.path())?
+            (
+                IndexJson::from_package_directory(cache_lock.path())?,
+                archive_type,
+            )
         };
+
+        let identifier = DistArchiveIdentifier::try_from_url(&self.url).unwrap_or_else(|| {
+            DistArchiveIdentifier {
+                identifier: ArchiveIdentifier {
+                    name: index_json.name.as_source().to_string(),
+                    version: index_json.version.to_string(),
+                    build_string: index_json.build.clone(),
+                },
+                archive_type: archive_type.into(),
+            }
+        });
 
         let package_record = PackageRecord::from_index_json(
             index_json,
@@ -113,8 +138,7 @@ impl DirectUrlQuery {
 
         Ok(Arc::new([RepoDataRecord {
             package_record,
-            // File name is the same as the url.
-            file_name: self.url.clone().to_string(),
+            identifier,
             url: self.url.clone(),
             channel: None,
         }]))

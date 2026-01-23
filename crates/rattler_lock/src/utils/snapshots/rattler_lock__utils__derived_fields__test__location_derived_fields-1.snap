@@ -3,8 +3,17 @@ source: crates/rattler_lock/src/utils/derived_fields.rs
 expression: "https://conda.anaconda.org/conda-forge/linux-aarch64/qt-5.15.8-h803f02a_0.conda"
 ---
 LocationDerivedFields {
-    file_name: Some(
-        "qt-5.15.8-h803f02a_0.conda",
+    identifier: Some(
+        DistArchiveIdentifier {
+            identifier: ArchiveIdentifier {
+                name: "qt",
+                version: "5.15.8",
+                build_string: "h803f02a_0",
+            },
+            archive_type: Conda(
+                Conda,
+            ),
+        },
     ),
     name: Some(
         "qt",

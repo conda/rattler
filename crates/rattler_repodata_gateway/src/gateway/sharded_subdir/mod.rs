@@ -68,11 +68,11 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
         Ok(packages
             .map(|(file_name, package_record)| RepoDataRecord {
                 url: base_url
-                    .join(&file_name)
+                    .join(&file_name.to_file_name())
                     .expect("filename is not a valid url"),
                 channel: Some(channel_base_url.url().clone().redact().to_string()),
                 package_record,
-                file_name,
+                identifier: file_name,
             })
             .collect())
     };

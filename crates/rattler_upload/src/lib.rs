@@ -2,7 +2,7 @@ pub mod upload;
 pub(crate) mod utils;
 
 use miette::IntoDiagnostic;
-use rattler_conda_types::package::ArchiveType;
+use rattler_conda_types::package::DistArchiveType;
 use upload::opt::{
     AnacondaData, ArtifactoryData, CondaForgeData, PrefixData, QuetzData, ServerType, UploadOpts,
 };
@@ -17,7 +17,7 @@ pub async fn upload_from_args(args: UploadOpts) -> miette::Result<()> {
 
     // Validate all files are conda packages
     for package_file in &args.package_files {
-        if ArchiveType::try_from(package_file).is_none() {
+        if DistArchiveType::try_from(package_file).is_none() {
             return Err(miette::miette!(
                 "The file {} does not appear to be a conda package.",
                 package_file.to_string_lossy()

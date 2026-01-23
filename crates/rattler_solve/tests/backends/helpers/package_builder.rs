@@ -3,7 +3,8 @@ use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{
-    package::ArchiveType, NoArchType, PackageRecord, RepoDataRecord, Version,
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
+    NoArchType, PackageRecord, RepoDataRecord, Version,
 };
 use url::Url;
 
@@ -12,17 +13,24 @@ use super::super::{dummy_md5_hash, dummy_sha256_hash};
 #[derive(Clone)]
 pub struct PackageBuilder {
     record: RepoDataRecord,
-    archive_type: ArchiveType,
+    archive_type: CondaArchiveType,
 }
 
 impl PackageBuilder {
     pub fn new(name: &str) -> Self {
-        let archive_type = ArchiveType::Conda;
+        let archive_type = CondaArchiveType::Conda;
         Self {
             record: RepoDataRecord {
                 url: Url::from_str("http://example.com").unwrap(),
                 channel: None,
-                file_name: format!("{name}-0.0.0-h123456_0{}", archive_type.extension()),
+                identifier: DistArchiveIdentifier {
+                    identifier: ArchiveIdentifier {
+                        name: name.to_string(),
+                        version: "0.0.0".to_string(),
+                        build_string: "h123456_0".to_string(),
+                    },
+                    archive_type: DistArchiveType::Conda(archive_type),
+                },
                 package_record: PackageRecord {
                     name: name.parse().unwrap(),
                     version: Version::from_str("0.0.0").unwrap().into(),
@@ -56,11 +64,14 @@ impl PackageBuilder {
 
     /// Updates the filename based on current package metadata and archive type.
     fn update_filename(&mut self) {
-        let name = self.record.package_record.name.as_normalized();
-        let version = self.record.package_record.version.as_str();
-        let build = &self.record.package_record.build;
-        self.record.file_name =
-            format!("{name}-{version}-{build}{}", self.archive_type.extension());
+        self.record.identifier = DistArchiveIdentifier {
+            identifier: ArchiveIdentifier {
+                name: self.record.package_record.name.as_normalized().to_string(),
+                version: self.record.package_record.version.as_str().to_string(),
+                build_string: self.record.package_record.build.clone(),
+            },
+            archive_type: DistArchiveType::Conda(self.archive_type),
+        };
     }
 
     pub fn depends(mut self, deps: impl IntoIterator<Item = impl Into<String>>) -> Self {
@@ -96,7 +107,7 @@ impl PackageBuilder {
     }
 
     /// Sets the archive type (defaults to `.conda`).
-    pub fn archive_type(mut self, archive_type: ArchiveType) -> Self {
+    pub fn archive_type(mut self, archive_type: CondaArchiveType) -> Self {
         self.archive_type = archive_type;
         self.update_filename();
         self

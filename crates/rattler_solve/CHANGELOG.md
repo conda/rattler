@@ -7,40 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.0.3](https://github.com/conda/rattler/compare/rattler_solve-v3.0.2...rattler_solve-v3.0.3) - 2025-09-05
+## [4.2.2](https://github.com/conda/rattler/compare/rattler_solve-v4.2.1...rattler_solve-v4.2.2) - 2026-01-22
 
 ### Other
 
 - updated the following local packages: rattler_conda_types
 
-## [3.0.2](https://github.com/conda/rattler/compare/rattler_solve-v3.0.1...rattler_solve-v3.0.2) - 2025-09-02
+## [4.2.1](https://github.com/baszalmstra/rattler/compare/rattler_solve-v4.2.0...rattler_solve-v4.2.1) - 2026-01-22
 
-### Other
+### Fixed
 
-- updated the following local packages: rattler_conda_types
+- changelog
 
-## [3.0.1](https://github.com/conda/rattler/compare/rattler_solve-v3.0.0...rattler_solve-v3.0.1) - 2025-08-15
-
-### Other
-
-- updated the following local packages: rattler_conda_types
-
-## [3.0.0](https://github.com/conda/rattler/compare/rattler_solve-v2.1.8...rattler_solve-v3.0.0) - 2025-08-12
+## [4.2.0](https://github.com/conda/rattler/compare/rattler_solve-v4.1.2...rattler_solve-v4.2.0) - 2026-01-22
 
 ### Added
 
-- implement extras with conditional dependencies ([#1542](https://github.com/conda/rattler/pull/1542))
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/conda/rattler/pull/1988))
 
 ### Other
 
-- `resolvo` bump ([#1576](https://github.com/conda/rattler/pull/1576))
-# Changelog
-All notable changes to this project will be documented in this file.
+- add type for archive file name ([#1999](https://github.com/conda/rattler/pull/1999))
+- Run `cargo clippy --fix` (from nightly) ([#1992](https://github.com/conda/rattler/pull/1992))
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [4.1.2](https://github.com/conda/rattler/compare/rattler_solve-v4.1.1...rattler_solve-v4.1.2) - 2025-12-18
 
-## [Unreleased]
+### Fixed
+
+- split on ';' when fetching dependencies in repodata ([#1919](https://github.com/conda/rattler/pull/1919))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
 
 ## [4.1.1](https://github.com/conda/rattler/compare/rattler_solve-v4.1.0...rattler_solve-v4.1.1) - 2025-12-08
 
@@ -123,6 +121,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Other
 
 - updated the following local packages: rattler_conda_types
+
+## [3.0.3](https://github.com/conda/rattler/compare/rattler_solve-v3.0.2...rattler_solve-v3.0.3) - 2025-09-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.0.2](https://github.com/conda/rattler/compare/rattler_solve-v3.0.1...rattler_solve-v3.0.2) - 2025-09-02
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.0.1](https://github.com/conda/rattler/compare/rattler_solve-v3.0.0...rattler_solve-v3.0.1) - 2025-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.0.0](https://github.com/conda/rattler/compare/rattler_solve-v2.1.8...rattler_solve-v3.0.0) - 2025-08-12
+
+### Added
+
+- implement extras with conditional dependencies ([#1542](https://github.com/conda/rattler/pull/1542))
+
+### Other
+
+- `resolvo` bump ([#1576](https://github.com/conda/rattler/pull/1576))
 
 ## [2.1.8](https://github.com/conda/rattler/compare/rattler_solve-v2.1.7...rattler_solve-v2.1.8) - 2025-07-23
 

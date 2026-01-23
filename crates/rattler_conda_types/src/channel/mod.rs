@@ -58,7 +58,6 @@ impl ChannelConfig {
                 .expect("could not parse default channel alias"),
         }
     }
-
     /// Strip the channel alias if the base url is "under" the channel alias.
     /// This returns the name of the channel (for example "conda-forge" for
     /// `https://conda.anaconda.org/conda-forge` when the channel alias is
@@ -67,13 +66,14 @@ impl ChannelConfig {
         base_url
             .as_str()
             .strip_prefix(self.channel_alias.as_str())
-            .map(|s| s.trim_end_matches('/').to_string())
+            .map(|s| s.trim_matches('/').to_string())
+            .filter(|s| !s.is_empty())
     }
 
     /// Returns the canonical name of a channel with the given base url.
     pub fn canonical_name(&self, base_url: &Url) -> String {
-        if let Some(stripped) = base_url.as_str().strip_prefix(self.channel_alias.as_str()) {
-            stripped.trim_end_matches('/').to_string()
+        if let Some(stripped) = self.strip_channel_alias(base_url) {
+            stripped
         } else {
             base_url.clone().redact().to_string()
         }
@@ -213,9 +213,13 @@ impl Channel {
 
         let channel = if parse_scheme(channel).is_some() {
             let url = Url::parse(channel)?;
+            let name = config.strip_channel_alias(&url);
+            let base_channel = Channel::from_url(url);
+
             Channel {
+                name: name.or(base_channel.name),
                 platforms,
-                ..Channel::from_url(url)
+                ..base_channel
             }
         } else if is_path(channel) {
             #[cfg(target_arch = "wasm32")]
@@ -489,6 +493,21 @@ mod tests {
     use url::Url;
 
     use super::*;
+
+    #[test]
+    fn test_issue_1953_artifactory_path_parsing() {
+        let alias_str = "https://example.jfrog.io/artifactory/api/conda/";
+        let config = ChannelConfig {
+            channel_alias: Url::from_str(alias_str).unwrap(),
+            root_dir: std::env::current_dir().unwrap(),
+        };
+
+        let full_url = "https://example.jfrog.io/artifactory/api/conda/conda_example";
+        let channel = Channel::from_str(full_url, &config).unwrap();
+
+        // Should be "conda_example", not "artifactory/api/conda/conda_example"
+        assert_eq!(channel.name.as_deref(), Some("conda_example"));
+    }
 
     #[test]
     fn test_parse_platforms() {
