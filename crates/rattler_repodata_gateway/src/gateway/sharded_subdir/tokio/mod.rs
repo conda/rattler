@@ -246,7 +246,7 @@ impl SubdirClient for ShardedSubdir {
             bytes
         };
 
-        let shard_bytes = decode_zst_bytes_async(shard_bytes).await?;
+        let shard_bytes = decode_zst_bytes_async(shard_bytes, shard_url).await?;
 
         // Create a future to write the cached bytes to disk
         let write_to_cache_fut = write_shard_to_cache(shard_cache_path, shard_bytes.clone());
