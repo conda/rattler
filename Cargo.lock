@@ -4879,6 +4879,7 @@ dependencies = [
 name = "rattler_repodata_gateway"
 version = "0.25.10"
 dependencies = [
+ "ahash",
  "anyhow",
  "assert_matches",
  "async-compression",
@@ -4918,6 +4919,7 @@ dependencies = [
  "rattler_networking",
  "rattler_package_streaming",
  "rattler_redaction",
+ "regex",
  "reqwest",
  "reqwest-middleware",
  "retry-policies",
