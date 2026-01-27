@@ -12,6 +12,10 @@ pub mod validation;
 mod consts;
 pub use consts::{PACKAGE_CACHE_DIR, REPODATA_CACHE_DIR, RUN_EXPORTS_CACHE_DIR};
 
+/// Re-export sigstore types for convenience when using signature verification.
+#[cfg(feature = "sigstore")]
+pub use rattler_sigstore as sigstore;
+
 /// Determines the default cache directory for rattler.
 /// It first checks the environment variable `RATTLER_CACHE_DIR`.
 /// If not set, it falls back to the standard cache directory provided by `dirs::cache_dir()/rattler/cache`.

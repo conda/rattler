@@ -35,6 +35,7 @@ rustls-tls = [
 ]
 s3 = ["rattler_networking/s3", "rattler_upload/s3"]
 gcs = ["rattler_networking/gcs"]
+sigstore-verify = ["dep:sigstore-verify", "dep:sigstore-trust-root"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -70,6 +71,11 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 itertools = { workspace = true }
 url = { workspace = true }
+sigstore-verify = { workspace = true, optional = true }
+sigstore-trust-root = { workspace = true, optional = true }
+serde_json = { workspace = true }
+rattler_digest = { workspace = true }
+sha2 = { workspace = true }
 
 [package.metadata.release]
 # Dont publish the binary
