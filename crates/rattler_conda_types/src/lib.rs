@@ -3,6 +3,7 @@
 //! the Conda ecosystem. The library itself doesnt provide any functionality
 //! besides parsing the data types.
 
+pub mod backup;
 mod build_spec;
 mod channel;
 mod channel_data;

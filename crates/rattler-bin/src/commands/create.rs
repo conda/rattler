@@ -145,7 +145,7 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
     // Find the default cache directory. Create it if it doesnt exist yet.
     let cache_dir = default_cache_dir()
         .map_err(|e| miette::miette!("could not determine default cache directory: {}", e))?;
-    std::fs::create_dir_all(&cache_dir)
+    rattler_cache::ensure_cache_dir(&cache_dir)
         .map_err(|e| miette::miette!("could not create cache directory: {}", e))?;
 
     // Determine the channels to use from the command line or select the default.

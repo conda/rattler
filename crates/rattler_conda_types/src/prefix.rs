@@ -2,9 +2,12 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::backup;
+
 /// Represents a conda environment prefix (directory).
 ///
-/// On macOS, the directory is excluded from Time Machine upons creation.
+/// The directory is excluded from backups upon creation (via CACHEDIR.TAG and
+/// Time Machine on macOS).
 #[derive(Debug, Clone)]
 pub struct Prefix {
     path: PathBuf,
@@ -38,38 +41,10 @@ impl Prefix {
             fs_err::File::create(path.join("conda-meta/history"))?;
         }
 
-        // Exclude from backups on macOS
-        #[cfg(target_os = "macos")]
-        Self::exclude_from_backups(&path);
+        // Exclude from backups (CACHEDIR.TAG + Time Machine on macOS)
+        backup::exclude_from_backups(&path)?;
 
         Ok(Self { path })
-    }
-
-    #[cfg(target_os = "macos")]
-    /// Marks files or directories as excluded from Time Machine on macOS
-    ///
-    /// This is recommended to prevent derived/temporary files from bloating backups.
-    /// <https://github.com/rust-lang/cargo/pull/7192>
-    fn exclude_from_backups(path: &Path) {
-        use core_foundation::base::TCFType;
-        use core_foundation::{number, string, url};
-        use std::ptr;
-
-        // For compatibility with 10.7 a string is used instead of global kCFURLIsExcludedFromBackupKey
-        let is_excluded_key: Result<string::CFString, _> = "NSURLIsExcludedFromBackupKey".parse();
-        let path = url::CFURL::from_path(path, false);
-        if let (Some(path), Ok(is_excluded_key)) = (path, is_excluded_key) {
-            unsafe {
-                url::CFURLSetResourcePropertyForKey(
-                    path.as_concrete_TypeRef(),
-                    is_excluded_key.as_concrete_TypeRef(),
-                    number::kCFBooleanTrue.cast(),
-                    ptr::null_mut(),
-                );
-            }
-        }
-        // Errors are ignored, since it's an optional feature and failure
-        // doesn't prevent Cargo from working
     }
 
     /// Get a reference to the prefix path
