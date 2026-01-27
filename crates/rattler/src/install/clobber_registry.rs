@@ -376,11 +376,16 @@ mod tests {
         {
             let path = entry.path();
 
+            // Skip conda-meta directory
             if path
                 .components()
                 .map(std::path::Component::as_os_str)
                 .any(|c| c == OsStr::new("conda-meta"))
             {
+                continue;
+            }
+            // Skip CACHEDIR.TAG (created by Prefix::create for backup exclusion)
+            if path.file_name() == Some(OsStr::new("CACHEDIR.TAG")) {
                 continue;
             }
             if path.is_file() {
