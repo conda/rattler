@@ -1,5 +1,5 @@
 //! This module contains the `GlobHashCache` struct which is used to cache the computation of glob hashes. This cache is an in-process cache
-//! so it's purpose is to re-use computed hashes across multiple calls to the same glob hash computation for the same set of input files.
+//! so its purpose is to re-use computed hashes across multiple calls to the same glob hash computation for the same set of input files.
 //! The input files are deemed not to change between calls.
 use std::{
     collections::BTreeSet,
