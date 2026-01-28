@@ -11,7 +11,7 @@ version = "0.1.0"
 [dependencies]
 dashmap = { workspace = true }
 fs-err = { workspace = true }
-ignore = "0.4"
+ignore = { workspace = true }
 itertools = { workspace = true }
 parking_lot = { workspace = true }
 rattler_digest = { workspace = true }
