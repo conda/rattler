@@ -54,7 +54,7 @@ enum HashCacheEntry {
 /// An object that caches the computation of glob hashes. It deduplicates
 /// requests for the same hash.
 ///
-/// Its is safe and efficient to use this object from multiple threads.
+/// It is safe and efficient to use this object from multiple threads.
 #[derive(Debug, Default, Clone)]
 pub struct GlobHashCache {
     cache: Arc<DashMap<GlobHashKey, HashCacheEntry>>,
