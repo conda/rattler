@@ -1,5 +1,5 @@
 [package]
-description = "A crate to deal with glob patterns"
+description = "A crate for glob pattern matching with hash computation and modification time tracking"
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
