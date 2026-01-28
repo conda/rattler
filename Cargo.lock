@@ -4747,7 +4747,6 @@ dependencies = [
  "ignore",
  "insta",
  "itertools 0.14.0",
- "memchr",
  "parking_lot 0.12.5",
  "rattler_digest",
  "rstest",
