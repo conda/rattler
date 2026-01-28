@@ -274,7 +274,6 @@ pub fn set_ignore_hidden_patterns(patterns: &[String]) -> Option<Vec<String>> {
     if requested_everything || (user_includes_hidden && !has_negation_for_all_folders) {
         let mut result = patterns.to_vec();
 
-        // result.push("!{**/.*, .*, .**/*}".to_string());
         result.push("!{**/.*, .*, .**/*}".to_string());
 
         // Now add back any explicitly whitelisted hidden folders/files
