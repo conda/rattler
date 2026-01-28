@@ -13,7 +13,6 @@ dashmap = { workspace = true }
 fs-err = { workspace = true }
 ignore = "0.4"
 itertools = { workspace = true }
-memchr = { workspace = true }
 parking_lot = { workspace = true }
 rattler_digest = { workspace = true }
 thiserror = { workspace = true }
