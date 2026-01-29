@@ -44,7 +44,7 @@ async def install(
     >>>
     >>> async def main():
     ...     # Solve an environment with python 3.9 for the current platform
-    ...     records = await solve(channels=["conda-forge"], specs=["python 3.9.*"])
+    ...     records = await solve(sources=["conda-forge"], specs=["python 3.9.*"])
     ...
     ...     # Link the environment in a temporary directory (you can pass any kind of path here).
     ...     await install(records, target_prefix=temp_dir.name)
