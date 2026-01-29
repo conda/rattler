@@ -1,6 +1,7 @@
 {
   "info": {
-    "subdir": "linux-64"
+    "subdir": "linux-64",
+    "base_url": "https://conda.anaconda.org/conda-forge/linux-64"
   },
   "packages": {},
   "packages.conda": {

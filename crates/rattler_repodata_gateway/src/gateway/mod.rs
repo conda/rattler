@@ -1452,39 +1452,10 @@ mod test {
     /// back to extracting run_exports from the actual package files.
     #[tokio::test]
     async fn test_ensure_run_exports_fallback_when_out_of_sync() {
-        use tempfile::TempDir;
-        use tokio::fs;
-
-        // Create a temporary channel directory
-        let temp_dir = TempDir::new().unwrap();
-        let channel_dir = temp_dir.path();
-        let linux64_dir = channel_dir.join("linux-64");
-        fs::create_dir_all(&linux64_dir).await.unwrap();
-
         // Use a minimal repodata with just one openssl package, and add a base_url
         // pointing to conda.anaconda.org so fallback downloads work.
-        let source_repodata = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../test-data/channels/openssl-run-exports-test/linux-64/repodata.json");
-        let repodata_content = fs::read_to_string(&source_repodata).await.unwrap();
-        let mut repodata: serde_json::Value = serde_json::from_str(&repodata_content).unwrap();
-
-        // Add a base_url pointing to conda.anaconda.org so package downloads work
-        repodata["info"]["base_url"] =
-            serde_json::json!("https://conda.anaconda.org/conda-forge/linux-64");
-
-        let dest_repodata = linux64_dir.join("repodata.json");
-        fs::write(&dest_repodata, serde_json::to_string(&repodata).unwrap())
-            .await
-            .unwrap();
-
-        // Create an EMPTY run_exports.json - this simulates the case where the
-        // run_exports.json file exists but doesn't contain entries for the packages
-        // we're querying (out-of-sync scenario).
-        let empty_run_exports = r#"{"info": {}, "packages": {}, "packages.conda": {}}"#;
-        let run_exports_path = linux64_dir.join("run_exports.json");
-        fs::write(&run_exports_path, empty_run_exports)
-            .await
-            .unwrap();
+        let channel_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/channels/openssl-run-exports-test");
 
         // Set up the test server
         let server = SimpleChannelServer::new(channel_dir).await;
