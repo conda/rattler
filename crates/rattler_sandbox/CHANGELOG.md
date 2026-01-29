@@ -7,18 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.11](https://github.com/conda/rattler/compare/rattler_sandbox-v0.1.10...rattler_sandbox-v0.1.11) - 2025-09-04
+## [0.2.11](https://github.com/baszalmstra/rattler/compare/rattler_sandbox-v0.2.10...rattler_sandbox-v0.2.11) - 2026-01-22
 
-### Other
+### Fixed
 
-- update Cargo.toml dependencies
-# Changelog
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
+- changelog
 
 ## [0.2.10](https://github.com/conda/rattler/compare/rattler_sandbox-v0.2.9...rattler_sandbox-v0.2.10) - 2025-12-18
 
@@ -85,6 +78,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - add a `rattler-sandbox` binary ([#1711](https://github.com/conda/rattler/pull/1711))
+
+## [0.1.11](https://github.com/conda/rattler/compare/rattler_sandbox-v0.1.10...rattler_sandbox-v0.1.11) - 2025-09-04
+
+### Other
+
+- update Cargo.toml dependencies
 
 ## [0.1.10](https://github.com/conda/rattler/compare/rattler_sandbox-v0.1.9...rattler_sandbox-v0.1.10) - 2025-07-01
 

@@ -43,6 +43,7 @@ pub enum PyPackageFormatSelection {
     OnlyTarBz2,
     OnlyConda,
     PreferConda,
+    PreferCondaWithWhl,
     Both,
 }
 
@@ -58,6 +59,9 @@ impl From<PackageFormatSelection> for PyPackageFormatSelection {
             PackageFormatSelection::OnlyTarBz2 => PyPackageFormatSelection::OnlyTarBz2,
             PackageFormatSelection::OnlyConda => PyPackageFormatSelection::OnlyConda,
             PackageFormatSelection::PreferConda => PyPackageFormatSelection::PreferConda,
+            PackageFormatSelection::PreferCondaWithWhl => {
+                PyPackageFormatSelection::PreferCondaWithWhl
+            }
             PackageFormatSelection::Both => PyPackageFormatSelection::Both,
         }
     }
@@ -69,6 +73,9 @@ impl From<PyPackageFormatSelection> for PackageFormatSelection {
             PyPackageFormatSelection::OnlyTarBz2 => PackageFormatSelection::OnlyTarBz2,
             PyPackageFormatSelection::OnlyConda => PackageFormatSelection::OnlyConda,
             PyPackageFormatSelection::PreferConda => PackageFormatSelection::PreferConda,
+            PyPackageFormatSelection::PreferCondaWithWhl => {
+                PackageFormatSelection::PreferCondaWithWhl
+            }
             PyPackageFormatSelection::Both => PackageFormatSelection::Both,
         }
     }

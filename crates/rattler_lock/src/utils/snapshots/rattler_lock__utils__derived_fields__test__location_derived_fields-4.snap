@@ -3,8 +3,17 @@ source: crates/rattler_lock/src/utils/derived_fields.rs
 expression: "file:///packages/win-64/x264-1!164.3095-h57fd34a_2.tar.bz2"
 ---
 LocationDerivedFields {
-    file_name: Some(
-        "x264-1!164.3095-h57fd34a_2.tar.bz2",
+    identifier: Some(
+        DistArchiveIdentifier {
+            identifier: ArchiveIdentifier {
+                name: "x264",
+                version: "1!164.3095",
+                build_string: "h57fd34a_2",
+            },
+            archive_type: Conda(
+                TarBz2,
+            ),
+        },
     ),
     name: Some(
         "x264",

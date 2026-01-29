@@ -421,7 +421,9 @@ impl From<PypiPackageEnvironmentData> for HashablePypiPackageEnvironmentData {
 mod test {
     use std::str::FromStr;
 
-    use rattler_conda_types::{PackageName, PackageRecord, Platform, Version};
+    use rattler_conda_types::{
+        package::DistArchiveIdentifier, PackageName, PackageRecord, Platform, Version,
+    };
     use url::Url;
 
     use crate::{CondaBinaryData, LockFile, PypiPrereleaseMode};
@@ -457,7 +459,9 @@ mod test {
                     )
                     .unwrap()
                     .into(),
-                    file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
+                    file_name: "foobar-1.0.0-build.tar.bz2"
+                        .parse::<DistArchiveIdentifier>()
+                        .unwrap(),
                     channel: None,
                 }
                 .into(),
@@ -472,7 +476,9 @@ mod test {
                     )
                     .unwrap()
                     .into(),
-                    file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
+                    file_name: "foobar-1.0.0-build.tar.bz2"
+                        .parse::<DistArchiveIdentifier>()
+                        .unwrap(),
                     channel: None,
                 }
                 .into(),
@@ -487,7 +493,9 @@ mod test {
                     )
                     .unwrap()
                     .into(),
-                    file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
+                    file_name: "foobar-1.0.0-build.tar.bz2"
+                        .parse::<DistArchiveIdentifier>()
+                        .unwrap(),
                     channel: None,
                 }
                 .into(),
@@ -518,7 +526,9 @@ mod test {
                     )
                     .unwrap()
                     .into(),
-                    file_name: "python-3.12.0-build.tar.bz2".to_string(),
+                    file_name: "python-3.12.0-build.tar.bz2"
+                        .parse::<DistArchiveIdentifier>()
+                        .unwrap(),
                     channel: None,
                 }
                 .into(),
@@ -564,7 +574,9 @@ mod test {
                         )
                         .unwrap()
                         .into(),
-                        file_name: "python-3.12.0-build.tar.bz2".to_string(),
+                        file_name: "python-3.12.0-build.tar.bz2"
+                            .parse::<DistArchiveIdentifier>()
+                            .unwrap(),
                         channel: None,
                     }
                     .into(),

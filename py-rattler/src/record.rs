@@ -8,7 +8,7 @@ use pyo3::{
     PyAny, PyErr, PyResult, Python,
 };
 use rattler_conda_types::{
-    package::{IndexJson, PackageFile},
+    package::{DistArchiveIdentifier, IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
     utils::TimestampMs,
     NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
@@ -201,10 +201,17 @@ impl PyRecord {
             ));
         }
 
+        let identifier = DistArchiveIdentifier::try_from_path(&file_name).ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "Invalid archive identifier: {}",
+                file_name.display()
+            ))
+        })?;
+
         Ok(Self {
             inner: RecordInner::RepoData(RepoDataRecord {
                 package_record: package_record.as_package_record().clone(),
-                file_name: file_name.to_string_lossy().to_string(),
+                identifier,
                 url: Url::parse(&url).map_err(PyRattlerError::from)?,
                 channel: channel
                     .map(|channel| Url::parse(&channel).map_err(PyRattlerError::from))
@@ -547,12 +554,14 @@ impl PyRecord {
     /// The filename of the package.
     #[getter]
     pub fn file_name(&self) -> PyResult<String> {
-        Ok(self.try_as_repodata_record()?.file_name.clone())
+        Ok(self.try_as_repodata_record()?.identifier.to_file_name())
     }
 
     #[setter]
     pub fn set_file_name(&mut self, file_name: String) -> PyResult<()> {
-        self.try_as_repodata_record_mut()?.file_name = file_name;
+        self.try_as_repodata_record_mut()?.identifier = file_name
+            .parse()
+            .map_err(|e: String| PyValueError::new_err(e))?;
         Ok(())
     }
 

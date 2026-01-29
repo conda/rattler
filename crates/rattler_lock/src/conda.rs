@@ -1,5 +1,6 @@
 use crate::source::SourceLocation;
 use crate::UrlOrPath;
+use rattler_conda_types::package::DistArchiveIdentifier;
 use rattler_conda_types::{
     ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, RepoDataRecord,
 };
@@ -161,7 +162,7 @@ pub struct CondaBinaryData {
     pub location: UrlOrPath,
 
     /// The filename of the package.
-    pub file_name: String,
+    pub file_name: DistArchiveIdentifier,
 
     /// The channel of the package.
     pub channel: Option<ChannelUrl>,
@@ -344,7 +345,7 @@ impl From<RepoDataRecord> for CondaPackageData {
         let location = UrlOrPath::from(value.url).normalize().into_owned();
         Self::Binary(CondaBinaryData {
             package_record: value.package_record,
-            file_name: value.file_name,
+            file_name: value.identifier,
             channel: value
                 .channel
                 .and_then(|channel| Url::parse(&channel).ok())
@@ -368,7 +369,7 @@ impl TryFrom<CondaBinaryData> for RepoDataRecord {
     fn try_from(value: CondaBinaryData) -> Result<Self, Self::Error> {
         Ok(Self {
             package_record: value.package_record,
-            file_name: value.file_name,
+            identifier: value.file_name,
             url: value.location.try_into_url()?,
             channel: value.channel.map(|channel| channel.to_string()),
         })

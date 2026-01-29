@@ -59,6 +59,42 @@ fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
     }
 }
 
+#[cfg(target_os = "freebsd")]
+/// FreeBSD implementation using FIODGNAME ioctl to get the slave pty name
+fn ptsname_r(fd: &PtyMaster) -> nix::Result<String> {
+    use nix::libc::ioctl;
+    use std::ffi::CStr;
+
+    // FreeBSD uses FIODGNAME ioctl with a fiodgname_arg struct
+    #[repr(C)]
+    struct fiodgname_arg {
+        len: libc::c_int,
+        buf: *mut libc::c_char,
+    }
+
+    // FIODGNAME is defined as _IOW('f', 120, struct fiodgname_arg) in FreeBSD
+    // _IOW(g,n,t) = (0x80000000 | ((sizeof(t) & 0x1fff) << 16) | ((g) << 8) | (n))
+    // sizeof(fiodgname_arg) = 16 on 64-bit (4 bytes int + 4 padding + 8 bytes pointer)
+    const FIODGNAME: libc::c_ulong = 0x80106678;
+
+    let mut buf: [libc::c_char; 128] = [0; 128];
+    let mut arg = fiodgname_arg {
+        len: buf.len() as libc::c_int,
+        buf: buf.as_mut_ptr(),
+    };
+
+    unsafe {
+        match ioctl(fd.as_raw_fd(), FIODGNAME, &mut arg) {
+            0 => {
+                let res = CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned();
+                // FreeBSD returns just the device name (e.g., "pts/0"), prepend /dev/
+                Ok(format!("/dev/{}", res))
+            }
+            _ => Err(nix::Error::last()),
+        }
+    }
+}
+
 #[derive(Default, Clone)]
 pub struct PtyProcessOptions {
     pub echo: bool,

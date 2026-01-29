@@ -62,7 +62,7 @@ pub async fn fetch_index(
     }
 
     // Decompress the bytes
-    let decoded_bytes = Bytes::from(decode_zst_bytes_async(bytes).await?);
+    let decoded_bytes = Bytes::from(decode_zst_bytes_async(bytes, response_url.clone()).await?);
 
     // Release the permit
     drop(request_permit);

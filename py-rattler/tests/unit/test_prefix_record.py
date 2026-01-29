@@ -80,14 +80,14 @@ def test_create_prefix_record() -> None:
 
     repodata_record = RepoDataRecord(
         package_record,
-        file_name="foobar.tar.bz2",
-        url="https://foobar.com/foobar.tar.bz2",
+        file_name="foobar-1.0-abc.tar.bz2",
+        url="https://foobar.com/foobar-1.0-abc.tar.bz2",
         channel="https://foobar.com/win-64",
     )
 
-    assert repodata_record.url == "https://foobar.com/foobar.tar.bz2"
+    assert repodata_record.url == "https://foobar.com/foobar-1.0-abc.tar.bz2"
     assert repodata_record.channel == "https://foobar.com/win-64"
-    assert repodata_record.file_name == "foobar.tar.bz2"
+    assert repodata_record.file_name == "foobar-1.0-abc.tar.bz2"
 
     paths_data = PrefixPaths()
 

@@ -235,8 +235,8 @@ impl Serialize for TimestampMs {
 pub struct DeserializeFromStrUnchecked;
 
 /// A helper function used to sort map alphabetically when serializing.
-pub(crate) fn sort_map_alphabetically<T: Serialize, H, S: serde::Serializer>(
-    value: &HashMap<String, T, H>,
+pub(crate) fn sort_map_alphabetically<K: Ord + Serialize, T: Serialize, H, S: serde::Serializer>(
+    value: &HashMap<K, T, H>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     value
@@ -246,8 +246,13 @@ pub(crate) fn sort_map_alphabetically<T: Serialize, H, S: serde::Serializer>(
 }
 
 /// A helper function used to sort map alphabetically when serializing.
-pub(crate) fn sort_index_map_alphabetically<T: Serialize, H, S: serde::Serializer>(
-    value: &IndexMap<String, T, H>,
+pub(crate) fn sort_index_map_alphabetically<
+    K: Ord + Serialize,
+    T: Serialize,
+    H,
+    S: serde::Serializer,
+>(
+    value: &IndexMap<K, T, H>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     value

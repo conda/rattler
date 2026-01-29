@@ -19,7 +19,7 @@ use fs_err::tokio as tokio_fs;
 use futures::TryFutureExt;
 use itertools::Itertools;
 use parking_lot::Mutex;
-use rattler_conda_types::package::ArchiveIdentifier;
+use rattler_conda_types::package::CondaArchiveIdentifier;
 use rattler_digest::Sha256Hash;
 use rattler_networking::{
     retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy},
@@ -424,7 +424,9 @@ impl PackageCache {
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheMetadata, PackageCacheError> {
         let path_buf = path.to_path_buf();
-        let mut cache_key: CacheKey = ArchiveIdentifier::try_from_path(&path_buf).unwrap().into();
+        let mut cache_key: CacheKey = CondaArchiveIdentifier::try_from_path(&path_buf)
+            .unwrap()
+            .into();
         if self.cache_origin {
             cache_key = cache_key.with_path(path);
         }
@@ -693,20 +695,76 @@ where
             .write_revision_and_sha(new_revision, given_sha)
             .await?;
 
-        // Fetch the package.
-        fetch_fn(path.clone())
-            .await
-            .map_err(|e| PackageCacheLayerError::FetchError(Arc::new(e)))?;
+        // Create a temporary directory in the same parent folder for atomic extraction.
+        // Using the same parent ensures the rename operation is atomic (same filesystem).
+        let parent_dir = path.parent().ok_or_else(|| {
+            PackageCacheLayerError::OtherError(Box::new(std::io::Error::other(format!(
+                "cache path '{}' has no parent directory",
+                path.display()
+            ))))
+        })?;
 
-        // After fetching, return the cache metadata with the new revision.
-        // We don't need to re-validate since we just fetched it.
-        Ok(CacheMetadata {
-            revision: new_revision,
-            sha256: given_sha.copied(),
-            path,
-            index_json: None,
-            paths_json: None,
-        })
+        let prefix = path.file_name().and_then(|n| n.to_str()).unwrap_or("pkg");
+
+        // Use tempfile::Builder to create a temp directory with automatic cleanup on failure
+        let temp_dir = tempfile::Builder::new()
+            .prefix(&format!(".{prefix}"))
+            .tempdir_in(parent_dir)
+            .map_err(|e| {
+                PackageCacheLayerError::OtherError(Box::new(std::io::Error::other(format!(
+                    "failed to create temp directory in '{}': {}",
+                    parent_dir.display(),
+                    e
+                ))))
+            })?;
+
+        // Fetch/extract the package to the temporary directory.
+        let fetch_result = fetch_fn(temp_dir.path().to_path_buf()).await;
+
+        // Handle fetch result
+        match fetch_result {
+            Ok(()) => {
+                // Take ownership of the temp directory path so it won't be auto-deleted
+                let temp_path = temp_dir.keep();
+
+                // Remove any existing (potentially corrupted) directory at the final path
+                if path.is_dir() {
+                    tokio_fs::remove_dir_all(&path).await.map_err(|e| {
+                        PackageCacheLayerError::OtherError(Box::new(std::io::Error::other(
+                            format!(
+                                "failed to remove existing cache directory '{}': {}",
+                                path.display(),
+                                e
+                            ),
+                        )))
+                    })?;
+                }
+
+                // Atomically rename the temp directory to the final destination
+                tokio_fs::rename(&temp_path, &path).await.map_err(|e| {
+                    PackageCacheLayerError::OtherError(Box::new(std::io::Error::other(format!(
+                        "failed to rename temp directory '{}' to '{}': {}",
+                        temp_path.display(),
+                        path.display(),
+                        e
+                    ))))
+                })?;
+
+                // After fetching, return the cache metadata with the new revision.
+                // We don't need to re-validate since we just fetched it.
+                Ok(CacheMetadata {
+                    revision: new_revision,
+                    sha256: given_sha.copied(),
+                    path,
+                    index_json: None,
+                    paths_json: None,
+                })
+            }
+            Err(e) => {
+                // temp_dir is dropped here, automatically cleaning up the directory
+                Err(PackageCacheLayerError::FetchError(Arc::new(e)))
+            }
+        }
     } else {
         Err(PackageCacheLayerError::InvalidPackage)
     }
@@ -769,7 +827,7 @@ mod test {
     };
     use bytes::Bytes;
     use futures::stream;
-    use rattler_conda_types::package::{ArchiveIdentifier, PackageFile, PathsJson};
+    use rattler_conda_types::package::{CondaArchiveIdentifier, PackageFile, PathsJson};
     use rattler_digest::{compute_bytes_digest, parse_digest_from_hex, Sha256};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use reqwest::Client;
@@ -813,7 +871,7 @@ mod test {
         // Get the package to the cache
         let cache_metadata = cache
             .get_or_fetch(
-                ArchiveIdentifier::try_from_path(&tar_archive_path).unwrap(),
+                CondaArchiveIdentifier::try_from_path(&tar_archive_path).unwrap(),
                 move |destination| {
                     let tar_archive_path = tar_archive_path.clone();
                     async move {
@@ -954,7 +1012,7 @@ mod test {
         // Do the first request without
         let result = cache
             .get_or_fetch_from_url_with_retry(
-                ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
+                CondaArchiveIdentifier::try_from_filename(archive_name).unwrap(),
                 server_url.join(archive_name).unwrap(),
                 client.clone().into(),
                 DoNotRetryPolicy,
@@ -977,7 +1035,7 @@ mod test {
         // The second one should fail after the 2nd try
         let result = cache
             .get_or_fetch_from_url_with_retry(
-                ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
+                CondaArchiveIdentifier::try_from_filename(archive_name).unwrap(),
                 server_url.join(archive_name).unwrap(),
                 client.into(),
                 retry_policy,
@@ -1090,7 +1148,7 @@ mod test {
         let cache = PackageCache::new(packages_dir.path());
 
         // Set the sha256 of the package
-        let key: CacheKey = ArchiveIdentifier::try_from_path(&tar_archive_path)
+        let key: CacheKey = CondaArchiveIdentifier::try_from_path(&tar_archive_path)
             .unwrap()
             .into();
         let key = key.with_sha256(
@@ -1214,7 +1272,7 @@ mod test {
                     .await
                     .unwrap();
 
-            let key: CacheKey = ArchiveIdentifier::try_from_path(&tar_archive_path)
+            let key: CacheKey = CondaArchiveIdentifier::try_from_path(&tar_archive_path)
                 .unwrap()
                 .into();
             let key =
@@ -1274,7 +1332,7 @@ mod test {
         )
         .await;
 
-        let cache_key = CacheKey::from(ArchiveIdentifier::try_from_url(&url).unwrap());
+        let cache_key = CacheKey::from(CondaArchiveIdentifier::try_from_url(&url).unwrap());
         let cache_key = cache_key.with_sha256(parse_digest_from_hex::<Sha256>(&sha).unwrap());
 
         let should_run = Arc::new(AtomicBool::new(false));
@@ -1316,7 +1374,7 @@ mod test {
         )
         .await;
 
-        let cache_key = CacheKey::from(ArchiveIdentifier::try_from_url(&url).unwrap());
+        let cache_key = CacheKey::from(CondaArchiveIdentifier::try_from_url(&url).unwrap());
         let cache_key = cache_key.with_sha256(parse_digest_from_hex::<Sha256>(&sha).unwrap());
 
         let should_run = Arc::new(AtomicBool::new(false));
@@ -1366,7 +1424,7 @@ mod test {
         let other_sha =
             "c172acdf9cb7655dd224879b30361a657b09bb084b65f151e36a2b51e51a080a".to_string();
 
-        let cache_key = CacheKey::from(ArchiveIdentifier::try_from_url(&other_url).unwrap());
+        let cache_key = CacheKey::from(CondaArchiveIdentifier::try_from_url(&other_url).unwrap());
         let cache_key = cache_key.with_sha256(parse_digest_from_hex::<Sha256>(&other_sha).unwrap());
 
         let should_run = Arc::new(AtomicBool::new(false));

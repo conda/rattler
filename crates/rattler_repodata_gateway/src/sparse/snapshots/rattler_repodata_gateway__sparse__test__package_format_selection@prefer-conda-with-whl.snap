@@ -1,0 +1,9 @@
+---
+source: crates/rattler_repodata_gateway/src/sparse/mod.rs
+expression: "records.join(\"\\n\")"
+---
+bors-1.0-bla_1.tar.bz2
+bors-1.1-bla_1.conda
+bors-1.2.1-bla_1.tar.bz2
+bors-2.0-bla_1.tar.bz2
+bors-2.1-bla_1.conda

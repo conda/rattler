@@ -1,4 +1,4 @@
-use rattler_conda_types::{package::ArchiveIdentifier, PackageRecord};
+use rattler_conda_types::{package::CondaArchiveIdentifier, PackageRecord};
 use rattler_digest::{Md5Hash, Sha256Hash};
 use std::fmt::{Display, Formatter};
 
@@ -47,7 +47,7 @@ impl CacheKey {
 
     /// Try to create a new cache key from a package record and a filename.
     pub fn create(record: &PackageRecord, filename: &str) -> Result<Self, CacheKeyError> {
-        let archive_identifier = ArchiveIdentifier::try_from_filename(filename)
+        let archive_identifier = CondaArchiveIdentifier::try_from_filename(filename)
             .ok_or_else(|| CacheKeyError::InvalidArchiveIdentifier(filename.to_string()))?;
 
         Ok(Self {

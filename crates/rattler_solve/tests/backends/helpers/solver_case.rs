@@ -308,7 +308,7 @@ impl PackageFingerprint {
             build_number: record.package_record.build_number,
             channel: record.channel.clone(),
             subdir: record.package_record.subdir.clone(),
-            file_name: record.file_name.clone(),
+            file_name: record.identifier.to_string(),
         }
     }
 
@@ -319,7 +319,7 @@ impl PackageFingerprint {
             && self.build_number == record.package_record.build_number
             && self.channel == record.channel
             && self.subdir == record.package_record.subdir
-            && self.file_name == record.file_name
+            && self.file_name == record.identifier.to_string()
     }
 }
 

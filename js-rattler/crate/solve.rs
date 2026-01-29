@@ -3,8 +3,10 @@ use std::str::FromStr;
 
 use crate::{error::JsError, platform::JsPlatform};
 use rattler_conda_types::{
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
     Channel, ChannelConfig, MatchSpec, NoArchType, PackageName, PackageRecord, ParseChannelError,
-    ParseStrictness::Lenient, RepoDataRecord, Version,
+    ParseStrictness::Lenient,
+    RepoDataRecord, Version,
 };
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use rattler_repodata_gateway::{Gateway, SourceConfig};
@@ -114,7 +116,18 @@ pub async fn simple_solve(
 
             Ok(RepoDataRecord {
                 url,
-                file_name: pkg.filename,
+                identifier: pkg.filename.parse().unwrap_or_else(|_| {
+                    let archive_type = DistArchiveType::try_from(&pkg.filename)
+                        .unwrap_or(CondaArchiveType::Conda.into());
+                    DistArchiveIdentifier {
+                        identifier: ArchiveIdentifier {
+                            name: rec.name.as_source().to_string(),
+                            version: rec.version.to_string(),
+                            build_string: rec.build.clone(),
+                        },
+                        archive_type,
+                    }
+                }),
                 channel: pkg.repo_name,
                 package_record: rec.clone(),
             })
@@ -185,7 +198,7 @@ pub async fn simple_solve(
             build: r.package_record.build.clone(),
             build_number: Some(r.package_record.build_number),
             repo_name: r.channel,
-            filename: r.file_name,
+            filename: r.identifier.to_file_name(),
             version: r.package_record.version.to_string(),
             md5: r
                 .package_record

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 #[cfg(all(feature = "s3", feature = "rattler_config"))]
 use anyhow::Context;
-use clap::{arg, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use rattler_conda_types::Platform;
 #[cfg(feature = "rattler_config")]
