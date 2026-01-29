@@ -1442,4 +1442,62 @@ mod test {
         );
         assert_eq!(custom_records[0].package_record.version.as_str(), "1.0.0");
     }
+
+    /// Test that ensures run_exports fallback works when run_exports.json exists
+    /// but doesn't contain all packages (out-of-sync scenario).
+    ///
+    /// This test creates a channel that has an empty run_exports.json file,
+    /// simulating the case where the run_exports.json file is out of sync with
+    /// the actual packages. The test verifies that the system correctly falls
+    /// back to extracting run_exports from the actual package files.
+    #[tokio::test]
+    async fn test_ensure_run_exports_fallback_when_out_of_sync() {
+        // Use a minimal repodata with just one openssl package, and add a base_url
+        // pointing to conda.anaconda.org so fallback downloads work.
+        let channel_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/channels/openssl-run-exports-test");
+
+        // Set up the test server
+        let server = SimpleChannelServer::new(channel_dir).await;
+        let gateway = Gateway::new();
+
+        // Query for openssl packages (which have run_exports)
+        let matchspec = MatchSpec::from_str("openssl=3.3.1", Lenient).unwrap();
+
+        let records = gateway
+            .query(
+                vec![server.channel()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+        assert!(total_records > 0, "should find some openssl packages");
+
+        let mut repodata_records = records
+            .iter()
+            .flat_map(|r| r.iter().cloned())
+            .collect::<Vec<_>>();
+
+        // Run exports should be missing initially since we just queried repodata
+        assert!(run_exports_missing(&repodata_records));
+
+        // Now ensure run_exports - this should:
+        // 1. Fetch the empty run_exports.json from our test server
+        // 2. Not find the packages in run_exports.json (it's empty)
+        // 3. Fall back to downloading the actual packages and extracting run_exports
+        gateway
+            .ensure_run_exports(repodata_records.iter_mut(), None)
+            .await
+            .unwrap();
+
+        // Verify that run_exports were successfully extracted via fallback
+        assert!(
+            run_exports_in_place(&repodata_records),
+            "run_exports should be populated via package extraction fallback when run_exports.json is out of sync"
+        );
+    }
 }
