@@ -1,4 +1,7 @@
-use crate::{error::PyRattlerError, networking::middleware::PyMiddleware};
+use crate::{
+    error::PyRattlerError,
+    networking::middleware::{AddHeadersMiddleware, PyMiddleware},
+};
 use pyo3::{pyclass, pymethods, PyResult};
 use rattler_networking::{
     AuthenticationMiddleware, AuthenticationStorage, GCSMiddleware, LazyClient, MirrorMiddleware,
@@ -71,6 +74,9 @@ impl PyClientWithMiddleware {
                         AuthenticationStorage::from_env_and_defaults()
                             .map_err(PyRattlerError::from)?,
                     ));
+                }
+                PyMiddleware::AddHeaders(middleware) => {
+                    client = client.with(AddHeadersMiddleware::from(middleware));
                 }
             }
         }

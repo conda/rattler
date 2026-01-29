@@ -96,7 +96,7 @@ async def fetch_repo_data(
         [platform._inner for platform in platforms],
         cache_path,
         callback,
-        client,
+        client._client if client else None,
         fetch_options._into_py(),
     )
 
