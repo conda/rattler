@@ -9,6 +9,7 @@ from rattler.repo_data import (
     Gateway,
     SourceConfig,
     PackageFormatSelection,
+    RepoDataSource,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.networking import Client, fetch_repo_data
@@ -97,6 +98,7 @@ __all__ = [
     "IndexJson",
     "Gateway",
     "SourceConfig",
+    "RepoDataSource",
     "NoArchType",
     "NoArchLiteral",
     "Link",

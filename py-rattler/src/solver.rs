@@ -14,14 +14,14 @@ use rattler_solve::{
 use tokio::task::JoinError;
 
 use crate::{
-    channel::{PyChannel, PyChannelPriority},
+    channel::PyChannelPriority,
     error::PyRattlerError,
     generic_virtual_package::PyGenericVirtualPackage,
     match_spec::PyMatchSpec,
     package_name::PyPackageName,
     platform::PyPlatform,
     record::PyRecord,
-    repo_data::gateway::PyGateway,
+    repo_data::gateway::{py_object_to_source, PyGateway},
     PyPackageFormatSelection, PySparseRepoData, Wrap,
 };
 
@@ -106,11 +106,11 @@ impl PyMinimumAgeConfig {
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-#[pyo3(signature = (channels, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, strategy=None, min_age=None)
+#[pyo3(signature = (sources, platforms, specs, constraints, gateway, locked_packages, pinned_packages, virtual_packages, channel_priority, timeout=None, exclude_newer_timestamp_ms=None, strategy=None, min_age=None)
 )]
-pub fn py_solve(
-    py: Python<'_>,
-    channels: Vec<PyChannel>,
+pub fn py_solve<'a>(
+    py: Python<'a>,
+    sources: Vec<Bound<'a, PyAny>>,
     platforms: Vec<PyPlatform>,
     specs: Vec<PyMatchSpec>,
     constraints: Vec<PyMatchSpec>,
@@ -123,12 +123,18 @@ pub fn py_solve(
     exclude_newer_timestamp_ms: Option<i64>,
     strategy: Option<Wrap<SolveStrategy>>,
     min_age: Option<PyMinimumAgeConfig>,
-) -> PyResult<Bound<'_, PyAny>> {
+) -> PyResult<Bound<'a, PyAny>> {
+    // Convert Python sources to Rust Source enum
+    let rust_sources: Vec<rattler_repodata_gateway::Source> = sources
+        .into_iter()
+        .map(py_object_to_source)
+        .collect::<PyResult<_>>()?;
+
     future_into_py(py, async move {
         let available_packages = gateway
             .inner
             .query(
-                channels.into_iter(),
+                rust_sources,
                 platforms.into_iter().map(Into::into),
                 specs.clone().into_iter(),
             )
