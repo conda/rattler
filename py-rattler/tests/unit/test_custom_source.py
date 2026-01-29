@@ -230,3 +230,107 @@ async def test_custom_source_with_solve():
 
     assert len(solved) == 1
     assert record_snapshot(solved[0]) == "my-package=1.0.0=test_0"
+
+
+@pytest.mark.asyncio
+async def test_custom_source_backed_by_sparse_repodata():
+    """Test a custom RepoDataSource that wraps SparseRepoData.
+
+    This demonstrates how to create a custom source that loads records
+    from local repodata files for multiple platforms (linux-64 and noarch),
+    which can be useful for offline scenarios or when you want to
+    filter/transform repodata before solving.
+    """
+    import os
+
+    from rattler import SparseRepoData
+
+    # Load sparse repodata from the test data directory
+    data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
+    linux64_path = os.path.join(data_dir, "channels/conda-forge/linux-64/repodata.json")
+    noarch_path = os.path.join(data_dir, "channels/conda-forge/noarch/repodata.json")
+
+    class SparseRepoDataSource(RepoDataSource):
+        """A custom source that wraps SparseRepoData files."""
+
+        def __init__(self, repodata_by_platform: dict[str, SparseRepoData]):
+            self._repodata = repodata_by_platform
+
+        async def fetch_package_records(self, platform: Platform, name: PackageName) -> List[RepoDataRecord]:
+            platform_str = str(platform)
+            if platform_str in self._repodata:
+                return self._repodata[platform_str].load_records(name)
+            return []
+
+        def package_names(self, platform: Platform) -> List[str]:
+            platform_str = str(platform)
+            if platform_str in self._repodata:
+                return self._repodata[platform_str].package_names()
+            return []
+
+    # Create sparse repodata for linux-64 and noarch
+    linux64_data = SparseRepoData(
+        channel=Channel("conda-forge"),
+        subdir="linux-64",
+        path=linux64_path,
+    )
+    noarch_data = SparseRepoData(
+        channel=Channel("conda-forge"),
+        subdir="noarch",
+        path=noarch_path,
+    )
+
+    # Wrap both in our custom source
+    source = SparseRepoDataSource(
+        {
+            "linux-64": linux64_data,
+            "noarch": noarch_data,
+        }
+    )
+
+    # Query using the custom source with both platforms
+    gateway = Gateway()
+    results = await gateway.query(
+        sources=[source],
+        platforms=["linux-64", "noarch"],
+        specs=["python"],
+        recursive=False,
+    )
+
+    # Verify we got results from both platforms
+    # results[0] is linux-64, results[1] is noarch
+    assert len(results) == 2
+    assert len(results[0]) > 0  # linux-64 has python
+    # noarch may or may not have python records
+
+    # Test with solve - python has dependencies from both linux-64 and noarch
+    solved = await solve(
+        sources=[source],
+        specs=["python"],
+        platforms=["linux-64", "noarch"],
+    )
+
+    # Snapshot of solved packages with subdir prefix
+    solved_snapshot = sorted(f"{r.subdir}/{r.name.normalized}-{r.version}-{r.build}" for r in solved)
+    assert solved_snapshot == [
+        "linux-64/_libgcc_mutex-0.1-conda_forge",
+        "linux-64/_openmp_mutex-4.5-2_gnu",
+        "linux-64/bzip2-1.0.8-h7f98852_4",
+        "linux-64/ca-certificates-2022.6.15-ha878542_0",
+        "linux-64/ld_impl_linux-64-2.36.1-hea4e1c9_2",
+        "linux-64/libffi-3.4.2-h7f98852_5",
+        "linux-64/libgcc-ng-12.1.0-h8d9b700_16",
+        "linux-64/libgomp-12.1.0-h8d9b700_16",
+        "linux-64/libnsl-2.0.0-h7f98852_0",
+        "linux-64/libsqlite-3.39.2-h753d276_1",
+        "linux-64/libuuid-2.32.1-h7f98852_1000",
+        "linux-64/libzlib-1.2.12-h166bdaf_2",
+        "linux-64/ncurses-6.3-h27087fc_1",
+        "linux-64/openssl-3.0.5-h166bdaf_1",
+        "linux-64/python-3.10.5-ha86cf86_0_cpython",
+        "linux-64/readline-8.1.2-h0f457ee_0",
+        "linux-64/sqlite-3.39.2-h4ff8645_1",
+        "linux-64/tk-8.6.12-h27826a3_0",
+        "linux-64/xz-5.2.6-h166bdaf_0",
+        "noarch/tzdata-2021e-he74cb21_0",
+    ]
