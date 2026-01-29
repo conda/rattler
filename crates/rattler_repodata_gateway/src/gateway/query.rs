@@ -72,8 +72,10 @@ impl SourceSpecs {
 
 /// A spec that references a package by direct URL.
 struct DirectUrlSpec {
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     spec: MatchSpec,
     url: Url,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     name: PackageName,
 }
 
@@ -140,6 +142,7 @@ impl RepoDataQuery {
 /// Owns all mutable state during query execution and provides methods for each phase.
 struct QueryExecutor {
     // Configuration (immutable after construction)
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     gateway: Arc<GatewayInner>,
     recursive: bool,
     reporter: Option<Arc<dyn Reporter>>,
