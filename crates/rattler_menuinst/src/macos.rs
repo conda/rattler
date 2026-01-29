@@ -7,7 +7,7 @@ use std::{
 
 use fs_err as fs;
 use fs_err::File;
-use plist::Value;
+use plist::{Dictionary, Value};
 use rattler_conda_types::{menuinst::MacOsTracker, Platform};
 use rattler_shell::{
     activation::{ActivationError, ActivationVariables, Activator, PathModificationBehavior},
@@ -15,7 +15,7 @@ use rattler_shell::{
 };
 use sha2::{Digest as _, Sha256};
 
-use crate::utils::slugify;
+use crate::{render::replace_placeholders, utils::slugify};
 use crate::{
     render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString},
     schema::{
@@ -258,6 +258,46 @@ impl CFBundleTypeRole {
             }
             .to_string(),
         )
+    }
+}
+
+fn serde_value_to_plist(
+    value: &serde_json::Value,
+    placeholders: &MenuItemPlaceholders,
+) -> Option<Value> {
+    match value {
+        serde_json::Value::Null => None,
+        serde_json::Value::Bool(bool) => Some(bool.into()),
+        serde_json::Value::Number(number) => {
+            if number.is_i64() {
+                Some(number.as_i64().unwrap().into())
+            } else if number.is_u64() {
+                Some(number.as_u64().unwrap().into())
+            } else {
+                Some(number.as_f64().unwrap().into())
+            }
+        }
+        serde_json::Value::String(string) => {
+            Some(replace_placeholders(string.clone(), placeholders.as_ref()).into())
+        }
+        serde_json::Value::Array(values) => Some(
+            values
+                .iter()
+                // We skip null values
+                .filter_map(|value| serde_value_to_plist(value, placeholders))
+                .collect::<Vec<_>>()
+                .into(),
+        ),
+        serde_json::Value::Object(map) => {
+            let mut dict = Dictionary::new();
+            for (key, value) in map {
+                // We skip null values
+                if let Some(value) = serde_value_to_plist(value, placeholders) {
+                    dict.insert(key.clone(), value);
+                }
+            }
+            Some(dict.into())
+        }
     }
 }
 
@@ -591,6 +631,18 @@ impl MacOSMenu {
                 url_array.push(url_type.to_plist(&self.placeholders));
             }
             pl.insert("CFBundleURLTypes".into(), Value::Array(url_array));
+        }
+
+        if let Some(extra) = &self.item.info_plist_extra {
+            for (key, value) in extra {
+                if pl.contains_key(key) {
+                    return Err(MenuInstError::PlistDuplicateError(key.clone()));
+                }
+                // If the json value is null, we skip inserting the key
+                if let Some(value) = serde_value_to_plist(value, &self.placeholders) {
+                    pl.insert(key.clone(), value);
+                }
+            }
         }
 
         let plist_target = self.directories.location.join("Contents/Info.plist");

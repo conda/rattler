@@ -1,6 +1,6 @@
 [package]
 name = "rattler"
-version = "0.39.4"
+version = "0.39.10"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust library to install conda environments"
@@ -25,6 +25,7 @@ anyhow = { workspace = true }
 clap = { workspace = true, optional = true }
 digest = { workspace = true }
 dirs = { workspace = true }
+filetime = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 humantime = { workspace = true }

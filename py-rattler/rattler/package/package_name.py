@@ -28,6 +28,51 @@ class PackageName:
         """
         return PackageName._from_py_package_name(PyPackageName.new_unchecked(normalized))
 
+    @staticmethod
+    def from_matchspec_str(spec: str) -> PackageName:
+        """
+        Parses the package name part from a matchspec string without parsing the entire matchspec.
+
+        This extracts the package name by splitting on whitespace or version constraint characters
+        (`>`, `<`, `=`, `!`, `~`, `;`).
+
+        Examples
+        --------
+        ```python
+        >>> p = PackageName.from_matchspec_str("numpy>=1.0,<2.0")
+        >>> p.source
+        'numpy'
+        >>> p = PackageName.from_matchspec_str("pillow >=10")
+        >>> p.source
+        'pillow'
+        >>>
+        ```
+        """
+        return PackageName._from_py_package_name(PyPackageName.from_matchspec_str(spec))
+
+    @staticmethod
+    def from_matchspec_str_unchecked(spec: str) -> PackageName:
+        """
+        Parses the package name part from a matchspec string without parsing the entire matchspec.
+        This function assumes the matchspec string is a valid matchspec.
+
+        This extracts the package name by splitting on whitespace or version constraint characters
+        (`>`, `<`, `=`, `!`, `~`, `;`). The original capitalization is preserved in the source,
+        while the normalized version is lowercase.
+
+        Examples
+        --------
+        ```python
+        >>> p = PackageName.from_matchspec_str_unchecked("Pillow >=10")
+        >>> p.source
+        'Pillow'
+        >>> p.normalized
+        'pillow'
+        >>>
+        ```
+        """
+        return PackageName._from_py_package_name(PyPackageName.from_matchspec_str_unchecked(spec))
+
     @classmethod
     def _from_py_package_name(cls, py_package_name: PyPackageName) -> PackageName:
         """Construct Rattler PackageName from FFI PyPackageName object."""

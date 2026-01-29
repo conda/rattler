@@ -3,8 +3,11 @@
 #![deny(missing_docs)]
 
 pub mod cache;
+/// Defines errors used in this crate.
+pub mod error;
 mod utils;
 
+use crate::error::RepodataError;
 use std::{
     collections::{HashMap, HashSet},
     io::{BufRead, BufReader, Cursor, Read, Seek},
@@ -21,13 +24,16 @@ use fs_err::{self as fs};
 use futures::{stream::FuturesUnordered, StreamExt};
 use indexmap::IndexMap;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use opendal::{
-    layers::RetryLayer,
-    services::{FsConfig, S3Config},
-    Configurator, ErrorKind, Operator,
-};
+#[cfg(feature = "s3")]
+use opendal::layers::RetryLayer;
+#[cfg(feature = "s3")]
+use opendal::services::S3Config;
+use opendal::{services::FsConfig, Configurator, Operator};
 use rattler_conda_types::{
-    package::{ArchiveIdentifier, ArchiveType, IndexJson, PackageFile, RunExportsJson},
+    package::{
+        CondaArchiveType, DistArchiveIdentifier, DistArchiveType, IndexJson, PackageFile,
+        RunExportsJson, WheelArchiveType,
+    },
     ChannelInfo, PackageRecord, PatchInstructions, Platform, RepoData, Shard, ShardedRepodata,
     ShardedSubdirInfo,
 };
@@ -36,12 +42,14 @@ use rattler_package_streaming::{
     read,
     seek::{self, stream_conda_content},
 };
+#[cfg(feature = "s3")]
 use rattler_s3::ResolvedS3Credentials;
 use retry_policies::{policies::ExponentialBackoff, Jitter, RetryDecision, RetryPolicy};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tracing::Instrument;
+#[cfg(feature = "s3")]
 use url::Url;
 
 /// Configuration for precondition checks during file operations.
@@ -273,10 +281,15 @@ pub fn package_record_from_conda_reader(reader: impl BufRead) -> std::io::Result
 /// Returns the parsed `PackageRecord`.
 fn parse_package_buffer(buffer: opendal::Buffer, filename: &str) -> std::io::Result<PackageRecord> {
     let reader = buffer.reader();
-    let archive_type = ArchiveType::try_from(filename).unwrap();
+    let archive_type = DistArchiveType::try_from(filename).unwrap();
     match archive_type {
-        ArchiveType::TarBz2 => package_record_from_tar_bz2_reader(reader),
-        ArchiveType::Conda => package_record_from_conda_reader(reader),
+        DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
+            package_record_from_tar_bz2_reader(reader)
+        }
+        DistArchiveType::Conda(CondaArchiveType::Conda) => package_record_from_conda_reader(reader),
+        DistArchiveType::Wheel(WheelArchiveType::Whl) => Err(std::io::Error::other(
+            "Package type \".whl\" not yet supported.",
+        )),
     }
 }
 
@@ -498,7 +511,7 @@ async fn index_subdir(
     semaphore: Arc<Semaphore>,
     cache: cache::PackageRecordCache,
     precondition_checks: PreconditionChecks,
-) -> Result<SubdirIndexStats> {
+) -> Result<SubdirIndexStats, RepodataError> {
     // Use write_retry_policy for handling lock contention during repodata writes
     // This will retry for 10 minutes with longer backoff durations (10s, 30s, 60s, etc.)
     let retry_policy = write_retry_policy();
@@ -527,58 +540,51 @@ async fn index_subdir(
             }
             Err(e) => {
                 // Check if this is a race condition error that we should retry
-                if let Some(opendal_err) = e.downcast_ref::<opendal::Error>() {
-                    let is_retryable_condition_error = matches!(
-                        opendal_err.kind(),
-                        opendal::ErrorKind::ConditionNotMatch | opendal::ErrorKind::Unexpected
-                    ) && {
-                        // For Unexpected errors, check if it's the HTTP 409 ConditionalRequestConflict
-                        let error_str = format!("{opendal_err:?}");
-                        error_str.contains("ConditionalRequestConflict")
-                            || error_str.contains("status: 409")
-                            || opendal_err.kind() == opendal::ErrorKind::ConditionNotMatch
-                    };
+                let is_retryable_condition_error = match &e {
+                    RepodataError::Opendal(opendal_err) => {
+                        matches!(
+                            opendal_err.kind(),
+                            opendal::ErrorKind::ConditionNotMatch | opendal::ErrorKind::Unexpected
+                        ) && {
+                            // For Unexpected errors, check if it's the HTTP 409 ConditionalRequestConflict
+                            let error_str = format!("{opendal_err:?}");
+                            error_str.contains("ConditionalRequestConflict")
+                                || error_str.contains("status: 409")
+                                || opendal_err.kind() == opendal::ErrorKind::ConditionNotMatch
+                        }
+                    }
+                    _ => false,
+                };
 
-                    if is_retryable_condition_error {
-                        // Race condition detected - should we retry?
-                        match retry_policy.should_retry(request_start_time, current_try as u32) {
-                            RetryDecision::Retry { execute_after } => {
-                                let duration = execute_after
-                                    .duration_since(SystemTime::now())
-                                    .unwrap_or_default();
+                if is_retryable_condition_error {
+                    // Race condition detected - should we retry?
+                    match retry_policy.should_retry(request_start_time, current_try as u32) {
+                        RetryDecision::Retry { execute_after } => {
+                            let duration = execute_after
+                                .duration_since(SystemTime::now())
+                                .unwrap_or_default();
 
-                                // Log with more context to help diagnose the issue
-                                tracing::warn!(
-                                    "Detected concurrent modification of repodata for {} (attempt {}/max). \
-                                    Error: {:?}. Retrying in {:?}. \
-                                    This may indicate multiple indexing processes running simultaneously, \
-                                    or an S3 backend with incomplete precondition support. \
-                                    Consider using PreconditionChecks::Disabled if this persists.",
-                                    subdir,
-                                    current_try + 1,
-                                    opendal_err,
-                                    duration
-                                );
-                                tokio::time::sleep(duration).await;
-                                current_try += 1;
-                                continue;
-                            }
-                            RetryDecision::DoNotRetry => {
-                                tracing::error!(
-                                    "Max retries exceeded for {} due to concurrent modifications. \
-                                    Final error: {:?}. \
-                                    If you're not running concurrent indexing, your S3 backend may not \
-                                    fully support conditional requests. Consider disabling precondition \
-                                    checks by setting precondition_checks to PreconditionChecks::Disabled.",
-                                    subdir,
-                                    opendal_err
-                                );
-                                return Err(e);
-                            }
+                            tracing::warn!(
+                                "Detected concurrent modification of repodata for {} (attempt {}/max). \
+                                 Error: {:?}. Retrying in {:?}.",
+                                subdir,
+                                current_try + 1,
+                                e,
+                                duration
+                            );
+                            tokio::time::sleep(duration).await;
+                            current_try += 1;
+                            continue;
+                        }
+                        RetryDecision::DoNotRetry => {
+                            tracing::error!(
+                                "Max retries exceeded for {subdir}. Final error: {e:?}"
+                            );
+                            return Err(e);
                         }
                     }
                 }
-                // Not a race condition error, or downcast failed - propagate immediately
+                // Not a race condition error, propagate immediately
                 return Err(e);
             }
         }
@@ -597,7 +603,7 @@ async fn index_subdir_inner(
     semaphore: Arc<Semaphore>,
     cache: cache::PackageRecordCache,
     precondition_checks: PreconditionChecks,
-) -> Result<SubdirIndexStats> {
+) -> Result<SubdirIndexStats, RepodataError> {
     // Step 1: Collect ETags/metadata for all critical files upfront
     let metadata = RepodataMetadataCollection::new(
         &op,
@@ -612,7 +618,7 @@ async fn index_subdir_inner(
     // Step 2: Read any previous repodata.json files with conditional check.
     // This file already contains a lot of information about the packages that we
     // can reuse.
-    let mut registered_packages: ahash::HashMap<String, PackageRecord> = if force {
+    let mut registered_packages: ahash::HashMap<DistArchiveIdentifier, PackageRecord> = if force {
         HashMap::default()
     } else {
         let (repodata_path, read_metadata) = if repodata_patch.is_some() {
@@ -645,7 +651,7 @@ async fn index_subdir_inner(
     };
 
     // List all the packages in the subdirectory.
-    let uploaded_packages: HashSet<String> = op
+    let uploaded_packages: HashSet<DistArchiveIdentifier> = op
         .list_with(&format!("{}/", subdir.as_str()))
         .await?
         .iter()
@@ -653,7 +659,7 @@ async fn index_subdir_inner(
             if entry.metadata().mode().is_file() {
                 let filename = entry.name().to_string();
                 // Check if the file is an archive package file.
-                ArchiveType::try_from(&filename).map(|_| filename)
+                DistArchiveIdentifier::try_from_filename(&filename)
             } else {
                 None
             }
@@ -725,10 +731,11 @@ async fn index_subdir_inner(
                     console::style(&filename).dim()
                 ));
 
-                let record = read_and_parse_package(&op, &cache, subdir, &filename).await?;
+                let record =
+                    read_and_parse_package(&op, &cache, subdir, &filename.to_file_name()).await?;
 
                 pb.inc(1);
-                Ok::<(String, PackageRecord), std::io::Error>((filename, record))
+                Ok::<(DistArchiveIdentifier, PackageRecord), std::io::Error>((filename, record))
             }
         };
         tasks.push(tokio::spawn(task));
@@ -745,7 +752,7 @@ async fn index_subdir_inner(
                     console::style("Failed to index").red(),
                     console::style(subdir.as_str()).dim()
                 ));
-                return Err(e.into());
+                return Err(RepodataError::Other(anyhow::anyhow!(e)));
             }
             Err(join_err) => {
                 tasks.clear();
@@ -755,7 +762,7 @@ async fn index_subdir_inner(
                     console::style("Failed to index").red(),
                     console::style(subdir.as_str()).dim()
                 ));
-                return Err(anyhow::anyhow!("Task panicked: {join_err}"));
+                return Err(join_err.into());
             }
         }
     }
@@ -775,15 +782,16 @@ async fn index_subdir_inner(
         registered_packages.insert(filename, record);
     }
 
-    let mut packages: IndexMap<String, PackageRecord, ahash::RandomState> = IndexMap::default();
-    let mut conda_packages: IndexMap<String, PackageRecord, ahash::RandomState> =
+    let mut packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
+        IndexMap::default();
+    let mut conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState> =
         IndexMap::default();
     for (filename, package) in registered_packages {
-        match ArchiveType::try_from(&filename) {
-            Some(ArchiveType::TarBz2) => {
+        match filename.archive_type {
+            DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
                 packages.insert(filename, package);
             }
-            Some(ArchiveType::Conda) => {
+            DistArchiveType::Conda(CondaArchiveType::Conda) => {
                 conda_packages.insert(filename, package);
             }
             _ => panic!("Unknown archive type"),
@@ -798,6 +806,7 @@ async fn index_subdir_inner(
         }),
         packages,
         conda_packages,
+        experimental_whl_packages: IndexMap::default(),
         removed: HashSet::default(),
         version: Some(2),
     };
@@ -818,7 +827,7 @@ async fn index_subdir_inner(
     })
 }
 
-fn serialize_msgpack_zst<T>(val: &T) -> Result<Vec<u8>>
+fn serialize_msgpack_zst<T>(val: &T) -> Result<Vec<u8>, RepodataError>
 where
     T: Serialize + ?Sized,
 {
@@ -836,7 +845,7 @@ pub async fn write_repodata(
     subdir: Platform,
     op: Operator,
     metadata: &RepodataMetadataCollection,
-) -> Result<()> {
+) -> Result<(), RepodataError> {
     if let Some(repodata_from_packages_metadata) = &metadata.repodata_from_packages {
         let unpatched_repodata_path = format!("{subdir}/{REPODATA_FROM_PACKAGES}");
         tracing::info!("Writing unpatched repodata to {unpatched_repodata_path}");
@@ -910,9 +919,7 @@ pub async fn write_repodata(
             shard.packages.insert(k, package_record);
         }
         for package in repodata.removed {
-            let package_name = ArchiveIdentifier::try_from_filename(package.as_str())
-                .context("Could not determine archive identifier for {package}")?
-                .name;
+            let package_name = package.identifier.name.clone();
             let shard = shards_by_package_names.entry(package_name).or_default();
             shard.removed.insert(package);
         }
@@ -928,7 +935,7 @@ pub async fn write_repodata(
                     (k, (digest, encoded))
                 })
             })
-            .collect::<Result<HashMap<_, _>>>()?;
+            .collect::<Result<HashMap<_, _>, RepodataError>>()?;
 
         let sharded_repodata = ShardedRepodata {
             info: ShardedSubdirInfo {
@@ -956,7 +963,7 @@ pub async fn write_repodata(
                     .cache_control(CACHE_CONTROL_IMMUTABLE)
                     .await
                 {
-                    Err(e) if e.kind() == ErrorKind::ConditionNotMatch => {
+                    Err(e) if e.kind() == opendal::ErrorKind::ConditionNotMatch => {
                         tracing::trace!("{shard_path} already exists");
                         Ok(())
                     }
@@ -1046,6 +1053,7 @@ pub async fn index_fs(
 }
 
 /// Configuration for `index_s3`
+#[cfg(feature = "s3")]
 pub struct IndexS3Config {
     /// The channel to index.
     pub channel: Url,
@@ -1069,8 +1077,31 @@ pub struct IndexS3Config {
     pub precondition_checks: PreconditionChecks,
 }
 
+#[cfg(feature = "s3")]
+fn s3_config(
+    credentials: &ResolvedS3Credentials,
+    channel: &Url,
+) -> Result<S3Config, anyhow::Error> {
+    let mut s3_config = S3Config::default();
+    s3_config.root = Some(channel.path().to_string());
+    s3_config.bucket = channel
+        .host_str()
+        .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
+        .to_string();
+    s3_config.region = Some(credentials.region.clone());
+    s3_config.endpoint = Some(credentials.endpoint_url.to_string());
+    s3_config.secret_access_key = Some(credentials.secret_access_key.clone());
+    s3_config.access_key_id = Some(credentials.access_key_id.clone());
+    s3_config.session_token = credentials.session_token.clone();
+    s3_config.enable_virtual_host_style =
+        credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
+
+    Ok(s3_config)
+}
+
 /// Create a new `repodata.json` for all packages in the channel at the given S3
 /// URL.
+#[cfg(feature = "s3")]
 pub async fn index_s3(
     IndexS3Config {
         channel,
@@ -1086,21 +1117,7 @@ pub async fn index_s3(
     }: IndexS3Config,
 ) -> anyhow::Result<()> {
     // Create the S3 configuration for opendal.
-    let mut s3_config = S3Config::default();
-    s3_config.root = Some(channel.path().to_string());
-    s3_config.bucket = channel
-        .host_str()
-        .ok_or(anyhow::anyhow!("No bucket in S3 URL"))?
-        .to_string();
-
-    s3_config.region = Some(credentials.region);
-    s3_config.endpoint = Some(credentials.endpoint_url.to_string());
-    s3_config.secret_access_key = Some(credentials.secret_access_key);
-    s3_config.access_key_id = Some(credentials.access_key_id);
-    s3_config.session_token = credentials.session_token;
-    s3_config.enable_virtual_host_style =
-        credentials.addressing_style == rattler_s3::S3AddressingStyle::VirtualHost;
-
+    let s3_config = s3_config(&credentials, &channel)?;
     let builder = s3_config.into_builder();
     let op = Operator::new(builder)?.layer(RetryLayer::new()).finish();
 
@@ -1185,9 +1202,13 @@ pub async fn index(
     }
 
     let repodata_patch = if let Some(path) = repodata_patch {
-        match ArchiveType::try_from(path.clone()) {
-            Some(ArchiveType::Conda) => {}
-            Some(ArchiveType::TarBz2) | None => {
+        match DistArchiveType::try_from(path.clone()) {
+            Some(DistArchiveType::Conda(CondaArchiveType::Conda)) => {}
+            Some(
+                DistArchiveType::Conda(CondaArchiveType::TarBz2)
+                | DistArchiveType::Wheel(WheelArchiveType::Whl),
+            )
+            | None => {
                 return Err(anyhow::anyhow!(
                     "Only .conda packages are supported for repodata patches. Got: {path}",
                 ))
@@ -1240,9 +1261,87 @@ pub async fn index(
             }
             Err(e) => {
                 tracing::error!("Failed to process subdir: {e}");
-                return Err(e);
+                return Err(e.into());
             }
         }
     }
     Ok(stats)
+}
+
+/// Ensures that a channel has a valid `noarch/repodata.json` file.
+///
+/// If `noarch/repodata.json` doesn't exist, creates an empty one.
+/// This is useful when publishing to a new channel to ensure it's
+/// immediately usable.
+pub async fn ensure_channel_initialized(op: &Operator) -> anyhow::Result<()> {
+    let noarch_repodata_path = format!("{}/{REPODATA}", Platform::NoArch.as_str());
+
+    if op.exists(&noarch_repodata_path).await? {
+        tracing::debug!("Channel already initialized");
+        return Ok(());
+    }
+
+    tracing::info!("Initializing channel with empty noarch/repodata.json");
+
+    let noarch_path = format!("{}/", Platform::NoArch.as_str());
+    if !op.exists(&noarch_path).await? {
+        op.create_dir(&noarch_path).await?;
+    }
+
+    let empty_repodata = RepoData {
+        info: Some(ChannelInfo {
+            subdir: Some(Platform::NoArch.to_string()),
+            base_url: None,
+        }),
+        packages: IndexMap::default(),
+        conda_packages: IndexMap::default(),
+        experimental_whl_packages: IndexMap::default(),
+        removed: HashSet::default(),
+        version: Some(2),
+    };
+
+    let repodata_bytes = serde_json::to_vec(&empty_repodata)?;
+    match op
+        .write_with(&noarch_repodata_path, repodata_bytes)
+        .if_not_exists(true)
+        .cache_control(CACHE_CONTROL_REPODATA)
+        .await
+    {
+        Ok(_) => {
+            tracing::info!("Successfully initialized channel");
+            Ok(())
+        }
+        Err(e) if e.kind() == opendal::ErrorKind::ConditionNotMatch => {
+            // Another process created the file - that's fine, channel is initialized
+            tracing::debug!("Channel already initialized by another process");
+            Ok(())
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Ensures that a filesystem channel has a valid `noarch/repodata.json` file.
+///
+/// See [`ensure_channel_initialized`] for details.
+pub async fn ensure_channel_initialized_fs(channel: &Path) -> anyhow::Result<()> {
+    let mut config = FsConfig::default();
+    config.root = Some(channel.canonicalize()?.to_string_lossy().to_string());
+    let op = Operator::new(config.into_builder())?.finish();
+    ensure_channel_initialized(&op).await
+}
+
+/// Ensures that an S3 channel has a valid `noarch/repodata.json` file.
+///
+/// See [`ensure_channel_initialized`] for details.
+#[cfg(feature = "s3")]
+pub async fn ensure_channel_initialized_s3(
+    channel: &Url,
+    credentials: &ResolvedS3Credentials,
+) -> anyhow::Result<()> {
+    let s3_config = s3_config(credentials, channel)?;
+
+    let op = Operator::new(s3_config.into_builder())?
+        .layer(RetryLayer::new())
+        .finish();
+    ensure_channel_initialized(&op).await
 }

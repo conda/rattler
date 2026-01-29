@@ -11,6 +11,7 @@ channels = ["https://prefix.dev/conda-forge"]
 platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
 license = "BSD-3-Clause"
 preview = ["pixi-build"]
+requires-pixi = ">=0.62.0"
 
 [workspace.build-variants]
 # Use the same Rust version everywhere
@@ -21,7 +22,7 @@ build = "cargo build"
 check = "cargo check"
 # libsolv compilation cannot find pixi's clang for some reason
 # so we skip that test for now
-test = "cargo nextest run --workspace --no-default-features --features=indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,experimental_extras,edit,rattler_config,cli-tools -E 'not test(libsolv_bindings_up_to_date)' --no-fail-fast"
+test = "cargo nextest run --workspace --no-default-features --features=indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,edit,rattler_config,cli-tools -E 'not test(libsolv_bindings_up_to_date)' --no-fail-fast"
 rattler = "cargo run --bin rattler --release --"
 doc = "RUSTDOCFLAGS='-Dwarnings -Wunreachable-pub' cargo doc --no-deps --all --all-features"
 
@@ -47,7 +48,7 @@ scripts = ["scripts/activate_linux.sh"]
 ruff = ">=0.14.1,<0.15"
 typos = ">=1.23.1,<2"
 dprint = ">=0.50.0,<0.51"
-lefthook = ">=1.12.2,<2"
+lefthook = ">=2.0.11,<3"
 actionlint = ">=1.7.7,<2"
 shellcheck = ">=0.10.0,<0.11"
 

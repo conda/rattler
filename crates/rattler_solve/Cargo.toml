@@ -1,6 +1,6 @@
 [package]
 name = "rattler_solve"
-version = "4.0.1"
+version = "4.2.2"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to solve conda environments"
@@ -14,7 +14,8 @@ readme.workspace = true
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
 libc = { workspace = true, optional = true }
-chrono = { workspace = true }
+chrono = { workspace = true, features = ["clock"] }
+humantime = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 itertools = { workspace = true }

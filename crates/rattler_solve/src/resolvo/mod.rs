@@ -13,9 +13,10 @@ use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
-    package::ArchiveType, utils::TimestampMs, GenericVirtualPackage, MatchSpec, Matches,
-    NamelessMatchSpec, PackageName, PackageNameMatcher, ParseMatchSpecError, ParseMatchSpecOptions,
-    RepoDataRecord, SolverResult,
+    package::{ArchiveIdentifier, DistArchiveType},
+    utils::TimestampMs,
+    GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageNameMatcher,
+    ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -26,8 +27,8 @@ use resolvo::{
 };
 
 use crate::{
-    resolvo::conda_sorting::CompareStrategy, ChannelPriority, IntoRepoData, SolveError,
-    SolveStrategy, SolverRepoData, SolverTask,
+    resolvo::conda_sorting::CompareStrategy, ChannelPriority, IntoRepoData, MinimumAgeConfig,
+    SolveError, SolveStrategy, SolverRepoData, SolverTask,
 };
 
 mod conda_sorting;
@@ -288,10 +289,15 @@ impl<'a> CondaDependencyProvider<'a> {
         stop_time: Option<std::time::SystemTime>,
         channel_priority: ChannelPriority,
         exclude_newer: Option<DateTime<Utc>>,
+        min_age: Option<&MinimumAgeConfig>,
         strategy: SolveStrategy,
     ) -> Result<Self, SolveError> {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
+
+        // Compute the cutoff time for min_age.
+        // Packages published after this time will be excluded (unless exempt).
+        let min_age_cutoff = min_age.map(MinimumAgeConfig::cutoff);
 
         // Add virtual packages to the records
         for virtual_package in virtual_packages {
@@ -332,22 +338,34 @@ impl<'a> CondaDependencyProvider<'a> {
             // records. This guarantees that the order of records remains the same over
             // runs.
             let mut ordered_repodata = Vec::with_capacity(repo_data.records.len());
-            let mut package_to_type: HashMap<&str, (ArchiveType, usize, bool)> =
+            let mut package_to_type: HashMap<&ArchiveIdentifier, (DistArchiveType, usize, bool)> =
                 HashMap::with_capacity(repo_data.records.len());
 
             for record in repo_data.records {
-                // Determine if this record will be excluded.
-                let excluded = matches!((&exclude_newer, &record.package_record.timestamp),
+                // Determine if this record will be excluded by exclude_newer.
+                let excluded_by_newer = matches!((&exclude_newer, &record.package_record.timestamp),
                     (Some(exclude_newer), Some(record_timestamp))
                         if record_timestamp > exclude_newer);
 
-                let (file_name, archive_type) = ArchiveType::split_str(&record.file_name)
-                    .unwrap_or((&record.file_name, ArchiveType::TarBz2));
-                match package_to_type.get_mut(file_name) {
+                // Determine if this record will be excluded by min_age.
+                let excluded_by_age =
+                    match (&min_age, &min_age_cutoff, &record.package_record.timestamp) {
+                        (Some(config), Some(cutoff), Some(timestamp)) => {
+                            // Exclude if published after cutoff and not exempt
+                            timestamp > cutoff && !config.is_exempt(&record.package_record.name)
+                        }
+                        _ => false,
+                    };
+
+                let excluded = excluded_by_newer || excluded_by_age;
+
+                let identifier = &record.identifier.identifier;
+                let archive_type = record.identifier.archive_type;
+                match package_to_type.get_mut(identifier) {
                     None => {
                         let idx = ordered_repodata.len();
                         ordered_repodata.push(record);
-                        package_to_type.insert(file_name, (archive_type, idx, excluded));
+                        package_to_type.insert(identifier, (archive_type, idx, excluded));
                     }
                     Some((prev_archive_type, idx, previous_excluded)) => {
                         if *previous_excluded && !excluded {
@@ -362,7 +380,7 @@ impl<'a> CondaDependencyProvider<'a> {
                             // this one will, so we'll keep the previous one
                             // regardless of the type.
                         } else {
-                            match archive_type.cmp(prev_archive_type) {
+                            match archive_type.cmp_preference(*prev_archive_type) {
                                 Ordering::Greater => {
                                     // A previous package has a worse package "type", we'll use the
                                     // current record instead.
@@ -378,7 +396,7 @@ impl<'a> CondaDependencyProvider<'a> {
                                 }
                                 Ordering::Equal => {
                                     return Err(SolveError::DuplicateRecords(
-                                        record.file_name.clone(),
+                                        record.identifier.to_string(),
                                     ));
                                 }
                             }
@@ -407,6 +425,26 @@ impl<'a> CondaDependencyProvider<'a> {
                         candidates.excluded.push((solvable_id, reason));
                     }
                     _ => {}
+                }
+
+                // Filter out any records that haven't been published long enough.
+                if let (Some(config), Some(cutoff)) = (&min_age, &min_age_cutoff) {
+                    if !config.is_exempt(&record.package_record.name) {
+                        let exclude_reason = match &record.package_record.timestamp {
+                            Some(timestamp) if timestamp > cutoff => {
+                                let age = humantime::format_duration(config.min_age);
+                                Some(format!("the package was published less than {age} ago"))
+                            }
+                            None if !config.include_unknown_timestamp => {
+                                Some("the package has no timestamp".to_string())
+                            }
+                            _ => None,
+                        };
+                        if let Some(reason) = exclude_reason {
+                            let reason = pool.intern_string(reason);
+                            candidates.excluded.push((solvable_id, reason));
+                        }
+                    }
                 }
 
                 // Add to excluded when package is not in the specified channel.
@@ -672,7 +710,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                     tracing::debug!(
                         "{}/{} from {} has invalid dependency '{}': {}, this variant will be ignored",
                         record.package_record.subdir,
-                        record.file_name,
+                        record.identifier,
                         record.channel.as_deref().unwrap_or("unknown"),
                         depends,
                         e
@@ -710,7 +748,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                     tracing::debug!(
                             "{}/{} from {} has invalid constraint '{}': {}, this variant will be ignored",
                             record.package_record.subdir,
-                            record.file_name,
+                            record.identifier,
                             record.channel.as_deref().unwrap_or("unknown"),
                             constrains,
                             e
@@ -745,7 +783,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                     tracing::debug!(
                         "{}/{} from {} has invalid extra dependency '{}': {}, this variant will be ignored",
                         record.package_record.subdir,
-                        record.file_name,
+                        record.identifier,
                         record.channel.as_deref().unwrap_or("unknown"),
                         matchspec,
                         e
@@ -877,6 +915,7 @@ impl super::SolverImpl for Solver {
             stop_time,
             task.channel_priority,
             task.exclude_newer,
+            task.min_age.as_ref(),
             task.strategy,
         )?;
 
@@ -1078,7 +1117,7 @@ fn parse_condition(
             if condition_ids.is_empty() {
                 panic!("match spec condition must have at least one version set");
             } else if condition_ids.len() == 1 {
-                return condition_ids[0];
+                condition_ids[0]
             } else {
                 // Otherwise, create a union of the conditions
                 let mut result = condition_ids[0];

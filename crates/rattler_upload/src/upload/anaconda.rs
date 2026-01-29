@@ -13,6 +13,8 @@ use tracing::debug;
 use tracing::info;
 use url::Url;
 
+use crate::upload::opt::ForceOverwrite;
+
 use super::package::ExtractedPackage;
 use super::VERSION;
 
@@ -305,7 +307,7 @@ impl Anaconda {
         &self,
         owner: &str,
         channels: &[String],
-        force: bool,
+        force: ForceOverwrite,
         package: &ExtractedPackage<'_>,
     ) -> miette::Result<bool> {
         if channels.is_empty() {
@@ -369,7 +371,7 @@ impl Anaconda {
         match resp.status() {
             reqwest::StatusCode::OK => (),
             reqwest::StatusCode::CONFLICT => {
-                if force {
+                if force.is_enabled() {
                     info!(
                         "file {} already exists, running with --force, removing file and retrying",
                         filename

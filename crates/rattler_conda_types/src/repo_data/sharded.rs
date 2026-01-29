@@ -1,11 +1,12 @@
 //! Structs to deal with repodata "shards" which are per-package repodata files.
 
+use crate::package::DistArchiveIdentifier;
+use crate::repo_data::WhlPackageRecord;
+use crate::PackageRecord;
 use chrono::{DateTime, Utc};
 use indexmap::IndexMap;
 use rattler_digest::{serde::SerializableHash, Sha256, Sha256Hash};
 use serde::{Deserialize, Serialize};
-
-use crate::PackageRecord;
 
 /// The sharded repodata holds a hashmap of package name -> shard (hash).
 /// This index file is stored under
@@ -49,13 +50,18 @@ pub struct ShardedSubdirInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Shard {
     /// The records for all `.tar.bz2` packages
-    pub packages: IndexMap<String, PackageRecord, ahash::RandomState>,
+    pub packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
 
     /// The records for all `.conda` packages
     #[serde(rename = "packages.conda", default)]
-    pub conda_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
+    pub conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
+
+    /// The records for all `.whl` packages
+    #[serde(rename = "packages.whl", default)]
+    pub experimental_whl_packages:
+        IndexMap<DistArchiveIdentifier, WhlPackageRecord, ahash::RandomState>,
 
     /// The file names of all removed for this shard
     #[serde(default)]
-    pub removed: ahash::HashSet<String>,
+    pub removed: ahash::HashSet<DistArchiveIdentifier>,
 }

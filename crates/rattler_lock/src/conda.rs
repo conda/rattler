@@ -1,13 +1,63 @@
 use crate::source::SourceLocation;
 use crate::UrlOrPath;
+use rattler_conda_types::package::DistArchiveIdentifier;
 use rattler_conda_types::{
     ChannelUrl, MatchSpec, Matches, NamelessMatchSpec, PackageRecord, RepoDataRecord,
 };
 use rattler_digest::Sha256Hash;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::{borrow::Cow, cmp::Ordering, hash::Hash};
+use std::{borrow::Cow, cmp::Ordering, fmt::Display, hash::Hash};
 use typed_path::Utf8TypedPathBuf;
 use url::Url;
+
+/// Represents a conda-build variant value.
+///
+/// Variants are used in conda-build to specify different build configurations.
+/// They can be strings (e.g., "3.11" for python version), integers (e.g., 1 for feature flags),
+/// or booleans (e.g., true/false for optional features).
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum VariantValue {
+    /// String variant value (most common, e.g., python version "3.11")
+    String(String),
+    /// Integer variant value (e.g., for numeric feature flags)
+    Int(i64),
+    /// Boolean variant value (e.g., for on/off features)
+    Bool(bool),
+}
+
+impl PartialOrd for VariantValue {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for VariantValue {
+    fn cmp(&self, other: &Self) -> Ordering {
+        #[allow(clippy::match_same_arms)]
+        match (self, other) {
+            (VariantValue::String(a), VariantValue::String(b)) => a.cmp(b),
+            (VariantValue::Int(a), VariantValue::Int(b)) => a.cmp(b),
+            (VariantValue::Bool(a), VariantValue::Bool(b)) => a.cmp(b),
+            // Define ordering between different types for deterministic sorting
+            (VariantValue::String(_), _) => Ordering::Less,
+            (_, VariantValue::String(_)) => Ordering::Greater,
+            (VariantValue::Int(_), VariantValue::Bool(_)) => Ordering::Less,
+            (VariantValue::Bool(_), VariantValue::Int(_)) => Ordering::Greater,
+        }
+    }
+}
+
+impl Display for VariantValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VariantValue::String(s) => write!(f, "{s}"),
+            VariantValue::Int(i) => write!(f, "{i}"),
+            VariantValue::Bool(b) => write!(f, "{b}"),
+        }
+    }
+}
 
 /// A locked conda dependency can be either a binary package or a source
 /// package.
@@ -112,7 +162,7 @@ pub struct CondaBinaryData {
     pub location: UrlOrPath,
 
     /// The filename of the package.
-    pub file_name: String,
+    pub file_name: DistArchiveIdentifier,
 
     /// The channel of the package.
     pub channel: Option<ChannelUrl>,
@@ -202,6 +252,11 @@ pub struct CondaSourceData {
     /// The location of the package. This can be a URL or a local path.
     pub location: UrlOrPath,
 
+    /// Conda-build variants used to disambiguate between multiple source packages
+    /// at the same location. This is a map from variant name to variant value.
+    /// Optional field added in lock file format V6 (made required in V7).
+    pub variants: Option<BTreeMap<String, VariantValue>>,
+
     /// Package build source location for reproducible builds
     pub package_build_source: Option<PackageBuildSource>,
 
@@ -290,7 +345,7 @@ impl From<RepoDataRecord> for CondaPackageData {
         let location = UrlOrPath::from(value.url).normalize().into_owned();
         Self::Binary(CondaBinaryData {
             package_record: value.package_record,
-            file_name: value.file_name,
+            file_name: value.identifier,
             channel: value
                 .channel
                 .and_then(|channel| Url::parse(&channel).ok())
@@ -314,7 +369,7 @@ impl TryFrom<CondaBinaryData> for RepoDataRecord {
     fn try_from(value: CondaBinaryData) -> Result<Self, Self::Error> {
         Ok(Self {
             package_record: value.package_record,
-            file_name: value.file_name,
+            identifier: value.file_name,
             url: value.location.try_into_url()?,
             channel: value.channel.map(|channel| channel.to_string()),
         })

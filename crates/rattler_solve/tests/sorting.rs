@@ -50,6 +50,7 @@ fn create_sorting_snapshot(package_name: &str, strategy: SolveStrategy) -> Strin
         None,
         ChannelPriority::default(),
         None,
+        None, // min_age
         strategy,
     )
     .expect("failed to create dependency provider");

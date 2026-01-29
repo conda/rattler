@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/environment_yaml.rs
-assertion_line: 187
 expression: "EnvironmentYaml::from_path(path).unwrap()"
 input_file: test-data/environments/asymmetric_vqgan.environment.yaml
 ---

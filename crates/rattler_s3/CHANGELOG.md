@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.21](https://github.com/conda/rattler/compare/rattler_s3-v0.1.20...rattler_s3-v0.1.21) - 2026-01-22
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.1.20](https://github.com/baszalmstra/rattler/compare/rattler_s3-v0.1.19...rattler_s3-v0.1.20) - 2026-01-22
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.1.19](https://github.com/conda/rattler/compare/rattler_s3-v0.1.18...rattler_s3-v0.1.19) - 2026-01-22
+
+### Other
+
+- Make s3 optional for rattler_index ([#1965](https://github.com/conda/rattler/pull/1965))
+
+## [0.1.18](https://github.com/conda/rattler/compare/rattler_s3-v0.1.17...rattler_s3-v0.1.18) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.1.17](https://github.com/conda/rattler/compare/rattler_s3-v0.1.16...rattler_s3-v0.1.17) - 2025-12-08
+
+### Other
+
+- updated the following local packages: rattler_networking
+
+## [0.1.16](https://github.com/conda/rattler/compare/rattler_s3-v0.1.15...rattler_s3-v0.1.16) - 2025-11-27
+
+### Added
+
+- enable credentials-login for aws new login functionality ([#1891](https://github.com/conda/rattler/pull/1891))
+
 ## [0.1.15](https://github.com/conda/rattler/compare/rattler_s3-v0.1.14...rattler_s3-v0.1.15) - 2025-11-25
 
 ### Other

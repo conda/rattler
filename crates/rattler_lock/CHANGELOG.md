@@ -7,42 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.24.1](https://github.com/conda/rattler/compare/rattler_lock-v0.24.0...rattler_lock-v0.24.1) - 2025-09-05
+## [0.26.12](https://github.com/conda/rattler/compare/rattler_lock-v0.26.11...rattler_lock-v0.26.12) - 2026-01-22
 
 ### Other
 
 - updated the following local packages: rattler_conda_types, rattler_solve
 
-## [0.24.0](https://github.com/conda/rattler/compare/rattler_lock-v0.23.16...rattler_lock-v0.24.0) - 2025-09-04
+## [0.26.11](https://github.com/baszalmstra/rattler/compare/rattler_lock-v0.26.10...rattler_lock-v0.26.11) - 2026-01-22
+
+### Fixed
+
+- changelog
+
+## [0.26.10](https://github.com/conda/rattler/compare/rattler_lock-v0.26.9...rattler_lock-v0.26.10) - 2026-01-22
 
 ### Added
 
-- lock package build source ([#1650](https://github.com/conda/rattler/pull/1650))
-
-## [0.23.16](https://github.com/conda/rattler/compare/rattler_lock-v0.23.15...rattler_lock-v0.23.16) - 2025-09-02
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/conda/rattler/pull/1988))
 
 ### Other
 
-- updated the following local packages: rattler_conda_types, rattler_solve
+- add type for archive file name ([#1999](https://github.com/conda/rattler/pull/1999))
+- remove Lockfile v5 serializing ([#1973](https://github.com/conda/rattler/pull/1973))
 
-## [0.23.15](https://github.com/conda/rattler/compare/rattler_lock-v0.23.14...rattler_lock-v0.23.15) - 2025-08-15
+## [0.26.9](https://github.com/conda/rattler/compare/rattler_lock-v0.26.8...rattler_lock-v0.26.9) - 2025-12-18
+
+### Fixed
+
+- always emit depends in index.json ([#1932](https://github.com/conda/rattler/pull/1932))
 
 ### Other
 
-- updated the following local packages: rattler_conda_types, rattler_solve
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
 
-## [0.23.14](https://github.com/conda/rattler/compare/rattler_lock-v0.23.13...rattler_lock-v0.23.14) - 2025-08-12
+## [0.26.8](https://github.com/conda/rattler/compare/rattler_lock-v0.26.7...rattler_lock-v0.26.8) - 2025-12-08
 
 ### Other
 
-- updated the following local packages: rattler_conda_types, rattler_solve
-# Changelog
-All notable changes to this project will be documented in this file.
+- update Cargo.toml dependencies
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.26.7](https://github.com/conda/rattler/compare/rattler_lock-v0.26.6...rattler_lock-v0.26.7) - 2025-11-27
 
-## [Unreleased]
+### Added
+
+- add `variants` to the lock-file (v6) ([#1854](https://github.com/conda/rattler/pull/1854))
+- *(rattler_lock)* add prerelease-mode support for PyPI dependencies ([#1889](https://github.com/conda/rattler/pull/1889))
 
 ## [0.26.6](https://github.com/conda/rattler/compare/rattler_lock-v0.26.5...rattler_lock-v0.26.6) - 2025-11-25
 
@@ -115,6 +124,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *(lock)* package build source ([#1699](https://github.com/conda/rattler/pull/1699))
 
 ## [0.24.2](https://github.com/conda/rattler/compare/rattler_lock-v0.24.1...rattler_lock-v0.24.2) - 2025-09-30
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.24.1](https://github.com/conda/rattler/compare/rattler_lock-v0.24.0...rattler_lock-v0.24.1) - 2025-09-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.24.0](https://github.com/conda/rattler/compare/rattler_lock-v0.23.16...rattler_lock-v0.24.0) - 2025-09-04
+
+### Added
+
+- lock package build source ([#1650](https://github.com/conda/rattler/pull/1650))
+
+## [0.23.16](https://github.com/conda/rattler/compare/rattler_lock-v0.23.15...rattler_lock-v0.23.16) - 2025-09-02
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.23.15](https://github.com/conda/rattler/compare/rattler_lock-v0.23.14...rattler_lock-v0.23.15) - 2025-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve
+
+## [0.23.14](https://github.com/conda/rattler/compare/rattler_lock-v0.23.13...rattler_lock-v0.23.14) - 2025-08-12
 
 ### Other
 

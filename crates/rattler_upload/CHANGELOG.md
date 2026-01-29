@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.10](https://github.com/conda/rattler/compare/rattler_upload-v0.4.9...rattler_upload-v0.4.10) - 2026-01-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.4.9](https://github.com/baszalmstra/rattler/compare/rattler_upload-v0.4.8...rattler_upload-v0.4.9) - 2026-01-22
+
+### Other
+
+- updated the following local packages: rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.4.8](https://github.com/conda/rattler/compare/rattler_upload-v0.4.7...rattler_upload-v0.4.8) - 2026-01-22
+
+### Added
+
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/conda/rattler/pull/1988))
+
+### Other
+
+- Run `cargo clippy --fix` (from nightly) ([#1992](https://github.com/conda/rattler/pull/1992))
+
+## [0.4.7](https://github.com/conda/rattler/compare/rattler_upload-v0.4.6...rattler_upload-v0.4.7) - 2025-12-18
+
+### Added
+
+- integrate sigstore-sign for automatic signing of attestations ([#1897](https://github.com/conda/rattler/pull/1897))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.4.6](https://github.com/conda/rattler/compare/rattler_upload-v0.4.5...rattler_upload-v0.4.6) - 2025-12-08
+
+### Added
+
+- add `--force` to prefix.dev upload and improve function signatures ([#1907](https://github.com/conda/rattler/pull/1907))
+- add gitlab CI for trusted publishing ([#1904](https://github.com/conda/rattler/pull/1904))
+
+## [0.4.5](https://github.com/conda/rattler/compare/rattler_upload-v0.4.4...rattler_upload-v0.4.5) - 2025-11-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_solve, rattler_s3, rattler_config, rattler_package_streaming
+
 ## [0.4.4](https://github.com/conda/rattler/compare/rattler_upload-v0.4.3...rattler_upload-v0.4.4) - 2025-11-25
 
 ### Other

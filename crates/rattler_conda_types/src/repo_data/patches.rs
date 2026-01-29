@@ -6,7 +6,10 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
-use crate::{package::ArchiveType, PackageRecord, PackageUrl, RepoData, Shard};
+use crate::{
+    package::{CondaArchiveType, DistArchiveIdentifier, DistArchiveType, WheelArchiveType},
+    PackageRecord, PackageUrl, RepoData, Shard, WhlPackageRecord,
+};
 
 /// Represents a Conda repodata patch.
 ///
@@ -69,7 +72,7 @@ pub struct PackageRecordPatch {
     /// Track features are nowadays only used to downweight packages (ie. give
     /// them less priority). To that effect, the number of track features is
     /// counted (number of commas) and the package is downweighted
-    /// by the number of track_features.
+    /// by the number of `track_features`.
     ///
     /// This field is double wrapped to be able to express the value `null`
     /// separate from it being missing from the JSON.
@@ -155,19 +158,27 @@ mod tracked_features {
 pub struct PatchInstructions {
     /// Filenames that have been removed from the subdirectory
     #[serde(default, skip_serializing_if = "ahash::HashSet::is_empty")]
-    pub remove: ahash::HashSet<String>,
+    pub remove: ahash::HashSet<DistArchiveIdentifier>,
 
     /// Patches for package records
     #[serde(default, skip_serializing_if = "ahash::HashMap::is_empty")]
-    pub packages: ahash::HashMap<String, PackageRecordPatch>,
+    pub packages: ahash::HashMap<DistArchiveIdentifier, PackageRecordPatch>,
 
-    /// Patches for package records
+    /// Patches for conda package records
     #[serde(
         default,
         rename = "packages.conda",
         skip_serializing_if = "ahash::HashMap::is_empty"
     )]
-    pub conda_packages: ahash::HashMap<String, PackageRecordPatch>,
+    pub conda_packages: ahash::HashMap<DistArchiveIdentifier, PackageRecordPatch>,
+
+    /// Patches for wheel package records (experimental)
+    #[serde(
+        default,
+        rename = "packages.whl",
+        skip_serializing_if = "ahash::HashMap::is_empty"
+    )]
+    pub experimental_whl_packages: ahash::HashMap<DistArchiveIdentifier, PackageRecordPatch>,
 }
 
 impl PackageRecord {
@@ -200,50 +211,68 @@ impl PackageRecord {
 /// Apply a patch to a repodata file
 /// Note that we currently do not handle `revoked` instructions
 pub fn apply_patches_impl(
-    packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
-    conda_packages: &mut IndexMap<String, PackageRecord, ahash::RandomState>,
-    removed: &mut ahash::HashSet<String>,
+    packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
+    conda_packages: &mut IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
+    experimental_whl_packages: &mut IndexMap<
+        DistArchiveIdentifier,
+        WhlPackageRecord,
+        ahash::RandomState,
+    >,
+    removed: &mut ahash::HashSet<DistArchiveIdentifier>,
     instructions: &PatchInstructions,
 ) {
-    for (pkg, patch) in instructions.packages.iter() {
-        if let Some(record) = packages.get_mut(pkg) {
+    for (identifier, patch) in instructions.packages.iter() {
+        if let Some(record) = packages.get_mut(identifier) {
             record.apply_patch(patch);
         }
 
-        // also apply the patch to the conda packages
-        if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
-            assert!(archive_type == ArchiveType::TarBz2);
-            if let Some(record) = conda_packages.get_mut(&format!("{pkg_name}.conda")) {
-                record.apply_patch(patch);
-            }
+        let conda_identifier = identifier.with_archive_type(CondaArchiveType::Conda.into());
+        if let Some(record) = conda_packages.get_mut(&conda_identifier) {
+            record.apply_patch(patch);
         }
     }
 
-    for (pkg, patch) in instructions.conda_packages.iter() {
-        if let Some(record) = conda_packages.get_mut(pkg) {
+    for (identifier, patch) in instructions.conda_packages.iter() {
+        if let Some(record) = conda_packages.get_mut(identifier) {
             record.apply_patch(patch);
+        }
+    }
+
+    // Apply patches to wheel packages
+    for (identifier, patch) in instructions.experimental_whl_packages.iter() {
+        if let Some(record) = experimental_whl_packages.get_mut(identifier) {
+            record.package_record.apply_patch(patch);
         }
     }
 
     // remove packages that have been removed
-    for pkg in instructions.remove.iter() {
-        if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
-            match archive_type {
-                ArchiveType::TarBz2 => {
-                    if packages.shift_remove_entry(pkg).is_some() {
-                        removed.insert(pkg.clone());
-                    }
-
-                    // also remove equivalent .conda package if it exists
-                    let conda_pkg_name = format!("{pkg_name}.conda");
-                    if conda_packages.shift_remove_entry(&conda_pkg_name).is_some() {
-                        removed.insert(conda_pkg_name);
-                    }
+    for identifier in instructions.remove.iter() {
+        match identifier.archive_type {
+            DistArchiveType::Conda(CondaArchiveType::TarBz2) => {
+                if packages.shift_remove_entry(identifier).is_some() {
+                    removed.insert(identifier.clone());
                 }
-                ArchiveType::Conda => {
-                    if conda_packages.shift_remove_entry(pkg).is_some() {
-                        removed.insert(pkg.clone());
-                    }
+
+                // also remove equivalent .conda package if it exists
+                let conda_identifier = identifier.with_archive_type(CondaArchiveType::Conda.into());
+                if conda_packages
+                    .shift_remove_entry(&conda_identifier)
+                    .is_some()
+                {
+                    removed.insert(conda_identifier);
+                }
+            }
+            DistArchiveType::Conda(CondaArchiveType::Conda) => {
+                if conda_packages.shift_remove_entry(identifier).is_some() {
+                    removed.insert(identifier.clone());
+                }
+            }
+            DistArchiveType::Wheel(WheelArchiveType::Whl) => {
+                if experimental_whl_packages
+                    .shift_remove_entry(identifier)
+                    .is_some()
+                {
+                    removed.insert(identifier.clone());
                 }
             }
         }
@@ -257,6 +286,7 @@ impl RepoData {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.experimental_whl_packages,
             &mut self.removed,
             instructions,
         );
@@ -270,6 +300,7 @@ impl Shard {
         apply_patches_impl(
             &mut self.packages,
             &mut self.conda_packages,
+            &mut self.experimental_whl_packages,
             &mut self.removed,
             instructions,
         );

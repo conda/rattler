@@ -7,37 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.39.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.1...rattler_conda_types-v0.39.2) - 2025-09-05
+## [0.43.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.43.0...rattler_conda_types-v0.43.1) - 2026-01-22
+
+### Added
+
+- add support for `packages.whl` to repodata parsing ([#1996](https://github.com/conda/rattler/pull/1996))
+
+## [0.43.0](https://github.com/baszalmstra/rattler/releases/tag/rattler_conda_types-v0.43.0) - 2026-01-22
+
+### Added
+
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/baszalmstra/rattler/pull/1988))
+- add support for track_features in matchspec brackets (Fixes #1964) ([#1968](https://github.com/baszalmstra/rattler/pull/1968))
+
+### Fixed
+
+- changelog
+- correctly handle channel_alias with path segments ([#1953](https://github.com/baszalmstra/rattler/pull/1953)) ([#1954](https://github.com/baszalmstra/rattler/pull/1954))
+
+### Other
+
+- release ([#2001](https://github.com/baszalmstra/rattler/pull/2001))
+- add type for archive file name ([#1999](https://github.com/baszalmstra/rattler/pull/1999))
+- Run `cargo clippy --fix` (from nightly) ([#1992](https://github.com/baszalmstra/rattler/pull/1992))
+- rename `loong64` to `loongarch64` ([#1957](https://github.com/baszalmstra/rattler/pull/1957))
+
+## [0.42.5](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.4...rattler_conda_types-v0.42.5) - 2026-01-22
+
+### Added
+
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/conda/rattler/pull/1988))
+- add support for track_features in matchspec brackets (Fixes #1964) ([#1968](https://github.com/conda/rattler/pull/1968))
+
+### Fixed
+
+- correctly handle channel_alias with path segments ([#1953](https://github.com/conda/rattler/pull/1953)) ([#1954](https://github.com/conda/rattler/pull/1954))
+
+### Other
+
+- add type for archive file name ([#1999](https://github.com/conda/rattler/pull/1999))
+- Run `cargo clippy --fix` (from nightly) ([#1992](https://github.com/conda/rattler/pull/1992))
+- rename `loong64` to `loongarch64` ([#1957](https://github.com/conda/rattler/pull/1957))
+
+## [0.42.4](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.3...rattler_conda_types-v0.42.4) - 2025-12-18
+
+### Added
+
+- add common function to extract package name from matchspec ([#1923](https://github.com/conda/rattler/pull/1923))
+
+### Fixed
+
+- always emit depends in index.json ([#1932](https://github.com/conda/rattler/pull/1932))
+- regression in `Version::starts_with` ([#1920](https://github.com/conda/rattler/pull/1920))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.42.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.2...rattler_conda_types-v0.42.3) - 2025-12-08
+
+### Fixed
+
+- topological sort looses nodes when they are in independent clusters ([#1913](https://github.com/conda/rattler/pull/1913))
+
+### Other
+
+- bump crates ([#1902](https://github.com/conda/rattler/pull/1902))
+
+## [0.42.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.1...rattler_conda_types-v0.42.2) - 2025-11-27
 
 ### Other
 
 - update Cargo.toml dependencies
-
-## [0.39.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.0...rattler_conda_types-v0.39.1) - 2025-09-02
-
-### Fixed
-
-- compatibility with older Artifactory repodata format ([#1599](https://github.com/conda/rattler/pull/1599))
-
-## [0.39.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.38.0...rattler_conda_types-v0.39.0) - 2025-08-15
-
-### Added
-
-- populate `requested_spec` ([#1596](https://github.com/conda/rattler/pull/1596))
-
-## [0.38.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.37.0...rattler_conda_types-v0.38.0) - 2025-08-12
-
-### Added
-
-- *(gateway)* add method to ensure `run_exports.json` ([#1540](https://github.com/conda/rattler/pull/1540))
-- implement extras with conditional dependencies ([#1542](https://github.com/conda/rattler/pull/1542))
-# Changelog
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
 
 ## [0.42.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.42.0...rattler_conda_types-v0.42.1) - 2025-11-25
 
@@ -125,6 +166,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - add LazyClient to late initialize the reqwest client ([#1687](https://github.com/conda/rattler/pull/1687))
 - optimize transaction operations ([#1615](https://github.com/conda/rattler/pull/1615))
+
+## [0.39.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.1...rattler_conda_types-v0.39.2) - 2025-09-05
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.39.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.39.0...rattler_conda_types-v0.39.1) - 2025-09-02
+
+### Fixed
+
+- compatibility with older Artifactory repodata format ([#1599](https://github.com/conda/rattler/pull/1599))
+
+## [0.39.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.38.0...rattler_conda_types-v0.39.0) - 2025-08-15
+
+### Added
+
+- populate `requested_spec` ([#1596](https://github.com/conda/rattler/pull/1596))
+
+## [0.38.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.37.0...rattler_conda_types-v0.38.0) - 2025-08-12
+
+### Added
+
+- *(gateway)* add method to ensure `run_exports.json` ([#1540](https://github.com/conda/rattler/pull/1540))
+- implement extras with conditional dependencies ([#1542](https://github.com/conda/rattler/pull/1542))
+# Changelog
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.37.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.36.0...rattler_conda_types-v0.37.0) - 2025-07-23
 
