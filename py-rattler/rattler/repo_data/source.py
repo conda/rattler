@@ -24,6 +24,10 @@ class RepoDataSource(Protocol):
     internal caching mechanisms only apply to channel data. If caching is needed for
     your custom source, you must implement it yourself within your source implementation.
 
+    **Performance:** Custom sources are slower than channels because data must be
+    marshalled between Python and Rust for each request. For performance-critical
+    applications with large amounts of repodata, consider using channels when possible.
+
     Example
     -------
     ```python

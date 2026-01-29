@@ -12,6 +12,7 @@ from rattler import (
     Platform,
     RepoDataRecord,
     RepoDataSource,
+    solve,
 )
 
 
@@ -206,3 +207,26 @@ def test_invalid_source_type():
                 recursive=False,
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_custom_source_with_solve():
+    """Test using a custom RepoDataSource with the solve function."""
+    # Create a simple package with no dependencies
+    source = MockRepoDataSource(
+        {
+            "linux-64": {
+                "my-package": [create_test_record("my-package", "1.0.0", "linux-64")],
+            },
+        }
+    )
+
+    # Solve using the custom source
+    solved = await solve(
+        sources=[source],
+        specs=["my-package"],
+        platforms=["linux-64"],
+    )
+
+    assert len(solved) == 1
+    assert record_snapshot(solved[0]) == "my-package=1.0.0=test_0"

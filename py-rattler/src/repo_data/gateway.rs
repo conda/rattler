@@ -62,8 +62,8 @@ impl<'source> FromPyObject<'source> for Wrap<SubdirSelection> {
 /// Convert a Python object to a Rust Source.
 ///
 /// Accepts either:
-/// - A PyChannel object (wrapped Channel)
-/// - Any object implementing the RepoDataSource protocol
+/// - A `PyChannel` object (wrapped Channel)
+/// - Any object implementing the `RepoDataSource` protocol
 ///   (has `fetch_package_records` and `package_names` methods)
 pub fn py_object_to_source(obj: Bound<'_, PyAny>) -> PyResult<Source> {
     // First try to extract as PyChannel

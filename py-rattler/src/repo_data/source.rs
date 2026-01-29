@@ -1,4 +1,4 @@
-//! Python RepoDataSource adapter implementation.
+//! Python `RepoDataSource` adapter implementation.
 
 use std::sync::Arc;
 
@@ -11,7 +11,7 @@ use crate::package_name::PyPackageName;
 use crate::platform::PyPlatform;
 use crate::record::PyRecord;
 
-/// Wraps a Python object implementing the RepoDataSource protocol.
+/// Wraps a Python object implementing the `RepoDataSource` protocol.
 ///
 /// This adapter allows Python objects with `fetch_package_records` (async)
 /// and `package_names` (sync) methods to be used as repodata sources
@@ -20,6 +20,10 @@ use crate::record::PyRecord;
 /// **Note:** Custom sources are not cached by the gateway. The gateway's internal
 /// caching mechanisms only apply to channel data. If caching is needed for a custom
 /// source, it must be implemented within the source itself.
+///
+/// **Performance:** Custom sources are slower than channels because data must be
+/// marshalled between Python and Rust for each request. For performance-critical
+/// applications, channels should be preferred when possible.
 pub struct PyRepoDataSource {
     inner: Py<PyAny>,
 }
@@ -27,7 +31,7 @@ pub struct PyRepoDataSource {
 impl PyRepoDataSource {
     /// Create a new adapter wrapping the given Python object.
     ///
-    /// The object should implement the RepoDataSource protocol:
+    /// The object should implement the `RepoDataSource` protocol:
     /// - `async def fetch_package_records(self, platform, name) -> List[RepoDataRecord]`
     /// - `def package_names(self, platform) -> List[str]`
     pub fn new(obj: Py<PyAny>) -> Self {
