@@ -11,27 +11,31 @@ use rattler_conda_types::{
 };
 use url::Url;
 
-use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
+use super::{
+    source::{CustomSourceClient, Source},
+    subdir::{Subdir, SubdirData},
+    BarrierCell, GatewayError, GatewayInner, RepoData,
+};
 use crate::Reporter;
 
 /// Represents a query to execute with a [`Gateway`].
 ///
 /// When executed the query will asynchronously load the repodata from all
-/// subdirectories (combination of channels and platforms).
+/// subdirectories (combination of sources and platforms).
 ///
 /// Most processing will happen on the background so downloading and parsing
 /// can happen simultaneously.
 ///
 /// Repodata is cached by the [`Gateway`] so executing the same query twice
-/// with the same channels will not result in the repodata being fetched
+/// with the same sources will not result in the repodata being fetched
 /// twice.
 #[derive(Clone)]
 pub struct RepoDataQuery {
     /// The gateway that manages all resources
     gateway: Arc<GatewayInner>,
 
-    /// The channels to fetch from
-    channels: Vec<Channel>,
+    /// The sources to fetch from (channels or custom sources)
+    sources: Vec<Source>,
 
     /// The platforms the fetch from
     platforms: Vec<Platform>,
@@ -84,13 +88,13 @@ impl RepoDataQuery {
     /// [`Gateway::query`] instead.
     pub(super) fn new(
         gateway: Arc<GatewayInner>,
-        channels: Vec<Channel>,
+        sources: Vec<Source>,
         platforms: Vec<Platform>,
         specs: Vec<MatchSpec>,
     ) -> Self {
         Self {
             gateway,
-            channels,
+            sources,
             platforms,
             specs,
 
@@ -152,8 +156,7 @@ struct QueryExecutor {
     pending_subdirs: FuturesUnordered<BoxFuture<Result<(), GatewayError>>>,
 
     // Record fetching
-    pending_records:
-        FuturesUnordered<BoxFuture<Result<(usize, SourceSpecs, Arc<[RepoDataRecord]>), GatewayError>>>,
+    pending_records: FuturesUnordered<BoxFuture<PendingRecordsResult>>,
 
     // Results
     result: Vec<RepoData>,
@@ -165,7 +168,7 @@ impl QueryExecutor {
         // Destructure query to take ownership of all fields
         let RepoDataQuery {
             gateway,
-            channels,
+            sources,
             platforms,
             specs,
             recursive,
@@ -204,37 +207,50 @@ impl QueryExecutor {
         // Result offset for direct url queries
         let direct_url_offset = usize::from(!direct_url_specs.is_empty());
 
-        // Collect all the channels and platforms together (owned, for 'static futures)
-        let channels_and_platforms = channels
+        // Expand sources into (source, platform) pairs for each platform
+        // For channels: use gateway's get_or_create_subdir
+        // For custom sources: create CustomSourceClient adapters
+        let sources_and_platforms = sources
             .into_iter()
             .cartesian_product(platforms)
             .collect_vec();
 
         // Create barrier cells for each subdirectory
-        let mut subdir_handles = Vec::with_capacity(channels_and_platforms.len());
+        let mut subdir_handles = Vec::with_capacity(sources_and_platforms.len());
         let pending_subdirs = FuturesUnordered::new();
 
-        for (subdir_idx, (channel, platform)) in channels_and_platforms.into_iter().enumerate() {
+        for (subdir_idx, (source, platform)) in sources_and_platforms.into_iter().enumerate() {
             let barrier = Arc::new(BarrierCell::new());
             subdir_handles.push(SubdirHandle {
                 result_index: subdir_idx + direct_url_offset,
                 barrier: barrier.clone(),
             });
 
-            let inner = gateway.clone();
-            let reporter = reporter.clone();
-            pending_subdirs.push(box_future(async move {
-                match inner
-                    .get_or_create_subdir(&channel, platform, reporter)
-                    .await
-                {
-                    Ok(subdir) => {
-                        barrier.set(subdir).expect("subdir was set twice");
-                        Ok(())
-                    }
-                    Err(e) => Err(e),
+            match source {
+                Source::Channel(channel) => {
+                    let inner = gateway.clone();
+                    let reporter = reporter.clone();
+                    pending_subdirs.push(box_future(async move {
+                        match inner
+                            .get_or_create_subdir(&channel, platform, reporter)
+                            .await
+                        {
+                            Ok(subdir) => {
+                                barrier.set(subdir).expect("subdir was set twice");
+                                Ok(())
+                            }
+                            Err(e) => Err(e),
+                        }
+                    }));
                 }
-            }));
+                Source::Custom(custom_source) => {
+                    // For custom sources, create an adapter that wraps the source
+                    // for the specific platform
+                    let client = CustomSourceClient::new(custom_source, platform);
+                    let subdir = Arc::new(Subdir::Found(SubdirData::from_client(client)));
+                    barrier.set(subdir).expect("subdir was set twice");
+                }
+            }
         }
 
         let result_len = subdir_handles.len() + direct_url_offset;
@@ -303,7 +319,7 @@ impl QueryExecutor {
         Ok(())
     }
 
-    /// Drain pending_package_specs and spawn fetch futures for each.
+    /// Drain `pending_package_specs` and spawn fetch futures for each.
     fn spawn_package_fetches(&mut self) {
         for (package_name, specs) in self.pending_package_specs.drain() {
             for handle in &self.subdir_handles {
@@ -423,6 +439,9 @@ type BoxFuture<T> = futures::future::BoxFuture<'static, T>;
 fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture<T> {
     future.boxed()
 }
+
+/// Result type for pending record fetches.
+type PendingRecordsResult = Result<(usize, SourceSpecs, Arc<[RepoDataRecord]>), GatewayError>;
 
 impl IntoFuture for RepoDataQuery {
     type Output = Result<Vec<RepoData>, GatewayError>;
