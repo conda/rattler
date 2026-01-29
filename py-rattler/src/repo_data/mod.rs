@@ -9,6 +9,7 @@ use patch_instructions::PyPatchInstructions;
 
 pub mod gateway;
 pub mod patch_instructions;
+pub mod source;
 pub mod sparse;
 
 #[pyclass]

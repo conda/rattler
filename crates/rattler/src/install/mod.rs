@@ -43,7 +43,9 @@ pub use apple_codesign::AppleCodeSignBehavior;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
-pub use installer::{result_record::InstallationResultRecord, Installer, InstallerError, Reporter};
+pub use installer::{
+    result_record::InstallationResultRecord, Installer, InstallerError, LinkOptions, Reporter,
+};
 #[cfg(feature = "indicatif")]
 pub use installer::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,

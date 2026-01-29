@@ -647,7 +647,7 @@ impl TryFrom<Url> for MatchSpec {
             .ok_or(MatchSpecUrlError::InvalidFilename(filename.to_string()))?;
 
         spec.name = Some(
-            PackageNameMatcher::from_str(&archive_identifier.name)
+            PackageNameMatcher::from_str(&archive_identifier.identifier.name)
                 .map_err(|e| MatchSpecUrlError::InvalidPackageName(e.to_string()))?,
         );
 
@@ -688,9 +688,10 @@ mod tests {
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
     use crate::{
-        match_spec::Matches, parse_mode::ParseStrictnessWithNameMatcher, MatchSpec,
-        NamelessMatchSpec, PackageName, PackageRecord, ParseMatchSpecError, ParseStrictness::*,
-        RepoDataRecord, StringMatcher, Version, VersionSpec,
+        match_spec::Matches, package::DistArchiveIdentifier,
+        parse_mode::ParseStrictnessWithNameMatcher, MatchSpec, NamelessMatchSpec, PackageName,
+        PackageRecord, ParseMatchSpecError, ParseStrictness::*, RepoDataRecord, StringMatcher,
+        Version, VersionSpec,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -891,7 +892,9 @@ mod tests {
                 Version::from_str("1.0").unwrap(),
                 String::from(""),
             ),
-            file_name: String::from("mamba-1.0-py37_0"),
+            identifier: "mamba-1.0-py37_0.conda"
+                .parse::<DistArchiveIdentifier>()
+                .unwrap(),
             url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
             channel: Some(String::from("mamba")),
         };
@@ -925,7 +928,9 @@ mod tests {
                 Version::from_str("1.0").unwrap(),
                 String::from(""),
             ),
-            file_name: String::from("mamba-1.0-py37_0"),
+            identifier: "mamba-1.0-py37_0.conda"
+                .parse::<DistArchiveIdentifier>()
+                .unwrap(),
             url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
             channel: Some(String::from("mamba")),
         };
@@ -952,7 +957,9 @@ mod tests {
                 Version::from_str("1.0").unwrap(),
                 String::from(""),
             ),
-            file_name: String::from("mamba-1.0-py37_0"),
+            identifier: "mamba-1.0-py37_0.conda"
+                .parse::<DistArchiveIdentifier>()
+                .unwrap(),
             url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
             channel: Some(String::from("mamba")),
         };

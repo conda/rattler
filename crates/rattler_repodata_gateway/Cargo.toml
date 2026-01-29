@@ -1,6 +1,6 @@
 [package]
 name = "rattler_repodata_gateway"
-version = "0.25.7"
+version = "0.25.10"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to interact with Conda repodata"
@@ -80,12 +80,14 @@ wasmtimer = { workspace = true }
 memmap2 = { workspace = true, optional = true }
 
 [dev-dependencies]
+ahash = { workspace = true }
 assert_matches = { workspace = true }
 axum = { workspace = true, features = ["tokio"] }
 fslock = { workspace = true }
 hex-literal = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
 rattler_conda_types = { path = "../rattler_conda_types", default-features = false }
+regex = { workspace = true }
 rstest = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tools = { path = "../tools" }
