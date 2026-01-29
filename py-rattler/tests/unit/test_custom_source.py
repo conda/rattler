@@ -1,6 +1,6 @@
 """Tests for custom RepoDataSource implementations."""
 
-from typing import List
+from typing import Any, List
 
 import pytest
 
@@ -66,17 +66,17 @@ def results_snapshot(results: List[List[RepoDataRecord]]) -> List[List[str]]:
     return [[record_snapshot(r) for r in source_results] for source_results in results]
 
 
-def test_protocol_check():
+def test_protocol_check() -> None:
     """Test that MockRepoDataSource is recognized as implementing RepoDataSource."""
     source = MockRepoDataSource({})
     assert isinstance(source, RepoDataSource)
 
 
-def test_protocol_check_missing_method():
+def test_protocol_check_missing_method() -> None:
     """Test that objects missing methods are not recognized as RepoDataSource."""
 
     class IncompleteSource:
-        async def fetch_package_records(self, platform, name):
+        async def fetch_package_records(self, platform: Any, name: Any) -> List[Any]:
             return []
 
         # Missing package_names method
@@ -86,7 +86,7 @@ def test_protocol_check_missing_method():
 
 
 @pytest.mark.asyncio
-async def test_custom_source_query():
+async def test_custom_source_query() -> None:
     """Test querying with a custom RepoDataSource."""
     source = MockRepoDataSource(
         {
@@ -106,7 +106,7 @@ async def test_custom_source_query():
 
 
 @pytest.mark.asyncio
-async def test_custom_source_names():
+async def test_custom_source_names() -> None:
     """Test querying package names from a custom RepoDataSource."""
     source = MockRepoDataSource(
         {
@@ -127,7 +127,7 @@ async def test_custom_source_names():
 
 
 @pytest.mark.asyncio
-async def test_mixed_sources_query(conda_forge_channel: Channel):
+async def test_mixed_sources_query(conda_forge_channel: Channel) -> None:
     """Test querying with both channels and custom sources."""
     custom_source = MockRepoDataSource(
         {
@@ -148,7 +148,7 @@ async def test_mixed_sources_query(conda_forge_channel: Channel):
 
 
 @pytest.mark.asyncio
-async def test_custom_source_empty_results():
+async def test_custom_source_empty_results() -> None:
     """Test that custom sources handle empty results correctly."""
     source = MockRepoDataSource({})
 
@@ -164,7 +164,7 @@ async def test_custom_source_empty_results():
 
 
 @pytest.mark.asyncio
-async def test_custom_source_multiple_platforms():
+async def test_custom_source_multiple_platforms() -> None:
     """Test custom source with multiple platforms."""
     source = MockRepoDataSource(
         {
@@ -188,7 +188,7 @@ async def test_custom_source_multiple_platforms():
     ]
 
 
-def test_invalid_source_type():
+def test_invalid_source_type() -> None:
     """Test that invalid source types raise appropriate errors."""
 
     class NotASource:
@@ -201,7 +201,7 @@ def test_invalid_source_type():
 
         asyncio.run(
             gateway.query(
-                sources=[NotASource()],
+                sources=[NotASource()],  # type: ignore[list-item]
                 platforms=["linux-64"],
                 specs=["test"],
                 recursive=False,
@@ -210,7 +210,7 @@ def test_invalid_source_type():
 
 
 @pytest.mark.asyncio
-async def test_custom_source_with_solve():
+async def test_custom_source_with_solve() -> None:
     """Test using a custom RepoDataSource with the solve function."""
     # Create a simple package with no dependencies
     source = MockRepoDataSource(
@@ -233,7 +233,7 @@ async def test_custom_source_with_solve():
 
 
 @pytest.mark.asyncio
-async def test_custom_source_backed_by_sparse_repodata():
+async def test_custom_source_backed_by_sparse_repodata() -> None:
     """Test a custom RepoDataSource that wraps SparseRepoData.
 
     This demonstrates how to create a custom source that loads records
