@@ -12,6 +12,7 @@ mod remote_subdir;
 mod repo_data;
 mod run_exports_extractor;
 mod sharded_subdir;
+mod source;
 mod subdir;
 mod subdir_builder;
 
@@ -33,6 +34,7 @@ use rattler_networking::LazyClient;
 pub use repo_data::RepoData;
 use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
+pub use source::{RepoDataSource, Source};
 use subdir::Subdir;
 use tracing::{instrument, Level};
 use url::Url;
@@ -108,15 +110,46 @@ impl Gateway {
 
     /// Constructs a new `GatewayQuery` which can be used to query repodata
     /// records.
-    pub fn query<AsChannel, ChannelIter, PlatformIter, PackageNameIter, IntoMatchSpec>(
+    ///
+    /// # Sources
+    ///
+    /// The `sources` parameter accepts any type that implements `Into<Source>`.
+    /// This includes:
+    /// - `Channel` - traditional conda channels
+    /// - `Arc<dyn RepoDataSource>` - custom repodata sources
+    /// - `Source` - the enum itself
+    ///
+    /// Existing code using channels continues to work unchanged:
+    ///
+    /// ```ignore
+    /// gateway.query(
+    ///     vec![channel1, channel2],
+    ///     vec![Platform::Linux64],
+    ///     vec![spec],
+    /// ).await
+    /// ```
+    ///
+    /// You can also mix channels and custom sources:
+    ///
+    /// ```ignore
+    /// gateway.query(
+    ///     vec![
+    ///         Source::Channel(channel),
+    ///         Source::Custom(my_custom_source),
+    ///     ],
+    ///     vec![Platform::Linux64],
+    ///     vec![spec],
+    /// ).await
+    /// ```
+    pub fn query<AsSource, SourceIter, PlatformIter, PackageNameIter, IntoMatchSpec>(
         &self,
-        channels: ChannelIter,
+        sources: SourceIter,
         platforms: PlatformIter,
         specs: PackageNameIter,
     ) -> RepoDataQuery
     where
-        AsChannel: Into<Channel>,
-        ChannelIter: IntoIterator<Item = AsChannel>,
+        AsSource: Into<Source>,
+        SourceIter: IntoIterator<Item = AsSource>,
         PlatformIter: IntoIterator<Item = Platform>,
         <PlatformIter as IntoIterator>::IntoIter: Clone,
         PackageNameIter: IntoIterator<Item = IntoMatchSpec>,
@@ -124,7 +157,7 @@ impl Gateway {
     {
         RepoDataQuery::new(
             self.inner.clone(),
-            channels.into_iter().map(Into::into).collect(),
+            sources.into_iter().map(Into::into).collect(),
             platforms.into_iter().collect(),
             specs.into_iter().map(Into::into).collect(),
         )
@@ -1181,7 +1214,7 @@ mod test {
             .unwrap();
 
         let total_records: usize = records.iter().map(RepoData::len).sum();
-        assert_eq!(total_records, 16);
+        assert_eq!(total_records, 19);
 
         let mut repodata_records = records
             .iter()
@@ -1196,5 +1229,217 @@ mod test {
             .unwrap();
 
         assert!(run_exports_in_place(&repodata_records));
+    }
+
+    /// A mock `RepoDataSource` for testing custom source functionality.
+    struct MockRepoDataSource {
+        records: std::collections::HashMap<(Platform, PackageName), Vec<RepoDataRecord>>,
+    }
+
+    impl MockRepoDataSource {
+        fn new() -> Self {
+            Self {
+                records: std::collections::HashMap::new(),
+            }
+        }
+
+        fn add_record(&mut self, platform: Platform, record: RepoDataRecord) {
+            let name = record.package_record.name.clone();
+            self.records
+                .entry((platform, name))
+                .or_default()
+                .push(record);
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl super::RepoDataSource for MockRepoDataSource {
+        async fn fetch_package_records(
+            &self,
+            platform: Platform,
+            name: &PackageName,
+        ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
+            let records = self
+                .records
+                .get(&(platform, name.clone()))
+                .cloned()
+                .unwrap_or_default();
+            Ok(Arc::from(records))
+        }
+
+        fn package_names(&self, platform: Platform) -> Vec<String> {
+            self.records
+                .keys()
+                .filter(|(p, _)| *p == platform)
+                .map(|(_, n)| n.as_source().to_string())
+                .collect()
+        }
+    }
+
+    fn make_test_record(name: &str, version: &str, subdir: &str) -> RepoDataRecord {
+        use rattler_conda_types::{
+            package::DistArchiveIdentifier, PackageRecord, VersionWithSource,
+        };
+
+        let package_record = PackageRecord {
+            name: PackageName::from_str(name).unwrap(),
+            version: VersionWithSource::from_str(version).unwrap(),
+            build: "0".to_string(),
+            build_number: 0,
+            subdir: subdir.to_string(),
+            md5: None,
+            sha256: None,
+            size: Some(1000),
+            arch: None,
+            platform: None,
+            depends: vec![],
+            constrains: vec![],
+            track_features: vec![],
+            features: None,
+            noarch: rattler_conda_types::NoArchType::default(),
+            license: None,
+            license_family: None,
+            timestamp: None,
+            legacy_bz2_size: None,
+            legacy_bz2_md5: None,
+            purls: None,
+            run_exports: None,
+            python_site_packages_path: None,
+            experimental_extra_depends: std::collections::BTreeMap::default(),
+        };
+
+        RepoDataRecord {
+            package_record,
+            identifier: format!("{name}-{version}-0.conda")
+                .parse::<DistArchiveIdentifier>()
+                .unwrap(),
+            url: Url::parse(&format!(
+                "https://example.com/{subdir}/{name}-{version}-0.conda"
+            ))
+            .unwrap(),
+            channel: Some("example".to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_custom_source() {
+        let gateway = Gateway::new();
+
+        // Create a mock source with some records
+        let mut mock_source = MockRepoDataSource::new();
+        mock_source.add_record(
+            Platform::Linux64,
+            make_test_record("testpkg", "1.0.0", "linux-64"),
+        );
+        mock_source.add_record(
+            Platform::Linux64,
+            make_test_record("testpkg", "2.0.0", "linux-64"),
+        );
+        mock_source.add_record(
+            Platform::NoArch,
+            make_test_record("otherpkg", "1.0.0", "noarch"),
+        );
+
+        let source: Arc<dyn super::RepoDataSource> = Arc::new(mock_source);
+
+        // Query using the custom source
+        let records = gateway
+            .query(
+                vec![super::Source::Custom(source.clone())],
+                vec![Platform::Linux64],
+                vec![PackageName::from_str("testpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(all_records.len(), 2, "should have two testpkg records");
+
+        // Check versions
+        let versions: std::collections::HashSet<_> = all_records
+            .iter()
+            .map(|r| r.package_record.version.as_str())
+            .collect();
+        assert!(versions.contains("1.0.0"));
+        assert!(versions.contains("2.0.0"));
+
+        // Query for noarch platform
+        let records = gateway
+            .query(
+                vec![super::Source::Custom(source)],
+                vec![Platform::NoArch],
+                vec![PackageName::from_str("otherpkg").unwrap()].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        assert_eq!(all_records.len(), 1, "should have one otherpkg record");
+        assert_eq!(
+            all_records[0].package_record.name.as_normalized(),
+            "otherpkg"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_mixed_channel_and_custom_source() {
+        let gateway = Gateway::new();
+
+        // Create a mock source with a custom package
+        let mut mock_source = MockRepoDataSource::new();
+        mock_source.add_record(
+            Platform::Linux64,
+            make_test_record("custom-pkg", "1.0.0", "linux-64"),
+        );
+
+        let custom_source: Arc<dyn super::RepoDataSource> = Arc::new(mock_source);
+
+        // Get the local conda-forge channel
+        let channel = local_conda_forge().await;
+
+        // Query both the channel and custom source
+        let records = gateway
+            .query(
+                vec![
+                    super::Source::Channel(channel),
+                    super::Source::Custom(custom_source),
+                ],
+                vec![Platform::Linux64],
+                vec![
+                    PackageName::from_str("python").unwrap(),
+                    PackageName::from_str("custom-pkg").unwrap(),
+                ]
+                .into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        // We should have results from both sources
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+
+        // Check we got python from the channel
+        let python_records: Vec<_> = all_records
+            .iter()
+            .filter(|r| r.package_record.name.as_normalized() == "python")
+            .collect();
+        assert!(
+            !python_records.is_empty(),
+            "should have python from channel"
+        );
+
+        // Check we got custom-pkg from our mock source
+        let custom_records: Vec<_> = all_records
+            .iter()
+            .filter(|r| r.package_record.name.as_normalized() == "custom-pkg")
+            .collect();
+        assert_eq!(
+            custom_records.len(),
+            1,
+            "should have custom-pkg from mock source"
+        );
+        assert_eq!(custom_records[0].package_record.version.as_str(), "1.0.0");
     }
 }
