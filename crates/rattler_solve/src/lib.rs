@@ -254,6 +254,11 @@ pub struct SolverTask<TAvailablePackagesIterator> {
     /// installed, but they must be satisfied by the solution.
     pub constraints: Vec<MatchSpec>,
 
+    /// Soft requirements that the solver should try to install if possible.
+    /// Unlike regular `specs`, soft requirements don't cause the solve to fail
+    /// if they cannot be satisfied. The solver will include as many as possible.
+    pub soft_requirements: Vec<MatchSpec>,
+
     /// The timeout after which the solver should stop
     pub timeout: Option<std::time::Duration>,
 
@@ -292,6 +297,7 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
             virtual_packages: Vec::new(),
             specs: Vec::new(),
             constraints: Vec::new(),
+            soft_requirements: Vec::new(),
             timeout: None,
             channel_priority: ChannelPriority::default(),
             exclude_newer: None,
