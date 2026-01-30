@@ -600,4 +600,104 @@ mod test {
             );
         }
     }
+    #[test]
+    fn test_channel_null_serialization_roundtrip() {
+        use crate::{CondaBinaryData, CondaPackageData, CondaSourceData, UrlOrPath};
+        use rattler_conda_types::{PackageName, PackageRecord, Platform, Version};
+        use std::str::FromStr;
+
+        // 1. Setup a Binary Package that explicitly has NO channel (None)
+        let binary_pkg_record = PackageRecord::new(
+            PackageName::new_unchecked("binary-pkg"),
+            Version::from_str("1.0.0").unwrap(),
+            "build_string".to_string(),
+        );
+
+        let binary_data = CondaBinaryData {
+            package_record: binary_pkg_record,
+            location: UrlOrPath::from_str(
+                "https://conda.anaconda.org/conda-forge/linux-64/binary-pkg-1.0.0.tar.bz2",
+            )
+            .unwrap(),
+            file_name: "binary-pkg-1.0.0.tar.bz2".to_string(),
+            channel: None,
+        };
+
+        // 2. Setup a Source Package (which should naturally have no channel)
+        let source_pkg_record = PackageRecord::new(
+            PackageName::new_unchecked("source-pkg"),
+            Version::from_str("1.0.0").unwrap(),
+            "build_string".to_string(),
+        );
+
+        let source_data = CondaSourceData {
+            package_record: source_pkg_record,
+            location: UrlOrPath::from_str("git+https://github.com/org/repo").unwrap(),
+            variants: None,
+            package_build_source: None,
+            input: None,
+            sources: std::collections::BTreeMap::default(),
+        };
+
+        // 3. Build the LockFile
+        let lock_file = LockFile::builder()
+            .with_conda_package(
+                "default",
+                Platform::Linux64,
+                CondaPackageData::Binary(binary_data),
+            )
+            .with_conda_package(
+                "default",
+                Platform::Linux64,
+                CondaPackageData::Source(source_data),
+            )
+            .finish();
+
+        // 4. Serialize to String
+        let serialized = lock_file.render_to_string().unwrap();
+
+        // ASSERTION 1:
+        // The Binary package (standard URL) MUST have "channel: null" to override inference.
+        // The Source package MUST NOT have "channel: null".
+        // Therefore, we expect exactly 1 occurrence.
+        assert_eq!(
+            serialized.matches("channel: null").count(),
+            1,
+            "Output should contain exactly one 'channel: null' (for the binary pkg only)"
+        );
+
+        // 5. Roundtrip (Deserialize)
+        let parsed = LockFile::from_str(&serialized).unwrap();
+        let env = parsed
+            .environment("default")
+            .expect("Environment 'default' should exist");
+        let packages: Vec<_> = env
+            .packages(Platform::Linux64)
+            .expect("Packages for linux-64 should exist")
+            .collect();
+
+        // ASSERTION 2: Verify we have 2 packages
+        assert_eq!(packages.len(), 2, "Should have 2 packages after roundtrip");
+
+        // ASSERTION 3: Verify Binary Package channel is STILL None
+        let binary_pkg = packages
+            .iter()
+            .find(|p| p.name() == "binary-pkg")
+            .expect("binary-pkg missing")
+            .as_binary_conda()
+            .expect("should be binary package");
+
+        assert!(
+            binary_pkg.channel.is_none(),
+            "Binary package channel should be None (local file path prevented inference)"
+        );
+
+        // ASSERTION 4: Verify Source Package
+        let _source_pkg = packages
+            .iter()
+            .find(|p| p.name() == "source-pkg")
+            .expect("source-pkg missing")
+            .as_source_conda()
+            .expect("should be source package");
+    }
 }

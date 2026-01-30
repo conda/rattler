@@ -23,6 +23,15 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use url::Url;
 
+use rattler_conda_types::{
+    package::ArchiveIdentifier, utils::TimestampMs, BuildNumber, ChannelUrl, NoArchType,
+    PackageName, PackageRecord, PackageUrl, VersionWithSource,
+};
+use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_with::serde_as;
+use url::Url;
+
 /// A helper struct that wraps all fields of a [`crate::CondaPackageData`] and
 /// allows for easy conversion between the two.
 ///
@@ -89,7 +98,11 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub experimental_extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
 
     // Additional properties (in semi alphabetic order but grouped by commonality)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_channel_field"
+    )]
     pub channel: Option<Cow<'a, Option<Url>>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -292,10 +305,13 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             noarch: (package_record.noarch != derived_noarch)
                 .then_some(Cow::Borrowed(&package_record.noarch)),
             variants: variants.map(Cow::Borrowed),
-            channel: (channel != derived.channel.as_ref())
-                .then_some(Cow::Owned(normalized_channel)),
-            file_name: (file_name != derived.identifier.as_ref())
-                .then_some(Cow::Owned(file_name.cloned())),
+            channel: if value.as_binary().is_some() && channel != derived.channel.as_ref() {
+                Some(Cow::Owned(normalized_channel))
+            } else {
+                None
+            },
+            file_name: (file_name != derived.file_name.as_deref())
+                .then_some(Cow::Owned(file_name.map(ToString::to_string))),
             purls: Cow::Borrowed(&package_record.purls),
             depends: Cow::Borrowed(&package_record.depends),
             constrains: Cow::Borrowed(&package_record.constrains),
@@ -330,4 +346,24 @@ fn strip_trailing_slash(url: &Url) -> Cow<'_, Url> {
     } else {
         Cow::Borrowed(url)
     }
+}
+
+/// Helper to deserialize the channel field, distinguishing "null" from "missing".
+fn deserialize_channel_field<'de, 'a, D>(
+    deserializer: D,
+) -> Result<Option<Cow<'a, Option<Url>>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    // If we are here, the field is present (either null or a value).
+    // Standard `Option::deserialize` will give us:
+    // - None for `null`
+    // - Some(Url) for `"string"`
+    let opt: Option<Url> = Option::deserialize(deserializer)?;
+
+    // We wrap this in Cow::Owned.
+    // Result:
+    // - null -> None -> Some(Cow::Owned(None))
+    // - "string" -> Some(Url) -> Some(Cow::Owned(Some(Url)))
+    Ok(Some(Cow::Owned(opt)))
 }
