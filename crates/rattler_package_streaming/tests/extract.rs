@@ -12,7 +12,6 @@ use rattler_package_streaming::{
 };
 use rstest::rstest;
 use rstest_reuse::{self, apply, template};
-use serde_json::json;
 use url::Url;
 
 fn test_data_dir() -> PathBuf {
@@ -307,12 +306,8 @@ fn test_extract_data_descriptor_package_fails_streaming_and_uses_buffering() {
     let new_result =
         extract_conda_via_buffering(File::open(package_path).unwrap(), &target_dir).unwrap();
 
-    let combined_result = json!({
-        "sha256": format!("{:x}", new_result.sha256),
-        "md5": format!("{:x}", new_result.md5),
-    });
-
-    insta::assert_snapshot!(combined_result, @r###"{"sha256":"6a5d6d8a1a7552dbf8c617312ef951a77d2dac09f2aeaba661deebce603a7a97","md5":"a1d1adb5a5dc516dfb3dccc7b9b574a9"}"###);
+    insta::assert_snapshot!(format!("{:x}", new_result.sha256), @r"6a5d6d8a1a7552dbf8c617312ef951a77d2dac09f2aeaba661deebce603a7a97");
+    insta::assert_snapshot!(format!("{:x}", new_result.md5), @r"a1d1adb5a5dc516dfb3dccc7b9b574a9");
 }
 
 struct FlakyReader<R: Read> {
