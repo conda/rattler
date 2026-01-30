@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.11](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.25.10...rattler_repodata_gateway-v0.25.11) - 2026-01-30
+
+### Added
+
+- custom channel sources in repodata gateway ([#2016](https://github.com/conda/rattler/pull/2016))
+- improve error message when shard download / decoding fails ([#2008](https://github.com/conda/rattler/pull/2008))
+
+### Fixed
+
+- issue when run_exports.json is not in sync with the repodata ([#2014](https://github.com/conda/rattler/pull/2014))
+
 ## [0.25.10](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.25.9...rattler_repodata_gateway-v0.25.10) - 2026-01-22
 
 ### Added
