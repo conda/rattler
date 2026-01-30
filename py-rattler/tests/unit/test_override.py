@@ -6,15 +6,18 @@ def test_overrides() -> None:
     assert overrides.osx is None
     assert overrides.libc is None
     assert overrides.cuda is None
+    assert overrides.archspec is None
 
     overrides = VirtualPackageOverrides.from_env()
     assert overrides.osx == Override.default_env_var()
     assert overrides.libc == Override.default_env_var()
     assert overrides.cuda == Override.default_env_var()
+    assert overrides.archspec == Override.default_env_var()
 
     overrides.osx = Override.string("123.45")
     overrides.libc = Override.string("123.457")
     overrides.cuda = Override.string("123.4578")
+    overrides.archspec = Override.string("m4")
 
     r = [i.into_generic() for i in VirtualPackage.detect(overrides)]
 
@@ -28,3 +31,7 @@ def test_overrides() -> None:
     find("__cuda", "123.4578")
     find("__libc", "123.4578", False)
     find("__osx", "123.45", False)
+
+    # archspec uses build_string rather than version
+    archspec_pkg = next(i for i in r if i.name == PackageName("__archspec"))
+    assert archspec_pkg.build_string == "m4"
