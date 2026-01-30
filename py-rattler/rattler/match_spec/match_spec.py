@@ -96,7 +96,7 @@ class MatchSpec:
 
         When `experimental_extras` is `True`, extras syntax is enabled (e.g., `pkg[extras=[foo,bar]]`).
 
-        When `experimental_conditionals` is `True`, conditionals syntax is enabled (e.g., `pkg; if python >=3.6`).
+        When `experimental_conditionals` is `True`, conditionals syntax is enabled (e.g., `pkg[when="python >=3.6"]`).
 
         ```python
         >>> MatchSpec("pip >=24.0")
