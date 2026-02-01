@@ -1,0 +1,33 @@
+[package]
+name = "rattler_cas_tar"
+version = "0.1.0"
+edition.workspace = true
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+description = "Tar archive extraction with CAS-based file storage"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[features]
+default = ["sync", "tokio"]
+sync = ["dep:tar"]
+tokio = ["dep:astral-tokio-tar", "dep:futures-util", "dep:tokio", "fs-err/tokio"]
+
+[dependencies]
+filetime = { workspace = true }
+fs-err = { workspace = true }
+futures-util = { workspace = true, optional = true }
+rattler_cas = { workspace = true }
+tar = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs"], optional = true }
+astral-tokio-tar = { workspace = true, optional = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+assert_matches = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }
+walkdir = { workspace = true }

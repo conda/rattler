@@ -122,6 +122,7 @@ fn test_extract_conda(#[case] input: Url, #[case] sha256: &str, #[case] md5: &st
     let result = extract_conda_via_streaming(
         File::open(test_data_dir().join(file_path)).unwrap(),
         &target_dir,
+        None,
     )
     .unwrap();
 
@@ -178,6 +179,7 @@ fn test_extract_tar_bz2(#[case] input: Url, #[case] sha256: &str, #[case] md5: &
     let result = extract_tar_bz2(
         File::open(test_data_dir().join(file_path)).unwrap(),
         &target_dir,
+        None,
     )
     .unwrap();
 
@@ -200,6 +202,7 @@ async fn test_extract_tar_bz2_async(#[case] input: Url, #[case] sha256: &str, #[
             .await
             .unwrap(),
         &target_dir,
+        None,
     )
     .await
     .unwrap();
@@ -225,6 +228,7 @@ async fn test_extract_conda_async(#[case] input: Url, #[case] sha256: &str, #[ca
                 .await
                 .unwrap(),
             &target_dir,
+            None,
         )
         .await
         .unwrap();
@@ -255,6 +259,7 @@ async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case]
         &target_dir,
         None,
         None,
+        None,
     )
     .await
     .unwrap();
@@ -282,6 +287,7 @@ fn test_extract_flaky_conda(#[values(0, 1, 13, 50, 74, 150, 8096, 16384, 20000)]
             cutoff,
         },
         &target_dir,
+        None,
     )
     .expect_err("this should error out and not panic");
 
@@ -294,7 +300,7 @@ fn test_extract_data_descriptor_package_fails_streaming_and_uses_buffering() {
 
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
     let target_dir = temp_dir.join("package_using_data_descriptors");
-    let result = extract_conda_via_streaming(File::open(package_path).unwrap(), &target_dir)
+    let result = extract_conda_via_streaming(File::open(package_path).unwrap(), &target_dir, None)
         .expect_err("this should error out and not panic");
 
     assert_matches::assert_matches!(
@@ -305,7 +311,7 @@ fn test_extract_data_descriptor_package_fails_streaming_and_uses_buffering() {
     );
 
     let new_result =
-        extract_conda_via_buffering(File::open(package_path).unwrap(), &target_dir).unwrap();
+        extract_conda_via_buffering(File::open(package_path).unwrap(), &target_dir, None).unwrap();
 
     let combined_result = json!({
         "sha256": format!("{:x}", new_result.sha256),
@@ -332,4 +338,62 @@ impl<R: Read> Read for FlakyReader<R> {
         self.total_read += bytes_read;
         Ok(bytes_read)
     }
+}
+
+// CAS (Content Addressable Store) extraction tests
+
+#[apply(tar_bz2_archives)]
+fn test_extract_tar_bz2_with_cas(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+    println!("Target dir: {}", temp_dir.display());
+
+    let file_path = tools::download_and_cache_file(input, sha256).unwrap();
+
+    // Create CAS store and destination in same temp dir
+    let cas_dir = temp_dir.join("cas").join(file_path.file_stem().unwrap());
+    let target_dir = temp_dir
+        .join("cas-dest")
+        .join(file_path.file_stem().unwrap());
+
+    let result = extract_tar_bz2(
+        File::open(test_data_dir().join(file_path)).unwrap(),
+        &target_dir,
+        Some(&cas_dir),
+    )
+    .unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    // Verify that files were created in the destination
+    assert!(target_dir.exists());
+}
+
+#[apply(conda_archives)]
+fn test_extract_conda_with_cas(#[case] input: Url, #[case] sha256: &str, #[case] md5: &str) {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+    println!("Target dir: {}", temp_dir.display());
+
+    let file_path = tools::download_and_cache_file(input, sha256).unwrap();
+
+    // Create CAS store and destination in same temp dir
+    let cas_dir = temp_dir
+        .join("cas-conda")
+        .join(file_path.file_stem().unwrap());
+    let target_dir = temp_dir
+        .join("cas-conda-dest")
+        .join(file_path.file_stem().unwrap());
+
+    let result = extract_conda_via_streaming(
+        File::open(test_data_dir().join(file_path)).unwrap(),
+        &target_dir,
+        Some(&cas_dir),
+    )
+    .unwrap();
+
+    assert_eq!(&format!("{:x}", result.sha256), sha256);
+    assert_eq!(&format!("{:x}", result.md5), md5);
+
+    // Verify that files were created in the destination
+    assert!(target_dir.exists());
 }

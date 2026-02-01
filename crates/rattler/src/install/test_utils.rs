@@ -166,7 +166,7 @@ pub async fn download_and_get_prefix_record(
     let package_dir = tempfile::TempDir::new().unwrap();
 
     // Create package cache
-    rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
+    rattler_package_streaming::fs::extract(&package_path, package_dir.path(), None).unwrap();
 
     let py_info =
         PythonInfo::from_version(&Version::from_str("3.10").unwrap(), None, Platform::Linux64)

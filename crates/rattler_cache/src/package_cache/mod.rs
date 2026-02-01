@@ -436,7 +436,7 @@ impl PackageCache {
             move |destination| {
                 let path_buf = path_buf.clone();
                 async move {
-                    rattler_package_streaming::tokio::fs::extract(&path_buf, &destination)
+                    rattler_package_streaming::tokio::fs::extract(&path_buf, &destination, None)
                         .await
                         .map(|_| ())
                 }
@@ -493,6 +493,7 @@ impl PackageCache {
                         client.client().clone(),
                         url.clone(),
                         &destination,
+                        None,
                         sha256,
                         download_reporter.clone().map(|reporter| Arc::new(PassthroughReporter {
                             reporter,
@@ -878,6 +879,7 @@ mod test {
                         rattler_package_streaming::tokio::fs::extract(
                             &tar_archive_path,
                             &destination,
+                            None,
                         )
                         .await
                         .map(|_| ())
@@ -1169,6 +1171,7 @@ mod test {
                         rattler_package_streaming::tokio::fs::extract(
                             &cloned_archive_path,
                             &destination,
+                            None,
                         )
                         .await
                         .map(|_| ())
@@ -1201,6 +1204,7 @@ mod test {
                         rattler_package_streaming::tokio::fs::extract(
                             &tar_archive_path,
                             &destination,
+                            None,
                         )
                         .await
                         .map(|_| ())
@@ -1286,6 +1290,7 @@ mod test {
                             rattler_package_streaming::tokio::fs::extract(
                                 &tar_archive_path,
                                 &destination,
+                                None,
                             )
                             .await
                             .map(|_| ())
@@ -1445,6 +1450,7 @@ mod test {
                         rattler_package_streaming::tokio::fs::extract(
                             &tar_archive_path,
                             &destination,
+                            None,
                         )
                         .await
                         .map(|_| ())

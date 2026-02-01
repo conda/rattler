@@ -174,7 +174,7 @@ fn test_rewrite_tar_bz2() {
         println!("Name: {}", file_path.display());
 
         let target_dir = temp_dir.join(file_path.file_stem().unwrap());
-        extract_tar_bz2(File::open(&file_path).unwrap(), &target_dir).unwrap();
+        extract_tar_bz2(File::open(&file_path).unwrap(), &target_dir, None).unwrap();
 
         let new_archive = temp_dir.join(format!(
             "{}-new.tar.bz2",
@@ -214,7 +214,7 @@ fn test_rewrite_conda() {
 
         let name = file_path.file_stem().unwrap().to_string_lossy();
         let target_dir = temp_dir.join(file_path.file_stem().unwrap());
-        extract_conda_via_streaming(File::open(&file_path).unwrap(), &target_dir).unwrap();
+        extract_conda_via_streaming(File::open(&file_path).unwrap(), &target_dir, None).unwrap();
 
         let new_archive = temp_dir.join(format!(
             "{}-new.conda",

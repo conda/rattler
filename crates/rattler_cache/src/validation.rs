@@ -319,7 +319,7 @@ mod test {
         let temp_dir = tempfile::tempdir().unwrap();
         let package_path = tools::download_and_cache_file(url, sha256).unwrap();
 
-        rattler_package_streaming::fs::extract(&package_path, temp_dir.path()).unwrap();
+        rattler_package_streaming::fs::extract(&package_path, temp_dir.path(), None).unwrap();
 
         // Validate that the extracted package is correct. Since it's just been
         // extracted this should work.
@@ -373,7 +373,7 @@ mod test {
         let temp_dir = tempfile::tempdir().unwrap();
         let package_path = tools::download_and_cache_file(url, sha256).unwrap();
 
-        rattler_package_streaming::fs::extract(&package_path, temp_dir.path()).unwrap();
+        rattler_package_streaming::fs::extract(&package_path, temp_dir.path(), None).unwrap();
 
         // Validate that the extracted package is correct. Since it's just been
         // extracted this should work.

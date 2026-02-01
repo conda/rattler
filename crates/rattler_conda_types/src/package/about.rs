@@ -104,7 +104,7 @@ mod test {
             "a8a44c5ff2b2f423546d49721ba2e3e632233c74a813c944adf8e5742834930e",
         )
         .unwrap();
-        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path(), None).unwrap();
 
         insta::assert_yaml_snapshot!(AboutJson::from_package_directory(package_dir.path()).unwrap());
     }
@@ -120,7 +120,7 @@ mod test {
             "f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97",
         )
         .unwrap();
-        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path(), None).unwrap();
 
         let package_dir = package_dir.keep();
         println!("{}", package_dir.display());

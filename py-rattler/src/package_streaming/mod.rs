@@ -15,29 +15,34 @@ fn convert_result(py: Python<'_>, result: ExtractResult) -> (PyObject, PyObject)
 }
 
 #[pyfunction]
+#[pyo3(signature = (reader, destination, cas_root=None))]
 pub fn extract_tar_bz2(
     py: Python<'_>,
     reader: PyObject,
     destination: String,
+    cas_root: Option<PathBuf>,
 ) -> PyResult<(PyObject, PyObject)> {
     // Convert Python file-like object to Read implementation
     let reader = PyFileLikeObject::new(reader)?;
     let destination = Path::new(&destination);
 
     // Call the Rust function
-    match rattler_package_streaming::read::extract_tar_bz2(reader, destination) {
+    match rattler_package_streaming::read::extract_tar_bz2(reader, destination, cas_root.as_deref())
+    {
         Ok(result) => Ok(convert_result(py, result)),
         Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())),
     }
 }
 
 #[pyfunction]
+#[pyo3(signature = (source, destination, cas_root=None))]
 pub fn extract(
     py: Python<'_>,
     source: PathBuf,
     destination: PathBuf,
+    cas_root: Option<PathBuf>,
 ) -> PyResult<(PyObject, PyObject)> {
-    match rattler_package_streaming::fs::extract(&source, &destination) {
+    match rattler_package_streaming::fs::extract(&source, &destination, cas_root.as_deref()) {
         Ok(result) => Ok(convert_result(py, result)),
         Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())),
     }
@@ -45,13 +50,14 @@ pub fn extract(
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-#[pyo3(signature = (client, url, destination, expected_sha256=None))]
+#[pyo3(signature = (client, url, destination, expected_sha256=None, cas_root=None))]
 pub fn download_and_extract<'a>(
     py: Python<'a>,
     client: PyClientWithMiddleware,
     url: String,
     destination: PathBuf,
     expected_sha256: Option<Bound<'_, PyBytes>>,
+    cas_root: Option<PathBuf>,
 ) -> PyResult<Bound<'a, PyAny>> {
     // Parse URL
     let url = Url::parse(&url).map_err(|e| {
@@ -69,6 +75,7 @@ pub fn download_and_extract<'a>(
             client.into(),
             url,
             &destination,
+            cas_root.as_deref(),
             sha256,
             None,
         )

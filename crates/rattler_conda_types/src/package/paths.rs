@@ -273,7 +273,7 @@ mod test {
             "f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97",
         )
         .unwrap();
-        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path(), None).unwrap();
 
         let paths_json = PathsJson::from_package_directory(package_dir.path()).unwrap();
         insta::assert_yaml_snapshot!(paths_json);
@@ -289,7 +289,7 @@ mod test {
             "ee9172dbe9ebd158e8e68d6d0f7dc2060f0c8230b44d2e9a3595b7cd7336b915",
         )
         .unwrap();
-        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path(), None).unwrap();
 
         insta::assert_yaml_snapshot!(PathsJson::from_deprecated_package_directory(
             package_dir.path()
@@ -309,7 +309,7 @@ mod test {
             "85fcb6906b8686fe6341db89b4e6fc2631ad69ee6eab2f4823bfd64ae0b20ac8",
         )
         .unwrap();
-        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path(), None).unwrap();
 
         let package_dir = package_dir.keep();
         println!("{}", package_dir.display());

@@ -103,6 +103,7 @@ async fn get_reader(
 ///     Url::parse("https://conda.anaconda.org/conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.tar.bz2").unwrap(),
 ///     Path::new("/tmp"),
 ///     None,
+///     None,
 ///     None)
 ///     .await
 ///     .unwrap();
@@ -112,12 +113,13 @@ pub async fn extract_tar_bz2(
     client: reqwest_middleware::ClientWithMiddleware,
     url: Url,
     destination: &Path,
+    cas_root: Option<&Path>,
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
     let reader = get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
     // The `response` is used to stream in the package data
-    let result = crate::tokio::async_read::extract_tar_bz2(reader, destination).await?;
+    let result = crate::tokio::async_read::extract_tar_bz2(reader, destination, cas_root).await?;
     if let Some(reporter) = &reporter {
         reporter.on_download_complete();
     }
@@ -140,6 +142,7 @@ pub async fn extract_tar_bz2(
 ///     Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap(),
 ///     Path::new("/tmp"),
 ///     None,
+///     None,
 ///     None)
 ///     .await
 ///     .unwrap();
@@ -149,6 +152,7 @@ pub async fn extract_conda(
     client: reqwest_middleware::ClientWithMiddleware,
     url: Url,
     destination: &Path,
+    cas_root: Option<&Path>,
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
@@ -160,7 +164,7 @@ pub async fn extract_conda(
         reporter.clone(),
     )
     .await?;
-    match crate::tokio::async_read::extract_conda(reader, destination).await {
+    match crate::tokio::async_read::extract_conda(reader, destination, cas_root).await {
         Ok(result) => {
             if let Some(reporter) = &reporter {
                 reporter.on_download_complete();
@@ -178,8 +182,12 @@ pub async fn extract_conda(
             let new_reader =
                 get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
 
-            match crate::tokio::async_read::extract_conda_via_buffering(new_reader, destination)
-                .await
+            match crate::tokio::async_read::extract_conda_via_buffering(
+                new_reader,
+                destination,
+                cas_root,
+            )
+            .await
             {
                 Ok(result) => {
                     if let Some(reporter) = &reporter {
@@ -210,6 +218,7 @@ pub async fn extract_conda(
 ///     Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap(),
 ///     Path::new("/tmp"),
 ///     None,
+///     None,
 ///     None)
 ///     .await
 ///     .unwrap();
@@ -219,6 +228,7 @@ pub async fn extract(
     client: reqwest_middleware::ClientWithMiddleware,
     url: Url,
     destination: &Path,
+    cas_root: Option<&Path>,
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
@@ -226,10 +236,10 @@ pub async fn extract(
         .ok_or(ExtractError::UnsupportedArchiveType)?
     {
         CondaArchiveType::TarBz2 => {
-            extract_tar_bz2(client, url, destination, expected_sha256, reporter).await
+            extract_tar_bz2(client, url, destination, cas_root, expected_sha256, reporter).await
         }
         CondaArchiveType::Conda => {
-            extract_conda(client, url, destination, expected_sha256, reporter).await
+            extract_conda(client, url, destination, cas_root, expected_sha256, reporter).await
         }
     }
 }
