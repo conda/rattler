@@ -16,15 +16,16 @@ rustls-tls = [
   "reqwest/rustls-tls",
   "rattler_networking/rustls-tls",
   "rattler_package_streaming/rustls-tls",
-  "sigstore-sign/rustls-tls",
+  "sigstore-sign?/rustls-tls",
 ]
 native-tls = [
   "reqwest/native-tls",
   "rattler_networking/native-tls",
   "rattler_package_streaming/native-tls",
-  "sigstore-sign/native-tls",
+  "sigstore-sign?/native-tls",
 ]
 s3 = ["rattler_networking/s3", "rattler_s3", "dep:opendal"]
+sigstore-sign = ["dep:sigstore-sign"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -32,7 +33,7 @@ all-features = true
 [dependencies]
 rattler_conda_types = { workspace = true, default-features = false }
 rattler_digest = { workspace = true, default-features = false }
-rattler_networking = { workspace = true, features = ["rattler_config" ]}
+rattler_networking = { workspace = true, features = ["rattler_config"] }
 rattler_redaction = { workspace = true, default-features = false }
 rattler_package_streaming = { workspace = true, default-features = false }
 rattler_config = { workspace = true, default-features = false }
@@ -45,12 +46,12 @@ futures = { workspace = true }
 indicatif = { workspace = true }
 opendal = { workspace = true, optional = true, default-features = false, features = [
   "services-s3",
-]}
+] }
 reqwest-retry = { workspace = true }
 tokio-util = { workspace = true, features = ["codec", "compat"] }
 reqwest = { workspace = true, default-features = false, features = [
   "multipart",
-]}
+] }
 url = { workspace = true }
 tracing = { workspace = true }
 reqwest-middleware = { workspace = true, features = ["json"] }
@@ -66,7 +67,7 @@ tokio = { workspace = true, features = [
   "rt-multi-thread",
   "process",
 ] }
-sigstore-sign = { workspace = true, default-features = false }
+sigstore-sign = { workspace = true, optional = true, default-features = false }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 sha2 = { workspace = true, features = ["asm"] }
