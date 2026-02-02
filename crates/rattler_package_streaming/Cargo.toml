@@ -16,9 +16,7 @@ chrono = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"], optional = true }
 futures-util = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
-rattler_digest = { workspace = true, default-features = false, features = [
-  "tokio",
-] }
+rattler_digest = { workspace = true, default-features = false, features = ["tokio"] }
 rattler_networking = { workspace = true, default-features = false }
 rattler_redaction = { workspace = true, features = [
   "reqwest",
@@ -63,7 +61,7 @@ features = ["reqwest"]
 [dev-dependencies]
 assert_matches = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread"] }
-tools = { path = "../tools", default-features = false }
+tools = { path = "../tools" }
 walkdir = { workspace = true }
 rstest = { workspace = true }
 rstest_reuse = { workspace = true }

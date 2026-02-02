@@ -15,12 +15,7 @@ cfg-if = { workspace = true }
 coalesced_map = { workspace = true }
 fs-err = { workspace = true }
 anyhow = { workspace = true }
-async-compression = { workspace = true, features = [
-  "gzip",
-  "tokio",
-  "bzip2",
-  "zstd",
-] }
+async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
 async-trait = { workspace = true, optional = true }
 blake2 = { workspace = true }
 bytes = { workspace = true }
@@ -32,10 +27,7 @@ file_url = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
 http = { workspace = true, optional = true }
-http-cache-semantics = { workspace = true, optional = true, features = [
-  "reqwest",
-  "serde",
-] }
+http-cache-semantics = { workspace = true, optional = true, features = ["reqwest", "serde"] }
 humansize = { workspace = true }
 humantime = { workspace = true }
 indicatif = { workspace = true, optional = true }
@@ -45,10 +37,7 @@ self_cell = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
 pin-project-lite = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false, optional = true }
-rattler_digest = { workspace = true, default-features = false, features = [
-  "tokio",
-  "serde",
-] }
+rattler_digest = { workspace = true, default-features = false, features = ["tokio", "serde"] }
 rattler_networking = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["stream", "http2"] }
 reqwest-middleware = { workspace = true }
@@ -67,22 +56,15 @@ tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 zstd = { workspace = true }
 retry-policies = { workspace = true }
-rattler_cache = { workspace = true, default-features = false }
-rattler_redaction = { workspace = true, features = [
-  "reqwest",
-  "reqwest-middleware",
-] }
+rattler_cache = { workspace = true }
+rattler_redaction = { workspace = true, features = ["reqwest", "reqwest-middleware"] }
 rattler_config = { workspace = true, optional = true, default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = [
-  "Win32_Storage_FileSystem",
-  "Win32_Foundation",
-  "Win32_System_IO",
-] }
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 async-fd-lock = { workspace = true }
@@ -108,45 +90,16 @@ rattler_conda_types = { path = "../rattler_conda_types", default-features = fals
 regex = { workspace = true }
 rstest = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
-tools = { path = "../tools", default-features = false }
-tower-http = { workspace = true, features = [
-  "fs",
-  "compression-gzip",
-  "trace",
-] }
+tools = { path = "../tools" }
+tower-http = { workspace = true, features = ["fs", "compression-gzip", "trace"] }
 tracing-test = { workspace = true }
 
 [features]
 default = ['rustls-tls']
-native-tls = [
-  'reqwest/native-tls',
-  'reqwest/native-tls-alpn',
-  'rattler_networking/native-tls',
-  'rattler_cache/native-tls',
-  'rattler_redaction/native-tls',
-]
-rustls-tls = [
-  'reqwest/rustls-tls',
-  'rattler_networking/rustls-tls',
-  'rattler_cache/rustls-tls',
-  'rattler_redaction/rustls-tls',
-]
-sparse = [
-  "rattler_conda_types",
-  "memmap2",
-  "self_cell",
-  "superslice",
-  "itertools",
-  "serde_json/raw_value",
-]
-gateway = [
-  "sparse",
-  "http",
-  "http-cache-semantics",
-  "parking_lot",
-  "async-trait",
-  "rattler_package_streaming",
-]
+native-tls = ['reqwest/native-tls', 'reqwest/native-tls-alpn', 'rattler_networking/native-tls', 'rattler_cache/native-tls', 'rattler_redaction/native-tls']
+rustls-tls = ['reqwest/rustls-tls', 'rattler_networking/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_redaction/rustls-tls']
+sparse = ["rattler_conda_types", "memmap2", "self_cell", "superslice", "itertools", "serde_json/raw_value"]
+gateway = ["sparse", "http", "http-cache-semantics", "parking_lot", "async-trait", "rattler_package_streaming"]
 
 [package.metadata.docs.rs]
 features = ["sparse", "gateway"]
