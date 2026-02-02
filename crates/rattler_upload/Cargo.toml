@@ -11,7 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ["rustls-tls"]
+default = ["rustls-tls", "s3", "sigstore-sign"]
 rustls-tls = [
   "reqwest/rustls-tls",
   "rattler_networking/rustls-tls",
