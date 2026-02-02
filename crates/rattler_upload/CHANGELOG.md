@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.11](https://github.com/conda/rattler/compare/rattler_upload-v0.4.10...rattler_upload-v0.4.11) - 2026-02-02
+
+### Fixed
+
+- OIDC ambient token detection with sigstore-rust 0.6.1 ([#2017](https://github.com/conda/rattler/pull/2017))
+
 ## [0.4.10](https://github.com/conda/rattler/compare/rattler_upload-v0.4.9...rattler_upload-v0.4.10) - 2026-01-22
 
 ### Other
