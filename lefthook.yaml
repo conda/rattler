@@ -53,12 +53,12 @@ pre-commit:
     - name: typos
       stage_fixed: true
       run: pixi {run} typos
-    - name: check-native-tls-no-rustls
-      glob: "**/Cargo.toml"
-      run: ./scripts/check-native-tls-no-rustls.sh
 
 pre-push:
   jobs:
     - name: cargo-clippy
       glob: "*.rs"
       run: pixi {run} cargo-clippy
+    - name: check-native-tls-no-rustls
+      glob: "**/Cargo.toml"
+      run: ./scripts/check-native-tls-no-rustls.sh
