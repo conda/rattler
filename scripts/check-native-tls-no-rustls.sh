@@ -2,7 +2,7 @@
 # Check that no package pulls in rustls when using native-tls feature
 # (except rattler_s3 which requires rustls due to AWS SDK limitations)
 
-set -e
+set -euxo pipefail
 
 SKIP_PACKAGES="rattler_s3"
 
