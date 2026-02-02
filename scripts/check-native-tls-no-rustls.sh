@@ -27,11 +27,11 @@ for package in $packages; do
     has_native_tls=$(cargo metadata --no-deps --format-version 1 | jq -r --arg pkg "$package" '.packages[] | select(.name == $pkg) | .features | has("native-tls")')
 
     if [ "$has_native_tls" = "true" ]; then
-        # Run cargo tree with native-tls feature
-        output=$(cargo tree -i rustls --no-default-features --features native-tls --package "$package" --locked 2>&1 || true)
+        # Run cargo tree with native-tls feature (prod dependencies only)
+        output=$(cargo tree -i rustls --no-default-features --features native-tls --package "$package" --locked --edges=normal 2>&1 || true)
     else
-        # Run cargo tree without native-tls feature (just check default has no rustls)
-        output=$(cargo tree -i rustls --no-default-features --package "$package" --locked 2>&1 || true)
+        # Run cargo tree without native-tls feature (prod dependencies only)
+        output=$(cargo tree -i rustls --no-default-features --package "$package" --locked --edges=normal 2>&1 || true)
     fi
 
     if echo "$output" | grep -q "^rustls"; then
