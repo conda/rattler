@@ -11,7 +11,20 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-s3 = ["rattler_networking/s3", "rattler_s3"]
+default = ["rustls-tls"]
+rustls-tls = [
+  "reqwest/rustls-tls",
+  "rattler_networking/rustls-tls",
+  "rattler_package_streaming/rustls-tls",
+  "sigstore-sign/rustls-tls",
+]
+native-tls = [
+  "reqwest/native-tls",
+  "rattler_networking/native-tls",
+  "rattler_package_streaming/native-tls",
+  "sigstore-sign/native-tls",
+]
+s3 = ["rattler_networking/s3", "rattler_s3", "dep:opendal"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -30,7 +43,7 @@ clap = { workspace = true, features = ["env"] }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indicatif = { workspace = true }
-opendal = { workspace = true , default-features = false, features = [
+opendal = { workspace = true, optional = true, default-features = false, features = [
   "services-s3",
 ]}
 reqwest-retry = { workspace = true }
@@ -53,7 +66,7 @@ tokio = { workspace = true, features = [
   "rt-multi-thread",
   "process",
 ] }
-sigstore-sign = { workspace = true, optional = true }
+sigstore-sign = { workspace = true, default-features = false }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 sha2 = { workspace = true, features = ["asm"] }
