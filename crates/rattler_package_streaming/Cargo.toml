@@ -61,7 +61,7 @@ features = ["reqwest"]
 [dev-dependencies]
 assert_matches = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread"] }
-tools = { path = "../tools" }
+tools = { path = "../tools", default-features = false }
 walkdir = { workspace = true }
 rstest = { workspace = true }
 rstest_reuse = { workspace = true }

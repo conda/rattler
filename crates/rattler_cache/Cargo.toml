@@ -51,5 +51,5 @@ futures = { workspace = true }
 rstest = { workspace = true }
 tokio-stream = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
-tools = { path = "../tools" }
+tools = { path = "../tools", default-features = false }
 reqwest-retry = { workspace = true }

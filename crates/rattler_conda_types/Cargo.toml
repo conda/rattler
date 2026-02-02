@@ -71,16 +71,14 @@ insta = { workspace = true, features = [
   "glob",
   "filters",
 ] }
-rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = [
-  "rustls-tls",
-] }
+rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false }
 rstest = { workspace = true }
 assert_matches = { workspace = true }
 hex-literal = { workspace = true }
 criterion = { workspace = true, features = ["html_reports"] }
 pathdiff = { workspace = true }
 dunce = { workspace = true }
-tools = { path = "../tools" }
+tools = { path = "../tools", default-features = false }
 
 [[bench]]
 name = "parse"

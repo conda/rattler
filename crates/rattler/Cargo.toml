@@ -67,7 +67,7 @@ rstest = { workspace = true }
 tracing-test = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
 rattler_lock = { path = "../rattler_lock" }
-tools = { path="../tools" }
+tools = { path="../tools", default-features = false }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 axum = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
