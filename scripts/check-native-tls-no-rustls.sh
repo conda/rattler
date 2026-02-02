@@ -17,11 +17,11 @@ for package in $packages; do
     # Skip packages that are known to require rustls
     if echo "$SKIP_PACKAGES" | grep -qw "$package"; then
         echo "SKIP: $package (known rustls dependency)"
-        ((skipped++))
+        ((++skipped))
         continue
     fi
 
-    ((checked++))
+    ((++checked))
 
     # Check if the package has native-tls feature
     has_native_tls=$(cargo metadata --no-deps --format-version 1 | jq -r --arg pkg "$package" '.packages[] | select(.name == $pkg) | .features | has("native-tls")')
@@ -38,7 +38,7 @@ for package in $packages; do
         echo "FAIL: $package has rustls dependency"
         echo "$output" | head -20
         echo ""
-        ((failed++))
+        ((++failed))
     else
         echo "OK:   $package"
     fi
