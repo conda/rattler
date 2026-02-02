@@ -1,13 +1,16 @@
 #!/bin/bash
-# Check that no package pulls in rustls when using native-tls feature
+# Check that no package pulls in rustls when all features except rustls-tls are enabled
 # (except rattler_s3 which requires rustls due to AWS SDK limitations)
 
 set -euo pipefail
 
 SKIP_PACKAGES="rattler_s3"
 
+# Get workspace metadata once
+metadata=$(cargo metadata --no-deps --format-version 1)
+
 # Get all workspace packages
-packages=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[].name')
+packages=$(echo "$metadata" | jq -r '.packages[].name')
 
 failed=0
 checked=0
@@ -23,14 +26,15 @@ for package in $packages; do
 
     ((++checked))
 
-    # Check if the package has native-tls feature
-    has_native_tls=$(cargo metadata --no-deps --format-version 1 | jq -r --arg pkg "$package" '.packages[] | select(.name == $pkg) | .features | has("native-tls")')
+    # Get all features except rustls-tls, s3, gcp, and default for this package
+    features=$(echo "$metadata" | jq -r --arg pkg "$package" '
+        .packages[] | select(.name == $pkg) | .features | keys[] | select(. != "rustls-tls" and . != "default" and . != "s3" and . != "gcp")
+    ' | tr '\n' ',' | sed 's/,$//')
 
-    if [ "$has_native_tls" = "true" ]; then
-        # Run cargo tree with native-tls feature (prod dependencies only)
-        output=$(cargo tree -i rustls --no-default-features --features native-tls --package "$package" --locked --edges=normal 2>&1 || true)
+    # Run cargo tree with all features except skipped features (prod dependencies only)
+    if [ -n "$features" ]; then
+        output=$(cargo tree -i rustls --no-default-features --features "$features" --package "$package" --locked --edges=normal 2>&1 || true)
     else
-        # Run cargo tree without native-tls feature (prod dependencies only)
         output=$(cargo tree -i rustls --no-default-features --package "$package" --locked --edges=normal 2>&1 || true)
     fi
 
