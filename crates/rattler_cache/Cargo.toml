@@ -11,8 +11,8 @@ readme.workspace = true
 
 [features]
 default = ["rustls-tls"]
-rustls-tls = ["reqwest/rustls-tls", "reqwest-middleware/rustls-tls", "rattler_networking/rustls-tls", "rattler_package_streaming/rustls-tls"]
-native-tls = ["reqwest/native-tls", "rattler_networking/native-tls", "rattler_package_streaming/native-tls"]
+rustls-tls = ["reqwest/rustls-tls", "reqwest-middleware/rustls-tls", "rattler_networking/rustls-tls", "rattler_package_streaming/rustls-tls", "tools/rustls-tls"]
+native-tls = ["reqwest/native-tls", "rattler_networking/native-tls", "rattler_package_streaming/native-tls", "tools/native-tls"]
 
 [dependencies]
 

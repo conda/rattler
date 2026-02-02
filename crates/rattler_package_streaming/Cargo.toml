@@ -50,8 +50,8 @@ getrandom_v02 = { package = "getrandom", version = "0.2", features = ["js"] }
 
 [features]
 default = ["rustls-tls"]
-native-tls = ["rattler_networking/native-tls", "rattler_redaction/native-tls"]
-rustls-tls = ["rattler_networking/rustls-tls", "rattler_redaction/rustls-tls"]
+native-tls = ["rattler_networking/native-tls", "rattler_redaction/native-tls", "tools/native-tls"]
+rustls-tls = ["rattler_networking/rustls-tls", "rattler_redaction/rustls-tls", "tools/rustls-tls"]
 reqwest = ["dep:reqwest-middleware", "dep:reqwest", "dep:fs-err"]
 wasm = ["zstd/wasm"]
 

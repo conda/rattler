@@ -12,8 +12,8 @@ readme.workspace = true
 
 [features]
 default = ['rustls-tls']
-native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
-rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_networking/rustls-tls']
+native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls', 'tools/native-tls']
+rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_networking/rustls-tls', 'tools/rustls-tls']
 cli-tools = ['dep:clap', 'reqwest/blocking']
 indicatif = ['dep:indicatif', 'dep:console']
 

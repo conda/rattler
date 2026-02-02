@@ -19,6 +19,7 @@ native-tls = [
   "rattler_package_streaming/native-tls",
   "rattler_networking/native-tls",
   "rattler_s3?/native-tls",
+  "tools/native-tls",
 ]
 rustls-tls = [
   "reqwest/rustls-tls",
@@ -26,6 +27,7 @@ rustls-tls = [
   "rattler_package_streaming/rustls-tls",
   "rattler_networking/rustls-tls",
   "rattler_s3?/rustls-tls",
+  "tools/rustls-tls",
 ]
 s3 = ["opendal/services-s3", "dep:rattler_s3"]
 rattler_config = ["dep:rattler_config"]

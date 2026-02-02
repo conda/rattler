@@ -124,12 +124,14 @@ native-tls = [
   'rattler_networking/native-tls',
   'rattler_cache/native-tls',
   'rattler_redaction/native-tls',
+  'tools/native-tls',
 ]
 rustls-tls = [
   'reqwest/rustls-tls',
   'rattler_networking/rustls-tls',
   'rattler_cache/rustls-tls',
   'rattler_redaction/rustls-tls',
+  'tools/rustls-tls',
 ]
 sparse = [
   "rattler_conda_types",
