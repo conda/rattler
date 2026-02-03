@@ -34,6 +34,8 @@ pub(crate) struct PypiPackageDataModel<'a> {
     pub location: Cow<'a, Verbatim<UrlOrPath>>,
     pub name: Cow<'a, PackageName>,
     pub version: Cow<'a, pep440_rs::Version>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index: Cow<'a, Option<url::Url>>,
     #[serde(default, skip_serializing_if = "Option::is_none", flatten)]
     pub hash: Cow<'a, Option<PackageHashes>>,
     #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
@@ -48,6 +50,7 @@ impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
             name: value.name.into_owned(),
             version: value.version.into_owned(),
             location: value.location.into_owned(),
+            index: value.index.into_owned(),
             hash: value.hash.into_owned(),
             requires_dist: value.requires_dist.into_owned(),
             requires_python: value.requires_python.into_owned(),
@@ -66,6 +69,7 @@ impl<'a> From<&'a PypiPackageData> for PypiPackageDataModel<'a> {
             name: Cow::Borrowed(&value.name),
             version: Cow::Borrowed(&value.version),
             location: Cow::Borrowed(&value.location),
+            index: Cow::Borrowed(&value.index),
             hash: Cow::Borrowed(&value.hash),
             requires_dist: requires_dist.into(),
             requires_python: Cow::Borrowed(&value.requires_python),

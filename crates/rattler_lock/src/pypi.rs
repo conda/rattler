@@ -18,6 +18,9 @@ pub struct PypiPackageData {
     /// The location of the package. This can be a URL or a path.
     pub location: Verbatim<UrlOrPath>,
 
+    /// The index URL from which this package was resolved.
+    pub index: Option<url::Url>,
+
     /// Hashes of the file pointed to by `url`.
     pub hash: Option<PackageHashes>,
 

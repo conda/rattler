@@ -216,6 +216,7 @@ pub fn parse_v3_or_lower(
                         requires_dist: pkg.requires_dist,
                         requires_python: pkg.requires_python,
                         location: Verbatim::new(UrlOrPath::Url(pkg.url)),
+                        index: None,
                         hash: pkg.hash,
                     })
                     .0;
