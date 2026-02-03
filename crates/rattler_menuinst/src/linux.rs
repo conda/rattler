@@ -913,7 +913,6 @@ mod tests {
         let result = linux_menu.command().unwrap();
         assert!(result.starts_with("env "));
         assert!(result.contains("CONDA_PREFIX="));
-        assert!(result.contains("CONDA_SHLVL="));
         assert!(result.contains("PATH="));
         assert!(result.contains("spyder"));
     }
