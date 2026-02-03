@@ -38,7 +38,7 @@ pub async fn install_package_to_environment(
         ..PrefixRecord::from_repodata_record(repodata_record, paths)
     };
 
-    // Create the conda-meta directory if it doesnt exist yet.
+    // Create the conda-meta directory if it doesn't exist yet.
     let target_prefix = target_prefix.path().to_path_buf();
     let result = tokio::task::spawn_blocking(move || {
         let conda_meta_path = target_prefix.join("conda-meta");

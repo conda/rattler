@@ -40,7 +40,7 @@ pub fn extract_conda_via_streaming(
     reader: impl Read,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    // Construct the destination path if it doesnt exist yet
+    // Construct the destination path if it doesn't exist yet
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
 
     process_with_hashing(reader, |reader| {

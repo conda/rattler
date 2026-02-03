@@ -190,7 +190,7 @@ impl PathResolver {
         //   - Use peekable iterator to know if we're at the last component
         //
         // 3. During traversal, detect "File blocks Directory" conflict:
-        //   - If we're not at the last component (still have subdirs to traverse)
+        //   - If we're not at the last component (still have subdirectories to traverse)
         //   - BUT current node has terminals (meaning a file exists here)
         //   - Then we have a conflict: existing file blocks our directory path
         //   - Example: If "foo/bar" is a file, we can't insert "foo/bar/baz.txt"
@@ -522,7 +522,7 @@ New:
     /// Move files on-disk:
     ///
     /// - For each `(p,pkg)` in `to_clobbers`:  `base/p` → `clobbers/pkg/p` if `base/p` exists and dest doesn’t.
-    /// - For each `(p,pkg)` in `from_clobers`: `clobbers/pkg/p` → `base/p` if source exists and dest doesn’t.
+    /// - For each `(p,pkg)` in `from_clobbers`: `clobbers/pkg/p` → `base/p` if source exists and dest doesn’t.
     pub fn sync_clobbers(
         target_prefix: &Path,
         clobbers_dir: &Path,

@@ -314,7 +314,7 @@ pub enum SolveStrategy {
     ///
     /// All candidates with the same version are still ordered the same as
     /// with `Default`. This ensures that the candidate with the highest build
-    /// number is used and downprioritization still works.
+    /// number is used and down-prioritization still works.
     LowestVersion,
 
     /// Resolve the lowest compatible version for direct dependencies but the

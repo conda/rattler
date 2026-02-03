@@ -22,7 +22,7 @@ use crate::record::PyRecord;
 /// source, it must be implemented within the source itself.
 ///
 /// **Performance:** Custom sources are slower than channels because data must be
-/// marshalled between Python and Rust for each request. For performance-critical
+/// marshaled between Python and Rust for each request. For performance-critical
 /// applications, channels should be preferred when possible.
 pub struct PyRepoDataSource {
     inner: Py<PyAny>,

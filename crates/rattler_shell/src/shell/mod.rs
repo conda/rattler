@@ -722,7 +722,7 @@ impl Shell for Fish {
     }
 
     fn format_env_var(&self, var_name: &str) -> String {
-        // Fish doesnt want the extra brackets '{}'
+        // Fish doesn't want the extra brackets '{}'
         format!("${var_name}")
     }
 
@@ -993,7 +993,7 @@ impl ShellEnum {
     }
 }
 
-/// Parsing of a shell was not possible. The shell mostlikely is not supported.
+/// Parsing of a shell was not possible. The shell most likely is not supported.
 #[derive(Debug, Error)]
 #[error("{0}")]
 pub struct ParseShellEnumError(String);

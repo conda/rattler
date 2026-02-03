@@ -13,7 +13,7 @@ mod writer;
 /// Returns a global instance of [`indicatif::MultiProgress`].
 ///
 /// Although you can always create an instance yourself any logging will
-/// interrupt pending progressbars. To fix this issue, logging has been
+/// interrupt pending progress bars. To fix this issue, logging has been
 /// configured in such a way to it will not interfere if you use the
 /// [`indicatif::MultiProgress`] returning by this function.
 pub fn global_multi_progress() -> MultiProgress {

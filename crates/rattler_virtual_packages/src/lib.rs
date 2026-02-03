@@ -595,10 +595,10 @@ impl From<Cuda> for VirtualPackage {
 /// Archspec describes the CPU architecture
 #[derive(Clone, Debug)]
 pub enum Archspec {
-    /// A microarchitecture from the archspec library.
+    /// A micro-architecture from the archspec library.
     Microarchitecture(Arc<Microarchitecture>),
 
-    /// An unknown microarchitecture
+    /// An unknown micro-architecture
     Unknown,
 }
 

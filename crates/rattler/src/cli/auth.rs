@@ -417,7 +417,7 @@ mod tests {
         let (storage, _temp_dir) = create_test_storage();
         let mut args = create_login_args("example.com");
         args.username = Some("testuser".to_string());
-        // password I set herer is:  None
+        // password I set here is:  None
         let result = login(args, storage).await;
         assert!(matches!(
             result,

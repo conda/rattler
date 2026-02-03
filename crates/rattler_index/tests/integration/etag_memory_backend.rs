@@ -579,7 +579,7 @@ mod tests {
         assert_eq!(data.to_bytes(), "hello world");
     }
 
-    /// Validates that ETags are generated and change when file content changes.
+    /// Validates that `ETag`s are generated and change when file content changes.
     #[tokio::test]
     async fn test_etag_generation() {
         let op = Operator::new(ETagMemoryBuilder::default())
@@ -603,8 +603,8 @@ mod tests {
 
     /// Validates that conditional reads with if-match work correctly.
     ///
-    /// Tests that reads succeed when ETag matches and fail with
-    /// ConditionNotMatch when it doesn't.
+    /// Tests that reads succeed when `ETag` matches and fail with
+    /// `ConditionNotMatch` when it doesn't.
     #[tokio::test]
     async fn test_conditional_read_with_if_match() {
         let op = Operator::new(ETagMemoryBuilder::default())
@@ -627,8 +627,8 @@ mod tests {
 
     /// Validates that conditional writes with if-match work correctly.
     ///
-    /// Tests that writes succeed when ETag matches and fail with
-    /// ConditionNotMatch when it doesn't.
+    /// Tests that writes succeed when `ETag` matches and fail with
+    /// `ConditionNotMatch` when it doesn't.
     #[tokio::test]
     async fn test_conditional_write_with_if_match() {
         let op = Operator::new(ETagMemoryBuilder::default())

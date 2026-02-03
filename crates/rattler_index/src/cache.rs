@@ -171,7 +171,7 @@ impl PackageRecordCache {
 /// Read a package file with retry logic for handling concurrent modifications.
 ///
 /// Uses conditional requests (`if-match`/`if-unmodified-since`) to ensure reading the
-/// same version that was stat'ed. Retries with exponential backoff if the file changes
+/// same version that was stated. Retries with exponential backoff if the file changes
 /// between `stat()` and `read()`.
 ///
 /// Only retries on [`ErrorKind::ConditionNotMatch`]. Falls back to simple `read()` for

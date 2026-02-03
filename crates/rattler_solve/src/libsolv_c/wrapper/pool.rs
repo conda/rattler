@@ -25,7 +25,7 @@ pub enum DistType {
     Conda = ffi::DISTTYPE_CONDA,
 }
 
-/// Wrapper for libsolv Pool, the interning datastructure used by libsolv
+/// Wrapper for libsolv Pool, the interning data-structure used by libsolv
 ///
 /// The wrapper functions as an owned pointer, guaranteed to be non-null and freed
 /// when the Pool is dropped

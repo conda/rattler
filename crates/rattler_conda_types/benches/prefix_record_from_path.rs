@@ -96,7 +96,7 @@ fn convert_to_new_format(
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    // Create two directoriew with old and new format.
+    // Create two directories with old and new format.
     let files = get_test_files();
 
     let temp_dir = tempfile::tempdir().unwrap();

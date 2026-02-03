@@ -237,7 +237,7 @@ pub struct InstallOptions {
     /// For binaries on macOS (both Intel and Apple Silicon), binaries need to be signed
     /// with an ad-hoc certificate to properly work when their signature has been invalidated
     /// by prefix replacement (modifying binary content). This field controls whether or not to do that.
-    /// Code signing is executed when the target platform is macOS. By default, codesigning
+    /// Code signing is executed when the target platform is macOS. By default, code signing
     /// will fail the installation if it fails. This behavior can be changed by setting
     /// this field to `AppleCodeSignBehavior::Ignore` or
     /// `AppleCodeSignBehavior::DoNothing`.

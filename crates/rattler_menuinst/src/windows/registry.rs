@@ -489,7 +489,7 @@ mod tests {
         // Setup
         register_file_extension(file_extension, mode)?;
 
-        // Test unregistration
+        // Test un-registration
         unregister_file_extension(extension, identifier, mode)?;
 
         // Verify removal

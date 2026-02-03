@@ -33,7 +33,7 @@ impl PyExplicitEnvironmentSpec {
     ///
     /// For example, if the file is in text format, this function reads the data from the file at
     /// the specified path, parses the text and returns the resulting object. If the file is
-    /// not in a parsable format or if the file could not be read, this function returns an error.
+    /// not in a parse-able format or if the file could not be read, this function returns an error.
     #[staticmethod]
     pub fn from_path(path: PathBuf) -> PyResult<Self> {
         Ok(ExplicitEnvironmentSpec::from_path(&path)
