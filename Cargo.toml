@@ -183,7 +183,7 @@ winver = { version = "1.0.0" }
 zip = { version = "6.0.0", default-features = false }
 zstd = { version = "0.13.3", default-features = false }
 
-# These are the all the crates defined in the workspace. We pin all of them together because they are always updated in tendem.
+# These are the all the crates defined in the workspace. We pin all of them together because they are always updated in tandem.
 coalesced_map = { path = "crates/coalesced_map", version = "=0.1.2", default-features = false }
 file_url = { path = "crates/file_url", version = "=0.2.7", default-features = false }
 path_resolver = { path = "crates/path_resolver", version = "=0.2.4", default-features = false }
