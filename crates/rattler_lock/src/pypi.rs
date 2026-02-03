@@ -43,12 +43,6 @@ impl Ord for PypiPackageData {
             .cmp(&other.name)
             .then_with(|| self.version.cmp(&other.version))
             .then_with(|| self.location.cmp(&other.location))
-            .then_with(|| {
-                self.index
-                    .as_ref()
-                    .map(|u| u.as_str())
-                    .cmp(&other.index.as_ref().map(|u| u.as_str()))
-            })
             .then_with(|| self.hash.cmp(&other.hash))
     }
 }
