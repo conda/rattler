@@ -7,6 +7,7 @@ use rattler_conda_types::{PackageName, Platform, VersionWithSource};
 use serde::{de::Error, Deserialize, Deserializer};
 use serde_with::{serde_as, DeserializeAs};
 use serde_yaml::Value;
+use url::Url;
 
 use crate::{
     file_format_version::FileFormatVersion,
@@ -58,7 +59,7 @@ pub struct PypiPackageDataRaw {
     pub location: Verbatim<UrlOrPath>,
 
     /// The index URL from which this package was resolved.
-    pub index: Option<url::Url>,
+    pub index: Option<Url>,
 
     /// Hashes of the file pointed to by `url`.
     pub hash: Option<PackageHashes>,
