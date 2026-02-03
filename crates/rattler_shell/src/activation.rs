@@ -1041,6 +1041,7 @@ mod tests {
             .collect::<BTreeMap<_, _>>();
 
         // Remove system specific environment variables.
+        env_diff.remove("CONDA_SHLVL");
         env_diff.remove("CONDA_PREFIX");
         env_diff.remove("Path");
         env_diff.remove("PATH");
