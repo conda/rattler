@@ -57,6 +57,9 @@ pub struct PypiPackageDataRaw {
     /// The location of the package. This can be a URL or a path.
     pub location: Verbatim<UrlOrPath>,
 
+    /// The index URL from which this package was resolved.
+    pub index: Option<url::Url>,
+
     /// Hashes of the file pointed to by `url`.
     pub hash: Option<PackageHashes>,
 
@@ -79,6 +82,7 @@ impl From<PypiPackageData> for PypiPackageDataRaw {
             name: value.name.clone(),
             version: value.version.clone(),
             location: value.location.clone(),
+            index: value.index.clone(),
             hash: value.hash.clone(),
             requires_dist,
             requires_python: value.requires_python.clone(),
@@ -344,6 +348,7 @@ fn convert_raw_pypi_package(
         name: raw_package.name,
         version: raw_package.version,
         location,
+        index: raw_package.index,
         hash: raw_package.hash,
         requires_dist,
         requires_python: raw_package.requires_python,

@@ -18,6 +18,9 @@ pub struct PypiPackageData {
     /// The location of the package. This can be a URL or a path.
     pub location: Verbatim<UrlOrPath>,
 
+    /// The index URL from which this package was resolved.
+    pub index: Option<url::Url>,
+
     /// Hashes of the file pointed to by `url`.
     pub hash: Option<PackageHashes>,
 
@@ -40,6 +43,12 @@ impl Ord for PypiPackageData {
             .cmp(&other.name)
             .then_with(|| self.version.cmp(&other.version))
             .then_with(|| self.location.cmp(&other.location))
+            .then_with(|| {
+                self.index
+                    .as_ref()
+                    .map(|u| u.as_str())
+                    .cmp(&other.index.as_ref().map(|u| u.as_str()))
+            })
             .then_with(|| self.hash.cmp(&other.hash))
     }
 }
