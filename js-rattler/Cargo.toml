@@ -36,14 +36,18 @@ thiserror = "2.0.12"
 
 rattler_conda_types = { path = "../crates/rattler_conda_types" }
 rattler_digest = { path = "../crates/rattler_digest" }
-rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", features = ["gateway"] }
-rattler_solve = { path = "../crates/rattler_solve", default-features = false, features = ["resolvo"] }
+rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", features = [
+  "gateway",
+] }
+rattler_solve = { path = "../crates/rattler_solve", default-features = false, features = [
+  "resolvo",
+] }
 
 url = "2.5.4"
 
 chrono = { version = "0.4.40", features = ["wasmbind"] }
-reqwest = { version = "0.12.24", default-features = false }
-reqwest-middleware = { version = "0.4.2", default-features = false }
+reqwest = { version = "0.13.1", default-features = false }
+reqwest-middleware = { version = "0.5.0", default-features = false }
 
 # We have transient dependency on getrandom 0.2.16 which needs to have the `js` feature
 # enabled.
