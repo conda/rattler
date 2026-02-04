@@ -176,6 +176,7 @@ impl PyPathsEntry {
         prefix_placeholder: Option<PyPrefixPlaceholder>,
         sha256: Option<Bound<'_, PyBytes>>,
         size_in_bytes: Option<u64>,
+        executable: Option<bool>
     ) -> PyResult<Self> {
         let sha256 = sha256.map(sha256_from_pybytes).transpose()?;
         Ok(Self {
@@ -186,6 +187,7 @@ impl PyPathsEntry {
                 prefix_placeholder: prefix_placeholder.map(Into::into),
                 sha256,
                 size_in_bytes,
+                executable
             },
         })
     }
@@ -357,11 +359,12 @@ impl From<PyPrefixPlaceholder> for PrefixPlaceholder {
 impl PyPrefixPlaceholder {
     /// Constructor
     #[new]
-    pub fn new(file_mode: PyFileMode, placeholder: &str) -> PyResult<Self> {
+    pub fn new(file_mode: PyFileMode, placeholder: &str, offsets: Option<Vec<usize>>) -> PyResult<Self> {
         Ok(Self {
             inner: PrefixPlaceholder {
                 file_mode: file_mode.into(),
                 placeholder: placeholder.to_string(),
+                offsets: offsets,
             },
         })
     }

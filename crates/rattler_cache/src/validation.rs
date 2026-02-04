@@ -47,7 +47,7 @@ pub enum PackageValidationError {
     MetadataMissing,
 
     /// An error occurred with the version of the `path.json` file
-    #[error("")]
+    #[error("The version of the 'paths.json' did not correspond to the included fields")]
     VersionError(),
 
     /// An error occurred while reading the `paths.json` file.

@@ -214,7 +214,7 @@ pub fn link_file(
                     &target_prefix,
                     &target_platform,
                     *file_mode,
-                    offsets.clone(),
+                    offsets,
                 )
                 .map_err(|err| {
                     LinkFileError::IoError(String::from("replacing placeholders"), err)
@@ -248,11 +248,17 @@ pub fn link_file(
 
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+
+        let executable = if path_json_entry.executable.is_some() {
+            path_json_entry.executable.unwrap()
+        } else {
+            has_executable_permissions(&metadata.permissions())
+        };
+
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
         // This is required for all macOS platforms because prefix replacement modifies the binary
         // content, which invalidates existing signatures. We need to preserve entitlements.
-        if (has_executable_permissions(&metadata.permissions())
-            || file_type == Some(FileType::MachO))
+        if (executable || file_type == Some(FileType::MachO))
             && target_platform.is_osx()
             && *file_mode == FileMode::Binary
         {
@@ -601,7 +607,7 @@ pub fn copy_and_replace_placeholders_with_offsets(
     target_prefix: &str,
     target_platform: &Platform,
     file_mode: FileMode,
-    offsets: Vec<usize>,
+    offsets: &[usize],
 ) -> Result<(), std::io::Error> {
     match file_mode {
         FileMode::Text => {
@@ -792,7 +798,7 @@ pub fn copy_and_replace_textual_placeholder_offsets(
     prefix_placeholder: &str,
     target_prefix: &str,
     target_platform: &Platform,
-    offsets: Vec<usize>,
+    offsets: &[usize],
 ) -> Result<(), std::io::Error> {
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
@@ -816,7 +822,7 @@ pub fn copy_and_replace_textual_placeholder_offsets(
 
     let mut last_match = 0;
 
-    for offset in offsets {
+    for &offset in offsets {
         destination.write_all(&source_bytes[last_match..offset])?;
         destination.write_all(new_prefix)?;
         last_match = offset + old_prefix.len();
@@ -917,7 +923,7 @@ pub fn copy_and_replace_cstring_placeholder_offsets(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
-    offsets: Vec<usize>,
+    offsets: &[usize],
 ) -> Result<(), std::io::Error> {
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
@@ -929,43 +935,37 @@ pub fn copy_and_replace_cstring_placeholder_offsets(
         ));
     }
 
-    if offsets.is_empty() {
-        return destination.write_all(source_bytes);
-    }
-
     let mut last_pos = 0;
+    let length_change = old_prefix.len() - new_prefix.len();
+    let mut unfinished_changes = 0;
 
-    for &offset in &offsets {
+    for (index, &offset) in offsets.iter().enumerate() {
         destination.write_all(&source_bytes[last_pos..offset])?;
 
+        destination.write_all(new_prefix)?;
+
         let mut end = offset + old_prefix.len();
-        while end < source_bytes.len() && source_bytes[end] != b'\0' {
+        let next_offset = offsets
+            .get(index + 1)
+            .copied()
+            .unwrap_or(source_bytes.len());
+
+        while end < source_bytes.len() && source_bytes[end] != b'\0' && end < next_offset {
             end += 1;
         }
 
-        let segment = &source_bytes[offset..end];
-        let old_len = segment.len();
+        destination.write_all(&source_bytes[(offset + old_prefix.len())..end])?;
 
-        let mut out = Vec::with_capacity(old_len);
-        let mut remaining = segment;
-        let finder = memchr::memmem::Finder::new(old_prefix);
+        if end == next_offset {
+            unfinished_changes += 1;
+            last_pos = end;
+            continue;
+        };
 
-        while let Some(index) = finder.find(remaining) {
-            out.write_all(&remaining[..index])?;
-            out.write_all(new_prefix)?;
-            remaining = &remaining[index + old_prefix.len()..];
-        }
-        out.write_all(remaining)?;
-
-        if out.len() > old_len {
-            destination.write_all(&out[..old_len])?;
-        } else {
-            destination.write_all(&out)?;
-        }
-
-        let padding = old_len.saturating_sub(out.len());
+        let padding = (unfinished_changes + 1) * length_change;
         if padding > 0 {
             destination.write_all(&vec![0; padding])?;
+            unfinished_changes = 0;
         }
 
         last_pos = end;
@@ -1310,7 +1310,7 @@ mod test {
             prefix_placeholder,
             target_prefix,
             &Platform::Linux64,
-            offsets,
+            &offsets,
         )
         .unwrap();
         assert_eq!(
@@ -1345,7 +1345,7 @@ mod test {
             &mut output,
             prefix_placeholder,
             target_prefix,
-            offsets,
+            &offsets,
         )
         .unwrap();
         assert_eq!(&output.into_inner(), expected_output);
@@ -1368,27 +1368,38 @@ mod test {
             &mut output,
             prefix_placeholder,
             target_prefix,
-            offsets,
+            &offsets,
         );
         assert!(result.is_err());
     }
 
-    #[test]
-    fn replace_binary_path_var_offsets() {
-        let input =
-            b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/:\x00somemoretext";
+    #[rstest]
+    #[case(
+        b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/:\x00somemoretext", 
+        b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext",
+        [20, 43].to_vec()
+    )]
+    #[case(
+        b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/another/placeholder/:\x00somemoretext",
+        b"beginrandomdataPATH=/target/etc/share:/target/bin/another/target/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext",
+        [20, 43, 67].to_vec(),
+    )]
+    fn replace_binary_path_var_offsets(
+        #[case] input: &[u8],
+        #[case] result: &[u8],
+        #[case] offsets: Vec<usize>,
+    ) {
         let mut output = Cursor::new(Vec::new());
-        let offsets: Vec<usize> = [20].to_vec();
         super::copy_and_replace_cstring_placeholder_offsets(
             input,
             &mut output,
             "/placeholder",
             "/target",
-            offsets,
+            &offsets,
         )
         .unwrap();
         let out = &output.into_inner();
-        assert_eq!(out, b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext");
+        assert_eq!(out, result);
         assert_eq!(out.len(), input.len());
     }
 
@@ -1413,7 +1424,7 @@ mod test {
             prefix_placeholder,
             &target_prefix,
             &Platform::Linux64,
-            offsets,
+            &offsets,
         )
         .unwrap();
 
