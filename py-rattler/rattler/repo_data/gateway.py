@@ -199,6 +199,18 @@ class Gateway:
         >>> assert len(records) == 1
         >>>
         ```
+
+        Glob and regex patterns are also supported using MatchSpec with `exact_names_only=False`:
+        ```python
+        >>> import asyncio
+        >>> from rattler import Gateway, MatchSpec
+        >>> gateway = Gateway()
+        >>> glob_spec = MatchSpec("python-*", strict=True, exact_names_only=False)
+        >>> records = asyncio.run(gateway.query(["conda-forge"], ["noarch"], [glob_spec], recursive=False))
+        >>> all(r.name.normalized.startswith("python-") for subdir in records for r in subdir)
+        True
+        >>>
+        ```
         """
         py_records = await self._gateway.query(
             sources=_convert_sources(sources),
