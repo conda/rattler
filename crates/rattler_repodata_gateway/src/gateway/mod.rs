@@ -1500,4 +1500,164 @@ mod test {
             "run_exports should be populated via package extraction fallback when run_exports.json is out of sync"
         );
     }
+
+    #[tokio::test]
+    async fn test_glob_pattern_query() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        // Query with glob pattern "openssl*" - should match packages starting with
+        // "openssl"
+        let matchspec = MatchSpec::from_str(
+            "openssl*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+
+        // Verify we got some results
+        assert!(
+            !all_records.is_empty(),
+            "glob pattern should match some packages"
+        );
+
+        // Verify all results start with "openssl"
+        for record in &all_records {
+            assert!(
+                record
+                    .package_record
+                    .name
+                    .as_normalized()
+                    .starts_with("openssl"),
+                "all matched packages should start with 'openssl', got: {}",
+                record.package_record.name.as_normalized()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_regex_pattern_query() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        // Query with regex pattern - match packages starting with "python-"
+        // Regex patterns are enclosed in ^...$ or use regex syntax
+        let matchspec = MatchSpec::from_str(
+            "^python-.*$",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+
+        // Verify we got some results
+        assert!(
+            !all_records.is_empty(),
+            "regex pattern should match some packages"
+        );
+
+        // Verify all results match the pattern (start with "python-")
+        for record in &all_records {
+            assert!(
+                record
+                    .package_record
+                    .name
+                    .as_normalized()
+                    .starts_with("python-"),
+                "all matched packages should start with 'python-', got: {}",
+                record.package_record.name.as_normalized()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_glob_pattern_query_no_matches() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        // Query with glob pattern that matches nothing
+        let matchspec = MatchSpec::from_str(
+            "zzznonexistent*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+        assert_eq!(
+            total_records, 0,
+            "glob pattern with no matches should return empty results"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_nameless_matchspec_error_without_url() {
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        // Create a matchspec and then remove the name
+        let mut matchspec = MatchSpec::from_str("python>=3.8", Lenient).unwrap();
+        matchspec.name = None;
+
+        let gateway_error = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap_err();
+
+        assert_matches!(gateway_error, GatewayError::MatchSpecWithoutName(_));
+    }
 }

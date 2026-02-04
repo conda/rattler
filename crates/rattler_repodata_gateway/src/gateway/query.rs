@@ -150,6 +150,9 @@ struct QueryExecutor {
     // Specs categorized at construction
     direct_url_specs: Vec<DirectUrlSpec>,
 
+    /// Specs with glob/regex patterns that need expansion
+    pending_pattern_specs: Vec<(PackageNameMatcher, MatchSpec)>,
+
     // Mutable state during execution
     seen: HashSet<PackageName>,
     pending_package_specs: HashMap<PackageName, SourceSpecs>,
@@ -181,9 +184,10 @@ impl QueryExecutor {
         let mut seen = HashSet::new();
         let mut pending_package_specs = HashMap::new();
         let mut direct_url_specs = Vec::new();
+        let mut pending_pattern_specs = Vec::new();
 
-        // Categorize specs into direct_url_specs and pending_package_specs
-        // TODO: allow glob/regex package names as well
+        // Categorize specs into direct_url_specs, pending_package_specs, and
+        // pending_pattern_specs
         for spec in specs {
             if let Some(url) = spec.url.clone() {
                 let name = spec
@@ -195,15 +199,28 @@ impl QueryExecutor {
                     )))?;
                 seen.insert(name.clone());
                 direct_url_specs.push(DirectUrlSpec { spec, url, name });
-            } else if let Some(PackageNameMatcher::Exact(name)) = &spec.name {
-                seen.insert(name.clone());
-                let pending = pending_package_specs
-                    .entry(name.clone())
-                    .or_insert_with(|| SourceSpecs::Input(vec![]));
-                let SourceSpecs::Input(input_specs) = pending else {
-                    panic!("SourceSpecs::Input was overwritten by SourceSpecs::Transitive");
-                };
-                input_specs.push(spec);
+            } else {
+                match &spec.name {
+                    Some(PackageNameMatcher::Exact(name)) => {
+                        seen.insert(name.clone());
+                        let pending = pending_package_specs
+                            .entry(name.clone())
+                            .or_insert_with(|| SourceSpecs::Input(vec![]));
+                        let SourceSpecs::Input(input_specs) = pending else {
+                            panic!("SourceSpecs::Input was overwritten by SourceSpecs::Transitive");
+                        };
+                        input_specs.push(spec);
+                    }
+                    Some(
+                        matcher @ (PackageNameMatcher::Glob(_) | PackageNameMatcher::Regex(_)),
+                    ) => {
+                        // Store pattern specs for later expansion
+                        pending_pattern_specs.push((matcher.clone(), spec));
+                    }
+                    None => {
+                        return Err(GatewayError::MatchSpecWithoutName(Box::new(spec)));
+                    }
+                }
             }
         }
 
@@ -263,6 +280,7 @@ impl QueryExecutor {
             recursive,
             reporter,
             direct_url_specs,
+            pending_pattern_specs,
             seen,
             pending_package_specs,
             subdir_handles,
@@ -391,9 +409,57 @@ impl QueryExecutor {
         }
     }
 
+    /// Expand pattern specs by fetching package names from all subdirs and
+    /// filtering.
+    async fn expand_pattern_specs(&mut self) {
+        if self.pending_pattern_specs.is_empty() {
+            return;
+        }
+
+        // Collect all package names from all subdirs
+        let mut all_names: HashSet<PackageName> = HashSet::new();
+        for handle in &self.subdir_handles {
+            let subdir = handle.barrier.wait().await;
+            if let Subdir::Found(subdir_data) = subdir.as_ref() {
+                for name_str in subdir_data.package_names() {
+                    if let Ok(name) = PackageName::try_from(name_str) {
+                        all_names.insert(name);
+                    }
+                }
+            }
+        }
+
+        // Expand each pattern spec
+        for (matcher, spec) in std::mem::take(&mut self.pending_pattern_specs) {
+            for name in &all_names {
+                if matcher.matches(name) && self.seen.insert(name.clone()) {
+                    let pending = self
+                        .pending_package_specs
+                        .entry(name.clone())
+                        .or_insert_with(|| SourceSpecs::Input(vec![]));
+                    if let SourceSpecs::Input(input_specs) = pending {
+                        input_specs.push(spec.clone());
+                    }
+                }
+            }
+        }
+    }
+
     /// Run the main event loop.
     async fn run(mut self) -> Result<Vec<RepoData>, GatewayError> {
         self.spawn_direct_url_fetches()?;
+
+        // If we have pattern specs, we need to wait for all subdirs to be loaded
+        // first so we can get all package names to match against
+        if !self.pending_pattern_specs.is_empty() {
+            // Wait for all pending subdirs to complete
+            while let Some(result) = self.pending_subdirs.next().await {
+                result?;
+            }
+
+            // Now expand pattern specs
+            self.expand_pattern_specs().await;
+        }
 
         loop {
             self.spawn_package_fetches();
