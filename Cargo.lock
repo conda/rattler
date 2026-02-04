@@ -2764,7 +2764,6 @@ checksum = "92baf25cf0b8c9246baecf3a444546360a97b569168fdf92563ee6a47829920c"
 dependencies = [
  "http 1.4.0",
  "http-serde",
- "reqwest 0.12.28",
  "serde",
  "time",
 ]

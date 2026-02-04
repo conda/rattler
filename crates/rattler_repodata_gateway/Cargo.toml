@@ -33,7 +33,6 @@ futures = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
 http = { workspace = true, optional = true }
 http-cache-semantics = { workspace = true, optional = true, features = [
-  "reqwest",
   "serde",
 ] }
 humansize = { workspace = true }
