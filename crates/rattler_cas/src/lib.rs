@@ -61,7 +61,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rattler_digest::XXh3Hash;
+use rattler_digest::Sha256Hash;
 pub use sync_writer::SyncWriter;
 pub use writer::Writer;
 
