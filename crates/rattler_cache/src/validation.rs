@@ -41,6 +41,10 @@ pub enum PackageValidationError {
     #[error("neither a 'paths.json' or a deprecated 'files' file was found")]
     MetadataMissing,
 
+    /// An error occured with the version of the `path.json`` file
+    #[error("")]
+    VersionError(),
+
     /// An error occurred while reading the `paths.json` file.
     #[error("failed to read 'paths.json' file")]
     ReadPathsJsonError(#[source] std::io::Error),

@@ -52,7 +52,10 @@ impl PathsJson {
         path: &Path,
     ) -> Result<Self, std::io::Error> {
         match Self::from_package_directory(path) {
-            Ok(paths) => Ok(paths),
+            Ok(paths) => {
+                Ok(paths)
+            }
+            
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 Self::from_deprecated_package_directory(path)
             }
@@ -117,11 +120,13 @@ impl PathsJson {
                             prefix_placeholder: prefix.map(|entry| PrefixPlaceholder {
                                 file_mode: entry.file_mode,
                                 placeholder: (*entry.prefix).to_owned(),
+                                offsets: None,
                             }),
                             no_link: no_link.contains(&path),
                             sha256: None,
                             size_in_bytes: None,
                             relative_path: path,
+                            executable: None,
                         }),
                         Err(e) => Err(e),
                     }
@@ -183,6 +188,11 @@ pub struct PrefixPlaceholder {
     /// was build.
     #[serde(rename = "prefix_placeholder")]
     pub placeholder: String,
+
+    /// The offsets on which the placeholders are found in the file
+    /// only present in version 2 of the paths.json file
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offsets: Option<Vec<usize>>,
 }
 
 /// A single entry in the `paths.json` file.
@@ -213,15 +223,20 @@ pub struct PathsEntry {
     pub prefix_placeholder: Option<PrefixPlaceholder>,
 
     /// A hex representation of the SHA256 hash of the contents of the file.
-    /// This entry is only present in version 1 of the paths.json file.
+    /// This entry is present in version 1 and up of the paths.json file.
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha256: Option<rattler_digest::Sha256Hash>,
 
     /// The size of the file in bytes
-    /// This entry is only present in version 1 of the paths.json file.
+    /// This entry is present in version 1 and up of the paths.json file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size_in_bytes: Option<u64>,
+
+    /// When a file is executable this will be true
+    /// This entry is only present in version 2 of the paths.json file
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executable: Option<bool>,
 }
 
 /// The file mode of the entry
@@ -258,9 +273,9 @@ fn is_no_link_default(value: &bool) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::package::PackageFile;
+    use crate::package::{PackageFile, PrefixPlaceholder};
 
-    use super::{PathsEntry, PathsJson};
+    use super::{PathsEntry, PathsJson, FileMode, PathType, PathBuf};
 
     #[test]
     pub fn roundtrip_paths_json() {
@@ -333,6 +348,7 @@ mod test {
                 no_link: false,
                 sha256: None,
                 size_in_bytes: Some(0),
+                executable: None,
             });
         }
 
@@ -344,5 +360,199 @@ mod test {
             paths,
             paths_version: 1
         });
+    }
+
+   #[test]
+    pub fn test_deserialize_paths_json_v2() {
+        let package_dir = tempfile::tempdir().unwrap();
+        let info_dir = package_dir.path().join("info");
+        std::fs::create_dir_all(&info_dir).unwrap();
+        
+        // Create a mock v2 paths.json file
+        let paths_json_v2 = r#"{
+            "paths": [
+                {
+                    "_path": "bin/example",
+                    "no_link": false,
+                    "path_type": "hardlink",
+                    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                    "size_in_bytes": 1024,
+                    "executable": true,
+                    "file_mode": "binary",
+                    "prefix_placeholder": "/opt/conda",
+                    "offsets": [100, 200, 300]
+                },
+                {
+                    "_path": "lib/library.so",
+                    "no_link": false,
+                    "path_type": "hardlink",
+                    "sha256": "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
+                    "size_in_bytes": 2048,
+                    "executable": false
+                },
+                {
+                    "_path": "share/doc/readme.txt",
+                    "no_link": false,
+                    "path_type": "hardlink",
+                    "sha256": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+                    "size_in_bytes": 256,
+                    "executable": false,
+                    "file_mode": "text",
+                    "prefix_placeholder": "/home/builder/conda",
+                    "offsets": [10, 45]
+                },
+                {
+                    "_path": "bin/symlink-example",
+                    "no_link": false,
+                    "path_type": "softlink",
+                    "executable": true
+                }
+            ],
+            "paths_version": 2
+            }"#;
+        
+        // Write the mock paths.json
+        std::fs::write(info_dir.join("paths.json"), paths_json_v2).unwrap();
+        
+        // Test loading it
+        let paths_json = PathsJson::from_package_directory_with_deprecated_fallback(
+            package_dir.path()
+        )
+        .unwrap();
+        
+        // Verify it's version 2
+        assert_eq!(paths_json.paths_version, 2);
+        assert_eq!(paths_json.paths.len(), 4);
+        
+        // Verify v2-specific fields are present and correct
+        
+        // First entry: binary with offsets and executable
+        assert_eq!(paths_json.paths[0].relative_path, PathBuf::from("bin/example"));
+        assert_eq!(paths_json.paths[0].executable, Some(true));
+        assert_eq!(paths_json.paths[0].size_in_bytes, Some(1024));
+        let prefix = paths_json.paths[0].prefix_placeholder.as_ref().unwrap();
+        assert_eq!(prefix.file_mode, FileMode::Binary);
+        assert_eq!(prefix.offsets, Some(vec![100, 200, 300]));
+        
+        // Second entry: no prefix, not executable
+        assert_eq!(paths_json.paths[1].executable, Some(false));
+        assert!(paths_json.paths[1].prefix_placeholder.is_none());
+        
+        // Third entry: text with offsets
+        let text_prefix = paths_json.paths[2].prefix_placeholder.as_ref().unwrap();
+        assert_eq!(text_prefix.file_mode, FileMode::Text);
+        assert_eq!(text_prefix.offsets, Some(vec![10, 45]));
+        
+        // Fourth entry: symlink with executable
+        assert_eq!(paths_json.paths[3].path_type, PathType::SoftLink);
+        assert_eq!(paths_json.paths[3].executable, Some(true));
+        
+        insta::assert_yaml_snapshot!(paths_json);
+    }
+
+    #[test]
+    pub fn test_v2_optional_fields_handling() {
+        let package_dir = tempfile::tempdir().unwrap();
+        let info_dir = package_dir.path().join("info");
+        std::fs::create_dir_all(&info_dir).unwrap();
+        
+        // Test that v2 fields are truly optional
+        let minimal_v2 = r#"{
+            "paths": [
+                {
+                "_path": "file.txt",
+                "path_type": "hardlink"
+                }
+            ],
+            "paths_version": 2
+            }"#;
+        
+        std::fs::write(info_dir.join("paths.json"), minimal_v2).unwrap();
+        
+        let paths_json = PathsJson::from_package_directory(package_dir.path()).unwrap();
+        
+        assert_eq!(paths_json.paths_version, 2);
+        assert_eq!(paths_json.paths[0].executable, None);
+        assert_eq!(paths_json.paths[0].sha256, None);
+        assert_eq!(paths_json.paths[0].size_in_bytes, None);
+        assert!(paths_json.paths[0].prefix_placeholder.is_none());
+    }
+
+    #[test]
+    pub fn test_v2_serialization_roundtrip() {
+        // Create a v2 PathsJson programmatically
+        let original = PathsJson {
+            paths: vec![
+                PathsEntry {
+                    relative_path: PathBuf::from("bin/tool"),
+                    no_link: false,
+                    path_type: PathType::HardLink,
+                    prefix_placeholder: Some(PrefixPlaceholder {
+                        file_mode: FileMode::Binary,
+                        placeholder: "/opt/conda".to_string(),
+                        offsets: Some(vec![50, 150]),
+                    }),
+                    sha256: None,
+                    size_in_bytes: Some(4096),
+                    executable: Some(true),
+                },
+                PathsEntry {
+                    relative_path: PathBuf::from("lib/module.py"),
+                    no_link: false,
+                    path_type: PathType::HardLink,
+                    prefix_placeholder: None,
+                    sha256: None,
+                    size_in_bytes: Some(512),
+                    executable: Some(false),
+                },
+            ],
+            paths_version: 2,
+        };
+        
+        // Serialize to JSON
+        let json = serde_json::to_string_pretty(&original).unwrap();
+        
+        // Deserialize back
+        let deserialized: PathsJson = serde_json::from_str(&json).unwrap();
+        
+        // Verify roundtrip
+        assert_eq!(original, deserialized);
+        assert_eq!(deserialized.paths_version, 2);
+        assert_eq!(deserialized.paths[0].executable, Some(true));
+        assert_eq!(
+            deserialized.paths[0].prefix_placeholder.as_ref().unwrap().offsets,
+            Some(vec![50, 150])
+        );
+    }
+
+    #[test]
+    pub fn test_fallback_from_v2_to_deprecated() {
+        let package_dir = tempfile::tempdir().unwrap();
+        let info_dir = package_dir.path().join("info");
+        std::fs::create_dir_all(&info_dir).unwrap();
+        
+        // Don't create paths.json, but create deprecated files
+        let files_content = "bin/old-tool\nlib/old-lib.so\n";
+        std::fs::write(info_dir.join("files"), files_content).unwrap();
+        
+        // Create actual files so path_type detection works
+        let bin_dir = package_dir.path().join("bin");
+        let lib_dir = package_dir.path().join("lib");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        std::fs::create_dir_all(&lib_dir).unwrap();
+        std::fs::write(bin_dir.join("old-tool"), "#!/bin/sh\necho test").unwrap();
+        std::fs::write(lib_dir.join("old-lib.so"), "binary data").unwrap();
+        
+        let paths_json = PathsJson::from_package_directory_with_deprecated_fallback(
+            package_dir.path()
+        )
+        .unwrap();
+        
+        // Should fall back and create v1
+        assert_eq!(paths_json.paths_version, 1);
+        assert_eq!(paths_json.paths.len(), 2);
+        
+        // v1 shouldn't have v2 fields
+        assert!(paths_json.paths.iter().all(|p| p.executable.is_none()));
     }
 }

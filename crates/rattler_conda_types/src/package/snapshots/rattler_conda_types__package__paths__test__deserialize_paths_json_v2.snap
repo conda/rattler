@@ -1,0 +1,36 @@
+---
+source: crates/rattler_conda_types/src/package/paths.rs
+assertion_line: 450
+expression: paths_json
+---
+paths:
+  - _path: bin/example
+    path_type: hardlink
+    file_mode: binary
+    prefix_placeholder: /opt/conda
+    offsets:
+      - 100
+      - 200
+      - 300
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    size_in_bytes: 1024
+    executable: true
+  - _path: bin/symlink-example
+    path_type: softlink
+    executable: true
+  - _path: lib/library.so
+    path_type: hardlink
+    sha256: d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592
+    size_in_bytes: 2048
+    executable: false
+  - _path: share/doc/readme.txt
+    path_type: hardlink
+    file_mode: text
+    prefix_placeholder: /home/builder/conda
+    offsets:
+      - 10
+      - 45
+    sha256: a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3
+    size_in_bytes: 256
+    executable: false
+paths_version: 2
