@@ -142,7 +142,7 @@ jobs:
         id: build-options
         if: contains(matrix.target, '-musl') || startsWith(matrix.target, 'powerpc') || startsWith(matrix.target, 's390x')
         run: |
-          echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls-tls" >> $GITHUB_OUTPUT
+          echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls" >> $GITHUB_OUTPUT
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
