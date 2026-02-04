@@ -52,10 +52,8 @@ impl PathsJson {
         path: &Path,
     ) -> Result<Self, std::io::Error> {
         match Self::from_package_directory(path) {
-            Ok(paths) => {
-                Ok(paths)
-            }
-            
+            Ok(paths) => Ok(paths),
+
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 Self::from_deprecated_package_directory(path)
             }
@@ -275,7 +273,7 @@ fn is_no_link_default(value: &bool) -> bool {
 mod test {
     use crate::package::{PackageFile, PrefixPlaceholder};
 
-    use super::{PathsEntry, PathsJson, FileMode, PathType, PathBuf};
+    use super::{FileMode, PathBuf, PathType, PathsEntry, PathsJson};
 
     #[test]
     pub fn roundtrip_paths_json() {
@@ -362,12 +360,12 @@ mod test {
         });
     }
 
-   #[test]
+    #[test]
     pub fn test_deserialize_paths_json_v2() {
         let package_dir = tempfile::tempdir().unwrap();
         let info_dir = package_dir.path().join("info");
         std::fs::create_dir_all(&info_dir).unwrap();
-        
+
         // Create a mock v2 paths.json file
         let paths_json_v2 = r#"{
             "paths": [
@@ -410,43 +408,44 @@ mod test {
             ],
             "paths_version": 2
             }"#;
-        
+
         // Write the mock paths.json
         std::fs::write(info_dir.join("paths.json"), paths_json_v2).unwrap();
-        
+
         // Test loading it
-        let paths_json = PathsJson::from_package_directory_with_deprecated_fallback(
-            package_dir.path()
-        )
-        .unwrap();
-        
+        let paths_json =
+            PathsJson::from_package_directory_with_deprecated_fallback(package_dir.path()).unwrap();
+
         // Verify it's version 2
         assert_eq!(paths_json.paths_version, 2);
         assert_eq!(paths_json.paths.len(), 4);
-        
+
         // Verify v2-specific fields are present and correct
-        
+
         // First entry: binary with offsets and executable
-        assert_eq!(paths_json.paths[0].relative_path, PathBuf::from("bin/example"));
+        assert_eq!(
+            paths_json.paths[0].relative_path,
+            PathBuf::from("bin/example")
+        );
         assert_eq!(paths_json.paths[0].executable, Some(true));
         assert_eq!(paths_json.paths[0].size_in_bytes, Some(1024));
         let prefix = paths_json.paths[0].prefix_placeholder.as_ref().unwrap();
         assert_eq!(prefix.file_mode, FileMode::Binary);
         assert_eq!(prefix.offsets, Some(vec![100, 200, 300]));
-        
+
         // Second entry: no prefix, not executable
         assert_eq!(paths_json.paths[1].executable, Some(false));
         assert!(paths_json.paths[1].prefix_placeholder.is_none());
-        
+
         // Third entry: text with offsets
         let text_prefix = paths_json.paths[2].prefix_placeholder.as_ref().unwrap();
         assert_eq!(text_prefix.file_mode, FileMode::Text);
         assert_eq!(text_prefix.offsets, Some(vec![10, 45]));
-        
+
         // Fourth entry: symlink with executable
         assert_eq!(paths_json.paths[3].path_type, PathType::SoftLink);
         assert_eq!(paths_json.paths[3].executable, Some(true));
-        
+
         insta::assert_yaml_snapshot!(paths_json);
     }
 
@@ -455,7 +454,7 @@ mod test {
         let package_dir = tempfile::tempdir().unwrap();
         let info_dir = package_dir.path().join("info");
         std::fs::create_dir_all(&info_dir).unwrap();
-        
+
         // Test that v2 fields are truly optional
         let minimal_v2 = r#"{
             "paths": [
@@ -466,11 +465,11 @@ mod test {
             ],
             "paths_version": 2
             }"#;
-        
+
         std::fs::write(info_dir.join("paths.json"), minimal_v2).unwrap();
-        
+
         let paths_json = PathsJson::from_package_directory(package_dir.path()).unwrap();
-        
+
         assert_eq!(paths_json.paths_version, 2);
         assert_eq!(paths_json.paths[0].executable, None);
         assert_eq!(paths_json.paths[0].sha256, None);
@@ -508,19 +507,23 @@ mod test {
             ],
             paths_version: 2,
         };
-        
+
         // Serialize to JSON
         let json = serde_json::to_string_pretty(&original).unwrap();
-        
+
         // Deserialize back
         let deserialized: PathsJson = serde_json::from_str(&json).unwrap();
-        
+
         // Verify roundtrip
         assert_eq!(original, deserialized);
         assert_eq!(deserialized.paths_version, 2);
         assert_eq!(deserialized.paths[0].executable, Some(true));
         assert_eq!(
-            deserialized.paths[0].prefix_placeholder.as_ref().unwrap().offsets,
+            deserialized.paths[0]
+                .prefix_placeholder
+                .as_ref()
+                .unwrap()
+                .offsets,
             Some(vec![50, 150])
         );
     }
@@ -530,11 +533,11 @@ mod test {
         let package_dir = tempfile::tempdir().unwrap();
         let info_dir = package_dir.path().join("info");
         std::fs::create_dir_all(&info_dir).unwrap();
-        
+
         // Don't create paths.json, but create deprecated files
         let files_content = "bin/old-tool\nlib/old-lib.so\n";
         std::fs::write(info_dir.join("files"), files_content).unwrap();
-        
+
         // Create actual files so path_type detection works
         let bin_dir = package_dir.path().join("bin");
         let lib_dir = package_dir.path().join("lib");
@@ -542,16 +545,14 @@ mod test {
         std::fs::create_dir_all(&lib_dir).unwrap();
         std::fs::write(bin_dir.join("old-tool"), "#!/bin/sh\necho test").unwrap();
         std::fs::write(lib_dir.join("old-lib.so"), "binary data").unwrap();
-        
-        let paths_json = PathsJson::from_package_directory_with_deprecated_fallback(
-            package_dir.path()
-        )
-        .unwrap();
-        
+
+        let paths_json =
+            PathsJson::from_package_directory_with_deprecated_fallback(package_dir.path()).unwrap();
+
         // Should fall back and create v1
         assert_eq!(paths_json.paths_version, 1);
         assert_eq!(paths_json.paths.len(), 2);
-        
+
         // v1 shouldn't have v2 fields
         assert!(paths_json.paths.iter().all(|p| p.executable.is_none()));
     }

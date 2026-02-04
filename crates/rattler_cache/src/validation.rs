@@ -46,7 +46,7 @@ pub enum PackageValidationError {
     #[error("neither a 'paths.json' or a deprecated 'files' file was found")]
     MetadataMissing,
 
-    /// An error occured with the version of the `path.json`` file
+    /// An error occurred with the version of the `path.json` file
     #[error("")]
     VersionError(),
 

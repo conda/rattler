@@ -165,7 +165,7 @@ pub fn link_file(
     let link_method = if let Some(PrefixPlaceholder {
         file_mode,
         placeholder,
-        offsets
+        offsets,
     }) = path_json_entry.prefix_placeholder.as_ref()
     {
         // Memory map the source file. This provides us with easy access to a continuous stream of
@@ -181,8 +181,7 @@ pub fn link_file(
             fs::File::create(&destination_path)
                 .map_err(LinkFileError::FailedToOpenDestinationFile)?,
         );
-        let mut destination_writer = 
-            HashingWriter::<_, rattler_digest::Sha256>::new(destination);
+        let mut destination_writer = HashingWriter::<_, rattler_digest::Sha256>::new(destination);
 
         // Convert back-slashes (\) on windows with forward-slashes (/) to avoid problems with
         // string escaping. For instance if we replace the prefix in the following text
@@ -205,7 +204,7 @@ pub fn link_file(
             Cow::Borrowed(target_prefix)
         };
 
-        // depending on the availability of the offsets 
+        // depending on the availability of the offsets
         match offsets {
             Some(offsets) => {
                 copy_and_replace_placeholders_with_offsets(
@@ -215,10 +214,12 @@ pub fn link_file(
                     &target_prefix,
                     &target_platform,
                     *file_mode,
-                    offsets.to_vec()
+                    offsets.clone(),
                 )
-                .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
-            },
+                .map_err(|err| {
+                    LinkFileError::IoError(String::from("replacing placeholders"), err)
+                })?;
+            }
             None => {
                 // Replace the prefix placeholder in the file with the new placeholder
                 copy_and_replace_placeholders(
@@ -229,8 +230,10 @@ pub fn link_file(
                     &target_platform,
                     *file_mode,
                 )
-                .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
-            },
+                .map_err(|err| {
+                    LinkFileError::IoError(String::from("replacing placeholders"), err)
+                })?;
+            }
         }
 
         let (mut file, current_hash) = destination_writer.finalize();
@@ -814,9 +817,9 @@ pub fn copy_and_replace_textual_placeholder_offsets(
     let mut last_match = 0;
 
     for offset in offsets {
-            destination.write_all(&source_bytes[last_match..offset])?;
-            destination.write_all(new_prefix)?;
-            last_match = offset + old_prefix.len();
+        destination.write_all(&source_bytes[last_match..offset])?;
+        destination.write_all(new_prefix)?;
+        last_match = offset + old_prefix.len();
     }
 
     // Write remaining bytes
@@ -902,7 +905,7 @@ pub fn copy_and_replace_cstring_placeholder(
     }
 }
 
-/// Given the contents & offsets of a file, copies it to the `destination` and in the process replace 
+/// Given the contents & offsets of a file, copies it to the `destination` and in the process replace
 /// any binary c-style string that contains the text `prefix_placeholder` with a binary compatible
 /// c-string where the `prefix_placeholder` text is replaced with the `target_prefix` text.
 ///
@@ -914,7 +917,7 @@ pub fn copy_and_replace_cstring_placeholder_offsets(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
-    offsets: Vec<usize>
+    offsets: Vec<usize>,
 ) -> Result<(), std::io::Error> {
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
@@ -942,11 +945,11 @@ pub fn copy_and_replace_cstring_placeholder_offsets(
 
         let segment = &source_bytes[offset..end];
         let old_len = segment.len();
-        
+
         let mut out = Vec::with_capacity(old_len);
         let mut remaining = segment;
         let finder = memchr::memmem::Finder::new(old_prefix);
-        
+
         while let Some(index) = finder.find(remaining) {
             out.write_all(&remaining[..index])?;
             out.write_all(new_prefix)?;
@@ -1284,7 +1287,6 @@ mod test {
         assert_eq!(FileType::detect(&empty), None);
     }
 
-
     #[rstest]
     #[case("Hello, cruel world!", [7].to_vec(), "cruel", "fabulous", "Hello, fabulous world!")]
     #[case(
@@ -1308,7 +1310,7 @@ mod test {
             prefix_placeholder,
             target_prefix,
             &Platform::Linux64,
-            offsets
+            offsets,
         )
         .unwrap();
         assert_eq!(
@@ -1377,8 +1379,14 @@ mod test {
             b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/:\x00somemoretext";
         let mut output = Cursor::new(Vec::new());
         let offsets: Vec<usize> = [20].to_vec();
-        super::copy_and_replace_cstring_placeholder_offsets(input, &mut output, "/placeholder", "/target", offsets)
-            .unwrap();
+        super::copy_and_replace_cstring_placeholder_offsets(
+            input,
+            &mut output,
+            "/placeholder",
+            "/target",
+            offsets,
+        )
+        .unwrap();
         let out = &output.into_inner();
         assert_eq!(out, b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext");
         assert_eq!(out.len(), input.len());
@@ -1396,7 +1404,7 @@ mod test {
         }
         let input = fs::read(test_file).unwrap();
 
-        let offsets: Vec<usize>= Vec::new();        
+        let offsets: Vec<usize> = Vec::new();
 
         let mut output = Cursor::new(Vec::new());
         super::copy_and_replace_textual_placeholder_offsets(
@@ -1413,5 +1421,4 @@ mod test {
         let replaced = String::from_utf8_lossy(&output);
         insta::assert_snapshot!(replaced);
     }
-   
 }
