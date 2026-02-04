@@ -69,6 +69,8 @@ pub enum PyRattlerError {
     RequirementError(String),
     #[error("{0}")]
     EnvironmentCreationError(String),
+    #[error("{0}")]
+    LockFileError(String),
     #[error(transparent)]
     ExtractError(#[from] ExtractError),
     #[error(transparent)]
@@ -171,6 +173,7 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::EnvironmentCreationError(err) => {
                 EnvironmentCreationException::new_err(err)
             }
+            PyRattlerError::LockFileError(err) => LockFileException::new_err(err),
             PyRattlerError::ExtractError(err) => {
                 ExtractException::new_err(pretty_print_error(&err))
             }
@@ -228,6 +231,7 @@ create_exception!(exceptions, ParseCondaLockException, PyException);
 create_exception!(exceptions, ConversionException, PyException);
 create_exception!(exceptions, RequirementException, PyException);
 create_exception!(exceptions, EnvironmentCreationException, PyException);
+create_exception!(exceptions, LockFileException, PyException);
 create_exception!(exceptions, ExtractException, PyException);
 create_exception!(exceptions, ActivationScriptFormatException, PyException);
 create_exception!(exceptions, GatewayException, PyException);

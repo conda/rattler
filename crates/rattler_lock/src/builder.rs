@@ -8,13 +8,13 @@ use std::{
 
 use indexmap::{IndexMap, IndexSet};
 use pep508_rs::ExtraName;
-use rattler_conda_types::{Platform, Version};
+use rattler_conda_types::Version;
 
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
     CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
-    UrlOrPath,
+    LockedPackageRef, ParseCondaLockError, PypiIndexes, PypiPackageData,
+    PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
 };
 
 /// Information about a single locked package in an environment.
@@ -115,6 +115,9 @@ impl LockedPackage {
 /// A struct to incrementally build a lock-file.
 #[derive(Default)]
 pub struct LockFileBuilder {
+    /// The known platforms
+    platforms: Vec<crate::PlatformData>,
+
     /// Metadata about the different environments stored in the lock file.
     environments: IndexMap<String, EnvironmentData>,
 
@@ -153,7 +156,58 @@ impl LockFileBuilder {
         Self::default()
     }
 
-    /// Helper function that returns the environment for the environment with the given name.
+    /// Sets the `Vec<Platform>` into the `LockFile`, replacing any platforms that were
+    /// known before.
+    pub fn with_platforms(
+        mut self,
+        platforms: Vec<crate::PlatformData>,
+    ) -> Result<Self, ParseCondaLockError> {
+        let mut unique_platforms = ahash::HashSet::default();
+        for platform in platforms.iter() {
+            if !unique_platforms.insert(platform.name.clone()) {
+                return Err(ParseCondaLockError::DuplicatePlatformName(
+                    platform.name.to_string(),
+                ));
+            }
+        }
+
+        self.platforms = platforms;
+        Ok(self)
+    }
+
+    /// Sets the `Vec<Platform>` into the `LockFile`, replacing any platforms that were
+    /// known before.
+    pub fn add_platform(
+        mut self,
+        platform: crate::PlatformData,
+    ) -> Result<Self, ParseCondaLockError> {
+        if self
+            .platforms
+            .iter()
+            .any(|p| p.name.as_str() == platform.name.as_str())
+        {
+            return Err(ParseCondaLockError::DuplicatePlatformName(
+                platform.name.to_string(),
+            ));
+        }
+
+        self.platforms.push(platform);
+        Ok(self)
+    }
+
+    fn find_platform_index(&self, platform_name: &str) -> Result<usize, ()> {
+        if let Some(platform_index) = self
+            .platforms
+            .iter()
+            .position(|p| p.name.as_str() == platform_name)
+        {
+            Ok(platform_index)
+        } else {
+            Err(())
+        }
+    }
+
+    /// Helper function that returns the `EnvironmentData` for the environment with the given name.
     fn environment_data(&mut self, environment_data: impl Into<String>) -> &mut EnvironmentData {
         self.environments
             .entry(environment_data.into())
@@ -185,6 +239,16 @@ impl LockFileBuilder {
         self
     }
 
+    /// Sets the channels of an environment.
+    pub fn with_channels(
+        mut self,
+        environment: impl Into<String>,
+        channels: impl IntoIterator<Item = impl Into<Channel>>,
+    ) -> Self {
+        self.set_channels(environment, channels);
+        self
+    }
+
     /// Sets the metadata for an environment.
     pub fn set_channels(
         &mut self,
@@ -196,6 +260,52 @@ impl LockFileBuilder {
         self
     }
 
+    /// Adds a package from another environment to a specific environment and
+    /// platform.
+    pub fn with_package(
+        mut self,
+        environment: impl Into<String>,
+        platform_name: &str,
+        locked_package: LockedPackage,
+    ) -> Result<Self, ParseCondaLockError> {
+        self.add_package(environment, platform_name, locked_package)?;
+        Ok(self)
+    }
+
+    /// Adds a package from another environment to a specific environment and
+    /// platform.
+    pub fn add_package(
+        &mut self,
+        environment: impl Into<String>,
+        platform_name: &str,
+        locked_package: LockedPackage,
+    ) -> Result<&mut Self, ParseCondaLockError> {
+        match locked_package {
+            LockedPackage::Conda(p) => {
+                self.add_conda_package(environment, platform_name, p)?;
+            }
+            LockedPackage::Pypi(data, env_data) => {
+                self.add_pypi_package(environment, platform_name, data, env_data)?;
+            }
+        }
+        Ok(self)
+    }
+
+    /// Adds a conda locked package to a specific environment and platform.
+    ///
+    /// This function is similar to [`Self::add_conda_package`] but differs in
+    /// that it consumes `self` instead of taking a mutable reference. This
+    /// allows for a better interface when modifying an existing instance.
+    pub fn with_conda_package(
+        mut self,
+        environment: impl Into<String>,
+        platform_name: &str,
+        locked_package: CondaPackageData,
+    ) -> Result<Self, ParseCondaLockError> {
+        self.add_conda_package(environment, platform_name, locked_package)?;
+        Ok(self)
+    }
+
     /// Adds a conda locked package to a specific environment and platform.
     ///
     /// This function is similar to [`Self::with_conda_package`] but differs in
@@ -204,9 +314,16 @@ impl LockFileBuilder {
     pub fn add_conda_package(
         &mut self,
         environment: impl Into<String>,
-        platform: Platform,
+        platform_name: &str,
         locked_package: CondaPackageData,
-    ) -> &mut Self {
+    ) -> Result<&mut Self, ParseCondaLockError> {
+        let environment = environment.into();
+        let platform_index = self.find_platform_index(platform_name).map_err(|_e| {
+            ParseCondaLockError::UnknownPlatform {
+                environment: environment.clone(),
+                platform: platform_name.to_string(),
+            }
+        })?;
         let unique_identifier = UniqueCondaIdentifier::from(&locked_package);
 
         // Add the package to the list of packages.
@@ -223,83 +340,11 @@ impl LockFileBuilder {
         // Add the package to the environment that it is intended for.
         self.environment_data(environment)
             .packages
-            .entry(platform)
+            .entry(platform_index)
             .or_default()
             .insert(EnvironmentPackageData::Conda(package_idx));
 
-        self
-    }
-
-    /// Adds a pypi locked package to a specific environment and platform.
-    ///
-    /// This function is similar to [`Self::with_pypi_package`] but differs in
-    /// that it takes a mutable reference to self instead of consuming it.
-    /// This allows for a more fluent with chaining calls.
-    pub fn add_pypi_package(
-        &mut self,
-        environment: impl Into<String>,
-        platform: Platform,
-        locked_package: PypiPackageData,
-        environment_data: PypiPackageEnvironmentData,
-    ) -> &mut Self {
-        // Add the package to the list of packages.
-        let package_idx = self.pypi_packages.insert_full(locked_package).0;
-        let runtime_idx = self
-            .pypi_runtime_configurations
-            .insert_full(environment_data.into())
-            .0;
-
-        // Add the package to the environment that it is intended for.
-        self.environment_data(environment)
-            .packages
-            .entry(platform)
-            .or_default()
-            .insert(EnvironmentPackageData::Pypi(package_idx, runtime_idx));
-
-        self
-    }
-
-    /// Adds a conda locked package to a specific environment and platform.
-    ///
-    /// This function is similar to [`Self::add_conda_package`] but differs in
-    /// that it consumes `self` instead of taking a mutable reference. This
-    /// allows for a better interface when modifying an existing instance.
-    pub fn with_conda_package(
-        mut self,
-        environment: impl Into<String>,
-        platform: Platform,
-        locked_package: CondaPackageData,
-    ) -> Self {
-        self.add_conda_package(environment, platform, locked_package);
-        self
-    }
-
-    /// Adds a package from another environment to a specific environment and
-    /// platform.
-    pub fn with_package(
-        mut self,
-        environment: impl Into<String>,
-        platform: Platform,
-        locked_package: LockedPackage,
-    ) -> Self {
-        self.add_package(environment, platform, locked_package);
-        self
-    }
-
-    /// Adds a package from another environment to a specific environment and
-    /// platform.
-    pub fn add_package(
-        &mut self,
-        environment: impl Into<String>,
-        platform: Platform,
-        locked_package: LockedPackage,
-    ) -> &mut Self {
-        match locked_package {
-            LockedPackage::Conda(p) => self.add_conda_package(environment, platform, p),
-            LockedPackage::Pypi(data, env_data) => {
-                self.add_pypi_package(environment, platform, data, env_data)
-            }
-        }
+        Ok(self)
     }
 
     /// Adds a pypi locked package to a specific environment and platform.
@@ -310,22 +355,49 @@ impl LockFileBuilder {
     pub fn with_pypi_package(
         mut self,
         environment: impl Into<String>,
-        platform: Platform,
+        platform_name: &str,
         locked_package: PypiPackageData,
         environment_data: PypiPackageEnvironmentData,
-    ) -> Self {
-        self.add_pypi_package(environment, platform, locked_package, environment_data);
-        self
+    ) -> Result<Self, ParseCondaLockError> {
+        self.add_pypi_package(environment, platform_name, locked_package, environment_data)?;
+        Ok(self)
     }
 
-    /// Sets the channels of an environment.
-    pub fn with_channels(
-        mut self,
+    /// Adds a pypi locked package to a specific environment and platform.
+    ///
+    /// This function is similar to [`Self::with_pypi_package`] but differs in
+    /// that it takes a mutable reference to self instead of consuming it.
+    /// This allows for a more fluent with chaining calls.
+    pub fn add_pypi_package(
+        &mut self,
         environment: impl Into<String>,
-        channels: impl IntoIterator<Item = impl Into<Channel>>,
-    ) -> Self {
-        self.set_channels(environment, channels);
-        self
+        platform_name: &str,
+        locked_package: PypiPackageData,
+        environment_data: PypiPackageEnvironmentData,
+    ) -> Result<&mut Self, ParseCondaLockError> {
+        let environment = environment.into();
+        let platform_index = self.find_platform_index(platform_name).map_err(|_e| {
+            ParseCondaLockError::UnknownPlatform {
+                environment: environment.clone(),
+                platform: platform_name.to_string(),
+            }
+        })?;
+
+        // Add the package to the list of packages.
+        let package_idx = self.pypi_packages.insert_full(locked_package).0;
+        let runtime_idx = self
+            .pypi_runtime_configurations
+            .insert_full(environment_data.into())
+            .0;
+
+        // Add the package to the environment that it is intended for.
+        self.environment_data(environment)
+            .packages
+            .entry(platform_index)
+            .or_default()
+            .insert(EnvironmentPackageData::Pypi(package_idx, runtime_idx));
+
+        Ok(self)
     }
 
     /// Sets the channels of an environment.
@@ -381,6 +453,7 @@ impl LockFileBuilder {
         LockFile {
             inner: Arc::new(LockFileInner {
                 version: FileFormatVersion::LATEST,
+                platforms: self.platforms,
                 conda_packages: self.conda_packages.into_values().collect(),
                 pypi_packages: self.pypi_packages.into_iter().collect(),
                 pypi_environment_package_data: self
@@ -422,11 +495,11 @@ mod test {
     use std::str::FromStr;
 
     use rattler_conda_types::{
-        package::DistArchiveIdentifier, PackageName, PackageRecord, Platform, Version,
+        package::DistArchiveIdentifier, PackageName, PackageRecord, Version,
     };
     use url::Url;
 
-    use crate::{CondaBinaryData, LockFile, PypiPrereleaseMode};
+    use crate::{platform::PlatformName, CondaBinaryData, LockFile, PypiPrereleaseMode};
 
     #[test]
     fn test_merge_records_and_purls() {
@@ -449,9 +522,15 @@ mod test {
         };
 
         let lock_file = LockFile::builder()
+            .with_platforms(vec![crate::PlatformData {
+                name: PlatformName::try_from("linux-64").unwrap(),
+                subdir: rattler_conda_types::Platform::Linux64,
+                virtual_packages: Vec::new(),
+            }])
+            .unwrap()
             .with_conda_package(
                 "default",
-                Platform::Linux64,
+                "linux-64",
                 CondaBinaryData {
                     package_record: record.clone(),
                     location: Url::parse(
@@ -466,9 +545,10 @@ mod test {
                 }
                 .into(),
             )
+            .unwrap()
             .with_conda_package(
                 "default",
-                Platform::Linux64,
+                "linux-64",
                 CondaBinaryData {
                     package_record: record.clone(),
                     location: Url::parse(
@@ -483,9 +563,10 @@ mod test {
                 }
                 .into(),
             )
+            .unwrap()
             .with_conda_package(
                 "foobar",
-                Platform::Linux64,
+                "linux-64",
                 CondaBinaryData {
                     package_record: record_with_purls,
                     location: Url::parse(
@@ -500,6 +581,7 @@ mod test {
                 }
                 .into(),
             )
+            .unwrap()
             .finish();
         insta::assert_snapshot!(lock_file.render_to_string().unwrap());
     }
@@ -516,9 +598,15 @@ mod test {
         };
 
         let lock_file = LockFile::builder()
+            .with_platforms(vec![crate::PlatformData {
+                name: PlatformName::try_from("linux-64").unwrap(),
+                subdir: rattler_conda_types::Platform::Linux64,
+                virtual_packages: Vec::new(),
+            }])
+            .unwrap()
             .with_conda_package(
                 "default",
-                Platform::Linux64,
+                "linux-64",
                 CondaBinaryData {
                     package_record: record.clone(),
                     location: Url::parse(
@@ -533,6 +621,7 @@ mod test {
                 }
                 .into(),
             )
+            .unwrap()
             .with_pypi_prerelease_mode("default", PypiPrereleaseMode::Allow)
             .finish();
 
@@ -564,9 +653,15 @@ mod test {
             PypiPrereleaseMode::IfNecessaryOrExplicit,
         ] {
             let lock_file = LockFile::builder()
+                .with_platforms(vec![crate::PlatformData {
+                    name: PlatformName::try_from("linux-64").unwrap(),
+                    subdir: rattler_conda_types::Platform::Linux64,
+                    virtual_packages: Vec::new(),
+                }])
+                .unwrap()
                 .with_conda_package(
                     "default",
-                    Platform::Linux64,
+                    "linux-64",
                     CondaBinaryData {
                         package_record: record.clone(),
                         location: Url::parse(
@@ -581,6 +676,7 @@ mod test {
                     }
                     .into(),
                 )
+                .unwrap()
                 .with_pypi_prerelease_mode("default", mode)
                 .finish();
 
