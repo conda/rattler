@@ -1,4 +1,4 @@
-use crate::{PackageHashes, UrlOrPath};
+use crate::{PackageHashes, UrlOrPath, Verbatim};
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{ExtraName, PackageName, Requirement};
 use rattler_digest::{digest::Digest, Sha256};
@@ -17,7 +17,7 @@ pub struct PypiPackageData {
     pub version: pep440_rs::Version,
 
     /// The location of the package. This can be a URL or a path.
-    pub location: UrlOrPath,
+    pub location: Verbatim<UrlOrPath>,
 
     /// Hashes of the file pointed to by `url`.
     pub hash: Option<PackageHashes>,
@@ -27,9 +27,6 @@ pub struct PypiPackageData {
 
     /// The python version that this package requires.
     pub requires_python: Option<VersionSpecifiers>,
-
-    /// Whether the projects should be installed in editable mode or not.
-    pub editable: bool,
 }
 
 /// Additional runtime configuration of a package. Multiple environments/platforms might refer to
