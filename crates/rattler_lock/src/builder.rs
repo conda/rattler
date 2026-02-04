@@ -426,7 +426,9 @@ mod test {
     };
     use url::Url;
 
-    use crate::{CondaBinaryData, LockFile, PypiPrereleaseMode};
+    use crate::{
+        CondaBinaryData, CondaPackageData, CondaSourceData, LockFile, PypiPrereleaseMode, UrlOrPath,
+    };
 
     #[test]
     fn test_merge_records_and_purls() {
@@ -599,5 +601,88 @@ mod test {
                 Some(mode)
             );
         }
+    }
+
+    #[test]
+    fn test_channel_null_serialization_roundtrip() {
+        use std::str::FromStr;
+
+        // 1. Setup Binary Package
+        let binary_pkg_record = PackageRecord::new(
+            PackageName::new_unchecked("binary-pkg"),
+            Version::from_str("1.0.0").unwrap(),
+            "build_string".to_string(),
+        );
+
+        let binary_data = CondaBinaryData {
+            package_record: binary_pkg_record,
+            location: UrlOrPath::from_str(
+                "https://conda.anaconda.org/conda-forge/linux-64/binary-pkg-1.0.0.tar.bz2",
+            )
+            .unwrap(),
+            // Updated to use the correct type from main
+            file_name: "binary-pkg-1.0.0.tar.bz2"
+                .parse::<DistArchiveIdentifier>()
+                .unwrap(),
+            channel: None,
+        };
+
+        // 2. Setup Source Package
+        let source_pkg_record = PackageRecord::new(
+            PackageName::new_unchecked("source-pkg"),
+            Version::from_str("1.0.0").unwrap(),
+            "build_string".to_string(),
+        );
+
+        let source_data = CondaSourceData {
+            package_record: source_pkg_record,
+            location: UrlOrPath::from_str("git+https://github.com/org/repo").unwrap(),
+            variants: None,
+            package_build_source: None,
+            input: None,
+            sources: std::collections::BTreeMap::default(),
+        };
+
+        // 3. Build & Serialize
+        let lock_file = LockFile::builder()
+            .with_conda_package(
+                "default",
+                Platform::Linux64,
+                CondaPackageData::Binary(binary_data),
+            )
+            .with_conda_package(
+                "default",
+                Platform::Linux64,
+                CondaPackageData::Source(source_data),
+            )
+            .finish();
+
+        let serialized = lock_file.render_to_string().unwrap();
+
+        // 4. Assertions
+        assert_eq!(
+            serialized.matches("channel: null").count(),
+            1,
+            "Should have exactly one 'channel: null'"
+        );
+
+        let parsed = LockFile::from_str(&serialized).unwrap();
+        let packages: Vec<_> = parsed
+            .environment("default")
+            .unwrap()
+            .packages(Platform::Linux64)
+            .unwrap()
+            .collect();
+
+        let binary_pkg = packages
+            .iter()
+            .find(|p| p.name() == "binary-pkg")
+            .unwrap()
+            .as_binary_conda()
+            .unwrap();
+        assert!(
+            binary_pkg.channel.is_none(),
+            "Binary package channel should be None"
+        );
     }
 }
