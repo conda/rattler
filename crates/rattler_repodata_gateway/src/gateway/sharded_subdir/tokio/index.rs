@@ -249,7 +249,8 @@ pub async fn fetch_index(
                             );
 
                             // Cache the 404 response
-                            let policy = CachePolicy::new(&canonical_request, &ResponseWrapper(&response));
+                            let policy =
+                                CachePolicy::new(&canonical_request, &ResponseWrapper(&response));
                             write_not_found_cache(cache_reader.into_inner().inner_mut(), policy)
                                 .await
                                 .map_err(|e| {
