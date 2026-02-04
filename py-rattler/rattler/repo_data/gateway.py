@@ -207,6 +207,8 @@ class Gateway:
         >>> gateway = Gateway()
         >>> glob_spec = MatchSpec("python-*", strict=True, exact_names_only=False)
         >>> records = asyncio.run(gateway.query(["conda-forge"], ["noarch"], [glob_spec], recursive=False))
+        >>> sum(len(subdir) for subdir in records) > 1
+        True
         >>> all(r.name.normalized.startswith("python-") for subdir in records for r in subdir)
         True
         >>>
