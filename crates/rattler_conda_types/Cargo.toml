@@ -71,8 +71,8 @@ insta = { workspace = true, features = [
   "glob",
   "filters",
 ] }
-rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = [
-  "rustls-tls",
+rattler_package_streaming = { workspace = true, default-features = false, features = [
+  "rustls",
 ] }
 rstest = { workspace = true }
 assert_matches = { workspace = true }

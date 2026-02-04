@@ -10,15 +10,15 @@ name = "rattler"
 crate-type = ["cdylib"]
 
 [features]
-default = ["rustls-tls"]
+default = ["rustls"]
 native-tls = [
-    "rattler_networking/native-tls",
-    "rattler_repodata_gateway/native-tls",
+  "rattler_networking/native-tls",
+  "rattler_repodata_gateway/native-tls",
 ]
-rustls-tls = [
-    "rattler_networking/rustls-tls",
-    "rattler_repodata_gateway/rustls-tls",
-    "reqwest/rustls-tls-native-roots",
+rustls = [
+  "rattler_networking/rustls",
+  "rattler_repodata_gateway/rustls",
+  "reqwest/rustls",
 ]
 vendored-openssl = ["openssl", "openssl/vendored"]
 pty = ["rattler_pty", "nix"]
@@ -29,37 +29,37 @@ chrono = { version = "0.4" }
 futures = "0.3.31"
 parking_lot = { version = "0.12.3", features = ["arc_lock", "send_guard"] }
 
-rattler_s3 = { path = "../crates/rattler_s3", features = ["serde"]}
+rattler_s3 = { path = "../crates/rattler_s3", features = ["serde"] }
 rattler = { path = "../crates/rattler", default-features = false, features = [
-    "indicatif",
+  "indicatif",
 ] }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false, features = [
-    "sparse",
-    "gateway",
-    "indicatif",
+  "sparse",
+  "gateway",
+  "indicatif",
 ] }
 rattler_conda_types = { path = "../crates/rattler_conda_types", default-features = false }
 rattler_config = { path = "../crates/rattler_config", default-features = false }
 rattler_digest = { path = "../crates/rattler_digest" }
 rattler_networking = { path = "../crates/rattler_networking", default-features = false, features = [
-    "gcs",
-    "s3",
-    "system-integration"
+  "gcs",
+  "s3",
+  "system-integration",
 ] }
 rattler_shell = { path = "../crates/rattler_shell", default-features = false }
 rattler_pty = { path = "../crates/rattler_pty", default-features = false, optional = true }
 rattler_virtual_packages = { path = "../crates/rattler_virtual_packages", default-features = false }
 rattler_solve = { path = "../crates/rattler_solve", default-features = false, features = [
-    "resolvo",
+  "resolvo",
 ] }
 rattler_index = { path = "../crates/rattler_index" }
 rattler_lock = { path = "../crates/rattler_lock", default-features = false }
 rattler_package_streaming = { path = "../crates/rattler_package_streaming", default-features = false }
 pyo3 = { version = "0.25.1", features = [
-    "abi3-py38",
-    "extension-module",
-    "multiple-pymethods",
-    "chrono",
+  "abi3-py38",
+  "extension-module",
+  "multiple-pymethods",
+  "chrono",
 ] }
 pyo3-async-runtimes = { version = "0.25.0", features = ["tokio-runtime"] }
 pythonize = "0.25.0"
