@@ -148,7 +148,7 @@ async fn benchmark_extraction(
             std::fs::create_dir_all(&dest).map_err(|e| format!("Failed to create dir: {e:?}"))?;
 
             let task_start = Instant::now();
-            rattler_package_streaming::tokio::fs::extract(&pkg_path, &dest)
+            rattler_package_streaming::tokio::fs::extract(&pkg_path, &dest, None)
                 .await
                 .map_err(|e| format!("Extraction failed: {e:?}"))?;
             Ok(task_start.elapsed())
@@ -178,6 +178,7 @@ async fn benchmark_download_and_extract(
                 client,
                 url.parse().unwrap(),
                 &dest,
+                None,
                 None,
                 None,
             )

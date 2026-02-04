@@ -1343,7 +1343,7 @@ mod test {
         .unwrap();
 
         // Create package cache
-        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path(), None).unwrap();
 
         let install_driver = InstallDriver::default();
 

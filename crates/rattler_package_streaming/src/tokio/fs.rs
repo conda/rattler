@@ -6,6 +6,9 @@ use std::path::Path;
 
 /// Extracts the contents a `.tar.bz2` package archive at the specified path to a directory.
 ///
+/// If `cas_store` is provided, file contents are stored in the CAS and hardlinked
+/// to the destination for deduplication.
+///
 /// ```rust,no_run
 /// # #[tokio::main]
 /// # async fn main() {
@@ -13,7 +16,8 @@ use std::path::Path;
 /// use rattler_package_streaming::tokio::fs::extract_tar_bz2;
 /// let _ = extract_tar_bz2(
 ///     Path::new("conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.tar.bz2"),
-///     Path::new("/tmp"))
+///     Path::new("/tmp"),
+///     None)
 ///     .await
 ///     .unwrap();
 /// # }
@@ -21,17 +25,20 @@ use std::path::Path;
 pub async fn extract_tar_bz2(
     archive: &Path,
     destination: &Path,
+    cas_store: Option<&Path>,
 ) -> Result<ExtractResult, ExtractError> {
     // Open the file for reading using async I/O
     let file = tokio::fs::File::open(archive)
         .await
         .map_err(ExtractError::IoError)?;
 
-    // Use the fully async extraction implementation
-    crate::tokio::async_read::extract_tar_bz2(file, destination).await
+    crate::tokio::async_read::extract_tar_bz2(file, destination, cas_store).await
 }
 
 /// Extracts the contents a `.conda` package archive at the specified path to a directory.
+///
+/// If `cas_store` is provided, file contents are stored in the CAS and hardlinked
+/// to the destination for deduplication.
 ///
 /// ```rust,no_run
 /// # use std::path::Path;
@@ -40,7 +47,8 @@ pub async fn extract_tar_bz2(
 /// use rattler_package_streaming::tokio::fs::extract_conda;
 /// let _ = extract_conda(
 ///     Path::new("conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.conda"),
-///     Path::new("/tmp"))
+///     Path::new("/tmp"),
+///     None)
 ///     .await
 ///     .unwrap();
 /// # }
@@ -48,25 +56,21 @@ pub async fn extract_tar_bz2(
 pub async fn extract_conda(
     archive: &Path,
     destination: &Path,
+    cas_store: Option<&Path>,
 ) -> Result<ExtractResult, ExtractError> {
-    // Spawn a block task to perform the extraction
-    let destination = destination.to_owned();
-    let archive = archive.to_owned();
-    match tokio::task::spawn_blocking(move || crate::fs::extract_conda(&archive, &destination))
+    // Open the file for reading using async I/O
+    let file = tokio::fs::File::open(archive)
         .await
-    {
-        Ok(result) => result,
-        Err(err) => {
-            if let Ok(reason) = err.try_into_panic() {
-                std::panic::resume_unwind(reason);
-            }
-            Err(ExtractError::Cancelled)
-        }
-    }
+        .map_err(ExtractError::IoError)?;
+
+    crate::tokio::async_read::extract_conda(file, destination, cas_store).await
 }
 
 /// Extracts the contents a package archive at the specified path to a directory. The type of
 /// package is determined based on the file extension of the archive path.
+///
+/// If `cas_store` is provided, file contents are stored in the CAS and hardlinked
+/// to the destination for deduplication.
 ///
 /// ```rust,no_run
 /// # #[tokio::main]
@@ -75,14 +79,19 @@ pub async fn extract_conda(
 /// use rattler_package_streaming::tokio::fs::extract;
 /// let _ = extract(
 ///     Path::new("conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.conda"),
-///     Path::new("/tmp"))
+///     Path::new("/tmp"),
+///     None)
 ///     .await
 ///     .unwrap();
 /// # }
 /// ```
-pub async fn extract(archive: &Path, destination: &Path) -> Result<ExtractResult, ExtractError> {
+pub async fn extract(
+    archive: &Path,
+    destination: &Path,
+    cas_store: Option<&Path>,
+) -> Result<ExtractResult, ExtractError> {
     match CondaArchiveType::try_from(archive).ok_or(ExtractError::UnsupportedArchiveType)? {
-        CondaArchiveType::TarBz2 => extract_tar_bz2(archive, destination).await,
-        CondaArchiveType::Conda => extract_conda(archive, destination).await,
+        CondaArchiveType::TarBz2 => extract_tar_bz2(archive, destination, cas_store).await,
+        CondaArchiveType::Conda => extract_conda(archive, destination, cas_store).await,
     }
 }

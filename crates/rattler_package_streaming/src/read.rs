@@ -23,38 +23,68 @@ pub(crate) fn stream_tar_zst(
 }
 
 /// Extracts the contents a `.tar.bz2` package archive.
+///
+/// # Arguments
+///
+/// * `reader` - The reader to read the archive from
+/// * `destination` - The directory to extract files to
+/// * `cas_root` - Optional CAS root directory for deduplication. If provided, file contents
+///   are stored in the CAS and hardlinked to the destination. Pass `None` to extract
+///   without CAS (e.g., when CAS and destination are on different filesystems).
 pub fn extract_tar_bz2(
     reader: impl Read,
     destination: &Path,
+    cas_root: Option<&Path>,
 ) -> Result<ExtractResult, ExtractError> {
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
 
     process_with_hashing(reader, |reader| {
-        stream_tar_bz2(reader).unpack(destination)?;
+        let mut archive = stream_tar_bz2(reader);
+        if let Some(cas_root) = cas_root {
+            rattler_cas_tar::unpack(archive, destination, cas_root)?;
+        } else {
+            archive.unpack(destination)?;
+        }
         Ok(())
     })
 }
 
 /// Extracts the contents of a `.conda` package archive.
+///
+/// # Arguments
+///
+/// * `reader` - The reader to read the archive from
+/// * `destination` - The directory to extract files to
+/// * `cas_root` - Optional CAS root directory for deduplication. If provided, file contents
+///   are stored in the CAS and hardlinked to the destination.
 pub fn extract_conda_via_streaming(
     reader: impl Read,
     destination: &Path,
+    cas_root: Option<&Path>,
 ) -> Result<ExtractResult, ExtractError> {
     // Construct the destination path if it doesnt exist yet
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
 
     process_with_hashing(reader, |reader| {
         while let Some(file) = read_zipfile_from_stream(reader)? {
-            extract_zipfile(file, destination)?;
+            extract_zipfile(file, destination, cas_root)?;
         }
         Ok(())
     })
 }
 
 /// Extracts the contents of a .conda package archive by fully reading the stream and then decompressing
+///
+/// # Arguments
+///
+/// * `reader` - The reader to read the archive from
+/// * `destination` - The directory to extract files to
+/// * `cas_root` - Optional CAS root directory for deduplication. If provided, file contents
+///   are stored in the CAS and hardlinked to the destination.
 pub fn extract_conda_via_buffering(
     reader: impl Read,
     destination: &Path,
+    cas_root: Option<&Path>,
 ) -> Result<ExtractResult, ExtractError> {
     // delete destination first, as this method is usually used as a fallback from a failed streaming decompression
     if destination.exists() {
@@ -71,7 +101,7 @@ pub fn extract_conda_via_buffering(
 
         for i in 0..archive.len() {
             let file = archive.by_index(i)?;
-            extract_zipfile(file, destination)?;
+            extract_zipfile(file, destination, cas_root)?;
         }
         Ok(())
     })
@@ -80,6 +110,7 @@ pub fn extract_conda_via_buffering(
 fn extract_zipfile<R: std::io::Read>(
     zip_file: ZipFile<'_, R>,
     destination: &Path,
+    cas_root: Option<&Path>,
 ) -> Result<(), ExtractError> {
     // If an error occurs while we are reading the contents of the zip we don't want to
     // seek to the end of the file. Using [`ManuallyDrop`] we prevent `drop` to be called on
@@ -92,7 +123,12 @@ fn extract_zipfile<R: std::io::Read>(
         .map(OsStr::to_string_lossy)
         .is_some_and(|file_name| file_name.ends_with(".tar.zst"))
     {
-        stream_tar_zst(&mut *file)?.unpack(destination)?;
+        let mut archive = stream_tar_zst(&mut *file)?;
+        if let Some(cas_root) = cas_root {
+            rattler_cas_tar::unpack(archive, destination, cas_root)?;
+        } else {
+            archive.unpack(destination)?;
+        }
     } else {
         // Manually read to the end of the stream if that didn't happen.
         std::io::copy(&mut *file, &mut std::io::sink())?;

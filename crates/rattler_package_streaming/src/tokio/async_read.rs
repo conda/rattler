@@ -1,7 +1,10 @@
 //! Functions that enable extracting or streaming a Conda package for objects
 //! that implement the [`tokio::io::AsyncRead`] trait.
 
-use std::{io::Read, path::Path};
+use std::{
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 use futures_util::stream::StreamExt;
 use tokio::io::AsyncRead;
@@ -63,14 +66,14 @@ async fn unpack_tar_archive<R: tokio::io::AsyncRead + Unpin>(
 
                 if has_any_executable_bit != 0 {
                     if let Some(path) = unpacked_path {
-                        let metadata = tokio::fs::metadata(&path)
+                        let metadata = fs_err::tokio::metadata(&path)
                             .await
                             .map_err(ExtractError::IoError)?;
                         let permissions = metadata.permissions();
 
                         // Only update if not already executable
                         if permissions.mode() & EXECUTABLE_MODE_BITS != EXECUTABLE_MODE_BITS {
-                            tokio::fs::set_permissions(
+                            fs_err::tokio::set_permissions(
                                 &path,
                                 std::fs::Permissions::from_mode(
                                     permissions.mode() | EXECUTABLE_MODE_BITS,
@@ -88,20 +91,16 @@ async fn unpack_tar_archive<R: tokio::io::AsyncRead + Unpin>(
     Ok(())
 }
 
-/// Extracts the contents a `.tar.bz2` package archive using fully async implementation.
+/// Extracts the contents a `.tar.bz2` package archive.
+///
+/// When `cas_root` is `None`, uses a fully async implementation.
+/// When `cas_root` is `Some`, uses fully async CAS extraction.
 pub async fn extract_tar_bz2(
     reader: impl AsyncRead + Send + Unpin + 'static,
     destination: &Path,
+    cas_root: Option<&Path>,
 ) -> Result<ExtractResult, ExtractError> {
     use async_compression::tokio::bufread::BzDecoder;
-
-    // Ensure the destination directory exists
-    tokio::fs::create_dir_all(destination)
-        .await
-        .map_err(ExtractError::CouldNotCreateDestination)?;
-
-    // Clone destination for the async block
-    let destination = destination.to_owned();
 
     // Wrap the reading in additional readers that will compute the hashes while extracting
     let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
@@ -125,8 +124,12 @@ pub async fn extract_tar_bz2(
         .set_unpack_xattrs(false)
         .build();
 
-    // Unpack entries manually, preserving only executable bits on Unix
-    unpack_tar_archive(archive, &destination).await?;
+    // Extract the archive.
+    if let Some(cas_root) = cas_root {
+        rattler_cas_tar::unpack_async(archive, destination, cas_root).await?;
+    } else {
+        unpack_tar_archive(archive, destination).await?;
+    }
 
     // Read the file to the end to make sure the hash is properly computed
     tokio::io::copy(&mut size_reader, &mut tokio::io::sink())
@@ -160,13 +163,9 @@ pub async fn extract_tar_bz2(
 pub async fn extract_conda(
     reader: impl AsyncRead + Send + 'static,
     destination: &Path,
+    cas_root: Option<&Path>,
 ) -> Result<ExtractResult, ExtractError> {
-    extract_conda_internal(
-        reader,
-        destination,
-        crate::read::extract_conda_via_streaming,
-    )
-    .await
+    extract_conda_internal(reader, destination, cas_root.map(Path::to_path_buf), false).await
 }
 
 /// Extracts the contents of a .conda package archive by fully reading the
@@ -174,13 +173,9 @@ pub async fn extract_conda(
 pub async fn extract_conda_via_buffering(
     reader: impl AsyncRead + Send + 'static,
     destination: &Path,
+    cas_root: Option<&Path>,
 ) -> Result<ExtractResult, ExtractError> {
-    extract_conda_internal(
-        reader,
-        destination,
-        crate::read::extract_conda_via_buffering,
-    )
-    .await
+    extract_conda_internal(reader, destination, cas_root.map(Path::to_path_buf), true).await
 }
 
 /// Extracts the contents of a `.conda` package archive using the provided
@@ -188,7 +183,8 @@ pub async fn extract_conda_via_buffering(
 async fn extract_conda_internal(
     reader: impl AsyncRead + Send + 'static,
     destination: &Path,
-    extract_fn: fn(Box<dyn Read>, &Path) -> Result<ExtractResult, ExtractError>,
+    cas_root: Option<PathBuf>,
+    use_buffering: bool,
 ) -> Result<ExtractResult, ExtractError> {
     // Create a async -> sync bridge
     let reader = SyncIoBridge::new(Box::pin(reader));
@@ -197,7 +193,11 @@ async fn extract_conda_internal(
     let destination = destination.to_owned();
     tokio::task::spawn_blocking(move || {
         let reader: Box<dyn Read> = Box::new(reader);
-        extract_fn(reader, &destination)
+        if use_buffering {
+            crate::read::extract_conda_via_buffering(reader, &destination, cas_root.as_deref())
+        } else {
+            crate::read::extract_conda_via_streaming(reader, &destination, cas_root.as_deref())
+        }
     })
     .await
     .unwrap_or_else(|err| {

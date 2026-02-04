@@ -3974,6 +3974,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_cas"
+version = "0.1.0"
+dependencies = [
+ "fs-err",
+ "pin-project-lite",
+ "rattler_digest",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "rattler_cas_tar"
+version = "0.1.0"
+dependencies = [
+ "astral-tokio-tar",
+ "filetime",
+ "fs-err",
+ "futures-util",
+ "rattler_cas",
+ "tar",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "rattler_conda_types"
 version = "0.43.1"
 dependencies = [
@@ -4182,11 +4208,14 @@ dependencies = [
  "async-compression",
  "bzip2",
  "chrono",
+ "filetime",
  "fs-err",
  "futures-util",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
  "num_cpus",
+ "rattler_cas",
+ "rattler_cas_tar",
  "rattler_conda_types",
  "rattler_digest",
  "rattler_networking",

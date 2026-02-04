@@ -12,10 +12,13 @@ readme.workspace = true
 
 [dependencies]
 bzip2 = { workspace = true }
+filetime = { workspace = true }
 chrono = { workspace = true }
-fs-err = { workspace = true, features = ["tokio"], optional = true }
+fs-err = { workspace = true, features = ["tokio"] }
 futures-util = { workspace = true }
 rattler_conda_types = { workspace = true, default-features = false }
+rattler_cas_tar = { workspace = true, features = ["sync", "tokio"] }
+rattler_cas = { workspace = true }
 rattler_digest = { workspace = true, default-features = false, features = ["tokio"] }
 rattler_networking = { workspace = true, default-features = false }
 rattler_redaction = { workspace = true, features = [
@@ -52,7 +55,7 @@ getrandom_v02 = { package = "getrandom", version = "0.2", features = ["js"] }
 default = ["rustls-tls"]
 native-tls = ["rattler_networking/native-tls", "rattler_redaction/native-tls"]
 rustls-tls = ["rattler_networking/rustls-tls", "rattler_redaction/rustls-tls"]
-reqwest = ["dep:reqwest-middleware", "dep:reqwest", "dep:fs-err"]
+reqwest = ["dep:reqwest-middleware", "dep:reqwest"]
 wasm = ["zstd/wasm"]
 
 [package.metadata.docs.rs]

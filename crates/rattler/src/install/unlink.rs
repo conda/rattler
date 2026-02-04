@@ -409,7 +409,8 @@ mod tests {
             let package_dir = tempfile::TempDir::new().unwrap();
 
             // Create package cache
-            rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
+            rattler_package_streaming::fs::extract(&package_path, package_dir.path(), None)
+                .unwrap();
 
             // Link the package
             let paths = link_package(

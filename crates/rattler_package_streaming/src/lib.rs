@@ -1,6 +1,41 @@
 #![deny(missing_docs)]
 
 //! This crate provides the ability to extract a Conda package archive or specific parts of it.
+//!
+//! # Content Addressable Store (CAS)
+//!
+//! This crate supports CAS-based extraction for file deduplication across packages.
+//! When extracting with CAS enabled:
+//!
+//! - File contents are stored in a content-addressed store indexed by SHA-256 hash
+//! - Files in the destination directory are hardlinked from the CAS
+//! - Identical files across multiple packages share storage in the CAS
+//!
+//! ## Usage
+//!
+//! ```rust,no_run
+//! use std::path::Path;
+//! use rattler_package_streaming::fs::extract;
+//!
+//! // Extract with CAS deduplication by providing the CAS path
+//! let result = extract(
+//!     Path::new("package.conda"),
+//!     Path::new("/destination"),
+//!     Some(Path::new("/path/to/cas")),
+//! ).unwrap();
+//! ```
+//!
+//! ## Requirements
+//!
+//! - The CAS store and destination must be on the same filesystem (for hardlinking)
+//! - If they are on different filesystems, pass `None` for the CAS store
+//!
+//! ## Security
+//!
+//! The CAS extraction includes security measures against malicious archives:
+//! - Path traversal attacks (`..` in paths) are rejected
+//! - Absolute paths are normalized to relative paths
+//! - Symlink targets are validated to prevent escape from the destination
 
 use simple_spawn_blocking::Cancelled;
 use std::path::PathBuf;
@@ -17,6 +52,7 @@ pub mod seek;
 #[cfg(feature = "reqwest")]
 pub mod reqwest;
 
+pub mod cas;
 pub mod fs;
 pub mod tokio;
 pub mod write;
@@ -63,6 +99,16 @@ pub enum ExtractError {
 
     #[error("could not parse archive member {0}: {1}")]
     ArchiveMemberParseError(PathBuf, #[source] std::io::Error),
+
+    #[error("path traversal attempt in archive: {0}")]
+    PathTraversal(PathBuf),
+
+    #[error("failed to create hardlink from CAS to {destination}: {source}")]
+    HardlinkFailed {
+        destination: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 impl From<ZipError> for ExtractError {
@@ -77,6 +123,22 @@ impl From<ZipError> for ExtractError {
 impl From<Cancelled> for ExtractError {
     fn from(_value: Cancelled) -> Self {
         Self::Cancelled
+    }
+}
+
+impl From<rattler_cas_tar::Error> for ExtractError {
+    fn from(err: rattler_cas_tar::Error) -> Self {
+        match err {
+            rattler_cas_tar::Error::IoError(e) => Self::IoError(e),
+            rattler_cas_tar::Error::PathTraversal(p) => Self::PathTraversal(p),
+            rattler_cas_tar::Error::HardlinkFailed {
+                destination,
+                source,
+            } => Self::HardlinkFailed {
+                destination,
+                source,
+            },
+        }
     }
 }
 

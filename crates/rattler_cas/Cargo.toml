@@ -1,0 +1,21 @@
+[package]
+name = "rattler_cas"
+version = "0.1.0"
+edition.workspace = true
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+description = "Content Addressable Store (CAS) for deduplicating file contents"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[dependencies]
+fs-err = { workspace = true, features = ["tokio"] }
+rattler_digest = { workspace = true, default-features = false, features = ["tokio"] }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = [], default-features = false }
+pin-project-lite = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

@@ -15,6 +15,11 @@ pub struct Opt {
     /// If not specified, extracts to a directory with the same name as the package
     #[clap(short, long)]
     destination: Option<PathBuf>,
+
+    /// Path to a Content Addressable Store (CAS) directory for file deduplication.
+    /// When specified, file contents are stored in the CAS and hardlinked to the destination.
+    #[clap(long)]
+    cas: Option<PathBuf>,
 }
 
 /// Strips package extensions (.tar.bz2 or .conda) from a filename
@@ -72,6 +77,7 @@ fn determine_destination_from_url(url: &Url) -> miette::Result<PathBuf> {
 async fn extract_from_url(
     url: Url,
     destination: Option<PathBuf>,
+    cas: Option<PathBuf>,
     package_display: &str,
 ) -> miette::Result<(PathBuf, rattler_package_streaming::ExtractResult)> {
     let destination = destination.map_or_else(|| determine_destination_from_url(&url), Ok)?;
@@ -84,11 +90,17 @@ async fn extract_from_url(
 
     let client = create_authenticated_client()?;
 
-    let result =
-        rattler_package_streaming::reqwest::tokio::extract(client, url, &destination, None, None)
-            .await
-            .into_diagnostic()
-            .with_context(|| format!("Failed to extract package from URL: {package_display}"))?;
+    let result = rattler_package_streaming::reqwest::tokio::extract(
+        client,
+        url,
+        &destination,
+        cas.as_deref(),
+        None,
+        None,
+    )
+    .await
+    .into_diagnostic()
+    .with_context(|| format!("Failed to extract package from URL: {package_display}"))?;
 
     Ok((destination, result))
 }
@@ -109,15 +121,20 @@ fn determine_destination_from_path(package_path: &str) -> miette::Result<PathBuf
 fn extract_from_path(
     package_path: &str,
     destination: Option<PathBuf>,
+    cas: Option<PathBuf>,
 ) -> miette::Result<(PathBuf, rattler_package_streaming::ExtractResult)> {
     let destination =
         destination.map_or_else(|| determine_destination_from_path(package_path), Ok)?;
 
     println!("Extracting {} to {}", package_path, destination.display());
 
-    let result = rattler_package_streaming::fs::extract(&PathBuf::from(package_path), &destination)
-        .into_diagnostic()
-        .with_context(|| format!("Failed to extract package: {package_path}"))?;
+    let result = rattler_package_streaming::fs::extract(
+        &PathBuf::from(package_path),
+        &destination,
+        cas.as_deref(),
+    )
+    .into_diagnostic()
+    .with_context(|| format!("Failed to extract package: {package_path}"))?;
 
     Ok((destination, result))
 }
@@ -125,9 +142,9 @@ fn extract_from_path(
 pub async fn extract(opt: Opt) -> miette::Result<()> {
     // Try to parse as URL, otherwise treat as file path
     let (destination, result) = if let Ok(url) = Url::parse(&opt.package) {
-        extract_from_url(url, opt.destination, &opt.package).await?
+        extract_from_url(url, opt.destination, opt.cas, &opt.package).await?
     } else {
-        extract_from_path(&opt.package, opt.destination)?
+        extract_from_path(&opt.package, opt.destination, opt.cas)?
     };
 
     println!(
