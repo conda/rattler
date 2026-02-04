@@ -27,7 +27,8 @@ impl<'a> ExtractedPackage<'a> {
     pub fn from_package_file(file: &'a Path) -> miette::Result<Self> {
         let extraction_dir = tempfile::tempdir().into_diagnostic()?;
 
-        rattler_package_streaming::fs::extract(file, extraction_dir.path(), None).into_diagnostic()?;
+        rattler_package_streaming::fs::extract(file, extraction_dir.path(), None)
+            .into_diagnostic()?;
 
         let index_json =
             IndexJson::from_package_directory(extraction_dir.path()).into_diagnostic()?;

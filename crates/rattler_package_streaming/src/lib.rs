@@ -131,9 +131,13 @@ impl From<rattler_cas_tar::Error> for ExtractError {
         match err {
             rattler_cas_tar::Error::IoError(e) => Self::IoError(e),
             rattler_cas_tar::Error::PathTraversal(p) => Self::PathTraversal(p),
-            rattler_cas_tar::Error::HardlinkFailed { destination, source } => {
-                Self::HardlinkFailed { destination, source }
-            }
+            rattler_cas_tar::Error::HardlinkFailed {
+                destination,
+                source,
+            } => Self::HardlinkFailed {
+                destination,
+                source,
+            },
         }
     }
 }

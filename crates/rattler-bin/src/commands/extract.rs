@@ -90,11 +90,17 @@ async fn extract_from_url(
 
     let client = create_authenticated_client()?;
 
-    let result =
-        rattler_package_streaming::reqwest::tokio::extract(client, url, &destination, cas.as_deref(), None, None)
-            .await
-            .into_diagnostic()
-            .with_context(|| format!("Failed to extract package from URL: {package_display}"))?;
+    let result = rattler_package_streaming::reqwest::tokio::extract(
+        client,
+        url,
+        &destination,
+        cas.as_deref(),
+        None,
+        None,
+    )
+    .await
+    .into_diagnostic()
+    .with_context(|| format!("Failed to extract package from URL: {package_display}"))?;
 
     Ok((destination, result))
 }
@@ -122,9 +128,13 @@ fn extract_from_path(
 
     println!("Extracting {} to {}", package_path, destination.display());
 
-    let result = rattler_package_streaming::fs::extract(&PathBuf::from(package_path), &destination, cas.as_deref())
-        .into_diagnostic()
-        .with_context(|| format!("Failed to extract package: {package_path}"))?;
+    let result = rattler_package_streaming::fs::extract(
+        &PathBuf::from(package_path),
+        &destination,
+        cas.as_deref(),
+    )
+    .into_diagnostic()
+    .with_context(|| format!("Failed to extract package: {package_path}"))?;
 
     Ok((destination, result))
 }

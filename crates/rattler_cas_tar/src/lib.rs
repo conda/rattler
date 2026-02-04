@@ -875,18 +875,14 @@ mod tests {
         header.set_size(12);
         header.set_mode(0o644);
         header.set_cksum();
-        builder
-            .append(&header, b"same content" as &[u8])
-            .unwrap();
+        builder.append(&header, b"same content" as &[u8]).unwrap();
 
         let mut header = tar::Header::new_gnu();
         header.set_path("file2.txt").unwrap();
         header.set_size(12);
         header.set_mode(0o644);
         header.set_cksum();
-        builder
-            .append(&header, b"same content" as &[u8])
-            .unwrap();
+        builder.append(&header, b"same content" as &[u8]).unwrap();
 
         let archive_data = builder.into_inner().unwrap();
 

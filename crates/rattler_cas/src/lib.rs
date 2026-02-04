@@ -79,10 +79,7 @@ fn temp_dir(root: &Path) -> PathBuf {
 ///
 /// * `root` - The root directory of the CAS store
 /// * `reader` - The reader to read content from
-pub fn write_sync(
-    root: &Path,
-    reader: &mut impl Read,
-) -> std::io::Result<Sha256Hash> {
+pub fn write_sync(root: &Path, reader: &mut impl Read) -> std::io::Result<Sha256Hash> {
     let mut w = SyncWriter::create(root)?;
     std::io::copy(reader, &mut w)?;
     w.finish()

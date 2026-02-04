@@ -236,10 +236,26 @@ pub async fn extract(
         .ok_or(ExtractError::UnsupportedArchiveType)?
     {
         CondaArchiveType::TarBz2 => {
-            extract_tar_bz2(client, url, destination, cas_root, expected_sha256, reporter).await
+            extract_tar_bz2(
+                client,
+                url,
+                destination,
+                cas_root,
+                expected_sha256,
+                reporter,
+            )
+            .await
         }
         CondaArchiveType::Conda => {
-            extract_conda(client, url, destination, cas_root, expected_sha256, reporter).await
+            extract_conda(
+                client,
+                url,
+                destination,
+                cas_root,
+                expected_sha256,
+                reporter,
+            )
+            .await
         }
     }
 }
