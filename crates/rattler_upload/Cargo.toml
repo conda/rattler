@@ -2,7 +2,10 @@
 name = "rattler_upload"
 version = "0.4.10"
 edition.workspace = true
-authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>", "Magenta Qin <magenta2127@gmail.com>"]
+authors = [
+  "Wolf Vollprecht <w.vollprecht@gmail.com>",
+  "Magenta Qin <magenta2127@gmail.com>",
+]
 description = "A crate to Upload conda packages to various channels."
 categories.workspace = true
 homepage.workspace = true
@@ -16,7 +19,7 @@ rustls-tls = [
   "reqwest/rustls-tls",
   "rattler_networking/rustls-tls",
   "rattler_package_streaming/rustls-tls",
-  "sigstore-sign?/rustls-tls",
+  "sigstore-sign?/rustls",
 ]
 native-tls = [
   "reqwest/native-tls",
