@@ -25,8 +25,13 @@ use rayon::prelude::IndexedParallelIterator;
 /// The mode in which the validation should be performed.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub enum ValidationMode {
-    /// Only check if the files exists. Do not check if the hashes match.
+    /// Only check if the package directory exists and contains a valid index.json.
+    /// Does not validate individual files or paths.json. This is the fastest validation
+    /// mode but provides minimal guarantees about package integrity.
     #[default]
+    Skip,
+
+    /// Only check if the files exists. Do not check if the hashes match.
     Fast,
 
     /// Check if the files exists and the content matches the hashes.
@@ -128,6 +133,12 @@ pub fn validate_package_directory(
         Err(e) => return Err(PackageValidationError::ReadPathsJsonError(e)),
         Ok(paths) => paths,
     };
+
+    // In Skip mode, only validate that index.json and paths.json exist and are readable.
+    // Skip all file validation checks.
+    if mode == ValidationMode::Skip {
+        return Ok((index_json, paths));
+    }
 
     // Validate all the entries
     validate_package_directory_from_paths(package_dir, &paths, mode)

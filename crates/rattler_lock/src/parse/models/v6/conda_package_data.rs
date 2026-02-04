@@ -3,15 +3,6 @@ use std::{
     collections::{BTreeMap, BTreeSet},
 };
 
-use rattler_conda_types::{
-    package::ArchiveIdentifier, utils::TimestampMs, BuildNumber, ChannelUrl, NoArchType,
-    PackageName, PackageRecord, PackageUrl, VersionWithSource,
-};
-use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
-use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
-use url::Url;
-
 use super::source_data::{PackageBuildSourceSerializer, SourceLocationSerializer};
 use crate::{
     conda,
@@ -20,6 +11,17 @@ use crate::{
     utils::{derived_fields, derived_fields::LocationDerivedFields},
     CondaPackageData, ConversionError, UrlOrPath,
 };
+use rattler_conda_types::package::{
+    ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
+};
+use rattler_conda_types::{
+    package::CondaArchiveIdentifier, utils::TimestampMs, BuildNumber, ChannelUrl, NoArchType,
+    PackageName, PackageRecord, PackageUrl, VersionWithSource,
+};
+use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
+use url::Url;
 
 /// A helper struct that wraps all fields of a [`crate::CondaPackageData`] and
 /// allows for easy conversion between the two.
@@ -96,7 +98,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub track_features: Cow<'a, [String]>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub file_name: Option<Cow<'a, Option<String>>>,
+    pub file_name: Option<Cow<'a, Option<DistArchiveIdentifier>>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license: Cow<'a, Option<String>>,
@@ -205,21 +207,21 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
         if value
             .location
             .file_name()
-            .is_some_and(|name| ArchiveIdentifier::try_from_filename(name).is_some())
+            .is_some_and(|name| CondaArchiveIdentifier::try_from_filename(name).is_some())
         {
             Ok(CondaPackageData::Binary(CondaBinaryData {
                 location: value.location,
                 file_name: value
                     .file_name
                     .map(Cow::into_owned)
-                    .unwrap_or(derived.file_name)
-                    .unwrap_or_else(|| {
-                        format!(
-                            "{}-{}-{}.conda",
-                            package_record.name.as_normalized(),
-                            package_record.version,
-                            package_record.build
-                        )
+                    .unwrap_or(derived.identifier)
+                    .unwrap_or_else(|| DistArchiveIdentifier {
+                        identifier: ArchiveIdentifier {
+                            name: package_record.name.as_normalized().to_owned(),
+                            version: package_record.version.to_string(),
+                            build_string: package_record.build.clone(),
+                        },
+                        archive_type: DistArchiveType::Conda(CondaArchiveType::Conda),
                     }),
                 channel: value
                     .channel
@@ -256,7 +258,7 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
         );
 
         let channel = value.as_binary().and_then(|binary| binary.channel.as_ref());
-        let file_name = value.as_binary().map(|binary| binary.file_name.as_str());
+        let file_name = value.as_binary().map(|binary| &binary.file_name);
         let variants = value
             .as_source()
             .and_then(|source| source.variants.as_ref());
@@ -292,8 +294,8 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             variants: variants.map(Cow::Borrowed),
             channel: (channel != derived.channel.as_ref())
                 .then_some(Cow::Owned(normalized_channel)),
-            file_name: (file_name != derived.file_name.as_deref())
-                .then_some(Cow::Owned(file_name.map(ToString::to_string))),
+            file_name: (file_name != derived.identifier.as_ref())
+                .then_some(Cow::Owned(file_name.cloned())),
             purls: Cow::Borrowed(&package_record.purls),
             depends: Cow::Borrowed(&package_record.depends),
             constrains: Cow::Borrowed(&package_record.constrains),

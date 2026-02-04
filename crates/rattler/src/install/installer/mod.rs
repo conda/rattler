@@ -12,18 +12,6 @@ use std::{
     sync::Arc,
 };
 
-use super::{
-    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
-};
-use crate::install::installer::result_record::InstallationResultRecord;
-use crate::{
-    default_cache_dir,
-    install::{
-        clobber_registry::ClobberedPath,
-        link_script::{LinkScriptError, PrePostLinkResult},
-    },
-    package_cache::PackageCache,
-};
 pub use error::InstallerError;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
 #[cfg(feature = "indicatif")]
@@ -37,17 +25,38 @@ use rattler_conda_types::{
     prefix_record::{Link, LinkType},
     MatchSpec, PackageName, PackageNameMatcher, Platform, PrefixRecord, RepoDataRecord,
 };
-use rattler_networking::retry_policies::default_retry_policy;
-use rattler_networking::LazyClient;
+use rattler_networking::{retry_policies::default_retry_policy, LazyClient};
 use rayon::prelude::*;
 pub use reporter::Reporter;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
 
+use super::{
+    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Prefix, Transaction,
+};
+use crate::{
+    default_cache_dir,
+    install::{
+        clobber_registry::ClobberedPath,
+        installer::result_record::InstallationResultRecord,
+        link_script::{LinkScriptError, PrePostLinkResult},
+    },
+    package_cache::PackageCache,
+};
+
+/// Defines which operations can be used to link files to disk.
 #[derive(Default)]
 pub struct LinkOptions {
+    /// If true, symbolic links will be allowed to install files to the disk.
+    /// Defaults to `true` if `None`.
     pub allow_symbolic_links: Option<bool>,
+
+    /// If true, hard links will be allowed to install files to the disk.
+    /// Defaults to `true` if `None`.
     pub allow_hard_links: Option<bool>,
+
+    /// If true, ref links (or copy-on-write links) will be allowed to install
+    /// files to the disk. Defaults to `true` if `None`.
     pub allow_ref_links: Option<bool>,
 }
 
@@ -241,8 +250,9 @@ impl Installer {
         self
     }
 
-    /// Set the packages that should be ignored (left untouched) during installation.
-    /// Ignored packages will not be removed, installed, or updated.
+    /// Set the packages that should be ignored (left untouched) during
+    /// installation. Ignored packages will not be removed, installed, or
+    /// updated.
     #[must_use]
     pub fn with_ignored_packages(self, ignored: HashSet<PackageName>) -> Self {
         Self {
@@ -251,10 +261,10 @@ impl Installer {
         }
     }
 
-    /// Set the packages that should be ignored (left untouched) during installation.
-    /// Ignored packages will not be removed, installed, or updated.
-    /// This function is similar to [`Self::with_ignored_packages`], but
-    /// modifies an existing instance.
+    /// Set the packages that should be ignored (left untouched) during
+    /// installation. Ignored packages will not be removed, installed, or
+    /// updated. This function is similar to
+    /// [`Self::with_ignored_packages`], but modifies an existing instance.
     pub fn set_ignored_packages(&mut self, ignored: HashSet<PackageName>) -> &mut Self {
         self.ignored_packages = Some(ignored);
         self
@@ -366,7 +376,8 @@ impl Installer {
                 .collect()
         } else {
             let prefix = prefix.clone();
-            // Use sparse collection for much faster reading when checking if packages changed
+            // Use sparse collection for much faster reading when checking if packages
+            // changed
             run_blocking_task(move || {
                 use rattler_conda_types::MinimalPrefixCollection;
                 PrefixRecord::collect_minimal_from_prefix(&prefix)
@@ -461,7 +472,8 @@ impl Installer {
             });
         }
 
-        // At this point we can't have any minimal prefix records, so force them to be prefix records.
+        // At this point we can't have any minimal prefix records, so force them to be
+        // prefix records.
         let transaction = transaction
             .into_prefix_record(&prefix)
             .map_err(InstallerError::FailedToDetectInstalledPackages)?;
@@ -536,7 +548,10 @@ impl Installer {
                         .map(move |r| (r, r.on_unlink_start(operation_idx, record)));
                     driver.clobber_registry().unregister_paths(record);
                     unlink_package(prefix, record).await.map_err(|e| {
-                        InstallerError::UnlinkError(record.repodata_record.file_name.clone(), e)
+                        InstallerError::UnlinkError(
+                            record.repodata_record.identifier.to_string(),
+                            e,
+                        )
                     })?;
                     if let Some((reporter, index)) = reporter {
                         reporter.on_unlink_complete(index);
@@ -721,7 +736,7 @@ async fn link_package(
                 clobber_registry,
                 install_options,
             )
-            .map_err(|e| InstallerError::LinkError(record.file_name.clone(), e))?;
+            .map_err(|e| InstallerError::LinkError(record.identifier.to_string(), e))?;
 
             // Construct a PrefixRecord for the package
             let prefix_record = PrefixRecord {
@@ -801,7 +816,7 @@ async fn populate_cache(
             }),
         )
         .await
-        .map_err(|e| InstallerError::FailedToFetch(record.file_name.clone(), e))
+        .map_err(|e| InstallerError::FailedToFetch(record.identifier.to_string(), e))
 }
 
 /// Updates only the `requested_specs` fields in a conda-meta JSON file.
@@ -812,7 +827,8 @@ async fn populate_cache(
 /// `MinimalPrefixRecord`, which doesn't contain most of the fields.
 /// Therefore direct writing could overwrite data we want to preserve.
 ///
-/// Currently we're loading full json, but we could do that inplace without parsing whole file.
+/// Currently we're loading full json, but we could do that inplace without
+/// parsing whole file.
 fn update_requested_specs_in_json(
     path: &Path,
     requested_specs: &[String],
@@ -972,14 +988,13 @@ fn update_existing_records<'p>(
 mod tests {
     use std::path::Path;
 
+    use super::*;
     use rattler_conda_types::{
         package::IndexJson, prefix::Prefix, MatchSpec, PackageName, ParseStrictness::Strict,
     };
     use rattler_package_streaming::seek::read_package_file;
     use tempfile::TempDir;
     use url::Url;
-
-    use super::*;
 
     /// Creates a test environment with a temporary directory and prefix
     fn create_test_environment() -> (TempDir, Prefix) {
@@ -1004,7 +1019,7 @@ mod tests {
                 None, // md5 unknown
             )
             .unwrap(),
-            file_name: "empty-0.1.0-h4616a5c_0.conda".to_string(),
+            identifier: "empty-0.1.0-h4616a5c_0.conda".parse().unwrap(),
             url: Url::from_file_path(package_path).unwrap(),
             channel: Some("local".to_string()),
         }
@@ -1293,7 +1308,8 @@ mod tests {
         let meta_file_path = get_meta_file_path(&target_prefix, &repo_record);
         assert!(meta_file_path.exists(), "Package should be installed");
 
-        // Step 2: Try to "remove" the package by installing an empty environment, but ignore the package
+        // Step 2: Try to "remove" the package by installing an empty environment, but
+        // ignore the package
         let package_name = repo_record.package_record.name.clone();
         let ignored_packages = HashSet::from_iter(vec![package_name]);
         let installer_with_ignored = Installer::new().with_ignored_packages(ignored_packages);

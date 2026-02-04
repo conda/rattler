@@ -1,9 +1,8 @@
 //! Native Sigstore attestation creation for conda packages
 //!
-//! This module provides attestation creation using the sigstore-sign crate,
-//! replacing the previous cosign CLI-based implementation.
+//! This module provides attestation creation using the sigstore-sign crate.
 
-use miette::IntoDiagnostic;
+use miette::{IntoDiagnostic, WrapErr};
 use reqwest::header;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
@@ -47,7 +46,11 @@ pub async fn create_attestation(
     client: &ClientWithMiddleware,
 ) -> miette::Result<String> {
     // Step 1: Get identity token from ambient environment (GitHub Actions, GitLab CI, etc.)
-    let identity_token = get_identity_token().await?;
+    let identity_token = IdentityToken::detect_ambient()
+        .await
+        .into_diagnostic()
+        .with_context(|| "Failed to detect OIDC identity token")?
+        .ok_or_else(|| miette::miette!("No OIDC identity token found in environment. Attestation signing is supported in GitHub Actions, GitLab CI, and other OIDC-enabled CI environments."))?;
 
     // Step 2: Compute package digest
     let digest = rattler_digest::compute_file_digest::<rattler_digest::Sha256>(package_path)
@@ -102,38 +105,6 @@ pub async fn create_attestation(
 
     // Always return the bundle JSON for uploading to prefix.dev
     Ok(bundle_json)
-}
-
-/// Get an identity token from the ambient CI/CD environment
-async fn get_identity_token() -> miette::Result<IdentityToken> {
-    use sigstore_sign::oidc::ambient;
-
-    // Check if we're in a supported CI environment
-    if !ambient::is_ci_environment() {
-        return Err(miette::miette!(
-            "Not running in a supported CI/CD environment.\n\
-             Sigstore attestation requires one of:\n\
-             - GitHub Actions (with 'id-token: write' permission)\n\
-             - GitLab CI\n\
-             - Google Cloud Build\n\
-             - Buildkite\n\
-             - CircleCI"
-        ));
-    }
-
-    let detected = ambient::detect_environment();
-    tracing::info!("Detected CI environment: {:?}", detected);
-
-    ambient::get_ambient_token().await.map_err(|e| {
-        miette::miette!(
-            "Failed to get identity token from CI environment: {}\n\n\
-             Troubleshooting:\n\
-             1. For GitHub Actions, ensure you have 'id-token: write' permission\n\
-             2. For GitLab CI, ensure CI_JOB_JWT_V2 or CI_JOB_JWT is available\n\
-             3. Check that your CI workflow is correctly configured for OIDC",
-            e
-        )
-    })
 }
 
 /// Store a signed attestation bundle to GitHub's attestation API

@@ -150,7 +150,7 @@ impl SubdirClient for ShardedSubdir {
             bytes
         };
 
-        let shard_bytes = decode_zst_bytes_async(shard_bytes).await?;
+        let shard_bytes = decode_zst_bytes_async(shard_bytes, shard_url).await?;
 
         // Create a future to parse the records from the shard
         let records = parse_records(

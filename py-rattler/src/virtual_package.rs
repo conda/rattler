@@ -117,6 +117,14 @@ impl PyVirtualPackageOverrides {
     pub fn set_libc(&mut self, value: Option<PyOverride>) {
         self.inner.libc = value.map(Into::into);
     }
+    #[getter]
+    pub fn get_archspec(&self) -> Option<PyOverride> {
+        self.inner.archspec.clone().map(Into::into)
+    }
+    #[setter]
+    pub fn set_archspec(&mut self, value: Option<PyOverride>) {
+        self.inner.archspec = value.map(Into::into);
+    }
 }
 
 #[pyclass]

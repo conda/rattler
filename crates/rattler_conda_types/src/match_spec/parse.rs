@@ -24,7 +24,7 @@ use crate::match_spec::condition::parse_condition;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
     match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError},
-    package::ArchiveIdentifier,
+    package::CondaArchiveIdentifier,
     utils::{path::is_absolute_path, url::parse_scheme},
     version_spec::{
         is_start_of_version_constraint,
@@ -370,7 +370,17 @@ fn parse_bracket_vec_into_components(
                 match_spec.subdir = match_spec.subdir.or(subdir);
             }
             "license" => match_spec.license = Some(value.to_string()),
-            // TODO: Still need to add `track_features`, `features`, and `license_family`
+            "track_features" => {
+                match_spec.track_features = Some(
+                    value
+                        .split([',', ' ']) // Split on BOTH comma and space
+                        .map(str::trim) // Remove surrounding whitespace
+                        .filter(|s| !s.is_empty()) // Filter out empty strings from "a, b"
+                        .map(ToString::to_string)
+                        .collect(),
+                );
+            }
+            // TODO: Still need to add `features` and `license_family`
             // to the match spec.
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
         }
@@ -708,8 +718,8 @@ pub(crate) fn matchspec_parser(
     // 4. Parse as url
     if nameless_match_spec.url.is_none() {
         if let Some(url) = parse_url_like(&input)? {
-            let archive = ArchiveIdentifier::try_from_url(&url);
-            let name = archive.and_then(|a| PackageNameMatcher::from_str(&a.name).ok());
+            let archive = CondaArchiveIdentifier::try_from_url(&url);
+            let name = archive.and_then(|a| PackageNameMatcher::from_str(&a.identifier.name).ok());
 
             // TODO: This should also work without a proper name from the url filename
             if name.is_none() {
@@ -1471,6 +1481,24 @@ mod tests {
     }
 
     #[test]
+    fn test_parsing_track_features() {
+        let cases = vec![
+            "python[track_features=\"pypy debug\"]",  // Space
+            "python[track_features=\"pypy,debug\"]",  // Comma
+            "python[track_features=\"pypy, debug\"]", // Comma + Space
+        ];
+
+        for case in cases {
+            let spec = MatchSpec::from_str(case, Strict).unwrap();
+            assert_eq!(
+                spec.track_features,
+                Some(vec!["pypy".to_string(), "debug".to_string()]),
+                "Failed on syntax: {case}",
+            );
+        }
+    }
+
+    #[test]
     fn test_issue_717() {
         assert_matches!(
             MatchSpec::from_str("ray[default,data] >=2.9.0,<3.0.0", Strict),
@@ -1557,6 +1585,7 @@ mod tests {
             ),
             license: Some("MIT".into()),
             condition: None,
+            track_features: None,
         });
 
         // insta check all the strings
