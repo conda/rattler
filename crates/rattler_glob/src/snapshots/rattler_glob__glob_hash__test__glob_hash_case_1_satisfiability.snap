@@ -1,0 +1,10 @@
+---
+source: crates/rattler_glob/src/glob_hash.rs
+expression: snapshot
+---
+Globs:
+- tests/data/satisfiability/source-dependency/**/*
+Hash: ddf785bcb41be51ffe8893e3407d35f421d86f728ed93498c73240529363fef1
+Matched files:
+- tests/data/satisfiability/source-dependency/pixi.lock
+- tests/data/satisfiability/source-dependency/pixi.toml
