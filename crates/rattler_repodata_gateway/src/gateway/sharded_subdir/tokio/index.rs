@@ -13,7 +13,7 @@ use bytes::Bytes;
 use fs_err::tokio as tokio_fs;
 use futures::{future::OptionFuture, TryFutureExt};
 use http::{HeaderMap, Method, StatusCode, Uri};
-use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike};
+use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike, ResponseLike};
 use rattler_conda_types::Channel;
 use rattler_networking::LazyClient;
 use rattler_redaction::Redact;
@@ -25,6 +25,21 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader, BufWriter},
 };
 use url::Url;
+
+/// Wrapper struct to implement `ResponseLike` for `reqwest::Response`.
+/// This is needed because `http-cache-semantics` with the `reqwest` feature
+/// only supports reqwest 0.12, but we use reqwest 0.13.
+struct ResponseWrapper<'a>(&'a Response);
+
+impl ResponseLike for ResponseWrapper<'_> {
+    fn status(&self) -> StatusCode {
+        self.0.status()
+    }
+
+    fn headers(&self) -> &HeaderMap {
+        self.0.headers()
+    }
+}
 
 /// Creates a `SubdirNotFoundError` for when sharded repodata is not available.
 fn create_subdir_not_found_error(channel_base_url: &Url) -> GatewayError {
@@ -234,7 +249,8 @@ pub async fn fetch_index(
                             );
 
                             // Cache the 404 response
-                            let policy = CachePolicy::new(&canonical_request, &response);
+                            let policy =
+                                CachePolicy::new(&canonical_request, &ResponseWrapper(&response));
                             write_not_found_cache(cache_reader.into_inner().inner_mut(), policy)
                                 .await
                                 .map_err(|e| {
@@ -257,7 +273,7 @@ pub async fn fetch_index(
 
                         match cache_header.policy.after_response(
                             &state_request,
-                            &response,
+                            &ResponseWrapper(&response),
                             SystemTime::now(),
                         ) {
                             AfterResponse::NotModified(_policy, _) => {
@@ -350,7 +366,7 @@ pub async fn fetch_index(
         tracing::debug!("sharded index not found (404) at {channel_base_url}, caching this result");
 
         // Cache the 404 response
-        let policy = CachePolicy::new(&canonical_request, &response);
+        let policy = CachePolicy::new(&canonical_request, &ResponseWrapper(&response));
         write_not_found_cache(cache_reader.into_inner().inner_mut(), policy)
             .await
             .map_err(|e| {
@@ -367,7 +383,7 @@ pub async fn fetch_index(
         return Err(create_subdir_not_found_error(channel_base_url));
     }
 
-    let policy = CachePolicy::new(&canonical_request, &response);
+    let policy = CachePolicy::new(&canonical_request, &ResponseWrapper(&response));
     from_response(
         cache_reader.into_inner(),
         &cache_path,

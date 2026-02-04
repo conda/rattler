@@ -12,12 +12,12 @@ publish = false
 [dependencies]
 clap = { workspace = true }
 itertools = { workspace = true }
-rattler_cache = { path = "../../crates/rattler_cache" }
-rattler_conda_types = { path = "../../crates/rattler_conda_types" }
-rattler_repodata_gateway = { path = "../../crates/rattler_repodata_gateway", default-features = false, version = "*" }
-rattler_networking = { path = "../../crates/rattler_networking", default-features = false, version = "*" }
-rattler_solve = { path = "../../crates/rattler_solve" }
-reqwest = { workspace = true, default-features = false, features = ["rustls-tls"] }
+rattler_cache = { workspace = true }
+rattler_conda_types = { workspace = true }
+rattler_repodata_gateway = { workspace = true, default-features = false }
+rattler_networking = { workspace = true, default-features = false }
+rattler_solve = { workspace = true }
+reqwest = { workspace = true, default-features = false, features = ["rustls"] }
 resolvo = { workspace = true, features = ["serde"] }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }

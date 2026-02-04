@@ -53,7 +53,12 @@ chrono = { version = "0.4.41", default-features = false, features = [
   "serde",
   "alloc",
 ] }
-clap = { version = "4.5.38", features = ["derive", "color", "suggestions", "error-context"] }
+clap = { version = "4.5.38", features = [
+  "derive",
+  "color",
+  "suggestions",
+  "error-context",
+] }
 clap-verbosity-flag = "3.0.3"
 cmake = "0.1.54"
 console = { version = "0.16.0", features = ["windows-console-colors"] }
@@ -120,9 +125,9 @@ rand = "0.9.1"
 rayon = "1.10.0"
 reflink-copy = "0.1.26"
 regex = "1.11.1"
-reqwest = { version = "0.12.15", default-features = false }
-reqwest-middleware = "0.4.2"
-reqwest-retry = "0.8.0"
+reqwest = { version = "0.13.1", default-features = false }
+reqwest-middleware = "0.5.0"
+reqwest-retry = "0.9.0"
 resolvo = { version = "0.10.0" }
 # hold back at 0.4.0 until `reqwest-retry` is updated
 retry-policies = { version = "0.5.0", default-features = false }

@@ -14,11 +14,11 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ["rustls-tls", "s3", "sigstore-sign"]
-rustls-tls = [
-  "reqwest/rustls-tls",
-  "rattler_networking/rustls-tls",
-  "rattler_package_streaming/rustls-tls",
+default = ["rustls", "s3", "sigstore-sign"]
+rustls = [
+  "reqwest/rustls",
+  "rattler_networking/rustls",
+  "rattler_package_streaming/rustls",
   "sigstore-sign?/rustls",
 ]
 native-tls = [
@@ -54,6 +54,7 @@ reqwest-retry = { workspace = true }
 tokio-util = { workspace = true, features = ["codec", "compat"] }
 reqwest = { workspace = true, default-features = false, features = [
   "multipart",
+  "query",
 ] }
 url = { workspace = true }
 tracing = { workspace = true }

@@ -72,7 +72,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e61320f0a8ca54a235b0e49307b16dcade6eecd441b1f8a8c7ca9204056cb17c"
 dependencies = [
  "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest-middleware 0.4.2",
  "secrecy",
  "serde",
  "serde_json",
@@ -1554,7 +1554,7 @@ dependencies = [
  "rattler_networking",
  "rattler_repodata_gateway",
  "rattler_solve",
- "reqwest 0.12.28",
+ "reqwest 0.13.1",
  "resolvo",
  "serde_json",
  "tokio",
@@ -2764,7 +2764,6 @@ checksum = "92baf25cf0b8c9246baecf3a444546360a97b569168fdf92563ee6a47829920c"
 dependencies = [
  "http 1.4.0",
  "http-serde",
- "reqwest 0.12.28",
  "serde",
  "time",
 ]
@@ -2894,11 +2893,9 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "socket2",
- "system-configuration",
  "tokio",
  "tower-service",
  "tracing",
- "windows-registry",
 ]
 
 [[package]]
@@ -4536,8 +4533,8 @@ dependencies = [
  "rayon",
  "reflink-copy",
  "regex",
- "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest 0.13.1",
+ "reqwest-middleware 0.5.0",
  "rstest",
  "serde_json",
  "simple_spawn_blocking",
@@ -4578,8 +4575,8 @@ dependencies = [
  "rattler_solve",
  "rattler_upload",
  "rattler_virtual_packages",
- "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest 0.13.1",
+ "reqwest-middleware 0.5.0",
  "tokio",
  "tracing-subscriber",
  "url",
@@ -4608,8 +4605,8 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_redaction",
  "rayon",
- "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest 0.13.1",
+ "reqwest-middleware 0.5.0",
  "reqwest-retry",
  "rstest",
  "serde_json",
@@ -4737,7 +4734,7 @@ dependencies = [
  "rattler_networking",
  "rattler_package_streaming",
  "rattler_s3",
- "reqwest 0.12.28",
+ "reqwest 0.13.1",
  "retry-policies",
  "rmp-serde",
  "serde",
@@ -4855,8 +4852,8 @@ dependencies = [
  "keyring",
  "netrc-rs",
  "rattler_config",
- "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest 0.13.1",
+ "reqwest-middleware 0.5.0",
  "reqwest-retry",
  "retry-policies",
  "rstest",
@@ -4890,8 +4887,8 @@ dependencies = [
  "rattler_digest",
  "rattler_networking",
  "rattler_redaction",
- "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest 0.13.1",
+ "reqwest-middleware 0.5.0",
  "rstest",
  "rstest_reuse",
  "serde_json",
@@ -4923,8 +4920,8 @@ dependencies = [
 name = "rattler_redaction"
 version = "0.1.13"
 dependencies = [
- "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest 0.13.1",
+ "reqwest-middleware 0.5.0",
  "url",
 ]
 
@@ -4973,8 +4970,8 @@ dependencies = [
  "rattler_package_streaming",
  "rattler_redaction",
  "regex",
- "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest 0.13.1",
+ "reqwest-middleware 0.5.0",
  "retry-policies",
  "rmp-serde",
  "rstest",
@@ -5094,8 +5091,8 @@ dependencies = [
  "rattler_redaction",
  "rattler_s3",
  "rattler_solve",
- "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest 0.13.1",
+ "reqwest-middleware 0.5.0",
  "reqwest-retry",
  "serde",
  "serde_json",
@@ -5286,8 +5283,6 @@ checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
 dependencies = [
  "base64",
  "bytes",
- "encoding_rs",
- "futures-channel",
  "futures-core",
  "futures-util",
  "h2",
@@ -5300,8 +5295,6 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
- "mime",
- "mime_guess",
  "native-tls",
  "percent-encoding",
  "pin-project-lite",
@@ -5336,7 +5329,11 @@ checksum = "04e9018c9d814e5f30cc16a0f03271aeab3571e609612d9fe78c1aa8d11c2f62"
 dependencies = [
  "base64",
  "bytes",
+ "encoding_rs",
+ "futures-channel",
  "futures-core",
+ "futures-util",
+ "h2",
  "http 1.4.0",
  "http-body 1.0.1",
  "http-body-util",
@@ -5346,6 +5343,8 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
+ "mime",
+ "mime_guess",
  "native-tls",
  "percent-encoding",
  "pin-project-lite",
@@ -5360,12 +5359,14 @@ dependencies = [
  "tokio",
  "tokio-native-tls",
  "tokio-rustls",
+ "tokio-util",
  "tower",
  "tower-http",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
 ]
 
@@ -5385,10 +5386,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "reqwest-retry"
-version = "0.8.0"
+name = "reqwest-middleware"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "105747e3a037fe5bf17458d794de91149e575b6183fc72c85623a44abb9683f5"
+checksum = "f42e2f48018a33d679ee7f477a446b697663a14e91ab0b3a0206792a22dd3aa8"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "http 1.4.0",
+ "reqwest 0.13.1",
+ "serde",
+ "thiserror 2.0.18",
+ "tower-service",
+]
+
+[[package]]
+name = "reqwest-retry"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "180e3930c1c07a59122f304ff269a634a4d5013afecbe646ccad4ff98e0803c2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5396,8 +5412,8 @@ dependencies = [
  "getrandom 0.2.17",
  "http 1.4.0",
  "hyper",
- "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest 0.13.1",
+ "reqwest-middleware 0.5.0",
  "retry-policies",
  "thiserror 2.0.18",
  "tokio",
@@ -6508,27 +6524,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "system-configuration"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c879d448e9d986b661742763247d3693ed13609438cf3d006f51f5368a5ba6b"
-dependencies = [
- "bitflags",
- "core-foundation 0.9.4",
- "system-configuration-sys",
-]
-
-[[package]]
-name = "system-configuration-sys"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
-dependencies = [
- "core-foundation-sys",
- "libc",
-]
-
-[[package]]
 name = "tabwriter"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6896,7 +6891,7 @@ dependencies = [
  "fs-err",
  "fslock",
  "rattler_digest",
- "reqwest 0.12.28",
+ "reqwest 0.13.1",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

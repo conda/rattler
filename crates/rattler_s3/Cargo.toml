@@ -10,12 +10,12 @@ edition.workspace = true
 readme.workspace = true
 
 [features]
-default = ["rustls-tls"]
+default = ["rustls"]
 # Note: aws-smithy-http-client does not support native-tls, only rustls variants.
 # This feature is provided for API compatibility with other rattler crates but
 # will use rustls under the hood.
-native-tls = ["rustls-tls"]
-rustls-tls = ["aws-smithy-http-client/rustls-ring"]
+native-tls = ["rustls"]
+rustls = ["aws-smithy-http-client/rustls-ring"]
 
 [dependencies]
 clap = { workspace = true, optional = true }
