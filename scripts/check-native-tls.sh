@@ -18,7 +18,7 @@ EXCLUDE_FEATURES="rustls-tls default s3 gcs"
 
 # Packages to skip entirely (space-separated)
 # Use this for packages that are known to require the forbidden crate
-SKIP_PACKAGES="rattler_s3"
+SKIP_PACKAGES="rattler_s3 create-resolvo-snapshot"
 
 # =============================================================================
 # Script logic - typically no changes needed below

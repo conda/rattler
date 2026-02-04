@@ -9,28 +9,15 @@ edition.workspace = true
 readme = "README.md"
 publish = false
 
-[features]
-default = ["rustls-tls"]
-rustls-tls = [
-  "rattler_cache/rustls-tls",
-  "rattler_repodata_gateway/rustls-tls",
-  "rattler_networking/rustls-tls",
-]
-native-tls = [
-  "rattler_cache/native-tls",
-  "rattler_repodata_gateway/native-tls",
-  "rattler_networking/native-tls",
-]
-
 [dependencies]
 clap = { workspace = true }
 itertools = { workspace = true }
-rattler_cache = { path = "../../crates/rattler_cache", default-features = false }
+rattler_cache = { path = "../../crates/rattler_cache" }
 rattler_conda_types = { path = "../../crates/rattler_conda_types" }
 rattler_repodata_gateway = { path = "../../crates/rattler_repodata_gateway", default-features = false, version = "*" }
 rattler_networking = { path = "../../crates/rattler_networking", default-features = false, version = "*" }
 rattler_solve = { path = "../../crates/rattler_solve" }
-reqwest = { workspace = true, default-features = false }
+reqwest = { workspace = true, default-features = false, features = ["rustls-tls"] }
 resolvo = { workspace = true, features = ["serde"] }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
