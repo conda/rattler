@@ -57,7 +57,6 @@ impl PathsJson {
     ) -> Result<Self, std::io::Error> {
         match Self::from_package_directory(path) {
             Ok(paths) => Ok(paths),
-
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 Self::from_deprecated_package_directory(path)
             }
@@ -388,8 +387,7 @@ mod test {
                     "no_link": false,
                     "path_type": "hardlink",
                     "sha256": "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
-                    "size_in_bytes": 2048,
-                    "executable": false
+                    "size_in_bytes": 2048
                 },
                 {
                     "_path": "share/doc/readme.txt",
@@ -397,7 +395,6 @@ mod test {
                     "path_type": "hardlink",
                     "sha256": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
                     "size_in_bytes": 256,
-                    "executable": false,
                     "file_mode": "text",
                     "prefix_placeholder": "/home/builder/conda",
                     "offsets": [10, 45]
@@ -409,7 +406,8 @@ mod test {
                     "executable": true
                 }
             ],
-            "paths_version": 2
+            "has_executable": true,
+            "paths_version": 1
             }"#;
 
         // Write the mock paths.json

@@ -201,7 +201,7 @@ impl From<PyPathsEntry> for PathsEntry {
 impl PyPathsEntry {
     /// Constructor
     #[new]
-    #[pyo3(signature = (relative_path, no_link, path_type, prefix_placeholder=None, sha256=None, size_in_bytes=None))]
+    #[pyo3(signature = (relative_path, no_link, path_type, prefix_placeholder=None, sha256=None, size_in_bytes=None, executable=None))]
     pub fn new(
         relative_path: PathBuf,
         no_link: bool,
@@ -397,7 +397,7 @@ impl PyPrefixPlaceholder {
             inner: PrefixPlaceholder {
                 file_mode: file_mode.into(),
                 placeholder: placeholder.to_string(),
-                offsets: offsets,
+                offsets,
             },
         })
     }
