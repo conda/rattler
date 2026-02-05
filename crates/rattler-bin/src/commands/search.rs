@@ -3,10 +3,7 @@ use std::{collections::HashMap, env, sync::Arc, time::Instant};
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
-use rattler_conda_types::{
-    Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, ParseStrictnessWithNameMatcher,
-    Platform,
-};
+use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, Platform};
 use rattler_networking::AuthenticationMiddleware;
 #[cfg(feature = "s3")]
 use rattler_networking::AuthenticationStorage;
