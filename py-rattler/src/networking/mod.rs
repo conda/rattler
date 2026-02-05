@@ -14,7 +14,7 @@ use crate::{
     repo_data::gateway::PyFetchRepoDataOptions, repo_data::sparse::PySparseRepoData,
 };
 use client::PyClientWithMiddleware;
-use rattler_repodata_gateway::{DownloadReporter, JLAPReporter, Reporter};
+use rattler_repodata_gateway::{DownloadReporter, Reporter};
 
 pub mod cached_repo_data;
 pub mod client;
@@ -102,9 +102,6 @@ impl DownloadReporter for ProgressReporter {
 impl Reporter for ProgressReporter {
     fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
         Some(self)
-    }
-    fn jlap_reporter(&self) -> Option<&dyn JLAPReporter> {
-        None
     }
 }
 

@@ -52,9 +52,6 @@ class SourceConfig:
     way.
     """
 
-    jlap_enabled: bool = True
-    """Whether the JLAP compression is enabled or not."""
-
     zstd_enabled: bool = True
     """Whether the ZSTD compression is enabled or not."""
 
@@ -86,7 +83,6 @@ class SourceConfig:
         ```
         """
         return PySourceConfig(
-            jlap_enabled=self.jlap_enabled,
             zstd_enabled=self.zstd_enabled,
             bz2_enabled=self.bz2_enabled,
             sharded_enabled=self.sharded_enabled,

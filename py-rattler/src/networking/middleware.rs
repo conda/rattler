@@ -47,7 +47,6 @@ impl PyMirrorMiddleware {
                             url,
                             no_zstd: false,
                             no_bz2: false,
-                            no_jlap: false,
                             max_failures: None,
                         })
                         .map_err(PyRattlerError::from)

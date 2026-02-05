@@ -7,11 +7,10 @@ authentication-override-file = "/path/to/your/override.json"
 run-post-link-scripts = "false" # set to "insecure" to allow running post-link scripts
 
 [repodata-config]
-# disable fetching of jlap, bz2 or zstd repodata files.
+# disable fetching of bz2 or zstd repodata files.
 # This should only be used for specific old versions of artifactory and other non-compliant
 # servers.
 disable-bzip2 = true   # don't try to download repodata.json.bz2
-disable-jlap = true    # don't try to download repodata.jlap
 disable-sharded = true # don't try to download sharded repodata
 disable-zstd = true    # don't try to download repodata.json.zst
 

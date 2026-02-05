@@ -299,7 +299,6 @@ impl PySourceConfig {
     #[new]
     #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
-        jlap_enabled: bool,
         zstd_enabled: bool,
         bz2_enabled: bool,
         sharded_enabled: bool,
@@ -307,7 +306,6 @@ impl PySourceConfig {
     ) -> Self {
         Self {
             inner: SourceConfig {
-                jlap_enabled,
                 zstd_enabled,
                 bz2_enabled,
                 sharded_enabled,
@@ -360,7 +358,6 @@ impl PyFetchRepoDataOptions {
     pub fn new(
         cache_action: Wrap<CacheAction>,
         variant: Wrap<Variant>,
-        jlap_enabled: bool,
         zstd_enabled: bool,
         bz2_enabled: bool,
     ) -> Self {
@@ -368,7 +365,6 @@ impl PyFetchRepoDataOptions {
             inner: FetchRepoDataOptions {
                 cache_action: cache_action.0,
                 variant: variant.0,
-                jlap_enabled,
                 zstd_enabled,
                 bz2_enabled,
                 retry_policy: None,

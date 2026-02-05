@@ -12,5 +12,3 @@ has_zst:
   value: true
   last_checked: "2023-02-13T14:08:50Z"
 has_bz2: ~
-has_jlap: ~
-jlap: ~

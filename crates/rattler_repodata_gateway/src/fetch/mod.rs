@@ -13,7 +13,6 @@ cfg_if! {
     if #[cfg(not(target_arch = "wasm32"))] {
         mod cache;
         mod with_cache;
-        pub mod jlap;
         pub use with_cache::*;
     }
 }

@@ -96,7 +96,6 @@ impl Default for JsSourceConfig {
 impl From<JsSourceConfig> for SourceConfig {
     fn from(value: JsSourceConfig) -> Self {
         Self {
-            jlap_enabled: false,
             zstd_enabled: value.zstd_enabled,
             bz2_enabled: value.bz2_enabled,
             sharded_enabled: value.sharded_enabled,

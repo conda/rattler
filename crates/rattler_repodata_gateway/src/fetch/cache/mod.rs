@@ -1,19 +1,20 @@
 mod cache_headers;
 
+use std::{path::Path, str::FromStr, time::SystemTime};
+
 pub use cache_headers::CacheHeaders;
 use fs_err as fs;
-use rattler_digest::{serde::SerializableHash, Blake2b256};
+use rattler_digest::Blake2b256;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_with::serde_as;
-use std::{path::Path, str::FromStr, time::SystemTime};
 use url::Url;
 
 /// Representation of the `.info.json` file alongside a `repodata.json` file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepoDataState {
-    /// The URL from where the repodata was downloaded. This is the URL of the `repodata.json`,
-    /// `repodata.json.zst`, or another variant. This is different from the subdir url which does
-    /// NOT include the final filename.
+    /// The URL from where the repodata was downloaded. This is the URL of the
+    /// `repodata.json`, `repodata.json.zst`, or another variant. This is
+    /// different from the subdir url which does NOT include the final
+    /// filename.
     pub url: Url,
 
     /// The HTTP cache headers send along with the last response.
@@ -41,27 +42,11 @@ pub struct RepoDataState {
     )]
     pub blake2_hash: Option<blake2::digest::Output<Blake2b256>>,
 
-    /// Upstream hash represented by the on-disk file. Used for jlap which reformats the cached json
-    /// but knows equivalent remote repodata.json hashes.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_blake2_hash",
-        serialize_with = "serialize_blake2_hash"
-    )]
-    pub blake2_hash_nominal: Option<blake2::digest::Output<Blake2b256>>,
-
     /// Whether or not zst is available for the subdirectory
     pub has_zst: Option<Expiring<bool>>,
 
     /// Whether a bz2 compressed version is available for the subdirectory
     pub has_bz2: Option<Expiring<bool>>,
-
-    /// Whether or not JLAP is available for the subdirectory
-    pub has_jlap: Option<Expiring<bool>>,
-
-    /// State information related to JLAP
-    pub jlap: Option<JLAPState>,
 }
 
 impl RepoDataState {
@@ -86,35 +71,6 @@ impl FromStr for RepoDataState {
     }
 }
 
-/// Used inside of the `RepoDataState` to store information related to our JLAP state
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JLAPState {
-    /// Initialization Vector (IV) for of the JLAP file; this is found on the first line of the
-    /// JLAP file.
-    #[serde(rename = "iv", with = "hex")]
-    pub initialization_vector: Vec<u8>,
-
-    /// Current position to use for the bytes offset in the range request for JLAP
-    #[serde(rename = "pos")]
-    pub position: u64,
-
-    /// Footer contains metadata about the JLAP file such as which url it is for
-    pub footer: JLAPFooter,
-}
-
-/// Represents the metadata for a JLAP file, which is typically found at the very end
-#[serde_as]
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct JLAPFooter {
-    /// This is not actually a full URL, just the last part of it (i.e. the filename
-    /// `repodata.json`). That's why we store it as a [`String`]
-    pub url: String,
-
-    /// blake2b hash of the latest `repodata.json` file
-    #[serde_as(as = "SerializableHash::<rattler_digest::Blake2b256>")]
-    pub latest: blake2::digest::Output<Blake2b256>,
-}
-
 /// Represents a value and when the value was last checked.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Expiring<T> {
@@ -134,8 +90,8 @@ impl<T> Expiring<T> {
     }
 }
 
-/// Deserializes a [`SystemTime`] by parsing an integer and converting that as a nanosecond based unix
-/// epoch timestamp to a [`SystemTime`].
+/// Deserializes a [`SystemTime`] by parsing an integer and converting that as a
+/// nanosecond based unix epoch timestamp to a [`SystemTime`].
 fn duration_from_nanos<'de, D>(deserializer: D) -> Result<SystemTime, D::Error>
 where
     D: Deserializer<'de>,
@@ -148,7 +104,8 @@ where
         .ok_or_else(|| D::Error::custom("the time cannot be represented internally"))
 }
 
-/// Serializes a [`SystemTime`] by converting it to a nanosecond based unix epoch timestamp.
+/// Serializes a [`SystemTime`] by converting it to a nanosecond based unix
+/// epoch timestamp.
 fn duration_to_nanos<S: Serializer>(time: &SystemTime, s: S) -> Result<S::Ok, S::Error> {
     use serde::ser::Error;
     time.duration_since(SystemTime::UNIX_EPOCH)
@@ -185,8 +142,9 @@ fn serialize_blake2_hash<S: Serializer>(
 
 #[cfg(test)]
 mod test {
-    use super::RepoDataState;
     use std::str::FromStr;
+
+    use super::RepoDataState;
 
     const JSON_STATE_ONE: &str = r#"{
         "cache_control": "public, max-age=1200",
@@ -216,8 +174,7 @@ mod test {
       "has_bz2": {
         "value": true,
         "last_checked": "2023-05-18T13:59:07.112638Z"
-      },
-      "has_jlap": null
+      }
     }"#;
 
     #[test]

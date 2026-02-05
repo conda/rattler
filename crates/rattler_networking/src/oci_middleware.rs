@@ -160,8 +160,6 @@ impl OCIUrl {
                 res.media_type = "application/vnd.conda.repodata.v1+json+bz2".to_string();
             } else if filename.ends_with(".zst") {
                 res.media_type = "application/vnd.conda.repodata.v1+json+zst".to_string();
-            } else if filename.ends_with(".jlap") {
-                res.media_type = "application/vnd.conda.jlap.v1".to_string();
             }
         }
 
@@ -254,14 +252,6 @@ impl Middleware for OciMiddleware {
         // if the URL is not an OCI URL, we don't need to do anything
         if req.url().scheme() != "oci" {
             return next.run(req, extensions).await;
-        }
-
-        // return 404 for the moment as these are not supported
-        if req.url().path().ends_with(".jlap") || req.url().path().ends_with(".json.bz2") {
-            return Ok(create_404_response(
-                req.url(),
-                "Mirror does not support this file type",
-            ));
         }
 
         let res = OCIUrl::get_blob_url(&mut req).await;

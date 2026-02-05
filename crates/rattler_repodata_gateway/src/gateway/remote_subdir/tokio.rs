@@ -35,7 +35,6 @@ impl RemoteSubdirClient {
             cache_dir,
             FetchRepoDataOptions {
                 cache_action: source_config.cache_action,
-                jlap_enabled: source_config.jlap_enabled,
                 zstd_enabled: source_config.zstd_enabled,
                 bz2_enabled: source_config.bz2_enabled,
                 ..FetchRepoDataOptions::default()
