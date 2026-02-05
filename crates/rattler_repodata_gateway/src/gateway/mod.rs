@@ -378,8 +378,7 @@ mod test {
 
     use crate::{
         fetch::CacheAction, gateway::Gateway, utils::simple_channel_server::SimpleChannelServer,
-        DownloadReporter, GatewayError, JLAPReporter, RepoData, Reporter, SourceConfig,
-        SubdirSelection,
+        DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
     };
 
     async fn local_conda_forge() -> Channel {
@@ -745,9 +744,6 @@ mod test {
         impl Reporter for Arc<Downloads> {
             fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
                 Some(self)
-            }
-            fn jlap_reporter(&self) -> Option<&dyn JLAPReporter> {
-                None
             }
         }
 

@@ -4,7 +4,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use parking_lot::Mutex;
 use url::Url;
 
-use crate::{DownloadReporter, JLAPReporter, Reporter};
+use crate::{DownloadReporter, Reporter};
 
 /// A builder to construct an [`IndicatifReporter`].
 #[derive(Clone)]
@@ -98,10 +98,6 @@ impl Default for IndicatifReporter {
 impl Reporter for IndicatifReporter {
     fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
         Some(self)
-    }
-
-    fn jlap_reporter(&self) -> Option<&dyn JLAPReporter> {
-        None
     }
 }
 

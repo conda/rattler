@@ -35,9 +35,6 @@ class FetchRepoDataOptions:
     * `'current'`: Fetch `current_repodata.json` file. This file contains only the latest version of each package.
     """
 
-    jlap_enabled: bool = True
-    """Whether the JLAP compression is enabled or not."""
-
     zstd_enabled: bool = True
     """Whether the ZSTD compression is enabled or not."""
 
@@ -59,7 +56,6 @@ class FetchRepoDataOptions:
         return PyFetchRepoDataOptions(
             cache_action=self.cache_action,
             variant=self.variant,
-            jlap_enabled=self.jlap_enabled,
             zstd_enabled=self.zstd_enabled,
             bz2_enabled=self.bz2_enabled,
         )

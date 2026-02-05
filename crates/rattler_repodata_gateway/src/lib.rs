@@ -66,7 +66,7 @@ mod reporter;
 #[cfg(feature = "sparse")]
 pub mod sparse;
 mod utils;
-pub use reporter::{DownloadReporter, JLAPReporter, Reporter};
+pub use reporter::{DownloadReporter, Reporter};
 
 #[cfg(feature = "gateway")]
 mod gateway;
