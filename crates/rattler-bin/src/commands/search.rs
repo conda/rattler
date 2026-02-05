@@ -4,7 +4,8 @@ use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{
-    Channel, ChannelConfig, MatchSpec, ParseStrictnessWithNameMatcher, Platform,
+    Channel, ChannelConfig, MatchSpec, ParseMatchSpecOptions, ParseStrictnessWithNameMatcher,
+    Platform,
 };
 use rattler_networking::AuthenticationMiddleware;
 #[cfg(feature = "s3")]
@@ -24,7 +25,7 @@ pub struct Opt {
     /// Supports exact names (python), glob patterns (python*, *ssl*),
     /// and regex patterns (^numpy-.*$).
     #[clap(required = true)]
-    pattern: String,
+    matchspec: String,
 
     /// Channels to search in
     #[clap(short, long, default_value = "conda-forge")]
@@ -55,15 +56,14 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
     let channel_config =
         ChannelConfig::default_with_root_dir(env::current_dir().into_diagnostic()?);
 
-    println!("Searching for '{}' on {}", opt.pattern, opt.platform);
+    println!("Searching for '{}' on {}", opt.matchspec, opt.platform);
 
     // Parse the pattern as a matchspec with glob/regex support
     let matchspec = MatchSpec::from_str(
-        &opt.pattern,
-        ParseStrictnessWithNameMatcher {
-            parse_strictness: rattler_conda_types::ParseStrictness::Lenient,
-            exact_names_only: false, // Allow glob and regex patterns
-        },
+        &opt.matchspec,
+        ParseMatchSpecOptions::strict()
+            .with_exact_names_only(false)
+            .with_experimental_extras(true),
     )
     .into_diagnostic()
     .context("failed to parse pattern as matchspec")?;
@@ -142,7 +142,7 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
     );
 
     if total_records == 0 {
-        println!("No packages found matching '{}'", opt.pattern);
+        println!("No packages found matching '{}'", opt.matchspec);
         return Ok(());
     }
 
