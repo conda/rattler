@@ -152,6 +152,7 @@ pub struct LinkedFile {
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub fn link_file(
     path_json_entry: &PathsEntry,
+    has_executable: bool,
     destination_relative_path: PathBuf,
     package_dir: &Path,
     target_dir: &Prefix,
@@ -258,10 +259,10 @@ pub fn link_file(
         drop(file);
 
         let metadata = fs::symlink_metadata(&source_path)
-            .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+                .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
 
-        let executable = if path_json_entry.executable.is_some() {
-            path_json_entry.executable.unwrap()
+        let executable = if has_executable {
+            path_json_entry.executable.unwrap_or(false)
         } else {
             has_executable_permissions(&metadata.permissions())
         };
