@@ -1,8 +1,9 @@
 ---
 source: crates/rattler_conda_types/src/package/paths.rs
-assertion_line: 450
+assertion_line: 453
 expression: paths_json
 ---
+has_executable: true
 paths:
   - _path: bin/example
     path_type: hardlink
@@ -22,7 +23,6 @@ paths:
     path_type: hardlink
     sha256: d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592
     size_in_bytes: 2048
-    executable: false
   - _path: share/doc/readme.txt
     path_type: hardlink
     file_mode: text
@@ -32,5 +32,4 @@ paths:
       - 45
     sha256: a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3
     size_in_bytes: 256
-    executable: false
-paths_version: 2
+paths_version: 1

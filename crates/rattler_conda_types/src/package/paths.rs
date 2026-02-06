@@ -17,6 +17,10 @@ use std::path::{Path, PathBuf};
 #[sorted]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PathsJson {
+    /// If the file contains the executable field implemented
+    #[serde(default, skip_serializing_if="Option::is_none")]
+    pub has_executable: Option<bool>,
+
     /// All entries included in the package.
     #[serde(serialize_with = "serialize_sorted_paths")]
     pub paths: Vec<PathsEntry>,
@@ -104,6 +108,7 @@ impl PathsJson {
 
         // Iterate over all files and create entries
         Ok(Self {
+            has_executable: None,
             paths: files
                 .files
                 .into_iter()
@@ -231,7 +236,7 @@ pub struct PathsEntry {
     pub size_in_bytes: Option<u64>,
 
     /// When a file is executable this will be true
-    /// This entry is only present in version 2 of the paths.json file
+    /// This entry is only present in newer versions of the paths.json file
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub executable: Option<bool>,
 }
@@ -354,19 +359,20 @@ mod test {
         paths.shuffle(&mut rng);
 
         insta::assert_yaml_snapshot!(PathsJson {
+            has_executable: None,
             paths,
             paths_version: 1
         });
     }
 
     #[test]
-    pub fn test_deserialize_paths_json_v2() {
+    pub fn test_deserialize_paths_json_excecutable() {
         let package_dir = tempfile::tempdir().unwrap();
         let info_dir = package_dir.path().join("info");
         std::fs::create_dir_all(&info_dir).unwrap();
 
-        // Create a mock v2 paths.json file
-        let paths_json_v2 = r#"{
+        // Create a mock paths.json file
+        let paths_json = r#"{
             "paths": [
                 {
                     "_path": "bin/example",
@@ -408,18 +414,18 @@ mod test {
             }"#;
 
         // Write the mock paths.json
-        std::fs::write(info_dir.join("paths.json"), paths_json_v2).unwrap();
+        std::fs::write(info_dir.join("paths.json"), paths_json).unwrap();
 
         // Test loading it
         let paths_json =
             PathsJson::from_package_directory_with_deprecated_fallback(package_dir.path()).unwrap();
 
-        // Verify it's version 2
-        assert_eq!(paths_json.paths_version, 2);
+        // Verify it's version
+        assert_eq!(paths_json.paths_version, 1);
         assert_eq!(paths_json.paths.len(), 4);
 
-        // Verify v2-specific fields are present and correct
-
+        assert_eq!(paths_json.has_executable, Some(true));
+        
         // First entry: binary with offsets and executable
         assert_eq!(
             paths_json.paths[0].relative_path,
@@ -432,7 +438,7 @@ mod test {
         assert_eq!(prefix.offsets, Some(vec![100, 200, 300]));
 
         // Second entry: no prefix, not executable
-        assert_eq!(paths_json.paths[1].executable, Some(false));
+        assert_eq!(paths_json.paths[1].executable, None);
         assert!(paths_json.paths[1].prefix_placeholder.is_none());
 
         // Third entry: text with offsets
@@ -448,27 +454,27 @@ mod test {
     }
 
     #[test]
-    pub fn test_v2_optional_fields_handling() {
+    pub fn test_optional_fields_handling() {
         let package_dir = tempfile::tempdir().unwrap();
         let info_dir = package_dir.path().join("info");
         std::fs::create_dir_all(&info_dir).unwrap();
 
-        // Test that v2 fields are truly optional
-        let minimal_v2 = r#"{
+        // Test that the fields are truly optional
+        let minimal = r#"{
             "paths": [
                 {
                 "_path": "file.txt",
                 "path_type": "hardlink"
                 }
             ],
-            "paths_version": 2
+            "paths_version": 1
             }"#;
 
-        std::fs::write(info_dir.join("paths.json"), minimal_v2).unwrap();
+        std::fs::write(info_dir.join("paths.json"), minimal).unwrap();
 
         let paths_json = PathsJson::from_package_directory(package_dir.path()).unwrap();
 
-        assert_eq!(paths_json.paths_version, 2);
+        assert_eq!(paths_json.paths_version, 1);
         assert_eq!(paths_json.paths[0].executable, None);
         assert_eq!(paths_json.paths[0].sha256, None);
         assert_eq!(paths_json.paths[0].size_in_bytes, None);
@@ -476,9 +482,10 @@ mod test {
     }
 
     #[test]
-    pub fn test_v2_serialization_roundtrip() {
-        // Create a v2 PathsJson programmatically
+    pub fn test_serialization_roundtrip() {
+        // Create a PathsJson with executable and offset fields programmatically
         let original = PathsJson {
+            has_executable: Some(true),
             paths: vec![
                 PathsEntry {
                     relative_path: PathBuf::from("bin/tool"),
@@ -500,10 +507,10 @@ mod test {
                     prefix_placeholder: None,
                     sha256: None,
                     size_in_bytes: Some(512),
-                    executable: Some(false),
+                    executable: None,
                 },
             ],
-            paths_version: 2,
+            paths_version: 1,
         };
 
         // Serialize to JSON
@@ -514,7 +521,7 @@ mod test {
 
         // Verify roundtrip
         assert_eq!(original, deserialized);
-        assert_eq!(deserialized.paths_version, 2);
+        assert_eq!(deserialized.paths_version, 1);
         assert_eq!(deserialized.paths[0].executable, Some(true));
         assert_eq!(
             deserialized.paths[0]
@@ -527,7 +534,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_fallback_from_v2_to_deprecated() {
+    pub fn test_fallback_from_v1_to_deprecated() {
         let package_dir = tempfile::tempdir().unwrap();
         let info_dir = package_dir.path().join("info");
         std::fs::create_dir_all(&info_dir).unwrap();
