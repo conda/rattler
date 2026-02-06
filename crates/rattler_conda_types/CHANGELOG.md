@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.43.1...rattler_conda_types-v0.43.2) - 2026-02-04
+
+### Added
+
+- Add CACHEDIR.TAG to environments and global cache ([#2011](https://github.com/conda/rattler/pull/2011))
+
 ## [0.43.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.43.0...rattler_conda_types-v0.43.1) - 2026-01-22
 
 ### Added
