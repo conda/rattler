@@ -8,7 +8,7 @@ use std::{
 };
 
 use fs_err::tokio as tokio_fs;
-use rattler_conda_types::PrefixRecord;
+use rattler_conda_types::{prefix::Prefix, prefix_record::PrefixRecord};
 use uuid::Uuid;
 
 /// Error that can occur while unlinking a package.
@@ -147,15 +147,15 @@ pub async fn empty_trash(target_prefix: &Path) -> Result<(), UnlinkError> {
             return Err(UnlinkError::FailedToReadDirectory(
                 trash_dir.to_string_lossy().to_string(),
                 e,
-            ))
+            ));
         }
     }
 
     Ok(())
 }
 
-async fn move_to_trash(target_prefix: &Path, path: &Path) -> Result<(), UnlinkError> {
-    let mut trash_dest = target_prefix.join(".trash");
+async fn move_to_trash(target_prefix: &Prefix, path: &Path) -> Result<(), UnlinkError> {
+    let mut trash_dest = target_prefix.get_trash_dir();
     tokio_fs::create_dir_all(&trash_dest).await.map_err(|e| {
         UnlinkError::FailedToCreateDirectory(trash_dest.to_string_lossy().to_string(), e)
     })?;
@@ -179,12 +179,12 @@ async fn move_to_trash(target_prefix: &Path, path: &Path) -> Result<(), UnlinkEr
 
 /// Completely remove the specified package from the environment.
 pub async fn unlink_package(
-    target_prefix: &Path,
+    target_prefix: &Prefix,
     prefix_record: &PrefixRecord,
 ) -> Result<(), UnlinkError> {
     // Remove all entries
     for paths in prefix_record.paths_data.paths.iter() {
-        let p = target_prefix.join(&paths.relative_path);
+        let p = target_prefix.path().join(&paths.relative_path);
         match tokio_fs::remove_file(&p).await {
             Ok(_) => {}
             Err(e) => match e.kind() {
@@ -195,7 +195,7 @@ pub async fn unlink_package(
                     return Err(UnlinkError::FailedToDeleteFile(
                         paths.relative_path.to_string_lossy().to_string(),
                         e,
-                    ))
+                    ));
                 }
             },
         }
@@ -221,7 +221,7 @@ mod tests {
         path::Path,
     };
 
-    use rattler_conda_types::{Platform, RepoDataRecord};
+    use rattler_conda_types::{prefix::Prefix, Platform, RepoDataRecord};
 
     use crate::install::test_utils::download_and_get_prefix_record;
     use crate::install::{empty_trash, unlink_package, InstallDriver, Transaction};
@@ -229,15 +229,16 @@ mod tests {
     #[tokio::test]
     async fn test_unlink_package() {
         let environment_dir = tempfile::TempDir::new().unwrap();
+        let prefix = Prefix::create(environment_dir.path()).unwrap();
         let prefix_record = download_and_get_prefix_record(
-            environment_dir.path(),
+            &prefix,
             "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda"
                 .parse()
                 .unwrap(),
             "25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd",
         )
         .await;
-        let conda_meta_path = environment_dir.path().join("conda-meta");
+        let conda_meta_path = prefix.path().join("conda-meta");
         std::fs::create_dir_all(&conda_meta_path).unwrap();
 
         // Write the conda-meta information
@@ -245,9 +246,7 @@ mod tests {
         prefix_record.write_to_path(&pkg_meta_path, true).unwrap();
 
         // Unlink the package
-        unlink_package(environment_dir.path(), &prefix_record)
-            .await
-            .unwrap();
+        unlink_package(&prefix, &prefix_record).await.unwrap();
 
         // Check if the conda-meta file is gone
         assert!(!pkg_meta_path.exists());
@@ -259,28 +258,32 @@ mod tests {
             vec![prefix_record.clone()],
             Vec::<RepoDataRecord>::new().into_iter(),
             None,
+            None, // ignored packages
             Platform::current(),
         )
         .unwrap();
 
         install_driver
-            .remove_empty_directories(&transaction, &[], environment_dir.path())
+            .remove_empty_directories(&transaction.operations, &[], environment_dir.path())
             .unwrap();
 
         // check that the environment is completely empty except for the conda-meta
-        // folder
-        let entries = std::fs::read_dir(environment_dir.path())
+        // folder and CACHEDIR.TAG (created by Prefix::create for backup exclusion)
+        let mut entries: Vec<_> = std::fs::read_dir(environment_dir.path())
             .unwrap()
-            .collect::<Vec<_>>();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].as_ref().unwrap().file_name(), "conda-meta");
+            .filter_map(Result::ok)
+            .map(|e| e.file_name())
+            .collect();
+        entries.sort();
+        assert_eq!(entries, vec!["CACHEDIR.TAG", "conda-meta"]);
     }
 
     #[tokio::test]
     async fn test_unlink_package_python_noarch() {
         let target_prefix = tempfile::TempDir::new().unwrap();
+        let target_prefix = Prefix::create(target_prefix.path()).unwrap();
         let prefix_record = download_and_get_prefix_record(
-            target_prefix.path(),
+            &target_prefix,
             "https://conda.anaconda.org/conda-forge/noarch/pytweening-1.0.4-pyhd8ed1ab_0.tar.bz2"
                 .parse()
                 .unwrap(),
@@ -310,7 +313,7 @@ mod tests {
         file.sync_all().unwrap();
 
         // Unlink the package
-        unlink_package(target_prefix.path(), &prefix_record)
+        unlink_package(&target_prefix, &prefix_record)
             .await
             .unwrap();
 
@@ -322,21 +325,24 @@ mod tests {
             vec![prefix_record.clone()],
             Vec::<RepoDataRecord>::new().into_iter(),
             None,
+            None, // ignored packages
             Platform::current(),
         )
         .unwrap();
 
         install_driver
-            .remove_empty_directories(&transaction, &[], target_prefix.path())
+            .remove_empty_directories(&transaction.operations, &[], target_prefix.path())
             .unwrap();
 
         // check that the environment is completely empty except for the conda-meta
-        // folder
-        let entries = std::fs::read_dir(target_prefix.path())
+        // folder and CACHEDIR.TAG (created by Prefix::create for backup exclusion)
+        let mut entries: Vec<_> = std::fs::read_dir(target_prefix.path())
             .unwrap()
-            .collect::<Vec<_>>();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].as_ref().unwrap().file_name(), "conda-meta");
+            .filter_map(Result::ok)
+            .map(|e| e.file_name())
+            .collect();
+        entries.sort();
+        assert_eq!(entries, vec!["CACHEDIR.TAG", "conda-meta"]);
     }
 
     fn count_trash(trash_dir: &Path) -> usize {
@@ -370,12 +376,25 @@ mod tests {
 
         let environment_dir = tempfile::TempDir::new().unwrap();
         let target_prefix = environment_dir.path();
+        let prefix = Prefix::create(target_prefix).unwrap();
         let trash_dir = target_prefix.join(".trash");
         let files = [
-            ("https://conda.anaconda.org/conda-forge/win-64/bat-0.24.0-ha073cba_1.conda", "65a125b7a6e7fd7e5d4588ee537b5db2c984ed71e4832f7041f691c2cfd73504"),
-            ("https://conda.anaconda.org/conda-forge/win-64/ucrt-10.0.22621.0-h57928b3_1.conda", "db8dead3dd30fb1a032737554ce91e2819b43496a0db09927edf01c32b577450"),
-            ("https://conda.anaconda.org/conda-forge/win-64/vc-14.3-ha32ba9b_23.conda", "986ddaf8feec2904eac9535a7ddb7acda1a1dfb9482088fdb8129f1595181663"),
-            ("https://conda.anaconda.org/conda-forge/win-64/vc14_runtime-14.42.34433-he29a5d6_23.conda", "c483b090c4251a260aba6ff3e83a307bcfb5fb24ad7ced872ab5d02971bd3a49"),
+            (
+                "https://conda.anaconda.org/conda-forge/win-64/bat-0.24.0-ha073cba_1.conda",
+                "65a125b7a6e7fd7e5d4588ee537b5db2c984ed71e4832f7041f691c2cfd73504",
+            ),
+            (
+                "https://conda.anaconda.org/conda-forge/win-64/ucrt-10.0.22621.0-h57928b3_1.conda",
+                "db8dead3dd30fb1a032737554ce91e2819b43496a0db09927edf01c32b577450",
+            ),
+            (
+                "https://conda.anaconda.org/conda-forge/win-64/vc-14.3-ha32ba9b_23.conda",
+                "986ddaf8feec2904eac9535a7ddb7acda1a1dfb9482088fdb8129f1595181663",
+            ),
+            (
+                "https://conda.anaconda.org/conda-forge/win-64/vc14_runtime-14.42.34433-he29a5d6_23.conda",
+                "c483b090c4251a260aba6ff3e83a307bcfb5fb24ad7ced872ab5d02971bd3a49",
+            ),
         ];
         let conda_meta_path = target_prefix.join("conda-meta");
         std::fs::create_dir_all(&conda_meta_path).unwrap();
@@ -395,7 +414,7 @@ mod tests {
             // Link the package
             let paths = link_package(
                 package_dir.path(),
-                target_prefix,
+                &prefix,
                 &install_driver,
                 InstallOptions::default(),
             )
@@ -405,8 +424,7 @@ mod tests {
             let repodata_record = get_repodata_record(&package_path);
             // Construct a PrefixRecord for the package
 
-            let prefix_record =
-                PrefixRecord::from_repodata_record(repodata_record, None, None, paths, None, None);
+            let prefix_record = PrefixRecord::from_repodata_record(repodata_record, paths);
             prefix_record
                 .write_to_path(conda_meta_path.join(prefix_record.file_name()), true)
                 .unwrap();
@@ -450,7 +468,7 @@ mod tests {
         // Unlink the package
         assert!(!trash_dir.exists());
         let prefix_record = prefix_records.first().unwrap();
-        unlink_package(target_prefix, prefix_record).await.unwrap();
+        unlink_package(&prefix, prefix_record).await.unwrap();
         // Check if the conda-meta file is gone
         assert!(!conda_meta_path.join(prefix_record.file_name()).exists());
         assert!(trash_dir.exists());

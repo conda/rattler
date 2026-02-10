@@ -8,8 +8,9 @@ use pyo3::{
     PyAny, PyErr, PyResult, Python,
 };
 use rattler_conda_types::{
-    package::{IndexJson, PackageFile},
+    package::{DistArchiveIdentifier, IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
+    utils::TimestampMs,
     NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
 };
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
@@ -40,6 +41,7 @@ pub struct PyRecord {
 }
 
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum RecordInner {
     Prefix(PrefixRecord),
     RepoData(RepoDataRecord),
@@ -106,29 +108,29 @@ pub struct PyLink {
     #[pyo3(get, set)]
     pub source: PathBuf,
     #[pyo3(get, set)]
-    pub type_: String,
+    pub type_: Option<String>,
 }
 
 #[pymethods]
 impl PyLink {
     #[new]
-    pub fn new(source: PathBuf, type_: String) -> Self {
-        Self { source, type_ }
+    #[pyo3(signature = (source, r#type=None))]
+    pub fn new(source: PathBuf, r#type: Option<String>) -> Self {
+        Self {
+            source,
+            type_: r#type,
+        }
     }
 }
 
 impl From<PyLink> for Link {
     fn from(value: PyLink) -> Self {
-        let link_type = if value.type_.is_empty() {
-            None
-        } else {
-            match value.type_.as_str() {
-                "hardlink" => Some(LinkType::HardLink),
-                "softlink" => Some(LinkType::SoftLink),
-                "copy" => Some(LinkType::Copy),
-                "directory" => Some(LinkType::Directory),
-                _ => None,
-            }
+        let link_type = match value.type_.as_deref() {
+            Some("hardlink") => Some(LinkType::HardLink),
+            Some("softlink") => Some(LinkType::SoftLink),
+            Some("copy") => Some(LinkType::Copy),
+            Some("directory") => Some(LinkType::Directory),
+            _ => None,
         };
 
         Link {
@@ -166,7 +168,7 @@ impl PyRecord {
                 subdir,
                 constrains: Vec::new(),
                 depends: Vec::new(),
-                extra_depends: BTreeMap::new(),
+                experimental_extra_depends: BTreeMap::new(),
                 features: None,
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,
@@ -199,10 +201,17 @@ impl PyRecord {
             ));
         }
 
+        let identifier = DistArchiveIdentifier::try_from_path(&file_name).ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "Invalid archive identifier: {}",
+                file_name.display()
+            ))
+        })?;
+
         Ok(Self {
             inner: RecordInner::RepoData(RepoDataRecord {
                 package_record: package_record.as_package_record().clone(),
-                file_name: file_name.to_string_lossy().to_string(),
+                identifier,
                 url: Url::parse(&url).map_err(PyRattlerError::from)?,
                 channel: channel
                     .map(|channel| Url::parse(&channel).map_err(PyRattlerError::from))
@@ -213,31 +222,35 @@ impl PyRecord {
     }
 
     #[staticmethod]
-    #[pyo3(signature = (package_record, paths_data, link=None, package_tarball_full_path=None, extracted_package_dir=None, requested_spec=None, files=None))]
+    #[pyo3(signature = (repodata_record, paths_data, link=None, package_tarball_full_path=None, extracted_package_dir=None, requested_spec=None, requested_specs=None, files=None))]
+    #[allow(clippy::too_many_arguments)]
     pub fn create_prefix_record(
-        package_record: PyRecord,
+        repodata_record: PyRecord,
         paths_data: PyPrefixPaths,
         link: Option<PyLink>,
         package_tarball_full_path: Option<PathBuf>,
         extracted_package_dir: Option<PathBuf>,
         requested_spec: Option<String>,
+        requested_specs: Option<Vec<String>>,
         files: Option<Vec<PathBuf>>,
     ) -> PyResult<Self> {
-        if !package_record.is_repodata_record() {
+        if !repodata_record.is_repodata_record() {
             return Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
             ));
         }
 
+        #[allow(deprecated)]
         Ok(Self {
             inner: RecordInner::Prefix(PrefixRecord {
-                repodata_record: package_record.try_as_repodata_record().unwrap().clone(),
+                repodata_record: repodata_record.try_as_repodata_record().unwrap().clone(),
                 package_tarball_full_path,
                 extracted_package_dir,
                 files: files.unwrap_or_default(),
                 paths_data: paths_data.into(),
                 link: link.map(Into::into),
                 requested_spec,
+                requested_specs: requested_specs.unwrap_or_default(),
                 // TODO wire up support
                 installed_system_menus: Vec::new(),
             }),
@@ -486,10 +499,10 @@ impl PyRecord {
     #[setter]
     pub fn set_timestamp(&mut self, timestamp: Option<i64>) -> PyResult<()> {
         if let Some(ts) = timestamp {
-            self.as_package_record_mut().timestamp = Some(
+            self.as_package_record_mut().timestamp = Some(TimestampMs::from_datetime_millis(
                 chrono::DateTime::from_timestamp_millis(ts)
                     .ok_or_else(|| PyValueError::new_err("Invalid timestamp"))?,
-            );
+            ));
         } else {
             self.as_package_record_mut().timestamp = None;
         }
@@ -541,12 +554,14 @@ impl PyRecord {
     /// The filename of the package.
     #[getter]
     pub fn file_name(&self) -> PyResult<String> {
-        Ok(self.try_as_repodata_record()?.file_name.clone())
+        Ok(self.try_as_repodata_record()?.identifier.to_file_name())
     }
 
     #[setter]
     pub fn set_file_name(&mut self, file_name: String) -> PyResult<()> {
-        self.try_as_repodata_record_mut()?.file_name = file_name;
+        self.try_as_repodata_record_mut()?.identifier = file_name
+            .parse()
+            .map_err(|e: String| PyValueError::new_err(e))?;
         Ok(())
     }
 
@@ -635,14 +650,30 @@ impl PyRecord {
 
     /// The spec that was used when this package was installed. Note that this
     /// field is not updated if the currently another spec was used.
+    /// Deprecated: Use requested_specs instead.
     #[getter]
+    #[allow(deprecated)]
     pub fn requested_spec(&self) -> PyResult<Option<String>> {
         Ok(self.try_as_prefix_record()?.requested_spec.clone())
     }
 
     #[setter]
+    #[allow(deprecated)]
     pub fn set_requested_spec(&mut self, spec: Option<String>) -> PyResult<()> {
         self.try_as_prefix_record_mut()?.requested_spec = spec;
+        Ok(())
+    }
+
+    /// Multiple specs that were used when this package was installed.
+    /// This field replaces the deprecated requested_spec field.
+    #[getter]
+    pub fn requested_specs(&self) -> PyResult<Vec<String>> {
+        Ok(self.try_as_prefix_record()?.requested_specs.clone())
+    }
+
+    #[setter]
+    pub fn set_requested_specs(&mut self, specs: Vec<String>) -> PyResult<()> {
+        self.try_as_prefix_record_mut()?.requested_specs = specs;
         Ok(())
     }
 

@@ -21,7 +21,7 @@ pub enum StringMatcher {
     /// and uses the regex syntax. For example, `^py.*37$` matches any
     /// string starting with `py` and ending with `37`. Note that the regex
     /// is anchored, so it must match the entire string.
-    Regex(regex::Regex),
+    Regex(fancy_regex::Regex),
 }
 
 impl Hash for StringMatcher {
@@ -51,7 +51,9 @@ impl StringMatcher {
         match self {
             StringMatcher::Exact(s) => s == other,
             StringMatcher::Glob(glob) => glob.matches(other),
-            StringMatcher::Regex(regex) => regex.is_match(other),
+            // `fancy_regex` can fail on pathological backtracking cases.
+            // Treat match errors as non-matches.
+            StringMatcher::Regex(regex) => regex.is_match(other).unwrap_or(false),
         }
     }
 }
@@ -79,7 +81,7 @@ impl FromStr for StringMatcher {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.starts_with('^') && s.ends_with('$') {
-            Ok(StringMatcher::Regex(regex::Regex::new(s).map_err(
+            Ok(StringMatcher::Regex(fancy_regex::Regex::new(s).map_err(
                 |_err| StringMatcherParseError::InvalidRegex {
                     regex: s.to_string(),
                 },
@@ -148,7 +150,7 @@ mod tests {
             "foo*".parse().unwrap()
         );
         assert_eq!(
-            StringMatcher::Regex(regex::Regex::new("^foo.*$").unwrap()),
+            StringMatcher::Regex(fancy_regex::Regex::new("^foo.*$").unwrap()),
             "^foo.*$".parse().unwrap()
         );
     }
@@ -196,6 +198,28 @@ mod tests {
         assert!(!StringMatcher::from_str("^foo\\[bar\\].*$")
             .unwrap()
             .matches("foobar"));
+    }
+
+    #[test]
+    fn test_string_matcher_lookahead_regex() {
+        // Positive lookahead: match "py" followed by digits, but don't consume the digits
+        let matcher = StringMatcher::from_str("^py(?=\\d).*$").unwrap();
+        assert!(matcher.matches("py311"));
+        assert!(matcher.matches("py39"));
+        assert!(!matcher.matches("pypy"));
+        assert!(!matcher.matches("python"));
+
+        // Negative lookahead: match "py" NOT followed by "py"
+        let matcher = StringMatcher::from_str("^py(?!py).*$").unwrap();
+        assert!(matcher.matches("py311"));
+        assert!(matcher.matches("python"));
+        assert!(!matcher.matches("pypy"));
+
+        // Lookbehind: match strings ending in digits preceded by "py"
+        let matcher = StringMatcher::from_str("^.*(?<=py)\\d+$").unwrap();
+        assert!(matcher.matches("py311"));
+        assert!(matcher.matches("prefix_py39"));
+        assert!(!matcher.matches("cp311"));
     }
 
     #[test]

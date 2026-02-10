@@ -15,7 +15,7 @@ use crate::{
     file_format_version::FileFormatVersion,
     parse::{models::v6, V6},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
+    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
 };
 
 #[serde_as]
@@ -35,6 +35,8 @@ struct SerializableEnvironment<'a> {
     channels: &'a [Channel],
     #[serde(flatten)]
     indexes: Option<&'a PypiIndexes>,
+    #[serde(default, skip_serializing_if = "crate::utils::serde::is_default")]
+    options: SolveOptions,
     packages: BTreeMap<Platform, Vec<SerializablePackageSelector<'a>>>,
 }
 
@@ -48,6 +50,7 @@ impl<'a> SerializableEnvironment<'a> {
         SerializableEnvironment {
             channels: &env_data.channels,
             indexes: env_data.indexes.as_ref(),
+            options: env_data.options.clone(),
             packages: env_data
                 .packages
                 .iter()
@@ -168,7 +171,7 @@ impl<'a> SerializablePackageSelector<'a> {
             .filter(|p| p.location() == package.location())
             .collect::<Vec<_>>();
 
-        // Iterate over other distinguising factors and reduce the set of possible
+        // Iterate over other distinguishing factors and reduce the set of possible
         // packages to a minimum with the least number of keys added.
         let mut name = None;
         let mut version = None;

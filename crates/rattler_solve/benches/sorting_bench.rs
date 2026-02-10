@@ -1,21 +1,24 @@
-use std::path::Path;
+use std::{hint::black_box, path::Path};
 
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use futures::FutureExt;
-use rattler_conda_types::{Channel, MatchSpec};
-use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::resolvo::CondaDependencyProvider;
-use rattler_solve::ChannelPriority;
+use rattler_conda_types::{Channel, MatchSpec, PackageName};
+use rattler_repodata_gateway::sparse::{PackageFormatSelection, SparseRepoData};
+use rattler_solve::{resolvo::CondaDependencyProvider, ChannelPriority};
 use resolvo::SolverCache;
 
 fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) {
     let match_spec =
         MatchSpec::from_str(spec, rattler_conda_types::ParseStrictness::Lenient).unwrap();
-    let package_name = match_spec.name.clone().unwrap();
+    let package_name = Option::<PackageName>::from(match_spec.name.clone().unwrap()).unwrap();
 
-    let repodata =
-        SparseRepoData::load_records_recursive([sparse_repo_data], [package_name.clone()], None)
-            .expect("failed to load records");
+    let repodata = SparseRepoData::load_records_recursive(
+        [sparse_repo_data],
+        [package_name.clone()],
+        None,
+        PackageFormatSelection::default(),
+    )
+    .expect("failed to load records");
 
     // Construct a cache
     c.bench_function(&format!("sort {spec}"), |b| {
@@ -33,13 +36,12 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
                     None,
                     ChannelPriority::default(),
                     None,
+                    None,
                     rattler_solve::SolveStrategy::Highest,
                 )
                 .expect("failed to create dependency provider");
 
-                let name = dependency_provider
-                    .pool
-                    .intern_package_name(package_name.as_normalized());
+                let name = dependency_provider.pool.intern_package_name(&package_name);
                 let version_set = dependency_provider
                     .pool
                     .intern_version_set(name, match_spec.into_nameless().1.into());

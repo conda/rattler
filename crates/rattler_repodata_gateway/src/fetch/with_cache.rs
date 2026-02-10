@@ -9,7 +9,7 @@ use cache_control::{Cachability, CacheControl};
 use futures::{future::ready, FutureExt, TryStreamExt};
 use humansize::{SizeFormatter, DECIMAL};
 use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
-use rattler_networking::retry_policies::default_retry_policy;
+use rattler_networking::{retry_policies::default_retry_policy, LazyClient};
 use rattler_redaction::Redact;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
@@ -26,7 +26,7 @@ use crate::{
         cache::{CacheHeaders, Expiring, RepoDataState},
         jlap, CacheAction, FetchRepoDataError, RepoDataNotFoundError, Variant,
     },
-    reporter::ResponseReporterExt,
+    reporter::{DownloadReporter, ResponseReporterExt},
     utils::{AsyncEncoding, Encoding, LockedFile},
     Reporter,
 };
@@ -183,7 +183,7 @@ async fn repodata_from_file(
 #[instrument(err(level = Level::INFO), skip_all, fields(subdir_url, cache_path = % cache_path.display()))]
 pub async fn fetch_repo_data(
     subdir_url: Url,
-    client: reqwest_middleware::ClientWithMiddleware,
+    client: LazyClient,
     cache_path: PathBuf,
     options: FetchRepoDataOptions,
     reporter: Option<Arc<dyn Reporter>>,
@@ -293,7 +293,7 @@ pub async fn fetch_repo_data(
     let jlap_state = if has_jlap && cache_state.is_some() {
         let repo_data_state = cache_state.as_ref().unwrap();
         match jlap::patch_repo_data(
-            &client,
+            client.client(),
             subdir_url.clone(),
             repo_data_state.clone(),
             &repo_data_json_path,
@@ -352,7 +352,7 @@ pub async fn fetch_repo_data(
 
     // Construct the HTTP request
     tracing::debug!("fetching '{}'", &repo_data_url);
-    let request_builder = client.get(repo_data_url.clone());
+    let request_builder = client.client().get(repo_data_url.clone());
 
     let mut headers = HeaderMap::default();
 
@@ -377,6 +377,7 @@ pub async fn fetch_repo_data(
     // Send the request and wait for a reply
     let download_reporter = reporter
         .as_deref()
+        .and_then(|reporter| reporter.download_reporter())
         .map(|r| (r, r.on_download_start(&repo_data_url)));
 
     let (client, request) = request_builder.headers(headers).build_split();
@@ -429,6 +430,20 @@ pub async fn fetch_repo_data(
                 cache_state,
                 cache_result: CacheResult::CacheHitAfterFetch,
             });
+        }
+
+        // Fail if the status code is not a success
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.ok();
+            return Err(FetchRepoDataError::HttpError(
+                reqwest_middleware::Error::Middleware(anyhow::format_err!(
+                    "received unexpected status code ({}) when fetching {}.\n\nBody:\n{}",
+                    status,
+                    repo_data_url.redact(),
+                    body.as_deref().unwrap_or("<failed to get body>"),
+                )),
+            ));
         }
 
         // Get cache headers from the response
@@ -490,8 +505,10 @@ pub async fn fetch_repo_data(
     let repo_data_destination_path = repo_data_json_path.clone();
     let repo_data_json_metadata = tokio::task::spawn_blocking(move || {
         let file = temp_file
-            .persist(repo_data_destination_path)
-            .map_err(FetchRepoDataError::FailedToPersistTemporaryFile)?;
+            .persist(repo_data_destination_path.clone())
+            .map_err(|e| {
+                FetchRepoDataError::FailedToPersistTemporaryFile(e, repo_data_destination_path)
+            })?;
 
         // Determine the last modified date and size of the repodata.json file. We store
         // these values in the cache to link the cache to the corresponding
@@ -547,7 +564,7 @@ async fn stream_and_decode_to_file(
     response: Response,
     content_encoding: Encoding,
     temp_dir: &Path,
-    reporter: Option<(&dyn Reporter, usize)>,
+    reporter: Option<(&dyn DownloadReporter, usize)>,
 ) -> Result<(NamedTempFile, blake2::digest::Output<Blake2b256>), FetchRepoDataError> {
     // Determine the encoding of the response
     let transfer_encoding = Encoding::from(&response);
@@ -559,7 +576,7 @@ async fn stream_and_decode_to_file(
         .inspect_ok(|bytes| {
             total_bytes += bytes.len();
         })
-        .map_err(|e| std::io::Error::new(ErrorKind::Other, e));
+        .map_err(std::io::Error::other);
 
     // Create a new stream from the byte stream that decodes the bytes using the
     // transfer encoding on the fly.
@@ -640,7 +657,7 @@ impl VariantAvailability {
 /// Determine the availability of `repodata.json` variants (like a `.zst` or
 /// `.bz2`) by checking a cache or the internet.
 pub async fn check_variant_availability(
-    client: &reqwest_middleware::ClientWithMiddleware,
+    client: &LazyClient,
     subdir_url: &Url,
     cache_state: Option<&RepoDataState>,
     filename: &str,
@@ -744,10 +761,7 @@ pub async fn check_variant_availability(
 }
 
 /// Performs a HEAD request on the given URL to see if it is available.
-async fn check_valid_download_target(
-    url: &Url,
-    client: &reqwest_middleware::ClientWithMiddleware,
-) -> bool {
+async fn check_valid_download_target(url: &Url, client: &LazyClient) -> bool {
     tracing::debug!("checking availability of '{url}'");
 
     if url.scheme() == "file" {
@@ -761,7 +775,7 @@ async fn check_valid_download_target(
         exists
     } else {
         // Otherwise, perform a HEAD request to determine whether the url seems valid.
-        match client.head(url.clone()).send().await {
+        match client.client().head(url.clone()).send().await {
             Ok(response) => {
                 if response.status().is_success() {
                     tracing::debug!("'{url}' seems to be available");
@@ -996,9 +1010,8 @@ mod test {
     use fs_err::tokio as tokio_fs;
     use futures::{stream, StreamExt};
     use hex_literal::hex;
-    use rattler_networking::AuthenticationMiddleware;
+    use rattler_networking::{AuthenticationMiddleware, LazyClient};
     use reqwest::Client;
-    use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
     use tempfile::TempDir;
     use tokio::{io::AsyncWriteExt, sync::Mutex};
     use tokio_util::io::ReaderStream;
@@ -1010,7 +1023,7 @@ mod test {
             FetchRepoDataError, RepoDataNotFoundError,
         },
         utils::{simple_channel_server::SimpleChannelServer, Encoding},
-        Reporter,
+        DownloadReporter, JLAPReporter, Reporter,
     };
 
     async fn write_encoded(
@@ -1100,8 +1113,8 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1130,7 +1143,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
+            LazyClient::default(),
             cache_dir.path().to_owned(),
             FetchRepoDataOptions::default(),
             None,
@@ -1143,7 +1156,7 @@ mod test {
         // Download the data from the channel with a filled cache.
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
+            LazyClient::default(),
             cache_dir.path().to_owned(),
             FetchRepoDataOptions::default(),
             None,
@@ -1167,8 +1180,8 @@ mod test {
         // Download the data from the channel with a filled cache.
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1196,8 +1209,8 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1238,8 +1251,8 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1287,8 +1300,8 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1342,8 +1355,8 @@ mod test {
 
         let result = fetch_repo_data(
             server.url(),
-            authenticated_client,
-            cache_dir.into_path(),
+            authenticated_client.into(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1369,6 +1382,16 @@ mod test {
         }
 
         impl Reporter for BasicReporter {
+            fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
+                Some(self)
+            }
+
+            fn jlap_reporter(&self) -> Option<&dyn JLAPReporter> {
+                None
+            }
+        }
+
+        impl DownloadReporter for BasicReporter {
             fn on_download_progress(
                 &self,
                 _url: &Url,
@@ -1390,8 +1413,8 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let _result = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             Some(reporter.clone()),
         )
@@ -1413,8 +1436,8 @@ mod test {
         let result = fetch_repo_data(
             Url::parse(format!("file://{}", subdir_path.path().to_str().unwrap()).as_str())
                 .unwrap(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1435,8 +1458,8 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            ClientWithMiddleware::from(Client::new()),
-            cache_dir.into_path(),
+            LazyClient::default(),
+            cache_dir.keep(),
             FetchRepoDataOptions::default(),
             None,
         )
@@ -1508,10 +1531,7 @@ mod test {
                 // Create a stream that ends prematurely
                 let stream = stream::iter(vec![
                     Ok(bytes.into_iter().collect::<Bytes>()),
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "premature close",
-                    )),
+                    Err(std::io::Error::other("premature close")),
                     // The stream ends after sending partial data, simulating a premature close
                 ]);
                 let body = Body::from_stream(stream);
@@ -1542,12 +1562,10 @@ mod test {
 
         let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
 
-        let client = ClientBuilder::new(Client::default()).build();
-
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server_url,
-            client,
+            LazyClient::default(),
             cache_dir.path().into(),
             FetchRepoDataOptions {
                 bz2_enabled: false,

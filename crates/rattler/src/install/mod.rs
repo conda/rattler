@@ -43,17 +43,20 @@ pub use apple_codesign::AppleCodeSignBehavior;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
+pub use installer::{
+    result_record::InstallationResultRecord, Installer, InstallerError, LinkOptions, Reporter,
+};
 #[cfg(feature = "indicatif")]
 pub use installer::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
     ProgressFormatter,
 };
-pub use installer::{Installer, InstallerError, Reporter};
 use itertools::Itertools;
 pub use link::{link_file, LinkFileError, LinkMethod};
 pub use python::PythonInfo;
 use rattler_conda_types::{
     package::{IndexJson, LinkJson, NoArchLinks, PackageFile, PathsEntry, PathsJson},
+    prefix::Prefix,
     prefix_record, Platform,
 };
 use rayon::{
@@ -68,7 +71,7 @@ pub use unlink::{empty_trash, unlink_package};
 
 pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 use crate::install::{
-    clobber_registry::ClobberRegistry,
+    clobber_registry::{ClobberRegistry, CLOBBERS_DIR_NAME},
     entry_point::{create_unix_python_entry_point, create_windows_python_entry_point},
 };
 
@@ -96,7 +99,7 @@ pub enum InstallError {
     FailedToLink(PathBuf, #[source] LinkFileError),
 
     /// A directory could not be created.
-    #[error("failed to create directory '{0}")]
+    #[error("failed to create directory '{0}'")]
     FailedToCreateDirectory(PathBuf, #[source] std::io::Error),
 
     /// The target prefix is not UTF-8.
@@ -231,22 +234,24 @@ pub struct InstallOptions {
     /// [`InstallError::MissingPythonInfo`].
     pub python_info: Option<PythonInfo>,
 
-    /// For binaries on macOS ARM64 (Apple Silicon), binaries need to be signed
-    /// with an ad-hoc certificate to properly work. This field controls
-    /// whether or not to do that. Code signing is only executed when the
-    /// target platform is macOS ARM64. By default, codesigning will fail
-    /// the installation if it fails. This behavior can be changed by setting
+    /// For binaries on macOS (both Intel and Apple Silicon), binaries need to be signed
+    /// with an ad-hoc certificate to properly work when their signature has been invalidated
+    /// by prefix replacement (modifying binary content). This field controls whether or not to do that.
+    /// Code signing is executed when the target platform is macOS. By default, codesigning
+    /// will fail the installation if it fails. This behavior can be changed by setting
     /// this field to `AppleCodeSignBehavior::Ignore` or
     /// `AppleCodeSignBehavior::DoNothing`.
     ///
     /// To sign the binaries, the `/usr/bin/codesign` executable is called with
-    /// `--force` and `--sign -` arguments. The `--force` argument is used
-    /// to overwrite existing signatures, and the `--sign -` argument is
-    /// used to sign with an ad-hoc certificate. Ad-hoc signing does not use
-    /// an identity at all, and identifies exactly one instance of code.
+    /// `--force`, `--sign -`, and `--preserve-metadata=entitlements` arguments.
+    /// The `--force` argument is used to overwrite existing signatures, the `--sign -`
+    /// argument is used to sign with an ad-hoc certificate (which does not use an identity
+    /// at all), and `--preserve-metadata=entitlements` preserves the original entitlements
+    /// from the binary (required for programs that need specific permissions like virtualization).
     pub apple_codesign_behavior: AppleCodeSignBehavior,
 }
 
+#[derive(Debug)]
 struct LinkPath {
     entry: PathsEntry,
     computed_path: PathBuf,
@@ -262,7 +267,7 @@ struct LinkPath {
 #[instrument(skip_all, fields(package_dir = % package_dir.display()))]
 pub async fn link_package(
     package_dir: &Path,
-    target_dir: &Path,
+    target_dir: &Prefix,
     driver: &InstallDriver,
     options: InstallOptions,
 ) -> Result<Vec<prefix_record::PathsEntry>, InstallError> {
@@ -272,11 +277,6 @@ pub async fn link_package(
         .to_str()
         .ok_or(InstallError::TargetPrefixIsNotUtf8)?
         .to_owned();
-
-    // Ensure target directory exists
-    tokio_fs::create_dir_all(&target_dir)
-        .await
-        .map_err(InstallError::FailedToCreateTargetDirectory)?;
 
     // Reuse or read the `paths.json` and `index.json` files from the package
     // directory
@@ -355,9 +355,22 @@ pub async fn link_package(
                 break;
             }
         }
+
+        // Since we store clobbers in the separate directory
+        // (`__clobbers__`) now we have to create all necessary
+        // directories for it as well.
+        let clobber_path = link_path.clobber_path.as_ref();
+        let mut current_clobber_path = clobber_path.and_then(|p| p.parent());
+        while let Some(path) = current_clobber_path {
+            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
+                current_clobber_path = path.parent();
+            } else {
+                break;
+            }
+        }
     }
 
-    let directories_target_dir = target_dir.to_path_buf();
+    let directories_target_dir = target_dir.path().to_path_buf();
     driver
         .run_blocking_io_task(move || {
             for directory in directories_to_construct.into_iter().sorted() {
@@ -412,7 +425,7 @@ pub async fn link_package(
             {
                 Ok(Ok(linked_file)) => linked_file,
                 Ok(Err(e)) => {
-                    return Err(InstallError::FailedToLink(entry.relative_path.clone(), e))
+                    return Err(InstallError::FailedToLink(entry.relative_path.clone(), e));
                 }
                 Err(Ok(payload)) => std::panic::resume_unwind(payload),
                 Err(Err(_err)) => return Err(InstallError::Cancelled),
@@ -429,7 +442,12 @@ pub async fn link_package(
                 path_type: entry.path_type.into(),
                 no_link: entry.no_link,
                 sha256: entry.sha256,
-                sha256_in_prefix: Some(result.sha256),
+                // Only set sha256_in_prefix if it differs from the original sha256
+                sha256_in_prefix: if Some(result.sha256) == entry.sha256 {
+                    None
+                } else {
+                    Some(result.sha256)
+                },
                 size_in_bytes: Some(result.file_size),
                 file_mode: match result.method {
                     LinkMethod::Patched(file_mode) => Some(file_mode),
@@ -569,7 +587,7 @@ pub async fn link_package(
 #[instrument(skip_all, fields(package_dir = % package_dir.display()))]
 pub fn link_package_sync(
     package_dir: &Path,
-    target_dir: &Path,
+    target_dir: &Prefix,
     clobber_registry: Arc<Mutex<ClobberRegistry>>,
     options: InstallOptions,
 ) -> Result<Vec<prefix_record::PathsEntry>, InstallError> {
@@ -581,9 +599,6 @@ pub fn link_package_sync(
         .to_str()
         .ok_or(InstallError::TargetPrefixIsNotUtf8)?
         .to_owned();
-
-    // Ensure target directory exists
-    fs_err::create_dir_all(target_dir).map_err(InstallError::FailedToCreateTargetDirectory)?;
 
     // Reuse or read the `paths.json` and `index.json` files from the package
     // directory
@@ -687,6 +702,19 @@ pub fn link_package_sync(
             }
         }
 
+        // Since we store clobbers in the separate directory
+        // (`__clobbers__`) now we have to create all necessary
+        // directories for it as well.
+        let clobber_path = link_path.clobber_path.as_ref();
+        let mut current_path = clobber_path.and_then(|p| p.parent());
+        while let Some(path) = current_path {
+            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
+                current_path = path.parent();
+            } else {
+                break;
+            }
+        }
+
         // Store the path by directory so we can create them in parallel
         paths_by_directory
             .entry(entry_parent.to_path_buf())
@@ -700,7 +728,7 @@ pub fn link_package_sync(
         .into_iter()
         .sorted_by(|a, b| a.components().count().cmp(&b.components().count()))
     {
-        let full_path = target_dir.join(&directory);
+        let full_path = target_dir.path().join(&directory);
 
         // if we already (recursively) created the parent directory we can skip this
         if created_directories
@@ -715,7 +743,11 @@ pub fn link_package_sync(
             continue;
         }
 
-        if allow_ref_links && cfg!(target_os = "macos") && !index_json.noarch.is_python() {
+        if allow_ref_links
+            && cfg!(target_os = "macos")
+            && !directory.starts_with(CLOBBERS_DIR_NAME)
+            && !index_json.noarch.is_python()
+        {
             // reflink the whole directory if possible
             // currently this does not handle noarch packages
             match reflink_copy::reflink(package_dir.join(&directory), &full_path) {
@@ -746,7 +778,7 @@ pub fn link_package_sync(
 
     // Take care of all the reflinked files (macos only)
     //  - Add them to the paths.json
-    //  - Fix any occurences of the prefix in the files
+    //  - Fix any occurrences of the prefix in the files
     //  - Rename files that need clobber-renames
     let mut reflinked_paths_entries = Vec::new();
     for (parent_dir, files) in reflinked_files {
@@ -784,7 +816,6 @@ pub fn link_package_sync(
     // Link the individual files in parallel
     let link_target_prefix = target_prefix.clone();
     let package_dir = package_dir.to_path_buf();
-    let link_target_dir = target_dir.to_path_buf();
     let mut paths = paths_by_directory
         .into_values()
         .collect_vec()
@@ -802,7 +833,7 @@ pub fn link_package_sync(
                         .clobber_path
                         .unwrap_or(link_path.computed_path.clone()),
                     &package_dir,
-                    &link_target_dir,
+                    target_dir,
                     &link_target_prefix,
                     allow_symbolic_links && !entry.no_link,
                     allow_hard_links && !entry.no_link,
@@ -817,7 +848,7 @@ pub fn link_package_sync(
                         return vec![Err(InstallError::FailedToLink(
                             entry.relative_path.clone(),
                             e,
-                        ))]
+                        ))];
                     }
                 };
 
@@ -832,7 +863,12 @@ pub fn link_package_sync(
                     path_type: entry.path_type.into(),
                     no_link: entry.no_link,
                     sha256: entry.sha256,
-                    sha256_in_prefix: Some(result.sha256),
+                    // Only set sha256_in_prefix if it differs from the original sha256
+                    sha256_in_prefix: if Some(result.sha256) == entry.sha256 {
+                        None
+                    } else {
+                        Some(result.sha256)
+                    },
                     size_in_bytes: Some(result.file_size),
                     file_mode: match result.method {
                         LinkMethod::Patched(file_mode) => Some(file_mode),
@@ -871,7 +907,6 @@ pub fn link_package_sync(
             .expect("should be safe because its checked above that this contains a value");
 
         let target_prefix = target_prefix.clone();
-        let target_dir = target_dir.to_path_buf();
 
         // Create entry points for each listed item. This is different between Windows
         // and unix because on Windows, two PathEntry's are created whereas on
@@ -883,7 +918,7 @@ pub fn link_package_sync(
                 // .with_min_len(100)
                 .flat_map(move |entry_point| {
                     match create_windows_python_entry_point(
-                        &target_dir,
+                        target_dir,
                         &target_prefix,
                         &entry_point,
                         &python_info,
@@ -903,7 +938,7 @@ pub fn link_package_sync(
                 // .with_min_len(100)
                 .map(move |entry_point| {
                     match create_unix_python_entry_point(
-                        &target_dir,
+                        target_dir,
                         &target_prefix,
                         &entry_point,
                         &python_info,
@@ -1014,9 +1049,9 @@ async fn read_link_json(
 }
 
 /// Returns true if it is possible to create symlinks in the target directory.
-fn can_create_symlinks_sync(target_dir: &Path) -> bool {
+fn can_create_symlinks_sync(target_dir: &Prefix) -> bool {
     let uuid = uuid::Uuid::new_v4();
-    let symlink_path = target_dir.join(format!("symtest_{uuid}"));
+    let symlink_path = target_dir.path().join(format!("symtest_{uuid}"));
     #[cfg(windows)]
     let result = std::os::windows::fs::symlink_file("./", &symlink_path);
     #[cfg(unix)]
@@ -1069,9 +1104,9 @@ impl<T> Ord for OrderWrapper<T> {
 }
 
 /// Returns true if it is possible to create symlinks in the target directory.
-async fn can_create_symlinks(target_dir: &Path) -> bool {
+async fn can_create_symlinks(target_dir: &Prefix) -> bool {
     let uuid = uuid::Uuid::new_v4();
-    let symlink_path = target_dir.join(format!("symtest_{uuid}"));
+    let symlink_path = target_dir.path().join(format!("symtest_{uuid}"));
     #[cfg(windows)]
     let result = tokio_fs::symlink_file("./", &symlink_path).await;
     #[cfg(unix)]
@@ -1097,21 +1132,21 @@ async fn can_create_symlinks(target_dir: &Path) -> bool {
 
 /// Returns true if it is possible to create hard links from the target
 /// directory to the package cache directory.
-async fn can_create_hardlinks(target_dir: &Path, package_dir: &Path) -> bool {
+async fn can_create_hardlinks(target_dir: &Prefix, package_dir: &Path) -> bool {
     paths_have_same_filesystem(target_dir, package_dir).await
 }
 
 /// Returns true if it is possible to create hard links from the target
 /// directory to the package cache directory.
-fn can_create_hardlinks_sync(target_dir: &Path, package_dir: &Path) -> bool {
-    paths_have_same_filesystem_sync(target_dir, package_dir)
+fn can_create_hardlinks_sync(target_dir: &Prefix, package_dir: &Path) -> bool {
+    paths_have_same_filesystem_sync(target_dir.path(), package_dir)
 }
 
 /// Returns true if two paths share the same filesystem
 #[cfg(unix)]
-async fn paths_have_same_filesystem(a: &Path, b: &Path) -> bool {
+async fn paths_have_same_filesystem(a: &Prefix, b: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
-    match tokio::join!(tokio_fs::metadata(a), tokio_fs::metadata(b)) {
+    match tokio::join!(tokio_fs::metadata(a.path()), tokio_fs::metadata(b)) {
         (Ok(a), Ok(b)) => a.dev() == b.dev(),
         _ => false,
     }
@@ -1151,19 +1186,19 @@ fn paths_have_same_filesystem_sync(a: &Path, b: &Path) -> bool {
 mod test {
     use std::{env::temp_dir, process::Command, str::FromStr};
 
-    use futures::{stream, StreamExt};
-    use rattler_conda_types::{
-        package::ArchiveIdentifier, ExplicitEnvironmentSpec, Platform, Version,
-    };
-    use rattler_lock::LockFile;
-    use tempfile::tempdir;
-    use url::Url;
-
     use crate::{
         get_test_data_dir,
-        install::{link_package, InstallDriver, InstallOptions, PythonInfo},
+        install::{link_package, InstallDriver, InstallOptions, Prefix, PythonInfo},
         package_cache::PackageCache,
     };
+    use futures::{stream, StreamExt};
+    use rattler_conda_types::{
+        package::CondaArchiveIdentifier, ExplicitEnvironmentSpec, Platform, Version,
+    };
+    use rattler_lock::LockFile;
+    use rattler_networking::LazyClient;
+    use tempfile::tempdir;
+    use url::Url;
 
     #[tracing_test::traced_test]
     #[tokio::test]
@@ -1174,7 +1209,11 @@ mod test {
             get_test_data_dir().join(format!("python/explicit-env-{current_platform}.txt"));
         let env = ExplicitEnvironmentSpec::from_path(&explicit_env_path).unwrap();
 
-        assert_eq!(env.platform, Some(current_platform), "the platform for which the explicit lock file was created does not match the current platform");
+        assert_eq!(
+            env.platform,
+            Some(current_platform),
+            "the platform for which the explicit lock file was created does not match the current platform"
+        );
 
         test_install_python(
             env.packages.into_iter().map(|p| p.url),
@@ -1197,7 +1236,9 @@ mod test {
             .expect("no default environment in lock file");
 
         let Some(packages) = lock_env.packages(current_platform) else {
-            panic!("the platform for which the explicit lock file was created does not match the current platform")
+            panic!(
+                "the platform for which the explicit lock file was created does not match the current platform"
+            )
         };
 
         test_install_python(
@@ -1219,7 +1260,7 @@ mod test {
         let package_cache = PackageCache::new(temp_dir().join("rattler").join(cache_name));
 
         // Create an HTTP client we can use to download packages
-        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+        let client = LazyClient::default();
 
         // Specify python version
         let python_version =
@@ -1229,16 +1270,17 @@ mod test {
         // Download and install each layer into an environment.
         let install_driver = InstallDriver::default();
         let target_dir = tempdir().unwrap();
+        let prefix_path = Prefix::create(target_dir.path()).unwrap();
         stream::iter(urls)
             .for_each_concurrent(Some(50), |package_url| {
-                let prefix_path = target_dir.path();
                 let client = client.clone();
                 let package_cache = &package_cache;
                 let install_driver = &install_driver;
                 let python_version = &python_version;
+                let prefix_path = prefix_path.clone();
                 async move {
                     // Populate the cache
-                    let package_info = ArchiveIdentifier::try_from_url(&package_url).unwrap();
+                    let package_info = CondaArchiveIdentifier::try_from_url(&package_url).unwrap();
                     let package_cache_lock = package_cache
                         .get_or_fetch_from_url(
                             package_info,
@@ -1252,7 +1294,7 @@ mod test {
                     // Install the package to the prefix
                     link_package(
                         package_cache_lock.path(),
-                        prefix_path,
+                        &prefix_path,
                         install_driver,
                         InstallOptions {
                             python_info: Some(python_version.clone()),
@@ -1306,7 +1348,7 @@ mod test {
         // Link the package
         let paths = link_package(
             package_dir.path(),
-            environment_dir.path(),
+            &Prefix::create(environment_dir.path()).unwrap(),
             &install_driver,
             InstallOptions::default(),
         )

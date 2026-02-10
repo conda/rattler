@@ -2,17 +2,6 @@
 
 use std::{collections::BTreeSet, ops::Not, str::FromStr, sync::Arc};
 
-use fxhash::FxHashMap;
-use indexmap::IndexSet;
-use pep440_rs::VersionSpecifiers;
-use pep508_rs::{ExtraName, Requirement};
-use rattler_conda_types::{
-    NoArchType, PackageName, PackageRecord, PackageUrl, Platform, VersionWithSource,
-};
-use serde::Deserialize;
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
-use url::Url;
-
 use super::ParseCondaLockError;
 use crate::{
     conda::CondaBinaryData,
@@ -22,9 +11,21 @@ use crate::{
         LocationDerivedFields,
     },
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
+    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath,
     DEFAULT_ENVIRONMENT_NAME,
 };
+use indexmap::IndexSet;
+use pep440_rs::VersionSpecifiers;
+use pep508_rs::{ExtraName, Requirement};
+use rattler_conda_types::package::{
+    ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
+};
+use rattler_conda_types::{
+    NoArchType, PackageName, PackageRecord, PackageUrl, Platform, VersionWithSource,
+};
+use serde::Deserialize;
+use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use url::Url;
 
 #[derive(Deserialize)]
 struct LockFileV3 {
@@ -138,8 +139,8 @@ pub fn parse_v3_or_lower(
     let mut conda_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_runtime_configs = IndexSet::with_capacity(lock_file.package.len());
-    let mut per_platform: FxHashMap<Platform, IndexSet<EnvironmentPackageData>> =
-        FxHashMap::default();
+    let mut per_platform: ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>> =
+        ahash::HashMap::default();
     for package in lock_file.package {
         let LockedPackageV3 { platform, kind } = package;
 
@@ -193,8 +194,13 @@ pub fn parse_v3_or_lower(
                             .channel
                             .unwrap_or_else(|| Url::parse("https://example.com").unwrap().into())
                             .into(),
-                        file_name: derived.file_name.unwrap_or_else(|| {
-                            format!("{}-{}-{}.conda", value.name, value.version, build)
+                        file_name: derived.identifier.unwrap_or_else(|| DistArchiveIdentifier {
+                            identifier: ArchiveIdentifier {
+                                name: value.name.clone(),
+                                version: value.version.to_string(),
+                                build_string: build.clone(),
+                            },
+                            archive_type: DistArchiveType::Conda(CondaArchiveType::Conda),
                         }),
                         package_record: PackageRecord {
                             arch: value.arch.or(derived_arch),
@@ -202,7 +208,7 @@ pub fn parse_v3_or_lower(
                             build_number,
                             constrains: value.constrains,
                             depends: value.dependencies,
-                            extra_depends: std::collections::BTreeMap::new(),
+                            experimental_extra_depends: std::collections::BTreeMap::new(),
                             features: value.features,
                             legacy_bz2_md5: None,
                             legacy_bz2_size: None,
@@ -215,7 +221,7 @@ pub fn parse_v3_or_lower(
                             sha256,
                             size: value.size,
                             subdir: subdir.to_string(),
-                            timestamp: value.timestamp,
+                            timestamp: value.timestamp.map(Into::into),
                             track_features: value.track_features,
                             version: value.version,
                             purls: value.purls.is_empty().not().then_some(value.purls),
@@ -258,6 +264,7 @@ pub fn parse_v3_or_lower(
         channels: lock_file.metadata.channels,
         indexes: None,
         packages: per_platform,
+        options: SolveOptions::default(),
     };
 
     Ok(LockFile {

@@ -1,0 +1,35 @@
+---
+source: crates/rattler_conda_types/src/repo_data/mod.rs
+expression: repodata
+---
+info:
+  subdir: noarch
+  base_url: "../linux-64"
+packages:
+  bar-1-xxx.tar.bz2:
+    build: xxx
+    build_number: 0
+    depends: []
+    name: bar
+    subdir: linux-64
+    version: "1"
+  bar-2-xxx.tar.bz2:
+    build: xxx
+    build_number: 0
+    depends: []
+    name: bar
+    subdir: linux-64
+    version: "2"
+  foo-1-xxx.tar.bz2:
+    build: xxx
+    build_number: 0
+    depends: []
+    extra_depends:
+      with-bar:
+        - bar <2
+    name: foo
+    subdir: linux-64
+    version: "1"
+packages.conda: {}
+packages.whl: {}
+repodata_version: 2

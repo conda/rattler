@@ -783,6 +783,62 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
             }
         }
     }
+
+    fn on_post_link_start(&self, package_name: &str, script_path: &str) -> usize {
+        let inner = self.inner.lock();
+
+        // Use the existing link progress bar to show post-link script execution
+        if let Some(link_pb) = &inner.link_progress {
+            link_pb.set_message(format!(
+                "running post-link script for {package_name} ({script_path})",
+            ));
+        }
+
+        // Return a dummy index since we're not tracking individual script progress bars
+        0
+    }
+
+    fn on_post_link_complete(&self, _index: usize, success: bool) {
+        let inner = self.inner.lock();
+
+        // Clear the message or update status based on success
+        if let Some(link_pb) = &inner.link_progress {
+            // Keep the message visible if there was a failure
+            // The actual error will be in the logs
+            if success {
+                // Clear the script message and go back to regular linking message
+                link_pb.set_message("");
+            }
+        }
+    }
+
+    fn on_pre_unlink_start(&self, package_name: &str, script_path: &str) -> usize {
+        let inner = self.inner.lock();
+
+        // Use the existing link progress bar to show pre-unlink script execution
+        if let Some(link_pb) = &inner.link_progress {
+            link_pb.set_message(format!(
+                "running pre-unlink script for {package_name} ({script_path})",
+            ));
+        }
+
+        // Return a dummy index since we're not tracking individual script progress bars
+        0
+    }
+
+    fn on_pre_unlink_complete(&self, _index: usize, success: bool) {
+        let inner = self.inner.lock();
+
+        // Clear the message or update status based on success
+        if let Some(link_pb) = &inner.link_progress {
+            // Keep the message visible if there was a failure
+            // The actual error will be in the logs
+            if success {
+                // Clear the script message and go back to regular linking message
+                link_pb.set_message("");
+            }
+        }
+    }
 }
 
 /// Formats a durations. Rounds to milliseconds and uses human-readable format.

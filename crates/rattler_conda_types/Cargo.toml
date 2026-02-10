@@ -1,6 +1,6 @@
 [package]
 name = "rattler_conda_types"
-version = "0.31.5"
+version = "0.43.2"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for common types used within the Conda ecosystem"
@@ -12,23 +12,27 @@ readme.workspace = true
 
 [features]
 default = ["rayon"]
-experimental_extras = []
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
+ahash = { workspace = true }
 chrono = { workspace = true }
-file_url = { path = "../file_url", version = "0.2.3" }
-fxhash = { workspace = true }
+file_url = { workspace = true }
 glob = { workspace = true }
 hex = { workspace = true }
 itertools = { workspace = true }
 lazy-regex = { workspace = true }
 nom = { workspace = true }
+nom-language = { workspace = true }
 purl = { workspace = true, features = ["serde"] }
-rattler_digest = { path = "../rattler_digest", version = "1.0.8", default-features = false, features = [
+rattler_digest = { workspace = true, default-features = false, features = [
   "serde",
 ] }
-rattler_macros = { path = "../rattler_macros", version = "1.0.7", default-features = false }
-rattler_redaction = { version = "0.1.8", path = "../rattler_redaction", default-features = false }
+rattler_macros = { workspace = true, default-features = false }
+rattler_redaction = { workspace = true, default-features = false }
+fancy-regex = { workspace = true }
 regex = { workspace = true }
 simd-json = { workspace = true, features = ["serde_impl"] }
 serde = { workspace = true, features = ["derive", "rc"] }
@@ -53,6 +57,10 @@ indexmap = { workspace = true }
 dirs = { workspace = true }
 rayon = { workspace = true, optional = true }
 fs-err = { workspace = true }
+memmap2 = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = { version = "0.10.0" }
 
 [dev-dependencies]
 rand = { workspace = true }

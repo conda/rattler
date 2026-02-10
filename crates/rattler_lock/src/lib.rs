@@ -78,7 +78,6 @@
 
 use std::{collections::HashMap, io::Read, path::Path, str::FromStr, sync::Arc};
 
-use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use rattler_conda_types::{Platform, RepoDataRecord};
 
@@ -87,17 +86,23 @@ mod channel;
 mod conda;
 mod file_format_version;
 mod hash;
+pub mod options;
 mod parse;
 mod pypi;
 mod pypi_indexes;
+pub mod source;
 mod url_or_path;
 mod utils;
 
 pub use builder::{LockFileBuilder, LockedPackage};
 pub use channel::Channel;
-pub use conda::{CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, InputHash};
+pub use conda::{
+    CondaBinaryData, CondaPackageData, CondaSourceData, ConversionError, GitShallowSpec, InputHash,
+    PackageBuildSource, VariantValue,
+};
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
+pub use options::{PypiPrereleaseMode, SolveOptions};
 pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
@@ -130,7 +135,7 @@ struct LockFileInner {
     pypi_packages: Vec<PypiPackageData>,
     pypi_environment_package_data: Vec<PypiPackageEnvironmentData>,
 
-    environment_lookup: FxHashMap<String, usize>,
+    environment_lookup: ahash::HashMap<String, usize>,
 }
 
 /// An package used in an environment. Selects a type of package based on the
@@ -157,9 +162,12 @@ struct EnvironmentData {
     /// The pypi indexes used to solve the environment.
     indexes: Option<PypiIndexes>,
 
+    /// The options that were used to solve the environment.
+    options: SolveOptions,
+
     /// For each individual platform this environment supports we store the
     /// package identifiers associated with the environment.
-    packages: FxHashMap<Platform, IndexSet<EnvironmentPackageData>>,
+    packages: ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>>,
 }
 
 impl LockFile {
@@ -185,14 +193,12 @@ impl LockFile {
     /// Writes the conda lock to a file
     pub fn to_path(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = std::fs::File::create(path)?;
-        serde_yaml::to_writer(file, self)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+        serde_yaml::to_writer(file, self).map_err(std::io::Error::other)
     }
 
     /// Writes the conda lock to a string
     pub fn render_to_string(&self) -> Result<String, std::io::Error> {
-        serde_yaml::to_string(self)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+        serde_yaml::to_string(self).map_err(std::io::Error::other)
     }
 
     /// Returns the environment with the given name.
@@ -275,6 +281,18 @@ impl<'lock> Environment<'lock> {
     /// Starting with version `5` of the format this should not be optional.
     pub fn pypi_indexes(&self) -> Option<&PypiIndexes> {
         self.data().indexes.as_ref()
+    }
+
+    /// Returns the `PyPI` prerelease mode that was used to solve this environment.
+    ///
+    /// Returns `None` if no prerelease mode was explicitly set.
+    pub fn pypi_prerelease_mode(&self) -> Option<PypiPrereleaseMode> {
+        self.data().options.pypi_prerelease_mode
+    }
+
+    /// Returns the solver options that were used to create this environment.
+    pub fn solve_options(&self) -> &SolveOptions {
+        &self.data().options
     }
 
     /// Returns all the packages for a specific platform in this environment.
@@ -547,6 +565,16 @@ mod test {
     #[case::v5_with_and_without_purl("v5/similar-with-and-without-purl.yml")]
     #[case::v6_conda_source_path("v6/conda-path-lock.yml")]
     #[case::v6_derived_channel("v6/derived-channel-lock.yml")]
+    #[case::v6_sources("v6/sources-lock.yml")]
+    #[case::v6_options("v6/options-lock.yml")]
+    #[case::v6_pixi_build_pinned_source("v6/pixi-build-pinned-source-lock.yml")]
+    #[case::v6_pixi_build_url_source("v6/pixi-build-url-source-lock.yml")]
+    #[case::v6_pixi_build_git_tag_source("v6/pixi-build-git-tag-source-lock.yml")]
+    #[case::v6_pixi_build_git_rev_only_source("v6/pixi-build-git-rev-only-source-lock.yml")]
+    #[case::v6_source_package_with_variants("v6/source-package-with-variants-lock.yml")]
+    #[case::v6_multiple_source_packages_with_variants(
+        "v6/multiple-source-packages-with-variants-lock.yml"
+    )]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")

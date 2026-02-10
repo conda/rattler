@@ -12,10 +12,13 @@ mod nameless_match_spec;
 mod networking;
 mod no_arch_type;
 mod package_name;
+mod package_name_matcher;
 mod package_streaming;
 mod paths_json;
 mod platform;
 mod prefix_paths;
+#[cfg(feature = "pty")]
+mod pty;
 mod record;
 mod repo_data;
 mod shell;
@@ -35,9 +38,10 @@ use error::{
     ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
     EnvironmentCreationException, ExtractException, FetchRepoDataException,
     InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
-    InvalidUrlException, InvalidVersionException, IoException, LinkException, ParseArchException,
-    ParsePlatformException, PyRattlerError, SolverException, TransactionException,
-    ValidatePackageRecordsException, VersionBumpException,
+    InvalidUrlException, InvalidVersionException, InvalidVersionSpecException, IoException,
+    LinkException, PackageNameMatcherParseException, ParseArchException, ParsePlatformException,
+    PyRattlerError, SolverException, TransactionException, ValidatePackageRecordsException,
+    VersionBumpException,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -52,28 +56,32 @@ use match_spec::PyMatchSpec;
 use meta::get_rattler_version;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::middleware::{
-    PyAuthenticationMiddleware, PyGCSMiddleware, PyMirrorMiddleware, PyOciMiddleware, PyS3Config,
-    PyS3Middleware,
+    PyAddHeadersMiddleware, PyAuthenticationMiddleware, PyGCSMiddleware, PyMirrorMiddleware,
+    PyOciMiddleware, PyS3Config, PyS3Middleware,
 };
 use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
 use package_name::PyPackageName;
+use package_name_matcher::PyPackageNameMatcher;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
 use platform::{PyArch, PyPlatform};
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
 use pyo3::prelude::*;
-use record::PyRecord;
+use record::{PyLink, PyRecord};
 use repo_data::{
     gateway::{PyFetchRepoDataOptions, PyGateway, PySourceConfig},
     patch_instructions::PyPatchInstructions,
-    sparse::PySparseRepoData,
+    sparse::{PyPackageFormatSelection, PySparseRepoData},
     PyRepoData,
 };
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
-use solver::{py_solve, py_solve_with_sparse_repodata};
-use version::PyVersion;
+use solver::{py_solve, py_solve_with_sparse_repodata, PyMinimumAgeConfig};
+use version::{PyVersion, PyVersionSpec};
 use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
+
+#[cfg(feature = "pty")]
+use pty::{PyPtyProcess, PyPtyProcessOptions, PyPtySession};
 
 use crate::error::GatewayException;
 
@@ -92,11 +100,13 @@ impl<T> Deref for Wrap<T> {
 #[pymodule]
 fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyVersion>()?;
+    m.add_class::<PyVersionSpec>()?;
 
     m.add_class::<PyMatchSpec>()?;
     m.add_class::<PyNamelessMatchSpec>()?;
 
     m.add_class::<PyPackageName>()?;
+    m.add_class::<PyPackageNameMatcher>()?;
 
     m.add_class::<PyChannel>()?;
     m.add_class::<PyChannelConfig>()?;
@@ -110,6 +120,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyGCSMiddleware>()?;
     m.add_class::<PyS3Middleware>()?;
     m.add_class::<PyS3Config>()?;
+    m.add_class::<PyAddHeadersMiddleware>()?;
     m.add_class::<PyClientWithMiddleware>()?;
 
     // Shell activation things
@@ -118,7 +129,16 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyShellEnum>()?;
     m.add_class::<PyActivator>()?;
 
+    // PTY (pseudoterminal) support - optional feature, Unix only
+    #[cfg(feature = "pty")]
+    {
+        m.add_class::<PyPtyProcess>()?;
+        m.add_class::<PyPtyProcessOptions>()?;
+        m.add_class::<PyPtySession>()?;
+    }
+
     m.add_class::<PySparseRepoData>()?;
+    m.add_class::<PyPackageFormatSelection>()?;
     m.add_class::<PyRepoData>()?;
     m.add_class::<PyPatchInstructions>()?;
     m.add_class::<PyGateway>()?;
@@ -126,6 +146,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyFetchRepoDataOptions>()?;
 
     m.add_class::<PyRecord>()?;
+    m.add_class::<PyLink>()?;
 
     m.add_function(wrap_pyfunction!(py_fetch_repo_data, &m)?)?;
     m.add_class::<PyGenericVirtualPackage>()?;
@@ -156,6 +177,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyFileMode>()?;
     m.add_class::<PyIndexJson>()?;
 
+    m.add_class::<PyMinimumAgeConfig>()?;
     m.add_function(wrap_pyfunction!(py_solve, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_solve_with_sparse_repodata, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(get_rattler_version, &m).unwrap())?;
@@ -177,8 +199,16 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         py.get_type::<InvalidVersionException>(),
     )?;
     m.add(
+        "InvalidVersionSpecError",
+        py.get_type::<InvalidVersionSpecException>(),
+    )?;
+    m.add(
         "InvalidMatchSpecError",
         py.get_type::<InvalidMatchSpecException>(),
+    )?;
+    m.add(
+        "PackageNameMatcherParseError",
+        py.get_type::<PackageNameMatcherParseException>(),
     )?;
     m.add(
         "InvalidPackageNameError",

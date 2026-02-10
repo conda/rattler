@@ -6,7 +6,6 @@ use std::{
     sync::Arc,
 };
 
-use fxhash::FxHashMap;
 use indexmap::{IndexMap, IndexSet};
 use pep508_rs::ExtraName;
 use rattler_conda_types::{Platform, Version};
@@ -14,7 +13,8 @@ use rattler_conda_types::{Platform, Version};
 use crate::{
     file_format_version::FileFormatVersion, Channel, CondaBinaryData, CondaPackageData,
     CondaSourceData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
+    LockedPackageRef, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
+    UrlOrPath,
 };
 
 /// Information about a single locked package in an environment.
@@ -153,20 +153,35 @@ impl LockFileBuilder {
         Self::default()
     }
 
-    /// Sets the pypi indexes for an environment.
-    pub fn set_pypi_indexes(
-        &mut self,
-        environment_data: impl Into<String>,
-        indexes: PypiIndexes,
-    ) -> &mut Self {
+    /// Helper function that returns the environment for the environment with the given name.
+    fn environment_data(&mut self, environment_data: impl Into<String>) -> &mut EnvironmentData {
         self.environments
             .entry(environment_data.into())
             .or_insert_with(|| EnvironmentData {
                 channels: vec![],
-                packages: FxHashMap::default(),
+                packages: HashMap::default(),
                 indexes: None,
+                options: SolveOptions::default(),
             })
-            .indexes = Some(indexes);
+    }
+
+    /// Sets the pypi indexes for an environment.
+    pub fn set_pypi_indexes(
+        &mut self,
+        environment: impl Into<String>,
+        indexes: PypiIndexes,
+    ) -> &mut Self {
+        self.environment_data(environment).indexes = Some(indexes);
+        self
+    }
+
+    /// Sets the options for a particular environment.
+    pub fn set_options(
+        &mut self,
+        environment: impl Into<String>,
+        options: SolveOptions,
+    ) -> &mut Self {
+        self.environment_data(environment).options = options;
         self
     }
 
@@ -176,14 +191,8 @@ impl LockFileBuilder {
         environment: impl Into<String>,
         channels: impl IntoIterator<Item = impl Into<Channel>>,
     ) -> &mut Self {
-        self.environments
-            .entry(environment.into())
-            .or_insert_with(|| EnvironmentData {
-                channels: vec![],
-                packages: FxHashMap::default(),
-                indexes: None,
-            })
-            .channels = channels.into_iter().map(Into::into).collect();
+        self.environment_data(environment).channels =
+            channels.into_iter().map(Into::into).collect();
         self
     }
 
@@ -198,16 +207,6 @@ impl LockFileBuilder {
         platform: Platform,
         locked_package: CondaPackageData,
     ) -> &mut Self {
-        // Get the environment
-        let environment = self
-            .environments
-            .entry(environment.into())
-            .or_insert_with(|| EnvironmentData {
-                channels: vec![],
-                packages: HashMap::default(),
-                indexes: None,
-            });
-
         let unique_identifier = UniqueCondaIdentifier::from(&locked_package);
 
         // Add the package to the list of packages.
@@ -222,7 +221,7 @@ impl LockFileBuilder {
             .or_insert(locked_package);
 
         // Add the package to the environment that it is intended for.
-        environment
+        self.environment_data(environment)
             .packages
             .entry(platform)
             .or_default()
@@ -243,16 +242,6 @@ impl LockFileBuilder {
         locked_package: PypiPackageData,
         environment_data: PypiPackageEnvironmentData,
     ) -> &mut Self {
-        // Get the environment
-        let environment = self
-            .environments
-            .entry(environment.into())
-            .or_insert_with(|| EnvironmentData {
-                channels: vec![],
-                packages: HashMap::default(),
-                indexes: None,
-            });
-
         // Add the package to the list of packages.
         let package_idx = self.pypi_packages.insert_full(locked_package).0;
         let runtime_idx = self
@@ -261,7 +250,7 @@ impl LockFileBuilder {
             .0;
 
         // Add the package to the environment that it is intended for.
-        environment
+        self.environment_data(environment)
             .packages
             .entry(platform)
             .or_default()
@@ -349,6 +338,37 @@ impl LockFileBuilder {
         self
     }
 
+    /// Sets the `PyPI` prerelease mode for an environment.
+    ///
+    /// This function is similar to [`Self::with_pypi_prerelease_mode`] but differs in
+    /// that it takes a mutable reference to self instead of consuming it.
+    pub fn set_pypi_prerelease_mode(
+        &mut self,
+        environment: impl Into<String>,
+        prerelease_mode: crate::PypiPrereleaseMode,
+    ) -> &mut Self {
+        self.environment_data(environment)
+            .options
+            .pypi_prerelease_mode = Some(prerelease_mode);
+        self
+    }
+
+    /// Sets the `PyPI` prerelease mode for an environment.
+    pub fn with_pypi_prerelease_mode(
+        mut self,
+        environment: impl Into<String>,
+        prerelease_mode: crate::PypiPrereleaseMode,
+    ) -> Self {
+        self.set_pypi_prerelease_mode(environment, prerelease_mode);
+        self
+    }
+
+    /// Sets the options for an environment.
+    pub fn with_options(mut self, environment: impl Into<String>, options: SolveOptions) -> Self {
+        self.set_options(environment, options);
+        self
+    }
+
     /// Build a [`LockFile`]
     pub fn finish(self) -> LockFile {
         let (environment_lookup, environments) = self
@@ -401,10 +421,12 @@ impl From<PypiPackageEnvironmentData> for HashablePypiPackageEnvironmentData {
 mod test {
     use std::str::FromStr;
 
-    use rattler_conda_types::{PackageName, PackageRecord, Platform, Version};
+    use rattler_conda_types::{
+        package::DistArchiveIdentifier, PackageName, PackageRecord, Platform, Version,
+    };
     use url::Url;
 
-    use crate::{CondaBinaryData, LockFile};
+    use crate::{CondaBinaryData, LockFile, PypiPrereleaseMode};
 
     #[test]
     fn test_merge_records_and_purls() {
@@ -437,7 +459,9 @@ mod test {
                     )
                     .unwrap()
                     .into(),
-                    file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
+                    file_name: "foobar-1.0.0-build.tar.bz2"
+                        .parse::<DistArchiveIdentifier>()
+                        .unwrap(),
                     channel: None,
                 }
                 .into(),
@@ -452,7 +476,9 @@ mod test {
                     )
                     .unwrap()
                     .into(),
-                    file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
+                    file_name: "foobar-1.0.0-build.tar.bz2"
+                        .parse::<DistArchiveIdentifier>()
+                        .unwrap(),
                     channel: None,
                 }
                 .into(),
@@ -467,12 +493,111 @@ mod test {
                     )
                     .unwrap()
                     .into(),
-                    file_name: "foobar-1.0.0-build.tar.bz2".to_string(),
+                    file_name: "foobar-1.0.0-build.tar.bz2"
+                        .parse::<DistArchiveIdentifier>()
+                        .unwrap(),
                     channel: None,
                 }
                 .into(),
             )
             .finish();
         insta::assert_snapshot!(lock_file.render_to_string().unwrap());
+    }
+
+    #[test]
+    fn test_pypi_prerelease_mode() {
+        let record = PackageRecord {
+            subdir: "linux-64".into(),
+            ..PackageRecord::new(
+                PackageName::new_unchecked("python"),
+                Version::from_str("3.12.0").unwrap(),
+                "build".into(),
+            )
+        };
+
+        let lock_file = LockFile::builder()
+            .with_conda_package(
+                "default",
+                Platform::Linux64,
+                CondaBinaryData {
+                    package_record: record.clone(),
+                    location: Url::parse(
+                        "https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2",
+                    )
+                    .unwrap()
+                    .into(),
+                    file_name: "python-3.12.0-build.tar.bz2"
+                        .parse::<DistArchiveIdentifier>()
+                        .unwrap(),
+                    channel: None,
+                }
+                .into(),
+            )
+            .with_pypi_prerelease_mode("default", PypiPrereleaseMode::Allow)
+            .finish();
+
+        // Verify the prerelease mode is set correctly
+        let env = lock_file.environment("default").unwrap();
+        assert_eq!(env.pypi_prerelease_mode(), Some(PypiPrereleaseMode::Allow));
+
+        // Verify it serializes correctly
+        insta::assert_snapshot!(lock_file.render_to_string().unwrap());
+    }
+
+    #[test]
+    fn test_pypi_prerelease_mode_roundtrip() {
+        let record = PackageRecord {
+            subdir: "linux-64".into(),
+            ..PackageRecord::new(
+                PackageName::new_unchecked("python"),
+                Version::from_str("3.12.0").unwrap(),
+                "build".into(),
+            )
+        };
+
+        // Test various prerelease modes
+        for mode in [
+            PypiPrereleaseMode::Disallow,
+            PypiPrereleaseMode::Allow,
+            PypiPrereleaseMode::IfNecessary,
+            PypiPrereleaseMode::Explicit,
+            PypiPrereleaseMode::IfNecessaryOrExplicit,
+        ] {
+            let lock_file = LockFile::builder()
+                .with_conda_package(
+                    "default",
+                    Platform::Linux64,
+                    CondaBinaryData {
+                        package_record: record.clone(),
+                        location: Url::parse(
+                            "https://prefix.dev/example/linux-64/python-3.12.0-build.tar.bz2",
+                        )
+                        .unwrap()
+                        .into(),
+                        file_name: "python-3.12.0-build.tar.bz2"
+                            .parse::<DistArchiveIdentifier>()
+                            .unwrap(),
+                        channel: None,
+                    }
+                    .into(),
+                )
+                .with_pypi_prerelease_mode("default", mode)
+                .finish();
+
+            // Serialize
+            let rendered = lock_file.render_to_string().unwrap();
+
+            // Parse again
+            let parsed = LockFile::from_str(&rendered).unwrap();
+
+            // Verify the prerelease mode roundtrips correctly
+            assert_eq!(
+                parsed
+                    .environment("default")
+                    .unwrap()
+                    .pypi_prerelease_mode(),
+                Some(mode)
+            );
+        }
     }
 }

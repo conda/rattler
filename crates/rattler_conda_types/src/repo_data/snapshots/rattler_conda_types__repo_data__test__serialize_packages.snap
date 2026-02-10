@@ -45,7 +45,7 @@ packages:
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     version: "2.0"
   bors-1.0-bla_1.tar.bz2:
     build: bla_1
@@ -97,7 +97,7 @@ packages:
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     version: "2.0"
   bors-2.1-bla_1.tar.bz2:
     build: bla_1
@@ -110,7 +110,7 @@ packages:
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     version: "2.1"
   cuda-version-12.5-hd4f0392_3.conda:
     build: hd4f0392_3
@@ -138,7 +138,7 @@ packages:
     sha256: 67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     version: 3.0.2
   foo-3.0.2-py36h1af98f8_1.tar.bz2:
     build: py36h1af98f8_1
@@ -164,7 +164,7 @@ packages:
     sha256: 67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     version: 3.0.2
   foo-3.0.2-py36h1af98f8_3.conda:
     build: py36h1af98f8_3
@@ -179,7 +179,7 @@ packages:
     sha256: 67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     version: 3.0.2
   foo-4.0.2-py36h1af98f8_2.tar.bz2:
     build: py36h1af98f8_2
@@ -192,7 +192,7 @@ packages:
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     version: 4.0.2
   foobar-2.0-bla_1.tar.bz2:
     build: bla_1
@@ -220,7 +220,7 @@ packages:
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     version: "2.1"
   issue_717-2.1-bla_1.tar.bz2:
     build: issue_717
@@ -235,7 +235,7 @@ packages:
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     version: "2.1"
   track-features-1-xxx.tar.bz2:
     build: xxx
@@ -248,7 +248,7 @@ packages:
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     track_features: foo
     version: "1"
   track-features-2-xxx.tar.bz2:
@@ -262,7 +262,7 @@ packages:
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     track_features: foo bar
     version: "2"
   track-features-3-xxx.tar.bz2:
@@ -276,7 +276,7 @@ packages:
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     track_features: foo bar
     version: "3"
   track-features-4-xxx.tar.bz2:
@@ -290,7 +290,7 @@ packages:
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     track_features: foo bar
     version: "4"
   xbar-1-xxx.tar.bz2:
@@ -305,7 +305,7 @@ packages:
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     version: "1"
   xfoo-1-xxx.tar.bz2:
     build: xxx
@@ -318,7 +318,7 @@ packages:
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     version: "1"
   xfoo-2-xxx.tar.bz2:
     build: xxx
@@ -331,7 +331,74 @@ packages:
     sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
     size: 414494
     subdir: linux-64
-    timestamp: 1715610974
+    timestamp: 1715610974000
     version: "2"
-packages.conda: {}
+packages.conda:
+  bors-1.1-bla_1.conda:
+    build: bla_1
+    build_number: 1
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: bors
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1605110689658
+    version: "1.1"
+  bors-2.1-bla_1.conda:
+    build: bla_1
+    build_number: 1
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: bors
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1715610974000
+    version: "2.1"
+  conda-only-0.1.0-foobar_0.conda:
+    build: foobar
+    build_number: 0
+    depends: []
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: conda-only
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1715610974000
+    version: 0.1.0
+  foobar-2.0-bla_1.conda:
+    build: bla_1
+    build_number: 1
+    depends:
+      - bors <2.0
+    license: MIT
+    license_family: MIT
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: foobar
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1605110689658
+    version: "2.0"
+  issue_717-2.1-bla_1.conda:
+    build: issue_717
+    build_number: 0
+    constrains:
+      - "ray[default,data] >=2.9.0,<3.0.0"
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: issue_717
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1715610974000
+    version: "2.1"
+packages.whl: {}
 repodata_version: 2

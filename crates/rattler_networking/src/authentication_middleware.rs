@@ -126,12 +126,17 @@ impl AuthenticationMiddleware {
 pub fn default_auth_store_fallback_directory() -> &'static Path {
     static FALLBACK_AUTH_DIR: OnceLock<PathBuf> = OnceLock::new();
     FALLBACK_AUTH_DIR.get_or_init(|| {
-        dirs::home_dir()
+        #[cfg(feature = "dirs")]
+        return dirs::home_dir()
             .map_or_else(|| {
                 tracing::warn!("using '/rattler' to store fallback authentication credentials because the home directory could not be found");
                 // This can only happen if the dirs lib can't find a home directory this is very unlikely.
                 PathBuf::from("/rattler/")
-            }, |home| home.join(".rattler/"))
+            }, |home| home.join(".rattler/"));
+        #[cfg(not(feature = "dirs"))]
+        {
+            PathBuf::from("/rattler/")
+        }
     })
 }
 
@@ -139,15 +144,19 @@ pub fn default_auth_store_fallback_directory() -> &'static Path {
 mod tests {
     use super::*;
     use crate::authentication_storage::backends::file::FileStorage;
-    use anyhow::anyhow;
     use std::sync::Arc;
     use tempfile::tempdir;
 
+    #[cfg(feature = "keyring")]
+    use anyhow::anyhow;
+
+    #[cfg(feature = "keyring")]
     // Requests are only authenticated when executed, so we need to capture and cancel the request
     struct CaptureAbortMiddleware {
         pub captured_tx: tokio::sync::mpsc::Sender<reqwest::Request>,
     }
 
+    #[cfg(feature = "keyring")]
     #[async_trait::async_trait]
     impl Middleware for CaptureAbortMiddleware {
         async fn handle(
@@ -166,6 +175,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "keyring")]
     fn make_client_harness(
         storage: &AuthenticationStorage,
     ) -> (
@@ -198,6 +208,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(feature = "keyring")]
     #[tokio::test]
     async fn test_conda_token_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
@@ -252,6 +263,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(feature = "keyring")]
     #[tokio::test]
     async fn test_bearer_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
@@ -312,6 +324,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(feature = "keyring")]
     #[tokio::test]
     async fn test_basic_auth_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;

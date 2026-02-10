@@ -6,6 +6,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.12...rattler_redaction-v0.1.13) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.1.12](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.11...rattler_redaction-v0.1.12) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [0.1.11](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.10...rattler_redaction-v0.1.11) - 2025-06-23
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [0.1.10](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.9...rattler_redaction-v0.1.10) - 2025-04-10
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.1.9](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.8...rattler_redaction-v0.1.9) - 2025-04-04
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.1.8](https://github.com/conda/rattler/compare/rattler_redaction-v0.1.7...rattler_redaction-v0.1.8) - 2025-03-04
 
 ### Other

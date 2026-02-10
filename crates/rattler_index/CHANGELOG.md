@@ -1,10 +1,321 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.27.12](https://github.com/conda/rattler/compare/rattler_index-v0.27.11...rattler_index-v0.27.12) - 2026-02-04
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.27.11](https://github.com/conda/rattler/compare/rattler_index-v0.27.10...rattler_index-v0.27.11) - 2026-01-22
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.27.10](https://github.com/baszalmstra/rattler/compare/rattler_index-v0.27.9...rattler_index-v0.27.10) - 2026-01-22
+
+### Fixed
+
+- changelog
+
+## [0.27.9](https://github.com/conda/rattler/compare/rattler_index-v0.27.8...rattler_index-v0.27.9) - 2026-01-22
+
+### Added
+
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/conda/rattler/pull/1988))
+
+### Fixed
+
+- Fix error handling in write_repodata by removing anyhow::Error and adding a dedicated error type ([#1899](https://github.com/conda/rattler/pull/1899))
+
+### Other
+
+- add type for archive file name ([#1999](https://github.com/conda/rattler/pull/1999))
+- Run `cargo clippy --fix` (from nightly) ([#1992](https://github.com/conda/rattler/pull/1992))
+- Make s3 optional for rattler_index ([#1965](https://github.com/conda/rattler/pull/1965))
+
+## [0.27.8](https://github.com/conda/rattler/compare/rattler_index-v0.27.7...rattler_index-v0.27.8) - 2025-12-18
+
+### Fixed
+
+- add if-not-exists check to prevent concurrency issues when initializing S3 channel ([#1915](https://github.com/conda/rattler/pull/1915))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.27.7](https://github.com/conda/rattler/compare/rattler_index-v0.27.6...rattler_index-v0.27.7) - 2025-12-08
+
+### Added
+
+- add ensure_channel_initialized for fs and s3 channels ([#1906](https://github.com/conda/rattler/pull/1906))
+
+## [0.27.6](https://github.com/conda/rattler/compare/rattler_index-v0.27.5...rattler_index-v0.27.6) - 2025-11-27
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.27.5](https://github.com/conda/rattler/compare/rattler_index-v0.27.4...rattler_index-v0.27.5) - 2025-11-25
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.27.4](https://github.com/conda/rattler/compare/rattler_index-v0.27.3...rattler_index-v0.27.4) - 2025-11-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_config, rattler_networking, rattler_s3
+
+## [0.27.3](https://github.com/conda/rattler/compare/rattler_index-v0.27.2...rattler_index-v0.27.3) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.27.2](https://github.com/conda/rattler/compare/rattler_index-v0.27.1...rattler_index-v0.27.2) - 2025-11-19
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.27.1](https://github.com/conda/rattler/compare/rattler_index-v0.27.0...rattler_index-v0.27.1) - 2025-11-13
+
+### Added
+
+- add cache control for repodata.json / zst and shard index ([#1796](https://github.com/conda/rattler/pull/1796))
+
+## [0.27.0](https://github.com/conda/rattler/compare/rattler_index-v0.26.5...rattler_index-v0.27.0) - 2025-10-28
+
+### Added
+
+- make precondition checks configurable ([#1777](https://github.com/conda/rattler/pull/1777))
+
+### Other
+
+- Replace fxhash with ahash ([#1674](https://github.com/conda/rattler/pull/1674))
+
+## [0.26.5](https://github.com/conda/rattler/compare/rattler_index-v0.26.4...rattler_index-v0.26.5) - 2025-10-25
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.26.4](https://github.com/conda/rattler/compare/rattler_index-v0.26.3...rattler_index-v0.26.4) - 2025-10-18
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_config, rattler_networking, rattler_s3
+
+## [0.26.3](https://github.com/conda/rattler/compare/rattler_index-v0.26.2...rattler_index-v0.26.3) - 2025-10-17
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.26.2](https://github.com/conda/rattler/compare/rattler_index-v0.26.1...rattler_index-v0.26.2) - 2025-10-14
+
+### Fixed
+
+- retry policy for indexing operations ([#1745](https://github.com/conda/rattler/pull/1745))
+
+## [0.26.1](https://github.com/conda/rattler/compare/rattler_index-v0.26.0...rattler_index-v0.26.1) - 2025-10-13
+
+### Other
+
+- updated the following local packages: rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.26.0](https://github.com/conda/rattler/compare/rattler_index-v0.25.6...rattler_index-v0.26.0) - 2025-10-10
+
+### Added
+
+- detect concurrent s3 indexing ([#1716](https://github.com/conda/rattler/pull/1716))
+
+## [0.25.6](https://github.com/conda/rattler/compare/rattler_index-v0.25.5...rattler_index-v0.25.6) - 2025-10-09
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.25.5](https://github.com/conda/rattler/compare/rattler_index-v0.25.4...rattler_index-v0.25.5) - 2025-10-07
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.25.4](https://github.com/conda/rattler/compare/rattler_index-v0.25.3...rattler_index-v0.25.4) - 2025-10-03
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.25.3](https://github.com/conda/rattler/compare/rattler_index-v0.25.2...rattler_index-v0.25.3) - 2025-09-30
+
+### Other
+
+- add LazyClient to late initialize the reqwest client ([#1687](https://github.com/conda/rattler/pull/1687))
+
+## [0.25.2](https://github.com/conda/rattler/compare/rattler_index-v0.25.1...rattler_index-v0.25.2) - 2025-09-17
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.25.1](https://github.com/conda/rattler/compare/rattler_index-v0.25.0...rattler_index-v0.25.1) - 2025-09-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.25.0](https://github.com/conda/rattler/compare/rattler_index-v0.24.12...rattler_index-v0.25.0) - 2025-09-04
+
+### Added
+
+- derive default credentials from aws sdk ([#1629](https://github.com/conda/rattler/pull/1629))
+
+## [0.24.12](https://github.com/conda/rattler/compare/rattler_index-v0.24.11...rattler_index-v0.24.12) - 2025-09-02
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.24.11](https://github.com/conda/rattler/compare/rattler_index-v0.24.10...rattler_index-v0.24.11) - 2025-08-28
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.24.10](https://github.com/conda/rattler/compare/rattler_index-v0.24.9...rattler_index-v0.24.10) - 2025-08-22
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.24.9](https://github.com/conda/rattler/compare/rattler_index-v0.24.8...rattler_index-v0.24.9) - 2025-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming
+
+## [0.24.8](https://github.com/conda/rattler/compare/rattler_index-v0.24.7...rattler_index-v0.24.8) - 2025-08-12
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.24.7](https://github.com/conda/rattler/compare/rattler_index-v0.24.6...rattler_index-v0.24.7) - 2025-07-28
+
+### Other
+
+- updated the following local packages: rattler_package_streaming
+
+## [0.24.6](https://github.com/conda/rattler/compare/rattler_index-v0.24.5...rattler_index-v0.24.6) - 2025-07-23
+
+### Fixed
+
+- indexing `extra-depends` ([#1546](https://github.com/conda/rattler/pull/1546))
+
+## [0.24.5](https://github.com/conda/rattler/compare/rattler_index-v0.24.4...rattler_index-v0.24.5) - 2025-07-21
+
+### Other
+
+- bump rust 1.88.0 ([#1536](https://github.com/conda/rattler/pull/1536))
+
+## [0.24.4](https://github.com/conda/rattler/compare/rattler_index-v0.24.3...rattler_index-v0.24.4) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming
+
+## [0.24.3](https://github.com/conda/rattler/compare/rattler_index-v0.24.2...rattler_index-v0.24.3) - 2025-07-09
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.24.2](https://github.com/conda/rattler/compare/rattler_index-v0.24.1...rattler_index-v0.24.2) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [0.24.1](https://github.com/conda/rattler/compare/rattler_index-v0.24.0...rattler_index-v0.24.1) - 2025-06-26
+
+### Other
+
+- Fix typo ([#1479](https://github.com/conda/rattler/pull/1479))
+
+## [0.23.3](https://github.com/conda/rattler/compare/rattler_index-v0.23.2...rattler_index-v0.23.3) - 2025-06-25
+
+### Added
+
+- *(rattler_index)* Use rattler_config ([#1466](https://github.com/conda/rattler/pull/1466))
+
+## [0.23.2](https://github.com/conda/rattler/compare/rattler_index-v0.23.1...rattler_index-v0.23.2) - 2025-06-24
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.23.1](https://github.com/conda/rattler/compare/rattler_index-v0.23.0...rattler_index-v0.23.1) - 2025-06-23
+
+### Added
+
+- make rattler_networking system integration optional ([#1381](https://github.com/conda/rattler/pull/1381))
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [0.23.0](https://github.com/conda/rattler/compare/rattler_index-v0.22.7...rattler_index-v0.23.0) - 2025-05-23
+
+### Added
+
+- Sharded repodata, zst, add purls and run_exports support ([#1312](https://github.com/conda/rattler/pull/1312))
+
+## [0.22.7](https://github.com/conda/rattler/compare/rattler_index-v0.22.6...rattler_index-v0.22.7) - 2025-05-16
+
+### Added
+
+- add purls to `IndexJson` ([#1303](https://github.com/conda/rattler/pull/1303))
+
+## [0.22.6](https://github.com/conda/rattler/compare/rattler_index-v0.22.5...rattler_index-v0.22.6) - 2025-05-03
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.22.5](https://github.com/conda/rattler/compare/rattler_index-v0.22.4...rattler_index-v0.22.5) - 2025-04-17
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.22.4](https://github.com/conda/rattler/compare/rattler_index-v0.22.3...rattler_index-v0.22.4) - 2025-04-10
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.22.3](https://github.com/conda/rattler/compare/rattler_index-v0.22.2...rattler_index-v0.22.3) - 2025-04-04
+
+### Added
+
+- add retry middleware to opendal operator ([#1207](https://github.com/conda/rattler/pull/1207))
+
+### Fixed
+
+- allow empty info key in repodata.json ([#1181](https://github.com/conda/rattler/pull/1181))
+- don't clone package bytes in rattler-index ([#1175](https://github.com/conda/rattler/pull/1175))
 
 ## [0.22.2](https://github.com/conda/rattler/compare/rattler_index-v0.22.1...rattler_index-v0.22.2) - 2025-03-18
 

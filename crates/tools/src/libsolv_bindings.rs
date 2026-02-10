@@ -1,6 +1,6 @@
 use crate::{project_root, reformat, update, Mode};
 use std::borrow::Cow;
-use tempdir::TempDir;
+use tempfile::TempDir;
 
 const ALLOWED_FUNC_PREFIX: &[&str] = &[
     "map",
@@ -86,7 +86,7 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
     //
     // The behavior of this file might change when we update libsolv so its important to check this
     // with every upgrade.
-    let temp_include_dir = TempDir::new("libsolv")?;
+    let temp_include_dir = TempDir::with_prefix("libsolv")?;
     std::fs::write(
         temp_include_dir.path().join("solvversion.h"),
         r#"#ifndef LIBSOLV_SOLVVERSION_H
@@ -105,8 +105,9 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
 
     // Define the contents of the bindings and how they are generated
     let bindings = bindgen::Builder::default()
-        .rust_target("1.81.0".parse().unwrap())
+        .rust_target("1.88.0".parse().unwrap())
         .clang_arg(format!("-I{}", temp_include_dir.path().display()))
+        .clang_arg(format!("-I{}", libsolv_path.join("src").display()))
         .ctypes_prefix("libc")
         .header(libsolv_path.join("src/solver.h").to_str().unwrap())
         .header(libsolv_path.join("src/solverdebug.h").to_str().unwrap())

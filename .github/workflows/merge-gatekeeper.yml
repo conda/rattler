@@ -1,0 +1,23 @@
+# This workflow uses Merge Gatekeeper to ensure that pull requests to the main
+# branch meet certain criteria before they can be merged. It checks for
+# required status checks and ensures that the pull request is not a draft.
+---
+name: Merge Gatekeeper
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  merge-gatekeeper:
+    runs-on: ubuntu-latest
+    permissions:
+      checks: read
+      statuses: read
+    steps:
+      - name: Run Merge Gatekeeper
+        uses: upsidr/merge-gatekeeper@09af7a82c1666d0e64d2bd8c01797a0bcfd3bb5d # v1.2.1
+        with:
+          timeout: 2700 # 45 minutes
+          token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,14 +1,12 @@
 mod index;
 
-use std::{io::Write, path::PathBuf, sync::Arc};
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-use fs_err::tokio as tokio_fs;
-use futures::future::OptionFuture;
-use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
-use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata};
-use reqwest_middleware::ClientWithMiddleware;
-use simple_spawn_blocking::tokio::run_blocking_task;
-use url::Url;
+use rattler_conda_types::Platform;
 
 use super::{add_trailing_slash, decode_zst_bytes_async, parse_records};
 use crate::{
@@ -17,10 +15,20 @@ use crate::{
     reporter::ResponseReporterExt,
     GatewayError, Reporter,
 };
+use fs_err::tokio as tokio_fs;
+use futures::future::OptionFuture;
+use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
+use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata};
+use rattler_networking::LazyClient;
+use simple_spawn_blocking::tokio::run_blocking_task;
+use url::Url;
+
+pub(crate) const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
+pub(crate) const SHARDS_CACHE_SUFFIX: &str = ".shards-cache-v1";
 
 pub struct ShardedSubdir {
     channel: Channel,
-    client: ClientWithMiddleware,
+    client: LazyClient,
     shards_base_url: Url,
     package_base_url: Url,
     sharded_repodata: ShardedRepodata,
@@ -33,7 +41,7 @@ impl ShardedSubdir {
     pub async fn new(
         channel: Channel,
         subdir: String,
-        client: ClientWithMiddleware,
+        client: LazyClient,
         cache_dir: PathBuf,
         cache_action: CacheAction,
         concurrent_requests_semaphore: Option<Arc<tokio::sync::Semaphore>>,
@@ -104,6 +112,48 @@ impl ShardedSubdir {
             concurrent_requests_semaphore,
         })
     }
+
+    /// Clears the on-disk cache for the sharded repodata index of the given
+    /// channel and platform.
+    ///
+    /// This acquires an exclusive lock on the cache file before removing it
+    /// to prevent race conditions with concurrent readers/writers.
+    ///
+    /// If the cache file doesn't exist, this is a no-op since there's nothing
+    /// to clear.
+    pub fn clear_cache(
+        cache_dir: &Path,
+        channel: &Channel,
+        platform: Platform,
+    ) -> Result<(), std::io::Error> {
+        let index_base_url = channel
+            .base_url
+            .url()
+            .join(&format!("{}/", platform.as_str()))
+            .expect("invalid subdir url");
+        let canonical_shards_url = index_base_url
+            .join(REPODATA_SHARDS_FILENAME)
+            .expect("invalid shard base url");
+        let cache_path = cache_dir.join(format!(
+            "{}{}",
+            crate::utils::url_to_cache_filename(&canonical_shards_url),
+            SHARDS_CACHE_SUFFIX
+        ));
+
+        if cache_path.exists() {
+            // Acquire an exclusive lock before removing the file.
+            // This uses flock() on Unix (same as async_fd_lock used in normal flow).
+            // On Unix, the file can be deleted while locked and will be removed
+            // when the last handle is closed.
+            let mut lock = fslock::LockFile::open(&cache_path).map_err(std::io::Error::other)?;
+            lock.lock().map_err(std::io::Error::other)?;
+
+            // Now remove the file while holding the lock
+            fs_err::remove_file(&cache_path)?;
+            tracing::debug!("deleted shard index cache: {:?}", cache_path);
+        }
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -160,6 +210,7 @@ impl SubdirClient for ShardedSubdir {
 
         let shard_request = self
             .client
+            .client()
             .get(shard_url.clone())
             .header(CACHE_CONTROL, HeaderValue::from_static("no-store"))
             .build()
@@ -172,9 +223,12 @@ impl SubdirClient for ShardedSubdir {
                     .map(tokio::sync::Semaphore::acquire),
             )
             .await;
-            let reporter = reporter.map(|r| (r, r.on_download_start(&shard_url)));
+            let reporter = reporter
+                .and_then(Reporter::download_reporter)
+                .map(|r| (r, r.on_download_start(&shard_url)));
             let shard_response = self
                 .client
+                .client()
                 .execute(shard_request)
                 .await
                 .and_then(|r| r.error_for_status().map_err(Into::into))
@@ -192,7 +246,7 @@ impl SubdirClient for ShardedSubdir {
             bytes
         };
 
-        let shard_bytes = decode_zst_bytes_async(shard_bytes).await?;
+        let shard_bytes = decode_zst_bytes_async(shard_bytes, shard_url).await?;
 
         // Create a future to write the cached bytes to disk
         let write_to_cache_fut = write_shard_to_cache(shard_cache_path, shard_bytes.clone());

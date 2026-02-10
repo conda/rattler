@@ -22,76 +22,102 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
-  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3
+  DEFAULT_FEATURES: indicatif,tokio,serde,reqwest,sparse,gateway,resolvo,libsolv_c,s3,edit,rattler_config
 
 jobs:
   check-rustdoc-links:
     name: Check intra-doc links
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           submodules: recursive
-      - uses: actions-rust-lang/setup-rust-toolchain@9399c7bb15d4c7d47b27263d024f0a4978346ba4 # v1
-      - run: |
-          RUSTDOCFLAGS="-Dwarnings -Wunreachable-pub" cargo doc --no-deps --all --all-features
-
-  format_and_lint:
-    name: Format and Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-        with:
-          submodules: recursive
-      - uses: actions-rust-lang/setup-rust-toolchain@9399c7bb15d4c7d47b27263d024f0a4978346ba4 # v1
-        with:
-          components: clippy, rustfmt
-      - name: Run rustfmt
-        uses: actions-rust-lang/rustfmt@559aa3035a47390ba96088dffa783b5d26da9326 # v1
-      - name: Run clippy
-        run: cargo clippy --all-targets
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+      - run: pixi r doc
 
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    needs: [format_and_lint]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { name: "Linux-x86_64",      target: x86_64-unknown-linux-musl,        os: ubuntu-22.04 }
-          - { name: "Linux-aarch64",     target: aarch64-unknown-linux-musl,       os: ubuntu-latest, skip-tests: true }
-          - { name: "Linux-arm",         target: arm-unknown-linux-musleabi,       os: ubuntu-latest, use-cross: true, skip-tests: true }
+          # TODO: We are using 22.04 because for some reason we have a SIGSEV on the libsolv tests on newer versions of Ubuntu.
+          - {name: "Linux-x86_64", target: x86_64-unknown-linux-musl, os: ubuntu-22.04}
+          - {
+              name: "Linux-aarch64",
+              target: aarch64-unknown-linux-musl,
+              os: ubuntu-latest,
+              skip-tests: true,
+            }
+          - {
+              name: "Linux-arm",
+              target: arm-unknown-linux-musleabi,
+              os: ubuntu-latest,
+              use-cross: true,
+              skip-tests: true,
+            }
           # - { name: "Linux-mips",        target: mips-unknown-linux-musl,          os: ubuntu-latest, use-cross: true, skip-tests: true }
           # - { name: "Linux-mipsel",      target: mipsel-unknown-linux-musl,        os: ubuntu-latest, use-cross: true, skip-tests: true }
           # - { name: "Linux-mips64",      target: mips64-unknown-linux-muslabi64,   os: ubuntu-latest, use-cross: true, skip-tests: true }
           # - { name: "Linux-mips64el",    target: mips64el-unknown-linux-muslabi64, os: ubuntu-latest, use-cross: true, skip-tests: true }
 
           # - { name: "Linux-powerpc",     target: powerpc-unknown-linux-gnu,        os: ubuntu-latest, use-cross: true, skip-tests: true }
-          - { name: "Linux-powerpc64",   target: powerpc64-unknown-linux-gnu,      os: ubuntu-latest, use-cross: true, skip-tests: true }
-          - { name: "Linux-powerpc64le", target: powerpc64le-unknown-linux-gnu,    os: ubuntu-latest, use-cross: true, skip-tests: true }
+          - {
+              name: "Linux-powerpc64",
+              target: powerpc64-unknown-linux-gnu,
+              os: ubuntu-latest,
+              use-cross: true,
+              skip-tests: true,
+            }
+          - {
+              name: "Linux-powerpc64le",
+              target: powerpc64le-unknown-linux-gnu,
+              os: ubuntu-latest,
+              use-cross: true,
+              skip-tests: true,
+            }
 
-          - { name: "Linux-s390x",       target: s390x-unknown-linux-gnu,          os: ubuntu-latest, use-cross: true, skip-tests: true }
+          - {
+              name: "Linux-s390x",
+              target: s390x-unknown-linux-gnu,
+              os: ubuntu-latest,
+              use-cross: true,
+              skip-tests: true,
+            }
 
-          - { name: "macOS-x86_64",      target: x86_64-apple-darwin,              os: macOS-latest }
-          - { name: "macOS-aarch64",     target: aarch64-apple-darwin,             os: macOS-latest }
+          - {
+              name: "Linux-riscv64gc",
+              target: riscv64gc-unknown-linux-musl,
+              os: ubuntu-latest,
+              use-cross: true,
+              skip-tests: true,
+            }
 
-          - { name: "Windows-x86_64",    target: x86_64-pc-windows-msvc,           os: windows-latest }
-          - { name: "Windows-aarch64",   target: aarch64-pc-windows-msvc,          os: windows-latest,                  skip-tests: true }
+          - {name: "macOS-x86_64", target: x86_64-apple-darwin, os: macOS-latest}
+          - {name: "macOS-aarch64", target: aarch64-apple-darwin, os: macOS-latest}
+
+          - {name: "Windows-x86_64", target: x86_64-pc-windows-msvc, os: windows-latest}
+          - {
+              name: "Windows-aarch64",
+              target: aarch64-pc-windows-msvc,
+              os: windows-latest,
+              skip-tests: true,
+            }
     steps:
       - name: Checkout source code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           submodules: recursive
 
       - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@9399c7bb15d4c7d47b27263d024f0a4978346ba4 # v1
-        with:
-          target: ${{ matrix.target }}
-          components: rustfmt
-          cache: false
+        run: |
+          rustup component add rustfmt
+          rustup target add ${{ matrix.target }}
+          rustup component add rust-src --target ${{ matrix.target }}
 
-      - uses: taiki-e/setup-cross-toolchain-action@0d2c6fcce937ba2ba77abf40e06449b74d60fa04 # v1
+      - uses: taiki-e/setup-cross-toolchain-action@0123528f956f923e7a476f4cc04882bc005e7c89 # v1.29.1
         if: matrix.target != 'x86_64-unknown-linux-musl'
         with:
           target: ${{ matrix.target }}
@@ -101,7 +127,7 @@ jobs:
           sudo apt install musl-tools gcc g++
           sudo ln -s /usr/bin/musl-gcc /usr/bin/musl-g++
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
 
       - name: Show version information (Rust, cargo, GCC)
         shell: bash
@@ -118,11 +144,28 @@ jobs:
         run: |
           echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls-tls" >> $GITHUB_OUTPUT
 
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        if: startsWith(matrix.os, 'ubuntu')
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false # Takes a lot of time so lets leave it
+          docker-images: true
+          swap-storage: true
+
       - name: Build
         run: >
           cargo build
           --all-targets
-          --features ${{ env.DEFAULT_FEATURES }}
+          --features ${{ env.DEFAULT_FEATURES }}${{ !startsWith(matrix.target, 'powerpc') && ',sigstore-sign' || '' }}
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
 
@@ -134,7 +177,7 @@ jobs:
 
       - name: Install cargo nextest
         if: ${{ !matrix.skip-tests }}
-        uses: taiki-e/install-action@d7975a1de23014ff85d5da2d113615774467bcc1 # v2
+        uses: taiki-e/install-action@9ba3ac3fd006a70c6e186a683577abc1ccf0ff3a # v2.54.0
         with:
           tool: cargo-nextest
 
@@ -147,7 +190,7 @@ jobs:
         run: >
           cargo nextest run
           --workspace
-          --features ${{ env.DEFAULT_FEATURES }},experimental_extras
+          --features ${{ env.DEFAULT_FEATURES }}${{ !startsWith(matrix.target, 'powerpc') && ',sigstore-sign' || '' }}
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }}
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS }}

@@ -1,10 +1,241 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [2.3.8](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.7...rattler_virtual_packages-v2.3.8) - 2026-02-04
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.7](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.6...rattler_virtual_packages-v2.3.7) - 2026-01-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.6](https://github.com/baszalmstra/rattler/compare/rattler_virtual_packages-v2.3.5...rattler_virtual_packages-v2.3.6) - 2026-01-22
+
+### Fixed
+
+- changelog
+
+## [2.3.5](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.4...rattler_virtual_packages-v2.3.5) - 2026-01-22
+
+### Other
+
+- rename `loong64` to `loongarch64` ([#1957](https://github.com/conda/rattler/pull/1957))
+
+## [2.3.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.3...rattler_virtual_packages-v2.3.4) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [2.3.3](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.2...rattler_virtual_packages-v2.3.3) - 2025-12-08
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.2](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.1...rattler_virtual_packages-v2.3.2) - 2025-11-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.3.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.3.0...rattler_virtual_packages-v2.3.1) - 2025-11-25
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [2.3.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.8...rattler_virtual_packages-v2.3.0) - 2025-11-22
+
+### Added
+
+- improve libc detection using `gnu_get_libc_version()` ([#1868](https://github.com/conda/rattler/pull/1868))
+
+## [2.2.8](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.7...rattler_virtual_packages-v2.2.8) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.2.7](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.6...rattler_virtual_packages-v2.2.7) - 2025-11-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.2.6](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.5...rattler_virtual_packages-v2.2.6) - 2025-11-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.2.5](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.4...rattler_virtual_packages-v2.2.5) - 2025-10-28
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.2.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.3...rattler_virtual_packages-v2.2.4) - 2025-10-18
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.2.3](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.2...rattler_virtual_packages-v2.2.3) - 2025-10-17
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.2.2](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.1...rattler_virtual_packages-v2.2.2) - 2025-10-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.2.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.2.0...rattler_virtual_packages-v2.2.1) - 2025-10-08
+
+### Fixed
+
+- use defaults found on OS even if cross-compiling ([#1713](https://github.com/conda/rattler/pull/1713))
+
+## [2.2.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.7...rattler_virtual_packages-v2.2.0) - 2025-10-07
+
+### Added
+
+- add cross-platform detection and tests ([#1708](https://github.com/conda/rattler/pull/1708))
+
+## [2.1.7](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.6...rattler_virtual_packages-v2.1.7) - 2025-10-03
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.6](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.5...rattler_virtual_packages-v2.1.6) - 2025-09-30
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.5](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.4...rattler_virtual_packages-v2.1.5) - 2025-09-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.3...rattler_virtual_packages-v2.1.4) - 2025-09-02
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.3](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.2...rattler_virtual_packages-v2.1.3) - 2025-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.2](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.1...rattler_virtual_packages-v2.1.2) - 2025-08-12
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.1](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.1.0...rattler_virtual_packages-v2.1.1) - 2025-07-23
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.19...rattler_virtual_packages-v2.1.0) - 2025-07-21
+
+### Added
+
+- make `Platform` `non_exhaustive` ([#1539](https://github.com/conda/rattler/pull/1539))
+- add support for loong64 platform to rattler ([#1534](https://github.com/conda/rattler/pull/1534))
+
+## [2.0.19](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.18...rattler_virtual_packages-v2.0.19) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.18](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.17...rattler_virtual_packages-v2.0.18) - 2025-07-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.17](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.16...rattler_virtual_packages-v2.0.17) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [2.0.16](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.15...rattler_virtual_packages-v2.0.16) - 2025-06-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.15](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.14...rattler_virtual_packages-v2.0.15) - 2025-06-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.14](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.13...rattler_virtual_packages-v2.0.14) - 2025-06-23
+
+### Fixed
+
+- fix code to use nom 8
+
+### Other
+
+- *(ci)* Update Rust crate nom to v8 ([#1404](https://github.com/conda/rattler/pull/1404))
+- Revert "fix code to use nom 8"
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [2.0.13](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.12...rattler_virtual_packages-v2.0.13) - 2025-05-23
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.0.12](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.11...rattler_virtual_packages-v2.0.12) - 2025-05-16
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [2.0.11](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.10...rattler_virtual_packages-v2.0.11) - 2025-05-03
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [2.0.10](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.9...rattler_virtual_packages-v2.0.10) - 2025-04-10
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [2.0.9](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.8...rattler_virtual_packages-v2.0.9) - 2025-04-04
+
+### Other
+
+- update Cargo.toml dependencies
 
 ## [2.0.8](https://github.com/conda/rattler/compare/rattler_virtual_packages-v2.0.7...rattler_virtual_packages-v2.0.8) - 2025-03-14
 

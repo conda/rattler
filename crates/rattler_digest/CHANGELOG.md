@@ -6,6 +6,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2](https://github.com/conda/rattler/compare/rattler_digest-v1.2.1...rattler_digest-v1.2.2) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [1.2.1](https://github.com/conda/rattler/compare/rattler_digest-v1.2.0...rattler_digest-v1.2.1) - 2025-12-08
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [1.2.0](https://github.com/conda/rattler/compare/rattler_digest-v1.1.7...rattler_digest-v1.2.0) - 2025-11-13
+
+### Added
+
+- expose crate features on docs.rs ([#1835](https://github.com/conda/rattler/pull/1835))
+
+## [1.1.7](https://github.com/conda/rattler/compare/rattler_digest-v1.1.6...rattler_digest-v1.1.7) - 2025-10-17
+
+### Fixed
+
+- use byte string instead of array for hash encoding ([#1755](https://github.com/conda/rattler/pull/1755))
+
+## [1.1.6](https://github.com/conda/rattler/compare/rattler_digest-v1.1.5...rattler_digest-v1.1.6) - 2025-10-14
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [1.1.5](https://github.com/conda/rattler/compare/rattler_digest-v1.1.4...rattler_digest-v1.1.5) - 2025-07-21
+
+### Other
+
+- bump rust 1.88.0 ([#1536](https://github.com/conda/rattler/pull/1536))
+
+## [1.1.4](https://github.com/conda/rattler/compare/rattler_digest-v1.1.3...rattler_digest-v1.1.4) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [1.1.3](https://github.com/conda/rattler/compare/rattler_digest-v1.1.2...rattler_digest-v1.1.3) - 2025-06-23
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [1.1.2](https://github.com/conda/rattler/compare/rattler_digest-v1.1.1...rattler_digest-v1.1.2) - 2025-05-16
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [1.1.1](https://github.com/conda/rattler/compare/rattler_digest-v1.1.0...rattler_digest-v1.1.1) - 2025-04-10
+
+### Fixed
+
+- Add location to the cache key ([#1143](https://github.com/conda/rattler/pull/1143))
+
+## [1.1.0](https://github.com/conda/rattler/compare/rattler_digest-v1.0.8...rattler_digest-v1.1.0) - 2025-04-04
+
+### Added
+
+- derive `Debug` and `Clone` for `SerializableHash` ([#1226](https://github.com/conda/rattler/pull/1226))
+
 ## [1.0.8](https://github.com/conda/rattler/compare/rattler_digest-v1.0.7...rattler_digest-v1.0.8) - 2025-03-10
 
 ### Other

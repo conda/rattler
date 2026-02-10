@@ -1,6 +1,6 @@
 [package]
 name = "rattler_pty"
-version = "0.1.0"
+version = "0.2.9"
 description = "A crate to create pty"
 categories.workspace = true
 homepage.workspace = true
@@ -10,8 +10,9 @@ edition.workspace = true
 readme.workspace = true
 
 [dependencies]
+tokio = { workspace = true, features = ["io-util", "fs", "time"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
-nix = { version = "0.29.0", features = ["fs", "signal", "term", "poll"] }
-signal-hook = "0.3.17"
+nix = { version = "0.30.1", features = ["fs", "signal", "term", "poll"] }
+signal-hook = "0.3.18"

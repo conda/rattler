@@ -8,6 +8,7 @@ use rattler_shell::{
     activation::{ActivationResult, ActivationVariables, Activator, PathModificationBehavior},
     shell::{Bash, CmdExe, Fish, PowerShell, ShellEnum, Xonsh, Zsh},
 };
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 #[pyclass]
@@ -56,6 +57,7 @@ impl PyActivationVariables {
             conda_prefix,
             path,
             path_modification_behavior: path_modification_behavior.0,
+            current_env: HashMap::new(),
         };
         activation_vars.into()
     }
@@ -98,7 +100,7 @@ impl PyActivationResult {
             .inner
             .script
             .contents()
-            .map_err(PyRattlerError::ActivationScriptFormatError)?)
+            .map_err(PyRattlerError::ShellError)?)
     }
 }
 

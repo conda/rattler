@@ -1,11 +1,10 @@
-use rattler_conda_types::package::ArchiveType;
+use rattler_conda_types::compression_level::CompressionLevel;
+use rattler_conda_types::package::CondaArchiveType;
 use rattler_package_streaming::read::{extract_conda_via_streaming, extract_tar_bz2};
-use rattler_package_streaming::write::{
-    write_conda_package, write_tar_bz2_package, CompressionLevel,
-};
+use rattler_package_streaming::write::{write_conda_package, write_tar_bz2_package};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
@@ -131,9 +130,15 @@ fn compare_two_conda_archives(p1: &Path, p2: &Path) {
     let metadata2 = zip2.by_name("metadata.json").unwrap();
 
     // read metadata.json file
-    let metadata_bytes1 = metadata1.bytes().collect::<Result<Vec<u8>, _>>().unwrap();
+    let metadata_bytes1 = BufReader::new(metadata1)
+        .bytes()
+        .collect::<Result<Vec<u8>, _>>()
+        .unwrap();
     let _mstr1 = std::str::from_utf8(&metadata_bytes1).unwrap();
-    let metadata_bytes2 = metadata2.bytes().collect::<Result<Vec<u8>, _>>().unwrap();
+    let metadata_bytes2 = BufReader::new(metadata2)
+        .bytes()
+        .collect::<Result<Vec<u8>, _>>()
+        .unwrap();
     let _mstr2 = std::str::from_utf8(&metadata_bytes2).unwrap();
 
     // compare metadata.json files
@@ -163,8 +168,8 @@ fn test_rewrite_tar_bz2() {
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
     println!("Target dir: {}", temp_dir.display());
 
-    for file_path in
-        find_all_archives().filter(|path| ArchiveType::try_from(path) == Some(ArchiveType::TarBz2))
+    for file_path in find_all_archives()
+        .filter(|path| CondaArchiveType::try_from(path) == Some(CondaArchiveType::TarBz2))
     {
         println!("Name: {}", file_path.display());
 
@@ -202,7 +207,7 @@ fn test_rewrite_conda() {
     println!("Target dir: {}", temp_dir.display());
 
     for file_path in find_all_archives().filter(|path| {
-        ArchiveType::try_from(path) == Some(ArchiveType::Conda)
+        CondaArchiveType::try_from(path) == Some(CondaArchiveType::Conda)
             && path.file_name().unwrap() != "stir-5.0.2-py38h9224444_7.conda"
     }) {
         println!("Name: {}", file_path.display());

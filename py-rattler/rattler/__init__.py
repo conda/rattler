@@ -1,4 +1,4 @@
-from rattler.version import Version, VersionWithSource
+from rattler.version import Version, VersionSpec, VersionWithSource
 from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.repo_data import (
     PackageRecord,
@@ -8,6 +8,8 @@ from rattler.repo_data import (
     SparseRepoData,
     Gateway,
     SourceConfig,
+    PackageFormatSelection,
+    RepoDataSource,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.networking import Client, fetch_repo_data
@@ -22,9 +24,10 @@ from rattler.package import (
     PrefixPlaceholder,
     FileMode,
     IndexJson,
+    NoArchType,
+    NoArchLiteral,
 )
-from rattler.package.no_arch_type import NoArchType
-from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType
+from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, Link, LinkType
 from rattler.platform import Platform
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
 from rattler.install import install
@@ -47,6 +50,7 @@ del _get_rattler_version
 
 __all__ = [
     "Version",
+    "VersionSpec",
     "VersionWithSource",
     "MatchSpec",
     "NamelessMatchSpec",
@@ -69,6 +73,7 @@ __all__ = [
     "PrefixPathsEntry",
     "PrefixPathType",
     "SparseRepoData",
+    "PackageFormatSelection",
     "LockFile",
     "Environment",
     "LockChannel",
@@ -93,5 +98,17 @@ __all__ = [
     "IndexJson",
     "Gateway",
     "SourceConfig",
+    "RepoDataSource",
     "NoArchType",
+    "NoArchLiteral",
+    "Link",
+    "LinkType",
 ]
+
+# PTY support - only available on Unix platforms
+try:
+    from rattler.pty import PtySession, PtyProcess, PtyProcessOptions  # noqa: F401
+
+    __all__.extend(["PtySession", "PtyProcess", "PtyProcessOptions"])
+except ImportError:
+    pass

@@ -3,27 +3,32 @@
 //! the Conda ecosystem. The library itself doesnt provide any functionality
 //! besides parsing the data types.
 
+pub mod backup;
 mod build_spec;
 mod channel;
 mod channel_data;
 mod explicit_environment_spec;
-mod match_spec;
+pub mod match_spec;
 pub mod menuinst;
 mod no_arch_type;
 mod parse_mode;
-mod platform;
+pub mod platform;
 mod repo_data;
 mod repo_data_record;
 mod run_export;
-mod utils;
+pub mod utils;
 mod version;
 pub mod version_spec;
 
+pub mod compression_level;
 mod environment_yaml;
 mod generic_virtual_package;
+pub mod minimal_prefix_record;
 pub mod package;
 mod package_name;
+pub mod prefix;
 pub mod prefix_record;
+mod record_traits;
 
 #[cfg(test)]
 use std::path::{Path, PathBuf};
@@ -37,22 +42,28 @@ pub use explicit_environment_spec::{
     ParseExplicitEnvironmentSpecError, ParsePackageArchiveHashError,
 };
 pub use generic_virtual_package::GenericVirtualPackage;
+pub use match_spec::condition::MatchSpecCondition;
+pub use match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError};
 pub use match_spec::{
     matcher::{StringMatcher, StringMatcherParseError},
     parse::ParseMatchSpecError,
-    MatchSpec, Matches, NamelessMatchSpec,
+    MatchSpec, MatchSpecUrlError, Matches, NamelessMatchSpec,
+};
+pub use minimal_prefix_record::{
+    collect_minimal_prefix_records, MinimalPrefixCollection, MinimalPrefixRecord,
 };
 pub use no_arch_type::{NoArchKind, NoArchType, RawNoArchType};
 pub use package_name::{InvalidPackageNameError, PackageName};
-pub use parse_mode::ParseStrictness;
+pub use parse_mode::{ParseMatchSpecOptions, ParseStrictness, ParseStrictnessWithNameMatcher};
 pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_record::PrefixRecord;
+pub use record_traits::HasArtifactIdentificationRefs;
 pub use repo_data::{
     compute_package_url,
     patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},
     sharded::{Shard, ShardedRepodata, ShardedSubdirInfo},
-    ChannelInfo, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData,
-    ValidatePackageRecordsError,
+    ChannelInfo, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData, SubdirRunExportsJson,
+    UrlOrPath, ValidatePackageRecordsError, WhlPackageRecord,
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;

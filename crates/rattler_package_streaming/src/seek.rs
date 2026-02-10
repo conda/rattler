@@ -3,7 +3,7 @@
 
 use crate::read::{stream_tar_bz2, stream_tar_zst};
 use crate::ExtractError;
-use rattler_conda_types::package::ArchiveType;
+use rattler_conda_types::package::CondaArchiveType;
 use rattler_conda_types::package::PackageFile;
 use std::fs::File;
 use std::io::Write;
@@ -86,18 +86,18 @@ fn get_file_from_archive(
 }
 
 /// Read a package file content from archive based on the path
-fn read_package_file_content<'a>(
+pub fn read_package_file_content<'a>(
     file: impl Read + Seek + 'a,
-    path: impl AsRef<Path>,
+    archive_type: CondaArchiveType,
     package_path: impl AsRef<Path>,
 ) -> Result<Vec<u8>, ExtractError> {
-    match ArchiveType::try_from(&path).ok_or(ExtractError::UnsupportedArchiveType)? {
-        ArchiveType::TarBz2 => {
+    match archive_type {
+        CondaArchiveType::TarBz2 => {
             let mut archive = stream_tar_bz2(file);
             let buf = get_file_from_archive(&mut archive, package_path.as_ref())?;
             Ok(buf)
         }
-        ArchiveType::Conda => {
+        CondaArchiveType::Conda => {
             let mut info_archive = stream_conda_info(file).unwrap();
             let buf = get_file_from_archive(&mut info_archive, package_path.as_ref())?;
             Ok(buf)
@@ -121,7 +121,11 @@ fn read_package_file_content<'a>(
 pub fn read_package_file<P: PackageFile>(path: impl AsRef<Path>) -> Result<P, ExtractError> {
     // stream extract the file from a package
     let file = File::open(&path)?;
-    let content = read_package_file_content(&file, &path, P::package_path())?;
+    let content = read_package_file_content(
+        &file,
+        CondaArchiveType::try_from(&path).ok_or(ExtractError::UnsupportedArchiveType)?,
+        P::package_path(),
+    )?;
 
     P::from_str(&String::from_utf8_lossy(&content))
         .map_err(|e| ExtractError::ArchiveMemberParseError(P::package_path().to_owned(), e))
@@ -133,7 +137,11 @@ pub fn extract_package_file<'a, P: PackageFile>(
     location: &Path,
     writer: &mut impl Write,
 ) -> Result<(), ExtractError> {
-    let content = read_package_file_content(reader, location, P::package_path())?;
+    let content = read_package_file_content(
+        reader,
+        CondaArchiveType::try_from(location).ok_or(ExtractError::UnsupportedArchiveType)?,
+        P::package_path(),
+    )?;
 
     writer.write_all(&content)?;
 

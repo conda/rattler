@@ -1,10 +1,258 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.25.19](https://github.com/conda/rattler/compare/rattler_shell-v0.25.18...rattler_shell-v0.25.19) - 2026-02-04
+
+### Fixed
+
+- Ignore CONDA_SHLVL in tests ([#2029](https://github.com/conda/rattler/pull/2029))
+
+## [0.25.18](https://github.com/conda/rattler/compare/rattler_shell-v0.25.17...rattler_shell-v0.25.18) - 2026-01-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.17](https://github.com/baszalmstra/rattler/compare/rattler_shell-v0.25.16...rattler_shell-v0.25.17) - 2026-01-22
+
+### Fixed
+
+- changelog
+
+## [0.25.16](https://github.com/conda/rattler/compare/rattler_shell-v0.25.15...rattler_shell-v0.25.16) - 2026-01-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_pty
+
+## [0.25.15](https://github.com/conda/rattler/compare/rattler_shell-v0.25.14...rattler_shell-v0.25.15) - 2025-12-18
+
+### Fixed
+
+- always emit depends in index.json ([#1932](https://github.com/conda/rattler/pull/1932))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.25.14](https://github.com/conda/rattler/compare/rattler_shell-v0.25.13...rattler_shell-v0.25.14) - 2025-12-08
+
+### Other
+
+- bump crates ([#1902](https://github.com/conda/rattler/pull/1902))
+
+## [0.25.13](https://github.com/conda/rattler/compare/rattler_shell-v0.25.12...rattler_shell-v0.25.13) - 2025-11-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.12](https://github.com/conda/rattler/compare/rattler_shell-v0.25.11...rattler_shell-v0.25.12) - 2025-11-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.11](https://github.com/conda/rattler/compare/rattler_shell-v0.25.10...rattler_shell-v0.25.11) - 2025-11-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.10](https://github.com/conda/rattler/compare/rattler_shell-v0.25.9...rattler_shell-v0.25.10) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.9](https://github.com/conda/rattler/compare/rattler_shell-v0.25.8...rattler_shell-v0.25.9) - 2025-11-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.8](https://github.com/conda/rattler/compare/rattler_shell-v0.25.7...rattler_shell-v0.25.8) - 2025-11-13
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.7](https://github.com/conda/rattler/compare/rattler_shell-v0.25.6...rattler_shell-v0.25.7) - 2025-10-28
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.6](https://github.com/conda/rattler/compare/rattler_shell-v0.25.5...rattler_shell-v0.25.6) - 2025-10-25
+
+### Other
+
+- Improve performance of bash shell activation on Windows ([#1758](https://github.com/conda/rattler/pull/1758))
+
+## [0.25.5](https://github.com/conda/rattler/compare/rattler_shell-v0.25.4...rattler_shell-v0.25.5) - 2025-10-18
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.4](https://github.com/conda/rattler/compare/rattler_shell-v0.25.3...rattler_shell-v0.25.4) - 2025-10-17
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_pty
+
+## [0.25.3](https://github.com/conda/rattler/compare/rattler_shell-v0.25.2...rattler_shell-v0.25.3) - 2025-10-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.2](https://github.com/conda/rattler/compare/rattler_shell-v0.25.1...rattler_shell-v0.25.2) - 2025-10-03
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.1](https://github.com/conda/rattler/compare/rattler_shell-v0.25.0...rattler_shell-v0.25.1) - 2025-09-30
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.25.0](https://github.com/conda/rattler/compare/rattler_shell-v0.24.11...rattler_shell-v0.25.0) - 2025-09-12
+
+### Added
+
+- add support for post-activation environment variables in Activator ([#1673](https://github.com/conda/rattler/pull/1673))
+
+## [0.24.11](https://github.com/conda/rattler/compare/rattler_shell-v0.24.10...rattler_shell-v0.24.11) - 2025-09-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.24.10](https://github.com/conda/rattler/compare/rattler_shell-v0.24.9...rattler_shell-v0.24.10) - 2025-09-02
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.24.9](https://github.com/conda/rattler/compare/rattler_shell-v0.24.8...rattler_shell-v0.24.9) - 2025-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.24.8](https://github.com/conda/rattler/compare/rattler_shell-v0.24.7...rattler_shell-v0.24.8) - 2025-08-12
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.24.7](https://github.com/conda/rattler/compare/rattler_shell-v0.24.6...rattler_shell-v0.24.7) - 2025-07-24
+
+### Fixed
+
+- allow variable expansion ([#1552](https://github.com/conda/rattler/pull/1552))
+
+## [0.24.6](https://github.com/conda/rattler/compare/rattler_shell-v0.24.5...rattler_shell-v0.24.6) - 2025-07-23
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.24.5](https://github.com/conda/rattler/compare/rattler_shell-v0.24.4...rattler_shell-v0.24.5) - 2025-07-21
+
+### Other
+
+- bump rust 1.88.0 ([#1536](https://github.com/conda/rattler/pull/1536))
+
+## [0.24.4](https://github.com/conda/rattler/compare/rattler_shell-v0.24.3...rattler_shell-v0.24.4) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.24.3](https://github.com/conda/rattler/compare/rattler_shell-v0.24.2...rattler_shell-v0.24.3) - 2025-07-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.24.2](https://github.com/conda/rattler/compare/rattler_shell-v0.24.1...rattler_shell-v0.24.2) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [0.24.1](https://github.com/conda/rattler/compare/rattler_shell-v0.24.0...rattler_shell-v0.24.1) - 2025-06-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_pty
+
+## [0.24.0](https://github.com/conda/rattler/compare/rattler_shell-v0.23.4...rattler_shell-v0.24.0) - 2025-06-25
+
+### Added
+
+- Add `deactivation()` method to Activator ([#1278](https://github.com/conda/rattler/pull/1278))
+
+## [0.23.4](https://github.com/conda/rattler/compare/rattler_shell-v0.23.3...rattler_shell-v0.23.4) - 2025-06-24
+
+### Fixed
+
+- simplify validate env vars ([#1465](https://github.com/conda/rattler/pull/1465))
+
+## [0.23.3](https://github.com/conda/rattler/compare/rattler_shell-v0.23.2...rattler_shell-v0.23.3) - 2025-06-23
+
+### Fixed
+
+- quote values in bash activation with shlex ([#1392](https://github.com/conda/rattler/pull/1392))
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [0.23.2](https://github.com/conda/rattler/compare/rattler_shell-v0.23.1...rattler_shell-v0.23.2) - 2025-05-23
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.23.1](https://github.com/conda/rattler/compare/rattler_shell-v0.23.0...rattler_shell-v0.23.1) - 2025-05-16
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [0.23.0](https://github.com/conda/rattler/compare/rattler_shell-v0.22.26...rattler_shell-v0.23.0) - 2025-05-03
+
+### Fixed
+
+- sanitize env vars ([#1222](https://github.com/conda/rattler/pull/1222))
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [0.22.26](https://github.com/conda/rattler/compare/rattler_shell-v0.22.25...rattler_shell-v0.22.26) - 2025-04-10
+
+### Added
+
+- Add start_unix_shell in Activator (2/n) ([#1180](https://github.com/conda/rattler/pull/1180))
+
+## [0.22.25](https://github.com/conda/rattler/compare/rattler_shell-v0.22.24...rattler_shell-v0.22.25) - 2025-04-04
+
+### Other
+
+- update Cargo.toml dependencies
 
 ## [0.22.24](https://github.com/conda/rattler/compare/rattler_shell-v0.22.23...rattler_shell-v0.22.24) - 2025-03-14
 

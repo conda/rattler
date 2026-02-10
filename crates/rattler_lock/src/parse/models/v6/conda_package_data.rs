@@ -3,21 +3,25 @@ use std::{
     collections::{BTreeMap, BTreeSet},
 };
 
+use super::source_data::{PackageBuildSourceSerializer, SourceLocationSerializer};
+use crate::{
+    conda,
+    conda::{CondaBinaryData, CondaSourceData, PackageBuildSource, VariantValue},
+    source::SourceLocation,
+    utils::{derived_fields, derived_fields::LocationDerivedFields},
+    CondaPackageData, ConversionError, UrlOrPath,
+};
+use rattler_conda_types::package::{
+    ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType,
+};
 use rattler_conda_types::{
-    package::ArchiveIdentifier, BuildNumber, ChannelUrl, NoArchType, PackageName, PackageRecord,
-    PackageUrl, VersionWithSource,
+    package::CondaArchiveIdentifier, utils::TimestampMs, BuildNumber, ChannelUrl, NoArchType,
+    PackageName, PackageRecord, PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use url::Url;
-
-use crate::{
-    conda,
-    conda::{CondaBinaryData, CondaSourceData},
-    utils::{derived_fields, derived_fields::LocationDerivedFields},
-    CondaPackageData, ConversionError, UrlOrPath,
-};
 
 /// A helper struct that wraps all fields of a [`crate::CondaPackageData`] and
 /// allows for easy conversion between the two.
@@ -52,13 +56,17 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<Cow<'a, VersionWithSource>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub build: Option<Cow<'a, String>>,
+    pub build: Option<Cow<'a, str>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub build_number: Option<BuildNumber>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subdir: Option<Cow<'a, String>>,
+    pub subdir: Option<Cow<'a, str>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub noarch: Option<Cow<'a, NoArchType>>,
+
+    // Conda-build variants for source packages (optional in V6, required in V7)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variants: Option<Cow<'a, BTreeMap<String, VariantValue>>>,
 
     // Then the hashes
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -72,12 +80,13 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub legacy_bz2_md5: Option<Md5Hash>,
 
     // Dependencies
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub depends: Cow<'a, Vec<String>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub constrains: Cow<'a, Vec<String>>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub depends: Cow<'a, [String]>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub constrains: Cow<'a, [String]>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
+    #[serde(rename = "extra_depends")]
+    pub experimental_extra_depends: Cow<'a, BTreeMap<String, Vec<String>>>,
 
     // Additional properties (in semi alphabetic order but grouped by commonality)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -85,11 +94,11 @@ pub(crate) struct CondaPackageDataModel<'a> {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub features: Cow<'a, Option<String>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub track_features: Cow<'a, Vec<String>>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub track_features: Cow<'a, [String]>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub file_name: Option<Cow<'a, Option<String>>>,
+    pub file_name: Option<Cow<'a, Option<DistArchiveIdentifier>>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license: Cow<'a, Option<String>>,
@@ -111,6 +120,14 @@ pub(crate) struct CondaPackageDataModel<'a> {
     pub input: Option<InputHash<'a>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<PackageBuildSourceSerializer>")]
+    pub package_build_source: Option<PackageBuildSource>,
+
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde_as(as = "BTreeMap<_, SourceLocationSerializer>")]
+    pub sources: BTreeMap<String, SourceLocation>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub python_site_packages_path: Cow<'a, Option<String>>,
 }
 
@@ -119,7 +136,7 @@ pub(crate) struct CondaPackageDataModel<'a> {
 pub(crate) struct InputHash<'a> {
     #[serde_as(as = "SerializableHash::<rattler_digest::Sha256>")]
     pub hash: Sha256Hash,
-    pub globs: Cow<'a, Vec<String>>,
+    pub globs: Cow<'a, [String]>,
 }
 
 impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
@@ -157,7 +174,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             build_number,
             constrains: value.constrains.into_owned(),
             depends: value.depends.into_owned(),
-            extra_depends: value.extra_depends.into_owned(),
+            experimental_extra_depends: value.experimental_extra_depends.into_owned(),
             features: value.features.into_owned(),
             legacy_bz2_md5: value.legacy_bz2_md5,
             legacy_bz2_size: value.legacy_bz2_size.into_owned(),
@@ -176,7 +193,7 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             sha256: value.sha256,
             size: value.size.into_owned(),
             subdir,
-            timestamp: value.timestamp,
+            timestamp: value.timestamp.map(Into::into),
             track_features: value.track_features.into_owned(),
             version: value
                 .version
@@ -190,21 +207,21 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
         if value
             .location
             .file_name()
-            .is_some_and(|name| ArchiveIdentifier::try_from_filename(name).is_some())
+            .is_some_and(|name| CondaArchiveIdentifier::try_from_filename(name).is_some())
         {
             Ok(CondaPackageData::Binary(CondaBinaryData {
                 location: value.location,
                 file_name: value
                     .file_name
                     .map(Cow::into_owned)
-                    .unwrap_or(derived.file_name)
-                    .unwrap_or_else(|| {
-                        format!(
-                            "{}-{}-{}.conda",
-                            package_record.name.as_normalized(),
-                            package_record.version,
-                            package_record.build
-                        )
+                    .unwrap_or(derived.identifier)
+                    .unwrap_or_else(|| DistArchiveIdentifier {
+                        identifier: ArchiveIdentifier {
+                            name: package_record.name.as_normalized().to_owned(),
+                            version: package_record.version.to_string(),
+                            build_string: package_record.build.clone(),
+                        },
+                        archive_type: DistArchiveType::Conda(CondaArchiveType::Conda),
                     }),
                 channel: value
                     .channel
@@ -217,10 +234,13 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
             Ok(CondaPackageData::Source(CondaSourceData {
                 package_record,
                 location: value.location,
+                variants: value.variants.map(Cow::into_owned),
+                package_build_source: value.package_build_source,
                 input: value.input.map(|input| conda::InputHash {
                     hash: input.hash,
                     globs: input.globs.into_owned(),
                 }),
+                sources: value.sources,
             }))
         }
     }
@@ -238,8 +258,17 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
         );
 
         let channel = value.as_binary().and_then(|binary| binary.channel.as_ref());
-        let file_name = value.as_binary().map(|binary| binary.file_name.as_str());
+        let file_name = value.as_binary().map(|binary| &binary.file_name);
+        let variants = value
+            .as_source()
+            .and_then(|source| source.variants.as_ref());
         let input = value.as_source().and_then(|source| source.input.as_ref());
+        let package_build_source = value
+            .as_source()
+            .and_then(|source| source.package_build_source.as_ref());
+        let sources = value
+            .as_source()
+            .map_or_else(BTreeMap::new, |source| source.sources.clone());
 
         let normalized_channel = channel
             .map(|channel| strip_trailing_slash(channel.as_ref()))
@@ -262,20 +291,21 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                 .then_some(Cow::Borrowed(&package_record.subdir)),
             noarch: (package_record.noarch != derived_noarch)
                 .then_some(Cow::Borrowed(&package_record.noarch)),
+            variants: variants.map(Cow::Borrowed),
             channel: (channel != derived.channel.as_ref())
                 .then_some(Cow::Owned(normalized_channel)),
-            file_name: (file_name != derived.file_name.as_deref())
-                .then_some(Cow::Owned(file_name.map(ToString::to_string))),
+            file_name: (file_name != derived.identifier.as_ref())
+                .then_some(Cow::Owned(file_name.cloned())),
             purls: Cow::Borrowed(&package_record.purls),
             depends: Cow::Borrowed(&package_record.depends),
             constrains: Cow::Borrowed(&package_record.constrains),
-            extra_depends: Cow::Borrowed(&package_record.extra_depends),
+            experimental_extra_depends: Cow::Borrowed(&package_record.experimental_extra_depends),
             md5: package_record.md5,
             legacy_bz2_md5: package_record.legacy_bz2_md5,
             sha256: package_record.sha256,
             size: Cow::Borrowed(&package_record.size),
             legacy_bz2_size: Cow::Borrowed(&package_record.legacy_bz2_size),
-            timestamp: package_record.timestamp,
+            timestamp: package_record.timestamp.map(TimestampMs::into_datetime),
             features: Cow::Borrowed(&package_record.features),
             track_features: Cow::Borrowed(&package_record.track_features),
             license: Cow::Borrowed(&package_record.license),
@@ -285,6 +315,8 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                 hash: input.hash,
                 globs: Cow::Borrowed(&input.globs),
             }),
+            package_build_source: package_build_source.cloned(),
+            sources,
         }
     }
 }

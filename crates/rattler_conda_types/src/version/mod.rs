@@ -533,29 +533,55 @@ fn segments_starts_with<
     B: Iterator<Item = SegmentIter<'b>> + 'b,
 >(
     a: A,
-    b: B,
+    b: B, // the prefix we're looking for in 'a'
 ) -> bool {
+    let mut had_extra_left = false;
     for ranges in a.zip_longest(b) {
         let (left, right) = match ranges {
-            EitherOrBoth::Both(left, right) => (left, right),
+            EitherOrBoth::Both(left, right) => {
+                // Previous segment had extra left components, but there are more
+                // prefix segments - this is a structural mismatch.
+                // E.g., "1.1c.1" does NOT start with "1.1.1"
+                if had_extra_left {
+                    return false;
+                }
+                (left, right)
+            }
+            // Extra segments in version after prefix is exhausted - OK
+            // E.g., "1.0.1.2" starts with "1.0.1"
             EitherOrBoth::Left(_) => return true,
             EitherOrBoth::Right(segment) => {
-                // If the segment is zero we can skip it. As long as there are
-                // only zeros, the version is still considered to start with
-                // the other version.
+                // Prefix has more segments. Zero segments are OK (implicit zeros).
+                // E.g., "1.0" starts with "1.0.0"
                 if segment.is_zero() {
                     continue;
                 }
                 return false;
             }
         };
+        had_extra_left = false;
         for values in left.components().zip_longest(right.components()) {
-            if !match values {
-                EitherOrBoth::Both(a, b) => a == b,
-                EitherOrBoth::Left(_) => return true,
-                EitherOrBoth::Right(_) => return false,
-            } {
-                return false;
+            match values {
+                EitherOrBoth::Both(a, b) => {
+                    if a != b {
+                        return false;
+                    }
+                }
+                // Extra components in version segment. Only OK if this is the last
+                // prefix segment (checked on next outer iteration).
+                // E.g., "1.0.1c" starts with "1.0.1"
+                EitherOrBoth::Left(_) => {
+                    had_extra_left = true;
+                    break;
+                }
+                // Missing component in version. Zero components are OK (implicit zeros).
+                // E.g., "1.1c.1" starts with "1.1c0.1"
+                EitherOrBoth::Right(component) => {
+                    if component.is_zero() {
+                        continue;
+                    }
+                    return false;
+                }
             }
         }
     }
@@ -1266,6 +1292,104 @@ mod test {
         assert!(Version::from_str("1.2.3")
             .unwrap()
             .starts_with(&Version::from_str("1.2").unwrap()));
+    }
+
+    #[test]
+    fn starts_with_differing_component_sizes() {
+        // segments: [2, 0, 1, [version, 2]]
+        let version = Version::from_str("2.0.1.version2").unwrap();
+        // segments: [2, 0, 1, version, 3]
+        let other_version = Version::from_str("2.0.1.version.3").unwrap();
+
+        assert!(!version.starts_with(&other_version));
+        assert!(!other_version.starts_with(&version));
+    }
+
+    #[test]
+    fn starts_with_extra_components() {
+        // For glob matching (e.g., "1.0.0_version*"), versions with extra
+        // components should match the prefix.
+        let version = Version::from_str("1.0.0_version").unwrap();
+        // "1.0.0_version1" starts with "1.0.0_version" (extra component "1")
+        assert!(Version::from_str("1.0.0_version1")
+            .unwrap()
+            .starts_with(&version));
+        // "1.0.0_version0" starts with "1.0.0_version" (extra component "0")
+        assert!(Version::from_str("1.0.0_version0")
+            .unwrap()
+            .starts_with(&version));
+        // "1.0.0_version0foo" starts with "1.0.0_version" (extra components "0", "foo")
+        assert!(Version::from_str("1.0.0_version0foo")
+            .unwrap()
+            .starts_with(&version));
+
+        // But different base components should NOT match
+        assert!(!Version::from_str("1.0.0_other")
+            .unwrap()
+            .starts_with(&version));
+        assert!(!Version::from_str("1.0.0_ver")
+            .unwrap()
+            .starts_with(&version));
+
+        // Different segment structure should NOT match (PR #1791)
+        // "1.0.0_version1" has segment [version, 1]
+        // "1.0.0_version_2" has segments [version], [2]
+        // This ensures "1.0.0_version_2*" does NOT match "1.0.0_version1"
+        let version_with_extra_segment = Version::from_str("1.0.0_version_2").unwrap();
+        assert!(!Version::from_str("1.0.0_version1")
+            .unwrap()
+            .starts_with(&version_with_extra_segment));
+
+        // Different component values should NOT match
+        let version1 = Version::from_str("1.0.0_version1").unwrap();
+        assert!(!Version::from_str("1.0.0_version0")
+            .unwrap()
+            .starts_with(&version1));
+
+        // Extra components after matching prefix should match
+        assert!(Version::from_str("1.0.0_version1a")
+            .unwrap()
+            .starts_with(&version1));
+        assert!(Version::from_str("1.0.0_version0a")
+            .unwrap()
+            .starts_with(&version));
+
+        // Extra components in INTERMEDIATE segments should NOT match
+        // "1.1c.1" has segment [1, c] where "1.1.1" has segment [1]
+        // This is a structure mismatch, not just extra components at the end
+        assert!(!Version::from_str("1.1c.1")
+            .unwrap()
+            .starts_with(&Version::from_str("1.1.1").unwrap()));
+        assert!(!Version::from_str("1.1c1.1")
+            .unwrap()
+            .starts_with(&Version::from_str("1.1c.1").unwrap()));
+
+        // BUT zero components in prefix are treated as "no component" (implicit zeros)
+        // So "1.1c.1" starts with "1.1c0.1" because c0 == c (trailing zero)
+        assert!(Version::from_str("1.1c.1")
+            .unwrap()
+            .starts_with(&Version::from_str("1.1c0.1").unwrap()));
+    }
+
+    /// Test for <https://github.com/conda/rattler/issues/1914>
+    /// Versions with letter suffixes (like openssl 1.0.1c) should match
+    /// prefix patterns (like 1.0.1*).
+    #[test]
+    fn starts_with_letter_suffix() {
+        // openssl versions like 1.0.1c, 1.0.1g, etc. should start with 1.0.1
+        let prefix = Version::from_str("1.0.1").unwrap();
+        assert!(Version::from_str("1.0.1c").unwrap().starts_with(&prefix));
+        assert!(Version::from_str("1.0.1g").unwrap().starts_with(&prefix));
+        assert!(Version::from_str("1.0.1k").unwrap().starts_with(&prefix));
+
+        // Also test 1.0.2 series
+        let prefix_2 = Version::from_str("1.0.2").unwrap();
+        assert!(Version::from_str("1.0.2a").unwrap().starts_with(&prefix_2));
+        assert!(Version::from_str("1.0.2l").unwrap().starts_with(&prefix_2));
+
+        // Negative cases - these should NOT match
+        assert!(!Version::from_str("1.0.2a").unwrap().starts_with(&prefix));
+        assert!(!Version::from_str("1.0.1c").unwrap().starts_with(&prefix_2));
     }
 
     fn get_hash(spec: &impl Hash) -> u64 {

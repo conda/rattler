@@ -1,0 +1,245 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.4.11](https://github.com/conda/rattler/compare/rattler_upload-v0.4.10...rattler_upload-v0.4.11) - 2026-02-04
+
+### Fixed
+
+- OIDC ambient token detection with sigstore-rust 0.6.1 ([#2017](https://github.com/conda/rattler/pull/2017))
+
+### Other
+
+- *(ci)* ensure rustls is not used when using native-tls ([#2024](https://github.com/conda/rattler/pull/2024))
+
+## [0.4.10](https://github.com/conda/rattler/compare/rattler_upload-v0.4.9...rattler_upload-v0.4.10) - 2026-01-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.4.9](https://github.com/baszalmstra/rattler/compare/rattler_upload-v0.4.8...rattler_upload-v0.4.9) - 2026-01-22
+
+### Other
+
+- updated the following local packages: rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.4.8](https://github.com/conda/rattler/compare/rattler_upload-v0.4.7...rattler_upload-v0.4.8) - 2026-01-22
+
+### Added
+
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/conda/rattler/pull/1988))
+
+### Other
+
+- Run `cargo clippy --fix` (from nightly) ([#1992](https://github.com/conda/rattler/pull/1992))
+
+## [0.4.7](https://github.com/conda/rattler/compare/rattler_upload-v0.4.6...rattler_upload-v0.4.7) - 2025-12-18
+
+### Added
+
+- integrate sigstore-sign for automatic signing of attestations ([#1897](https://github.com/conda/rattler/pull/1897))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [0.4.6](https://github.com/conda/rattler/compare/rattler_upload-v0.4.5...rattler_upload-v0.4.6) - 2025-12-08
+
+### Added
+
+- add `--force` to prefix.dev upload and improve function signatures ([#1907](https://github.com/conda/rattler/pull/1907))
+- add gitlab CI for trusted publishing ([#1904](https://github.com/conda/rattler/pull/1904))
+
+## [0.4.5](https://github.com/conda/rattler/compare/rattler_upload-v0.4.4...rattler_upload-v0.4.5) - 2025-11-27
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_solve, rattler_s3, rattler_config, rattler_package_streaming
+
+## [0.4.4](https://github.com/conda/rattler/compare/rattler_upload-v0.4.3...rattler_upload-v0.4.4) - 2025-11-25
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.4.3](https://github.com/conda/rattler/compare/rattler_upload-v0.4.2...rattler_upload-v0.4.3) - 2025-11-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_solve, rattler_config, rattler_networking, rattler_s3
+
+## [0.4.2](https://github.com/conda/rattler/compare/rattler_upload-v0.4.1...rattler_upload-v0.4.2) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.4.1](https://github.com/conda/rattler/compare/rattler_upload-v0.4.0...rattler_upload-v0.4.1) - 2025-11-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.4.0](https://github.com/conda/rattler/compare/rattler_upload-v0.3.10...rattler_upload-v0.4.0) - 2025-11-13
+
+### Added
+
+- expose crate features on docs.rs ([#1835](https://github.com/conda/rattler/pull/1835))
+- cleanup upload CLI structs ([#1807](https://github.com/conda/rattler/pull/1807))
+- create attestations on upload with cosign ([#1679](https://github.com/conda/rattler/pull/1679))
+
+## [0.3.10](https://github.com/conda/rattler/compare/rattler_upload-v0.3.9...rattler_upload-v0.3.10) - 2025-10-28
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_solve, rattler_config, rattler_networking, rattler_package_streaming, rattler_s3
+
+## [0.3.9](https://github.com/conda/rattler/compare/rattler_upload-v0.3.8...rattler_upload-v0.3.9) - 2025-10-25
+
+### Other
+
+- updated the following local packages: rattler_package_streaming
+
+## [0.3.8](https://github.com/conda/rattler/compare/rattler_upload-v0.3.7...rattler_upload-v0.3.8) - 2025-10-18
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_package_streaming, rattler_config, rattler_networking, rattler_solve, rattler_s3
+
+## [0.3.7](https://github.com/conda/rattler/compare/rattler_upload-v0.3.6...rattler_upload-v0.3.7) - 2025-10-17
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.3.6](https://github.com/conda/rattler/compare/rattler_upload-v0.3.5...rattler_upload-v0.3.6) - 2025-10-14
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_networking, rattler_config, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.3.5](https://github.com/conda/rattler/compare/rattler_upload-v0.3.4...rattler_upload-v0.3.5) - 2025-10-13
+
+### Other
+
+- small bearer token improvements ([#1727](https://github.com/conda/rattler/pull/1727))
+
+## [0.3.4](https://github.com/conda/rattler/compare/rattler_upload-v0.3.3...rattler_upload-v0.3.4) - 2025-10-07
+
+### Added
+
+- *(upload)* attach hashes to uploaded packages ([#1705](https://github.com/conda/rattler/pull/1705))
+
+## [0.3.3](https://github.com/conda/rattler/compare/rattler_upload-v0.3.2...rattler_upload-v0.3.3) - 2025-10-03
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.3.2](https://github.com/conda/rattler/compare/rattler_upload-v0.3.1...rattler_upload-v0.3.2) - 2025-09-30
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking, rattler_config, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.3.1](https://github.com/conda/rattler/compare/rattler_upload-v0.3.0...rattler_upload-v0.3.1) - 2025-09-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve, rattler_s3
+
+## [0.3.0](https://github.com/conda/rattler/compare/rattler_upload-v0.2.1...rattler_upload-v0.3.0) - 2025-09-04
+
+### Added
+
+- derive default credentials from aws sdk ([#1629](https://github.com/conda/rattler/pull/1629))
+
+## [0.2.1](https://github.com/conda/rattler/compare/rattler_upload-v0.2.0...rattler_upload-v0.2.1) - 2025-09-02
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve
+
+## [0.2.0](https://github.com/conda/rattler/compare/rattler_upload-v0.1.5...rattler_upload-v0.2.0) - 2025-08-22
+
+### Added
+
+- update `UploadOpts` and `get_auth_store` ([#1575](https://github.com/conda/rattler/pull/1575))
+
+## [0.1.5](https://github.com/conda/rattler/compare/rattler_upload-v0.1.4...rattler_upload-v0.1.5) - 2025-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_networking, rattler_package_streaming, rattler_solve
+
+## [0.1.4](https://github.com/conda/rattler/compare/rattler_upload-v0.1.3...rattler_upload-v0.1.4) - 2025-08-12
+
+### Other
+
+- *(ci)* Update Rust crate opendal to 0.54.0 ([#1566](https://github.com/conda/rattler/pull/1566))
+
+## [0.1.3](https://github.com/conda/rattler/compare/rattler_upload-v0.1.2...rattler_upload-v0.1.3) - 2025-07-28
+
+### Other
+
+- updated the following local packages: rattler_package_streaming
+
+## [0.1.2](https://github.com/conda/rattler/compare/rattler_upload-v0.1.1...rattler_upload-v0.1.2) - 2025-07-23
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_config, rattler_solve, rattler_networking, rattler_package_streaming
+
+## [0.1.1](https://github.com/conda/rattler/compare/rattler_upload-v0.1.0...rattler_upload-v0.1.1) - 2025-07-21
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types, rattler_config, rattler_package_streaming, rattler_solve, rattler_networking
+
+## [0.1.0](https://github.com/conda/rattler/releases/tag/rattler_upload-v0.1.0) - 2025-07-09
+
+### Added
+
+- better readme ([#118](https://github.com/conda/rattler/pull/118))
+- replace zulip with discord ([#116](https://github.com/conda/rattler/pull/116))
+- move all conda types to separate crate
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+- added missing hyphen to relative url linking to what-is-conda section in README.md ([#1192](https://github.com/conda/rattler/pull/1192))
+- typos ([#849](https://github.com/conda/rattler/pull/849))
+- move more links to the conda org from conda-incubator ([#816](https://github.com/conda/rattler/pull/816))
+- use conda-incubator
+- add python docs badge
+- typo libsolve -> libsolv ([#164](https://github.com/conda/rattler/pull/164))
+- change urls from baszalmstra to mamba-org
+- build badge
+
+### Other
+
+- move upload from `rattler-build` to `rattler` ([#1386](https://github.com/conda/rattler/pull/1386))
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+- Fix badge style ([#1110](https://github.com/conda/rattler/pull/1110))
+- fix anchor link ([#1035](https://github.com/conda/rattler/pull/1035))
+- change links from conda-incubator to conda ([#813](https://github.com/conda/rattler/pull/813))
+- update banner ([#808](https://github.com/conda/rattler/pull/808))
+- update README.md
+- add pixi badge ([#563](https://github.com/conda/rattler/pull/563))
+- update installation gif
+- update banner image
+- address issue #282 ([#283](https://github.com/conda/rattler/pull/283))
+- Add an image to Readme ([#203](https://github.com/conda/rattler/pull/203))
+- Improve getting started with a micromamba environment. ([#163](https://github.com/conda/rattler/pull/163))
+- Misc/update readme ([#66](https://github.com/conda/rattler/pull/66))
+- update readme
+- layout the vision a little bit better
+- *(docs)* add build badge
+- matchspec parsing

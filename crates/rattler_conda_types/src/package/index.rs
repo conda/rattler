@@ -1,11 +1,14 @@
-use std::path::Path;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+};
 
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
 use super::PackageFile;
-use crate::{NoArchType, PackageName, VersionWithSource};
+use crate::{NoArchType, PackageName, PackageUrl, VersionWithSource};
 
 /// A representation of the `index.json` file found in package archives.
 ///
@@ -32,8 +35,14 @@ pub struct IndexJson {
     pub constrains: Vec<String>,
 
     /// The dependencies of the package
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub depends: Vec<String>,
+
+    /// Extra dependency groups that can be selected using `foobar[extras=["scientific"]]`
+    /// The implementation is specified in this CEP: <https://github.com/conda/ceps/pull/111>
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(rename = "extra_depends")]
+    pub experimental_extra_depends: BTreeMap<String, Vec<String>>,
 
     /// Features are a deprecated way to specify different feature sets for the
     /// conda solver. This is not supported anymore and should not be used.
@@ -58,6 +67,11 @@ pub struct IndexJson {
     /// Optionally, the OS the package is build for.
     pub platform: Option<String>,
 
+    /// A list of Package URLs identifying this package.
+    /// See this CEP: <https://github.com/conda/ceps/pull/63>
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purls: Option<BTreeSet<PackageUrl>>,
+
     /// Optionally a path within the environment of the site-packages directory.
     /// This field is only present for python interpreter packages.
     /// This field was introduced with <https://github.com/conda/ceps/blob/main/cep-17.md>.
@@ -67,13 +81,12 @@ pub struct IndexJson {
     pub subdir: Option<String>,
 
     /// The timestamp when this package was created
-    #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
-    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    pub timestamp: Option<crate::utils::TimestampMs>,
 
     /// Track features are nowadays only used to downweight packages (ie. give
     /// them less priority). To that effect, the number of track features is
     /// counted (number of commas) and the package is downweighted
-    /// by the number of track_features.
+    /// by the number of `track_features`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[serde_as(as = "crate::utils::serde::Features")]
     pub track_features: Vec<String>,
@@ -125,7 +138,7 @@ mod test {
         .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
-        let package_dir = package_dir.into_path();
+        let package_dir = package_dir.keep();
         println!("{}", package_dir.display());
 
         insta::assert_yaml_snapshot!(IndexJson::from_package_directory(&package_dir).unwrap());

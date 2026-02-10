@@ -51,7 +51,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         &solvable.record
     }
 
-    /// Referece to the pool
+    /// Reference to the pool
     fn pool(&self) -> &Pool<SolverMatchSpec<'repo>, NameType> {
         &self.solver.provider().pool
     }
@@ -94,7 +94,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         };
 
         // Otherwise, select the variant with the highest version
-        match (self.strategy, a_record.version().cmp(b_record.version())) {
+        match (self.strategy, a_record.version().cmp(&b_record.version())) {
             (CompareStrategy::Default, Ordering::Greater)
             | (CompareStrategy::LowestVersion, Ordering::Less) => return Ordering::Less,
             (CompareStrategy::Default, Ordering::Less)
@@ -172,11 +172,14 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             Err(_) => return,
         };
 
-        // Get the known dependencies for each solvable, filter out the unknown
-        // dependencies
+        // Get the known dependencies for each solvable. Solvables with unknown
+        // dependencies are moved to the end of the array (sorted lower).
         let mut id_and_deps: HashMap<_, Vec<_>> = HashMap::with_capacity(dependencies.len());
         let mut name_count: HashMap<NameId, usize> = HashMap::new();
-        for (solvable_idx, &solvable_id) in solvables.iter().enumerate() {
+        let mut known_count = solvables.len();
+        let mut solvable_idx = 0;
+        while solvable_idx < known_count {
+            let solvable_id = solvables[solvable_idx];
             let dependencies = self
                 .solver
                 .get_or_cache_dependencies(solvable_id)
@@ -185,14 +188,17 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             let known = match dependencies {
                 Ok(Dependencies::Known(known_dependencies)) => known_dependencies,
                 Ok(Dependencies::Unknown(_)) => {
-                    unreachable!("Unknown dependencies should never happen in the conda ecosystem")
+                    // Swap to end and don't advance index - need to check swapped-in element
+                    known_count -= 1;
+                    solvables.swap(solvable_idx, known_count);
+                    continue;
                 }
                 // Solver cancelation, lets just return
                 Err(_) => return,
             };
 
             for requirement in &known.requirements {
-                let version_set_id = match requirement {
+                let version_set_id = match &requirement.requirement {
                     // Ignore union requirements, these do not occur in the conda ecosystem
                     // currently
                     Requirement::Union(_) => {
@@ -228,13 +234,18 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                     }
                 }
             }
+
+            solvable_idx += 1;
         }
+
+        // Only sort solvables with known dependencies (unknown deps are already at the end)
+        let solvables = &mut solvables[..known_count];
 
         // Sort all the dependencies that the solvables have in common by their name.
         let sorted_unique_names = name_count
             .into_iter()
             .filter_map(|(name, count)| {
-                if count == solvables.len() {
+                if count == known_count {
                     Some(name)
                 } else {
                     None
@@ -295,8 +306,8 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 // Compare the versions
                 match a_version.compare_with_strategy(&b_version, self.dependency_strategy) {
                     Ordering::Equal => {
-                        // If this version is equal, we continue with the next dependency
-                        continue;
+                        // If this version is equal, we continue with the next
+                        // dependency
                     }
                     ordering => return ordering,
                 }
@@ -359,29 +370,32 @@ pub(super) fn find_highest_version(
 
             let pool = &solver.provider().pool;
 
-            candidates
+            let mut highest_version = None;
+            for record in candidates
                 .iter()
                 .map(|id| &pool.resolve_solvable(*id).record)
-                .fold(None, |init, record| {
-                    Some(init.map_or_else(
-                        || {
-                            (
-                                record.version().clone(),
-                                !record.track_features().is_empty(),
-                            )
-                        },
-                        |(version, has_tracked_features)| {
-                            if &version < record.version() {
-                                (
-                                    record.version().clone(),
-                                    !record.track_features().is_empty(),
-                                )
-                            } else {
-                                (version, has_tracked_features)
-                            }
-                        },
-                    ))
-                })
+            {
+                let (version, has_tracked_features) = match record {
+                    SolverPackageRecord::Record(record) => (
+                        record.package_record.version.version(),
+                        !record.package_record.track_features.is_empty(),
+                    ),
+                    SolverPackageRecord::VirtualPackage(record) => (&record.version, false),
+                    SolverPackageRecord::Extra { .. } => continue,
+                };
+                highest_version = highest_version.map_or_else(
+                    || Some((version.clone(), has_tracked_features)),
+                    |(highest_version, current_has_tracked_features)| {
+                        if version > &highest_version {
+                            Some((version.clone(), has_tracked_features))
+                        } else {
+                            Some((highest_version, current_has_tracked_features))
+                        }
+                    },
+                );
+            }
+
+            highest_version
         })
         .clone()
 }

@@ -34,8 +34,8 @@ pub(crate) struct PypiPackageDataModel<'a> {
     pub version: Cow<'a, pep440_rs::Version>,
     #[serde(default, skip_serializing_if = "Option::is_none", flatten)]
     pub hash: Cow<'a, Option<PackageHashes>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub requires_dist: Cow<'a, Vec<Requirement>>,
+    #[serde(default, skip_serializing_if = "<[Requirement]>::is_empty")]
+    pub requires_dist: Cow<'a, [Requirement]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requires_python: Cow<'a, Option<VersionSpecifiers>>,
     #[serde(default, skip_serializing_if = "should_skip_serializing_editable")]

@@ -17,6 +17,7 @@ use std::io::{BufWriter, ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use super::apple_codesign::{codesign, AppleCodeSignBehavior};
+use super::Prefix;
 
 /// Describes the method to "link" a file from the source directory (or the cache directory) to the
 /// destination directory.
@@ -91,6 +92,10 @@ pub enum LinkFileError {
     #[error("could not update destination file permissions")]
     FailedToUpdateDestinationFilePermissions(#[source] std::io::Error),
 
+    /// The atime/mtime could not be updated on the destination file.
+    #[error("could not update file modification and access time")]
+    FailedToUpdateDestinationFileTimestamps(#[source] std::io::Error),
+
     /// The binary (dylib or executable) could not be signed (codesign -f -s -) on
     /// macOS ARM64 (Apple Silicon).
     #[error("failed to sign Apple binary")]
@@ -106,6 +111,7 @@ pub enum LinkFileError {
 }
 
 /// The successful result of calling [`link_file`].
+#[derive(Debug)]
 pub struct LinkedFile {
     /// True if an existing file already existed and linking overwrote the original file.
     pub clobbered: bool,
@@ -139,7 +145,7 @@ pub fn link_file(
     path_json_entry: &PathsEntry,
     destination_relative_path: PathBuf,
     package_dir: &Path,
-    target_dir: &Path,
+    target_dir: &Prefix,
     target_prefix: &str,
     allow_symbolic_links: bool,
     allow_hard_links: bool,
@@ -149,10 +155,10 @@ pub fn link_file(
 ) -> Result<LinkedFile, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
-    let destination_path = target_dir.join(&destination_relative_path);
+    let destination_path = target_dir.path().join(&destination_relative_path);
 
     // Temporary variables to store intermediate computations in. If we already computed the file
-    // size or the sha hash we dont have to recompute them at the end of the function.
+    // size or the sha hash we don't have to recompute them at the end of the function.
     let mut sha256 = None;
     let mut file_size = path_json_entry.size_in_bytes;
 
@@ -164,6 +170,9 @@ pub fn link_file(
         // Memory map the source file. This provides us with easy access to a continuous stream of
         // bytes which makes it easier to search for the placeholder prefix.
         let source = map_or_read_source_file(&source_path)?;
+
+        // Detect file type from the content
+        let file_type = FileType::detect(source.as_ref());
 
         // Open the destination file
         let destination = BufWriter::with_capacity(
@@ -215,16 +224,14 @@ pub fn link_file(
         // We no longer need the file.
         drop(file);
 
-        // Copy over filesystem permissions. We do this to ensure that the destination file has the
-        // same permissions as the source file.
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-        fs::set_permissions(&destination_path, metadata.permissions())
-            .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
-
-        // (re)sign the binary if the file is executable
-        if has_executable_permissions(&metadata.permissions())
-            && target_platform == Platform::OsxArm64
+        // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
+        // This is required for all macOS platforms because prefix replacement modifies the binary
+        // content, which invalidates existing signatures. We need to preserve entitlements.
+        if (has_executable_permissions(&metadata.permissions())
+            || file_type == Some(FileType::MachO))
+            && target_platform.is_osx()
             && *file_mode == FileMode::Binary
         {
             // Did the binary actually change?
@@ -257,6 +264,14 @@ pub fn link_file(
                 );
             }
         }
+
+        // Copy file permissions and timestamps
+        fs::set_permissions(&destination_path, metadata.permissions())
+            .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+        let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+        filetime::set_file_times(&destination_path, file_time, file_time)
+            .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+
         LinkMethod::Patched(*file_mode)
     } else if path_json_entry.path_type == PathType::HardLink && allow_ref_links {
         reflink_to_destination(&source_path, &destination_path, allow_hard_links)?
@@ -268,7 +283,7 @@ pub fn link_file(
         copy_to_destination(&source_path, &destination_path)?
     };
 
-    // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.
+    // Compute the final SHA256 if we didn't already or if its not stored in the paths.json entry.
     let sha256 = if let Some(sha256) = sha256 {
         sha256
     } else if link_method == LinkMethod::Softlink {
@@ -295,7 +310,7 @@ pub fn link_file(
         Sha256Hash::default()
     };
 
-    // Compute the final file size if we didnt already.
+    // Compute the final file size if we didn't already.
     let file_size = if let Some(file_size) = file_size {
         file_size
     } else if let Some(size_in_bytes) = path_json_entry.size_in_bytes {
@@ -378,15 +393,19 @@ fn reflink_to_destination(
     loop {
         match reflink(source_path, destination_path) {
             Ok(_) => {
-                #[cfg(target_os = "linux")]
+                #[cfg(not(target_os = "macos"))]
                 {
-                    // Copy over filesystem permissions. We do this to ensure that the destination file has the
-                    // same permissions as the source file.
-                    let metadata = fs::metadata(source_path)
+                    // Mac is documented to clone the file attributes and extended attributes. Linux and Windows
+                    // both do not guarantee that, so copy permissions and timestamps
+                    let metadata = fs::symlink_metadata(source_path)
                         .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
                     fs::set_permissions(destination_path, metadata.permissions())
                         .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+                    let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+                    filetime::set_file_times(destination_path, file_time, file_time)
+                        .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
                 }
+
                 return Ok(LinkMethod::Reflink);
             }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
@@ -419,7 +438,10 @@ fn hardlink_to_destination(
 ) -> Result<LinkMethod, LinkFileError> {
     loop {
         match fs::hard_link(source_path, destination_path) {
-            Ok(_) => return Ok(LinkMethod::Hardlink),
+            Ok(_) => {
+                // No need to copy file permissions, hard links share those anyway
+                return Ok(LinkMethod::Hardlink);
+            }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
                 fs::remove_file(destination_path).map_err(|err| {
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
@@ -447,7 +469,16 @@ fn symlink_to_destination(
         .map_err(LinkFileError::FailedToReadSymlink)?;
     loop {
         match symlink(&linked_path, destination_path) {
-            Ok(_) => return Ok(LinkMethod::Softlink),
+            Ok(_) => {
+                // Copy timestamps as permissions are not relevant on soft links
+                let metadata = fs::symlink_metadata(source_path)
+                    .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+                let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+                filetime::set_symlink_file_times(destination_path, file_time, file_time)
+                    .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+
+                return Ok(LinkMethod::Softlink);
+            }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
                 fs::remove_file(destination_path).map_err(|err| {
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
@@ -478,7 +509,16 @@ fn copy_to_destination(
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
                 })?;
             }
-            Ok(_) => return Ok(LinkMethod::Copy),
+            Ok(_) => {
+                // Copy file modification times, fs::copy transfers file permissions automatically
+                let metadata = fs::symlink_metadata(source_path)
+                    .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+                let file_time = filetime::FileTime::from_last_modification_time(&metadata);
+                filetime::set_file_times(destination_path, file_time, file_time)
+                    .map_err(LinkFileError::FailedToUpdateDestinationFileTimestamps)?;
+
+                return Ok(LinkMethod::Copy);
+            }
             Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),
         }
     }
@@ -690,6 +730,13 @@ pub fn copy_and_replace_cstring_placeholder(
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
 
+    if new_prefix.len() > old_prefix.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "target prefix cannot be longer than the placeholder prefix",
+        ));
+    }
+
     let finder = memchr::memmem::Finder::new(old_prefix);
 
     loop {
@@ -755,6 +802,43 @@ fn has_executable_permissions(permissions: &Permissions) -> bool {
     return std::os::unix::fs::PermissionsExt::mode(permissions) & 0o111 != 0;
 }
 
+/// Represents the type of file detected from its content
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum FileType {
+    /// A Mach-O binary (executable, dylib, bundle, etc.)
+    MachO,
+}
+
+impl FileType {
+    // Mach-O magic bytes constants
+    const MACHO_FAT_MAGIC: u32 = 0xcafebabe; // Fat/Universal binary (big-endian)
+    const MACHO_FAT_CIGAM: u32 = 0xbebafeca; // Fat/Universal binary (little-endian)
+    const MACHO_MAGIC_32: u32 = 0xfeedface; // Mach-O 32-bit (big-endian)
+    const MACHO_CIGAM_32: u32 = 0xcefaedfe; // Mach-O 32-bit (little-endian)
+    const MACHO_MAGIC_64: u32 = 0xfeedfacf; // Mach-O 64-bit (big-endian)
+    const MACHO_CIGAM_64: u32 = 0xcffaedfe; // Mach-O 64-bit (little-endian)
+
+    /// Detects the file type by checking its magic bytes.
+    /// Returns `Some(FileType)` if a known file type is detected, `None` otherwise.
+    fn detect(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < 4 {
+            return None;
+        }
+
+        let magic = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+
+        match magic {
+            Self::MACHO_FAT_MAGIC
+            | Self::MACHO_FAT_CIGAM
+            | Self::MACHO_MAGIC_32
+            | Self::MACHO_CIGAM_32
+            | Self::MACHO_MAGIC_64
+            | Self::MACHO_CIGAM_64 => Some(FileType::MachO),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::PYTHON_REGEX;
@@ -799,8 +883,6 @@ mod test {
         "cruel",
         b"12345Hello, cruel world!\x00\x00\x00\x006789"
     )]
-    #[case(b"short\x00", "short", "verylong", b"veryl\x00")]
-    #[case(b"short1234\x00", "short", "verylong", b"verylong1\x00")]
     pub fn test_copy_and_replace_binary_placeholder(
         #[case] input: &[u8],
         #[case] prefix_placeholder: &str,
@@ -821,6 +903,26 @@ mod test {
         )
         .unwrap();
         assert_eq!(&output.into_inner(), expected_output);
+    }
+
+    #[rstest]
+    #[case(b"short\x00", "short", "verylong")]
+    #[case(b"short1234\x00", "short", "verylong")]
+    pub fn test_shorter_binary_placeholder(
+        #[case] input: &[u8],
+        #[case] prefix_placeholder: &str,
+        #[case] target_prefix: &str,
+    ) {
+        assert!(target_prefix.len() > prefix_placeholder.len());
+
+        let mut output = Cursor::new(Vec::new());
+        let result = super::copy_and_replace_cstring_placeholder(
+            input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+        );
+        assert!(result.is_err());
     }
 
     #[test]
@@ -950,5 +1052,46 @@ mod test {
         for s in no_match_strings {
             assert!(!PYTHON_REGEX.is_match(s));
         }
+    }
+
+    #[test]
+    fn test_detect_file_type() {
+        use super::FileType;
+
+        // Test Mach-O 64-bit magic (big-endian)
+        let macho_64_be = [0xfe, 0xed, 0xfa, 0xcf, 0x00, 0x00];
+        assert_eq!(FileType::detect(&macho_64_be), Some(FileType::MachO));
+
+        // Test Mach-O 64-bit magic (little-endian)
+        let macho_64_le = [0xcf, 0xfa, 0xed, 0xfe, 0x00, 0x00];
+        assert_eq!(FileType::detect(&macho_64_le), Some(FileType::MachO));
+
+        // Test Mach-O 32-bit magic (big-endian)
+        let macho_32_be = [0xfe, 0xed, 0xfa, 0xce, 0x00, 0x00];
+        assert_eq!(FileType::detect(&macho_32_be), Some(FileType::MachO));
+
+        // Test Mach-O 32-bit magic (little-endian)
+        let macho_32_le = [0xce, 0xfa, 0xed, 0xfe, 0x00, 0x00];
+        assert_eq!(FileType::detect(&macho_32_le), Some(FileType::MachO));
+
+        // Test Fat/Universal binary magic (big-endian)
+        let fat_be = [0xca, 0xfe, 0xba, 0xbe, 0x00, 0x00];
+        assert_eq!(FileType::detect(&fat_be), Some(FileType::MachO));
+
+        // Test Fat/Universal binary magic (little-endian)
+        let fat_le = [0xbe, 0xba, 0xfe, 0xca, 0x00, 0x00];
+        assert_eq!(FileType::detect(&fat_le), Some(FileType::MachO));
+
+        // Test non-Mach-O file
+        let not_macho = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05];
+        assert_eq!(FileType::detect(&not_macho), None);
+
+        // Test short file
+        let short = [0xfe, 0xed];
+        assert_eq!(FileType::detect(&short), None);
+
+        // Test empty file
+        let empty: [u8; 0] = [];
+        assert_eq!(FileType::detect(&empty), None);
     }
 }

@@ -16,11 +16,21 @@ class NamelessMatchSpec:
     (e.g. `foo = "3.4.1 *cuda"`).
     """
 
-    def __init__(self, spec: str, strict: bool = False) -> None:
+    def __init__(
+        self,
+        spec: str,
+        strict: bool = False,
+        experimental_extras: bool = False,
+        experimental_conditionals: bool = False,
+    ) -> None:
         """
         Create a new version spec.
 
         When `strict` is `True`, some ambiguous version specs are rejected.
+
+        When `experimental_extras` is `True`, extras syntax is enabled (e.g., `[extras=[foo,bar]]`).
+
+        When `experimental_conditionals` is `True`, conditionals syntax is enabled (e.g., `>=1.0; if python >=3.6`).
 
         ```python
         >>> NamelessMatchSpec(">=24.0")
@@ -31,7 +41,9 @@ class NamelessMatchSpec:
         ```
         """
         if isinstance(spec, str):
-            self._nameless_match_spec = PyNamelessMatchSpec(spec, strict)
+            self._nameless_match_spec = PyNamelessMatchSpec(
+                spec, strict, experimental_extras, experimental_conditionals
+            )
         else:
             raise TypeError(
                 "NamelessMatchSpec constructor received unsupported type"
@@ -71,9 +83,8 @@ class NamelessMatchSpec:
         """
         The channel of the package.
         """
-        if (channel := self._nameless_match_spec.channel) is not None:
-            return Channel(channel.name)
-        return None
+        channel = self._nameless_match_spec.channel
+        return channel and Channel._from_py_channel(channel)
 
     @property
     def subdir(self) -> Optional[str]:
@@ -102,6 +113,16 @@ class NamelessMatchSpec:
         The sha256 hash of the package.
         """
         return self._nameless_match_spec.sha256
+
+    @property
+    def extras(self) -> Optional[list[str]]:
+        """The extras (optional dependencies) of the package."""
+        return self._nameless_match_spec.extras
+
+    @property
+    def condition(self) -> Optional[str]:
+        """The condition under which this match spec applies."""
+        return self._nameless_match_spec.condition
 
     def matches(self, package_record: PackageRecord) -> bool:
         """

@@ -1,7 +1,7 @@
 //! Functions to extracting or stream a Conda package from a file on disk.
 
 use crate::{ExtractError, ExtractResult};
-use rattler_conda_types::package::ArchiveType;
+use rattler_conda_types::package::CondaArchiveType;
 use std::path::Path;
 
 /// Extracts the contents a `.tar.bz2` package archive at the specified path to a directory.
@@ -22,20 +22,13 @@ pub async fn extract_tar_bz2(
     archive: &Path,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    // Spawn a block task to perform the extraction
-    let destination = destination.to_owned();
-    let archive = archive.to_owned();
-    match tokio::task::spawn_blocking(move || crate::fs::extract_tar_bz2(&archive, &destination))
+    // Open the file for reading using async I/O
+    let file = tokio::fs::File::open(archive)
         .await
-    {
-        Ok(result) => result,
-        Err(err) => {
-            if let Ok(reason) = err.try_into_panic() {
-                std::panic::resume_unwind(reason);
-            }
-            Err(ExtractError::Cancelled)
-        }
-    }
+        .map_err(ExtractError::IoError)?;
+
+    // Use the fully async extraction implementation
+    crate::tokio::async_read::extract_tar_bz2(file, destination).await
 }
 
 /// Extracts the contents a `.conda` package archive at the specified path to a directory.
@@ -88,8 +81,8 @@ pub async fn extract_conda(
 /// # }
 /// ```
 pub async fn extract(archive: &Path, destination: &Path) -> Result<ExtractResult, ExtractError> {
-    match ArchiveType::try_from(archive).ok_or(ExtractError::UnsupportedArchiveType)? {
-        ArchiveType::TarBz2 => extract_tar_bz2(archive, destination).await,
-        ArchiveType::Conda => extract_conda(archive, destination).await,
+    match CondaArchiveType::try_from(archive).ok_or(ExtractError::UnsupportedArchiveType)? {
+        CondaArchiveType::TarBz2 => extract_tar_bz2(archive, destination).await,
+        CondaArchiveType::Conda => extract_conda(archive, destination).await,
     }
 }

@@ -1,10 +1,12 @@
 //! Functionality for writing conda packages
-use std::fs::{self, File};
-use std::io::{self, Read, Seek, Write};
-use std::path::{Path, PathBuf};
+use std::{
+    fs::{self, File},
+    io::{self, Read, Seek, Write},
+    path::{Path, PathBuf},
+};
 
 use chrono::{Datelike, Timelike};
-use rattler_conda_types::package::PackageMetadata;
+use rattler_conda_types::{compression_level::CompressionLevel, package::PackageMetadata};
 use zip::DateTime;
 
 /// Trait for progress bars
@@ -65,8 +67,9 @@ impl Read for ProgressBarReader {
     }
 }
 
-/// a function that sorts paths into two iterators, one that starts with `info/` and one that does not
-/// both iterators are sorted alphabetically for reproducibility
+/// a function that sorts paths into two iterators, one that starts with `info/`
+/// and one that does not both iterators are sorted alphabetically for
+/// reproducibility
 fn sort_paths<'a>(paths: &'a [PathBuf], base_path: &'a Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let info = Path::new("info/");
     let (mut info_paths, mut other_paths): (Vec<_>, Vec<_>) = paths
@@ -81,60 +84,6 @@ fn sort_paths<'a>(paths: &'a [PathBuf], base_path: &'a Path) -> (Vec<PathBuf>, V
     (info_paths, other_paths)
 }
 
-/// Select the compression level to use for the package
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CompressionLevel {
-    /// Use the lowest compression level (zstd: 1, bzip2: 1)
-    Lowest,
-    /// Use the highest compression level (zstd: 22, bzip2: 9)
-    Highest,
-    /// Use the default compression level (zstd: 15, bzip2: 9)
-    #[default]
-    Default,
-    /// Use a numeric compression level (zstd: 1-22, bzip2: 1-9)
-    Numeric(i32),
-}
-
-impl CompressionLevel {
-    /// convert the compression level to a zstd compression level
-    pub fn to_zstd_level(self) -> Result<i32, std::io::Error> {
-        match self {
-            CompressionLevel::Lowest => Ok(-7),
-            CompressionLevel::Highest => Ok(22),
-            CompressionLevel::Default => Ok(15),
-            CompressionLevel::Numeric(n) => {
-                if (-7..=22).contains(&n) {
-                    Ok(n)
-                } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "zstd compression level must be between -7 and 22",
-                    ))
-                }
-            }
-        }
-    }
-
-    /// convert the compression level to a bzip2 compression level
-    pub fn to_bzip2_level(self) -> Result<bzip2::Compression, std::io::Error> {
-        match self {
-            CompressionLevel::Lowest => Ok(bzip2::Compression::new(1)),
-            CompressionLevel::Default | CompressionLevel::Highest => Ok(bzip2::Compression::new(9)),
-            CompressionLevel::Numeric(n) => {
-                if (1..=9).contains(&n) {
-                    // this conversion from i32 to u32 cannot panic because of the check above
-                    Ok(bzip2::Compression::new(n.try_into().unwrap()))
-                } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "bzip2 compression level must be between 1 and 9",
-                    ))
-                }
-            }
-        }
-    }
-}
-
 fn total_size(base_path: &Path, paths: &[PathBuf]) -> u64 {
     paths
         .iter()
@@ -143,27 +92,32 @@ fn total_size(base_path: &Path, paths: &[PathBuf]) -> u64 {
 }
 
 /// Write the contents of a list of paths to a tar.bz2 package
-/// The paths are sorted alphabetically, and paths beginning with `info/` come first.
+/// The paths are sorted alphabetically, and paths beginning with `info/` come
+/// first.
 ///
 /// # Arguments
 ///
 /// * `writer` - the writer to write the package to
-/// * `base_path` - the base path of the package. All paths in `paths` are relative to this path
+/// * `base_path` - the base path of the package. All paths in `paths` are
+///   relative to this path
 /// * `paths` - a list of paths to include in the package
-/// * `compression_level` - the compression level to use for the inner bzip2 encoded files
-/// * `timestamp` - optional a timestamp to use for all archive files (useful for reproducible builds)
+/// * `compression_level` - the compression level to use for the inner bzip2
+///   encoded files
+/// * `timestamp` - optional a timestamp to use for all archive files (useful
+///   for reproducible builds)
 ///
 /// # Errors
 ///
-/// This function will return an error if the writer returns an error, or if the paths are not
-/// relative to the base path.
+/// This function will return an error if the writer returns an error, or if the
+/// paths are not relative to the base path.
 ///
 /// # Examples
 ///
 /// ```no_run
 /// use std::path::PathBuf;
 /// use std::fs::File;
-/// use rattler_package_streaming::write::{write_tar_bz2_package, CompressionLevel};
+/// use rattler_package_streaming::write::{write_tar_bz2_package};
+/// use rattler_conda_types::compression_level::CompressionLevel;
 ///
 /// let paths = vec![PathBuf::from("info/recipe/meta.yaml"), PathBuf::from("info/recipe/conda_build_config.yaml")];
 /// let mut file = File::create("test.tar.bz2").unwrap();
@@ -183,7 +137,7 @@ pub fn write_tar_bz2_package<W: Write>(
 ) -> Result<(), std::io::Error> {
     let mut archive = tar::Builder::new(bzip2::write::BzEncoder::new(
         writer,
-        compression_level.to_bzip2_level()?,
+        bzip2::Compression::new(compression_level.to_bzip2_level()?),
     ));
     archive.follow_symlinks(false);
 
@@ -263,25 +217,29 @@ fn write_zst_archive<W: Write>(
 }
 
 /// Write a `.conda` package to a writer
-/// A `.conda` package is an outer uncompressed zip archive that contains a `metadata.json` file, a
-/// `pkg-archive.tar.zst` file, and a `info-archive.tar.zst` file.
-/// The inner zstd encoded files are sorted alphabetically. The `info-archive.tar.zst` file comes last in
-/// the outer zip archive.
+/// A `.conda` package is an outer uncompressed zip archive that contains a
+/// `metadata.json` file, a `pkg-archive.tar.zst` file, and a
+/// `info-archive.tar.zst` file. The inner zstd encoded files are sorted
+/// alphabetically. The `info-archive.tar.zst` file comes last in the outer zip
+/// archive.
 ///
 /// # Arguments
 ///
 /// * `writer` - the writer to write the package to
-/// * `base_path` - the base path of the package. All paths in `paths` are relative to this path
+/// * `base_path` - the base path of the package. All paths in `paths` are
+///   relative to this path
 /// * `paths` - a list of paths to include in the package
-/// * `compression_level` - the compression level to use for the inner zstd encoded files
-/// * `compression_num_threads` - the number of threads to use for zstd compression (defaults to
-///    the number of CPU cores if `None`)
-/// * `timestamp` - optional a timestamp to use for all archive files (useful for reproducible builds)
+/// * `compression_level` - the compression level to use for the inner zstd
+///   encoded files
+/// * `compression_num_threads` - the number of threads to use for zstd
+///   compression (defaults to the number of CPU cores if `None`)
+/// * `timestamp` - optional a timestamp to use for all archive files (useful
+///   for reproducible builds)
 ///
 /// # Errors
 ///
-/// This function will return an error if the writer returns an error, or if the paths are not
-/// relative to the base path.
+/// This function will return an error if the writer returns an error, or if the
+/// paths are not relative to the base path.
 #[allow(clippy::too_many_arguments)]
 pub fn write_conda_package<W: Write + Seek>(
     writer: W,

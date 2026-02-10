@@ -1,10 +1,245 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [4.2.3](https://github.com/conda/rattler/compare/rattler_solve-v4.2.2...rattler_solve-v4.2.3) - 2026-02-04
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [4.2.2](https://github.com/conda/rattler/compare/rattler_solve-v4.2.1...rattler_solve-v4.2.2) - 2026-01-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [4.2.1](https://github.com/baszalmstra/rattler/compare/rattler_solve-v4.2.0...rattler_solve-v4.2.1) - 2026-01-22
+
+### Fixed
+
+- changelog
+
+## [4.2.0](https://github.com/conda/rattler/compare/rattler_solve-v4.1.2...rattler_solve-v4.2.0) - 2026-01-22
+
+### Added
+
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/conda/rattler/pull/1988))
+
+### Other
+
+- add type for archive file name ([#1999](https://github.com/conda/rattler/pull/1999))
+- Run `cargo clippy --fix` (from nightly) ([#1992](https://github.com/conda/rattler/pull/1992))
+
+## [4.1.2](https://github.com/conda/rattler/compare/rattler_solve-v4.1.1...rattler_solve-v4.1.2) - 2025-12-18
+
+### Fixed
+
+- split on ';' when fetching dependencies in repodata ([#1919](https://github.com/conda/rattler/pull/1919))
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
+## [4.1.1](https://github.com/conda/rattler/compare/rattler_solve-v4.1.0...rattler_solve-v4.1.1) - 2025-12-08
+
+### Other
+
+- added resolvo #188 reproducer ([#1898](https://github.com/conda/rattler/pull/1898))
+
+## [4.1.0](https://github.com/conda/rattler/compare/rattler_solve-v4.0.1...rattler_solve-v4.1.0) - 2025-11-27
+
+### Added
+
+- *(solver)* add minimum package age filter for security ([#1890](https://github.com/conda/rattler/pull/1890))
+- add condition dependency and `extras` support for libsolv ([#1836](https://github.com/conda/rattler/pull/1836))
+
+## [4.0.1](https://github.com/conda/rattler/compare/rattler_solve-v4.0.0...rattler_solve-v4.0.1) - 2025-11-25
+
+### Fixed
+
+- *(rattler_solve)* handle unparsable dependencies gracefully in sorting ([#1884](https://github.com/conda/rattler/pull/1884))
+- *(solver)* conditionals on root requirements ([#1880](https://github.com/conda/rattler/pull/1880))
+
+## [4.0.0](https://github.com/conda/rattler/compare/rattler_solve-v3.1.2...rattler_solve-v4.0.0) - 2025-11-22
+
+### Other
+
+- make `extras` and `conditionals` runtime-configurable ([#1816](https://github.com/conda/rattler/pull/1816))
+
+## [3.1.2](https://github.com/conda/rattler/compare/rattler_solve-v3.1.1...rattler_solve-v3.1.2) - 2025-11-20
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.1.1](https://github.com/conda/rattler/compare/rattler_solve-v3.1.0...rattler_solve-v3.1.1) - 2025-11-19
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.1.0](https://github.com/conda/rattler/compare/rattler_solve-v3.0.9...rattler_solve-v3.1.0) - 2025-11-13
+
+### Added
+
+- Add glob support for package name in matchspec ([#1480](https://github.com/conda/rattler/pull/1480))
+- move repodata fetch logic to tools crate ([#1820](https://github.com/conda/rattler/pull/1820))
+- parse matchspec conditions and translate to resolvo ([#1545](https://github.com/conda/rattler/pull/1545))
+
+## [3.0.9](https://github.com/conda/rattler/compare/rattler_solve-v3.0.8...rattler_solve-v3.0.9) - 2025-10-28
+
+### Fixed
+
+- timestamp serialization as milliseconds ([#1776](https://github.com/conda/rattler/pull/1776))
+
+## [3.0.8](https://github.com/conda/rattler/compare/rattler_solve-v3.0.7...rattler_solve-v3.0.8) - 2025-10-18
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.0.7](https://github.com/conda/rattler/compare/rattler_solve-v3.0.6...rattler_solve-v3.0.7) - 2025-10-17
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types
+
+## [3.0.6](https://github.com/conda/rattler/compare/rattler_solve-v3.0.5...rattler_solve-v3.0.6) - 2025-10-14
+
+### Other
+
+- updated the following local packages: rattler_digest, rattler_conda_types
+
+## [3.0.5](https://github.com/conda/rattler/compare/rattler_solve-v3.0.4...rattler_solve-v3.0.5) - 2025-10-03
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.0.4](https://github.com/conda/rattler/compare/rattler_solve-v3.0.3...rattler_solve-v3.0.4) - 2025-09-30
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.0.3](https://github.com/conda/rattler/compare/rattler_solve-v3.0.2...rattler_solve-v3.0.3) - 2025-09-05
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.0.2](https://github.com/conda/rattler/compare/rattler_solve-v3.0.1...rattler_solve-v3.0.2) - 2025-09-02
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.0.1](https://github.com/conda/rattler/compare/rattler_solve-v3.0.0...rattler_solve-v3.0.1) - 2025-08-15
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [3.0.0](https://github.com/conda/rattler/compare/rattler_solve-v2.1.8...rattler_solve-v3.0.0) - 2025-08-12
+
+### Added
+
+- implement extras with conditional dependencies ([#1542](https://github.com/conda/rattler/pull/1542))
+
+### Other
+
+- `resolvo` bump ([#1576](https://github.com/conda/rattler/pull/1576))
+
+## [2.1.8](https://github.com/conda/rattler/compare/rattler_solve-v2.1.7...rattler_solve-v2.1.8) - 2025-07-23
+
+### Fixed
+
+- indexing `extra-depends` ([#1546](https://github.com/conda/rattler/pull/1546))
+
+## [2.1.7](https://github.com/conda/rattler/compare/rattler_solve-v2.1.6...rattler_solve-v2.1.7) - 2025-07-21
+
+### Other
+
+- bump rust 1.88.0 ([#1536](https://github.com/conda/rattler/pull/1536))
+
+## [2.1.6](https://github.com/conda/rattler/compare/rattler_solve-v2.1.5...rattler_solve-v2.1.6) - 2025-07-14
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.5](https://github.com/conda/rattler/compare/rattler_solve-v2.1.4...rattler_solve-v2.1.5) - 2025-07-09
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.4](https://github.com/conda/rattler/compare/rattler_solve-v2.1.3...rattler_solve-v2.1.4) - 2025-07-01
+
+### Fixed
+
+- *(ci)* run pre-commit-run for all files ([#1481](https://github.com/conda/rattler/pull/1481))
+
+## [2.1.3](https://github.com/conda/rattler/compare/rattler_solve-v2.1.2...rattler_solve-v2.1.3) - 2025-06-26
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [2.1.2](https://github.com/conda/rattler/compare/rattler_solve-v2.1.1...rattler_solve-v2.1.2) - 2025-06-25
+
+### Other
+
+- *(ci)* Update Rust crate criterion to 0.6 ([#1438](https://github.com/conda/rattler/pull/1438))
+
+## [2.1.1](https://github.com/conda/rattler/compare/rattler_solve-v2.1.0...rattler_solve-v2.1.1) - 2025-06-23
+
+### Other
+
+- update npm name ([#1368](https://github.com/conda/rattler/pull/1368))
+- update readme ([#1364](https://github.com/conda/rattler/pull/1364))
+
+## [2.1.0](https://github.com/conda/rattler/compare/rattler_solve-v2.0.0...rattler_solve-v2.1.0) - 2025-05-23
+
+### Added
+
+- control over selection of .conda and .tar.bz2 ([#1344](https://github.com/conda/rattler/pull/1344))
+
+## [2.0.0](https://github.com/conda/rattler/compare/rattler_solve-v1.4.6...rattler_solve-v2.0.0) - 2025-05-16
+
+### Added
+
+- allows enabling of resolvo diagnostics ([#1296](https://github.com/conda/rattler/pull/1296))
+
+## [1.4.6](https://github.com/conda/rattler/compare/rattler_solve-v1.4.5...rattler_solve-v1.4.6) - 2025-05-03
+
+### Other
+
+- lock workspace member dependencies ([#1279](https://github.com/conda/rattler/pull/1279))
+
+## [1.4.5](https://github.com/conda/rattler/compare/rattler_solve-v1.4.4...rattler_solve-v1.4.5) - 2025-04-17
+
+### Other
+
+- bump resolvo 0.9.0 ([#1259](https://github.com/conda/rattler/pull/1259))
+
+## [1.4.4](https://github.com/conda/rattler/compare/rattler_solve-v1.4.3...rattler_solve-v1.4.4) - 2025-04-10
+
+### Other
+
+- update Cargo.toml dependencies
+
+## [1.4.3](https://github.com/conda/rattler/compare/rattler_solve-v1.4.2...rattler_solve-v1.4.3) - 2025-04-04
+
+### Other
+
+- update Cargo.toml dependencies
 
 ## [1.4.2](https://github.com/conda/rattler/compare/rattler_solve-v1.4.1...rattler_solve-v1.4.2) - 2025-03-14
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from rattler.networking.middleware import (
+    AddHeadersMiddleware,
     AuthenticationMiddleware,
     GCSMiddleware,
     MirrorMiddleware,
@@ -18,11 +19,20 @@ class Client:
     def __init__(
         self,
         middlewares: (
-            list[AuthenticationMiddleware | MirrorMiddleware | OciMiddleware | GCSMiddleware | S3Middleware] | None
+            list[
+                AddHeadersMiddleware
+                | AuthenticationMiddleware
+                | MirrorMiddleware
+                | OciMiddleware
+                | GCSMiddleware
+                | S3Middleware
+            ]
+            | None
         ) = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self._client = PyClientWithMiddleware(
-            [middleware._middleware for middleware in middlewares] if middlewares else None
+            [middleware._middleware for middleware in middlewares] if middlewares else None, headers
         )
 
     @classmethod

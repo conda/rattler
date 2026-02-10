@@ -2,6 +2,6 @@ version: 6
 environments:
   default:
     channels:
-    - url: https://prefix.dev/conda-forge/
+      - url: https://prefix.dev/conda-forge/
     packages: {}
 packages: []

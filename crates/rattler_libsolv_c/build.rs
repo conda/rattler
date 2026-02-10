@@ -12,7 +12,9 @@ fn build_libsolv() -> Result<PathBuf> {
         ));
     }
     let out = cmake::Config::new(p.parent().unwrap())
+        .define("DENABLE_EXAMPLES", "OFF")
         .define("ENABLE_CONDA", "ON")
+        .define("ENABLE_COMPLEX_DEPS", "ON")
         .define("ENABLE_STATIC", "ON")
         .define("DISABLE_SHARED", "ON")
         .define("MULTI_SEMANTICS", "ON")

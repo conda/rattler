@@ -7,15 +7,15 @@ use std::{
 
 use fs_err as fs;
 use fs_err::File;
-use plist::Value;
+use plist::{Dictionary, Value};
 use rattler_conda_types::{menuinst::MacOsTracker, Platform};
 use rattler_shell::{
-    activation::{ActivationError, ActivationVariables, Activator},
+    activation::{ActivationError, ActivationVariables, Activator, PathModificationBehavior},
     shell,
 };
 use sha2::{Digest as _, Sha256};
 
-use crate::utils::slugify;
+use crate::{render::replace_placeholders, utils::slugify};
 use crate::{
     render::{BaseMenuItemPlaceholders, MenuItemPlaceholders, PlaceholderString},
     schema::{
@@ -261,6 +261,46 @@ impl CFBundleTypeRole {
     }
 }
 
+fn serde_value_to_plist(
+    value: &serde_json::Value,
+    placeholders: &MenuItemPlaceholders,
+) -> Option<Value> {
+    match value {
+        serde_json::Value::Null => None,
+        serde_json::Value::Bool(bool) => Some(bool.into()),
+        serde_json::Value::Number(number) => {
+            if number.is_i64() {
+                Some(number.as_i64().unwrap().into())
+            } else if number.is_u64() {
+                Some(number.as_u64().unwrap().into())
+            } else {
+                Some(number.as_f64().unwrap().into())
+            }
+        }
+        serde_json::Value::String(string) => {
+            Some(replace_placeholders(string.clone(), placeholders.as_ref()).into())
+        }
+        serde_json::Value::Array(values) => Some(
+            values
+                .iter()
+                // We skip null values
+                .filter_map(|value| serde_value_to_plist(value, placeholders))
+                .collect::<Vec<_>>()
+                .into(),
+        ),
+        serde_json::Value::Object(map) => {
+            let mut dict = Dictionary::new();
+            for (key, value) in map {
+                // We skip null values
+                if let Some(value) = serde_value_to_plist(value, placeholders) {
+                    dict.insert(key.clone(), value);
+                }
+            }
+            Some(dict.into())
+        }
+    }
+}
+
 /// Call `lsregister` with args
 fn lsregister(args: &[&str], directory: &Path) -> Result<(), MenuInstError> {
     let exe = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
@@ -444,9 +484,14 @@ impl MacOSMenu {
         // This one is _not_ part of the schema, so we just set it
         pl.insert("CFBundleExecutable".into(), Value::String(slugname.clone()));
 
+        let cf_bundle_identifier = resolve(
+            &self.item.cf_bundle_identifier,
+            &self.placeholders,
+            &format!("com.{slugname}"),
+        );
         pl.insert(
             "CFBundleIdentifier".into(),
-            Value::String(format!("com.{slugname}")),
+            Value::String(cf_bundle_identifier.clone()),
         );
         pl.insert("CFBundlePackageType".into(), Value::String("APPL".into()));
 
@@ -508,7 +553,7 @@ impl MacOSMenu {
             pl.insert("LSBackgroundOnly".into(), Value::Boolean(true));
             pl.insert(
                 "CFBundleIdentifier".into(),
-                Value::String(format!("com.{slugname}-appkit-launcher")),
+                Value::String(format!("{cf_bundle_identifier}-appkit-launcher")),
             );
         }
 
@@ -588,6 +633,18 @@ impl MacOSMenu {
             pl.insert("CFBundleURLTypes".into(), Value::Array(url_array));
         }
 
+        if let Some(extra) = &self.item.info_plist_extra {
+            for (key, value) in extra {
+                if pl.contains_key(key) {
+                    return Err(MenuInstError::PlistDuplicateError(key.clone()));
+                }
+                // If the json value is null, we skip inserting the key
+                if let Some(value) = serde_value_to_plist(value, &self.placeholders) {
+                    pl.insert(key.clone(), value);
+                }
+            }
+        }
+
         let plist_target = self.directories.location.join("Contents/Info.plist");
         tracing::info!("Writing plist to {:?}", plist_target);
         Ok(plist::to_file_xml(plist_target, &pl)?)
@@ -656,7 +713,11 @@ impl MacOSMenu {
         if self.command.activate.unwrap_or(false) {
             // create a bash activation script and emit it into the script
             let activator = Activator::from_path(&self.prefix, shell::Bash, Platform::current())?;
-            let activation_env = activator.run_activation(ActivationVariables::default(), None)?;
+            let activation_variables = ActivationVariables {
+                path_modification_behavior: PathModificationBehavior::Prepend,
+                ..Default::default()
+            };
+            let activation_env = activator.run_activation(activation_variables, None)?;
 
             for (k, v) in activation_env {
                 lines.push(format!(r#"export {k}="{v}""#));
@@ -851,8 +912,8 @@ mod tests {
         pub fn new_test() -> Self {
             // Create a temporary directory for testing
             Self {
-                location: tempfile::tempdir().unwrap().into_path(),
-                nested_location: tempfile::tempdir().unwrap().into_path(),
+                location: tempfile::tempdir().unwrap().keep(),
+                nested_location: tempfile::tempdir().unwrap().keep(),
             }
         }
     }

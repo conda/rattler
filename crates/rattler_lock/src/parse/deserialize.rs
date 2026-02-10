@@ -5,7 +5,6 @@ use std::{
     sync::Arc,
 };
 
-use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use itertools::Either;
 use pep508_rs::ExtraName;
@@ -18,7 +17,8 @@ use crate::{
     file_format_version::FileFormatVersion,
     parse::{models, models::v6, V5, V6},
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
+    ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
+    UrlOrPath,
 };
 
 #[serde_as]
@@ -43,6 +43,8 @@ struct DeserializableEnvironment {
     channels: Vec<Channel>,
     #[serde(flatten)]
     indexes: Option<PypiIndexes>,
+    #[serde(default)]
+    options: SolveOptions,
     packages: BTreeMap<Platform, Vec<DeserializablePackageSelector>>,
 }
 
@@ -173,7 +175,7 @@ fn parse_from_lock<P>(
     }
 
     // Determine the indices of the packages by url
-    let mut conda_url_lookup: FxHashMap<UrlOrPath, Vec<_>> = FxHashMap::default();
+    let mut conda_url_lookup: ahash::HashMap<UrlOrPath, Vec<_>> = ahash::HashMap::default();
     for (idx, conda_package) in conda_packages.iter().enumerate() {
         conda_url_lookup
             .entry(conda_package.location().clone())
@@ -185,7 +187,7 @@ fn parse_from_lock<P>(
         .iter()
         .enumerate()
         .map(|(idx, p)| (&p.location, idx))
-        .collect::<FxHashMap<_, _>>();
+        .collect::<ahash::HashMap<_, _>>();
     let mut pypi_runtime_lookup = IndexSet::new();
 
     let environments = raw
@@ -197,6 +199,7 @@ fn parse_from_lock<P>(
                 EnvironmentData {
                     channels: env.channels,
                     indexes: env.indexes,
+                    options: env.options,
                     packages: env
                         .packages
                         .into_iter()

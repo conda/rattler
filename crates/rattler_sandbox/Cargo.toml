@@ -1,13 +1,19 @@
 [package]
 name = "rattler_sandbox"
-version = "0.1.5"
+version = "0.2.11"
 description = "A crate to run executables in a sandbox"
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
-license.workspace = true
+# Note: because `birdcage` is GPL-3.0-or-later, this crate must also be GPL-3.0-or-later
+# We might be able to change this in the future if we switch to a different sandboxing solution.
+license = "GPL-3.0-or-later"
 edition.workspace = true
 readme.workspace = true
+
+[[bin]]
+name = "rattler-sandbox"
+path = "src/main.rs"
 
 [dependencies]
 clap = { workspace = true, features = ["derive"] }

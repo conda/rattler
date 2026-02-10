@@ -23,7 +23,7 @@ pub enum NetRcStorageError {
     IOError(#[from] std::io::Error),
 
     /// An error occurred when parsing the netrc file
-    #[error("could not parse .netc file: {0}")]
+    #[error("could not parse .netrc file: {0}")]
     ParseError(netrc_rs::Error),
 
     /// Something is not supported
@@ -32,7 +32,7 @@ pub enum NetRcStorageError {
 }
 
 impl NetRcStorage {
-    /// Create a new fallback storage by retrieving the netrc file from the user environment.  
+    /// Create a new fallback storage by retrieving the netrc file from the user environment.
     /// This uses the same environment variable as curl and will read the file from $NETRC
     /// falling back to `~/.netrc`.
     ///

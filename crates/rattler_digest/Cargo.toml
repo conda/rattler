@@ -1,6 +1,6 @@
 [package]
 name = "rattler_digest"
-version = "1.0.8"
+version = "1.2.2"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "An simple crate used by rattler crates to compute different hashes from different sources"
@@ -16,17 +16,24 @@ digest = { workspace = true }
 hex = { workspace = true }
 md-5 = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
+serde_bytes = { workspace = true }
 serde_with = { workspace = true }
 sha2 = { workspace = true }
 tokio = { workspace = true, features = ["io-util"], optional = true }
+url = { workspace = true }
 generic-array = { workspace = true, optional = true }
 
 [features]
 tokio = ["dep:tokio"]
 serde = ["dep:serde", "generic-array/serde"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dev-dependencies]
 rstest = { workspace = true }
 tempfile = { workspace = true }
 md-5 = { workspace = true }
 serde_json = { workspace = true }
+rmp = { workspace = true }
+rmp-serde = { workspace = true }

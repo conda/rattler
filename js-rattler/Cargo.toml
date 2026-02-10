@@ -41,12 +41,15 @@ rattler_solve = { path = "../crates/rattler_solve", default-features = false, fe
 
 url = "2.5.4"
 
-# By adding the `libbz2-rs-sys` feature we ensure that bzip2 is using the rust
-# implementation. This is important because the C implementation is not
-# compatible with wasm.
-bzip2 = { version = "0.5.1", features = ["libbz2-rs-sys"] }
-
 chrono = { version = "0.4.40", features = ["wasmbind"] }
+reqwest = { version = "0.12.24", default-features = false }
+reqwest-middleware = { version = "0.4.2", default-features = false }
+
+# We have transient dependency on getrandom 0.2.16 which needs to have the `js` feature
+# enabled.
+[dependencies.getrandom]
+version = "*"
+features = ["js"]
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.45"

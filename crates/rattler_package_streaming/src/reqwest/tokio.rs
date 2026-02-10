@@ -5,7 +5,7 @@ use std::{path::Path, sync::Arc};
 
 use fs_err::tokio as tokio_fs;
 use futures_util::stream::TryStreamExt;
-use rattler_conda_types::package::ArchiveType;
+use rattler_conda_types::package::CondaArchiveType;
 use rattler_digest::Sha256Hash;
 use reqwest::Response;
 use tokio::io::BufReader;
@@ -80,7 +80,7 @@ async fn get_reader(
                 } else if err.is_decode() {
                     std::io::Error::new(std::io::ErrorKind::InvalidData, err)
                 } else {
-                    std::io::Error::new(std::io::ErrorKind::Other, err)
+                    std::io::Error::other(err)
                 }
             },
         ))))
@@ -222,13 +222,13 @@ pub async fn extract(
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
-    match ArchiveType::try_from(Path::new(url.path()))
+    match CondaArchiveType::try_from(Path::new(url.path()))
         .ok_or(ExtractError::UnsupportedArchiveType)?
     {
-        ArchiveType::TarBz2 => {
+        CondaArchiveType::TarBz2 => {
             extract_tar_bz2(client, url, destination, expected_sha256, reporter).await
         }
-        ArchiveType::Conda => {
+        CondaArchiveType::Conda => {
             extract_conda(client, url, destination, expected_sha256, reporter).await
         }
     }

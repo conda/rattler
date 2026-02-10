@@ -1,5 +1,6 @@
-use crate::PackageRecord;
-use fxhash::{FxHashMap, FxHashSet};
+use std::borrow::Cow;
+
+use crate::{PackageName, PackageRecord};
 
 /// Sorts the packages topologically
 ///
@@ -13,7 +14,7 @@ use fxhash::{FxHashMap, FxHashSet};
 ///
 /// Note that this function only works for packages with unique names.
 pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> Vec<T> {
-    let mut all_packages: FxHashMap<String, T> = packages
+    let mut all_packages: ahash::HashMap<String, T> = packages
         .iter()
         .cloned()
         .map(|p| (p.as_ref().name.as_normalized().to_owned(), p))
@@ -27,11 +28,16 @@ pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> 
 }
 
 /// Find cycles with DFS
-fn find_all_cycles<T: AsRef<PackageRecord>>(packages: &FxHashMap<String, T>) -> Vec<Vec<String>> {
+fn find_all_cycles<T: AsRef<PackageRecord>>(
+    packages: &ahash::HashMap<String, T>,
+) -> Vec<Vec<String>> {
     let mut all_cycles = Vec::new();
-    let mut visited = FxHashSet::default();
+    let mut visited = ahash::HashSet::default();
 
-    for package in packages.keys() {
+    let mut package_names: Vec<_> = packages.keys().collect();
+    package_names.sort();
+
+    for package in package_names {
         if !visited.contains(package) {
             let mut path = Vec::new();
             dfs(package, packages, &mut visited, &mut path, &mut all_cycles);
@@ -43,8 +49,8 @@ fn find_all_cycles<T: AsRef<PackageRecord>>(packages: &FxHashMap<String, T>) -> 
 
 fn dfs<T: AsRef<PackageRecord>>(
     node: &str,
-    packages: &FxHashMap<String, T>,
-    visited: &mut FxHashSet<String>,
+    packages: &ahash::HashMap<String, T>,
+    visited: &mut ahash::HashSet<String>,
     path: &mut Vec<String>,
     all_cycles: &mut Vec<Vec<String>>,
 ) {
@@ -64,8 +70,8 @@ fn dfs<T: AsRef<PackageRecord>>(
 
     if let Some(package) = packages.get(node) {
         for dependency in package.as_ref().depends.iter() {
-            let dependency = package_name_from_match_spec(dependency);
-            dfs(dependency, packages, visited, path, all_cycles);
+            let dependency = PackageName::normalized_name_from_matchspec_str(dependency);
+            dfs(&dependency, packages, visited, path, all_cycles);
         }
     }
 
@@ -77,24 +83,24 @@ fn dfs<T: AsRef<PackageRecord>>(
 /// A -> B will be removed)
 fn get_graph_roots<T: AsRef<PackageRecord>>(
     records: &[T],
-    cycle_breaks: &FxHashSet<(String, String)>,
+    cycle_breaks: &ahash::HashSet<(String, String)>,
 ) -> Vec<String> {
-    let all_packages: FxHashSet<_> = records
+    let all_packages: ahash::HashSet<Cow<'_, str>> = records
         .iter()
-        .map(|r| r.as_ref().name.as_normalized())
+        .map(|r| Cow::Borrowed(r.as_ref().name.as_normalized()))
         .collect();
 
-    let dependencies: FxHashSet<_> = records
+    let dependencies: ahash::HashSet<Cow<'_, str>> = records
         .iter()
         .flat_map(|r| {
             r.as_ref()
                 .depends
                 .iter()
-                .map(|d| package_name_from_match_spec(d))
+                .map(|d| PackageName::normalized_name_from_matchspec_str(d))
                 .filter(|d| {
                     // filter out circular dependencies
                     !cycle_breaks
-                        .contains(&(r.as_ref().name.as_normalized().to_owned(), (*d).to_string()))
+                        .contains(&(r.as_ref().name.as_normalized().to_owned(), d.to_string()))
                 })
         })
         .collect();
@@ -116,10 +122,10 @@ enum Action {
 /// Edges from arch to noarch packages are removed to break the cycles.
 fn break_cycles<T: AsRef<PackageRecord>>(
     cycles: &[Vec<String>],
-    packages: &FxHashMap<String, T>,
-) -> FxHashSet<(String, String)> {
+    packages: &ahash::HashMap<String, T>,
+) -> ahash::HashSet<(String, String)> {
     // we record the edges that we want to remove
-    let mut cycle_breaks = FxHashSet::default();
+    let mut cycle_breaks: ahash::HashSet<(String, String)> = ahash::HashSet::default();
 
     for cycle in cycles {
         for i in 0..cycle.len() {
@@ -152,8 +158,8 @@ fn break_cycles<T: AsRef<PackageRecord>>(
 /// roots
 fn get_topological_order<T: AsRef<PackageRecord>>(
     mut roots: Vec<String>,
-    packages: &mut FxHashMap<String, T>,
-    cycle_breaks: &FxHashSet<(String, String)>,
+    packages: &mut ahash::HashMap<String, T>,
+    cycle_breaks: &ahash::HashSet<(String, String)>,
 ) -> Vec<T> {
     // Sorting makes this step deterministic (i.e. the same output is returned, regardless of the
     // original order of the input)
@@ -161,44 +167,65 @@ fn get_topological_order<T: AsRef<PackageRecord>>(
 
     // Store the name of each package in `order` according to the graph's topological sort
     let mut order = Vec::new();
-    let mut visited_packages = FxHashSet::default();
+    let mut visited_packages: ahash::HashSet<String> = ahash::HashSet::default();
     let mut stack: Vec<_> = roots.into_iter().map(Action::ResolveAndInstall).collect();
-    while let Some(action) = stack.pop() {
-        match action {
-            Action::Install(package_name) => {
-                order.push(package_name);
-            }
-            Action::ResolveAndInstall(package_name) => {
-                let already_visited = !visited_packages.insert(package_name.clone());
-                if already_visited {
-                    continue;
-                }
 
-                let mut deps = match &packages.get(package_name.as_str()) {
-                    Some(p) => p
-                        .as_ref()
-                        .depends
-                        .iter()
-                        .map(|d| package_name_from_match_spec(d).to_string())
-                        .collect::<Vec<_>>(),
-                    None => {
-                        // This is a virtual package, so no real package was found for it
+    loop {
+        while let Some(action) = stack.pop() {
+            match action {
+                Action::Install(package_name) => {
+                    order.push(package_name);
+                }
+                Action::ResolveAndInstall(package_name) => {
+                    let already_visited = !visited_packages.insert(package_name.clone());
+                    if already_visited {
                         continue;
                     }
-                };
 
-                // Remove the edges that form cycles
-                deps.retain(|dep| !cycle_breaks.contains(&(package_name.clone(), dep.clone())));
+                    let mut deps = match &packages.get(package_name.as_str()) {
+                        Some(p) => p
+                            .as_ref()
+                            .depends
+                            .iter()
+                            .map(|d| PackageName::normalized_name_from_matchspec_str(d).to_string())
+                            .collect::<Vec<_>>(),
+                        None => {
+                            // This is a virtual package, so no real package was found for it
+                            continue;
+                        }
+                    };
 
-                // Sorting makes this step deterministic (i.e. the same output is returned, regardless of the
-                // original order of the input)
-                deps.sort();
+                    // Remove the edges that form cycles
+                    deps.retain(|dep| !cycle_breaks.contains(&(package_name.clone(), dep.clone())));
 
-                // Install dependencies, then ourselves (the order is reversed because of the stack)
-                stack.push(Action::Install(package_name));
-                stack.extend(deps.into_iter().map(Action::ResolveAndInstall));
+                    // Sorting makes this step deterministic (i.e. the same output is returned, regardless of the
+                    // original order of the input)
+                    deps.sort();
+
+                    // Install dependencies, then ourselves (the order is reversed because of the stack)
+                    stack.push(Action::Install(package_name));
+                    stack.extend(deps.into_iter().map(Action::ResolveAndInstall));
+                }
             }
         }
+
+        // Check for any unvisited packages (disconnected components).
+        // This can happen when a strongly connected component (cycle) has no incoming edges
+        // from outside the component. After breaking cycle edges, no node in the component
+        // becomes a root, so we need to explicitly add unvisited packages as new roots.
+        let mut unvisited: Vec<_> = packages
+            .keys()
+            .filter(|k| !visited_packages.contains(*k))
+            .cloned()
+            .collect();
+
+        if unvisited.is_empty() {
+            break;
+        }
+
+        // Sort for determinism and add as new roots
+        unvisited.sort();
+        stack.extend(unvisited.into_iter().map(Action::ResolveAndInstall));
     }
 
     // Apply the order we just obtained
@@ -209,12 +236,6 @@ fn get_topological_order<T: AsRef<PackageRecord>>(
     }
 
     output
-}
-
-/// Helper function to obtain the package name from a match spec
-fn package_name_from_match_spec(d: &str) -> &str {
-    // Unwrap is safe because split always returns at least one value
-    d.split([' ', '=']).next().unwrap()
 }
 
 #[cfg(test)]
@@ -228,11 +249,11 @@ mod tests {
         sorted_packages: &[RepoDataRecord],
         original_packages: &[RepoDataRecord],
     ) {
-        let all_sorted_packages: FxHashSet<_> = sorted_packages
+        let all_sorted_packages: ahash::HashSet<_> = sorted_packages
             .iter()
             .map(|p| p.package_record.name.as_normalized())
             .collect();
-        let all_original_packages: FxHashSet<_> = original_packages
+        let all_original_packages: ahash::HashSet<_> = original_packages
             .iter()
             .map(|p| p.package_record.name.as_normalized())
             .collect();
@@ -262,9 +283,9 @@ mod tests {
     /// package before its dependencies are met (ignoring circular dependencies)
     fn simulate_install(
         sorted_packages: &[RepoDataRecord],
-        circular_dependencies: &FxHashSet<(&str, &str)>,
+        circular_dependencies: &ahash::HashSet<(&str, &str)>,
     ) {
-        let packages_by_name: FxHashMap<_, _> = sorted_packages
+        let packages_by_name: ahash::HashMap<_, _> = sorted_packages
             .iter()
             .map(|p| {
                 (
@@ -273,7 +294,7 @@ mod tests {
                 )
             })
             .collect();
-        let mut installed = FxHashSet::default();
+        let mut installed: ahash::HashSet<&str> = ahash::HashSet::default();
 
         for (i, p) in sorted_packages.iter().enumerate() {
             let name = p.package_record.name.as_normalized();
@@ -281,13 +302,13 @@ mod tests {
 
             // All the package's dependencies must have already been installed
             for dep in deps {
-                let dep_name = package_name_from_match_spec(dep);
+                let dep_name = PackageName::normalized_name_from_matchspec_str(dep);
 
-                if circular_dependencies.contains(&(name, dep_name)) {
+                if circular_dependencies.contains(&(name, &*dep_name)) {
                     // Ignore circular dependencies
                 } else {
                     assert!(
-                        installed.contains(dep_name),
+                        installed.contains(&*dep_name),
                         "attempting to install {name} (package {i} of {}) but dependency {dep_name} is not yet installed",
                         sorted_packages.len()
                     );
@@ -300,16 +321,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case("python >=3.0", "python")]
-    #[case("python", "python")]
-    #[case("python=*=*", "python")]
-    #[case("", "")]
-    fn test_package_name_from_match_spec(#[case] match_spec: &str, #[case] expected_name: &str) {
-        let name = package_name_from_match_spec(match_spec);
-        assert_eq!(name, expected_name);
-    }
-
-    #[rstest]
     #[case(get_resolved_packages_for_python(), &["python"])]
     #[case(get_resolved_packages_for_python_pip(), &["pip"])]
     #[case(get_resolved_packages_for_numpy(), &["numpy"])]
@@ -318,7 +329,7 @@ mod tests {
         #[case] packages: Vec<RepoDataRecord>,
         #[case] expected_roots: &[&str],
     ) {
-        let mut roots = get_graph_roots(&packages, &FxHashSet::default());
+        let mut roots = get_graph_roots(&packages, &ahash::HashSet::default());
         roots.sort();
         assert_eq!(roots.as_slice(), expected_roots);
     }
@@ -1880,5 +1891,116 @@ mod tests {
         let pip: Vec<RepoDataRecord> = serde_json::from_str(pip).unwrap();
         python.extend(pip);
         python
+    }
+
+    /// Test case for disconnected cycle bug
+    /// See: <https://github.com/prefix-dev/rattler-build/issues/1967>
+    ///
+    /// The bug occurs when:
+    /// 1. There's a root package that doesn't connect to a cycle
+    /// 2. The cycle is a strongly connected component with no external incoming edges
+    /// 3. After breaking one cycle edge, no node in the cycle becomes a root
+    ///    because they all still have incoming edges from within the cycle
+    fn get_packages_with_disconnected_cycle() -> Vec<RepoDataRecord> {
+        let repodata_json = r#"[
+            {
+              "name": "root-pkg",
+              "version": "1.0",
+              "build": "0",
+              "build_number": 0,
+              "subdir": "linux-64",
+              "depends": ["isolated-dep"],
+              "md5": "d7c89558ba9fa0495403155b64376d81",
+              "sha256": "fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726",
+              "size": 100,
+              "fn": "root-pkg-1.0-0.tar.bz2",
+              "url": "https://example.com/root-pkg-1.0-0.tar.bz2",
+              "channel": "https://example.com/"
+            },
+            {
+              "name": "isolated-dep",
+              "version": "1.0",
+              "build": "0",
+              "build_number": 0,
+              "subdir": "linux-64",
+              "depends": [],
+              "md5": "d7c89558ba9fa0495403155b64376d81",
+              "sha256": "fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726",
+              "size": 100,
+              "fn": "isolated-dep-1.0-0.tar.bz2",
+              "url": "https://example.com/isolated-dep-1.0-0.tar.bz2",
+              "channel": "https://example.com/"
+            },
+            {
+              "name": "cycle-a",
+              "version": "1.0",
+              "build": "0",
+              "build_number": 0,
+              "subdir": "linux-64",
+              "depends": ["cycle-b"],
+              "md5": "d7c89558ba9fa0495403155b64376d81",
+              "sha256": "fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726",
+              "size": 100,
+              "fn": "cycle-a-1.0-0.tar.bz2",
+              "url": "https://example.com/cycle-a-1.0-0.tar.bz2",
+              "channel": "https://example.com/"
+            },
+            {
+              "name": "cycle-b",
+              "version": "1.0",
+              "build": "0",
+              "build_number": 0,
+              "subdir": "linux-64",
+              "depends": ["cycle-c"],
+              "md5": "d7c89558ba9fa0495403155b64376d81",
+              "sha256": "fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726",
+              "size": 100,
+              "fn": "cycle-b-1.0-0.tar.bz2",
+              "url": "https://example.com/cycle-b-1.0-0.tar.bz2",
+              "channel": "https://example.com/"
+            },
+            {
+              "name": "cycle-c",
+              "version": "1.0",
+              "build": "0",
+              "build_number": 0,
+              "subdir": "linux-64",
+              "depends": ["cycle-a"],
+              "md5": "d7c89558ba9fa0495403155b64376d81",
+              "sha256": "fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726",
+              "size": 100,
+              "fn": "cycle-c-1.0-0.tar.bz2",
+              "url": "https://example.com/cycle-c-1.0-0.tar.bz2",
+              "channel": "https://example.com/"
+            }
+          ]"#;
+
+        serde_json::from_str(repodata_json).unwrap()
+    }
+
+    #[test]
+    fn test_topological_sort_disconnected_cycle() {
+        // This test reproduces the bug where a disconnected cycle causes packages to be lost
+        // during topological sort.
+        //
+        // Structure:
+        // - root-pkg -> isolated-dep (connected component 1)
+        // - cycle-a -> cycle-b -> cycle-c -> cycle-a (connected component 2, a cycle)
+        //
+        // The cycle component has no incoming edges from outside, so after breaking
+        // one cycle edge, no node becomes a root and the entire cycle is lost.
+        let packages = get_packages_with_disconnected_cycle();
+        let sorted_packages = sort_topologically(packages.clone());
+
+        // The bug causes only 2 packages to be returned instead of 5
+        sanity_check_topological_sort(&sorted_packages, &packages);
+
+        // All 5 packages should be present
+        assert_eq!(
+            sorted_packages.len(),
+            5,
+            "Expected 5 packages, got {}. The disconnected cycle was lost!",
+            sorted_packages.len()
+        );
     }
 }
