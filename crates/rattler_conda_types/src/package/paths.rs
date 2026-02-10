@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PathsJson {
     /// If the file contains the executable field implemented
-    #[serde(default, skip_serializing_if="Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub has_executable: Option<bool>,
 
     /// All entries included in the package.
@@ -366,7 +366,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_deserialize_paths_json_excecutable() {
+    pub fn test_deserialize_paths_json_executable() {
         let package_dir = tempfile::tempdir().unwrap();
         let info_dir = package_dir.path().join("info");
         std::fs::create_dir_all(&info_dir).unwrap();
@@ -425,7 +425,7 @@ mod test {
         assert_eq!(paths_json.paths.len(), 4);
 
         assert_eq!(paths_json.has_executable, Some(true));
-        
+
         // First entry: binary with offsets and executable
         assert_eq!(
             paths_json.paths[0].relative_path,

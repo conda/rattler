@@ -140,7 +140,7 @@ pub struct LinkedFile {
 ///
 /// Note that usually the `target_prefix` is equal to `target_dir` but it might differ. See
 /// [`crate::install::InstallOptions::target_prefix`] for more information.
-#[allow(clippy::too_many_arguments)] // TODO: Fix this properly
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)] // TODO: Fix this properly
 pub fn link_file(
     path_json_entry: &PathsEntry,
     has_executable: bool,
@@ -248,7 +248,7 @@ pub fn link_file(
         drop(file);
 
         let metadata = fs::symlink_metadata(&source_path)
-                .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+            .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
 
         let executable = if has_executable {
             path_json_entry.executable.unwrap_or(false)
