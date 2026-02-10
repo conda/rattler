@@ -259,7 +259,7 @@ pub fn link_file(
         drop(file);
 
         let metadata = fs::symlink_metadata(&source_path)
-                .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+            .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
 
         let executable = if has_executable {
             path_json_entry.executable.unwrap_or(false)
