@@ -1,4 +1,5 @@
 from __future__ import annotations
+import warnings
 from dataclasses import dataclass
 from typing import Callable, List, Literal, Optional, Union, TYPE_CHECKING
 
@@ -40,6 +41,18 @@ class FetchRepoDataOptions:
 
     bz2_enabled: bool = True
     """Whether the BZ2 compression is enabled or not."""
+
+    jlap_enabled: Optional[bool] = None
+    """Deprecated: JLAP support has been removed. This field is ignored."""
+
+    def __post_init__(self) -> None:
+        if self.jlap_enabled is not None:
+            warnings.warn(
+                "The 'jlap_enabled' option is deprecated and has no effect. "
+                "JLAP support has been removed.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
     def _into_py(self) -> PyFetchRepoDataOptions:
         """
