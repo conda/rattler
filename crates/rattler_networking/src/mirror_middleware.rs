@@ -19,8 +19,6 @@ pub struct Mirror {
     pub no_zstd: bool,
     /// Disable bz2 support (for repodata.json.bz2 files)
     pub no_bz2: bool,
-    /// Disable jlap support (for repodata.jlap files)
-    pub no_jlap: bool,
     /// Allowed number of failures before the mirror is considered dead
     pub max_failures: Option<usize>,
 }
@@ -135,12 +133,6 @@ impl Middleware for MirrorMiddleware {
                         "Mirror does not support bz2",
                     ));
                 }
-                if url_rest.ends_with(".jlap") && mirror.no_jlap {
-                    return Ok(create_404_response(
-                        &selected_url,
-                        "Mirror does not support jlap",
-                    ));
-                }
 
                 *req.url_mut() = selected_url;
                 let res = next.run(req, extensions).await;
@@ -249,7 +241,6 @@ mod test {
             url,
             no_zstd: false,
             no_bz2: false,
-            no_jlap: false,
             max_failures: Some(3),
         }
     }

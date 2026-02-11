@@ -37,45 +37,10 @@ pub trait DownloadReporter: Send + Sync {
     fn on_download_complete(&self, _url: &Url, _index: usize) {}
 }
 
-/// A trait that enables being notified of JLAP operations progress.
-pub trait JLAPReporter: Send + Sync {
-    /// Called when starting to apply JLAP to existing repodata.
-    ///
-    /// This function should return a unique index that can be used to
-    /// identify the subsequent JLAP operation.
-    fn on_jlap_start(&self) -> usize {
-        0
-    }
-
-    /// Called when reading and decoding the repodata started.
-    fn on_jlap_decode_start(&self, _index: usize) {}
-
-    /// Called when reading and decoding the repodata completed.
-    fn on_jlap_decode_completed(&self, _index: usize) {}
-
-    /// Called when starting to apply a JLAP patch.
-    fn on_jlap_apply_patch(&self, _index: usize, _patch_index: usize, _total: usize) {}
-
-    /// Called when all JLAP patches have been applied.
-    fn on_jlap_apply_patches_completed(&self, _index: usize) {}
-
-    /// Called when reading and decoding the repodata started.
-    fn on_jlap_encode_start(&self, _index: usize) {}
-
-    /// Called when reading and decoding the repodata completed.
-    fn on_jlap_encode_completed(&self, _index: usize) {}
-
-    /// Called when finished applying JLAP to existing repodata.
-    fn on_jlap_completed(&self, _index: usize) {}
-}
-
 /// A trait that enables being notified of repodata fetching progress.
 pub trait Reporter: Send + Sync {
     /// Returns a reporter for downloading files.
     fn download_reporter(&self) -> Option<&dyn DownloadReporter>;
-
-    /// Returns a reporter for JLAP operations.
-    fn jlap_reporter(&self) -> Option<&dyn JLAPReporter>;
 }
 
 #[allow(dead_code)]
