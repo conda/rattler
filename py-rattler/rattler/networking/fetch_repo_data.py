@@ -48,8 +48,7 @@ class FetchRepoDataOptions:
     def __post_init__(self) -> None:
         if self.jlap_enabled is not None:
             warnings.warn(
-                "The 'jlap_enabled' option is deprecated and has no effect. "
-                "JLAP support has been removed.",
+                "The 'jlap_enabled' option is deprecated and has no effect. JLAP support has been removed.",
                 DeprecationWarning,
                 stacklevel=2,
             )
