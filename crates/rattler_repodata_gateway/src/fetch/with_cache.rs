@@ -24,7 +24,7 @@ use url::Url;
 use crate::{
     fetch::{
         cache::{CacheHeaders, Expiring, RepoDataState},
-        jlap, CacheAction, FetchRepoDataError, RepoDataNotFoundError, Variant,
+        CacheAction, FetchRepoDataError, RepoDataNotFoundError, Variant,
     },
     reporter::{DownloadReporter, ResponseReporterExt},
     utils::{AsyncEncoding, Encoding, LockedFile},
@@ -43,9 +43,6 @@ pub struct FetchRepoDataOptions {
     /// information.
     pub variant: Variant,
 
-    /// When enabled repodata can be fetched incrementally using JLAP
-    pub jlap_enabled: bool,
-
     /// When enabled, the zstd variant will be used if available
     pub zstd_enabled: bool,
 
@@ -62,7 +59,6 @@ impl Default for FetchRepoDataOptions {
         Self {
             cache_action: CacheAction::default(),
             variant: Variant::default(),
-            jlap_enabled: true,
             zstd_enabled: true,
             bz2_enabled: true,
             retry_policy: None,
@@ -136,11 +132,8 @@ async fn repodata_from_file(
         },
         cache_last_modified: SystemTime::now(),
         blake2_hash: None,
-        blake2_hash_nominal: None,
         has_zst: None,
         has_bz2: None,
-        has_jlap: None,
-        jlap: None,
     };
 
     // write the cache state
@@ -286,56 +279,6 @@ pub async fn fetch_repo_data(
     // refreshed it.
     let has_zst = options.zstd_enabled && variant_availability.has_zst();
     let has_bz2 = options.bz2_enabled && variant_availability.has_bz2();
-    let has_jlap = options.jlap_enabled && variant_availability.has_jlap();
-
-    // We first attempt to make a JLAP request; if it fails for any reason, we
-    // continue on with a normal request.
-    let jlap_state = if has_jlap && cache_state.is_some() {
-        let repo_data_state = cache_state.as_ref().unwrap();
-        match jlap::patch_repo_data(
-            client.client(),
-            subdir_url.clone(),
-            repo_data_state.clone(),
-            &repo_data_json_path,
-            reporter.clone(),
-        )
-        .await
-        {
-            Ok((state, disk_hash)) => {
-                tracing::info!("fetched JLAP patches successfully");
-                let cache_state = RepoDataState {
-                    blake2_hash: Some(disk_hash),
-                    blake2_hash_nominal: Some(state.footer.latest),
-                    has_zst: variant_availability.has_zst,
-                    has_bz2: variant_availability.has_bz2,
-                    has_jlap: variant_availability.has_jlap,
-                    jlap: Some(state),
-                    ..cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
-                };
-
-                let cache_state = tokio::task::spawn_blocking(move || {
-                    cache_state
-                        .to_path(&cache_state_path)
-                        .map(|_| cache_state)
-                        .map_err(FetchRepoDataError::FailedToWriteCacheState)
-                })
-                .await??;
-
-                return Ok(CachedRepoData {
-                    lock_file,
-                    repo_data_json_path,
-                    cache_state,
-                    cache_result: CacheResult::CacheOutdated,
-                });
-            }
-            Err(error) => {
-                tracing::warn!("Error during JLAP request: {}", error);
-                None
-            }
-        }
-    } else {
-        None
-    };
 
     // Determine which variant to download
     let repo_data_url = if has_zst {
@@ -411,8 +354,6 @@ pub async fn fetch_repo_data(
                 url: repo_data_url,
                 has_zst: variant_availability.has_zst,
                 has_bz2: variant_availability.has_bz2,
-                has_jlap: variant_availability.has_jlap,
-                jlap: jlap_state,
                 ..cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
             };
 
@@ -528,11 +469,8 @@ pub async fn fetch_repo_data(
             .map_err(FetchRepoDataError::FailedToGetMetadata)?,
         cache_size: repo_data_json_metadata.len(),
         blake2_hash: Some(blake2_hash),
-        blake2_hash_nominal: Some(blake2_hash),
         has_zst: variant_availability.has_zst,
         has_bz2: variant_availability.has_bz2,
-        has_jlap: variant_availability.has_jlap,
-        jlap: jlap_state,
     };
 
     let new_cache_state = tokio::task::spawn_blocking(move || {
@@ -631,7 +569,6 @@ async fn stream_and_decode_to_file(
 pub struct VariantAvailability {
     has_zst: Option<Expiring<bool>>,
     has_bz2: Option<Expiring<bool>>,
-    has_jlap: Option<Expiring<bool>>,
 }
 
 impl VariantAvailability {
@@ -645,12 +582,6 @@ impl VariantAvailability {
     /// was checked
     pub fn has_bz2(&self) -> bool {
         self.has_bz2.as_ref().is_some_and(|state| state.value)
-    }
-
-    /// Returns true if there is a JLAP variant available, regardless of when it
-    /// was checked
-    pub fn has_jlap(&self) -> bool {
-        self.has_jlap.as_ref().is_some_and(|state| state.value)
     }
 }
 
@@ -682,19 +613,10 @@ pub async fn check_variant_availability(
     } else {
         Some(false)
     };
-    let has_jlap = if options.jlap_enabled {
-        cache_state
-            .and_then(|state| state.has_jlap.as_ref())
-            .and_then(|value| value.value(expiration_duration))
-            .copied()
-    } else {
-        Some(false)
-    };
 
     // Create a future to possibly refresh the zst state.
     let zst_repodata_url = subdir_url.join(&format!("{filename}.zst")).unwrap();
     let bz2_repodata_url = subdir_url.join(&format!("{filename}.bz2")).unwrap();
-    let jlap_repodata_url = subdir_url.join(jlap::JLAP_FILE_NAME).unwrap();
 
     let zst_future = match has_zst {
         Some(_) => {
@@ -735,29 +657,11 @@ pub async fn check_variant_availability(
         .left_future()
     };
 
-    let jlap_future = match has_jlap {
-        Some(_) => {
-            // The last cached value is valid, so we simply copy that
-            ready(cache_state.and_then(|state| state.has_jlap.clone())).left_future()
-        }
-        None => async {
-            Some(Expiring {
-                value: check_valid_download_target(&jlap_repodata_url, client).await,
-                last_checked: chrono::Utc::now(),
-            })
-        }
-        .right_future(),
-    };
-
     // Await all futures so they happen concurrently. Note that a request might not
     // actually happen if the cache is still valid.
-    let (has_zst, has_bz2, has_jlap) = futures::join!(zst_future, bz2_future, jlap_future);
+    let (has_zst, has_bz2) = futures::join!(zst_future, bz2_future);
 
-    VariantAvailability {
-        has_zst,
-        has_bz2,
-        has_jlap,
-    }
+    VariantAvailability { has_zst, has_bz2 }
 }
 
 /// Performs a HEAD request on the given URL to see if it is available.
@@ -1023,7 +927,7 @@ mod test {
             FetchRepoDataError, RepoDataNotFoundError,
         },
         utils::{simple_channel_server::SimpleChannelServer, Encoding},
-        DownloadReporter, JLAPReporter, Reporter,
+        DownloadReporter, Reporter,
     };
 
     async fn write_encoded(
@@ -1385,10 +1289,6 @@ mod test {
             fn download_reporter(&self) -> Option<&dyn DownloadReporter> {
                 Some(self)
             }
-
-            fn jlap_reporter(&self) -> Option<&dyn JLAPReporter> {
-                None
-            }
         }
 
         impl DownloadReporter for BasicReporter {
@@ -1570,7 +1470,6 @@ mod test {
             FetchRepoDataOptions {
                 bz2_enabled: false,
                 zstd_enabled: false,
-                jlap_enabled: false,
                 ..FetchRepoDataOptions::default()
             },
             None,

@@ -153,11 +153,6 @@ mod tests {
 
         // Test editing individual repodata config fields
         config
-            .set("repodata-config.disable-jlap", Some("true".to_string()))
-            .unwrap();
-        assert_eq!(config.repodata_config.default.disable_jlap, Some(true));
-
-        config
             .set("repodata-config.disable-bzip2", Some("false".to_string()))
             .unwrap();
         assert_eq!(config.repodata_config.default.disable_bzip2, Some(false));
@@ -505,9 +500,6 @@ mod tests {
 
         // Edit repodata configuration
         config
-            .set("repodata-config.disable-jlap", Some("true".to_string()))
-            .unwrap();
-        config
             .set("repodata-config.disable-bzip2", Some("false".to_string()))
             .unwrap();
         config
@@ -599,9 +591,6 @@ mod tests {
                 "proxy-config.non-proxy-hosts",
                 Some(r#"["localhost", "*.company.com", "10.0.0.0/8"]"#.to_string()),
             )
-            .unwrap();
-        config
-            .set("repodata-config.disable-jlap", Some("false".to_string()))
             .unwrap();
         config
             .set("repodata-config.disable-zstd", Some("false".to_string()))
