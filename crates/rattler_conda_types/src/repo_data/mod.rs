@@ -227,6 +227,22 @@ pub struct PackageRecord {
     //pub package_type: ?
 }
 
+impl PartialOrd for PackageRecord {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PackageRecord {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.name
+            .cmp(&other.name)
+            .then_with(|| self.version.cmp(&other.version))
+            .then_with(|| self.build_number.cmp(&other.build_number))
+            .then_with(|| self.timestamp.cmp(&other.timestamp))
+    }
+}
+
 /// A record in the `packages.whl` section of the `repodata.json`.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Hash)]
 pub struct WhlPackageRecord {
