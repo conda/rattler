@@ -8,20 +8,19 @@ use super::{
 };
 use crate::{
     file_format_version::FileFormatVersion,
+    platform::PlatformName,
     utils::derived_fields::{
         derive_arch_and_platform, derive_build_number_from_build, derive_noarch_type,
         LocationDerivedFields,
     },
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, SolveOptions, UrlOrPath, Verbatim,
-    DEFAULT_ENVIRONMENT_NAME,
+    PackageHashes, PlatformData, PypiPackageData, PypiPackageEnvironmentData, SolveOptions,
+    UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
 };
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{ExtraName, Requirement};
-use rattler_conda_types::{
-    NoArchType, PackageName, PackageRecord, PackageUrl, Platform, VersionWithSource,
-};
+use rattler_conda_types::{NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource};
 use serde::Deserialize;
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use url::Url;
@@ -39,12 +38,12 @@ struct LockMetaV3 {
     pub channels: Vec<Channel>,
     /// The platforms this lock file supports
     #[serde_as(as = "crate::utils::serde::Ordered<_>")]
-    pub platforms: Vec<Platform>,
+    pub platforms: Vec<rattler_conda_types::Platform>,
 }
 
 #[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 struct LockedPackageV3 {
-    pub platform: Platform,
+    pub platform: rattler_conda_types::Platform,
     #[serde(flatten)]
     pub kind: LockedPackageKindV3,
 }
@@ -125,6 +124,45 @@ pub struct CondaLockedPackageV3 {
     pub purls: BTreeSet<PackageUrl>,
 }
 
+fn create_platforms_and_packages(
+    mut per_package: ahash::HashMap<
+        rattler_conda_types::Platform,
+        IndexSet<EnvironmentPackageData>,
+    >,
+) -> (
+    Vec<PlatformData>,
+    ahash::HashMap<usize, IndexSet<EnvironmentPackageData>>,
+) {
+    let mut unique_platforms = ahash::HashSet::default();
+
+    let mut platforms = per_package
+        .keys()
+        .filter(|platform| unique_platforms.insert(**platform))
+        .map(|platform| PlatformData {
+            name: PlatformName::try_from(platform.to_string())
+                .expect("All `rattler_conda_types::Platform` are valid platform names"),
+            subdir: *platform,
+            virtual_packages: Vec::new(),
+        })
+        .collect::<Vec<_>>();
+
+    platforms.sort_by_key(|p| p.name.to_string());
+
+    let packages = per_package
+        .drain()
+        .map(|(k, v)| {
+            (
+                platforms
+                    .iter()
+                    .position(|p| p.name.as_str() == k.as_str())
+                    .expect("All Platforms in this hashmap were added before"),
+                v,
+            )
+        })
+        .collect();
+    (platforms, packages)
+}
+
 /// A function that enables parsing of lock files version 3 or lower.
 pub fn parse_v3_or_lower(
     document: serde_yaml::Value,
@@ -138,8 +176,10 @@ pub fn parse_v3_or_lower(
     let mut conda_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_runtime_configs = IndexSet::with_capacity(lock_file.package.len());
-    let mut per_platform: ahash::HashMap<Platform, IndexSet<EnvironmentPackageData>> =
-        ahash::HashMap::default();
+    let mut per_platform: ahash::HashMap<
+        rattler_conda_types::Platform,
+        IndexSet<EnvironmentPackageData>,
+    > = ahash::HashMap::default();
     for package in lock_file.package {
         let LockedPackageV3 { platform, kind } = package;
 
@@ -166,7 +206,7 @@ pub fn parse_v3_or_lower(
                             .path_segments()
                             .and_then(|split| split.rev().nth(1))
                     })
-                    .and_then(|subdir_str| Platform::from_str(subdir_str).ok())
+                    .and_then(|subdir_str| rattler_conda_types::Platform::from_str(subdir_str).ok())
                     .unwrap_or(platform);
 
                 let location = UrlOrPath::Url(value.url).normalize().into_owned();
@@ -190,12 +230,10 @@ pub fn parse_v3_or_lower(
                 let deduplicated_idx = conda_packages
                     .insert_full(LegacyCondaPackageData::Binary(LegacyCondaBinaryData {
                         channel: derived.channel,
-                        file_name: derived
-                            .identifier
-                            .map(|id| id.to_file_name())
-                            .unwrap_or_else(|| {
-                                format!("{}-{}-{}.conda", value.name, value.version, build)
-                            }),
+                        file_name: derived.identifier.map_or_else(
+                            || format!("{}-{}-{}.conda", value.name, value.version, build),
+                            |id| id.to_file_name(),
+                        ),
                         package_record: PackageRecord {
                             arch: value.arch.or(derived_arch),
                             build,
@@ -252,17 +290,19 @@ pub fn parse_v3_or_lower(
             .insert(pkg);
     }
 
+    let (platforms, packages) = create_platforms_and_packages(per_platform);
     // Construct the default environment
     let default_environment = EnvironmentData {
         channels: lock_file.metadata.channels,
         indexes: None,
-        packages: per_platform,
+        packages,
         options: SolveOptions::default(),
     };
 
     Ok(LockFile {
         inner: Arc::new(LockFileInner {
             version,
+            platforms,
             conda_packages: conda_packages
                 .into_iter()
                 .map(CondaPackageData::from)
