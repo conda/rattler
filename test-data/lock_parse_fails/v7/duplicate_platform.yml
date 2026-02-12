@@ -1,0 +1,22 @@
+version: 7
+platforms:
+  - name: "DUPLICATE"
+    subdir: linux-64
+    virtual-packages:
+      - __libc >= 32
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      DUPLICATE:
+        - source: "minimal-project[ac2e8eb3] @ ../minimal-project"
+      DUPLICATE:
+        - source: "minimal-project[ac2e8eb3] @ ../minimal-project"
+packages:
+  - source: "minimal-project[ac2e8eb3] @ ../minimal-project"
+    version: "0.1"
+    subdir: linux-64
+    build: "first"
+    depends:
+      - __unix

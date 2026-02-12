@@ -5,7 +5,6 @@ mod v3;
 
 use std::path::Path;
 
-use rattler_conda_types::Platform;
 use serde::de::Error;
 use serde_yaml::Value;
 use v3::parse_v3_or_lower;
@@ -28,8 +27,12 @@ pub enum ParseCondaLockError {
         max_supported_version: FileFormatVersion,
     },
 
-    #[error("environment {0} and platform {1} refers to a package that does not exist: {2}")]
-    MissingPackage(String, Platform, String),
+    #[error("environment {environment} and platform {platform} refers to a package that does not exist: {location}")]
+    MissingPackage {
+        environment: String,
+        platform: String,
+        location: String,
+    },
 
     #[error("Python requirement parsing failed")]
     Pep508Error(#[from] pep508_rs::Pep508Error),
@@ -37,8 +40,23 @@ pub enum ParseCondaLockError {
     #[error(transparent)]
     InvalidPypiPackageName(#[from] pep508_rs::InvalidNameError),
 
+    #[error(transparent)]
+    InvalidPlatform(#[from] crate::platform::ParsePlatformError),
+
+    #[error("Duplicate platform name `{0}` found")]
+    DuplicatePlatformName(String),
+
     #[error("missing field `{0}` for package {1}")]
     MissingField(String, UrlOrPath),
+
+    #[error("`platforms` were not supported in lockfile version {0}")]
+    UnexpectedPlatforms(FileFormatVersion),
+
+    #[error("Environment `{environment}` is using an unknown platform `{platform}`")]
+    UnknownPlatform {
+        environment: String,
+        platform: String,
+    },
 
     /// The location of the conda package cannot be converted to a URL
     #[error(transparent)]
