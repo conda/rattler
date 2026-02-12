@@ -392,6 +392,7 @@ impl From<PyPrefixPlaceholder> for PrefixPlaceholder {
 impl PyPrefixPlaceholder {
     /// Constructor
     #[new]
+    #[pyo3(signature = (file_mode, placeholder, offsets=None))]
     pub fn new(
         file_mode: PyFileMode,
         placeholder: &str,
