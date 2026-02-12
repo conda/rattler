@@ -1104,7 +1104,15 @@ mod test {
 
         let formatted: Vec<String> = records
             .iter()
-            .map(|r| format!("{}/{}-{}-{}", r.subdir, r.name.as_normalized(), r.version, r.build))
+            .map(|r| {
+                format!(
+                    "{}/{}-{}-{}",
+                    r.subdir,
+                    r.name.as_normalized(),
+                    r.version,
+                    r.build
+                )
+            })
             .collect();
         insta::assert_snapshot!(formatted.join("\n"));
     }
