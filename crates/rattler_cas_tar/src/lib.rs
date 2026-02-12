@@ -25,6 +25,12 @@ use std::path::{Component, Path};
 use filetime::FileTime;
 #[cfg(any(feature = "sync", feature = "tokio"))]
 use fs_err as fs;
+
+/// Files smaller than this threshold are buffered in memory before writing to
+/// the CAS. This allows checking whether the content already exists in the CAS
+/// *before* touching the disk, avoiding all I/O for duplicate files.
+#[cfg(any(feature = "sync", feature = "tokio"))]
+const SMALL_FILE_THRESHOLD: u64 = 5 * 1024 * 1024; // 5 MiB
 #[cfg(feature = "tokio")]
 use futures_util::StreamExt;
 
@@ -176,9 +182,20 @@ pub fn unpack<R: std::io::Read>(
             #[cfg(unix)]
             let mode = header.mode().map_err(Error::IoError)?;
 
-            // Write to CAS
-            let integrity =
-                rattler_cas::write_sync(cas_root, &mut entry).map_err(Error::IoError)?;
+            let file_size = header.size().map_err(Error::IoError)?;
+
+            let integrity = if file_size <= SMALL_FILE_THRESHOLD {
+                // Buffer small files in memory so we can check CAS existence
+                // before writing. This avoids all disk I/O for files already
+                // in the CAS (the common case for incremental updates).
+                let mut buffer = Vec::with_capacity(file_size as usize);
+                std::io::Read::read_to_end(&mut entry, &mut buffer).map_err(Error::IoError)?;
+                rattler_cas::write_bytes(cas_root, &buffer).map_err(Error::IoError)?
+            } else {
+                // Stream large files directly to avoid high memory usage.
+                rattler_cas::write_sync(cas_root, &mut entry).map_err(Error::IoError)?
+            };
+
             let cas_path = cas_root.join(rattler_cas::path_for_hash(&integrity));
 
             // Hardlink from CAS to destination, if a file already exists at the
@@ -352,8 +369,20 @@ pub async fn unpack_async<R: tokio::io::AsyncRead + Unpin>(
             #[cfg(unix)]
             let mode = header.mode()?;
 
-            // Write to CAS using async writer
-            let integrity = rattler_cas::write(cas_root, &mut entry).await?;
+            let file_size = header.size()?;
+
+            let integrity = if file_size <= SMALL_FILE_THRESHOLD {
+                // Buffer small files in memory so we can check CAS existence
+                // before writing. This avoids all disk I/O for files already
+                // in the CAS (the common case for incremental updates).
+                let mut buffer = Vec::with_capacity(file_size as usize);
+                tokio::io::AsyncReadExt::read_to_end(&mut entry, &mut buffer).await?;
+                rattler_cas::write_bytes(cas_root, &buffer)?
+            } else {
+                // Stream large files directly to avoid high memory usage.
+                rattler_cas::write(cas_root, &mut entry).await?
+            };
+
             let cas_path = cas_root.join(rattler_cas::path_for_hash(&integrity));
 
             // Hardlink from CAS to destination, if a file already exists at the

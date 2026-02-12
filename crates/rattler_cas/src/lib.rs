@@ -57,11 +57,11 @@ mod sync_writer;
 mod writer;
 
 use std::{
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
-use rattler_digest::Sha256Hash;
+use rattler_digest::{Sha256, Sha256Hash};
 pub use sync_writer::SyncWriter;
 pub use writer::Writer;
 
@@ -101,6 +101,50 @@ pub async fn write(
     let mut w = Writer::create(root).await?;
     tokio::io::copy(reader, &mut w).await?;
     w.finish().await
+}
+
+/// Writes a byte buffer to the CAS, returning the content hash.
+///
+/// Unlike [`write_sync`] and [`write`], this function computes the hash from
+/// the in-memory buffer first, then checks whether the file already exists in
+/// the CAS. If it does, the write is skipped entirely — no temporary file is
+/// created, no disk I/O occurs.
+///
+/// This makes it significantly faster for content that is already stored in the
+/// CAS (the common case for incremental updates), at the cost of holding the
+/// file content in memory.
+///
+/// # Arguments
+///
+/// * `root` - The root directory of the CAS store
+/// * `content` - The file content to store
+pub fn write_bytes(root: &Path, content: &[u8]) -> std::io::Result<Sha256Hash> {
+    let hash = rattler_digest::compute_bytes_digest::<Sha256>(content);
+    let path = root.join(path_for_hash(&hash));
+
+    // Fast path: file already exists in CAS, skip all disk I/O.
+    if path.exists() {
+        return Ok(hash);
+    }
+
+    // Ensure the parent directory exists.
+    std::fs::create_dir_all(path.parent().expect("parent directory must exist"))?;
+
+    // Ensure the temporary directory exists.
+    let temp_dir = temp_dir(root);
+    std::fs::create_dir_all(&temp_dir)?;
+
+    // Write atomically via temp file to avoid partial files on crash.
+    let mut temp = tempfile::Builder::new().tempfile_in(&temp_dir)?;
+    temp.write_all(content)?;
+    temp.flush()?;
+
+    // Persist the file, ignoring AlreadyExists from a concurrent writer.
+    match temp.persist_noclobber(&path) {
+        Ok(_) => Ok(hash),
+        Err(e) if e.error.kind() == std::io::ErrorKind::AlreadyExists => Ok(hash),
+        Err(e) => Err(e.error),
+    }
 }
 
 /// Returns the relative path in the CAS for a given hash. Note that the path
@@ -268,5 +312,76 @@ mod tests {
         let file_path = cas_root.join(path_for_hash(&hash));
         let stored_content = std::fs::read_to_string(&file_path).unwrap();
         assert_eq!(stored_content, "Async Part 1 Async Part 2");
+    }
+
+    #[test]
+    fn test_write_bytes_basic() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cas_root = temp_dir.path();
+
+        let content = b"Hello, buffered CAS!";
+        let hash = write_bytes(cas_root, content).unwrap();
+
+        // Verify the file exists with correct content
+        let file_path = cas_root.join(path_for_hash(&hash));
+        assert!(file_path.exists());
+        assert_eq!(std::fs::read(&file_path).unwrap(), content);
+    }
+
+    #[test]
+    fn test_write_bytes_deduplication() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cas_root = temp_dir.path();
+
+        let content = b"Duplicate buffered content";
+
+        // Write the same content twice
+        let hash1 = write_bytes(cas_root, content).unwrap();
+        let hash2 = write_bytes(cas_root, content).unwrap();
+
+        // Both should return the same hash
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_write_bytes_matches_write_sync() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cas_root = temp_dir.path();
+
+        let content = b"Content for both methods";
+
+        // Write via write_bytes
+        let hash_bytes = write_bytes(cas_root, content).unwrap();
+
+        // Write the same content via write_sync (should hit CAS)
+        let hash_sync = write_sync(cas_root, &mut Cursor::new(content)).unwrap();
+
+        // Both methods must produce the same hash
+        assert_eq!(hash_bytes, hash_sync);
+    }
+
+    #[test]
+    fn test_write_bytes_cas_hit_no_temp_files() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cas_root = temp_dir.path();
+
+        let content = b"Check no temp files on CAS hit";
+
+        // First write populates the CAS
+        let hash = write_bytes(cas_root, content).unwrap();
+        let file_path = cas_root.join(path_for_hash(&hash));
+        assert!(file_path.exists());
+
+        // Count files in .tmp directory
+        let tmp_dir = cas_root.join(".tmp");
+        let tmp_count_before = std::fs::read_dir(&tmp_dir).map(|d| d.count()).unwrap_or(0);
+
+        // Second write should hit the CAS fast path (no temp file created)
+        let hash2 = write_bytes(cas_root, content).unwrap();
+        assert_eq!(hash, hash2);
+
+        // No new temp files should have been created
+        let tmp_count_after = std::fs::read_dir(&tmp_dir).map(|d| d.count()).unwrap_or(0);
+        assert_eq!(tmp_count_before, tmp_count_after);
     }
 }
