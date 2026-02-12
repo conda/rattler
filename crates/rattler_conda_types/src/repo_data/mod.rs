@@ -1047,16 +1047,16 @@ mod test {
             ))
         };
 
-        let mut record = |name: &str,
-                          version: &str,
-                          build: &str,
-                          build_number: u64,
-                          subdir: &str|
+        let record = |name: &str,
+                      version: &str,
+                      build: &str,
+                      build_number: u64,
+                      subdir: &str|
          -> PackageRecord {
             let mut r = PackageRecord::new(
                 PackageName::new_unchecked(name),
                 version.parse::<Version>().unwrap(),
-                format!("{}_{}", build, build_number),
+                format!("{build}_{build_number}"),
             );
             r.build_number = build_number;
             r.subdir = subdir.to_string();
