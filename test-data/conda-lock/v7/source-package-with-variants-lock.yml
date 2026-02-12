@@ -4,6 +4,8 @@
 # disambiguate between multiple source packages at the same location.
 
 version: 6
+platforms:
+  - name: linux-64
 environments:
   default:
     channels:

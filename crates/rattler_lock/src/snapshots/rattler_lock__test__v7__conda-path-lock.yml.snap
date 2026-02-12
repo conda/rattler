@@ -3,12 +3,18 @@ source: crates/rattler_lock/src/lib.rs
 expression: conda_lock
 ---
 version: 7
+platforms:
+  - name: linux-64-foobar
+    subdir: linux-64
+    virtual-packages:
+      - __libc >= 32
+  - name: win-64
 environments:
   default:
     channels:
       - url: "https://conda.anaconda.org/conda-forge/"
     packages:
-      linux-64:
+      linux-64-foobar:
         - source: "minimal-project[ac2e8eb3] @ ../minimal-project"
       win-64:
         - source: "a-python-project[38b8d5ef] @ ../a-python-project"

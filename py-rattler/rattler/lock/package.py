@@ -26,10 +26,11 @@ class LockedPackage(ABC):
         Examples
         --------
         ```python
-        >>> from rattler import Platform, LockFile
+        >>> from rattler import LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
-        >>> lock_package = env.packages(Platform("osx-arm64"))[0]
+        >>> platforms = env.platforms()
+        >>> lock_package = env.packages(platforms[0])[0]
         >>> lock_package.name
         'tzdata'
         >>>
@@ -45,10 +46,11 @@ class LockedPackage(ABC):
         Examples
         --------
         ```python
-        >>> from rattler import Platform, LockFile
+        >>> from rattler import LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
-        >>> lock_package = env.packages(Platform("osx-arm64"))[0]
+        >>> platforms = env.platforms()
+        >>> lock_package = env.packages(platforms[0])[0]
         >>> lock_package.location
         'https://conda.anaconda.org/...'
         >>>
@@ -64,11 +66,11 @@ class LockedPackage(ABC):
         Examples
         --------
         ```python
-        >>> from rattler import LockFile, Platform
+        >>> from rattler import LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages[Platform("osx-arm64")][0]
+        >>> data = pypi_packages["osx-arm64"][0]
         >>> data.hashes
         PackageHashes()
         >>>
@@ -123,10 +125,11 @@ class CondaLockedPackage(LockedPackage, ABC):
         Examples
         --------
         ```python
-        >>> from rattler import Platform, LockFile
+        >>> from rattler import LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
-        >>> lock_package = env.packages(Platform("osx-arm64"))[0]
+        >>> platforms = env.platforms()
+        >>> lock_package = env.packages(platforms[0])[0]
         >>> lock_package.version
         Version("2024a")
         >>>
@@ -141,10 +144,11 @@ class CondaLockedPackage(LockedPackage, ABC):
         Examples
         --------
         ```python
-        >>> from rattler import LockFile, Platform
+        >>> from rattler import LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
-        >>> packages = env.packages(Platform("osx-arm64"))
+        >>> platforms = env.platforms()
+        >>> packages = env.packages(platforms[0])
         >>> packages[0].satisfies("tzdata >=2024a")
         True
         >>>
@@ -176,11 +180,11 @@ class PypiLockedPackage(LockedPackage):
         Examples
         --------
         ```python
-        >>> from rattler import LockFile, Platform
+        >>> from rattler import LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages[Platform("osx-arm64")][0]
+        >>> data = pypi_packages["osx-arm64"][0]
         >>> data.requires_dist
         []
         >>>
@@ -196,11 +200,11 @@ class PypiLockedPackage(LockedPackage):
         Examples
         --------
         ```python
-        >>> from rattler import LockFile, Platform
+        >>> from rattler import LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages[Platform("osx-arm64")][0]
+        >>> data = pypi_packages["osx-arm64"][0]
         >>> data.requires_python
         '>=3.7.0'
         >>>
@@ -217,11 +221,11 @@ class PypiLockedPackage(LockedPackage):
         Examples
         --------
         ```python
-        >>> from rattler import LockFile, Platform
+        >>> from rattler import LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> env_data = pypi_packages[Platform("osx-arm64")][0]
+        >>> env_data = pypi_packages["osx-arm64"][0]
         >>> env_data.extras
         set()
         >>>
@@ -236,11 +240,11 @@ class PypiLockedPackage(LockedPackage):
         Examples
         --------
         ```python
-        >>> from rattler import LockFile, Platform
+        >>> from rattler import LockFile
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages[Platform("osx-arm64")][0]
+        >>> data = pypi_packages["osx-arm64"][0]
         >>> data.satisfies("charset-normalizer")
         True
         >>>

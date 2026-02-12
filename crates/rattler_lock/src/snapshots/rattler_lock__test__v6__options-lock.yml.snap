@@ -4,6 +4,7 @@ assertion_line: 583
 expression: conda_lock
 ---
 version: 7
+platforms: []
 environments:
   with-channel-priority:
     channels: []
