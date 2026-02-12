@@ -273,7 +273,7 @@ impl PyRecord {
     }
 
     /// Performs comparison between this record and another based on
-    /// name, version, build number, and timestamp.
+    /// name, track features, version, build number, and timestamp.
     pub fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
         let a = self.as_package_record();
         let b = other.as_package_record();

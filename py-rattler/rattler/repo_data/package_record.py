@@ -927,13 +927,14 @@ class PackageRecord:
         """
         Returns True if this record is less than the other.
 
-        Ordering is defined by package name, version, build number, and timestamp.
+        Ordering is defined by package name, track features, version,
+        build number, and timestamp.
 
         Examples
         --------
         ```python
-        >>> a = PackageRecord("a-package", "1.0", "build_0", 0, "noarch")
-        >>> b = PackageRecord("b-package", "1.0", "build_0", 0, "noarch")
+        >>> a = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
+        >>> b = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
         >>> a < b
         True
         >>>
@@ -947,13 +948,14 @@ class PackageRecord:
         """
         Returns True if this record is less than or equal to the other.
 
-        Ordering is defined by package name, version, build number, and timestamp.
+        Ordering is defined by package name, track features, version,
+        build number, and timestamp.
 
         Examples
         --------
         ```python
-        >>> a = PackageRecord("a-package", "1.0", "build_0", 0, "noarch")
-        >>> b = PackageRecord("b-package", "1.0", "build_0", 0, "noarch")
+        >>> a = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
+        >>> b = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
         >>> a <= b
         True
         >>>
@@ -967,15 +969,16 @@ class PackageRecord:
         """
         Returns True if this record is greater than the other.
 
-        Ordering is defined by package name, version, build number, and timestamp.
+        Ordering is defined by package name, track features, version,
+        build number, and timestamp.
 
         Examples
         --------
         ```python
-        >>> a = PackageRecord("a-package", "1.0", "build_0", 0, "noarch")
-        >>> b = PackageRecord("b-package", "1.0", "build_0", 0, "noarch")
+        >>> a = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
+        >>> b = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
         >>> a > b
-        False
+        True
         >>>
         ```
         """
@@ -987,15 +990,16 @@ class PackageRecord:
         """
         Returns True if this record is greater than or equal to the other.
 
-        Ordering is defined by package name, version, build number, and timestamp.
+        Ordering is defined by package name, track features, version,
+        build number, and timestamp.
 
         Examples
         --------
         ```python
-        >>> a = PackageRecord("a-package", "1.0", "build_0", 0, "noarch")
-        >>> b = PackageRecord("b-package", "1.0", "build_0", 0, "noarch")
+        >>> a = PackageRecord("foo", "2.0", "build_0", 0, "noarch")
+        >>> b = PackageRecord("foo", "1.0", "build_0", 0, "noarch")
         >>> a >= b
-        False
+        True
         >>>
         ```
         """
