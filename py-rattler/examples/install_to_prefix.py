@@ -24,7 +24,14 @@ async def _install(
     environment = lock_file.environment(environment_name)
     if environment is None:
         raise ValueError(f"Environment {environment_name} not found in lock file {lock_file_path}")
-    records = environment.conda_repodata_records_for_platform(platform)
+    # Find the lock platform matching the requested platform
+    lock_platform = next(
+        (p for p in environment.platforms() if p.name == str(platform)),
+        None,
+    )
+    if lock_platform is None:
+        raise ValueError(f"Platform {platform} not found in environment {environment_name}")
+    records = environment.conda_repodata_records_for_platform(lock_platform)
     if not records:
         raise ValueError(f"No records found for platform {platform} in lock file {lock_file_path}")
     await rattler_install(
