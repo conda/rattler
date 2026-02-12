@@ -1041,17 +1041,12 @@ mod test {
     fn test_ordering() {
         use crate::{PackageName, Version};
 
-        let ts = |secs| {
-            Some(crate::utils::TimestampMs::from_datetime_seconds(
-                chrono::DateTime::from_timestamp(secs, 0).unwrap(),
-            ))
-        };
-
         let record = |name: &str,
                       version: &str,
                       build: &str,
                       build_number: u64,
-                      subdir: &str|
+                      subdir: &str,
+                      timestamp: Option<i64>|
          -> PackageRecord {
             let mut r = PackageRecord::new(
                 PackageName::new_unchecked(name),
@@ -1060,44 +1055,37 @@ mod test {
             );
             r.build_number = build_number;
             r.subdir = subdir.to_string();
+            r.timestamp = timestamp.map(|secs| {
+                crate::utils::TimestampMs::from_datetime_seconds(
+                    chrono::DateTime::from_timestamp(secs, 0).unwrap(),
+                )
+            });
             r
         };
 
         let mut records = vec![
             // Different versions of the same package
-            record("python", "3.12.0", "hab5_py312", 3, "linux-64"),
-            record("python", "3.11.0", "hab5_py311", 1, "linux-64"),
-            record("python", "3.12.0", "hab5_py312", 1, "linux-64"),
+            record("python", "3.12.0", "hab5_py312", 3, "linux-64", None),
+            record("python", "3.11.0", "hab5_py311", 1, "linux-64", None),
+            record("python", "3.12.0", "hab5_py312", 1, "linux-64", None),
             // Different build numbers
-            record("numpy", "1.26.0", "hc1_np126", 2, "linux-64"),
-            record("numpy", "1.26.0", "hc1_np126", 0, "linux-64"),
-            record("numpy", "1.26.0", "hc1_np126", 1, "linux-64"),
+            record("numpy", "1.26.0", "hc1_np126", 2, "linux-64", None),
+            record("numpy", "1.26.0", "hc1_np126", 0, "linux-64", None),
+            record("numpy", "1.26.0", "hc1_np126", 1, "linux-64", None),
             // Different timestamps (same version & build number)
-            {
-                let mut r = record("openssl", "3.1.0", "hlib", 0, "linux-64");
-                r.timestamp = ts(1700000000);
-                r
-            },
-            {
-                let mut r = record("openssl", "3.1.0", "hlib", 0, "linux-64");
-                r.timestamp = ts(1600000000);
-                r
-            },
-            {
-                let mut r = record("openssl", "3.1.0", "hlib", 0, "linux-64");
-                r.timestamp = ts(1800000000);
-                r
-            },
+            record("openssl", "3.1.0", "hlib", 0, "linux-64", Some(1700000000)),
+            record("openssl", "3.1.0", "hlib", 0, "linux-64", Some(1600000000)),
+            record("openssl", "3.1.0", "hlib", 0, "linux-64", Some(1800000000)),
             // Track features (packages with tracked features sort after those
             // without)
             {
-                let mut r = record("scipy", "1.11.0", "hfeature", 0, "linux-64");
+                let mut r = record("scipy", "1.11.0", "hfeature", 0, "linux-64", None);
                 r.track_features = vec!["mkl".to_string()];
                 r
             },
-            record("scipy", "1.11.0", "hplain", 0, "linux-64"),
+            record("scipy", "1.11.0", "hplain", 0, "linux-64", None),
             // Another package to show name ordering
-            record("curl", "8.4.0", "hdns", 0, "linux-64"),
+            record("curl", "8.4.0", "hdns", 0, "linux-64", None),
         ];
 
         records.sort();
