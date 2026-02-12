@@ -245,9 +245,9 @@ impl Ord for PackageRecord {
                     .cmp(&other.track_features.is_empty())
                     .reverse()
             })
-            .then_with(|| self.version.cmp(&other.version).reverse())
-            .then_with(|| self.build_number.cmp(&other.build_number).reverse())
-            .then_with(|| self.timestamp.cmp(&other.timestamp).reverse())
+            .then_with(|| self.version.cmp(&other.version))
+            .then_with(|| self.build_number.cmp(&other.build_number))
+            .then_with(|| self.timestamp.cmp(&other.timestamp))
     }
 }
 
