@@ -150,7 +150,7 @@ pub enum AuthenticationCLIError {
 
     /// OAuth error
     #[cfg(feature = "oauth")]
-    #[error("OAuth error: {0}")]
+    #[error(transparent)]
     OAuthError(#[from] oauth::OAuthError),
 }
 
@@ -207,13 +207,12 @@ async fn login(
             issuer_url,
             client_id,
             flow,
-            scopes: args.oauth_scopes,
+            scopes: args.oauth_scopes.into_iter().collect(),
         };
 
         let auth = oauth::perform_oauth_login(config).await?;
         // OAuth credentials are issuer-specific, skip wildcard conversion
         let host = args.host.clone();
-        eprintln!("Authenticating with {host} using {} method", auth.method());
         storage.store(&host, &auth)?;
         return Ok(());
     }

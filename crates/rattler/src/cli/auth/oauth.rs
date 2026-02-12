@@ -4,13 +4,14 @@
 //! flow (fallback for headless environments).
 
 use openidconnect::{
-    AdditionalProviderMetadata, AuthorizationCode, ClientId, CsrfToken, IssuerUrl, Nonce,
-    OAuth2TokenResponse, PkceCodeChallenge, ProviderMetadata, RedirectUrl, Scope,
+    AdditionalProviderMetadata, AuthorizationCode, ClientId, CsrfToken, DeviceAuthorizationUrl,
+    IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge, ProviderMetadata, RedirectUrl, Scope,
+    TokenResponse,
     core::{
         CoreAuthDisplay, CoreClaimName, CoreClaimType, CoreClient, CoreClientAuthMethod,
-        CoreGrantType, CoreJsonWebKey, CoreJweContentEncryptionAlgorithm,
-        CoreJweKeyManagementAlgorithm, CoreResponseMode, CoreResponseType,
-        CoreSubjectIdentifierType,
+        CoreDeviceAuthorizationResponse, CoreGrantType, CoreIdTokenClaims, CoreJsonWebKey,
+        CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm, CoreResponseMode,
+        CoreResponseType, CoreSubjectIdentifierType,
     },
     AdditionalProviderMetadata, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
     DeviceAuthorizationUrl, IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
@@ -18,6 +19,7 @@ use openidconnect::{
 };
 use rattler_networking::Authentication;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Write};
 use std::time::Duration;
 use tokio::net::TcpListener;
@@ -60,7 +62,7 @@ pub struct OAuthConfig {
     /// Which flow to use.
     pub flow: OAuthFlow,
     /// Additional OAuth scopes to request.
-    pub scopes: Vec<String>,
+    pub scopes: HashSet<String>,
 }
 
 /// Which OAuth flow to attempt.
@@ -78,6 +80,7 @@ struct OAuthTokens {
     access_token: String,
     refresh_token: Option<String>,
     expires_in: Option<Duration>,
+    authenticated_as: Option<String>,
 }
 
 /// Errors that can occur during OAuth authentication.
@@ -104,16 +107,20 @@ pub enum OAuthError {
     CsrfMismatch,
 
     /// A network error occurred.
-    #[error("Network error: {0}")]
+    #[error(transparent)]
     Network(#[from] reqwest::Error),
 
     /// An I/O error occurred.
-    #[error("I/O error: {0}")]
+    #[error(transparent)]
     Io(#[from] std::io::Error),
 
     /// A URL parsing error occurred.
-    #[error("URL parse error: {0}")]
+    #[error(transparent)]
     UrlParse(#[from] url::ParseError),
+
+    /// Failed to open the browser for authentication.
+    #[error("Failed to open browser: {0}")]
+    BrowserOpen(String),
 
     /// The provider does not support device authorization.
     #[error("Provider does not support device authorization flow")]
@@ -162,16 +169,22 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
             .await
             {
                 Ok(tokens) => tokens,
-                Err(e) => {
-                    eprintln!("Authorization code flow failed ({e}), trying device code flow...");
+                Err(OAuthError::BrowserOpen(e)) => {
+                    eprintln!("Failed to open browser ({e}), falling back to device code flow...");
                     device_code_flow(&endpoints, &config.client_id, &config.scopes, &http_client)
                         .await?
                 }
+                Err(e) => return Err(e),
             }
         }
     };
 
-    // 3. Build the Authentication::OAuth value
+    // 3. Display authenticated identity
+    if let Some(identity) = &tokens.authenticated_as {
+        eprintln!("Authenticated as: {identity}");
+    }
+
+    // 4. Build the Authentication::OAuth value
     let expires_at = tokens.expires_in.map(|d| {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -232,7 +245,7 @@ async fn discover_endpoints(
 async fn auth_code_flow(
     provider_metadata: &ExtendedCoreProviderMetadata,
     client_id: &str,
-    scopes: &[String],
+    scopes: &HashSet<String>,
     http_client: &reqwest::Client,
 ) -> Result<OAuthTokens, OAuthError> {
     // Bind to a random port on localhost
@@ -259,7 +272,7 @@ async fn auth_code_flow(
     for scope in scopes {
         auth_request = auth_request.add_scope(Scope::new(scope.clone()));
     }
-    let (auth_url, csrf_token, _nonce) = auth_request.set_pkce_challenge(pkce_challenge).url();
+    let (auth_url, csrf_token, nonce) = auth_request.set_pkce_challenge(pkce_challenge).url();
 
     // Open browser
     let auth_url_str = auth_url.to_string();
@@ -267,9 +280,7 @@ async fn auth_code_flow(
     eprintln!("If the browser does not open, visit: {auth_url_str}");
 
     if let Err(e) = open::that(&auth_url_str) {
-        return Err(OAuthError::Authorization(format!(
-            "Failed to open browser: {e}"
-        )));
+        return Err(OAuthError::BrowserOpen(e.to_string()));
     }
 
     // Wait for the redirect callback
@@ -289,10 +300,16 @@ async fn auth_code_flow(
         .await
         .map_err(|e| OAuthError::TokenExchange(e.to_string()))?;
 
+    let authenticated_as = token_response
+        .id_token()
+        .and_then(|id_token| id_token.claims(&client.id_token_verifier(), &nonce).ok())
+        .map(display_name_from_claims);
+
     Ok(OAuthTokens {
         access_token: token_response.access_token().secret().clone(),
         refresh_token: token_response.refresh_token().map(|t| t.secret().clone()),
         expires_in: token_response.expires_in(),
+        authenticated_as,
     })
 }
 
@@ -319,6 +336,38 @@ async fn accept_redirect_callback(listener: &TcpListener) -> Result<(String, Str
 
     let callback_url =
         Url::parse(&format!("http://localhost{path}")).map_err(|_| OAuthError::InvalidCallback)?;
+
+    // Check for an error response from the identity provider (RFC 6749 Section 4.1.2.1)
+    if let Some(error) = callback_url
+        .query_pairs()
+        .find(|(k, _)| k == "error")
+        .map(|(_, v)| v.to_string())
+    {
+        let description = callback_url
+            .query_pairs()
+            .find(|(k, _)| k == "error_description")
+            .map(|(_, v)| v.to_string());
+
+        let msg = description.unwrap_or(error);
+
+        // Still send a response to the browser before returning the error
+        let response_body =
+            format!("<html><body><h1>Authentication failed</h1><p>{msg}</p></body></html>");
+        let response = format!(
+            "HTTP/1.1 200 OK\r\n\
+             Content-Type: text/html\r\n\
+             Content-Length: {}\r\n\
+             Connection: close\r\n\
+             \r\n\
+             {response_body}",
+            response_body.len(),
+        );
+        let mut writer = std_stream;
+        writer.write_all(response.as_bytes())?;
+        writer.flush()?;
+
+        return Err(OAuthError::Authorization(msg));
+    }
 
     let code = callback_url
         .query_pairs()
@@ -353,156 +402,88 @@ async fn accept_redirect_callback(listener: &TcpListener) -> Result<(String, Str
     Ok((code, state))
 }
 
-/// Standard OAuth error response (RFC 6749 Section 5.2).
-#[derive(Deserialize)]
-struct OAuthErrorResponse {
-    error: String,
-    error_description: Option<String>,
-}
-
-impl std::fmt::Display for OAuthErrorResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(desc) = &self.error_description {
-            write!(f, "{desc}")
-        } else {
-            write!(f, "{}", self.error)
-        }
-    }
-}
-
-/// Response from the device authorization endpoint (RFC 8628).
-#[derive(Deserialize)]
-struct DeviceAuthResponse {
-    device_code: String,
-    user_code: String,
-    verification_uri: String,
-    verification_uri_complete: Option<String>,
-    expires_in: Option<u64>,
-    #[serde(default = "default_interval")]
-    interval: u64,
-}
-
-fn default_interval() -> u64 {
-    5
-}
-
-/// Standard OAuth token response.
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum TokenResponse {
-    Success {
-        access_token: String,
-        refresh_token: Option<String>,
-        expires_in: Option<u64>,
-    },
-    Error {
-        error: String,
-    },
-}
-
 /// Device code flow for headless environments (RFC 8628).
 ///
-/// Implemented with raw HTTP requests to avoid openidconnect's complex
-/// type-level endpoint state system.
+/// Uses the openidconnect crate's high-level API, which automatically
+/// includes the `openid` scope and handles polling with backoff.
 async fn device_code_flow(
     endpoints: &DiscoveredEndpoints,
     client_id: &str,
-    scopes: &[String],
+    scopes: &HashSet<String>,
     http_client: &reqwest::Client,
 ) -> Result<OAuthTokens, OAuthError> {
-    let device_auth_endpoint = endpoints
+    let device_auth_url = endpoints
         .device_authorization_endpoint
         .as_deref()
         .ok_or(OAuthError::DeviceCodeNotSupported)?;
 
-    // Step 1: Request device authorization
-    let scope_str = scopes.join(" ");
-    let params = [("client_id", client_id), ("scope", &scope_str)];
-    let resp = http_client
-        .post(device_auth_endpoint)
-        .form(&params)
-        .send()
-        .await
-        .map_err(OAuthError::Network)?;
+    let device_auth_url = DeviceAuthorizationUrl::new(device_auth_url.to_string())
+        .map_err(|e| OAuthError::Authorization(format!("Invalid device authorization URL: {e}")))?;
 
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let msg = match resp.json::<OAuthErrorResponse>().await {
-            Ok(err) => err.to_string(),
-            Err(_) => format!("HTTP {status}"),
-        };
-        return Err(OAuthError::Authorization(msg));
+    let client = CoreClient::from_provider_metadata(
+        endpoints.provider_metadata.clone(),
+        ClientId::new(client_id.to_string()),
+        None,
+    )
+    .set_device_authorization_url(device_auth_url);
+
+    // Step 1: Request device authorization
+    let mut device_request = client.exchange_device_code();
+    for scope in scopes {
+        device_request = device_request.add_scope(Scope::new(scope.clone()));
     }
 
-    let device_auth: DeviceAuthResponse = resp.json().await.map_err(|e| {
-        OAuthError::Authorization(format!("Failed to parse device auth response: {e}"))
-    })?;
+    let details: CoreDeviceAuthorizationResponse = device_request
+        .request_async(http_client)
+        .await
+        .map_err(|e| OAuthError::Authorization(format!("Device authorization failed: {e}")))?;
 
     // Step 2: Display instructions
-    eprintln!("\nTo authenticate, visit: {}", device_auth.verification_uri);
-    eprintln!("And enter the code: {}\n", device_auth.user_code);
+    eprintln!(
+        "\nTo authenticate, visit: {}",
+        details.verification_uri().as_str()
+    );
+    eprintln!("And enter the code: {}\n", details.user_code().secret());
 
-    if let Some(ref complete_uri) = device_auth.verification_uri_complete {
-        eprintln!("Or visit: {complete_uri}");
+    if let Some(complete_uri) = details.verification_uri_complete() {
+        eprintln!("Or visit: {}", complete_uri.secret());
     }
 
     // Step 3: Poll the token endpoint
-    let poll_interval = Duration::from_secs(device_auth.interval);
-    let timeout = Duration::from_secs(device_auth.expires_in.unwrap_or(300));
-    let deadline = tokio::time::Instant::now() + timeout;
+    let token_response = client
+        .exchange_device_access_token(&details)
+        .map_err(|e| OAuthError::TokenExchange(format!("token endpoint not configured: {e}")))?
+        .request_async(http_client, tokio::time::sleep, None)
+        .await
+        .map_err(|e| OAuthError::TokenExchange(e.to_string()))?;
 
-    loop {
-        tokio::time::sleep(poll_interval).await;
+    // Device flow has no nonce, so skip nonce verification
+    let authenticated_as = token_response
+        .id_token()
+        .and_then(|id_token| {
+            id_token
+                .claims(&client.id_token_verifier(), |_: Option<&Nonce>| Ok(()))
+                .ok()
+        })
+        .map(display_name_from_claims);
 
-        if tokio::time::Instant::now() >= deadline {
-            return Err(OAuthError::TokenExchange(
-                "Device code flow timed out".to_string(),
-            ));
-        }
+    Ok(OAuthTokens {
+        access_token: token_response.access_token().secret().clone(),
+        refresh_token: token_response.refresh_token().map(|t| t.secret().clone()),
+        expires_in: token_response.expires_in(),
+        authenticated_as,
+    })
+}
 
-        let params = [
-            ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
-            ("device_code", &device_auth.device_code),
-            ("client_id", client_id),
-        ];
-
-        let resp = http_client
-            .post(&endpoints.token_endpoint)
-            .form(&params)
-            .send()
-            .await
-            .map_err(OAuthError::Network)?;
-
-        let body: TokenResponse = resp.json().await.map_err(|e| {
-            OAuthError::TokenExchange(format!("Failed to parse token response: {e}"))
-        })?;
-
-        match body {
-            TokenResponse::Error { error } => match error.as_str() {
-                "authorization_pending" => continue,
-                "slow_down" => {
-                    tokio::time::sleep(poll_interval).await;
-                    continue;
-                }
-                _ => {
-                    return Err(OAuthError::TokenExchange(format!(
-                        "Token endpoint error: {error}"
-                    )));
-                }
-            },
-            TokenResponse::Success {
-                access_token,
-                refresh_token,
-                expires_in,
-            } => {
-                return Ok(OAuthTokens {
-                    access_token,
-                    refresh_token,
-                    expires_in: expires_in.map(Duration::from_secs),
-                });
-            }
-        }
+/// Extract a display name from ID token claims, preferring email over subject.
+fn display_name_from_claims(claims: &CoreIdTokenClaims) -> String {
+    if let Some(email) = claims.email() {
+        return email.to_string();
     }
+    if let Some(username) = claims.preferred_username() {
+        return username.to_string();
+    }
+    claims.subject().to_string()
 }
 
 /// Revoke OAuth tokens at the provider's revocation endpoint.
