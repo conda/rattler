@@ -1,4 +1,5 @@
 version: 7
+platforms: []
 environments:
   default:
     channels:
