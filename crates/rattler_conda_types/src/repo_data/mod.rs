@@ -237,9 +237,17 @@ impl Ord for PackageRecord {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.name
             .cmp(&other.name)
-            .then_with(|| self.version.cmp(&other.version))
-            .then_with(|| self.build_number.cmp(&other.build_number))
-            .then_with(|| self.timestamp.cmp(&other.timestamp))
+            .then_with(|| {
+                // Packages with tracked features are sorted after packages
+                // without tracked features.
+                self.track_features
+                    .is_empty()
+                    .cmp(&other.track_features.is_empty())
+                    .reverse()
+            })
+            .then_with(|| self.version.cmp(&other.version).reverse())
+            .then_with(|| self.build_number.cmp(&other.build_number).reverse())
+            .then_with(|| self.timestamp.cmp(&other.timestamp).reverse())
     }
 }
 
