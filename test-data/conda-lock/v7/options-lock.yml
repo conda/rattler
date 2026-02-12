@@ -1,4 +1,6 @@
 version: 7
+platforms:
+  - name: linux-64
 environments:
   without-options:
     channels: []
