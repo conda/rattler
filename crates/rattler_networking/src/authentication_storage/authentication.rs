@@ -28,6 +28,22 @@ pub enum Authentication {
         /// The session token to use for S3 authentication
         session_token: Option<String>,
     },
+    /// OAuth/OIDC credentials with automatic token refresh support
+    OAuth {
+        /// The OAuth access token
+        access_token: String,
+        /// The OAuth refresh token (if available)
+        refresh_token: Option<String>,
+        /// Seconds since UNIX epoch when `access_token` expires
+        expires_at: Option<i64>,
+        /// Token endpoint URL (cached from OIDC discovery for refresh without
+        /// openidconnect)
+        token_endpoint: String,
+        /// Revocation endpoint URL (RFC 7009, for logout)
+        revocation_endpoint: Option<String>,
+        /// OAuth client ID
+        client_id: String,
+    },
 }
 
 /// An error that can occur when parsing an authentication string
@@ -56,6 +72,7 @@ impl Authentication {
             Authentication::BasicHTTP { .. } => "BasicHTTP",
             Authentication::CondaToken(_) => "CondaToken",
             Authentication::S3Credentials { .. } => "S3",
+            Authentication::OAuth { .. } => "OAuth",
         }
     }
 }

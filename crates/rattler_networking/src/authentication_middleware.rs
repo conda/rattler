@@ -1,13 +1,28 @@
-//! `reqwest` middleware that authenticates requests with data from the `AuthenticationStorage`
-use crate::authentication_storage::AuthenticationStorageError;
-use crate::{Authentication, AuthenticationStorage};
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
+//! `reqwest` middleware that authenticates requests with data from the
+//! `AuthenticationStorage`
+use std::{
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
+
+use base64::{prelude::BASE64_STANDARD, Engine};
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
-use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use serde::Deserialize;
 use url::Url;
+
+use crate::{
+    authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
+};
+
+/// Response from an OAuth token refresh request (standard `OAuth2` token
+/// response).
+#[derive(Deserialize)]
+struct TokenRefreshResponse {
+    access_token: String,
+    refresh_token: Option<String>,
+    expires_in: Option<i64>,
+}
 
 /// `reqwest` middleware to authenticate requests
 #[derive(Clone)]
@@ -30,12 +45,21 @@ impl Middleware for AuthenticationMiddleware {
         }
 
         let url = req.url().clone();
-        match self.auth_storage.get_by_url(url) {
+        match self.auth_storage.get_by_url_with_host(url) {
             Err(_) => {
                 // Forward error to caller (invalid URL)
                 next.run(req, extensions).await
             }
-            Ok((url, auth)) => {
+            Ok((url, auth_with_key)) => {
+                // If this is an OAuth token, attempt refresh if expired
+                let auth = match auth_with_key {
+                    Some((matched_key, oauth_auth @ Authentication::OAuth { .. })) => {
+                        self.maybe_refresh_oauth(oauth_auth, &matched_key).await
+                    }
+                    Some((_, auth)) => Some(auth),
+                    None => None,
+                };
+
                 let url = Self::authenticate_url(url, &auth);
 
                 let mut req = req;
@@ -49,12 +73,14 @@ impl Middleware for AuthenticationMiddleware {
 }
 
 impl AuthenticationMiddleware {
-    /// Create a new authentication middleware with the given authentication storage
+    /// Create a new authentication middleware with the given authentication
+    /// storage
     pub fn from_auth_storage(auth_storage: AuthenticationStorage) -> Self {
         Self { auth_storage }
     }
 
-    /// Create a new authentication middleware with the default authentication storage
+    /// Create a new authentication middleware with the default authentication
+    /// storage
     pub fn from_env_and_defaults() -> Result<Self, AuthenticationStorageError> {
         Ok(Self {
             auth_storage: AuthenticationStorage::from_env_and_defaults()?,
@@ -113,16 +139,149 @@ impl AuthenticationMiddleware {
                         .insert(reqwest::header::AUTHORIZATION, header_value);
                     Ok(req)
                 }
+                Authentication::OAuth { access_token, .. } => {
+                    let bearer_auth = format!("Bearer {access_token}");
+
+                    let mut header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
+                        .map_err(reqwest_middleware::Error::middleware)?;
+                    header_value.set_sensitive(true);
+
+                    req.headers_mut()
+                        .insert(reqwest::header::AUTHORIZATION, header_value);
+                    Ok(req)
+                }
                 Authentication::CondaToken(_) | Authentication::S3Credentials { .. } => Ok(req),
             }
         } else {
             Ok(req)
         }
     }
+
+    /// Check if an OAuth token is expired and attempt to refresh it.
+    ///
+    /// Returns the (possibly refreshed) authentication. If refresh fails,
+    /// returns the original auth so the request proceeds with the existing
+    /// (possibly expired) token — the server will return 401 which is clearer
+    /// than a middleware error.
+    async fn maybe_refresh_oauth(
+        &self,
+        auth: Authentication,
+        matched_key: &str,
+    ) -> Option<Authentication> {
+        let Authentication::OAuth {
+            ref access_token,
+            ref refresh_token,
+            expires_at,
+            ref token_endpoint,
+            ref revocation_endpoint,
+            ref client_id,
+        } = auth
+        else {
+            return Some(auth);
+        };
+
+        // Check if token is expired (with 5 minute buffer for clock skew)
+        let is_expired = expires_at.is_some_and(|exp| {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            exp - now < 300 // 5 minute buffer
+        });
+
+        if !is_expired {
+            return Some(auth);
+        }
+
+        let Some(refresh_token_val) = refresh_token.as_deref() else {
+            tracing::warn!("OAuth token is expired but no refresh token is available");
+            return Some(auth);
+        };
+
+        tracing::debug!("OAuth token expired, attempting refresh");
+
+        let client = reqwest::Client::new();
+        let params = [
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh_token_val),
+            ("client_id", client_id),
+        ];
+
+        let response = match client
+            .post(token_endpoint.as_str())
+            .form(&params)
+            .send()
+            .await
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                tracing::warn!("Failed to refresh OAuth token: {e}");
+                return Some(auth);
+            }
+        };
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let hint = match response.json::<serde_json::Value>().await {
+                Ok(body) => {
+                    let error_code = body
+                        .get("error")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
+                    if error_code == "invalid_grant" {
+                        "refresh token is expired or revoked — please re-authenticate".to_string()
+                    } else {
+                        format!("error code: {error_code}")
+                    }
+                }
+                Err(_) => format!("HTTP {status}"),
+            };
+            tracing::warn!("OAuth token refresh failed ({hint})");
+            return Some(auth);
+        }
+
+        let token_response: TokenRefreshResponse = match response.json().await {
+            Ok(body) => body,
+            Err(e) => {
+                tracing::warn!("Failed to read OAuth refresh response body: {e}");
+                return Some(auth);
+            }
+        };
+
+        let new_expires_at = token_response.expires_in.map(|secs| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64
+                + secs
+        });
+
+        let refreshed = Authentication::OAuth {
+            access_token: token_response.access_token,
+            refresh_token: token_response
+                .refresh_token
+                .or_else(|| refresh_token.clone()),
+            expires_at: new_expires_at,
+            token_endpoint: token_endpoint.clone(),
+            revocation_endpoint: revocation_endpoint.clone(),
+            client_id: client_id.clone(),
+        };
+
+        // Store the refreshed token back (best-effort)
+        if let Err(e) = self.auth_storage.store(matched_key, &refreshed) {
+            tracing::warn!("Failed to store refreshed OAuth token: {e}");
+        }
+
+        // Invalidate the cache entry for the old token
+        let _ = access_token;
+
+        Some(refreshed)
+    }
 }
 
 /// Returns the default auth storage directory used by rattler.
-/// Would be placed in $HOME/.rattler, except when there is no home then it will be put in '/rattler/'
+/// Would be placed in $HOME/.rattler, except when there is no home then it will
+/// be put in '/rattler/'
 pub fn default_auth_store_fallback_directory() -> &'static Path {
     static FALLBACK_AUTH_DIR: OnceLock<PathBuf> = OnceLock::new();
     FALLBACK_AUTH_DIR.get_or_init(|| {
@@ -142,16 +301,18 @@ pub fn default_auth_store_fallback_directory() -> &'static Path {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::authentication_storage::backends::file::FileStorage;
     use std::sync::Arc;
-    use tempfile::tempdir;
 
     #[cfg(feature = "keyring")]
     use anyhow::anyhow;
+    use tempfile::tempdir;
+
+    use super::*;
+    use crate::authentication_storage::backends::file::FileStorage;
 
     #[cfg(feature = "keyring")]
-    // Requests are only authenticated when executed, so we need to capture and cancel the request
+    // Requests are only authenticated when executed, so we need to capture and
+    // cancel the request
     struct CaptureAbortMiddleware {
         pub captured_tx: tokio::sync::mpsc::Sender<reqwest::Request>,
     }
@@ -253,7 +414,8 @@ mod tests {
         let request = client.get("https://conda.example.com/conda-forge/noarch/testpkg.tar.bz2");
         let request = request.build()?;
 
-        // we expect middleware error. if auth middleware fails, tests below will detect it
+        // we expect middleware error. if auth middleware fails, tests below will detect
+        // it
         let _ = client.execute(request).await;
 
         let captured_request = captured_rx.recv().await.unwrap();
