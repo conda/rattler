@@ -18,62 +18,69 @@ struct LoginArgs {
     /// The host to authenticate with (e.g. prefix.dev)
     host: String,
 
+    // -- Token / Basic auth --
     /// The token to use (for authentication with prefix.dev)
-    #[clap(long)]
+    #[clap(long, help_heading = "Token / Basic Authentication")]
     token: Option<String>,
 
     /// The username to use (for basic HTTP authentication)
-    #[clap(long)]
+    #[clap(long, help_heading = "Token / Basic Authentication")]
     username: Option<String>,
 
     /// The password to use (for basic HTTP authentication)
-    #[clap(long)]
+    #[clap(long, help_heading = "Token / Basic Authentication")]
     password: Option<String>,
 
     /// The token to use on anaconda.org / quetz authentication
-    #[clap(long)]
+    #[clap(long, help_heading = "Token / Basic Authentication")]
     conda_token: Option<String>,
 
+    // -- S3 --
     /// The S3 access key ID
-    #[clap(long, requires_all = ["s3_secret_access_key"], conflicts_with_all = ["token", "username", "password", "conda_token"])]
+    #[clap(long, requires_all = ["s3_secret_access_key"], conflicts_with_all = ["token", "username", "password", "conda_token"], help_heading = "S3 Authentication")]
     s3_access_key_id: Option<String>,
 
     /// The S3 secret access key
-    #[clap(long, requires_all = ["s3_access_key_id"])]
+    #[clap(long, requires_all = ["s3_access_key_id"], help_heading = "S3 Authentication")]
     s3_secret_access_key: Option<String>,
 
     /// The S3 session token
-    #[clap(long, requires_all = ["s3_access_key_id"])]
+    #[clap(long, requires_all = ["s3_access_key_id"], help_heading = "S3 Authentication")]
     s3_session_token: Option<String>,
 
+    // -- OAuth/OIDC --
     /// Use OAuth/OIDC authentication
     #[cfg(feature = "oauth")]
-    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id"])]
+    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id"], help_heading = "OAuth/OIDC Authentication")]
     oauth: bool,
 
     /// OIDC issuer URL (defaults to https://{host})
     #[cfg(feature = "oauth")]
-    #[clap(long, requires = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
     issuer_url: Option<String>,
 
     /// OAuth client ID (defaults to "rattler")
     #[cfg(feature = "oauth")]
-    #[clap(long, requires = "oauth")]
-    client_id: Option<String>,
+    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
+    oauth_client_id: Option<String>,
 
     /// OAuth client secret (for confidential clients)
     #[cfg(feature = "oauth")]
-    #[clap(long, requires = "oauth")]
-    client_secret: Option<String>,
+    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
+    oauth_client_secret: Option<String>,
 
     /// OAuth flow: auto (default), auth-code, device-code
     #[cfg(feature = "oauth")]
-    #[clap(long, requires = "oauth", value_parser = ["auto", "auth-code", "device-code"])]
+    #[clap(long, requires = "oauth", value_parser = ["auto", "auth-code", "device-code"], help_heading = "OAuth/OIDC Authentication")]
     oauth_flow: Option<String>,
 
     /// Additional OAuth scopes to request (repeatable)
     #[cfg(feature = "oauth")]
-    #[clap(long = "oauth-scope", requires = "oauth")]
+    #[clap(
+        long = "oauth-scope",
+        requires = "oauth",
+        help_heading = "OAuth/OIDC Authentication"
+    )]
     oauth_scopes: Vec<String>,
 }
 
@@ -201,7 +208,9 @@ async fn login(
         let issuer_url = args
             .issuer_url
             .unwrap_or_else(|| format!("https://{}", args.host));
-        let client_id = args.client_id.unwrap_or_else(|| "rattler".to_string());
+        let client_id = args
+            .oauth_client_id
+            .unwrap_or_else(|| "rattler".to_string());
         let flow = match args.oauth_flow.as_deref() {
             Some("auth-code") => oauth::OAuthFlow::AuthCode,
             Some("device-code") => oauth::OAuthFlow::DeviceCode,
@@ -211,7 +220,7 @@ async fn login(
         let config = oauth::OAuthConfig {
             issuer_url,
             client_id,
-            client_secret: args.client_secret,
+            client_secret: args.oauth_client_secret,
             flow,
             scopes: args.oauth_scopes.into_iter().collect(),
         };
@@ -429,9 +438,9 @@ mod tests {
             #[cfg(feature = "oauth")]
             issuer_url: None,
             #[cfg(feature = "oauth")]
-            client_id: None,
+            oauth_client_id: None,
             #[cfg(feature = "oauth")]
-            client_secret: None,
+            oauth_client_secret: None,
             #[cfg(feature = "oauth")]
             oauth_flow: None,
             #[cfg(feature = "oauth")]
