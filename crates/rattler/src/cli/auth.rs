@@ -61,6 +61,11 @@ struct LoginArgs {
     #[clap(long, requires = "oauth")]
     client_id: Option<String>,
 
+    /// OAuth client secret (for confidential clients)
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth")]
+    client_secret: Option<String>,
+
     /// OAuth flow: auto (default), auth-code, device-code
     #[cfg(feature = "oauth")]
     #[clap(long, requires = "oauth", value_parser = ["auto", "auth-code", "device-code"])]
@@ -206,6 +211,7 @@ async fn login(
         let config = oauth::OAuthConfig {
             issuer_url,
             client_id,
+            client_secret: args.client_secret,
             flow,
             scopes: args.oauth_scopes.into_iter().collect(),
         };
@@ -214,6 +220,7 @@ async fn login(
         // OAuth credentials are issuer-specific, skip wildcard conversion
         let host = args.host.clone();
         storage.store(&host, &auth)?;
+        eprintln!("Credentials stored for {host}.");
         return Ok(());
     }
 
@@ -423,6 +430,8 @@ mod tests {
             issuer_url: None,
             #[cfg(feature = "oauth")]
             client_id: None,
+            #[cfg(feature = "oauth")]
+            client_secret: None,
             #[cfg(feature = "oauth")]
             oauth_flow: None,
             #[cfg(feature = "oauth")]

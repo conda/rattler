@@ -10,9 +10,6 @@ use std::{
 };
 
 use openidconnect::{
-    AdditionalProviderMetadata, AuthorizationCode, ClientId, CsrfToken, DeviceAuthorizationUrl,
-    IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge, ProviderMetadata, RedirectUrl, Scope,
-    TokenResponse,
     core::{
         CoreAuthDisplay, CoreClaimName, CoreClaimType, CoreClient, CoreClientAuthMethod,
         CoreDeviceAuthorizationResponse, CoreGrantType, CoreIdTokenClaims, CoreJsonWebKey,
@@ -63,6 +60,8 @@ pub struct OAuthConfig {
     pub issuer_url: String,
     /// The OAuth client ID.
     pub client_id: String,
+    /// The OAuth client secret (for confidential clients).
+    pub client_secret: Option<String>,
     /// Which flow to use.
     pub flow: OAuthFlow,
     /// Additional OAuth scopes to request.
@@ -139,6 +138,14 @@ struct DiscoveredEndpoints {
     device_authorization_endpoint: Option<String>,
 }
 
+/// Parsed values from the OAuth redirect callback.
+struct CallbackResult {
+    code: String,
+    state: String,
+    /// The TCP stream to send the browser response on after the token exchange.
+    stream: std::net::TcpStream,
+}
+
 /// Perform an OAuth/OIDC login and return the resulting
 /// `Authentication::OAuth`.
 pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, OAuthError> {
@@ -150,24 +157,35 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
     // 1. OIDC Discovery
     let endpoints = discover_endpoints(&http_client, &config.issuer_url).await?;
 
+    let client_secret = config.client_secret.as_deref();
+
     // 2. Run the appropriate flow
     let tokens = match config.flow {
         OAuthFlow::AuthCode => {
             auth_code_flow(
-                &endpoints.provider_metadata,
+                &endpoints,
                 &config.client_id,
+                client_secret,
                 &config.scopes,
                 &http_client,
             )
             .await?
         }
         OAuthFlow::DeviceCode => {
-            device_code_flow(&endpoints, &config.client_id, &config.scopes, &http_client).await?
+            device_code_flow(
+                &endpoints,
+                &config.client_id,
+                client_secret,
+                &config.scopes,
+                &http_client,
+            )
+            .await?
         }
         OAuthFlow::Auto => {
             match auth_code_flow(
-                &endpoints.provider_metadata,
+                &endpoints,
                 &config.client_id,
+                client_secret,
                 &config.scopes,
                 &http_client,
             )
@@ -176,8 +194,14 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
                 Ok(tokens) => tokens,
                 Err(OAuthError::BrowserOpen(e)) => {
                     eprintln!("Failed to open browser ({e}), falling back to device code flow...");
-                    device_code_flow(&endpoints, &config.client_id, &config.scopes, &http_client)
-                        .await?
+                    device_code_flow(
+                        &endpoints,
+                        &config.client_id,
+                        client_secret,
+                        &config.scopes,
+                        &http_client,
+                    )
+                    .await?
                 }
                 Err(e) => return Err(e),
             }
@@ -185,8 +209,9 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
     };
 
     // 3. Display authenticated identity
-    if let Some(identity) = &tokens.authenticated_as {
-        eprintln!("Authenticated as: {identity}");
+    match &tokens.authenticated_as {
+        Some(identity) => eprintln!("Authenticated as: {identity}"),
+        None => eprintln!("Authentication successful."),
     }
 
     // 4. Build the Authentication::OAuth value
@@ -227,7 +252,9 @@ async fn discover_endpoints(
     let token_endpoint = provider_metadata
         .token_endpoint()
         .map(|u| u.url().to_string())
-        .unwrap_or_default();
+        .ok_or_else(|| {
+            OAuthError::Discovery("provider metadata does not include a token endpoint".into())
+        })?;
 
     let extra = provider_metadata.additional_metadata();
     let revocation_endpoint = extra.revocation_endpoint.clone();
@@ -248,8 +275,9 @@ async fn discover_endpoints(
 /// 3. Waits for the redirect callback
 /// 4. Exchanges the authorization code for tokens
 async fn auth_code_flow(
-    provider_metadata: &ExtendedCoreProviderMetadata,
+    endpoints: &DiscoveredEndpoints,
     client_id: &str,
+    client_secret: Option<&str>,
     scopes: &HashSet<String>,
     http_client: &reqwest::Client,
 ) -> Result<OAuthTokens, OAuthError> {
@@ -258,13 +286,17 @@ async fn auth_code_flow(
     let local_addr = listener.local_addr()?;
     let redirect_url = format!("http://127.0.0.1:{}", local_addr.port());
 
-    let client = CoreClient::from_provider_metadata(
-        provider_metadata.clone(),
+    let mut client = CoreClient::from_provider_metadata(
+        endpoints.provider_metadata.clone(),
         ClientId::new(client_id.to_string()),
-        None,
+        client_secret.map(|s| ClientSecret::new(s.to_string())),
     )
-    .set_redirect_uri(RedirectUrl::new(redirect_url).map_err(OAuthError::UrlParse)?)
-    .set_auth_type(openidconnect::AuthType::RequestBody);
+    .set_redirect_uri(RedirectUrl::new(redirect_url).map_err(OAuthError::UrlParse)?);
+
+    // Public clients (no secret) must send client_id in the request body
+    if client_secret.is_none() {
+        client = client.set_auth_type(openidconnect::AuthType::RequestBody);
+    }
 
     // Generate PKCE challenge
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
@@ -289,8 +321,18 @@ async fn auth_code_flow(
     // Print that we are opening the browser
     eprintln!("Opening browser at:\n\n{auth_url_str}");
 
-    // Wait for the redirect callback
-    let callback = accept_redirect_callback(&listener).await?;
+    // Wait for the redirect callback (with timeout)
+    eprintln!("Waiting for authentication in browser...");
+    let callback = tokio::time::timeout(
+        Duration::from_secs(300),
+        accept_redirect_callback(&listener),
+    )
+    .await
+    .map_err(|_timeout| {
+        OAuthError::Authorization(
+            "timed out waiting for browser authentication — please try again".into(),
+        )
+    })??;
 
     // Verify CSRF state
     if callback.state != *csrf_token.secret() {
@@ -317,10 +359,15 @@ async fn auth_code_flow(
         }
     };
 
-    let authenticated_as = token_response
-        .id_token()
-        .and_then(|id_token| id_token.claims(&client.id_token_verifier(), &nonce).ok())
-        .map(display_name_from_claims);
+    let authenticated_as = token_response.id_token().and_then(|id_token| {
+        match id_token.claims(&client.id_token_verifier(), &nonce) {
+            Ok(claims) => Some(display_name_from_claims(claims)),
+            Err(e) => {
+                tracing::debug!("ID token verification failed: {e}");
+                None
+            }
+        }
+    });
 
     Ok(OAuthTokens {
         access_token: token_response.access_token().secret().clone(),
@@ -328,14 +375,6 @@ async fn auth_code_flow(
         expires_in: token_response.expires_in(),
         authenticated_as,
     })
-}
-
-/// Parsed values from the OAuth redirect callback.
-struct CallbackResult {
-    code: String,
-    state: String,
-    /// The TCP stream to send the browser response on after the token exchange.
-    stream: std::net::TcpStream,
 }
 
 /// Accept the OAuth redirect callback on the local TCP listener.
@@ -402,14 +441,27 @@ async fn accept_redirect_callback(listener: &TcpListener) -> Result<CallbackResu
     })
 }
 
+/// Escape a string for safe interpolation into HTML.
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
+}
+
 /// Send an HTML response to the browser on the callback stream.
 fn send_callback_response(stream: &std::net::TcpStream, success: bool, detail: &str) {
     let response_body = if success {
         "<html><body><h1>Authentication successful!</h1>\
-            <p>You can close this window.</p></body></html>"
+            <p>You can close this window and return to the terminal.</p></body></html>"
             .to_string()
     } else {
-        format!("<html><body><h1>Authentication failed</h1><p>{detail}</p></body></html>")
+        let escaped = html_escape(detail);
+        format!(
+            "<html><body><h1>Authentication failed</h1><p>{escaped}</p>\
+                <p>Please return to the terminal and try again.</p></body></html>"
+        )
     };
     let response = format!(
         "HTTP/1.1 200 OK\r\n\
@@ -433,6 +485,7 @@ fn send_callback_response(stream: &std::net::TcpStream, success: bool, detail: &
 async fn device_code_flow(
     endpoints: &DiscoveredEndpoints,
     client_id: &str,
+    client_secret: Option<&str>,
     scopes: &HashSet<String>,
     http_client: &reqwest::Client,
 ) -> Result<OAuthTokens, OAuthError> {
@@ -444,13 +497,17 @@ async fn device_code_flow(
     let device_auth_url = DeviceAuthorizationUrl::new(device_auth_url.to_string())
         .map_err(|e| OAuthError::Authorization(format!("Invalid device authorization URL: {e}")))?;
 
-    let client = CoreClient::from_provider_metadata(
+    let mut client = CoreClient::from_provider_metadata(
         endpoints.provider_metadata.clone(),
         ClientId::new(client_id.to_string()),
-        None,
+        client_secret.map(|s| ClientSecret::new(s.to_string())),
     )
-    .set_device_authorization_url(device_auth_url)
-    .set_auth_type(openidconnect::AuthType::RequestBody);
+    .set_device_authorization_url(device_auth_url);
+
+    // Public clients (no secret) must send client_id in the request body
+    if client_secret.is_none() {
+        client = client.set_auth_type(openidconnect::AuthType::RequestBody);
+    }
 
     // Step 1: Request device authorization
     let mut device_request = client.exchange_device_code();
@@ -464,17 +521,26 @@ async fn device_code_flow(
         .map_err(|e| OAuthError::Authorization(format!("Device authorization failed: {e}")))?;
 
     // Step 2: Display instructions
-    eprintln!(
-        "\nTo authenticate, visit: {}",
-        details.verification_uri().as_str()
-    );
-    eprintln!("And enter the code: {}\n", details.user_code().secret());
-
     if let Some(complete_uri) = details.verification_uri_complete() {
-        eprintln!("Or visit: {}", complete_uri.secret());
+        eprintln!(
+            "\nOpen this link to authenticate directly:\n\n  {}\n",
+            complete_uri.secret()
+        );
+        eprintln!(
+            "Or visit {} and enter code:  {}\n",
+            details.verification_uri().as_str(),
+            details.user_code().secret()
+        );
+    } else {
+        eprintln!(
+            "\nTo authenticate, visit:\n\n  {}\n\nAnd enter code:  {}\n",
+            details.verification_uri().as_str(),
+            details.user_code().secret()
+        );
     }
 
     // Step 3: Poll the token endpoint
+    eprintln!("Waiting for authorization...");
     let token_response = client
         .exchange_device_access_token(&details)
         .map_err(|e| OAuthError::TokenExchange(format!("token endpoint not configured: {e}")))?
@@ -482,15 +548,16 @@ async fn device_code_flow(
         .await
         .map_err(|e| OAuthError::TokenExchange(e.to_string()))?;
 
-    // Device flow has no nonce, so skip nonce verification
-    let authenticated_as = token_response
-        .id_token()
-        .and_then(|id_token| {
-            id_token
-                .claims(&client.id_token_verifier(), |_: Option<&Nonce>| Ok(()))
-                .ok()
-        })
-        .map(display_name_from_claims);
+    // Device flow has no nonce (RFC 8628), so skip nonce verification
+    let authenticated_as = token_response.id_token().and_then(|id_token| {
+        match id_token.claims(&client.id_token_verifier(), |_: Option<&Nonce>| Ok(())) {
+            Ok(claims) => Some(display_name_from_claims(claims)),
+            Err(e) => {
+                tracing::debug!("ID token verification failed: {e}");
+                None
+            }
+        }
+    });
 
     Ok(OAuthTokens {
         access_token: token_response.access_token().secret().clone(),
@@ -500,13 +567,20 @@ async fn device_code_flow(
     })
 }
 
-/// Extract a display name from ID token claims, preferring email over subject.
+/// Extract a display name from ID token claims.
+///
+/// Prefers email > `preferred_username` > name > subject.
 fn display_name_from_claims(claims: &CoreIdTokenClaims) -> String {
     if let Some(email) = claims.email() {
         return email.to_string();
     }
     if let Some(username) = claims.preferred_username() {
         return username.to_string();
+    }
+    if let Some(name) = claims.name() {
+        if let Some(n) = name.get(None) {
+            return n.to_string();
+        }
     }
     claims.subject().to_string()
 }
