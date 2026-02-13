@@ -1,6 +1,6 @@
 [package]
 name = "path_resolver"
-version = "0.2.4"
+version = "0.2.5"
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true

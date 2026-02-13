@@ -1,6 +1,6 @@
 [package]
 name = "rattler_index"
-version = "0.27.13"
+version = "0.27.14"
 edition.workspace = true
 authors = []
 description = "A crate to index conda channels and create a repodata.json file."

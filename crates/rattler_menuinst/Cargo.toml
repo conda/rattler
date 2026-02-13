@@ -1,6 +1,6 @@
 [package]
 name = "rattler_menuinst"
-version = "0.2.46"
+version = "0.2.47"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Install menu entries for a Conda package"
