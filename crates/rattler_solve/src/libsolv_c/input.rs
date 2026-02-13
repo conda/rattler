@@ -214,7 +214,7 @@ pub fn add_repodata_records<'a>(
             // Track this extra for synthetic solvable creation
             extras.insert((record.name.as_normalized().to_string(), extra_name.clone()));
 
-            // Create conditional dependencies: dep; if package[extra]
+            // Create conditional dependencies: dep[when="package[extra]"]
             for dep_str in deps.iter() {
                 // Parse the dependency matchspec
                 let dep_id = pool.conda_matchspec(&c_string(dep_str));
@@ -223,7 +223,7 @@ pub fn add_repodata_records<'a>(
                 let extra_name_str = format!("{}[{}]", record.name.as_normalized(), extra_name);
                 let extra_condition_id = pool.intern_str(extra_name_str.as_str()).into();
 
-                // Create a conditional dependency: dep; if package[extra]
+                // Create a conditional dependency: dep[when="package[extra]"]
                 let conditional_dep_id = pool.rel_cond(dep_id, extra_condition_id);
 
                 // Add it as a requirement
