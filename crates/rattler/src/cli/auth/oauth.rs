@@ -401,8 +401,8 @@ async fn accept_redirect_callback(listener: &TcpListener) -> Result<CallbackResu
         .nth(1)
         .ok_or(OAuthError::InvalidCallback)?;
 
-    let callback_url =
-        Url::parse(&format!("http://localhost{path}")).map_err(|_| OAuthError::InvalidCallback)?;
+    let callback_url = Url::parse(&format!("http://localhost{path}"))
+        .map_err(|_err| OAuthError::InvalidCallback)?;
 
     // Check for an error response from the identity provider (RFC 6749 Section
     // 4.1.2.1)

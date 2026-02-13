@@ -54,10 +54,10 @@ struct LoginArgs {
     #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id"], help_heading = "OAuth/OIDC Authentication")]
     oauth: bool,
 
-    /// OIDC issuer URL (defaults to https://{host})
+    /// OIDC issuer URL (defaults to <https://{host>})
     #[cfg(feature = "oauth")]
     #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
-    issuer_url: Option<String>,
+    oauth_issuer_url: Option<String>,
 
     /// OAuth client ID (defaults to "rattler")
     #[cfg(feature = "oauth")]
@@ -91,6 +91,7 @@ struct LogoutArgs {
 }
 
 #[derive(Parser, Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Subcommand {
     /// Store authentication information for a given host
     Login(LoginArgs),
@@ -206,7 +207,7 @@ async fn login(
     #[cfg(feature = "oauth")]
     if args.oauth {
         let issuer_url = args
-            .issuer_url
+            .oauth_issuer_url
             .unwrap_or_else(|| format!("https://{}", args.host));
         let client_id = args
             .oauth_client_id
@@ -375,15 +376,19 @@ async fn logout(
     if let Ok(Some(Authentication::OAuth {
         ref access_token,
         ref refresh_token,
-        ref revocation_endpoint,
+        revocation_endpoint: Some(ref revocation_endpoint),
         ref client_id,
         ..
     })) = storage.get(&host)
     {
-        if let Some(endpoint) = revocation_endpoint {
-            eprintln!("Revoking OAuth tokens...");
-            oauth::revoke_tokens(endpoint, access_token, refresh_token.as_deref(), client_id).await;
-        }
+        eprintln!("Revoking OAuth tokens...");
+        oauth::revoke_tokens(
+            revocation_endpoint,
+            access_token,
+            refresh_token.as_deref(),
+            client_id,
+        )
+        .await;
     }
 
     println!("Removing authentication for {host}");
@@ -436,7 +441,7 @@ mod tests {
             #[cfg(feature = "oauth")]
             oauth: false,
             #[cfg(feature = "oauth")]
-            issuer_url: None,
+            oauth_issuer_url: None,
             #[cfg(feature = "oauth")]
             oauth_client_id: None,
             #[cfg(feature = "oauth")]
