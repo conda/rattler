@@ -155,11 +155,10 @@ async fn login(
     let auth = if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
     } else if let Some(username) = args.username {
-        if args.password.is_none() {
-            return Err(AuthenticationCLIError::MissingPassword);
-        } else {
-            let password = args.password.unwrap();
+        if let Some(password) = args.password {
             Authentication::BasicHTTP { username, password }
+        } else {
+            return Err(AuthenticationCLIError::MissingPassword);
         }
     } else if let Some(token) = args.token {
         Authentication::BearerToken(token)

@@ -54,8 +54,7 @@ enum Command {
 /// Entry point of the `rattler` cli.
 fn main() -> miette::Result<()> {
     let num_cores = std::thread::available_parallelism()
-        .map(std::num::NonZero::get)
-        .unwrap_or(2)
+        .map_or(2, std::num::NonZero::get)
         .max(2);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()

@@ -157,8 +157,7 @@ impl PackageCacheLayer {
     pub fn is_readonly(&self) -> bool {
         self.path
             .metadata()
-            .map(|m| m.permissions().readonly())
-            .unwrap_or(false)
+            .is_ok_and(|m| m.permissions().readonly())
     }
 
     /// Validate the packages.
