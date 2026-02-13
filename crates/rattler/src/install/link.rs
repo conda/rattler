@@ -140,9 +140,10 @@ pub struct LinkedFile {
 ///
 /// Note that usually the `target_prefix` is equal to `target_dir` but it might differ. See
 /// [`crate::install::InstallOptions::target_prefix`] for more information.
-#[allow(clippy::too_many_arguments)] // TODO: Fix this properly
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)] // TODO: Fix this properly
 pub fn link_file(
     path_json_entry: &PathsEntry,
+    has_executable: bool,
     destination_relative_path: PathBuf,
     package_dir: &Path,
     target_dir: &Prefix,
@@ -165,6 +166,7 @@ pub fn link_file(
     let link_method = if let Some(PrefixPlaceholder {
         file_mode,
         placeholder,
+        offsets,
     }) = path_json_entry.prefix_placeholder.as_ref()
     {
         // Memory map the source file. This provides us with easy access to a continuous stream of
@@ -203,16 +205,37 @@ pub fn link_file(
             Cow::Borrowed(target_prefix)
         };
 
-        // Replace the prefix placeholder in the file with the new placeholder
-        copy_and_replace_placeholders(
-            source.as_ref(),
-            &mut destination_writer,
-            placeholder,
-            &target_prefix,
-            &target_platform,
-            *file_mode,
-        )
-        .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
+        // depending on the availability of the offsets
+        match offsets {
+            Some(offsets) => {
+                copy_and_replace_placeholders_with_offsets(
+                    source.as_ref(),
+                    &mut destination_writer,
+                    placeholder,
+                    &target_prefix,
+                    &target_platform,
+                    *file_mode,
+                    offsets,
+                )
+                .map_err(|err| {
+                    LinkFileError::IoError(String::from("replacing placeholders"), err)
+                })?;
+            }
+            None => {
+                // Replace the prefix placeholder in the file with the new placeholder
+                copy_and_replace_placeholders(
+                    source.as_ref(),
+                    &mut destination_writer,
+                    placeholder,
+                    &target_prefix,
+                    &target_platform,
+                    *file_mode,
+                )
+                .map_err(|err| {
+                    LinkFileError::IoError(String::from("replacing placeholders"), err)
+                })?;
+            }
+        }
 
         let (mut file, current_hash) = destination_writer.finalize();
 
@@ -226,11 +249,17 @@ pub fn link_file(
 
         let metadata = fs::symlink_metadata(&source_path)
             .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+
+        let executable = if has_executable {
+            path_json_entry.executable.unwrap_or(false)
+        } else {
+            has_executable_permissions(&metadata.permissions())
+        };
+
         // (re)sign the binary if the file is executable or is a Mach-O binary (e.g., dylib)
         // This is required for all macOS platforms because prefix replacement modifies the binary
         // content, which invalidates existing signatures. We need to preserve entitlements.
-        if (has_executable_permissions(&metadata.permissions())
-            || file_type == Some(FileType::MachO))
+        if (executable || file_type == Some(FileType::MachO))
             && target_platform.is_osx()
             && *file_mode == FileMode::Binary
         {
@@ -566,6 +595,51 @@ pub fn copy_and_replace_placeholders(
     Ok(())
 }
 
+/// Given the contents of a file copy it to the `destination` and in the process replace the
+/// `prefix_placeholder` text with the `target_prefix` text.
+///
+/// This switches to more specialized functions that handle the replacement of either
+/// textual and binary placeholders, the [`FileMode`] enum switches between the two functions.
+/// See both [`copy_and_replace_cstring_placeholder`] and [`copy_and_replace_textual_placeholder`]
+pub fn copy_and_replace_placeholders_with_offsets(
+    source_bytes: &[u8],
+    mut destination: impl Write,
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    target_platform: &Platform,
+    file_mode: FileMode,
+    offsets: &[usize],
+) -> Result<(), std::io::Error> {
+    match file_mode {
+        FileMode::Text => {
+            copy_and_replace_textual_placeholder_offsets(
+                source_bytes,
+                destination,
+                prefix_placeholder,
+                target_prefix,
+                target_platform,
+                offsets,
+            )?;
+        }
+        FileMode::Binary => {
+            // conda does not replace the prefix in the binary files on windows
+            // DLLs are loaded quite differently anyways (there is no rpath, for example).
+            if target_platform.is_windows() {
+                destination.write_all(source_bytes)?;
+            } else {
+                copy_and_replace_cstring_placeholder_offsets(
+                    source_bytes,
+                    destination,
+                    prefix_placeholder,
+                    target_prefix,
+                    offsets,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 static SHEBANG_REGEX: Lazy<Regex> = Lazy::new(|| {
     // ^(#!      pretty much the whole match string
     // (?:[ ]*)  allow spaces between #! and beginning of
@@ -712,6 +786,57 @@ pub fn copy_and_replace_textual_placeholder(
     Ok(())
 }
 
+/// Given the contents of a file copy it to the `destination` and in the process replace the
+/// `prefix_placeholder` text with the `target_prefix` text using the offsets from the paths.json
+///
+/// This is a text based version where the complete string is replaced. This works fine for text
+/// files but will not work correctly for binary files where the length of the string is often
+/// important. See [`copy_and_replace_cstring_placeholder`] when you are dealing with binary
+/// content.
+pub fn copy_and_replace_textual_placeholder_offsets(
+    mut source_bytes: &[u8],
+    mut destination: impl Write,
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    target_platform: &Platform,
+    offsets: &[usize],
+) -> Result<(), std::io::Error> {
+    let old_prefix = prefix_placeholder.as_bytes();
+    let new_prefix = target_prefix.as_bytes();
+
+    // check if we have a shebang. We need to handle it differently because it has a maximum length
+    // that can be exceeded in very long target prefix's.
+    if target_platform.is_unix() && source_bytes.starts_with(b"#!") {
+        // extract first line
+        let (first, rest) =
+            source_bytes.split_at(source_bytes.iter().position(|&c| c == b'\n').unwrap_or(0));
+        let first_line = String::from_utf8_lossy(first);
+        let new_shebang = replace_shebang(
+            first_line,
+            (prefix_placeholder, target_prefix),
+            target_platform,
+        );
+        // let replaced = first_line.replace(prefix_placeholder, target_prefix);
+        destination.write_all(new_shebang.as_bytes())?;
+        source_bytes = rest;
+    }
+
+    let mut last_match = 0;
+
+    for &offset in offsets {
+        destination.write_all(&source_bytes[last_match..offset])?;
+        destination.write_all(new_prefix)?;
+        last_match = offset + old_prefix.len();
+    }
+
+    // Write remaining bytes
+    if last_match < source_bytes.len() {
+        destination.write_all(&source_bytes[last_match..])?;
+    }
+
+    Ok(())
+}
+
 /// Given the contents of a file, copies it to the `destination` and in the process replace any
 /// binary c-style string that contains the text `prefix_placeholder` with a binary compatible
 /// c-string where the `prefix_placeholder` text is replaced with the `target_prefix` text.
@@ -785,6 +910,74 @@ pub fn copy_and_replace_cstring_placeholder(
             return Ok(());
         }
     }
+}
+
+/// Given the contents & offsets of a file, copies it to the `destination` and in the process replace
+/// any binary c-style string that contains the text `prefix_placeholder` with a binary compatible
+/// c-string where the `prefix_placeholder` text is replaced with the `target_prefix` text.
+///
+/// The length of the input will match the output.
+///
+/// This function replaces binary c-style strings using pre-computed offsets for better performance.
+pub fn copy_and_replace_cstring_placeholder_offsets(
+    source_bytes: &[u8],
+    mut destination: impl Write,
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    offsets: &[usize],
+) -> Result<(), std::io::Error> {
+    let old_prefix = prefix_placeholder.as_bytes();
+    let new_prefix = target_prefix.as_bytes();
+
+    if new_prefix.len() > old_prefix.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "target prefix cannot be longer than the placeholder prefix",
+        ));
+    }
+
+    let mut last_pos = 0;
+    let length_change = old_prefix.len() - new_prefix.len();
+    let mut unfinished_changes = 0;
+
+    for (index, &offset) in offsets.iter().enumerate() {
+        destination.write_all(&source_bytes[last_pos..offset])?;
+
+        destination.write_all(new_prefix)?;
+
+        let mut end = offset + old_prefix.len();
+        let next_offset = offsets
+            .get(index + 1)
+            .copied()
+            .unwrap_or(source_bytes.len());
+
+        while end < source_bytes.len() && source_bytes[end] != b'\0' && end < next_offset {
+            end += 1;
+        }
+
+        destination.write_all(&source_bytes[(offset + old_prefix.len())..end])?;
+
+        if end == next_offset {
+            unfinished_changes += 1;
+            last_pos = end;
+            continue;
+        };
+
+        let padding = (unfinished_changes + 1) * length_change;
+        if padding > 0 {
+            destination.write_all(&vec![0; padding])?;
+            unfinished_changes = 0;
+        }
+
+        last_pos = end;
+    }
+
+    // Write any remaining bytes after the last replacement
+    if last_pos < source_bytes.len() {
+        destination.write_all(&source_bytes[last_pos..])?;
+    }
+
+    Ok(())
 }
 
 fn symlink(source_path: &Path, destination_path: &Path) -> std::io::Result<()> {
@@ -1093,5 +1286,151 @@ mod test {
         // Test empty file
         let empty: [u8; 0] = [];
         assert_eq!(FileType::detect(&empty), None);
+    }
+
+    #[rstest]
+    #[case("Hello, cruel world!", [7].to_vec(), "cruel", "fabulous", "Hello, fabulous world!")]
+    #[case(
+        "prefix_placeholder",
+        [0].to_vec(),
+        "prefix_placeholder",
+        "target_prefix",
+        "target_prefix"
+    )]
+    pub fn test_copy_and_replace_textual_placeholder_with_offsets(
+        #[case] input: &str,
+        #[case] offsets: Vec<usize>,
+        #[case] prefix_placeholder: &str,
+        #[case] target_prefix: &str,
+        #[case] expected_output: &str,
+    ) {
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder_offsets(
+            input.as_bytes(),
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+            &Platform::Linux64,
+            &offsets,
+        )
+        .unwrap();
+        assert_eq!(
+            &String::from_utf8_lossy(&output.into_inner()),
+            expected_output
+        );
+    }
+
+    #[rstest]
+    #[case(
+        b"12345Hello, fabulous world!\x006789",
+        [12].to_vec(),
+        "fabulous",
+        "cruel",
+        b"12345Hello, cruel world!\x00\x00\x00\x006789"
+    )]
+    pub fn test_copy_and_replace_binary_placeholder_offsets(
+        #[case] input: &[u8],
+        #[case] offsets: Vec<usize>,
+        #[case] prefix_placeholder: &str,
+        #[case] target_prefix: &str,
+        #[case] expected_output: &[u8],
+    ) {
+        assert_eq!(
+            expected_output.len(),
+            input.len(),
+            "input and expected output must have the same length"
+        );
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_cstring_placeholder_offsets(
+            input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+            &offsets,
+        )
+        .unwrap();
+        assert_eq!(&output.into_inner(), expected_output);
+    }
+
+    #[rstest]
+    #[case(b"short\x00", [0].to_vec(), "short", "verylong")]
+    #[case(b"short1234\x00", [0].to_vec(), "short", "verylong")]
+    pub fn test_shorter_binary_placeholder_offsets(
+        #[case] input: &[u8],
+        #[case] offsets: Vec<usize>,
+        #[case] prefix_placeholder: &str,
+        #[case] target_prefix: &str,
+    ) {
+        assert!(target_prefix.len() > prefix_placeholder.len());
+
+        let mut output = Cursor::new(Vec::new());
+        let result = super::copy_and_replace_cstring_placeholder_offsets(
+            input,
+            &mut output,
+            prefix_placeholder,
+            target_prefix,
+            &offsets,
+        );
+        assert!(result.is_err());
+    }
+
+    #[rstest]
+    #[case(
+        b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/:\x00somemoretext", 
+        b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext",
+        [20, 43].to_vec()
+    )]
+    #[case(
+        b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/another/placeholder/:\x00somemoretext",
+        b"beginrandomdataPATH=/target/etc/share:/target/bin/another/target/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext",
+        [20, 43, 67].to_vec(),
+    )]
+    fn replace_binary_path_var_offsets(
+        #[case] input: &[u8],
+        #[case] result: &[u8],
+        #[case] offsets: Vec<usize>,
+    ) {
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_cstring_placeholder_offsets(
+            input,
+            &mut output,
+            "/placeholder",
+            "/target",
+            &offsets,
+        )
+        .unwrap();
+        let out = &output.into_inner();
+        assert_eq!(out, result);
+        assert_eq!(out.len(), input.len());
+    }
+
+    #[test]
+    fn test_replace_long_prefix_in_text_file_offsets() {
+        let test_data_dir =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
+        let test_file = test_data_dir.join("shebang_test.txt");
+        let prefix_placeholder = "/this/is/placeholder";
+        let mut target_prefix = "/super/long/".to_string();
+        for _ in 0..15 {
+            target_prefix.push_str("verylongstring/");
+        }
+        let input = fs::read(test_file).unwrap();
+
+        let offsets: Vec<usize> = Vec::new();
+
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder_offsets(
+            &input,
+            &mut output,
+            prefix_placeholder,
+            &target_prefix,
+            &Platform::Linux64,
+            &offsets,
+        )
+        .unwrap();
+
+        let output = output.into_inner();
+        let replaced = String::from_utf8_lossy(&output);
+        insta::assert_snapshot!(replaced);
     }
 }

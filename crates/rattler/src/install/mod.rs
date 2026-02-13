@@ -372,6 +372,8 @@ pub async fn link_package(
         }
     }
 
+    let has_executable = paths_json.has_executable.unwrap_or(false);
+
     let directories_target_dir = target_dir.path().to_path_buf();
     driver
         .run_blocking_io_task(move || {
@@ -411,6 +413,7 @@ pub async fn link_package(
             let result = match tokio::task::spawn_blocking(move || {
                 link_file(
                     &cloned_entry,
+                    has_executable,
                     link_path.clobber_path.unwrap_or(link_path.computed_path),
                     &package_dir,
                     &target_dir,
@@ -618,6 +621,8 @@ pub fn link_package_sync(
         },
         Ok,
     )?;
+
+    let has_executable = paths_json.has_executable.unwrap_or(false);
 
     // Error out if this is a noarch python package but the python information is
     // missing.
@@ -831,6 +836,7 @@ pub fn link_package_sync(
                 let is_clobber = link_path.clobber_path.is_some();
                 let link_result = link_file(
                     &entry,
+                    has_executable,
                     link_path
                         .clobber_path
                         .unwrap_or(link_path.computed_path.clone()),
