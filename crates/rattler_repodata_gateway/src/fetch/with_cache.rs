@@ -761,7 +761,7 @@ fn validate_cached_state(
     // Try to read the repodata state cache
     let cache_state = match RepoDataState::from_path(&cache_state_path) {
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            // Ignore, the cache just doesnt exist
+            // Ignore, the cache just doesn't exist
             tracing::debug!("repodata cache state is missing. Ignoring cached files...");
             return ValidatedCacheState::InvalidOrMissing;
         }
@@ -1074,7 +1074,7 @@ mod test {
         );
 
         // I know this is terrible but without the sleep rust is too blazingly fast and
-        // the server doesnt think the file was actually updated.. This is
+        // the server doesn't think the file was actually updated.. This is
         // because the time send by the server has seconds precision.
         tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
 
@@ -1331,7 +1331,7 @@ mod test {
         let subdir_path = TempDir::new().unwrap();
         // Don't add repodata to the channel.
 
-        // Download the "data" from the local filebased channel.
+        // Download the "data" from the local file-based channel.
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             Url::parse(format!("file://{}", subdir_path.path().to_str().unwrap()).as_str())

@@ -60,7 +60,7 @@ impl Repo<'_> {
         self.0.as_ptr()
     }
 
-    /// Adds a new repodata to this repo (repodata is a libsolv datastructure, see [`Repodata`] for
+    /// Adds a new repodata to this repo (repodata is a libsolv data-structure, see [`Repodata`] for
     /// details)
     pub fn add_repodata(&self) -> Repodata<'_> {
         unsafe {

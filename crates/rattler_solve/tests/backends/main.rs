@@ -796,7 +796,7 @@ mod resolvo {
             },
         );
 
-        // We expect an error here. `bors` is pinnend to 1, but we try to install `>=2`.
+        // We expect an error here. `bors` is pinned to 1, but we try to install `>=2`.
         insta::assert_snapshot!(result.unwrap_err());
     }
 
@@ -810,7 +810,7 @@ mod resolvo {
             },
         );
 
-        // We expect an error here. `bors` is pinnend to 1, but we try to install `>=2`.
+        // We expect an error here. `bors` is pinned to 1, but we try to install `>=2`.
         insta::assert_snapshot!(result.unwrap_err());
     }
 

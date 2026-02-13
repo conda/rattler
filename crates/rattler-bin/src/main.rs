@@ -13,7 +13,7 @@ mod writer;
 /// Returns a global instance of [`indicatif::MultiProgress`].
 ///
 /// Although you can always create an instance yourself any logging will
-/// interrupt pending progressbars. To fix this issue, logging has been
+/// interrupt pending progress bars. To fix this issue, logging has been
 /// configured in such a way to it will not interfere if you use the
 /// [`indicatif::MultiProgress`] returning by this function.
 pub fn global_multi_progress() -> MultiProgress {
@@ -54,8 +54,7 @@ enum Command {
 /// Entry point of the `rattler` cli.
 fn main() -> miette::Result<()> {
     let num_cores = std::thread::available_parallelism()
-        .map(std::num::NonZero::get)
-        .unwrap_or(2)
+        .map_or(2, std::num::NonZero::get)
         .max(2);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
