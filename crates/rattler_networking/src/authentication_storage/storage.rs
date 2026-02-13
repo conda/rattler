@@ -143,13 +143,87 @@ impl AuthenticationStorage {
         Ok(None)
     }
 
-    /// Retrieve the authentication information for the given URL
-    /// (including the authentication information for the wildcard
-    /// host if no credentials are found for the given host)
+    /// Try to find credentials by matching host + path prefix (longest match first).
     ///
-    /// E.g. if credentials are stored for `*.prefix.dev` and the
-    /// given URL is `https://repo.prefix.dev`, the credentials
-    /// for `*.prefix.dev` will be returned.
+    /// For a URL like `https://example.com/org/repo/file.json`, tries:
+    /// 1. `example.com/org/repo/file.json`
+    /// 2. `example.com/org/repo`
+    /// 3. `example.com/org`
+    /// 4. `example.com`
+    fn get_by_path_prefix(&self, host: &str, path: &str) -> Result<Option<Authentication>> {
+        // Normalize: remove trailing slashes
+        let path = path.trim_end_matches('/');
+
+        // Start with full host+path
+        let mut current = if path.is_empty() {
+            host.to_string()
+        } else {
+            format!("{host}{path}")
+        };
+
+        loop {
+            if let Some(auth) = self.get(&current)? {
+                return Ok(Some(auth));
+            }
+
+            // Try to strip the last path segment
+            match current.rsplit_once('/') {
+                Some((parent, _)) if !parent.is_empty() => {
+                    current = parent.to_string();
+                }
+                _ => break, // No more segments to strip
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Try to find credentials using wildcard domain expansion.
+    ///
+    /// For a URL like `https://repo.prefix.dev/path`, tries:
+    /// 1. `*.repo.prefix.dev`
+    /// 2. `*.prefix.dev`
+    /// 3. `*.dev`
+    ///
+    /// Note: Wildcards only match against the host, not paths.
+    fn get_by_wildcard_domain(&self, url: &Url) -> Result<Option<Authentication>> {
+        let Some(mut domain) = url.domain() else {
+            return Ok(None);
+        };
+
+        loop {
+            let wildcard_host = format!("*.{domain}");
+
+            if let Some(auth) = self.get(&wildcard_host)? {
+                return Ok(Some(auth));
+            }
+
+            // Try parent domain
+            match domain.split_once('.') {
+                Some((_, rest)) if !rest.is_empty() => {
+                    domain = rest;
+                }
+                _ => return Ok(None), // No more subdomains
+            }
+        }
+    }
+
+    /// Retrieve the authentication information for the given URL using
+    /// longest-prefix path matching, falling back to wildcard domain matching.
+    ///
+    /// ## Matching Order
+    ///
+    /// For a request to `https://repo.prefix.dev/org/repo/file.json`:
+    ///
+    /// 1. `repo.prefix.dev/org/repo/file.json` (exact path)
+    /// 2. `repo.prefix.dev/org/repo`
+    /// 3. `repo.prefix.dev/org`
+    /// 4. `repo.prefix.dev` (host only)
+    /// 5. `*.repo.prefix.dev` (wildcard fallback)
+    /// 6. `*.prefix.dev`
+    /// 7. `*.dev`
+    ///
+    /// Note: Wildcards only match against the host, not paths.
     pub fn get_by_url<U: IntoUrl>(
         &self,
         url: U,
@@ -159,63 +233,29 @@ impl AuthenticationStorage {
             return Ok((url, None));
         };
 
-        match self.get(host) {
+        // For S3 URLs, use the full URL string (s3://bucket/path)
+        // For other URLs, use host + path
+        let (lookup_host, lookup_path) = if url.scheme() == "s3" {
+            (url.as_str().trim_end_matches('/'), "")
+        } else {
+            (host, url.path())
+        };
+
+        // 1. Try path prefix matching (longest to shortest)
+        match self.get_by_path_prefix(lookup_host, lookup_path) {
+            Ok(Some(auth)) => return Ok((url, Some(auth))),
             Ok(None) => {}
             Err(_) => return Ok((url, None)),
-            Ok(Some(credentials)) => return Ok((url, Some(credentials))),
-        };
-
-        // S3 protocol URLs need to be treated separately since they follow a different schema
-        if url.scheme() == "s3" {
-            let mut current_url = url.clone();
-            loop {
-                match self.get(current_url.as_str()) {
-                    Ok(None) => {
-                        let possible_rest =
-                            current_url.as_str().rsplit_once('/').map(|(rest, _)| rest);
-
-                        match possible_rest {
-                            Some(rest) => {
-                                if let Ok(new_url) = Url::parse(rest) {
-                                    current_url = new_url;
-                                } else {
-                                    return Ok((url, None));
-                                }
-                            }
-                            _ => return Ok((url, None)), // No more subpaths to check
-                        }
-                    }
-                    Ok(Some(credentials)) => return Ok((url, Some(credentials))),
-                    Err(_) => return Ok((url, None)),
-                }
-            }
         }
 
-        // Check for credentials under e.g. `*.prefix.dev`
-        let Some(mut domain) = url.domain() else {
-            return Ok((url, None));
-        };
-
-        loop {
-            let wildcard_host = format!("*.{domain}");
-
-            let Ok(credentials) = self.get(&wildcard_host) else {
-                return Ok((url, None));
-            };
-
-            if let Some(credentials) = credentials {
-                return Ok((url, Some(credentials)));
-            }
-
-            let possible_rest = domain.split_once('.').map(|(_, rest)| rest);
-
-            match possible_rest {
-                Some(rest) => {
-                    domain = rest;
-                }
-                _ => return Ok((url, None)), // No more subdomains to check
-            }
+        // 2. Try wildcard domain expansion (host-only, no paths)
+        match self.get_by_wildcard_domain(&url) {
+            Ok(Some(auth)) => return Ok((url, Some(auth))),
+            Ok(None) => {}
+            Err(_) => return Ok((url, None)),
         }
+
+        Ok((url, None))
     }
 
     /// Delete the authentication information for the given host
@@ -249,5 +289,157 @@ impl AuthenticationStorage {
         } else {
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::authentication_storage::backends::memory::MemoryStorage;
+
+    #[test]
+    fn test_path_prefix_matching() {
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::default()));
+
+        // Store credential under host+path
+        let auth = Authentication::BearerToken("token-for-org".to_string());
+        storage.store("example.com/org/repo", &auth).unwrap();
+
+        // Request to subpath should match
+        let (_, result) = storage
+            .get_by_url("https://example.com/org/repo/file.json")
+            .unwrap();
+        assert_eq!(result, Some(auth.clone()));
+
+        // Request to exact path should match
+        let (_, result) = storage.get_by_url("https://example.com/org/repo").unwrap();
+        assert_eq!(result, Some(auth.clone()));
+
+        // Request to different path should NOT match
+        let (_, result) = storage
+            .get_by_url("https://example.com/other/path")
+            .unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_multiple_credentials_per_host() {
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::default()));
+
+        // Store different credentials for different paths on same host
+        let auth_one = Authentication::BearerToken("token-one".to_string());
+        let auth_two = Authentication::BearerToken("token-two".to_string());
+
+        storage.store("example.com/one", &auth_one).unwrap();
+        storage.store("example.com/two", &auth_two).unwrap();
+
+        // Requests to /one should get auth_one
+        let (_, result) = storage
+            .get_by_url("https://example.com/one/packages/file.json")
+            .unwrap();
+        assert_eq!(result, Some(auth_one.clone()));
+
+        // Requests to /two should get auth_two
+        let (_, result) = storage
+            .get_by_url("https://example.com/two/packages/file.json")
+            .unwrap();
+        assert_eq!(result, Some(auth_two.clone()));
+
+        // Requests to unknown path should get nothing (no host-only fallback stored)
+        let (_, result) = storage
+            .get_by_url("https://example.com/three/file.json")
+            .unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_host_only_fallback() {
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::default()));
+
+        // Store credential under host only (no path)
+        let auth = Authentication::BearerToken("fallback-token".to_string());
+        storage.store("example.com", &auth).unwrap();
+
+        // Any path on that host should match
+        let (_, result) = storage
+            .get_by_url("https://example.com/any/path/here")
+            .unwrap();
+        assert_eq!(result, Some(auth.clone()));
+
+        // Root path should also match
+        let (_, result) = storage.get_by_url("https://example.com/").unwrap();
+        assert_eq!(result, Some(auth.clone()));
+
+        // No path should also match
+        let (_, result) = storage.get_by_url("https://example.com").unwrap();
+        assert_eq!(result, Some(auth));
+    }
+
+    #[test]
+    fn test_longest_match_wins() {
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::default()));
+
+        // Store credentials at different path depths
+        let auth_short = Authentication::BearerToken("short".to_string());
+        let auth_long = Authentication::BearerToken("long".to_string());
+
+        storage.store("example.com/org", &auth_short).unwrap();
+        storage.store("example.com/org/repo", &auth_long).unwrap();
+
+        // Request to /org/repo/file should match the longer path
+        let (_, result) = storage
+            .get_by_url("https://example.com/org/repo/file.json")
+            .unwrap();
+        assert_eq!(result, Some(auth_long.clone()));
+
+        // Request to /org/other should match the shorter path
+        let (_, result) = storage
+            .get_by_url("https://example.com/org/other/file.json")
+            .unwrap();
+        assert_eq!(result, Some(auth_short));
+    }
+
+    #[test]
+    fn test_wildcard_fallback_after_path() {
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::default()));
+
+        // Store wildcard credential
+        let auth = Authentication::BearerToken("wildcard-token".to_string());
+        storage.store("*.example.com", &auth).unwrap();
+
+        // Request to subdomain with path should fall through to wildcard
+        let (_, result) = storage
+            .get_by_url("https://repo.example.com/org/file.json")
+            .unwrap();
+        assert_eq!(result, Some(auth));
+    }
+
+    #[test]
+    fn test_s3_path_matching() {
+        let mut storage = AuthenticationStorage::empty();
+        storage.add_backend(Arc::new(MemoryStorage::default()));
+
+        // Store S3 credential with path
+        let auth = Authentication::S3Credentials {
+            access_key_id: "key".to_string(),
+            secret_access_key: "secret".to_string(),
+            session_token: None,
+        };
+        storage.store("s3://bucket/prefix", &auth).unwrap();
+
+        // Request to subpath should match
+        let (_, result) = storage
+            .get_by_url("s3://bucket/prefix/path/to/file")
+            .unwrap();
+        assert_eq!(result, Some(auth.clone()));
+
+        // Request to different prefix should not match
+        let (_, result) = storage.get_by_url("s3://bucket/other/path").unwrap();
+        assert_eq!(result, None);
     }
 }
