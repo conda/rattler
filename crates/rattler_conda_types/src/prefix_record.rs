@@ -226,6 +226,18 @@ pub struct PrefixRecord {
     pub installed_system_menus: Vec<menuinst::Tracker>,
 }
 
+impl PartialOrd for PrefixRecord {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PrefixRecord {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.repodata_record.cmp(&other.repodata_record)
+    }
+}
+
 impl PrefixRecord {
     /// Parses a `paths.json` file from a reader.
     pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
