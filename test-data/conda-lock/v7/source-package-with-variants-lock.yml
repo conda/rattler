@@ -1,0 +1,28 @@
+# V6 lock file with a source package that has optional variants
+#
+# This tests that variants are optional in V6 and can be used to
+# disambiguate between multiple source packages at the same location.
+
+version: 6
+platforms:
+  - name: linux-64
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    packages:
+      linux-64:
+        # Single source package (variants are in package definition, not selector)
+        - conda: my-package
+
+packages:
+  # Source package with variant information (optional in V6)
+  - conda: my-package
+    name: my-package
+    version: 1.0.0
+    subdir: noarch
+    variants:
+      target_platform: linux-64
+    depends:
+      - python >=3.8
+    license: MIT

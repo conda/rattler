@@ -2,7 +2,9 @@
 source: crates/rattler_lock/src/lib.rs
 expression: conda_lock
 ---
-version: 6
+version: 7
+platforms:
+  - name: win-64
 environments:
   default:
     channels:
@@ -204,7 +206,6 @@ packages:
   - pypi: "./minimal_project"
     name: minimal-project
     version: "0.1"
-    editable: true
   - conda: "https://conda.anaconda.org/conda-forge/win-64/openssl-3.2.1-hcfcfb64_1.conda"
     sha256: 61ce4e11c3c26ed4e4d9b7e7e2483121a1741ad0f9c8db0a91a28b6e05182ce6
     md5: 958e0418e93e50c575bff70fbcaa12d8

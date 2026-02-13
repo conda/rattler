@@ -2,7 +2,9 @@
 source: crates/rattler_lock/src/lib.rs
 expression: conda_lock
 ---
-version: 6
+version: 7
+platforms:
+  - name: osx-arm64
 environments:
   default:
     channels:
