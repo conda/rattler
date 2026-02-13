@@ -1,6 +1,6 @@
 [package]
 name = "rattler"
-version = "0.39.12"
+version = "0.39.13"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust library to install conda environments"
