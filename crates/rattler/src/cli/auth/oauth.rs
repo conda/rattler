@@ -3,6 +3,12 @@
 //! Supports authorization code grant with PKCE (primary) and device code
 //! flow (fallback for headless environments).
 
+use std::{
+    collections::HashSet,
+    io::{BufRead, BufReader, Write},
+    time::Duration,
+};
+
 use openidconnect::{
     AdditionalProviderMetadata, AuthorizationCode, ClientId, CsrfToken, DeviceAuthorizationUrl,
     IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge, ProviderMetadata, RedirectUrl, Scope,
@@ -19,14 +25,12 @@ use openidconnect::{
 };
 use rattler_networking::Authentication;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::io::{BufRead, BufReader, Write};
-use std::time::Duration;
 use tokio::net::TcpListener;
 use url::Url;
 
 /// Additional OIDC provider metadata fields not included in the standard
-/// `ExtendedCoreProviderMetadata` type (RFC 7009 revocation, RFC 8628 device auth).
+/// `ExtendedCoreProviderMetadata` type (RFC 7009 revocation, RFC 8628 device
+/// auth).
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct ExtendedProviderMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -135,7 +139,8 @@ struct DiscoveredEndpoints {
     device_authorization_endpoint: Option<String>,
 }
 
-/// Perform an OAuth/OIDC login and return the resulting `Authentication::OAuth`.
+/// Perform an OAuth/OIDC login and return the resulting
+/// `Authentication::OAuth`.
 pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, OAuthError> {
     let http_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -258,7 +263,8 @@ async fn auth_code_flow(
         ClientId::new(client_id.to_string()),
         None,
     )
-    .set_redirect_uri(RedirectUrl::new(redirect_url).map_err(OAuthError::UrlParse)?);
+    .set_redirect_uri(RedirectUrl::new(redirect_url).map_err(OAuthError::UrlParse)?)
+    .set_auth_type(openidconnect::AuthType::RequestBody);
 
     // Generate PKCE challenge
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
@@ -276,29 +282,40 @@ async fn auth_code_flow(
 
     // Open browser
     let auth_url_str = auth_url.to_string();
-    eprintln!("Opening browser for authentication...");
-    eprintln!("If the browser does not open, visit: {auth_url_str}");
-
     if let Err(e) = open::that(&auth_url_str) {
         return Err(OAuthError::BrowserOpen(e.to_string()));
     }
 
+    // Print that we are opening the browser
+    eprintln!("Opening browser at:\n\n{auth_url_str}");
+
     // Wait for the redirect callback
-    let (code, state) = accept_redirect_callback(&listener).await?;
+    let callback = accept_redirect_callback(&listener).await?;
 
     // Verify CSRF state
-    if state != *csrf_token.secret() {
+    if callback.state != *csrf_token.secret() {
+        send_callback_response(&callback.stream, false, "CSRF state mismatch");
         return Err(OAuthError::CsrfMismatch);
     }
 
     // Exchange code for tokens
-    let token_response = client
-        .exchange_code(AuthorizationCode::new(code))
+    let token_response = match client
+        .exchange_code(AuthorizationCode::new(callback.code))
         .map_err(|e| OAuthError::TokenExchange(format!("token endpoint not configured: {e}")))?
         .set_pkce_verifier(pkce_verifier)
         .request_async(http_client)
         .await
-        .map_err(|e| OAuthError::TokenExchange(e.to_string()))?;
+    {
+        Ok(response) => {
+            send_callback_response(&callback.stream, true, "");
+            response
+        }
+        Err(e) => {
+            let msg = e.to_string();
+            send_callback_response(&callback.stream, false, &msg);
+            return Err(OAuthError::TokenExchange(msg));
+        }
+    };
 
     let authenticated_as = token_response
         .id_token()
@@ -313,14 +330,25 @@ async fn auth_code_flow(
     })
 }
 
+/// Parsed values from the OAuth redirect callback.
+struct CallbackResult {
+    code: String,
+    state: String,
+    /// The TCP stream to send the browser response on after the token exchange.
+    stream: std::net::TcpStream,
+}
+
 /// Accept the OAuth redirect callback on the local TCP listener.
 ///
-/// Parses the `code` and `state` query parameters from the GET request,
-/// sends a simple HTML response, and returns the extracted values.
-async fn accept_redirect_callback(listener: &TcpListener) -> Result<(String, String), OAuthError> {
+/// Parses the `code` and `state` query parameters from the GET request
+/// and returns them along with the stream. The caller is responsible for
+/// sending the browser response via [`send_callback_response`] after
+/// the token exchange completes.
+async fn accept_redirect_callback(listener: &TcpListener) -> Result<CallbackResult, OAuthError> {
     let (stream, _) = listener.accept().await?;
 
-    // Convert to std TcpStream for synchronous I/O (simpler than async line parsing)
+    // Convert to std TcpStream for synchronous I/O (simpler than async line
+    // parsing)
     let std_stream = stream.into_std()?;
     std_stream.set_nonblocking(false)?;
 
@@ -337,7 +365,8 @@ async fn accept_redirect_callback(listener: &TcpListener) -> Result<(String, Str
     let callback_url =
         Url::parse(&format!("http://localhost{path}")).map_err(|_| OAuthError::InvalidCallback)?;
 
-    // Check for an error response from the identity provider (RFC 6749 Section 4.1.2.1)
+    // Check for an error response from the identity provider (RFC 6749 Section
+    // 4.1.2.1)
     if let Some(error) = callback_url
         .query_pairs()
         .find(|(k, _)| k == "error")
@@ -350,22 +379,7 @@ async fn accept_redirect_callback(listener: &TcpListener) -> Result<(String, Str
 
         let msg = description.unwrap_or(error);
 
-        // Still send a response to the browser before returning the error
-        let response_body =
-            format!("<html><body><h1>Authentication failed</h1><p>{msg}</p></body></html>");
-        let response = format!(
-            "HTTP/1.1 200 OK\r\n\
-             Content-Type: text/html\r\n\
-             Content-Length: {}\r\n\
-             Connection: close\r\n\
-             \r\n\
-             {response_body}",
-            response_body.len(),
-        );
-        let mut writer = std_stream;
-        writer.write_all(response.as_bytes())?;
-        writer.flush()?;
-
+        send_callback_response(&std_stream, false, &msg);
         return Err(OAuthError::Authorization(msg));
     }
 
@@ -381,25 +395,35 @@ async fn accept_redirect_callback(listener: &TcpListener) -> Result<(String, Str
         .map(|(_, v)| v.to_string())
         .ok_or(OAuthError::InvalidCallback)?;
 
-    // Send a simple success response
-    let response_body = "<html><body><h1>Authentication successful!</h1>\
-        <p>You can close this window.</p></body></html>";
+    Ok(CallbackResult {
+        code,
+        state,
+        stream: std_stream,
+    })
+}
+
+/// Send an HTML response to the browser on the callback stream.
+fn send_callback_response(stream: &std::net::TcpStream, success: bool, detail: &str) {
+    let response_body = if success {
+        "<html><body><h1>Authentication successful!</h1>\
+            <p>You can close this window.</p></body></html>"
+            .to_string()
+    } else {
+        format!("<html><body><h1>Authentication failed</h1><p>{detail}</p></body></html>")
+    };
     let response = format!(
         "HTTP/1.1 200 OK\r\n\
          Content-Type: text/html\r\n\
          Content-Length: {}\r\n\
          Connection: close\r\n\
          \r\n\
-         {}",
+         {response_body}",
         response_body.len(),
-        response_body
     );
-
-    let mut writer = std_stream;
-    writer.write_all(response.as_bytes())?;
-    writer.flush()?;
-
-    Ok((code, state))
+    let mut writer = stream;
+    let _ = writer
+        .write_all(response.as_bytes())
+        .and_then(|_| writer.flush());
 }
 
 /// Device code flow for headless environments (RFC 8628).
@@ -425,7 +449,8 @@ async fn device_code_flow(
         ClientId::new(client_id.to_string()),
         None,
     )
-    .set_device_authorization_url(device_auth_url);
+    .set_device_authorization_url(device_auth_url)
+    .set_auth_type(openidconnect::AuthType::RequestBody);
 
     // Step 1: Request device authorization
     let mut device_request = client.exchange_device_code();
