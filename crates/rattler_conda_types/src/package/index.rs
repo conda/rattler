@@ -20,6 +20,14 @@ use crate::{NoArchType, PackageName, PackageUrl, VersionWithSource};
 #[skip_serializing_none]
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
 pub struct IndexJson {
+    /// The command to launch the application (for Anaconda Navigator app discovery).
+    /// Set when the package has an `app` section.
+    pub app_entry: Option<String>,
+
+    /// The type of application: "web" or "desk" (for Anaconda Navigator app discovery).
+    /// Set when the package has an `app` section.
+    pub app_type: Option<String>,
+
     /// Optionally, the architecture the package is build for.
     pub arch: Option<String>,
 
@@ -50,6 +58,10 @@ pub struct IndexJson {
     /// mutually exclusive features.
     pub features: Option<String>,
 
+    /// The icon filename for the application (for Anaconda Navigator app discovery).
+    /// Set when the package has an `app` section.
+    pub icon: Option<String>,
+
     /// Optionally, the license
     pub license: Option<String>,
 
@@ -63,6 +75,11 @@ pub struct IndexJson {
     /// what way. See [`NoArchType`] for more information.
     #[serde(skip_serializing_if = "NoArchType::is_none")]
     pub noarch: NoArchType,
+
+    /// The package type. Set to "app" when the package has an `app` section
+    /// (for Anaconda Navigator app discovery).
+    #[serde(rename = "type")]
+    pub package_type: Option<String>,
 
     /// Optionally, the OS the package is build for.
     pub platform: Option<String>,
@@ -79,6 +96,10 @@ pub struct IndexJson {
 
     /// The subdirectory that contains this package
     pub subdir: Option<String>,
+
+    /// A short summary/description of the application (for Anaconda Navigator app discovery).
+    /// Set when the package has an `app` section.
+    pub summary: Option<String>,
 
     /// The timestamp when this package was created
     pub timestamp: Option<crate::utils::TimestampMs>,
