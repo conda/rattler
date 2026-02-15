@@ -875,12 +875,134 @@ impl Shell for NuShell {
     }
 }
 
+/// A [`Shell`] implementation for the sh shell (POSIX shell).
+/// This is a more minimal shell that's available on almost all Unix systems.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Sh;
+
+impl Shell for Sh {
+    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+
+        // Check if the value contains variable references ($)
+        // If so, use double quotes to allow variable expansion, otherwise use shlex quoting
+        if value.contains('$') {
+            // Use double quotes to allow variable expansion, but escape any existing double quotes
+            let escaped_value = value.replace('"', "\\\"");
+            Ok(writeln!(f, "export {env_var}=\"{escaped_value}\"")?)
+        } else {
+            // Use shlex quoting for values that don't need variable expansion
+            let quoted_value = shlex::try_quote(value).unwrap_or_else(|_| value.into());
+            Ok(writeln!(f, "export {env_var}={quoted_value}")?)
+        }
+    }
+
+    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> ShellResult {
+        validate_env_var_name(env_var)?;
+        writeln!(f, "unset {env_var}")?;
+        Ok(())
+    }
+
+    fn run_script(&self, f: &mut impl Write, path: &Path) -> ShellResult {
+        let lossy_path = path.to_string_lossy();
+        let quoted_path = shlex::try_quote(&lossy_path).unwrap_or_default();
+        Ok(writeln!(f, ". {quoted_path}")?)
+    }
+
+    fn set_path(
+        &self,
+        f: &mut impl Write,
+        paths: &[PathBuf],
+        modification_behavior: PathModificationBehavior,
+        platform: &Platform,
+    ) -> ShellResult {
+        // Put paths in a vector of the correct format.
+        let paths_vec = paths
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect_vec();
+
+        // Create the shell specific list of paths.
+        let paths_string = if cfg!(windows) {
+            // Use cygpath to convert the paths joined with the Windows ";" separator.
+            match native_path_to_unix(&paths_vec.join(";")) {
+                Ok(path) => path,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    // When cygpath isn't found, join the paths with the posix separator.
+                    paths_vec.join(":")
+                }
+                Err(e) => panic!("{e}"),
+            }
+        } else {
+            paths_vec.join(":")
+        };
+        // Replace, Append, or Prepend the path variable to the paths.
+        let path_var = self.path_var(platform);
+        let combined_paths_string: String = match modification_behavior {
+            PathModificationBehavior::Replace => paths_string,
+            PathModificationBehavior::Prepend => {
+                format!("{paths_string}:{}", &self.format_env_var(path_var))
+            }
+            PathModificationBehavior::Append => {
+                format!("{}:{paths_string}", self.format_env_var(path_var))
+            }
+        };
+        // Use double quotes "" so that ${PATH} is substituted. Calling set_env_var
+        // would correctly escape ${PATH} so that it literally is in the result.
+        Ok(writeln!(
+            f,
+            "export {path_var}=\"{combined_paths_string}\""
+        )?)
+    }
+
+    /// For Sh, the path variable is always all capital PATH, even on Windows.
+    fn path_var(&self, _platform: &Platform) -> &str {
+        "PATH"
+    }
+
+    fn extension(&self) -> &str {
+        "sh"
+    }
+
+    fn executable(&self) -> &str {
+        "sh"
+    }
+
+    fn create_run_script_command(&self, path: &Path) -> Command {
+        let mut cmd = Command::new(self.executable());
+
+        // check if we are on Windows, and if yes, convert native path to unix for (Git) Sh
+        if cfg!(windows) {
+            cmd.arg(native_path_to_unix(path.to_str().unwrap()).unwrap());
+        } else {
+            cmd.arg(path);
+        }
+
+        cmd
+    }
+
+    fn restore_env_var(&self, f: &mut impl Write, key: &str, backup_key: &str) -> ShellResult {
+        validate_env_var_name(key)?;
+        validate_env_var_name(backup_key)?;
+        Ok(writeln!(
+            f,
+            r#"if [ -n "${{{backup_key}:-}}" ]; then
+                {key}="${{{backup_key}}}"
+                unset {backup_key}
+            else
+                unset {key}
+            fi"#
+        )?)
+    }
+}
+
 /// A generic [`Shell`] implementation for concrete shell types.
 #[enum_dispatch]
 #[allow(missing_docs)]
 #[derive(Clone, Debug)]
 pub enum ShellEnum {
     Bash,
+    Sh,
     Zsh,
     Xonsh,
     CmdExe,
@@ -946,6 +1068,8 @@ impl ShellEnum {
 
             let shell: Option<ShellEnum> = if parent_process_name.contains("bash") {
                 Some(Bash.into())
+            } else if parent_process_name.contains("sh") && !parent_process_name.contains("bash") {
+                Some(Sh.into())
             } else if parent_process_name.contains("zsh") {
                 Some(Zsh.into())
             } else if parent_process_name.contains("xonsh")
@@ -1004,6 +1128,7 @@ impl FromStr for ShellEnum {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "bash" => Ok(Bash.into()),
+            "sh" => Ok(Sh.into()),
             "zsh" => Ok(Zsh.into()),
             "xonsh" => Ok(Xonsh.into()),
             "fish" => Ok(Fish.into()),
