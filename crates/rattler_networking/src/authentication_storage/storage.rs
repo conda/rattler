@@ -140,6 +140,11 @@ impl AuthenticationStorage {
             }
         }
 
+        // Cache the negative result to avoid repeated backend lookups
+        // (especially important for keyring which uses D-Bus IPC on Linux).
+        let mut cache = self.cache.lock().unwrap();
+        cache.insert(host.to_string(), None);
+
         Ok(None)
     }
 
