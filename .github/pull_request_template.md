@@ -25,3 +25,14 @@ Tools: {e.g., Claude, Codex, GitHub Copilot, ChatGPT, etc.}
 - [ ] I have commented my code, particularly in hard-to-understand areas
 - [ ] I have made corresponding changes to the documentation
 - [ ] I have added sufficient tests to cover my changes.
+
+<!-- Just as a reminder, everyone in all conda org spaces (including PRs)
+     must follow the Conda Org Code of Conduct (link below).
+
+     Finally, once again, thanks for your time and effort. If you have any
+     feedback in regards to your experience contributing here, please
+     let us know!
+
+     Helpful links:
+       - Conda Org COC: https://github.com/conda/.github/blob/main/CODE_OF_CONDUCT.md
+       - Contributing docs: https://github.com/conda/.github/blob/main/CONTRIBUTING.md -->
