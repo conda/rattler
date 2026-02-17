@@ -10,6 +10,38 @@ use serde_with::{serde_as, skip_serializing_none};
 use super::PackageFile;
 use crate::{NoArchType, PackageName, PackageUrl, VersionWithSource};
 
+/// This struct represents extra metadata for the Anaconda Navigator app discovery. 
+/// It's flattened into the `index.json` file when the package recipe has an `app` section.
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Eq, PartialEq)]
+pub struct AppSection {
+    /// The application type, usually `app`
+    #[serde(rename = "type")]
+    pub type_: Option<String>,
+
+    pub icon: Option<String>,
+
+    #[serde(rename = "app_entry")]
+    pub entry: Option<String>,
+
+    #[serde(rename = "app_cli_opts")]
+    pub cli_opts: Option<String>,
+
+    #[serde(rename = "app_type")]
+    pub app_type: Option<String>,
+
+    pub summary: Option<String>,
+
+    #[serde(rename = "app_own_environment")]
+    pub own_environment: Option<bool>,
+}
+
+impl AppSection {
+    /// Returns true if the app section is empty, meaning that it has no fields set.
+    pub fn is_default(&self) -> bool {
+        self == &AppSection::default()
+    }
+}
+
 /// A representation of the `index.json` file found in package archives.
 ///
 /// The `index.json` file contains information about the package build and
@@ -20,16 +52,6 @@ use crate::{NoArchType, PackageName, PackageUrl, VersionWithSource};
 #[skip_serializing_none]
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
 pub struct IndexJson {
-    /// The command to launch the application (for Anaconda Navigator app discovery).
-    /// Set when the package has an `app` section.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub app_entry: Option<String>,
-
-    /// The type of application: "web" or "desk" (for Anaconda Navigator app discovery).
-    /// Set when the package has an `app` section.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub app_type: Option<String>,
-
     /// Optionally, the architecture the package is build for.
     pub arch: Option<String>,
 
@@ -79,11 +101,6 @@ pub struct IndexJson {
     #[serde(skip_serializing_if = "NoArchType::is_none")]
     pub noarch: NoArchType,
 
-    /// The package type. Set to "app" when the package has an `app` section
-    /// (for Anaconda Navigator app discovery).
-    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
-    pub package_type: Option<String>,
-
     /// Optionally, the OS the package is build for.
     pub platform: Option<String>,
 
@@ -100,10 +117,6 @@ pub struct IndexJson {
     /// The subdirectory that contains this package
     pub subdir: Option<String>,
 
-    /// A short summary/description of the application (for Anaconda Navigator app discovery).
-    /// Set when the package has an `app` section.
-    pub summary: Option<String>,
-
     /// The timestamp when this package was created
     pub timestamp: Option<crate::utils::TimestampMs>,
 
@@ -117,6 +130,11 @@ pub struct IndexJson {
 
     /// The version of the package
     pub version: VersionWithSource,
+
+    /// The app section is used for Anaconda Navigator app discovery. It is only
+    /// present if the package recipe has an `app` section.
+    #[serde(flatten, skip_serializing_if = "AppSection::is_default")]
+    pub app: AppSection,
 }
 
 impl PackageFile for IndexJson {
