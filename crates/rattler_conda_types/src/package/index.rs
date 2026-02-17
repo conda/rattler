@@ -22,10 +22,12 @@ use crate::{NoArchType, PackageName, PackageUrl, VersionWithSource};
 pub struct IndexJson {
     /// The command to launch the application (for Anaconda Navigator app discovery).
     /// Set when the package has an `app` section.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub app_entry: Option<String>,
 
     /// The type of application: "web" or "desk" (for Anaconda Navigator app discovery).
     /// Set when the package has an `app` section.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub app_type: Option<String>,
 
     /// Optionally, the architecture the package is build for.
@@ -60,6 +62,7 @@ pub struct IndexJson {
 
     /// The icon filename for the application (for Anaconda Navigator app discovery).
     /// Set when the package has an `app` section.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
 
     /// Optionally, the license
@@ -78,7 +81,7 @@ pub struct IndexJson {
 
     /// The package type. Set to "app" when the package has an `app` section
     /// (for Anaconda Navigator app discovery).
-    #[serde(rename = "type")]
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub package_type: Option<String>,
 
     /// Optionally, the OS the package is build for.
