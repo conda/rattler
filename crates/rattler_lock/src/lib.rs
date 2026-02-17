@@ -325,7 +325,7 @@ impl<'lock> Environment<'lock> {
     /// Returns the `PyPI` prerelease mode that was used to solve this environment.
     ///
     /// Returns `None` if no prerelease mode was explicitly set.
-    pub fn pypi_prerelease_mode(&self) -> Option<PypiPrereleaseMode> {
+    pub fn pypi_prerelease_mode(&self) -> PypiPrereleaseMode {
         self.data().options.pypi_prerelease_mode
     }
 
