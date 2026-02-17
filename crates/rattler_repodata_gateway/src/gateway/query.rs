@@ -1,5 +1,4 @@
 use std::{
-    collections::HashSet,
     future::{Future, IntoFuture},
     sync::Arc,
 };
@@ -13,7 +12,8 @@ use url::Url;
 
 use super::{
     source::{CustomSourceClient, Source},
-    subdir::{Subdir, SubdirData},
+    subdir::{PackageRecords, Subdir, SubdirData},
+    BarrierCell, GatewayError, GatewayInner, RepoData,
 };
 use crate::Reporter;
 
@@ -57,16 +57,6 @@ enum SourceSpecs {
 
     /// The record is required by a dependency.
     Transitive,
-}
-
-impl SourceSpecs {
-    /// Returns true if this record should be processed for these specs.
-    fn matches(&self, record: &RepoDataRecord) -> bool {
-        match self {
-            SourceSpecs::Input(specs) => specs.iter().any(|spec| spec.matches(record)),
-            SourceSpecs::Transitive => true,
-        }
-    }
 }
 
 /// A spec that references a package by direct URL.
@@ -304,7 +294,15 @@ impl QueryExecutor {
                 }
 
                 // Push the direct url in the first subdir result for channel priority logic
-                Ok((0, SourceSpecs::Input(vec![spec]), record))
+                let unique_deps = super::subdir::extract_unique_deps(&record);
+                Ok((
+                    0,
+                    SourceSpecs::Input(vec![spec]),
+                    PackageRecords {
+                        records: record,
+                        unique_deps,
+                    },
+                ))
             }));
         }
 
@@ -338,8 +336,8 @@ impl QueryExecutor {
                         Subdir::Found(subdir) => subdir
                             .get_or_fetch_package_records(&package_name, reporter)
                             .await
-                            .map(|records| (result_index, specs, records)),
-                        Subdir::NotFound => Ok((result_index, specs, Arc::from(vec![]))),
+                            .map(|pkg| (result_index, specs, pkg)),
+                        Subdir::NotFound => Ok((result_index, specs, PackageRecords::default())),
                     }
                 }));
             }
@@ -347,19 +345,30 @@ impl QueryExecutor {
     }
 
     /// Extract dependencies from records and queue them if not seen.
-    fn queue_dependencies(&mut self, records: &[RepoDataRecord], request_specs: &SourceSpecs) {
-        for record in records {
-            if !request_specs.matches(record) {
-                continue;
+    fn queue_dependencies(&mut self, pkg: &PackageRecords, request_specs: &SourceSpecs) {
+        match request_specs {
+            SourceSpecs::Transitive => {
+                // Use precomputed unique deps — typically ~50-100 strings
+                // instead of iterating all records (~20,000 dep strings).
+                for dep in pkg.unique_deps.iter() {
+                    self.queue_dependency(dep);
+                }
             }
-
-            for dependency in &record.package_record.depends {
-                self.queue_dependency(dependency);
-            }
-
-            for (_, dependencies) in record.package_record.experimental_extra_depends.iter() {
-                for dependency in dependencies {
-                    self.queue_dependency(dependency);
+            SourceSpecs::Input(specs) => {
+                // For input specs, only process deps from matching records.
+                for record in pkg.records.iter() {
+                    if !specs.iter().any(|s| s.matches(record)) {
+                        continue;
+                    }
+                    for dependency in &record.package_record.depends {
+                        self.queue_dependency(dependency);
+                    }
+                    for (_, dependencies) in record.package_record.experimental_extra_depends.iter()
+                    {
+                        for dependency in dependencies {
+                            self.queue_dependency(dependency);
+                        }
+                    }
                 }
             }
         }
@@ -426,13 +435,13 @@ impl QueryExecutor {
 
                 // Handle any records that were fetched
                 records = self.pending_records.select_next_some() => {
-                    let (result_idx, request_specs, records) = records?;
+                    let (result_idx, request_specs, pkg) = records?;
 
                     if self.recursive {
-                        self.queue_dependencies(&records, &request_specs);
+                        self.queue_dependencies(&pkg, &request_specs);
                     }
 
-                    self.accumulate_records(result_idx, records, &request_specs);
+                    self.accumulate_records(result_idx, pkg.records, &request_specs);
                 }
 
                 // All futures have been handled, all subdirectories have been loaded and all
@@ -464,7 +473,7 @@ fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture
 }
 
 /// Result type for pending record fetches.
-type PendingRecordsResult = Result<(usize, SourceSpecs, Arc<[RepoDataRecord]>), GatewayError>;
+type PendingRecordsResult = Result<(usize, SourceSpecs, PackageRecords), GatewayError>;
 
 impl IntoFuture for RepoDataQuery {
     type Output = Result<Vec<RepoData>, GatewayError>;
@@ -550,7 +559,7 @@ impl NamesQuery {
                 }
             });
         }
-        let mut names: HashSet<String> = HashSet::default();
+        let mut names: std::collections::HashSet<String> = std::collections::HashSet::default();
 
         while let Some(result) = pending_subdirs.next().await {
             let subdir_names = result?;
