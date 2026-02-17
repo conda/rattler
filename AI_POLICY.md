@@ -45,5 +45,6 @@ because we want to keep the keep the code quality high w.r.t to speed, readabili
 and composability and ideally we have fun doing so. 
 Applying AI injudiciously, in our opinion, always compromises one of these goals. 
 
-We include this section to be transparent about the project's usage about
-AI for people who may disagree with it, and to address the misconception, should one exist, that this policy is anti-AI in nature.
+We include this section to be transparent about the project's usage about AI
+for people who may disagree with it, and to address the misconception,
+should one exist, that this policy is anti-AI in nature.
