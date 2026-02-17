@@ -14,7 +14,6 @@ use url::Url;
 use super::{
     source::{CustomSourceClient, Source},
     subdir::{Subdir, SubdirData},
-    BarrierCell, GatewayError, GatewayInner, RepoData,
 };
 use crate::Reporter;
 
@@ -377,17 +376,30 @@ impl QueryExecutor {
     fn accumulate_records(
         &mut self,
         result_idx: usize,
-        records: &[RepoDataRecord],
+        records: Arc<[RepoDataRecord]>,
         request_specs: &SourceSpecs,
     ) {
         let result = &mut self.result[result_idx];
 
-        for record in records {
-            if !request_specs.matches(record) {
-                continue;
+        match request_specs {
+            SourceSpecs::Transitive => {
+                // All records match for transitive deps — push the whole Arc
+                // without cloning any records.
+                result.len += records.len();
+                result.shards.push(records);
             }
-            result.len += 1;
-            result.shards.push(Arc::new([record.clone()]));
+            SourceSpecs::Input(specs) => {
+                // Only a subset matches — filter and build one new Arc.
+                let matching: Vec<RepoDataRecord> = records
+                    .iter()
+                    .filter(|r| specs.iter().any(|s| s.matches(*r)))
+                    .cloned()
+                    .collect();
+                result.len += matching.len();
+                if !matching.is_empty() {
+                    result.shards.push(Arc::from(matching));
+                }
+            }
         }
     }
 
@@ -412,7 +424,7 @@ impl QueryExecutor {
                         self.queue_dependencies(&records, &request_specs);
                     }
 
-                    self.accumulate_records(result_idx, &records, &request_specs);
+                    self.accumulate_records(result_idx, records, &request_specs);
                 }
 
                 // All futures have been handled, all subdirectories have been loaded and all
