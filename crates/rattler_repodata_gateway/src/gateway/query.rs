@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     future::{Future, IntoFuture},
     sync::Arc,
 };
@@ -150,8 +150,9 @@ struct QueryExecutor {
     direct_url_specs: Vec<DirectUrlSpec>,
 
     // Mutable state during execution
-    seen: HashSet<PackageName>,
-    pending_package_specs: HashMap<PackageName, SourceSpecs>,
+    /// Normalized (lowercase) package names we've already queued.
+    seen: hashbrown::HashMap<String, (), ahash::RandomState>,
+    pending_package_specs: ahash::HashMap<PackageName, SourceSpecs>,
 
     // Subdir management
     subdir_handles: Vec<SubdirHandle>,
@@ -177,8 +178,8 @@ impl QueryExecutor {
             reporter,
         } = query;
 
-        let mut seen = HashSet::new();
-        let mut pending_package_specs = HashMap::new();
+        let mut seen = hashbrown::HashMap::with_hasher(ahash::RandomState::new());
+        let mut pending_package_specs = ahash::HashMap::default();
         let mut direct_url_specs = Vec::new();
 
         // Categorize specs into direct_url_specs and pending_package_specs
@@ -192,10 +193,10 @@ impl QueryExecutor {
                     .ok_or(GatewayError::MatchSpecWithoutExactName(Box::new(
                         spec.clone(),
                     )))?;
-                seen.insert(name.clone());
+                seen.insert(name.as_normalized().to_string(), ());
                 direct_url_specs.push(DirectUrlSpec { spec, url, name });
             } else if let Some(PackageNameMatcher::Exact(name)) = &spec.name {
-                seen.insert(name.clone());
+                seen.insert(name.as_normalized().to_string(), ());
                 let pending = pending_package_specs
                     .entry(name.clone())
                     .or_insert_with(|| SourceSpecs::Input(vec![]));
@@ -353,22 +354,29 @@ impl QueryExecutor {
             }
 
             for dependency in &record.package_record.depends {
-                let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
-                if self.seen.insert(dependency_name.clone()) {
-                    self.pending_package_specs
-                        .insert(dependency_name, SourceSpecs::Transitive);
-                }
+                self.queue_dependency(dependency);
             }
 
             for (_, dependencies) in record.package_record.experimental_extra_depends.iter() {
                 for dependency in dependencies {
-                    let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
-                    if self.seen.insert(dependency_name.clone()) {
-                        self.pending_package_specs
-                            .insert(dependency_name, SourceSpecs::Transitive);
-                    }
+                    self.queue_dependency(dependency);
                 }
             }
+        }
+    }
+
+    /// Queue a single dependency if not already seen.
+    ///
+    /// Uses `entry_ref` for a single hash lookup. Only allocates when the
+    /// name is genuinely new (~500 unique names vs ~1M+ dependency strings).
+    fn queue_dependency(&mut self, dependency: &str) {
+        let normalized = PackageName::normalized_name_from_matchspec_str(dependency);
+        let normalized_str: &str = &normalized;
+        if let hashbrown::hash_map::EntryRef::Vacant(entry) = self.seen.entry_ref(normalized_str) {
+            entry.insert(());
+            let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
+            self.pending_package_specs
+                .insert(dependency_name, SourceSpecs::Transitive);
         }
     }
 
