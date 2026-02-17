@@ -288,8 +288,11 @@ impl LinuxMenu {
             .unwrap_or(true)
             .then(|| {
                 // create a bash activation script and emit it into the script
-                let activator =
-                    Activator::from_path(&self.prefix, shell::Bash::default(), Platform::current())?;
+                let activator = Activator::from_path(
+                    &self.prefix,
+                    shell::Bash::default(),
+                    Platform::current(),
+                )?;
                 let activation_variables = ActivationVariables {
                     path_modification_behavior: PathModificationBehavior::Prepend,
                     ..Default::default()
