@@ -902,8 +902,6 @@ impl Shell for NuShell {
     }
 }
 
-
-
 /// A generic [`Shell`] implementation for concrete shell types.
 #[enum_dispatch]
 #[allow(missing_docs)]
