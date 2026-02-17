@@ -421,7 +421,7 @@ impl LockFileBuilder {
     ) -> &mut Self {
         self.environment_data(environment)
             .options
-            .pypi_prerelease_mode = Some(prerelease_mode);
+            .pypi_prerelease_mode = prerelease_mode;
         self
     }
 
@@ -627,7 +627,7 @@ mod test {
 
         // Verify the prerelease mode is set correctly
         let env = lock_file.environment("default").unwrap();
-        assert_eq!(env.pypi_prerelease_mode(), Some(PypiPrereleaseMode::Allow));
+        assert_eq!(env.pypi_prerelease_mode(), PypiPrereleaseMode::Allow);
 
         // Verify it serializes correctly
         insta::assert_snapshot!(lock_file.render_to_string().unwrap());
@@ -692,7 +692,7 @@ mod test {
                     .environment("default")
                     .unwrap()
                     .pypi_prerelease_mode(),
-                Some(mode)
+                mode
             );
         }
     }
