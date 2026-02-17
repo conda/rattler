@@ -974,9 +974,19 @@ impl ShellEnum {
             let parent_process_name = parent_process.name().to_string_lossy().to_lowercase();
 
             let shell: Option<ShellEnum> = if parent_process_name.contains("bash") {
-                Some(Bash { flavor: BashFlavor::Bash }.into())
+                Some(
+                    Bash {
+                        flavor: BashFlavor::Bash,
+                    }
+                    .into(),
+                )
             } else if parent_process_name.contains("sh") {
-                Some(Bash { flavor: BashFlavor::Sh }.into())
+                Some(
+                    Bash {
+                        flavor: BashFlavor::Sh,
+                    }
+                    .into(),
+                )
             } else if parent_process_name.contains("zsh") {
                 Some(Zsh.into())
             } else if parent_process_name.contains("xonsh")
@@ -1034,8 +1044,14 @@ impl FromStr for ShellEnum {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "bash" => Ok(Bash { flavor: BashFlavor::Bash }.into()),
-            "sh" => Ok(Bash { flavor: BashFlavor::Sh }.into()),
+            "bash" => Ok(Bash {
+                flavor: BashFlavor::Bash,
+            }
+            .into()),
+            "sh" => Ok(Bash {
+                flavor: BashFlavor::Sh,
+            }
+            .into()),
             "zsh" => Ok(Zsh.into()),
             "xonsh" => Ok(Xonsh.into()),
             "fish" => Ok(Fish.into()),
@@ -1221,7 +1237,12 @@ mod tests {
 
     #[test]
     fn test_sh() {
-        let mut script = ShellScript::new(Bash { flavor: BashFlavor::Sh }, Platform::Linux64);
+        let mut script = ShellScript::new(
+            Bash {
+                flavor: BashFlavor::Sh,
+            },
+            Platform::Linux64,
+        );
 
         script
             .set_env_var("FOO", "bar")
