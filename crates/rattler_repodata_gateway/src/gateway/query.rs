@@ -152,6 +152,8 @@ struct QueryExecutor {
 
     /// Specs with glob/regex patterns that need expansion
     pending_pattern_specs: Vec<(PackageNameMatcher, MatchSpec)>,
+    /// Track names already considered for pattern expansion (across subdirs)
+    pattern_names_seen: HashSet<PackageName>,
 
     // Mutable state during execution
     seen: HashSet<PackageName>,
@@ -159,7 +161,7 @@ struct QueryExecutor {
 
     // Subdir management
     subdir_handles: Vec<SubdirHandle>,
-    pending_subdirs: FuturesUnordered<BoxFuture<Result<(), GatewayError>>>,
+    pending_subdirs: FuturesUnordered<BoxFuture<PendingSubdirResult>>,
 
     // Record fetching
     pending_records: FuturesUnordered<BoxFuture<PendingRecordsResult>>,
@@ -185,6 +187,7 @@ impl QueryExecutor {
         let mut pending_package_specs = HashMap::new();
         let mut direct_url_specs = Vec::new();
         let mut pending_pattern_specs = Vec::new();
+        let pattern_names_seen = HashSet::new();
 
         // Categorize specs into direct_url_specs, pending_package_specs, and
         // pending_pattern_specs
@@ -246,31 +249,30 @@ impl QueryExecutor {
                 barrier: barrier.clone(),
             });
 
-            match source {
+            let pending = match source {
                 Source::Channel(channel) => {
                     let inner = gateway.clone();
                     let reporter = reporter.clone();
-                    pending_subdirs.push(box_future(async move {
-                        match inner
+                    box_future(async move {
+                        let subdir = inner
                             .get_or_create_subdir(&channel, platform, reporter)
-                            .await
-                        {
-                            Ok(subdir) => {
-                                barrier.set(subdir).expect("subdir was set twice");
-                                Ok(())
-                            }
-                            Err(e) => Err(e),
-                        }
-                    }));
+                            .await?;
+                        barrier.set(subdir.clone()).expect("subdir was set twice");
+                        Ok(subdir)
+                    })
                 }
                 Source::Custom(custom_source) => {
                     // For custom sources, create an adapter that wraps the source
-                    // for the specific platform
+                    // for the specific platform.
                     let client = CustomSourceClient::new(custom_source, platform);
                     let subdir = Arc::new(Subdir::Found(SubdirData::from_client(client)));
-                    barrier.set(subdir).expect("subdir was set twice");
+                    box_future(async move {
+                        barrier.set(subdir.clone()).expect("subdir was set twice");
+                        Ok(subdir)
+                    })
                 }
-            }
+            };
+            pending_subdirs.push(pending);
         }
 
         let result_len = subdir_handles.len() + direct_url_offset;
@@ -281,6 +283,7 @@ impl QueryExecutor {
             reporter,
             direct_url_specs,
             pending_pattern_specs,
+            pattern_names_seen,
             seen,
             pending_package_specs,
             subdir_handles,
@@ -409,37 +412,36 @@ impl QueryExecutor {
         }
     }
 
-    /// Expand pattern specs by fetching package names from all subdirs and
-    /// filtering.
-    async fn expand_pattern_specs(&mut self) {
+    /// Expand pattern specs based on the names provided by a resolved subdir.
+    fn expand_pattern_specs_for_subdir(&mut self, subdir: &Subdir) {
         if self.pending_pattern_specs.is_empty() {
             return;
         }
 
-        // Collect all package names from all subdirs
-        let mut all_names: HashSet<PackageName> = HashSet::new();
-        for handle in &self.subdir_handles {
-            let subdir = handle.barrier.wait().await;
-            if let Subdir::Found(subdir_data) = subdir.as_ref() {
-                for name_str in subdir_data.package_names() {
-                    if let Ok(name) = PackageName::try_from(name_str) {
-                        all_names.insert(name);
-                    }
-                }
-            }
-        }
+        let Some(names) = subdir.package_names() else {
+            return;
+        };
 
-        // Expand each pattern spec
-        for (matcher, spec) in std::mem::take(&mut self.pending_pattern_specs) {
-            for name in &all_names {
-                if matcher.matches(name) && self.seen.insert(name.clone()) {
-                    let pending = self
-                        .pending_package_specs
-                        .entry(name.clone())
-                        .or_insert_with(|| SourceSpecs::Input(vec![]));
-                    if let SourceSpecs::Input(input_specs) = pending {
-                        input_specs.push(spec.clone());
+        for name_str in names {
+            let Ok(name) = PackageName::try_from(name_str) else {
+                continue;
+            };
+            if !self.pattern_names_seen.insert(name.clone()) {
+                continue;
+            }
+
+            for (matcher, spec) in &self.pending_pattern_specs {
+                if matcher.matches(&name) {
+                    if self.seen.insert(name.clone()) {
+                        let pending = self
+                            .pending_package_specs
+                            .entry(name.clone())
+                            .or_insert_with(|| SourceSpecs::Input(vec![]));
+                        if let SourceSpecs::Input(input_specs) = pending {
+                            input_specs.push(spec.clone());
+                        }
                     }
+                    break;
                 }
             }
         }
@@ -449,25 +451,18 @@ impl QueryExecutor {
     async fn run(mut self) -> Result<Vec<RepoData>, GatewayError> {
         self.spawn_direct_url_fetches()?;
 
-        // If we have pattern specs, we need to wait for all subdirs to be loaded
-        // first so we can get all package names to match against
-        if !self.pending_pattern_specs.is_empty() {
-            // Wait for all pending subdirs to complete
-            while let Some(result) = self.pending_subdirs.next().await {
-                result?;
-            }
-
-            // Now expand pattern specs
-            self.expand_pattern_specs().await;
-        }
-
         loop {
             self.spawn_package_fetches();
 
             select_biased! {
                 // Handle any error that was emitted by the pending subdirs
                 subdir_result = self.pending_subdirs.select_next_some() => {
-                    subdir_result?;
+                    let subdir = subdir_result?;
+                    self.expand_pattern_specs_for_subdir(subdir.as_ref());
+                    if self.pending_subdirs.is_empty() {
+                        self.pending_pattern_specs.clear();
+                        self.pattern_names_seen.clear();
+                    }
                 }
 
                 // Handle any records that were fetched
@@ -510,6 +505,7 @@ fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture
 }
 
 /// Result type for pending record fetches.
+type PendingSubdirResult = Result<Arc<Subdir>, GatewayError>;
 type PendingRecordsResult = Result<(usize, SourceSpecs, Arc<[RepoDataRecord]>), GatewayError>;
 
 impl IntoFuture for RepoDataQuery {
