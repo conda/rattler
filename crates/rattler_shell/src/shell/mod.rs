@@ -30,7 +30,7 @@ use crate::activation::PathModificationBehavior;
 /// use rattler_shell::shell::Shell;
 ///
 /// let mut script = String::new();
-/// let shell = Bash;
+/// let shell = Bash::default();
 /// shell.set_env_var(&mut script, "FOO", "bar").unwrap();
 ///
 /// assert_eq!(script, "export FOO=bar\n");
