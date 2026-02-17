@@ -267,18 +267,13 @@ fn validate_env_var_name(name: &str) -> Result<(), ShellError> {
 type ShellResult = Result<(), ShellError>;
 
 /// A flavor of the Bash shell.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BashFlavor {
     /// The standard bash shell.
+    #[default]
     Bash,
     /// The sh shell (POSIX compliant).
     Sh,
-}
-
-impl Default for BashFlavor {
-    fn default() -> Self {
-        BashFlavor::Bash
-    }
 }
 
 /// A [`Shell`] implementation for the Bash shell.
