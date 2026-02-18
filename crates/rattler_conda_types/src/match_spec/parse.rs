@@ -675,7 +675,7 @@ fn split_version_and_build(
         }
     }
 
-    match parse_version_and_build_separator(strictness)(input).finish() {
+    match parse_version_and_build_separator::<nom::error::Error<&str>>(strictness)(input).finish() {
         Ok((rest, version)) => {
             let build_string = rest.trim();
 
@@ -693,9 +693,9 @@ fn split_version_and_build(
                 build_string.is_empty().not().then_some(build_string),
             ))
         }
-        Err(nom_language::error::VerboseError { .. }) => Err(
-            ParseMatchSpecError::InvalidVersionAndBuild(input.to_string()),
-        ),
+        Err(_) => Err(ParseMatchSpecError::InvalidVersionAndBuild(
+            input.to_string(),
+        )),
     }
 }
 /// Parse version and build string.
