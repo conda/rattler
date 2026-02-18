@@ -258,7 +258,7 @@ impl Middleware for AddHeadersMiddleware {
                 }
 
                 // Try to extract as a dictionary
-                let dict = result.downcast_bound::<PyDict>(py).map_err(|_err| {
+                let dict = result.downcast_bound::<PyDict>(py).map_err(|_e| {
                     let type_name = result
                         .bind(py)
                         .get_type()
