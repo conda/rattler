@@ -245,7 +245,7 @@ async def test_solve_with_sparse_repodata_conditional_dependencies() -> None:
         path=noarch_path,
     )
 
-    # Test 1: Platform-conditional dependency with __linux virtual package
+    # Test: Platform-conditional dependency with __linux virtual package
     solved_data = await solve_with_sparse_repodata(
         [MatchSpec("package")],
         [noarch_data],

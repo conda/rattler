@@ -30,6 +30,7 @@ pub mod parse;
 
 use matcher::StringMatcher;
 use package_name_matcher::PackageNameMatcher;
+use parse::escape_bracket_value;
 
 /// A [`MatchSpec`] is, fundamentally, a query language for conda packages. Any of the fields that
 /// comprise a [`crate::PackageRecord`] can be used to compose a [`MatchSpec`].
@@ -170,20 +171,6 @@ pub struct MatchSpec {
     pub condition: Option<MatchSpecCondition>,
     /// The track features of the package
     pub track_features: Option<Vec<String>>,
-}
-
-/// Escapes a string value for use in bracket syntax.
-/// Escapes double quotes and backslashes.
-fn escape_bracket_value(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '"' => result.push_str("\\\""),
-            '\\' => result.push_str("\\\\"),
-            _ => result.push(c),
-        }
-    }
-    result
 }
 
 impl Display for MatchSpec {
@@ -366,11 +353,11 @@ impl Display for NamelessMatchSpec {
         let mut keys = Vec::new();
 
         if let Some(md5) = &self.md5 {
-            keys.push(format!("md5={md5:x}"));
+            keys.push(format!("md5=\"{md5:x}\""));
         }
 
         if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256={sha256:x}"));
+            keys.push(format!("sha256=\"{sha256:x}\""));
         }
 
         if let Some(condition) = &self.condition {

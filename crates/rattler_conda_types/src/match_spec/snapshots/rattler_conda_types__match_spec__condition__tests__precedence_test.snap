@@ -2,16 +2,14 @@
 source: crates/rattler_conda_types/src/match_spec/condition.rs
 expression: result
 ---
-prefix: prec
-condition:
-  Or:
-    - And:
-        - MatchSpec:
-            name: a
-        - MatchSpec:
-            name: b
-    - And:
-        - MatchSpec:
-            name: c
-        - MatchSpec:
-            name: d
+Or:
+  - And:
+      - MatchSpec:
+          name: a
+      - MatchSpec:
+          name: b
+  - And:
+      - MatchSpec:
+          name: c
+      - MatchSpec:
+          name: d

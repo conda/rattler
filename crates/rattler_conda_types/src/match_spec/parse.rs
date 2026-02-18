@@ -152,17 +152,23 @@ fn strip_comment(input: &str) -> (&str, Option<&str>) {
         .map_or_else(|| (input, None), |(spec, comment)| (spec, Some(comment)))
 }
 
-/// Checks for deprecated `; if` syntax and returns an error if found.
+/// Rejects the deprecated `; if` syntax and returns an error if found.
 /// Users should migrate to the new `[when="..."]` bracket syntax.
-fn check_for_deprecated_if_syntax(input: &str) -> Result<&str, ParseMatchSpecError> {
+/// Also returns an error for bare semicolons (more than one).
+fn reject_deprecated_if_syntax(input: &str) -> Result<&str, ParseMatchSpecError> {
+    // Fast path: no semicolons at all (99%+ of match specs)
+    if input.find(';').is_none() {
+        return Ok(input.trim());
+    }
+
+    // Check for deprecated "; if" syntax first (more helpful error)
+    if has_if_statement(input) {
+        return Err(ParseMatchSpecError::DeprecatedIfSyntax);
+    }
+
     // Check that we only have a single semicolon (if any)
     if input.matches(';').count() > 1 {
         return Err(ParseMatchSpecError::MoreThanOneSemicolon);
-    }
-
-    // Check if the old "; if" syntax is used
-    if has_if_statement(input) {
-        return Err(ParseMatchSpecError::DeprecatedIfSyntax);
     }
 
     // No deprecated syntax found, return the input as is
@@ -217,8 +223,19 @@ fn parse_quoted_string_with_escapes<'a>(
         // Match opening quote
         let (input, _) = char(quote_char)(input)?;
 
-        // Find the closing quote, accounting for escapes
-        let mut chars = input.char_indices().peekable();
+        // Fast path: no escape sequences, use simple search
+        if !input.contains('\\') {
+            if let Some(pos) = input.find(quote_char) {
+                return Ok((&input[pos + quote_char.len_utf8()..], &input[..pos]));
+            }
+            return Err(nom::Err::Error(nom::error::Error::new(
+                input,
+                nom::error::ErrorKind::Char,
+            )));
+        }
+
+        // Slow path: handle escape sequences
+        let mut chars = input.char_indices();
         let mut end_pos = None;
 
         while let Some((i, c)) = chars.next() {
@@ -245,8 +262,30 @@ fn parse_quoted_string_with_escapes<'a>(
     }
 }
 
+/// Escapes a string value for use in bracket syntax.
+/// Escapes double quotes and backslashes.
+/// Returns `Cow::Borrowed` when no escaping is needed (the common case).
+///
+/// This is the inverse of [`unescape_string`].
+pub(crate) fn escape_bracket_value(s: &str) -> Cow<'_, str> {
+    if !s.contains('"') && !s.contains('\\') {
+        return Cow::Borrowed(s);
+    }
+    let mut result = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '"' => result.push_str("\\\""),
+            '\\' => result.push_str("\\\\"),
+            _ => result.push(c),
+        }
+    }
+    Cow::Owned(result)
+}
+
 /// Unescapes a string by processing escape sequences.
 /// Handles \", \', and \\ escape sequences.
+///
+/// This is the inverse of [`escape_bracket_value`].
 pub(crate) fn unescape_string(input: &str) -> Cow<'_, str> {
     if !input.contains('\\') {
         return Cow::Borrowed(input);
@@ -710,6 +749,10 @@ impl NamelessMatchSpec {
         options: impl Into<ParseMatchSpecOptions>,
     ) -> Result<Self, ParseMatchSpecError> {
         let options = options.into();
+
+        // Check for deprecated "; if" syntax
+        let input = reject_deprecated_if_syntax(input.trim())?;
+
         // Strip off brackets portion
         let (input, brackets) = strip_brackets(input.trim())?;
         let input = input.trim();
@@ -798,7 +841,7 @@ pub(crate) fn matchspec_parser(
 
     // Check for deprecated "; if" syntax and return error if found
     // (Users should migrate to the new [when="..."] bracket syntax)
-    let input = check_for_deprecated_if_syntax(input)?;
+    let input = reject_deprecated_if_syntax(input)?;
 
     // 2. Strip off brackets portion
     let (input, brackets) = strip_brackets(input.trim())?;
@@ -1469,9 +1512,11 @@ mod tests {
 
     #[test]
     fn test_multiple_semicolons() {
+        // "; if" pattern should produce DeprecatedIfSyntax even with multiple semicolons
         let spec = MatchSpec::from_str("foo; if bar; if baz", Strict);
-        assert_matches!(spec, Err(ParseMatchSpecError::MoreThanOneSemicolon));
+        assert_matches!(spec, Err(ParseMatchSpecError::DeprecatedIfSyntax));
 
+        // Bare semicolons without "if" should still produce MoreThanOneSemicolon
         let spec2 = MatchSpec::from_str("package; something; else", Lenient);
         assert_matches!(spec2, Err(ParseMatchSpecError::MoreThanOneSemicolon));
     }
@@ -1739,48 +1784,46 @@ mod tests {
         );
     }
 
+    /// Helper to parse a conditional match spec with strict mode + conditionals enabled.
+    fn parse_conditional(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
+        MatchSpec::from_str(
+            input,
+            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+        )
+    }
+
     #[test]
     fn test_conditional_parsing_with_and_or() {
         // Complex condition with AND/OR
-        let spec = MatchSpec::from_str(
-            r#"foo[when="python >=3.6 and linux"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
-        )
-        .unwrap();
-        assert!(spec.condition.is_some());
-        let condition_str = spec.condition.unwrap().to_string();
-        assert!(condition_str.contains("and"));
+        let spec = parse_conditional(r#"foo[when="python >=3.6 and linux"]"#).unwrap();
+        assert_eq!(
+            spec.condition.unwrap().to_string(),
+            "(python >=3.6 and linux)"
+        );
     }
 
     #[test]
     fn test_conditional_parsing_escaped_quotes_in_when_value() {
-        // Escaped quotes in the when value itself (not in inner brackets)
-        // The condition contains a package name with escaped quotes for testing the escaping mechanism
-        let spec = MatchSpec::from_str(
-            r#"foo[when="python >=3.6"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
-        )
-        .unwrap();
+        // When value containing an inner bracket spec with quotes
+        let spec = parse_conditional(r#"foo[when="python[version=\">=3.6\"]"]"#).unwrap();
         assert!(spec.condition.is_some());
+        // Verify round-trip
+        let reparsed = parse_conditional(&spec.to_string()).unwrap();
+        assert_eq!(spec, reparsed);
     }
 
     #[test]
     fn test_conditional_parsing_complex_version() {
         // Complex version constraints in condition
-        let spec = MatchSpec::from_str(
-            r#"foo[when="python >=3.6,<4.0"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
-        )
-        .unwrap();
-        assert!(spec.condition.is_some());
+        let spec = parse_conditional(r#"foo[when="python >=3.6,<4.0"]"#).unwrap();
+        assert_eq!(spec.condition.unwrap().to_string(), "python >=3.6,<4.0");
 
         // Multiple conditions with or
-        let spec = MatchSpec::from_str(
-            r#"foo[when="python >=3.6 or python <3.0"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
-        )
-        .unwrap();
-        assert!(spec.condition.is_some());
+        let spec = parse_conditional(r#"foo[when="python >=3.6 or python <3.0"]"#).unwrap();
+        assert_eq!(
+            spec.condition.unwrap().to_string(),
+            "(python >=3.6 or python <3.0)"
+        );
     }
 
     #[test]
@@ -1828,18 +1871,15 @@ mod tests {
     #[test]
     fn test_when_with_other_bracket_keys() {
         // when key combined with other bracket keys
-        let spec = MatchSpec::from_str(
-            r#"foo[version=">=1.0", when="python >=3.6", build="py*"]"#,
-            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
-        )
-        .unwrap();
+        let spec =
+            parse_conditional(r#"foo[version=">=1.0", when="python >=3.6", build="py*"]"#).unwrap();
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
         assert_eq!(
             spec.version,
             Some(VersionSpec::from_str(">=1.0", Strict).unwrap())
         );
-        assert!(spec.condition.is_some());
-        assert!(spec.build.is_some());
+        assert_eq!(spec.condition.unwrap().to_string(), "python >=3.6");
+        assert_eq!(spec.build.unwrap().to_string(), "py*");
     }
 
     #[test]
@@ -1934,6 +1974,95 @@ mod tests {
             spec.unwrap_err(),
             ParseMatchSpecError::InvalidCondition(_, _)
         );
+    }
+
+    #[test]
+    fn test_conditional_empty_when_value() {
+        // Empty when value should error
+        let spec = parse_conditional(r#"foo[when=""]"#);
+        assert!(spec.is_err());
+
+        // Whitespace-only when value should error
+        let spec = parse_conditional(r#"foo[when="   "]"#);
+        assert!(spec.is_err());
+    }
+
+    #[test]
+    fn test_conditional_multiple_when_keys() {
+        // Multiple when keys in strict mode should error
+        let spec = MatchSpec::from_str(
+            r#"foo[when="a", when="b"]"#,
+            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+        );
+        assert_matches!(spec, Err(ParseMatchSpecError::MultipleValueForKey(_)));
+    }
+
+    #[test]
+    fn test_conditional_package_name_with_and_or_substring() {
+        // Package names containing "and"/"or" substrings should not be split
+        let spec = parse_conditional(r#"foo[when="pandoc >=2.0"]"#).unwrap();
+        assert_eq!(spec.condition.unwrap().to_string(), "pandoc >=2.0");
+    }
+
+    #[test]
+    fn test_conditional_roundtrip_and_or() {
+        // Round-trip with AND condition
+        let spec = parse_conditional(r#"foo[when="python >=3.6 and __linux"]"#).unwrap();
+        let reparsed = parse_conditional(&spec.to_string()).unwrap();
+        assert_eq!(spec, reparsed);
+
+        // Round-trip with OR condition
+        let spec = parse_conditional(r#"foo[when="python >=3.6 or python <3.0"]"#).unwrap();
+        let reparsed = parse_conditional(&spec.to_string()).unwrap();
+        assert_eq!(spec, reparsed);
+    }
+
+    #[test]
+    fn test_conditional_roundtrip_parenthesized() {
+        // Round-trip with parenthesized conditions
+        let spec =
+            parse_conditional(r#"foo[when="(python >=3.6 or python <3.0) and __unix"]"#).unwrap();
+        let reparsed = parse_conditional(&spec.to_string()).unwrap();
+        assert_eq!(spec, reparsed);
+    }
+
+    #[test]
+    fn test_nameless_match_spec_with_when() {
+        // NamelessMatchSpec with when should work
+        let spec = NamelessMatchSpec::from_str(
+            r#">=1.0[when="python >=3.6"]"#,
+            ParseMatchSpecOptions::strict().with_experimental_conditionals(true),
+        )
+        .unwrap();
+        assert_eq!(
+            spec.version,
+            Some(VersionSpec::from_str(">=1.0", Strict).unwrap())
+        );
+        assert_eq!(spec.condition.unwrap().to_string(), "python >=3.6");
+    }
+
+    #[test]
+    fn test_when_rejected_without_conditionals_lenient() {
+        // when key should be rejected in Lenient mode when conditionals disabled
+        let spec = MatchSpec::from_str(r#"foo[when="a"]"#, Lenient);
+        assert_matches!(spec, Err(ParseMatchSpecError::InvalidBracketKey(_)));
+    }
+
+    #[test]
+    fn test_nameless_deprecated_if_syntax() {
+        // NamelessMatchSpec with deprecated ; if syntax should error
+        let spec = NamelessMatchSpec::from_str("; if python >=3.6", Strict);
+        assert_matches!(spec, Err(ParseMatchSpecError::DeprecatedIfSyntax));
+
+        let spec = NamelessMatchSpec::from_str(">=1.0; if python >=3.6", Strict);
+        assert_matches!(spec, Err(ParseMatchSpecError::DeprecatedIfSyntax));
+    }
+
+    #[test]
+    fn test_conditional_inner_bracket_spec() {
+        // Inner bracket specs in conditions should work with proper bracket syntax
+        let spec = parse_conditional(r#"foo[when="python[version=\">=3.6\"]"]"#).unwrap();
+        assert!(spec.condition.is_some());
     }
 
     #[test]

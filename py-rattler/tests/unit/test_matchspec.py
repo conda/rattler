@@ -1,3 +1,5 @@
+import pytest
+
 from rattler import MatchSpec, NamelessMatchSpec
 
 
@@ -88,16 +90,12 @@ def test_experimental_extras_enabled() -> None:
 
 def test_experimental_extras_disabled() -> None:
     """Test that extras syntax fails to parse when experimental_extras is disabled."""
-    import pytest
-
     with pytest.raises(Exception):  # Should raise InvalidBracketKey error
         MatchSpec("numpy[extras=[test]]", experimental_extras=False)
 
 
 def test_experimental_extras_default() -> None:
     """Test that extras syntax fails to parse by default (experimental_extras defaults to False)."""
-    import pytest
-
     with pytest.raises(Exception):  # Should raise InvalidBracketKey error
         MatchSpec("numpy[extras=[test]]")
 
@@ -121,8 +119,6 @@ def test_experimental_conditionals_enabled() -> None:
 def test_experimental_conditionals_disabled() -> None:
     """Test that conditionals are rejected when experimental_conditionals is disabled."""
     # When disabled, the when key should be rejected as invalid
-    import pytest
-
     with pytest.raises(Exception):
         MatchSpec('requests[when="python >=3.6"]', experimental_conditionals=False)
 
@@ -130,16 +126,12 @@ def test_experimental_conditionals_disabled() -> None:
 def test_experimental_conditionals_default() -> None:
     """Test that conditionals are rejected by default (experimental_conditionals defaults to False)."""
     # When disabled, the when key should be rejected as invalid
-    import pytest
-
     with pytest.raises(Exception):
         MatchSpec('requests[when="python >=3.6"]')
 
 
 def test_deprecated_if_syntax_returns_error() -> None:
     """Test that the deprecated '; if' syntax returns an error."""
-    import pytest
-
     # Old syntax should always return an error, regardless of experimental_conditionals setting
     with pytest.raises(Exception):
         MatchSpec("requests; if python >=3.6", experimental_conditionals=True)
