@@ -223,12 +223,23 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
             Ok((rest, flatten_group(LogicalOperator::Or, group)))
         }
 
-        match all_consuming(parse_or_group).parse(input) {
+        // First try with a cheap error type that doesn't allocate on every
+        // failed alt() branch. Only reparse with VerboseError on failure to
+        // produce a nice error message.
+        match all_consuming(parse_or_group::<nom::error::Error<&str>>).parse(input) {
             Ok((_, tree)) => Ok(tree),
-            Err(nom::Err::Error(e) | nom::Err::Failure(e)) => {
-                Err(ParseVersionTreeError::ParseError(convert_error(input, e)))
+            Err(_) => {
+                match all_consuming(parse_or_group::<nom_language::error::VerboseError<&str>>)
+                    .parse(input)
+                {
+                    Err(nom::Err::Error(e) | nom::Err::Failure(e)) => {
+                        Err(ParseVersionTreeError::ParseError(convert_error(input, e)))
+                    }
+                    _ => Err(ParseVersionTreeError::ParseError(
+                        "unknown parse error".to_string(),
+                    )),
+                }
             }
-            _ => unreachable!("with all_consuming the only error can be Error"),
         }
     }
 }
