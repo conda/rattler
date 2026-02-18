@@ -148,26 +148,29 @@ impl AuthenticationStorage {
         Ok(None)
     }
 
-    /// Retrieve the authentication information for the given URL
-    /// (including the authentication information for the wildcard
-    /// host if no credentials are found for the given host)
+    /// Retrieve the authentication information for the given URL, along with the
+    /// storage key that matched (exact host or wildcard).
     ///
-    /// E.g. if credentials are stored for `*.prefix.dev` and the
-    /// given URL is `https://repo.prefix.dev`, the credentials
-    /// for `*.prefix.dev` will be returned.
-    pub fn get_by_url<U: IntoUrl>(
+    /// This is useful when the caller needs to store updated credentials back
+    /// under the same key (e.g. after an OAuth token refresh).
+    ///
+    /// Returns `(url, Some((matched_key, auth)))` or `(url, None)`.
+    pub fn get_by_url_with_host<U: IntoUrl>(
         &self,
         url: U,
-    ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
+    ) -> Result<(Url, Option<(String, Authentication)>), reqwest::Error> {
         let url = url.into_url()?;
-        let Some(host) = url.host_str() else {
-            return Ok((url, None));
+        let host = match url.host_str() {
+            Some(h) => h.to_string(),
+            None => return Ok((url, None)),
         };
 
-        match self.get(host) {
+        match self.get(&host) {
             Ok(None) => {}
             Err(_) => return Ok((url, None)),
-            Ok(Some(credentials)) => return Ok((url, Some(credentials))),
+            Ok(Some(credentials)) => {
+                return Ok((url, Some((host, credentials))));
+            }
         };
 
         // S3 protocol URLs need to be treated separately since they follow a different schema
@@ -190,7 +193,9 @@ impl AuthenticationStorage {
                             _ => return Ok((url, None)), // No more sub-paths to check
                         }
                     }
-                    Ok(Some(credentials)) => return Ok((url, Some(credentials))),
+                    Ok(Some(credentials)) => {
+                        return Ok((url, Some((current_url.as_str().to_string(), credentials))));
+                    }
                     Err(_) => return Ok((url, None)),
                 }
             }
@@ -209,7 +214,7 @@ impl AuthenticationStorage {
             };
 
             if let Some(credentials) = credentials {
-                return Ok((url, Some(credentials)));
+                return Ok((url, Some((wildcard_host, credentials))));
             }
 
             let possible_rest = domain.split_once('.').map(|(_, rest)| rest);
@@ -221,6 +226,21 @@ impl AuthenticationStorage {
                 _ => return Ok((url, None)), // No more subdomains to check
             }
         }
+    }
+
+    /// Retrieve the authentication information for the given URL
+    /// (including the authentication information for the wildcard
+    /// host if no credentials are found for the given host)
+    ///
+    /// E.g. if credentials are stored for `*.prefix.dev` and the
+    /// given URL is `https://repo.prefix.dev`, the credentials
+    /// for `*.prefix.dev` will be returned.
+    pub fn get_by_url<U: IntoUrl>(
+        &self,
+        url: U,
+    ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
+        let (url, auth) = self.get_by_url_with_host(url)?;
+        Ok((url, auth.map(|(_, credentials)| credentials)))
     }
 
     /// Delete the authentication information for the given host

@@ -1,4 +1,8 @@
 //! This module contains CLI common entrypoint for authentication.
+
+#[cfg(feature = "oauth")]
+pub mod oauth;
+
 use clap::Parser;
 use rattler_networking::{
     authentication_storage::AuthenticationStorageError, Authentication, AuthenticationStorage,
@@ -14,33 +18,70 @@ struct LoginArgs {
     /// The host to authenticate with (e.g. prefix.dev)
     host: String,
 
+    // -- Token / Basic auth --
     /// The token to use (for authentication with prefix.dev)
-    #[clap(long)]
+    #[clap(long, help_heading = "Token / Basic Authentication")]
     token: Option<String>,
 
     /// The username to use (for basic HTTP authentication)
-    #[clap(long)]
+    #[clap(long, help_heading = "Token / Basic Authentication")]
     username: Option<String>,
 
     /// The password to use (for basic HTTP authentication)
-    #[clap(long)]
+    #[clap(long, help_heading = "Token / Basic Authentication")]
     password: Option<String>,
 
     /// The token to use on anaconda.org / quetz authentication
-    #[clap(long)]
+    #[clap(long, help_heading = "Token / Basic Authentication")]
     conda_token: Option<String>,
 
+    // -- S3 --
     /// The S3 access key ID
-    #[clap(long, requires_all = ["s3_secret_access_key"], conflicts_with_all = ["token", "username", "password", "conda_token"])]
+    #[clap(long, requires_all = ["s3_secret_access_key"], conflicts_with_all = ["token", "username", "password", "conda_token"], help_heading = "S3 Authentication")]
     s3_access_key_id: Option<String>,
 
     /// The S3 secret access key
-    #[clap(long, requires_all = ["s3_access_key_id"])]
+    #[clap(long, requires_all = ["s3_access_key_id"], help_heading = "S3 Authentication")]
     s3_secret_access_key: Option<String>,
 
     /// The S3 session token
-    #[clap(long, requires_all = ["s3_access_key_id"])]
+    #[clap(long, requires_all = ["s3_access_key_id"], help_heading = "S3 Authentication")]
     s3_session_token: Option<String>,
+
+    // -- OAuth/OIDC --
+    /// Use OAuth/OIDC authentication
+    #[cfg(feature = "oauth")]
+    #[clap(long, conflicts_with_all = ["token", "username", "password", "conda_token", "s3_access_key_id"], help_heading = "OAuth/OIDC Authentication")]
+    oauth: bool,
+
+    /// OIDC issuer URL (defaults to <https://{host>})
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
+    oauth_issuer_url: Option<String>,
+
+    /// OAuth client ID (defaults to "rattler")
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
+    oauth_client_id: Option<String>,
+
+    /// OAuth client secret (for confidential clients)
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", help_heading = "OAuth/OIDC Authentication")]
+    oauth_client_secret: Option<String>,
+
+    /// OAuth flow: auto (default), auth-code, device-code
+    #[cfg(feature = "oauth")]
+    #[clap(long, requires = "oauth", value_parser = ["auto", "auth-code", "device-code"], help_heading = "OAuth/OIDC Authentication")]
+    oauth_flow: Option<String>,
+
+    /// Additional OAuth scopes to request (repeatable)
+    #[cfg(feature = "oauth")]
+    #[clap(
+        long = "oauth-scope",
+        requires = "oauth",
+        help_heading = "OAuth/OIDC Authentication"
+    )]
+    oauth_scopes: Vec<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -50,6 +91,7 @@ struct LogoutArgs {
 }
 
 #[derive(Parser, Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Subcommand {
     /// Store authentication information for a given host
     Login(LoginArgs),
@@ -85,11 +127,15 @@ pub enum AuthenticationCLIError {
     PrefixDevBadMethod,
 
     /// Bad authentication method when using anaconda.org
-    #[error("Authentication with anaconda.org requires a conda token. Use `--conda-token` to provide one")]
+    #[error(
+        "Authentication with anaconda.org requires a conda token. Use `--conda-token` to provide one"
+    )]
     AnacondaOrgBadMethod,
 
     /// Bad authentication method when using S3
-    #[error("Authentication with S3 requires a S3 access key ID and a secret access key. Use `--s3-access-key-id` and `--s3-secret-access-key` to provide them")]
+    #[error(
+        "Authentication with S3 requires a S3 access key ID and a secret access key. Use `--s3-access-key-id` and `--s3-secret-access-key` to provide them"
+    )]
     S3BadMethod,
 
     // TODO: rework this
@@ -114,6 +160,11 @@ pub enum AuthenticationCLIError {
     /// Token is unauthorized or invalid
     #[error("Unauthorized or invalid token")]
     UnauthorizedToken,
+
+    /// OAuth error
+    #[cfg(feature = "oauth")]
+    #[error(transparent)]
+    OAuthError(#[from] oauth::OAuthError),
 }
 
 fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
@@ -152,6 +203,37 @@ async fn login(
     args: LoginArgs,
     storage: AuthenticationStorage,
 ) -> Result<(), AuthenticationCLIError> {
+    // OAuth flow (when --oauth is set)
+    #[cfg(feature = "oauth")]
+    if args.oauth {
+        let issuer_url = args
+            .oauth_issuer_url
+            .unwrap_or_else(|| format!("https://{}", args.host));
+        let client_id = args
+            .oauth_client_id
+            .unwrap_or_else(|| "rattler".to_string());
+        let flow = match args.oauth_flow.as_deref() {
+            Some("auth-code") => oauth::OAuthFlow::AuthCode,
+            Some("device-code") => oauth::OAuthFlow::DeviceCode,
+            _ => oauth::OAuthFlow::Auto,
+        };
+
+        let config = oauth::OAuthConfig {
+            issuer_url,
+            client_id,
+            client_secret: args.oauth_client_secret,
+            flow,
+            scopes: args.oauth_scopes.into_iter().collect(),
+        };
+
+        let auth = oauth::perform_oauth_login(config).await?;
+        // OAuth credentials are issuer-specific, skip wildcard conversion
+        let host = args.host.clone();
+        storage.store(&host, &auth)?;
+        eprintln!("Credentials stored for {host}.");
+        return Ok(());
+    }
+
     let auth = if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
     } else if let Some(username) = args.username {
@@ -203,7 +285,9 @@ async fn login(
         // Validate the token using the extracted function
         match validate_prefix_dev_token(token, &args.host).await? {
             ValidationResult::Valid(username, url) => {
-                println!("✅ Token is valid. Logged into {url} as \"{username}\". Storing credentials...");
+                println!(
+                    "✅ Token is valid. Logged into {url} as \"{username}\". Storing credentials..."
+                );
                 // Store the authentication
                 storage.store(&host, &auth)?;
             }
@@ -280,8 +364,31 @@ async fn validate_prefix_dev_token(
     }
 }
 
-fn logout(args: LogoutArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
+async fn logout(
+    args: LogoutArgs,
+    storage: AuthenticationStorage,
+) -> Result<(), AuthenticationCLIError> {
     let host = get_url(&args.host)?;
+
+    // Revoke OAuth tokens before deleting credentials
+    #[cfg(feature = "oauth")]
+    if let Ok(Some(Authentication::OAuth {
+        ref access_token,
+        ref refresh_token,
+        revocation_endpoint: Some(ref revocation_endpoint),
+        ref client_id,
+        ..
+    })) = storage.get(&host)
+    {
+        eprintln!("Revoking OAuth tokens...");
+        oauth::revoke_tokens(
+            revocation_endpoint,
+            access_token,
+            refresh_token.as_deref(),
+            client_id,
+        )
+        .await;
+    }
 
     println!("Removing authentication for {host}");
 
@@ -295,7 +402,7 @@ pub async fn execute(args: Args) -> Result<(), AuthenticationCLIError> {
 
     match args.subcommand {
         Subcommand::Login(args) => login(args, storage).await,
-        Subcommand::Logout(args) => logout(args, storage),
+        Subcommand::Logout(args) => logout(args, storage).await,
     }
 }
 
@@ -330,6 +437,18 @@ mod tests {
             s3_access_key_id: None,
             s3_secret_access_key: None,
             s3_session_token: None,
+            #[cfg(feature = "oauth")]
+            oauth: false,
+            #[cfg(feature = "oauth")]
+            oauth_issuer_url: None,
+            #[cfg(feature = "oauth")]
+            oauth_client_id: None,
+            #[cfg(feature = "oauth")]
+            oauth_client_secret: None,
+            #[cfg(feature = "oauth")]
+            oauth_flow: None,
+            #[cfg(feature = "oauth")]
+            oauth_scopes: vec![],
         }
     }
 
