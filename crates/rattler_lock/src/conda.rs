@@ -255,13 +255,10 @@ pub struct CondaSourceData {
     /// Conda-build variants used to disambiguate between multiple source packages
     /// at the same location. This is a map from variant name to variant value.
     /// Optional field added in lock file format V6 (made required in V7).
-    pub variants: Option<BTreeMap<String, VariantValue>>,
+    pub variants: BTreeMap<String, VariantValue>,
 
     /// Package build source location for reproducible builds
     pub package_build_source: Option<PackageBuildSource>,
-
-    /// The input hash of the package
-    pub input: Option<InputHash>,
 
     /// Information about packages that should be built from source instead of binary.
     /// This maps from a normalized package name to location of the source.
@@ -386,6 +383,10 @@ pub enum ConversionError {
     /// The location of the conda package cannot be converted to a URL
     #[error(transparent)]
     LocationToUrlConversionError(#[from] file_url::FileURLParseError),
+
+    /// The location does not have a valid binary package filename (e.g., `.conda` or `.tar.bz2`)
+    #[error("binary package location must have a valid archive filename (.conda or .tar.bz2)")]
+    InvalidBinaryPackageLocation,
 }
 
 impl CondaPackageData {

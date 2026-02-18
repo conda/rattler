@@ -1,0 +1,8 @@
+version: 7
+platforms: []
+environments:
+  default:
+    channels:
+      - url: https://prefix.dev/conda-forge/
+    packages: {}
+packages: []

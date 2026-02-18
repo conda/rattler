@@ -1,73 +1,238 @@
 use crate::channel::PyChannel;
 use crate::match_spec::PyMatchSpec;
+use crate::platform::PyPlatform;
 use crate::version::PyVersion;
-use crate::{error::PyRattlerError, platform::PyPlatform, record::PyRecord};
+use crate::{error::PyRattlerError, record::PyRecord};
 use pep508_rs::Requirement;
 use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
 use rattler_conda_types::RepoDataRecord;
 use rattler_lock::{
     Channel, CondaPackageData, Environment, LockFile, LockedPackage, OwnedEnvironment,
-    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, DEFAULT_ENVIRONMENT_NAME,
+    OwnedPlatform, PackageHashes, PlatformData, PlatformName, PypiPackageData,
+    PypiPackageEnvironmentData, UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
 };
 use std::{
     collections::{BTreeSet, HashMap},
     path::PathBuf,
     str::FromStr,
+    sync::Mutex,
 };
+
+/// State for building a lock file incrementally.
+#[derive(Clone, Default)]
+struct LockFileBuildState {
+    platforms: Vec<PlatformData>,
+    conda_packages: Vec<(String, String, CondaPackageData)>, // (env, platform_name, data)
+    pypi_packages: Vec<(String, String, PypiPackageData, PypiPackageEnvironmentData)>, // (env, platform_name, data, env_data)
+    channels: HashMap<String, Vec<Channel>>, // env -> channels
+}
+
+impl LockFileBuildState {
+    fn build(&self) -> PyResult<LockFile> {
+        let mut builder = LockFile::builder();
+        builder = builder
+            .with_platforms(self.platforms.clone())
+            .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?;
+
+        for (env, channels) in &self.channels {
+            builder.set_channels(env, channels.iter().cloned());
+        }
+
+        for (env, platform_name, pkg) in &self.conda_packages {
+            builder
+                .add_conda_package(env, platform_name, pkg.clone())
+                .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?;
+        }
+
+        for (env, platform_name, pkg, env_data) in &self.pypi_packages {
+            builder
+                .add_pypi_package(env, platform_name, pkg.clone(), env_data.clone())
+                .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?;
+        }
+
+        Ok(builder.finish())
+    }
+}
+
+/// Internal state of a `PyLockFile` - either loaded from disk or being built.
+#[derive(Clone)]
+enum LockFileState {
+    /// A lock file loaded from disk (read-only).
+    Loaded(LockFile),
+    /// A lock file being built incrementally.
+    Building(LockFileBuildState),
+}
 
 /// Represents a lock-file for both Conda packages and Pypi packages.
 ///
 /// Lock-files can store information for multiple platforms and for multiple
 /// environments.
 #[pyclass]
-#[repr(transparent)]
-#[derive(Clone)]
 pub struct PyLockFile {
-    pub(crate) inner: LockFile,
+    state: Mutex<LockFileState>,
+}
+
+impl Clone for PyLockFile {
+    fn clone(&self) -> Self {
+        Self {
+            state: Mutex::new(self.state.lock().unwrap().clone()),
+        }
+    }
+}
+
+impl PyLockFile {
+    /// Gets the `LockFile`, building it if necessary.
+    fn get_lock_file(&self) -> PyResult<LockFile> {
+        let state = self.state.lock().unwrap();
+        match &*state {
+            LockFileState::Loaded(lock_file) => Ok(lock_file.clone()),
+            LockFileState::Building(build_state) => build_state.build(),
+        }
+    }
+
+    /// Gets the build state, returning an error if this is a loaded lock file.
+    fn with_build_state_mut<F, R>(&self, f: F) -> PyResult<R>
+    where
+        F: FnOnce(&mut LockFileBuildState) -> PyResult<R>,
+    {
+        let mut state = self.state.lock().unwrap();
+        match &mut *state {
+            LockFileState::Loaded(_) => Err(PyRattlerError::LockFileError(
+                "Cannot modify a lock file loaded from disk".into(),
+            )
+            .into()),
+            LockFileState::Building(build_state) => f(build_state),
+        }
+    }
 }
 
 impl From<LockFile> for PyLockFile {
     fn from(value: LockFile) -> Self {
-        Self { inner: value }
+        Self {
+            state: Mutex::new(LockFileState::Loaded(value)),
+        }
     }
 }
 
 impl From<PyLockFile> for LockFile {
     fn from(value: PyLockFile) -> Self {
-        value.inner
+        value.get_lock_file().expect("failed to build lock file")
     }
 }
 
 #[pymethods]
 impl PyLockFile {
+    /// Creates a new lock file with the given platforms.
+    ///
+    /// Packages can be added using `add_conda_package` and `add_pypi_package`.
+    /// Channels can be set using `set_channels`.
     #[new]
-    pub fn new(envs: HashMap<String, PyEnvironment>) -> PyResult<Self> {
-        let mut lock = LockFile::builder();
-        for (name, env) in envs {
-            lock.set_channels(&name, env.channels());
-            for (platform, records) in env
-                .as_ref()
-                .conda_repodata_records_by_platform()
-                .map_err(PyRattlerError::from)?
+    pub fn new(platforms: Vec<PyLockPlatform>) -> PyResult<Self> {
+        let platform_data: Vec<PlatformData> = platforms
+            .into_iter()
+            .map(|p| p.to_platform_data())
+            .collect();
+
+        Ok(Self {
+            state: Mutex::new(LockFileState::Building(LockFileBuildState {
+                platforms: platform_data,
+                ..Default::default()
+            })),
+        })
+    }
+
+    /// Sets the channels for an environment.
+    pub fn set_channels(&self, environment: String, channels: Vec<PyLockChannel>) -> PyResult<()> {
+        self.with_build_state_mut(|state| {
+            state
+                .channels
+                .insert(environment, channels.into_iter().map(|c| c.inner).collect());
+            Ok(())
+        })
+    }
+
+    /// Adds a conda package to the lock file.
+    ///
+    /// The platform must be one of the platforms specified when creating the lock file.
+    pub fn add_conda_package(
+        &self,
+        environment: String,
+        platform: PyLockPlatform,
+        record: PyRecord,
+    ) -> PyResult<()> {
+        let platform_name = platform.name();
+        let repo_data_record = record.try_as_repodata_record()?.clone();
+
+        self.with_build_state_mut(|state| {
+            // Validate that the platform is known
+            if !state
+                .platforms
+                .iter()
+                .any(|p| p.name.as_str() == platform_name)
             {
-                for record in records {
-                    lock.add_conda_package(&name, platform, record.into());
-                }
+                return Err(PyRattlerError::LockFileError(format!(
+                    "Platform '{platform_name}' is not in the list of platforms for this lock file"
+                ))
+                .into());
             }
 
-            for (platform, records) in env.as_ref().pypi_packages_by_platform() {
-                for (pkg_data, pkg_env_data) in records {
-                    lock.add_pypi_package(&name, platform, pkg_data.clone(), pkg_env_data.clone());
-                }
-            }
-        }
+            state
+                .conda_packages
+                .push((environment, platform_name, repo_data_record.into()));
+            Ok(())
+        })
+    }
 
-        Ok(lock.finish().into())
+    /// Adds a pypi package to the lock file.
+    ///
+    /// The platform must be one of the platforms specified when creating the lock file.
+    pub fn add_pypi_package(
+        &self,
+        environment: String,
+        platform: PyLockPlatform,
+        name: String,
+        version: String,
+        location: String,
+    ) -> PyResult<()> {
+        let platform_name = platform.name();
+
+        self.with_build_state_mut(|state| {
+            // Validate that the platform is known
+            if !state
+                .platforms
+                .iter()
+                .any(|p| p.name.as_str() == platform_name)
+            {
+                return Err(PyRattlerError::LockFileError(format!(
+                    "Platform '{platform_name}' is not in the list of platforms for this lock file"
+                ))
+                .into());
+            }
+
+            let pkg_data = PypiPackageData {
+                name: pep508_rs::PackageName::from_str(&name)
+                    .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
+                version: pep440_rs::Version::from_str(&version)
+                    .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
+                location: Verbatim::<UrlOrPath>::from_str(&location)
+                    .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
+                hash: None,
+                requires_dist: Vec::new(),
+                requires_python: None,
+            };
+            let env_data = PypiPackageEnvironmentData::default();
+
+            state
+                .pypi_packages
+                .push((environment, platform_name, pkg_data, env_data));
+            Ok(())
+        })
     }
 
     /// Writes the conda lock to a file
     pub fn to_path(&self, path: PathBuf) -> PyResult<()> {
-        Ok(self.inner.to_path(&path).map_err(PyRattlerError::from)?)
+        let lock_file = self.get_lock_file()?;
+        Ok(lock_file.to_path(&path).map_err(PyRattlerError::from)?)
     }
 
     /// Parses an rattler-lock file from a file.
@@ -79,27 +244,187 @@ impl PyLockFile {
     }
 
     /// Returns the environment with the given name.
-    pub fn environment(&self, name: &str) -> Option<PyEnvironment> {
-        PyEnvironment::from_lock_file_and_name(self.inner.clone(), name).ok()
+    pub fn environment(&self, name: &str) -> PyResult<Option<PyEnvironment>> {
+        let lock_file = self.get_lock_file()?;
+        Ok(PyEnvironment::from_lock_file_and_name(lock_file, name).ok())
     }
 
     /// Returns the environment with the default name as defined by
     /// [`DEFAULT_ENVIRONMENT_NAME`].
-    pub fn default_environment(&self) -> Option<PyEnvironment> {
-        PyEnvironment::from_lock_file_and_name(self.inner.clone(), DEFAULT_ENVIRONMENT_NAME).ok()
+    pub fn default_environment(&self) -> PyResult<Option<PyEnvironment>> {
+        let lock_file = self.get_lock_file()?;
+        Ok(PyEnvironment::from_lock_file_and_name(lock_file, DEFAULT_ENVIRONMENT_NAME).ok())
     }
 
     /// Returns an iterator over all environments defined in the lock-file.
-    pub fn environments(&self) -> Vec<(String, PyEnvironment)> {
-        self.inner
+    pub fn environments(&self) -> PyResult<Vec<(String, PyEnvironment)>> {
+        let lock_file = self.get_lock_file()?;
+        Ok(lock_file
             .environments()
             .map(|(name, _)| {
                 (
                     name.to_string(),
-                    PyEnvironment::from_lock_file_and_name(self.inner.clone(), name).unwrap(),
+                    PyEnvironment::from_lock_file_and_name(lock_file.clone(), name).unwrap(),
                 )
             })
-            .collect()
+            .collect())
+    }
+
+    /// Returns the platform with the given name.
+    pub fn platform(&self, name: &str) -> PyResult<Option<PyLockPlatform>> {
+        let lock_file = self.get_lock_file()?;
+        Ok(lock_file
+            .platform(name)
+            .map(|p| p.to_owned(&lock_file).into()))
+    }
+
+    /// Returns all platforms defined in the lock-file.
+    pub fn platforms(&self) -> PyResult<Vec<PyLockPlatform>> {
+        let lock_file = self.get_lock_file()?;
+        Ok(lock_file
+            .platforms()
+            .map(|p| p.to_owned(&lock_file).into())
+            .collect())
+    }
+}
+
+/// Internal representation of a lock platform - either owned from an existing
+/// lock file or standalone data.
+#[derive(Clone)]
+enum LockPlatformInner {
+    /// Platform from an existing lock file.
+    Owned(OwnedPlatform),
+    /// Standalone platform data (not yet part of a lock file).
+    Standalone(PlatformData),
+}
+
+/// Represents a platform in a lock file.
+///
+/// This provides access to the platform name, the underlying conda subdir,
+/// and any virtual packages associated with the platform.
+#[pyclass]
+#[derive(Clone)]
+pub struct PyLockPlatform {
+    inner: LockPlatformInner,
+}
+
+impl PyLockPlatform {
+    /// Returns the name of the platform (e.g., "linux-64", "osx-arm64").
+    pub fn name(&self) -> String {
+        match &self.inner {
+            LockPlatformInner::Owned(owned) => owned.as_ref().name().to_string(),
+            LockPlatformInner::Standalone(data) => data.name.to_string(),
+        }
+    }
+
+    /// Returns the underlying conda subdir/platform.
+    pub fn subdir(&self) -> rattler_conda_types::Platform {
+        match &self.inner {
+            LockPlatformInner::Owned(owned) => owned.as_ref().subdir(),
+            LockPlatformInner::Standalone(data) => data.subdir,
+        }
+    }
+
+    /// Returns the list of virtual packages for this platform.
+    pub fn virtual_packages(&self) -> Vec<String> {
+        match &self.inner {
+            LockPlatformInner::Owned(owned) => owned.as_ref().virtual_packages().to_vec(),
+            LockPlatformInner::Standalone(data) => data.virtual_packages.clone(),
+        }
+    }
+
+    /// Returns the platform data for use in building a lock file.
+    pub(crate) fn to_platform_data(&self) -> PlatformData {
+        match &self.inner {
+            LockPlatformInner::Owned(owned) => {
+                let platform = owned.as_ref();
+                PlatformData {
+                    name: platform.name().clone(),
+                    subdir: platform.subdir(),
+                    virtual_packages: platform.virtual_packages().to_vec(),
+                }
+            }
+            LockPlatformInner::Standalone(data) => data.clone(),
+        }
+    }
+
+    /// Returns a Platform reference for use with lock file methods.
+    /// For owned platforms, returns the underlying reference directly.
+    /// For standalone platforms, looks up the platform by name in the given lock file.
+    pub(crate) fn platform<'a>(&'a self) -> rattler_lock::Platform<'a> {
+        match &self.inner {
+            LockPlatformInner::Owned(owned) => owned.as_ref(),
+            LockPlatformInner::Standalone(_) => {
+                panic!("Cannot get platform reference from standalone platform - use an owned platform from the lock file")
+            }
+        }
+    }
+}
+
+impl From<OwnedPlatform> for PyLockPlatform {
+    fn from(inner: OwnedPlatform) -> Self {
+        Self {
+            inner: LockPlatformInner::Owned(inner),
+        }
+    }
+}
+
+#[pymethods]
+impl PyLockPlatform {
+    /// Creates a new platform with the given name.
+    ///
+    /// The subdir is automatically determined from the name if it matches a known platform.
+    /// Virtual packages default to an empty list.
+    #[new]
+    #[pyo3(signature = (name, subdir=None, virtual_packages=None))]
+    pub fn new(
+        name: String,
+        subdir: Option<PyPlatform>,
+        virtual_packages: Option<Vec<String>>,
+    ) -> PyResult<Self> {
+        let platform_name = PlatformName::try_from(name.clone())
+            .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?;
+
+        // Try to determine the subdir from the name if not provided
+        let subdir = match subdir {
+            Some(p) => p.inner,
+            None => rattler_conda_types::Platform::from_str(&name)
+                .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?,
+        };
+
+        Ok(Self {
+            inner: LockPlatformInner::Standalone(PlatformData {
+                name: platform_name,
+                subdir,
+                virtual_packages: virtual_packages.unwrap_or_default(),
+            }),
+        })
+    }
+
+    /// The name of the platform (e.g., "linux-64", "osx-arm64").
+    #[getter(name)]
+    fn py_name(&self) -> String {
+        self.name()
+    }
+
+    /// The underlying conda subdir/platform.
+    #[getter(subdir)]
+    fn py_subdir(&self) -> PyPlatform {
+        self.subdir().into()
+    }
+
+    /// The list of virtual packages for this platform.
+    #[getter(virtual_packages)]
+    fn py_virtual_packages(&self) -> Vec<String> {
+        self.virtual_packages()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("LockPlatform(name='{}')", self.name())
+    }
+
+    fn __str__(&self) -> String {
+        self.name()
     }
 }
 
@@ -135,6 +460,20 @@ impl PyEnvironment {
     ) -> PyResult<Self> {
         let mut lock = LockFile::builder();
 
+        // Collect all unique platforms
+        let platforms: Vec<PlatformData> = records
+            .keys()
+            .map(|p| PlatformData {
+                name: PlatformName::try_from(p.inner.to_string())
+                    .expect("platform name should be valid"),
+                subdir: p.inner,
+                virtual_packages: Vec::new(),
+            })
+            .collect();
+        lock = lock
+            .with_platforms(platforms)
+            .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?;
+
         lock.set_channels(
             &name,
             channels.into_iter().map(|c| {
@@ -145,12 +484,14 @@ impl PyEnvironment {
         );
 
         for (platform, records) in records {
+            let platform_name = platform.inner.to_string();
             for record in records {
                 lock.add_conda_package(
                     &name,
-                    platform.inner,
+                    &platform_name,
                     record.try_as_repodata_record()?.clone().into(),
-                );
+                )
+                .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?;
             }
         }
 
@@ -158,11 +499,12 @@ impl PyEnvironment {
     }
 
     /// Returns all the platforms for which we have a locked-down environment.
-    pub fn platforms(&self) -> Vec<PyPlatform> {
+    pub fn platforms(&self) -> Vec<PyLockPlatform> {
+        let lock_file = self.environment.lock_file();
         self.as_ref()
             .platforms()
-            .map(Into::into)
-            .collect::<Vec<_>>()
+            .map(|p| p.to_owned(&lock_file).into())
+            .collect()
     }
 
     /// Returns the channels that are used by this environment.
@@ -178,30 +520,29 @@ impl PyEnvironment {
     }
 
     /// Returns all the packages for a specific platform in this environment.
-    pub fn packages(&self, platform: PyPlatform) -> Option<Vec<PyLockedPackage>> {
-        if let Some(packages) = self.as_ref().packages(platform.inner) {
-            return Some(packages.map(LockedPackage::from).map(Into::into).collect());
-        }
-        None
+    pub fn packages(&self, platform: PyLockPlatform) -> Option<Vec<PyLockedPackage>> {
+        self.as_ref()
+            .packages(platform.platform())
+            .map(|packages| packages.map(LockedPackage::from).map(Into::into).collect())
     }
 
     /// Returns a list of all packages and platforms defined for this
     /// environment
-    pub fn packages_by_platform(&self) -> Vec<(PyPlatform, Vec<PyLockedPackage>)> {
+    pub fn packages_by_platform(&self) -> Vec<(PyLockPlatform, Vec<PyLockedPackage>)> {
+        let lock_file = self.environment.lock_file();
         self.as_ref()
             .packages_by_platform()
             .map(|(platform, pkgs)| {
                 (
-                    platform.into(),
-                    pkgs.map(|pkg| LockedPackage::from(pkg).into())
-                        .collect::<Vec<_>>(),
+                    platform.to_owned(&lock_file).into(),
+                    pkgs.map(|pkg| LockedPackage::from(pkg).into()).collect(),
                 )
             })
             .collect()
     }
 
     /// Returns all pypi packages for all platforms
-    pub fn pypi_packages(&self) -> HashMap<PyPlatform, Vec<PyLockedPackage>> {
+    pub fn pypi_packages(&self) -> HashMap<String, Vec<PyLockedPackage>> {
         self.as_ref()
             .pypi_packages_by_platform()
             .map(|(platform, data_vec)| {
@@ -213,14 +554,14 @@ impl PyEnvironment {
                         ))
                     })
                     .collect::<Vec<_>>();
-                (platform.into(), data)
+                (platform.name().to_string(), data)
             })
             .collect()
     }
 
     /// Returns all conda packages for all platforms and converts them to
     /// [`PyRecord`].
-    pub fn conda_repodata_records(&self) -> PyResult<HashMap<PyPlatform, Vec<PyRecord>>> {
+    pub fn conda_repodata_records(&self) -> PyResult<HashMap<String, Vec<PyRecord>>> {
         Ok(self
             .as_ref()
             .conda_repodata_records_by_platform()
@@ -228,7 +569,7 @@ impl PyEnvironment {
             .into_iter()
             .map(|(platform, record_vec)| {
                 (
-                    platform.into(),
+                    platform.name().to_string(),
                     record_vec.into_iter().map(Into::into).collect(),
                 )
             })
@@ -240,11 +581,11 @@ impl PyEnvironment {
     /// the specified platform is not defined for this environment.
     pub fn conda_repodata_records_for_platform(
         &self,
-        platform: PyPlatform,
+        platform: PyLockPlatform,
     ) -> PyResult<Option<Vec<PyRecord>>> {
         if let Some(records) = self
             .as_ref()
-            .conda_repodata_records(platform.inner)
+            .conda_repodata_records(platform.platform())
             .map_err(PyRattlerError::from)?
         {
             return Ok(Some(records.into_iter().map(Into::into).collect()));
@@ -255,16 +596,18 @@ impl PyEnvironment {
     /// Returns all the pypi packages and their associated environment data for
     /// the specified platform. Returns `None` if the platform is not
     /// defined for this environment.
-    pub fn pypi_packages_for_platform(&self, platform: PyPlatform) -> Option<Vec<PyLockedPackage>> {
-        if let Some(data) = self.as_ref().pypi_packages(platform.inner) {
-            return Some(
+    pub fn pypi_packages_for_platform(
+        &self,
+        platform: PyLockPlatform,
+    ) -> Option<Vec<PyLockedPackage>> {
+        self.as_ref()
+            .pypi_packages(platform.platform())
+            .map(|data| {
                 data.map(|(pkg, env)| {
                     PyLockedPackage::from(LockedPackage::Pypi(pkg.clone(), env.clone()))
                 })
-                .collect(),
-            );
-        }
-        None
+                .collect()
+            })
     }
 }
 
@@ -382,12 +725,6 @@ impl PyLockedPackage {
     #[getter]
     pub fn pypi_version(&self) -> String {
         self.as_pypi().version.to_string()
-    }
-
-    /// Whether the package is installed in editable mode or not.
-    #[getter]
-    pub fn pypi_is_editable(&self) -> bool {
-        self.as_pypi().editable
     }
 
     // Hashes of the file pointed to by `url`.
@@ -514,12 +851,6 @@ impl PyPypiPackageData {
     #[getter]
     pub fn location(&self) -> String {
         self.inner.location.to_string()
-    }
-
-    /// Whether the package is installed in editable mode or not.
-    #[getter]
-    pub fn is_editable(&self) -> bool {
-        self.inner.editable
     }
 
     /// Hashes of the file pointed to by `url`.

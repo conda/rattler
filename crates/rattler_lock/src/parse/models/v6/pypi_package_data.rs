@@ -1,11 +1,11 @@
 use std::borrow::Cow;
 
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::{PackageName, Requirement};
+use pep508_rs::PackageName;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
-use crate::{PackageHashes, PypiPackageData, UrlOrPath};
+use crate::{parse::deserialize::PypiPackageDataRaw, PackageHashes, UrlOrPath, Verbatim};
 
 /// A helper struct that wraps all fields of a [`crate::PypiPackageData`] and
 /// allows for easy conversion between the two.
@@ -29,13 +29,13 @@ use crate::{PackageHashes, PypiPackageData, UrlOrPath};
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug, Hash)]
 pub(crate) struct PypiPackageDataModel<'a> {
     #[serde(rename = "pypi")]
-    pub location: Cow<'a, UrlOrPath>,
+    pub location: Cow<'a, Verbatim<UrlOrPath>>,
     pub name: Cow<'a, PackageName>,
     pub version: Cow<'a, pep440_rs::Version>,
     #[serde(default, skip_serializing_if = "Option::is_none", flatten)]
     pub hash: Cow<'a, Option<PackageHashes>>,
-    #[serde(default, skip_serializing_if = "<[Requirement]>::is_empty")]
-    pub requires_dist: Cow<'a, [Requirement]>,
+    #[serde(default, skip_serializing_if = "<[String]>::is_empty")]
+    pub requires_dist: Cow<'a, [String]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requires_python: Cow<'a, Option<VersionSpecifiers>>,
     #[serde(default, skip_serializing_if = "should_skip_serializing_editable")]
@@ -48,7 +48,7 @@ fn should_skip_serializing_editable(editable: &bool) -> bool {
     !*editable
 }
 
-impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageData {
+impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageDataRaw {
     fn from(value: PypiPackageDataModel<'a>) -> Self {
         Self {
             name: value.name.into_owned(),
@@ -57,21 +57,6 @@ impl<'a> From<PypiPackageDataModel<'a>> for PypiPackageData {
             hash: value.hash.into_owned(),
             requires_dist: value.requires_dist.into_owned(),
             requires_python: value.requires_python.into_owned(),
-            editable: value.editable,
-        }
-    }
-}
-
-impl<'a> From<&'a PypiPackageData> for PypiPackageDataModel<'a> {
-    fn from(value: &'a PypiPackageData) -> Self {
-        Self {
-            name: Cow::Borrowed(&value.name),
-            version: Cow::Borrowed(&value.version),
-            location: Cow::Borrowed(&value.location),
-            hash: Cow::Borrowed(&value.hash),
-            requires_dist: Cow::Borrowed(&value.requires_dist),
-            requires_python: Cow::Borrowed(&value.requires_python),
-            editable: value.editable,
         }
     }
 }

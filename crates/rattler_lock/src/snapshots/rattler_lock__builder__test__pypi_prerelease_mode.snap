@@ -2,7 +2,9 @@
 source: crates/rattler_lock/src/builder.rs
 expression: lock_file.render_to_string().unwrap()
 ---
-version: 6
+version: 7
+platforms:
+- name: linux-64
 environments:
   default:
     channels: []
