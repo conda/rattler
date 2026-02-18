@@ -367,6 +367,11 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
 /// Strips the brackets part of the matchspec returning the rest of the
 /// matchspec and  the contents of the brackets as a `Vec<&str>`.
 fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMatchSpecError> {
+    // Fast path: skip the regex entirely if no brackets present.
+    if !input.contains('[') {
+        return Ok((input.into(), SmallVec::new()));
+    }
+
     if let Some(matches) =
         lazy_regex::regex!(r#".*(\[(?:[^\[\]]|\[(?:[^\[\]]|\[.*\])*\])*\])$"#).captures(input)
     {
@@ -750,11 +755,13 @@ impl NamelessMatchSpec {
     ) -> Result<Self, ParseMatchSpecError> {
         let options = options.into();
 
+        let input = input.trim();
+
         // Check for deprecated "; if" syntax
-        let input = reject_deprecated_if_syntax(input.trim())?;
+        let input = reject_deprecated_if_syntax(input)?;
 
         // Strip off brackets portion
-        let (input, brackets) = strip_brackets(input.trim())?;
+        let (input, brackets) = strip_brackets(input)?;
         let input = input.trim();
 
         // Parse url or path spec
