@@ -193,7 +193,9 @@ pub async fn perform_oauth_login(config: OAuthConfig) -> Result<Authentication, 
             {
                 Ok(tokens) => tokens,
                 Err(OAuthError::BrowserOpen(e)) => {
-                    eprintln!("Failed to open browser ({e}), falling back to device code flow...");
+                    tracing::info!(
+                        "Failed to open browser ({e}), falling back to device code flow..."
+                    );
                     device_code_flow(
                         &endpoints,
                         &config.client_id,
