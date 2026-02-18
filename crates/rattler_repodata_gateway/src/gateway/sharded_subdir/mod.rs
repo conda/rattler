@@ -7,9 +7,9 @@ use rattler_redaction::Redact;
 use url::Url;
 
 use crate::{
-    GatewayError,
     fetch::FetchRepoDataError,
-    gateway::subdir::{PackageRecords, extract_unique_deps},
+    gateway::subdir::{extract_unique_deps, PackageRecords},
+    GatewayError,
 };
 
 cfg_if! {
@@ -126,13 +126,13 @@ mod tests {
     use crate::fetch::CacheAction;
     use crate::gateway::subdir::SubdirClient;
     use axum::{
-        Router,
         body::Body,
         http::{Response, StatusCode},
         routing::get,
+        Router,
     };
     use rattler_conda_types::{Channel, ShardedRepodata, ShardedSubdirInfo};
-    use rattler_digest::{Sha256, parse_digest_from_hex};
+    use rattler_digest::{parse_digest_from_hex, Sha256};
     use std::future::IntoFuture;
     use std::net::SocketAddr;
     use tokio::sync::oneshot;

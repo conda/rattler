@@ -4,8 +4,8 @@ use futures::FutureExt;
 use rattler_cache::package_cache::{CacheKey, PackageCache, PackageCacheError};
 use rattler_conda_types::package::{ArchiveIdentifier, CondaArchiveType};
 use rattler_conda_types::{
-    ConvertSubdirError, PackageRecord, RepoDataRecord,
     package::{CondaArchiveIdentifier, DistArchiveIdentifier, IndexJson, PackageFile},
+    ConvertSubdirError, PackageRecord, RepoDataRecord,
 };
 use rattler_digest::{Md5Hash, Sha256Hash};
 use rattler_networking::LazyClient;

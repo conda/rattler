@@ -5,8 +5,8 @@ use std::sync::Arc;
 use rattler_conda_types::{Channel, PackageName, Platform, RepoDataRecord};
 
 use super::{
+    subdir::{extract_unique_deps, PackageRecords, SubdirClient},
     GatewayError,
-    subdir::{PackageRecords, SubdirClient, extract_unique_deps},
 };
 use crate::Reporter;
 

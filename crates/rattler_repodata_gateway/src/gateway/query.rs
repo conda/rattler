@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use futures::{FutureExt, StreamExt, select_biased, stream::FuturesUnordered};
+use futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
 use rattler_conda_types::{
     Channel, MatchSpec, Matches, PackageName, PackageNameMatcher, Platform, RepoDataRecord,
@@ -11,9 +11,9 @@ use rattler_conda_types::{
 use url::Url;
 
 use super::{
-    BarrierCell, GatewayError, GatewayInner, RepoData,
     source::{CustomSourceClient, Source},
     subdir::{PackageRecords, Subdir, SubdirData},
+    BarrierCell, GatewayError, GatewayInner, RepoData,
 };
 use crate::Reporter;
 

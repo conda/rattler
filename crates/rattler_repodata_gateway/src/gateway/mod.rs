@@ -18,7 +18,7 @@ mod subdir_builder;
 
 use std::{collections::HashSet, sync::Arc};
 
-use crate::{Reporter, gateway::subdir_builder::SubdirBuilder};
+use crate::{gateway::subdir_builder::SubdirBuilder, Reporter};
 pub use barrier_cell::BarrierCell;
 pub use builder::{GatewayBuilder, MaxConcurrency};
 pub use channel_config::{ChannelConfig, SourceConfig};
@@ -36,7 +36,7 @@ use run_exports_extractor::{RunExportExtractor, SubdirRunExportsCache};
 pub use run_exports_extractor::{RunExportExtractorError, RunExportsReporter};
 pub use source::{RepoDataSource, Source};
 use subdir::Subdir;
-use tracing::{Level, instrument};
+use tracing::{instrument, Level};
 use url::Url;
 
 /// Central access point for high level queries about
@@ -377,8 +377,8 @@ mod test {
     use url::Url;
 
     use crate::{
-        DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
         fetch::CacheAction, gateway::Gateway, utils::simple_channel_server::SimpleChannelServer,
+        DownloadReporter, GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
     };
 
     async fn local_conda_forge() -> Channel {
@@ -849,7 +849,7 @@ mod test {
     #[test]
     fn test_clear_sharded_disk_cache() {
         use crate::gateway::sharded_subdir::{
-            REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX, ShardedSubdir,
+            ShardedSubdir, REPODATA_SHARDS_FILENAME, SHARDS_CACHE_SUFFIX,
         };
 
         let cache_dir = tempfile::tempdir().unwrap();
@@ -1274,7 +1274,7 @@ mod test {
 
     fn make_test_record(name: &str, version: &str, subdir: &str) -> RepoDataRecord {
         use rattler_conda_types::{
-            PackageRecord, VersionWithSource, package::DistArchiveIdentifier,
+            package::DistArchiveIdentifier, PackageRecord, VersionWithSource,
         };
 
         let package_record = PackageRecord {
