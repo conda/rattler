@@ -142,7 +142,7 @@ impl PackageName {
 /// Returns `true` if the byte is a matchspec delimiter (whitespace or version
 /// constraint character: `>`, `<`, `=`, `!`, `~`, `;`).
 fn is_matchspec_delimiter(b: u8) -> bool {
-    b.is_ascii_whitespace() || matches!(b, b'>' | b'<' | b'=' | b'!' | b'~' | b';')
+    b.is_ascii_whitespace() || matches!(b, b'>' | b'<' | b'=' | b'!' | b'~' | b';' | b'[')
 }
 
 /// Scans a matchspec string to find the package name boundary and whether it
@@ -162,7 +162,8 @@ fn scan_matchspec_name(spec: &str) -> (&str, bool) {
 }
 
 /// Extracts the package name part from a matchspec string by splitting on
-/// matchspec delimiters.
+/// whitespace, version constraint characters (`>`, `<`, `=`, `!`, `~`, `;`),
+/// or bracket `[` (used for bracket syntax like `pkg[when="..."]`).
 fn name_from_matchspec_str(spec: &str) -> &str {
     scan_matchspec_name(spec).0
 }
@@ -312,12 +313,17 @@ mod test {
     #[case("numpy>=1.0", "numpy")]
     #[case("numpy!=1.5", "numpy")]
     #[case("numpy~=1.0", "numpy")]
-    // Conditional dependency syntax
+    // Conditional dependency syntax (deprecated ; if)
     #[case("package; if __osx", "package")]
     #[case("osx-dependency; if __osx", "osx-dependency")]
     #[case("linux-dependency; if __linux", "linux-dependency")]
     #[case("numpy; if python >=3.9", "numpy")]
     #[case("pkg-a; if python>=3.8 and python<3.9.5", "pkg-a")]
+    // Conditional dependency syntax (bracket [when="..."])
+    #[case(r#"package[when="side-dependency=0.2"]"#, "package")]
+    #[case(r#"osx-dependency[when="__osx"]"#, "osx-dependency")]
+    #[case(r#"numpy >=1.0[when="python >=3.9"]"#, "numpy")]
+    #[case(r#"foo[version=">=1.0", when="python >=3.6"]"#, "foo")]
     fn test_from_matchspec_str(#[case] spec: &str, #[case] expected: &str) {
         let name = PackageName::from_matchspec_str(spec).unwrap();
         assert_eq!(name.as_source(), expected);
@@ -328,6 +334,8 @@ mod test {
     #[case("pillow >=10", "pillow", "pillow")]
     #[case("numpy>=1.0,<2.0", "numpy", "numpy")]
     #[case("Pillow >=10", "Pillow", "pillow")]
+    #[case(r#"package[when="side-dependency=0.2"]"#, "package", "package")]
+    #[case(r#"Numpy[when="python >=3.9"]"#, "Numpy", "numpy")]
     fn test_from_matchspec_str_unchecked(
         #[case] spec: &str,
         #[case] expected_source: &str,
@@ -351,6 +359,7 @@ mod test {
     #[case("Pillow >=10", "pillow", false)]
     #[case("NUMPY>=1.0,<2.0", "numpy", false)]
     #[case("package; if __osx", "package", true)]
+    #[case(r#"package[when="__osx"]"#, "package", true)]
     fn test_normalized_name_from_matchspec_str(
         #[case] spec: &str,
         #[case] expected: &str,
