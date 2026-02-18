@@ -6,7 +6,7 @@ use nom::{
     character::complete::{alpha1, digit1, multispace0, u32},
     combinator::{all_consuming, cut, map, not, opt, recognize, value},
     error::{context, ContextError, ParseError},
-    multi::{many0, separated_list1},
+    multi::separated_list1,
     sequence::{delimited, preceded, terminated},
     IResult, Parser,
 };
@@ -95,14 +95,25 @@ pub(crate) fn recognize_version<'a, E: ParseError<&'a str> + ContextError<&'a st
         allow_glob: bool,
     ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
         move |input: &'a str| {
-            recognize((
-                recognize_version_component(allow_glob),
-                many0(preceded(
-                    opt(take_while(|c: char| c == '.' || c == '-' || c == '_')),
-                    recognize_version_component(allow_glob),
-                )),
-            ))
-            .parse(input)
+            // Parse the first component (required)
+            let (mut rest, _) = recognize_version_component::<E>(allow_glob)(input)?;
+            // Parse subsequent separator + component pairs without allocating
+            loop {
+                let after_sep = match opt(take_while::<_, _, E>(|c: char| {
+                    c == '.' || c == '-' || c == '_'
+                }))
+                .parse(rest)
+                {
+                    Ok((r, _)) => r,
+                    Err(_) => break,
+                };
+                match recognize_version_component::<E>(allow_glob)(after_sep) {
+                    Ok((r, _)) => rest = r,
+                    Err(_) => break,
+                }
+            }
+            let matched = &input[..input.len() - rest.len()];
+            Ok((rest, matched))
         }
     }
 
