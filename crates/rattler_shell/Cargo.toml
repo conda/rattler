@@ -1,6 +1,6 @@
 [package]
 name = "rattler_shell"
-version = "0.25.19"
+version = "0.26.0"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "A crate to help with activation and deactivation of a conda environment"
