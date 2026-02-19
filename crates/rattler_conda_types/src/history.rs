@@ -78,6 +78,21 @@ pub enum HistoryError {
     ParseError(String),
 }
 
+/// A revision to be written to a history file.
+///
+/// This groups the data needed to append a single revision entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Revision {
+    /// Timestamp string, typically in `YYYY-MM-DD HH:MM:SS` format.
+    pub timestamp: String,
+
+    /// Distribution strings that were removed in this revision.
+    pub removed: BTreeSet<String>,
+
+    /// Distribution strings that were added in this revision.
+    pub added: BTreeSet<String>,
+}
+
 /// The parsed contents of a `conda-meta/history` file.
 ///
 /// This type is returned by [`History::parse`] and provides query methods
@@ -280,17 +295,11 @@ impl History {
 
     /// Appends a new revision to the history file.
     ///
-    /// If the parent directory does not exist it will be created. The
-    /// `timestamp` should be a string in `YYYY-MM-DD HH:MM:SS` format.
-    /// Packages that were removed should appear in `removed` and packages
-    /// that were added in `added`. The sets contain distribution strings
-    /// without any `+`/`-` prefix — the prefix is added automatically.
-    pub fn write_revision(
-        &self,
-        timestamp: &str,
-        removed: &BTreeSet<String>,
-        added: &BTreeSet<String>,
-    ) -> Result<(), HistoryError> {
+    /// If the parent directory does not exist it will be created.
+    /// Packages in [`Revision::removed`] and [`Revision::added`] contain
+    /// distribution strings without any `+`/`-` prefix — the prefix is added
+    /// automatically.
+    pub fn write_revision(&self, revision: &Revision) -> Result<(), HistoryError> {
         if let Some(parent) = self.path.parent() {
             fs_err::create_dir_all(parent)?;
         }
@@ -301,15 +310,15 @@ impl History {
             .open(&self.path)?;
 
         // Write timestamp header.
-        writeln!(file, "==> {timestamp} <==")?;
+        writeln!(file, "==> {} <==", revision.timestamp)?;
 
         // Write removed packages.
-        for pkg in removed {
+        for pkg in &revision.removed {
             writeln!(file, "-{pkg}")?;
         }
 
         // Write added packages.
-        for pkg in added {
+        for pkg in &revision.added {
             writeln!(file, "+{pkg}")?;
         }
 
@@ -323,8 +332,6 @@ impl History {
     /// responsible for formatting the comment correctly (the leading `#` should
     /// be included).
     pub fn write_comment(&self, comment: &str) -> Result<(), HistoryError> {
-        use std::io::Write;
-
         let mut file = fs_err::OpenOptions::new()
             .create(true)
             .append(true)
@@ -343,9 +350,7 @@ impl History {
     /// parameters are optional and only written if `Some`.
     pub fn write_full_revision(
         &self,
-        timestamp: &str,
-        removed: &BTreeSet<String>,
-        added: &BTreeSet<String>,
+        revision: &Revision,
         cmd: Option<&str>,
         conda_version: Option<&str>,
         action_specs: Option<(&str, &[String])>,
@@ -360,7 +365,7 @@ impl History {
             .open(&self.path)?;
 
         // Revision header.
-        writeln!(file, "==> {timestamp} <==")?;
+        writeln!(file, "==> {} <==", revision.timestamp)?;
 
         // Comment metadata.
         if let Some(cmd) = cmd {
@@ -374,10 +379,10 @@ impl History {
         }
 
         // Package diffs.
-        for pkg in removed {
+        for pkg in &revision.removed {
             writeln!(file, "-{pkg}")?;
         }
-        for pkg in added {
+        for pkg in &revision.added {
             writeln!(file, "+{pkg}")?;
         }
 
@@ -603,14 +608,16 @@ pip-24.0-pyhd8ed1ab_0
         let dir = tempfile::tempdir().unwrap();
         let history = History::new(dir.path());
 
-        let removed = BTreeSet::new();
-        let mut added = BTreeSet::new();
-        added.insert("python-3.12.0-h1234567_0".to_string());
-        added.insert("pip-24.0-pyhd8ed1ab_0".to_string());
+        let rev = Revision {
+            timestamp: "2024-01-15 10:30:00".to_string(),
+            removed: BTreeSet::new(),
+            added: BTreeSet::from([
+                "python-3.12.0-h1234567_0".to_string(),
+                "pip-24.0-pyhd8ed1ab_0".to_string(),
+            ]),
+        };
 
-        history
-            .write_revision("2024-01-15 10:30:00", &removed, &added)
-            .unwrap();
+        history.write_revision(&rev).unwrap();
 
         let parsed = history.parse().unwrap();
         assert_eq!(parsed.len(), 1);
@@ -628,16 +635,16 @@ pip-24.0-pyhd8ed1ab_0
         let dir = tempfile::tempdir().unwrap();
         let history = History::new(dir.path());
 
-        let removed = BTreeSet::new();
-        let mut added = BTreeSet::new();
-        added.insert("numpy-1.26.3-py312h1234567_0".to_string());
+        let rev = Revision {
+            timestamp: "2024-02-01 08:00:00".to_string(),
+            removed: BTreeSet::new(),
+            added: BTreeSet::from(["numpy-1.26.3-py312h1234567_0".to_string()]),
+        };
 
         let specs = vec!["numpy".to_string()];
         history
             .write_full_revision(
-                "2024-02-01 08:00:00",
-                &removed,
-                &added,
+                &rev,
                 Some("conda install numpy"),
                 Some("24.1.0"),
                 Some(("install", &specs)),
@@ -660,11 +667,12 @@ pip-24.0-pyhd8ed1ab_0
         let history = History::new(dir.path());
 
         // Write something first.
-        let mut added = BTreeSet::new();
-        added.insert("pkg-1.0-0".to_string());
-        history
-            .write_revision("2024-01-01 00:00:00", &BTreeSet::new(), &added)
-            .unwrap();
+        let rev = Revision {
+            timestamp: "2024-01-01 00:00:00".to_string(),
+            removed: BTreeSet::new(),
+            added: BTreeSet::from(["pkg-1.0-0".to_string()]),
+        };
+        history.write_revision(&rev).unwrap();
         assert!(!history.parse().unwrap().is_empty());
 
         // Clear.
@@ -685,11 +693,12 @@ pip-24.0-pyhd8ed1ab_0
         let history = History::new(dir.path());
 
         // Write initial content.
-        let mut added = BTreeSet::new();
-        added.insert("old-pkg-1.0-0".to_string());
-        history
-            .write_revision("2024-01-01 00:00:00", &BTreeSet::new(), &added)
-            .unwrap();
+        let rev = Revision {
+            timestamp: "2024-01-01 00:00:00".to_string(),
+            removed: BTreeSet::new(),
+            added: BTreeSet::from(["old-pkg-1.0-0".to_string()]),
+        };
+        history.write_revision(&rev).unwrap();
 
         // Overwrite with new revisions.
         let new_revisions = vec![HistoryRevision {
@@ -718,20 +727,20 @@ pip-24.0-pyhd8ed1ab_0
         let history = History::new(dir.path());
 
         // First revision.
-        let mut added = BTreeSet::new();
-        added.insert("python-3.12.0-h1234567_0".to_string());
-        history
-            .write_revision("2024-01-01 00:00:00", &BTreeSet::new(), &added)
-            .unwrap();
+        let rev1 = Revision {
+            timestamp: "2024-01-01 00:00:00".to_string(),
+            removed: BTreeSet::new(),
+            added: BTreeSet::from(["python-3.12.0-h1234567_0".to_string()]),
+        };
+        history.write_revision(&rev1).unwrap();
 
         // Second revision.
-        let mut removed = BTreeSet::new();
-        removed.insert("python-3.12.0-h1234567_0".to_string());
-        let mut added2 = BTreeSet::new();
-        added2.insert("python-3.13.0-h1234567_0".to_string());
-        history
-            .write_revision("2024-01-02 12:00:00", &removed, &added2)
-            .unwrap();
+        let rev2 = Revision {
+            timestamp: "2024-01-02 12:00:00".to_string(),
+            removed: BTreeSet::from(["python-3.12.0-h1234567_0".to_string()]),
+            added: BTreeSet::from(["python-3.13.0-h1234567_0".to_string()]),
+        };
+        history.write_revision(&rev2).unwrap();
 
         let parsed = history.parse().unwrap();
         assert_eq!(parsed.len(), 2);

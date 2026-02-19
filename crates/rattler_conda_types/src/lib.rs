@@ -43,7 +43,7 @@ pub use explicit_environment_spec::{
     ParseExplicitEnvironmentSpecError, ParsePackageArchiveHashError,
 };
 pub use generic_virtual_package::GenericVirtualPackage;
-pub use history::{History, HistoryError, HistoryRevision, ParsedHistory, UserRequest};
+pub use history::{History, HistoryError, HistoryRevision, ParsedHistory, Revision, UserRequest};
 pub use match_spec::condition::MatchSpecCondition;
 pub use match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError};
 pub use match_spec::{
