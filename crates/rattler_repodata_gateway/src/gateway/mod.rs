@@ -1690,10 +1690,7 @@ mod test {
 
         let records = gateway
             .query(
-                vec![
-                    super::Source::Custom(src_a),
-                    super::Source::Custom(src_b),
-                ],
+                vec![super::Source::Custom(src_a), super::Source::Custom(src_b)],
                 vec![Platform::Linux64, Platform::NoArch],
                 vec![matchspec].into_iter(),
             )
