@@ -1439,13 +1439,13 @@ mod test {
         assert_eq!(custom_records[0].package_record.version.as_str(), "1.0.0");
     }
 
-    /// Test that ensures run_exports fallback works when run_exports.json exists
+    /// Test that ensures `run_exports` fallback works when `run_exports.json` exists
     /// but doesn't contain all packages (out-of-sync scenario).
     ///
-    /// This test creates a channel that has an empty run_exports.json file,
-    /// simulating the case where the run_exports.json file is out of sync with
+    /// This test creates a channel that has an empty `run_exports.json` file,
+    /// simulating the case where the `run_exports.json` file is out of sync with
     /// the actual packages. The test verifies that the system correctly falls
-    /// back to extracting run_exports from the actual package files.
+    /// back to extracting `run_exports` from the actual package files.
     #[tokio::test]
     async fn test_ensure_run_exports_fallback_when_out_of_sync() {
         // Use a minimal repodata with just one openssl package, and add a base_url
@@ -1495,5 +1495,248 @@ mod test {
             run_exports_in_place(&repodata_records),
             "run_exports should be populated via package extraction fallback when run_exports.json is out of sync"
         );
+    }
+
+    #[tokio::test]
+    async fn test_glob_pattern_query() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        // Query with glob pattern "openssl*" - should match packages starting with
+        // "openssl"
+        let matchspec = MatchSpec::from_str(
+            "openssl*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+
+        // Verify we got some results
+        assert!(
+            !all_records.is_empty(),
+            "glob pattern should match some packages"
+        );
+
+        // Verify all results start with "openssl"
+        for record in &all_records {
+            assert!(
+                record
+                    .package_record
+                    .name
+                    .as_normalized()
+                    .starts_with("openssl"),
+                "all matched packages should start with 'openssl', got: {}",
+                record.package_record.name.as_normalized()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_regex_pattern_query() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        // Query with regex pattern - match packages starting with "python-"
+        // Regex patterns are enclosed in ^...$ or use regex syntax
+        let matchspec = MatchSpec::from_str(
+            "^python-.*$",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+
+        // Verify we got some results
+        assert!(
+            !all_records.is_empty(),
+            "regex pattern should match some packages"
+        );
+
+        // Verify all results match the pattern (start with "python-")
+        for record in &all_records {
+            assert!(
+                record
+                    .package_record
+                    .name
+                    .as_normalized()
+                    .starts_with("python-"),
+                "all matched packages should start with 'python-', got: {}",
+                record.package_record.name.as_normalized()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_glob_pattern_query_no_matches() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        // Query with glob pattern that matches nothing
+        let matchspec = MatchSpec::from_str(
+            "zzznonexistent*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+        assert_eq!(
+            total_records, 0,
+            "glob pattern with no matches should return empty results"
+        );
+    }
+
+    /// Verify that glob pattern queries discover matching packages across
+    /// multiple channels *and* multiple subdirs, even when each source
+    /// carries a disjoint set of package names.
+    #[tokio::test]
+    async fn test_glob_pattern_across_multiple_channels_and_subdirs() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+
+        // --- Source A: has lib-foo on linux-64 and lib-bar on noarch ----------
+        let mut source_a = MockRepoDataSource::new();
+        source_a.add_record(
+            Platform::Linux64,
+            make_test_record("lib-foo", "1.0.0", "linux-64"),
+        );
+        source_a.add_record(
+            Platform::NoArch,
+            make_test_record("lib-bar", "2.0.0", "noarch"),
+        );
+        // A non-matching package that should be excluded.
+        source_a.add_record(
+            Platform::Linux64,
+            make_test_record("unrelated", "1.0.0", "linux-64"),
+        );
+
+        // --- Source B: has lib-baz on linux-64 and lib-qux on noarch ---------
+        let mut source_b = MockRepoDataSource::new();
+        source_b.add_record(
+            Platform::Linux64,
+            make_test_record("lib-baz", "3.0.0", "linux-64"),
+        );
+        source_b.add_record(
+            Platform::NoArch,
+            make_test_record("lib-qux", "4.0.0", "noarch"),
+        );
+        // Another non-matching package.
+        source_b.add_record(
+            Platform::NoArch,
+            make_test_record("other-pkg", "1.0.0", "noarch"),
+        );
+
+        let src_a: Arc<dyn super::RepoDataSource> = Arc::new(source_a);
+        let src_b: Arc<dyn super::RepoDataSource> = Arc::new(source_b);
+
+        // Glob that matches every "lib-*" package.
+        let matchspec = MatchSpec::from_str(
+            "lib-*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let records = gateway
+            .query(
+                vec![super::Source::Custom(src_a), super::Source::Custom(src_b)],
+                vec![Platform::Linux64, Platform::NoArch],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let mut all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        all_records.sort();
+
+        // Collect matched names.
+        let matched_names: std::collections::BTreeSet<_> = all_records
+            .iter()
+            .map(|r| r.package_record.name.as_normalized().to_string())
+            .collect();
+
+        assert_eq!(
+            matched_names,
+            ["lib-bar", "lib-baz", "lib-foo", "lib-qux"]
+                .into_iter()
+                .map(String::from)
+                .collect::<std::collections::BTreeSet<_>>(),
+            "glob should find all lib-* packages across both sources and both subdirs"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_nameless_matchspec_error_without_url() {
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        // Create a matchspec and then remove the name
+        let mut matchspec = MatchSpec::from_str("python>=3.8", Lenient).unwrap();
+        matchspec.name = None;
+
+        let gateway_error = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap_err();
+
+        assert_matches!(gateway_error, GatewayError::MatchSpecWithoutName(_));
     }
 }
