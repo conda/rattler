@@ -691,7 +691,7 @@ mod tests {
         match_spec::Matches, package::DistArchiveIdentifier,
         parse_mode::ParseStrictnessWithNameMatcher, MatchSpec, NamelessMatchSpec, PackageName,
         PackageRecord, ParseMatchSpecError, ParseStrictness::*, RepoDataRecord, StringMatcher,
-        Version, VersionSpec,
+        Version,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -708,12 +708,13 @@ mod tests {
     #[test]
     fn test_name_asterisk() {
         use crate::match_spec::package_name_matcher::PackageNameMatcher;
-        use crate::ParseMatchSpecOptions;
+        use crate::{MatchSpec, ParseMatchSpecOptions, ParseStrictness::Lenient, VersionSpec};
+
         // Explicitly configure the parser to allow glob matching
         let options = ParseMatchSpecOptions::from(Lenient).with_exact_names_only(false);
 
         // Test that MatchSpec can be created with an asterisk as the package name
-        let spec = MatchSpec::from_str("*[license=MIT]", options.clone()).unwrap();
+        let spec = MatchSpec::from_str("*[license=MIT]", options).unwrap();
 
         // It should now correctly be identified as a Glob instead of None!
         assert_eq!(spec.name, Some(PackageNameMatcher::from_str("*").unwrap()));
@@ -730,19 +731,21 @@ mod tests {
     #[test]
     fn test_name_asterisk_edge_cases() {
         use crate::match_spec::package_name_matcher::PackageNameMatcher;
-        use crate::ParseMatchSpecOptions;
+        use crate::{
+            MatchSpec, ParseMatchSpecError, ParseMatchSpecOptions, ParseStrictness::Strict,
+            VersionSpec,
+        };
+
         // EDGE CASE 1: The Security Boundary
         // In Strict mode (exact_names_only = true), a standalone `*` SHOULD be rejected.
         // The previous hack used to bypass this. The new architecture catches it.
         let strict_spec = MatchSpec::from_str("*", Strict);
-        assert!(
-            matches!(
-                strict_spec,
-                Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedGlob(ref g)) if g == "*"
-            ),
-            "Strict mode failed to block the glob! Got: {:?}",
-            strict_spec
-        );
+        match strict_spec {
+            Err(ParseMatchSpecError::OnlyExactPackageNameMatchersAllowedGlob(g)) => {
+                assert_eq!(g, "*");
+            }
+            other => panic!("Strict mode failed to block the glob! Got: {other:?}"),
+        }
 
         // EDGE CASE 2: The Kitchen Sink
         // Testing `*` as a glob buried inside a highly complex spec string
@@ -754,12 +757,15 @@ mod tests {
             MatchSpec::from_str(complex_str, options).expect("Failed to parse complex glob spec");
 
         // Verify every single piece was parsed correctly around the `*`
-        assert_eq!(spec.name, Some(PackageNameMatcher::from_str("*").unwrap()));
+        assert_eq!(
+            spec.name,
+            Some(PackageNameMatcher::from_str("*").expect("invalid package name matcher"))
+        );
         assert_eq!(spec.channel.unwrap().name(), "conda-forge");
         assert_eq!(spec.subdir, Some("linux-64".to_string()));
         assert_eq!(
             spec.version,
-            Some(VersionSpec::from_str(">=2.0", Strict).unwrap())
+            Some(VersionSpec::from_str(">=2.0", Strict).expect("invalid version spec"))
         );
         assert!(spec.build.is_some(), "Build string matcher was dropped");
     }
