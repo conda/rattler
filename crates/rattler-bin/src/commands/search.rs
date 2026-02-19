@@ -170,16 +170,8 @@ pub async fn search(opt: Opt) -> miette::Result<()> {
     for name in package_names.into_iter().take(limit_packages) {
         let mut records = packages.remove(&name).unwrap();
         // Sort by version descending
-        records.sort_by(|a, b| {
-            b.package_record
-                .version
-                .cmp(&a.package_record.version)
-                .then_with(|| {
-                    b.package_record
-                        .build_number
-                        .cmp(&a.package_record.build_number)
-                })
-        });
+        records.sort_unstable();
+        records.reverse();
 
         let total = records.len();
         let shown = records.len().min(limit_versions);
