@@ -367,6 +367,11 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
 /// Strips the brackets part of the matchspec returning the rest of the
 /// matchspec and  the contents of the brackets as a `Vec<&str>`.
 fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMatchSpecError> {
+    // Fast path: skip the regex entirely if no brackets present.
+    if !input.contains('[') {
+        return Ok((input.into(), SmallVec::new()));
+    }
+
     if let Some(matches) =
         lazy_regex::regex!(r#".*(\[(?:[^\[\]]|\[(?:[^\[\]]|\[.*\])*\])*\])$"#).captures(input)
     {
@@ -675,7 +680,7 @@ fn split_version_and_build(
         }
     }
 
-    match parse_version_and_build_separator(strictness)(input).finish() {
+    match parse_version_and_build_separator::<nom::error::Error<&str>>(strictness)(input).finish() {
         Ok((rest, version)) => {
             let build_string = rest.trim();
 
@@ -693,9 +698,9 @@ fn split_version_and_build(
                 build_string.is_empty().not().then_some(build_string),
             ))
         }
-        Err(nom_language::error::VerboseError { .. }) => Err(
-            ParseMatchSpecError::InvalidVersionAndBuild(input.to_string()),
-        ),
+        Err(_) => Err(ParseMatchSpecError::InvalidVersionAndBuild(
+            input.to_string(),
+        )),
     }
 }
 /// Parse version and build string.
@@ -750,11 +755,13 @@ impl NamelessMatchSpec {
     ) -> Result<Self, ParseMatchSpecError> {
         let options = options.into();
 
+        let input = input.trim();
+
         // Check for deprecated "; if" syntax
-        let input = reject_deprecated_if_syntax(input.trim())?;
+        let input = reject_deprecated_if_syntax(input)?;
 
         // Strip off brackets portion
-        let (input, brackets) = strip_brackets(input.trim())?;
+        let (input, brackets) = strip_brackets(input)?;
         let input = input.trim();
 
         // Parse url or path spec
