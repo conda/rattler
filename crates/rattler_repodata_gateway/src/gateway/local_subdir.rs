@@ -83,7 +83,7 @@ impl SubdirClient for LocalSubdirClient {
             Ok(records) => {
                 let unique_deps = extract_unique_deps(&records);
                 Ok(PackageRecords {
-                    records: records.into(),
+                    records: records.into_iter().map(Arc::new).collect(),
                     unique_deps,
                 })
             }

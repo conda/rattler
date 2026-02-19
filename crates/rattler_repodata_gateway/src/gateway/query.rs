@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     future::{Future, IntoFuture},
     sync::Arc,
 };
@@ -139,6 +140,11 @@ struct QueryExecutor {
     // Specs categorized at construction
     direct_url_specs: Vec<DirectUrlSpec>,
 
+    /// Specs with glob/regex patterns that need expansion
+    pending_pattern_specs: Vec<(PackageNameMatcher, MatchSpec)>,
+    /// Track names already considered for pattern expansion (across subdirs)
+    pattern_names_seen: HashSet<PackageName>,
+
     // Mutable state during execution
     /// Normalized (lowercase) package names we've already queued.
     seen: hashbrown::HashMap<String, (), ahash::RandomState>,
@@ -146,7 +152,7 @@ struct QueryExecutor {
 
     // Subdir management
     subdir_handles: Vec<SubdirHandle>,
-    pending_subdirs: FuturesUnordered<BoxFuture<Result<(), GatewayError>>>,
+    pending_subdirs: FuturesUnordered<BoxFuture<PendingSubdirResult>>,
 
     // Record fetching
     pending_records: FuturesUnordered<BoxFuture<PendingRecordsResult>>,
@@ -171,9 +177,11 @@ impl QueryExecutor {
         let mut seen = hashbrown::HashMap::with_hasher(ahash::RandomState::new());
         let mut pending_package_specs = ahash::HashMap::default();
         let mut direct_url_specs = Vec::new();
+        let mut pending_pattern_specs = Vec::new();
+        let pattern_names_seen = HashSet::new();
 
-        // Categorize specs into direct_url_specs and pending_package_specs
-        // TODO: allow glob/regex package names as well
+        // Categorize specs into direct_url_specs, pending_package_specs, and
+        // pending_pattern_specs
         for spec in specs {
             if let Some(url) = spec.url.clone() {
                 let name = spec
@@ -185,15 +193,28 @@ impl QueryExecutor {
                     )))?;
                 seen.insert(name.as_normalized().to_string(), ());
                 direct_url_specs.push(DirectUrlSpec { spec, url, name });
-            } else if let Some(PackageNameMatcher::Exact(name)) = &spec.name {
-                seen.insert(name.as_normalized().to_string(), ());
-                let pending = pending_package_specs
-                    .entry(name.clone())
-                    .or_insert_with(|| SourceSpecs::Input(vec![]));
-                let SourceSpecs::Input(input_specs) = pending else {
-                    panic!("SourceSpecs::Input was overwritten by SourceSpecs::Transitive");
-                };
-                input_specs.push(spec);
+            } else {
+                match &spec.name {
+                    Some(PackageNameMatcher::Exact(name)) => {
+                        seen.insert(name.as_normalized().to_string(), ());
+                        let pending = pending_package_specs
+                            .entry(name.clone())
+                            .or_insert_with(|| SourceSpecs::Input(vec![]));
+                        let SourceSpecs::Input(input_specs) = pending else {
+                            panic!("SourceSpecs::Input was overwritten by SourceSpecs::Transitive");
+                        };
+                        input_specs.push(spec);
+                    }
+                    Some(
+                        matcher @ (PackageNameMatcher::Glob(_) | PackageNameMatcher::Regex(_)),
+                    ) => {
+                        // Store pattern specs for later expansion
+                        pending_pattern_specs.push((matcher.clone(), spec));
+                    }
+                    None => {
+                        return Err(GatewayError::MatchSpecWithoutName(Box::new(spec)));
+                    }
+                }
             }
         }
 
@@ -219,31 +240,30 @@ impl QueryExecutor {
                 barrier: barrier.clone(),
             });
 
-            match source {
+            let pending = match source {
                 Source::Channel(channel) => {
                     let inner = gateway.clone();
                     let reporter = reporter.clone();
-                    pending_subdirs.push(box_future(async move {
-                        match inner
+                    box_future(async move {
+                        let subdir = inner
                             .get_or_create_subdir(&channel, platform, reporter)
-                            .await
-                        {
-                            Ok(subdir) => {
-                                barrier.set(subdir).expect("subdir was set twice");
-                                Ok(())
-                            }
-                            Err(e) => Err(e),
-                        }
-                    }));
+                            .await?;
+                        barrier.set(subdir.clone()).expect("subdir was set twice");
+                        Ok(subdir)
+                    })
                 }
                 Source::Custom(custom_source) => {
                     // For custom sources, create an adapter that wraps the source
-                    // for the specific platform
+                    // for the specific platform.
                     let client = CustomSourceClient::new(custom_source, platform);
                     let subdir = Arc::new(Subdir::Found(SubdirData::from_client(client)));
-                    barrier.set(subdir).expect("subdir was set twice");
+                    box_future(async move {
+                        barrier.set(subdir.clone()).expect("subdir was set twice");
+                        Ok(subdir)
+                    })
                 }
-            }
+            };
+            pending_subdirs.push(pending);
         }
 
         let result_len = subdir_handles.len() + direct_url_offset;
@@ -253,6 +273,8 @@ impl QueryExecutor {
             recursive,
             reporter,
             direct_url_specs,
+            pending_pattern_specs,
+            pattern_names_seen,
             seen,
             pending_package_specs,
             subdir_handles,
@@ -278,13 +300,13 @@ impl QueryExecutor {
                     spec.md5,
                 );
 
-                let record = query
+                let records = query
                     .execute()
                     .await
                     .map_err(|e| GatewayError::DirectUrlQueryError(url.to_string(), e))?;
 
                 // Check if record actually has the same name
-                if let Some(record) = record.first() {
+                if let Some(record) = records.first() {
                     if record.package_record.name != name {
                         return Err(GatewayError::UrlRecordNameMismatch(
                             record.package_record.name.as_source().to_string(),
@@ -294,12 +316,12 @@ impl QueryExecutor {
                 }
 
                 // Push the direct url in the first subdir result for channel priority logic
-                let unique_deps = super::subdir::extract_unique_deps(&record);
+                let unique_deps = super::subdir::extract_unique_deps(records.iter().map(|r| &**r));
                 Ok((
                     0,
                     SourceSpecs::Input(vec![spec]),
                     PackageRecords {
-                        records: record,
+                        records,
                         unique_deps,
                     },
                 ))
@@ -356,8 +378,8 @@ impl QueryExecutor {
             }
             SourceSpecs::Input(specs) => {
                 // For input specs, only process deps from matching records.
-                for record in pkg.records.iter() {
-                    if !specs.iter().any(|s| s.matches(record)) {
+                for record in &pkg.records {
+                    if !specs.iter().any(|s| s.matches(record.as_ref())) {
                         continue;
                     }
                     for dependency in &record.package_record.depends {
@@ -393,28 +415,61 @@ impl QueryExecutor {
     fn accumulate_records(
         &mut self,
         result_idx: usize,
-        records: Arc<[RepoDataRecord]>,
+        records: Vec<Arc<RepoDataRecord>>,
         request_specs: &SourceSpecs,
     ) {
         let result = &mut self.result[result_idx];
 
         match request_specs {
             SourceSpecs::Transitive => {
-                // All records match for transitive deps — push the whole Arc
-                // without cloning any records.
-                result.len += records.len();
-                result.shards.push(records);
+                // All records match — extend with Arc clones (cheap refcount bumps).
+                result.records.extend(records);
             }
             SourceSpecs::Input(specs) => {
-                // Only a subset matches — filter and build one new Arc.
-                let matching: Vec<RepoDataRecord> = records
-                    .iter()
-                    .filter(|r| specs.iter().any(|s| s.matches(*r)))
-                    .cloned()
-                    .collect();
-                result.len += matching.len();
-                if !matching.is_empty() {
-                    result.shards.push(Arc::from(matching));
+                // Only a subset matches — filter and clone matching Arcs.
+                for record in &records {
+                    if specs.iter().any(|s| s.matches(record.as_ref())) {
+                        result.records.push(record.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    /// Expand pattern specs based on the names provided by a resolved subdir.
+    fn expand_pattern_specs_for_subdir(&mut self, subdir: &Subdir) {
+        if self.pending_pattern_specs.is_empty() {
+            return;
+        }
+
+        let Some(names) = subdir.package_names() else {
+            return;
+        };
+
+        for name_str in names {
+            let Ok(name) = PackageName::try_from(name_str) else {
+                continue;
+            };
+            if !self.pattern_names_seen.insert(name.clone()) {
+                continue;
+            }
+
+            for (matcher, spec) in &self.pending_pattern_specs {
+                if matcher.matches(&name) {
+                    if self
+                        .seen
+                        .insert(name.as_normalized().to_string(), ())
+                        .is_none()
+                    {
+                        let pending = self
+                            .pending_package_specs
+                            .entry(name.clone())
+                            .or_insert_with(|| SourceSpecs::Input(vec![]));
+                        if let SourceSpecs::Input(input_specs) = pending {
+                            input_specs.push(spec.clone());
+                        }
+                    }
+                    break;
                 }
             }
         }
@@ -430,7 +485,12 @@ impl QueryExecutor {
             select_biased! {
                 // Handle any error that was emitted by the pending subdirs
                 subdir_result = self.pending_subdirs.select_next_some() => {
-                    subdir_result?;
+                    let subdir = subdir_result?;
+                    self.expand_pattern_specs_for_subdir(subdir.as_ref());
+                    if self.pending_subdirs.is_empty() {
+                        self.pending_pattern_specs.clear();
+                        self.pattern_names_seen.clear();
+                    }
                 }
 
                 // Handle any records that were fetched
@@ -473,6 +533,7 @@ fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture
 }
 
 /// Result type for pending record fetches.
+type PendingSubdirResult = Result<Arc<Subdir>, GatewayError>;
 type PendingRecordsResult = Result<(usize, SourceSpecs, PackageRecords), GatewayError>;
 
 impl IntoFuture for RepoDataQuery {
