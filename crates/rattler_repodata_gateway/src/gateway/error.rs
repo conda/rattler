@@ -49,6 +49,10 @@ pub enum GatewayError {
     #[error("the match spec '{0}' does not specify an exact name")]
     MatchSpecWithoutExactName(Box<MatchSpec>),
 
+    // todo: remove after https://github.com/conda/rattler/issues/2039
+    #[error("the match spec '{0}' does not have a package name")]
+    MatchSpecWithoutName(Box<MatchSpec>),
+
     #[error("the package from url '{0}', doesn't have the same name as the match spec filename intents '{1}'")]
     UrlRecordNameMismatch(String, String),
 

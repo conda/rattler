@@ -43,6 +43,7 @@ struct Opt {
 enum Command {
     Auth(commands::auth::Opt),
     Create(commands::create::Opt),
+    Search(commands::search::Opt),
     VirtualPackages(commands::virtual_packages::Opt),
     InstallMenu(commands::menu::InstallOpt),
     RemoveMenu(commands::menu::InstallOpt),
@@ -98,6 +99,7 @@ async fn async_main() -> miette::Result<()> {
     match opt.command {
         Command::Auth(opts) => commands::auth::auth(opts).await,
         Command::Create(opts) => commands::create::create(opts).await,
+        Command::Search(opts) => commands::search::search(opts).await,
         Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
         Command::InstallMenu(opts) => commands::menu::install_menu(opts).await,
         Command::RemoveMenu(opts) => commands::menu::remove_menu(opts).await,
