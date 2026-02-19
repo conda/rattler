@@ -1,6 +1,6 @@
 [package]
 name = "rattler_s3"
-version = "0.1.22"
+version = "0.1.23"
 description = "A crate to streamline interaction with S3 storage for rattler"
 categories.workspace = true
 homepage.workspace = true
