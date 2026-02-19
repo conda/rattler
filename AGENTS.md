@@ -2,9 +2,9 @@
 
 This file provides guidance to AI coding agents working with code in this repository.
 
-- Rust monorepo for conda package management (solving, installing, fetching repodata) — used by pixi, rattler-build, prefix.dev
+- Rust monorepo for conda package management (solving, installing, fetching repodata), used by pixi, rattler-build, prefix.dev
 - Build: `pixi run build` | Test: `pixi run test` | Lint all: `pixi run lint`
 - Single test: `pixi run -- cargo nextest run -p <crate_name> <test_name>`
-- After every code change, run `pixi run cargo-fmt` and `pixi run cargo-clippy` to ensure formatting and lint compliance
-- 25+ crates in `crates/`, Python bindings in `py-rattler/`, WASM bindings in `js-rattler/`
+- Before committing, run `pixi run cargo-fmt` and `pixi run cargo-clippy` to ensure formatting and lint compliance
+- crates in `crates/`, Python bindings in `py-rattler/`, WASM bindings in `js-rattler/`
 - py-rattler tests: `cd py-rattler && pixi run test`
