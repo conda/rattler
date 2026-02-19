@@ -71,7 +71,7 @@ pub fn py_fetch_repo_data<'a>(
             Ok(res) => res
                 .into_iter()
                 .map(|(cache, chan, platform)| {
-                    PySparseRepoData::new(chan, platform, cache.repo_data_json_path)
+                    PySparseRepoData::from_args(chan, platform, cache.repo_data_json_path)
                 })
                 .collect::<Result<Vec<_>, _>>(),
             Err(e) => Err(PyRattlerError::from(e).into()),

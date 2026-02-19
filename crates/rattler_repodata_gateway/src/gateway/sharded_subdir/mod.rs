@@ -94,21 +94,21 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
                 .filter(|(name, _record)| !shard.removed.contains(name));
         let channel_str = channel_base_url.url().clone().redact().to_string();
         let base_url_str = base_url.as_str();
-        let records: Vec<RepoDataRecord> = packages
+        let records: Vec<Arc<RepoDataRecord>> = packages
             .map(|(file_name, package_record)| {
                 let file_name_str = file_name.to_file_name();
-                RepoDataRecord {
+                Arc::new(RepoDataRecord {
                     url: Url::parse(&format!("{base_url_str}{file_name_str}"))
                         .expect("filename is not a valid url"),
                     channel: Some(channel_str.clone()),
                     package_record,
                     identifier: file_name,
-                }
+                })
             })
             .collect();
-        let unique_deps = extract_unique_deps(&records);
+        let unique_deps = extract_unique_deps(records.iter().map(|r| &**r));
         Ok(PackageRecords {
-            records: Arc::from(records),
+            records,
             unique_deps,
         })
     };

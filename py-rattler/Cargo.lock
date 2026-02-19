@@ -152,21 +152,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "astral_async_zip"
-version = "0.0.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab72a761e6085828cc8f0e05ed332b2554701368c5dc54de551bfaec466518ba"
-dependencies = [
- "async-compression",
- "crc32fast",
- "futures-lite",
- "pin-project",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -198,7 +183,6 @@ checksum = "d10e4f991a553474232bc0a31799f6d24b034a84c0971d80d2e2f78b2e576e40"
 dependencies = [
  "compression-codecs",
  "compression-core",
- "futures-io",
  "pin-project-lite",
  "tokio",
 ]
@@ -323,16 +307,6 @@ dependencies = [
  "signal-hook-registry",
  "slab",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "async-spooled-tempfile"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dd9c58a1dbecfc23aa470d57e5aff60877ab1b459bf05e60e861dd18fcaa5f5"
-dependencies = [
- "tempfile",
- "tokio",
 ]
 
 [[package]]
@@ -3927,7 +3901,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.39.12"
+version = "0.39.11"
 dependencies = [
  "anyhow",
  "console",
@@ -3970,7 +3944,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.11"
+version = "0.6.10"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4074,7 +4048,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.13"
+version = "0.27.12"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4202,16 +4176,13 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.23.26"
+version = "0.23.25"
 dependencies = [
  "astral-tokio-tar",
- "astral_async_zip",
  "async-compression",
- "async-spooled-tempfile",
  "bzip2",
  "chrono",
  "fs-err",
- "futures",
  "futures-util",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
@@ -4256,7 +4227,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.25.12"
+version = "0.25.11"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -5666,7 +5637,6 @@ checksum = "9ae9cec805b01e8fc3fd2fe289f89149a9b66dd16786abd8b19cfa7b48cb0098"
 dependencies = [
  "bytes",
  "futures-core",
- "futures-io",
  "futures-sink",
  "pin-project-lite",
  "tokio",
