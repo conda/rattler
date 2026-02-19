@@ -37,7 +37,7 @@ use async_zip::spec::header::{
 };
 use bytes::Bytes;
 use http::StatusCode;
-use rattler_conda_types::package::{ArchiveType, PackageFile};
+use rattler_conda_types::package::{CondaArchiveType, PackageFile};
 use reqwest_middleware::ClientWithMiddleware;
 use tar::Archive;
 use tracing::debug;
@@ -378,10 +378,10 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
     );
 
     // Determine archive type from URL - only .conda supports efficient range requests
-    let archive_type = ArchiveType::try_from(std::path::Path::new(url.path()))
+    let archive_type = CondaArchiveType::try_from(std::path::Path::new(url.path()))
         .ok_or(ExtractError::UnsupportedArchiveType)?;
 
-    if archive_type != ArchiveType::Conda {
+    if archive_type != CondaArchiveType::Conda {
         // .tar.bz2 files don't support efficient range requests, fall back to full download
         debug!("archive type is .tar.bz2, falling back to full download");
         return fetch_package_file_full_download(&client, &url, archive_type).await;
@@ -395,14 +395,14 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         RangeRequestResult::Success(bytes, range) => (bytes, range),
         RangeRequestResult::NotSupported => {
             debug!("server does not support range requests, falling back to full download");
-            return fetch_package_file_full_download(&client, &url, ArchiveType::Conda).await;
+            return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda).await;
         }
         RangeRequestResult::FullContent(bytes) => {
             // Server returned full content, extract from that
             debug!("server returned full content, extracting from response");
             let content = read_package_file_content(
                 Cursor::new(&*bytes),
-                ArchiveType::Conda,
+                CondaArchiveType::Conda,
                 P::package_path(),
             )?;
             return P::from_str(&String::from_utf8_lossy(&content)).map_err(|e| {
@@ -452,7 +452,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         );
         match fetch_range(&client, &url, &range).await? {
             RangeRequestResult::Success(bytes, _) => bytes,
-            _ => return fetch_package_file_full_download(&client, &url, ArchiveType::Conda).await,
+            _ => return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda).await,
         }
     };
 
@@ -485,7 +485,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         );
         match fetch_range(&client, &url, &range).await? {
             RangeRequestResult::Success(bytes, _) => bytes,
-            _ => return fetch_package_file_full_download(&client, &url, ArchiveType::Conda).await,
+            _ => return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda).await,
         }
     };
 
@@ -512,7 +512,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
         let range = format!("bytes={}-{}", data_start, data_end - 1);
         match fetch_range(&client, &url, &range).await? {
             RangeRequestResult::Success(bytes, _) => bytes,
-            _ => return fetch_package_file_full_download(&client, &url, ArchiveType::Conda).await,
+            _ => return fetch_package_file_full_download(&client, &url, CondaArchiveType::Conda).await,
         }
     };
 
@@ -537,7 +537,7 @@ pub async fn fetch_package_file_from_url<P: PackageFile>(
 async fn fetch_package_file_full_download<P: PackageFile>(
     client: &ClientWithMiddleware,
     url: &Url,
-    archive_type: ArchiveType,
+    archive_type: CondaArchiveType,
 ) -> Result<P, ExtractError> {
     let response = client
         .get(url.clone())
