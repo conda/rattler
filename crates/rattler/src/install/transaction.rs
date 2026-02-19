@@ -105,11 +105,11 @@ pub struct Transaction<Old, New> {
     /// A list of operations to update an environment
     pub operations: Vec<TransactionOperation<Old, New>>,
 
-    /// The python version of the target state, or None if python doesnt exist
+    /// The python version of the target state, or None if python doesn't exist
     /// in the environment.
     pub python_info: Option<PythonInfo>,
 
-    /// The python version of the current state, or None if python didnt exist
+    /// The python version of the current state, or None if python didn't exist
     /// in the previous environment.
     pub current_python_info: Option<PythonInfo>,
 

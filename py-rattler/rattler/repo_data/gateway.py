@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Iterable, List, Optional, Union
 
@@ -52,9 +53,6 @@ class SourceConfig:
     way.
     """
 
-    jlap_enabled: bool = True
-    """Whether the JLAP compression is enabled or not."""
-
     zstd_enabled: bool = True
     """Whether the ZSTD compression is enabled or not."""
 
@@ -64,6 +62,9 @@ class SourceConfig:
     sharded_enabled: bool = True
     """Whether sharded repodata is enabled or not."""
 
+    jlap_enabled: Optional[bool] = None
+    """Deprecated: JLAP support has been removed. This field is ignored."""
+
     cache_action: CacheAction = "cache-or-fetch"
     """How to interact with the cache.
 
@@ -72,6 +73,14 @@ class SourceConfig:
     * `'force-cache-only'`: Only use the cache, ignore whether or not it is up to date.
     * `'no-cache'`: Do not use the cache even if there is an up to date entry
     """
+
+    def __post_init__(self) -> None:
+        if self.jlap_enabled is not None:
+            warnings.warn(
+                "The 'jlap_enabled' option is deprecated and has no effect. JLAP support has been removed.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
     def _into_py(self) -> PySourceConfig:
         """
@@ -86,7 +95,6 @@ class SourceConfig:
         ```
         """
         return PySourceConfig(
-            jlap_enabled=self.jlap_enabled,
             zstd_enabled=self.zstd_enabled,
             bz2_enabled=self.bz2_enabled,
             sharded_enabled=self.sharded_enabled,

@@ -37,53 +37,85 @@ fn ws(input: &str) -> IResult<&str, &str> {
     multispace0(input)
 }
 
-// Parse a matchspec by consuming until we hit a delimiter
+/// Check if the word-boundary delimiter `word` starts at byte position `pos` in `input`.
+/// A word boundary means the character before (if any) and after (if any) must be
+/// whitespace or a parenthesis.
+fn check_word_delimiter(input: &str, pos: usize, word: &str) -> bool {
+    let bytes = input.as_bytes();
+    // Check that the word actually matches at this position
+    if !input[pos..].starts_with(word) {
+        return false;
+    }
+    let before_ok = pos == 0 || {
+        let b = bytes[pos - 1];
+        b.is_ascii_whitespace() || b == b'(' || b == b')'
+    };
+    let after_pos = pos + word.len();
+    let after_ok = after_pos >= bytes.len() || {
+        let b = bytes[after_pos];
+        b.is_ascii_whitespace() || b == b'(' || b == b')'
+    };
+    before_ok && after_ok
+}
+
+// Parse a matchspec by consuming until we hit a delimiter.
+// Correctly skips delimiters inside quoted strings and brackets.
 fn matchspec_token(input: &str) -> IResult<&str, &str> {
-    // Try to find the next delimiter
-    let delimiters = ["and", "or", ")", "("];
+    let bytes = input.as_bytes();
+    let mut i = 0;
+    let mut bracket_depth: u32 = 0;
+    let mut in_double_quote = false;
+    let mut in_single_quote = false;
 
-    // Find the earliest delimiter
-    let mut end_pos = input.len();
-    for delimiter in &delimiters {
-        if let Some(pos) = input.find(delimiter) {
-            // Make sure it's a word boundary for "and"/"or"
-            if *delimiter == "and" || *delimiter == "or" {
-                // Check if it's preceded and followed by whitespace or start/end of string or parentheses
-                let is_word_boundary = {
-                    let before_ok = pos == 0 || input.chars().nth(pos - 1).unwrap().is_whitespace();
-                    let after_ok = pos + delimiter.len() >= input.len() || {
-                        let next_char = input.chars().nth(pos + delimiter.len()).unwrap();
-                        next_char.is_whitespace() || next_char == '(' || next_char == ')'
-                    };
-                    before_ok && after_ok
-                };
-                if is_word_boundary {
-                    end_pos = end_pos.min(pos);
-                }
-            } else {
-                end_pos = end_pos.min(pos);
+    while i < bytes.len() {
+        let b = bytes[i];
+        match b {
+            b'\\' if in_double_quote || in_single_quote => {
+                // Skip the escaped character
+                i += 2;
+                continue;
             }
+            b'"' if !in_single_quote => {
+                in_double_quote = !in_double_quote;
+            }
+            b'\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+            }
+            b'[' if !in_double_quote && !in_single_quote => {
+                bracket_depth += 1;
+            }
+            b']' if !in_double_quote && !in_single_quote => {
+                bracket_depth = bracket_depth.saturating_sub(1);
+            }
+            b'(' | b')' if !in_double_quote && !in_single_quote && bracket_depth == 0 => {
+                break;
+            }
+            _ if !in_double_quote && !in_single_quote && bracket_depth == 0 => {
+                if check_word_delimiter(input, i, "and") || check_word_delimiter(input, i, "or") {
+                    break;
+                }
+            }
+            _ => {}
         }
+        i += 1;
     }
 
-    if end_pos == 0 {
+    if i == 0 {
         return Err(nom::Err::Error(nom::error::Error::new(
             input,
             nom::error::ErrorKind::TakeUntil,
         )));
     }
 
-    let (matchspec_str, remaining) = input.split_at(end_pos);
-    let matchspec_str = matchspec_str.trim();
-
-    if matchspec_str.is_empty() {
+    let token = input[..i].trim();
+    if token.is_empty() {
         return Err(nom::Err::Error(nom::error::Error::new(
             input,
             nom::error::ErrorKind::TakeUntil,
         )));
     }
 
-    Ok((remaining, matchspec_str))
+    Ok((&input[i..], token))
 }
 
 // Parse a matchspec
@@ -149,71 +181,39 @@ pub(crate) fn parse_condition(input: &str) -> IResult<&str, MatchSpecCondition> 
 mod tests {
     use super::*;
     use insta::assert_yaml_snapshot;
-    use nom::{bytes::complete::take_while1, character::complete::multispace1, combinator::opt};
 
-    #[derive(Debug, Clone, serde::Serialize)]
-    pub struct Statement {
-        pub prefix: String,
-        pub condition: Option<MatchSpecCondition>,
-    }
-
-    fn parse_and_extract(input: &str) -> Statement {
-        let result = parse_statement(input).unwrap();
-        assert_eq!(result.0.trim(), ""); // Ensure no remaining input
-        result.1
-    }
-
-    // Parse identifier (alphanumeric + underscore)
-    fn identifier(input: &str) -> IResult<&str, &str> {
-        take_while1(|c: char| c.is_alphanumeric() || c == '_')(input)
-    }
-
-    // Parse the entire statement
-    pub fn parse_statement(input: &str) -> IResult<&str, Statement> {
-        // Check for multiple semicolons (only one allowed)
-        if input.matches(';').count() > 1 {
-            return Err(nom::Err::Error(nom::error::Error::new(
-                input,
-                nom::error::ErrorKind::Fail,
-            )));
-        }
-
-        let (input, prefix) = identifier(input)?;
-        let (input, _) = char(';')(input)?;
-        let (input, _) = ws(input)?;
-        let (input, condition) =
-            opt(preceded((tag("if"), multispace1), parse_condition)).parse(input)?;
-
-        Ok((
-            input,
-            Statement {
-                prefix: prefix.to_string(),
-                condition,
-            },
-        ))
+    /// Parse a condition string and assert it consumes all input.
+    fn parse_full(input: &str) -> MatchSpecCondition {
+        let (remaining, condition) = parse_condition(input).unwrap();
+        assert_eq!(
+            remaining.trim(),
+            "",
+            "Expected all input consumed, but got remainder: '{remaining}'"
+        );
+        condition
     }
 
     #[test]
     fn test_condition_parsing_snapshots() {
+        // These are the condition expressions (extracted from the old `; if` test format).
         let test_cases = vec![
-            "bla; if foobar or bizbaz",
-            "bla; if python >=3.12 or foobar [version='3.12.*', url='https://foobar.com/bla.tar.bz2']",
-            "xyz; if foobar and (bizbaz or blabla)",
-            "test;",
-            "simple; if single_condition",
-            "complex; if a and b or c",
-            "nested; if (a or b) and (c or d)",
-            "deep; if a and (b or (c and d))",
-            "deep; if a and(b or(c and d))",
-            "deep; if foobar >=1.23 *or* and(b >32.12,<=43 *and or(c and d))",
-            "whitespace;   if   foo   or   bar  ",
-            "underscores; if foo_bar and baz_qux",
-            "mixed; if (alpha and beta) or (gamma and (delta or epsilon))",
+            "foobar or bizbaz",
+            "python >=3.12 or foobar [version='3.12.*', url='https://foobar.com/bla.tar.bz2']",
+            "foobar and (bizbaz or blabla)",
+            "single_condition",
+            "a and b or c",
+            "(a or b) and (c or d)",
+            "a and (b or (c and d))",
+            "a and(b or(c and d))",
+            "foobar >=1.23 *or* and(b >32.12,<=43 *and or(c and d))",
+            "  foo   or   bar  ",
+            "foo_bar and baz_qux",
+            "(alpha and beta) or (gamma and (delta or epsilon))",
         ];
 
-        let results: Vec<(&str, Statement)> = test_cases
+        let results: Vec<(&str, MatchSpecCondition)> = test_cases
             .into_iter()
-            .map(|input| (input, parse_and_extract(input)))
+            .map(|input| (input, parse_full(input)))
             .collect();
 
         assert_yaml_snapshot!(results);
@@ -222,44 +222,72 @@ mod tests {
     #[test]
     fn test_individual_cases() {
         // Simple OR condition
-        let result = parse_and_extract("bla; if foobar or bizbaz");
+        let result = parse_full("foobar or bizbaz");
         assert_yaml_snapshot!("simple_or", result);
 
         // Complex AND with parentheses
-        let result = parse_and_extract("xyz; if foobar and (bizbaz or blabla)");
+        let result = parse_full("foobar and (bizbaz or blabla)");
         assert_yaml_snapshot!("complex_and_with_parens", result);
 
-        // No condition
-        let result = parse_and_extract("test;");
-        assert_yaml_snapshot!("no_condition", result);
-
-        // Precedence test
-        let result = parse_and_extract("prec; if a and b or c and d");
+        // Precedence test: AND binds tighter than OR
+        let result = parse_full("a and b or c and d");
         assert_yaml_snapshot!("precedence_test", result);
     }
 
     #[test]
     fn test_error_cases() {
-        // These should fail to parse completely
+        // These should fail to parse or leave remaining input
         let error_cases = vec![
-            "no_semicolon if foo",
-            "; if missing_prefix",
-            "bad; if (unclosed_paren",
-            "bad; if closed_paren)",
-            "bad; if and missing_operand",
-            "bad; if or missing_operand",
-            "bad; if multiple; if another",
+            "(unclosed_paren",
+            "and missing_operand",
+            "or missing_operand",
         ];
 
         for case in error_cases {
-            let result = parse_statement(case);
-            // These should either fail or not consume all input
-            if let Ok((remaining, _)) = result {
-                assert!(
-                    !remaining.is_empty(),
-                    "Case '{case}' should have failed or left remaining input",
-                );
+            let result = parse_condition(case);
+            match result {
+                Err(_) => {} // Expected: parse error
+                Ok((remaining, _)) => {
+                    assert!(
+                        !remaining.trim().is_empty(),
+                        "Case '{case}' should have failed or left remaining input",
+                    );
+                }
             }
         }
+    }
+
+    #[test]
+    fn test_matchspec_token_with_quoted_and_or() {
+        // "and" inside double-quoted bracket value should NOT be treated as a delimiter
+        let (rem, token) = matchspec_token(r#"python[build="fast and slow"] and linux"#).unwrap();
+        assert_eq!(token, r#"python[build="fast and slow"]"#);
+        assert_eq!(rem, "and linux");
+
+        // "or" inside single-quoted bracket value should NOT be treated as a delimiter
+        let (rem, token) = matchspec_token("foo[version='1 or 2'] or bar").unwrap();
+        assert_eq!(token, "foo[version='1 or 2']");
+        assert_eq!(rem, "or bar");
+    }
+
+    #[test]
+    fn test_matchspec_token_package_name_substring() {
+        // "and" as substring in package name should NOT be split
+        let (rem, token) = matchspec_token("pandoc >=2.0").unwrap();
+        assert_eq!(token, "pandoc >=2.0");
+        assert_eq!(rem, "");
+
+        // "or" as substring in package name should NOT be split
+        let (rem, token) = matchspec_token("tensorflow-core >=1.0 or linux").unwrap();
+        assert_eq!(token, "tensorflow-core >=1.0");
+        assert_eq!(rem, "or linux");
+    }
+
+    #[test]
+    fn test_matchspec_token_brackets_without_quotes() {
+        // Brackets without quotes should also be respected
+        let (rem, token) = matchspec_token("foo[version>=3.6] and bar").unwrap();
+        assert_eq!(token, "foo[version>=3.6]");
+        assert_eq!(rem, "and bar");
     }
 }

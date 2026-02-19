@@ -221,7 +221,7 @@ impl super::SolverImpl for Solver {
         repo_mapping.insert(repo.id(), repo_mapping.len());
         all_repodata_records.push(task.pinned_packages.iter().collect());
 
-        // Create datastructures for solving
+        // Create data-structures for solving
         pool.create_whatprovides();
 
         // Add matchspec to the queue

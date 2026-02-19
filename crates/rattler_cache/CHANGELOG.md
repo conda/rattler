@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.11](https://github.com/conda/rattler/compare/rattler_cache-v0.6.10...rattler_cache-v0.6.11) - 2026-02-10
+
+### Other
+
+- updated the following local packages: rattler_package_streaming
+
+## [0.6.10](https://github.com/conda/rattler/compare/rattler_cache-v0.6.9...rattler_cache-v0.6.10) - 2026-02-04
+
+### Added
+
+- Add CACHEDIR.TAG to environments and global cache ([#2011](https://github.com/conda/rattler/pull/2011))
+
 ## [0.6.9](https://github.com/conda/rattler/compare/rattler_cache-v0.6.8...rattler_cache-v0.6.9) - 2026-01-22
 
 ### Other

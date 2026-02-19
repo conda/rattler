@@ -183,7 +183,7 @@ impl ClobberRegistry {
             &removals,
             &all_additions,
         )
-        .map_err(|e| ClobberError::IoError("On-disk syncornization error".into(), e))?;
+        .map_err(|e| ClobberError::IoError("On-disk synchronization error".into(), e))?;
 
         // 3
         for (path, pkg) in &removals {

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.26](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.25...rattler_package_streaming-v0.23.26) - 2026-02-10
+
+### Other
+
+- replace async `conda` with `astral-async-zip`. ([#1855](https://github.com/conda/rattler/pull/1855))
+
+## [0.23.25](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.24...rattler_package_streaming-v0.23.25) - 2026-02-04
+
+### Other
+
+- updated the following local packages: rattler_conda_types, rattler_networking
+
 ## [0.23.24](https://github.com/conda/rattler/compare/rattler_package_streaming-v0.23.23...rattler_package_streaming-v0.23.24) - 2026-01-22
 
 ### Other

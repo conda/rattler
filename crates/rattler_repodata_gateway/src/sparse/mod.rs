@@ -869,7 +869,7 @@ fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
     let mut entries: Vec<(PackageFilename<'d>, &'d RawValue)> =
         deserializer.deserialize_map(MapVisitor(PhantomData))?;
 
-    // Although in general the filenames are sorted in repodata.json this doesnt
+    // Although in general the filenames are sorted in repodata.json this doesn't
     // necessarily mean that the records are also sorted by package name.
     //
     // To illustrate, the following filenames are properly sorted by filename but
@@ -891,7 +891,7 @@ fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
     Ok(entries)
 }
 
-/// A struct that holds both a filename and the part of the filename thats just
+/// A struct that holds both a filename and the part of the filename that is just
 /// the package name.
 #[derive(Copy, Clone)]
 struct PackageFilename<'i> {
@@ -1139,7 +1139,7 @@ mod test {
             "pytz",
         ];
 
-        // Memmapped
+        // Mem-mapped
         let sparse_empty_data =
             load_sparse(package_names.clone(), PackageFormatSelection::default()).await;
 

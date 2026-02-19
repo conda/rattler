@@ -168,7 +168,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
 
         let dependencies = match dependencies {
             Ok(dependencies) => dependencies,
-            // Solver cancelation, lets just return
+            // Solver cancellation, lets just return
             Err(_) => return,
         };
 
@@ -193,7 +193,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                     solvables.swap(solvable_idx, known_count);
                     continue;
                 }
-                // Solver cancelation, lets just return
+                // Solver cancellation, lets just return
                 Err(_) => return,
             };
 
