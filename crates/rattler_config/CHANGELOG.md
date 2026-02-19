@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.26](https://github.com/conda/rattler/compare/rattler_config-v0.2.25...rattler_config-v0.2.26) - 2026-02-04
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.2.25](https://github.com/conda/rattler/compare/rattler_config-v0.2.24...rattler_config-v0.2.25) - 2026-01-22
+
+### Other
+
+- updated the following local packages: rattler_conda_types
+
+## [0.2.24](https://github.com/conda/rattler/compare/rattler_config-v0.2.23...rattler_config-v0.2.24) - 2026-01-22
+
+### Added
+
+- add support for `packages.whl` and wheel archives types ([#1988](https://github.com/conda/rattler/pull/1988))
+
 ## [0.2.23](https://github.com/conda/rattler/compare/rattler_config-v0.2.22...rattler_config-v0.2.23) - 2025-12-18
 
 ### Other

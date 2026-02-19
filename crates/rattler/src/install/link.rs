@@ -744,7 +744,7 @@ pub fn copy_and_replace_cstring_placeholder(
             // write all bytes up to the old prefix, followed by the new prefix.
             destination.write_all(&source_bytes[..index])?;
 
-            // Find the end of the c-style string. The nul terminator basically.
+            // Find the end of the c-style string. The null terminator basically.
             let mut end = index + old_prefix.len();
             while end < source_bytes.len() && source_bytes[end] != b'\0' {
                 end += 1;
@@ -770,8 +770,8 @@ pub fn copy_and_replace_cstring_placeholder(
 
             // Compute the padding required when replacing the old prefix(es) with the new one. If the old
             // prefix is longer than the new one we need to add padding to ensure that the entire part
-            // will hold the same number of bytes. We do this by adding '\0's (e.g. nul terminators). This
-            // ensures that the text will remain a valid nul-terminated string.
+            // will hold the same number of bytes. We do this by adding '\0's (e.g. null terminators). This
+            // ensures that the text will remain a valid null-terminated string.
             let padding = old_len.saturating_sub(out.len());
             destination.write_all(&vec![0; padding])?;
 

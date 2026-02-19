@@ -33,7 +33,7 @@ impl PyAboutJson {
     ///
     /// For example, if the file is in JSON format, this function reads the data from the file at
     /// the specified path, parse the JSON string and return the resulting object. If the file is
-    /// not in a parsable format or if the file could not read, this function returns an error.
+    /// not in a parse-able format or if the file could not read, this function returns an error.
     #[staticmethod]
     pub fn from_path(path: PathBuf) -> PyResult<Self> {
         Ok(AboutJson::from_path(path)
@@ -46,7 +46,7 @@ impl PyAboutJson {
     ///
     /// For example, if the file is in JSON format, this function reads the appropriate file from
     /// the archive, parse the JSON string and return the resulting object. If the file is not in a
-    /// parsable format or if the file could not be read, this function returns an error.
+    /// parse-able format or if the file could not be read, this function returns an error.
     #[staticmethod]
     pub fn from_package_directory(path: PathBuf) -> PyResult<Self> {
         Ok(AboutJson::from_package_directory(path)
@@ -57,7 +57,7 @@ impl PyAboutJson {
     /// Parses the object from a string, using a format appropriate for the file type.
     ///
     /// For example, if the file is in JSON format, this function parses the JSON string and returns
-    /// the resulting object. If the file is not in a parsable format, this function returns an
+    /// the resulting object. If the file is not in a parse-able format, this function returns an
     /// error.
     #[staticmethod]
     pub fn from_str(str: &str) -> PyResult<Self> {

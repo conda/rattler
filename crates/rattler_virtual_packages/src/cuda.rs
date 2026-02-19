@@ -44,7 +44,7 @@ pub fn detect_cuda_version() -> Option<Version> {
 /// variables.
 ///
 /// Although the required methods in the runtime are not implemented on much older machines it is
-/// considered old enough to be usable for our use case. Since Conda doesnt provide old versions of
+/// considered old enough to be usable for our use case. Since Conda doesn't provide old versions of
 /// the CUDA SDK anyway this is considered a non-issue.
 pub fn detect_cuda_version_via_nvml() -> Option<Version> {
     // Try to open the library
@@ -242,7 +242,7 @@ fn detect_cuda_version_via_nvidia_smi() -> Option<Version> {
         .ok()?;
 
     // Convert the output to Utf8. The conversion is lossy so it might contain some illegal
-    // characters. If thats the case we simply assume the version in the file also wont make sense
+    // characters. If that is the case we simply assume the version in the file also wont make sense
     // during parsing.
     let output = String::from_utf8_lossy(&nvidia_smi_output.stdout);
 

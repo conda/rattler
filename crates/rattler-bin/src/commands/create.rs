@@ -142,10 +142,10 @@ pub async fn create(opt: Opt) -> miette::Result<()> {
         .collect::<Result<Vec<_>, _>>()
         .into_diagnostic()?;
 
-    // Find the default cache directory. Create it if it doesnt exist yet.
+    // Find the default cache directory. Create it if it doesn't exist yet.
     let cache_dir = default_cache_dir()
         .map_err(|e| miette::miette!("could not determine default cache directory: {}", e))?;
-    std::fs::create_dir_all(&cache_dir)
+    rattler_cache::ensure_cache_dir(&cache_dir)
         .map_err(|e| miette::miette!("could not create cache directory: {}", e))?;
 
     // Determine the channels to use from the command line or select the default.
@@ -450,7 +450,7 @@ async fn wrap_in_async_progress<T, F: IntoFuture<Output = T>>(
     result
 }
 
-/// Returns the style to use for a progressbar that is indeterminate and simply
+/// Returns the style to use for a progress bar that is indeterminate and simply
 /// shows a spinner.
 fn long_running_progress_style() -> indicatif::ProgressStyle {
     ProgressStyle::with_template("{spinner:.green} {msg}").unwrap()

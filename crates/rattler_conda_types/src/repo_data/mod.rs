@@ -8,23 +8,27 @@ mod topological_sort;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
+    hash::{Hash, Hasher},
     path::Path,
+    str::FromStr,
 };
 
 use indexmap::IndexMap;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none};
+use serde_with::{serde_as, skip_serializing_none, DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 use url::Url;
 
 use crate::{
     build_spec::BuildNumber,
-    package::{IndexJson, RunExportsJson},
+    package::{DistArchiveIdentifier, IndexJson, RunExportsJson},
     utils::{
-        serde::sort_index_map_alphabetically, serde::sort_map_alphabetically,
-        serde::DeserializeFromStrUnchecked, UrlWithTrailingSlash,
+        serde::{
+            sort_index_map_alphabetically, sort_map_alphabetically, DeserializeFromStrUnchecked,
+        },
+        UrlWithTrailingSlash,
     },
     Arch, Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
     ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
@@ -41,7 +45,7 @@ pub struct RepoData {
 
     /// The tar.bz2 packages contained in the repodata.json file
     #[serde(default, serialize_with = "sort_index_map_alphabetically")]
-    pub packages: IndexMap<String, PackageRecord, ahash::RandomState>,
+    pub packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
 
     /// The conda packages contained in the repodata.json file (under a
     /// different key for backwards compatibility with previous conda
@@ -51,7 +55,16 @@ pub struct RepoData {
         rename = "packages.conda",
         serialize_with = "sort_index_map_alphabetically"
     )]
-    pub conda_packages: IndexMap<String, PackageRecord, ahash::RandomState>,
+    pub conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
+
+    /// The wheel packages contained in the repodata.json file
+    #[serde(
+        default,
+        rename = "packages.whl",
+        serialize_with = "sort_index_map_alphabetically"
+    )]
+    pub experimental_whl_packages:
+        IndexMap<DistArchiveIdentifier, WhlPackageRecord, ahash::RandomState>,
 
     /// removed packages (files are still accessible, but they are not
     /// installable like regular packages)
@@ -60,7 +73,7 @@ pub struct RepoData {
         serialize_with = "sort_set_alphabetically",
         skip_serializing_if = "ahash::HashSet::is_empty"
     )]
-    pub removed: ahash::HashSet<String>,
+    pub removed: ahash::HashSet<DistArchiveIdentifier>,
 
     /// The version of the repodata format
     #[serde(rename = "repodata_version")]
@@ -167,7 +180,7 @@ pub struct PackageRecord {
     /// starting from 0.23.2, this field became [`Option<Vec<PackageUrl>>`].
     /// This was done to support older lockfiles,
     /// where we didn't differentiate between empty purl and missing one.
-    /// Now, None:: means that the purl is missing, and it will be tried to
+    /// Now, `None::` means that the purl is missing, and it will be tried to
     /// filled in. So later it can be one of the following:
     /// [`Some(vec![])`] means that the purl is empty and package is not pypi
     /// one. [`Some([`PackageUrl`])`] means that it is a pypi package.
@@ -200,7 +213,7 @@ pub struct PackageRecord {
 
     /// Track features are nowadays only used to downweight packages (ie. give
     /// them less priority). To that effect, the package is downweighted
-    /// by the number of track_features.
+    /// by the number of `track_features`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[serde_as(as = "crate::utils::serde::Features")]
     pub track_features: Vec<String>,
@@ -212,6 +225,96 @@ pub struct PackageRecord {
     //pub preferred_env: Option<String>,
     //pub date: Option<String>,
     //pub package_type: ?
+}
+
+impl PartialOrd for PackageRecord {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PackageRecord {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.name
+            .cmp(&other.name)
+            .then_with(|| {
+                // Packages with tracked features are sorted after packages
+                // without tracked features.
+                self.track_features
+                    .is_empty()
+                    .cmp(&other.track_features.is_empty())
+                    .reverse()
+            })
+            .then_with(|| self.version.cmp(&other.version))
+            .then_with(|| self.build_number.cmp(&other.build_number))
+            .then_with(|| self.timestamp.cmp(&other.timestamp))
+    }
+}
+
+/// A record in the `packages.whl` section of the `repodata.json`.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Hash)]
+pub struct WhlPackageRecord {
+    /// The conda metadata
+    #[serde(flatten)]
+    pub package_record: PackageRecord,
+
+    /// Where to get the package from. This is a required field.
+    pub url: UrlOrPath,
+}
+
+impl AsRef<PackageRecord> for WhlPackageRecord {
+    fn as_ref(&self) -> &PackageRecord {
+        self.package_record.as_ref()
+    }
+}
+
+/// Represents either an absolute URL or a relative path to the base url of a
+/// channel
+#[derive(Debug, DeserializeFromStr, SerializeDisplay, Eq, PartialEq, Clone)]
+pub enum UrlOrPath {
+    /// A relative path to the base url of the channel
+    Path(String),
+
+    /// An absolute URL
+    Url(Url),
+}
+
+impl UrlOrPath {
+    /// Returns the string representation of the URL or path.
+    pub fn as_str(&self) -> &str {
+        match self {
+            UrlOrPath::Path(path) => path,
+            UrlOrPath::Url(url) => url.as_str(),
+        }
+    }
+}
+
+impl Hash for UrlOrPath {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
+    }
+}
+
+impl Display for UrlOrPath {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UrlOrPath::Path(path) => write!(f, "{path}"),
+            UrlOrPath::Url(url) => write!(f, "{url}"),
+        }
+    }
+}
+
+impl FromStr for UrlOrPath {
+    type Err = url::ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // First try to parse the string as a path.
+        if s.contains("://") {
+            Ok(UrlOrPath::Url(s.parse()?))
+        } else {
+            Ok(UrlOrPath::Path(s.to_owned()))
+        }
+    }
 }
 
 impl Display for PackageRecord {
@@ -263,7 +366,7 @@ impl RepoData {
         let base_url = self.base_url().map(ToOwned::to_owned);
 
         // Determine the base_url of the channel
-        for (filename, package_record) in self.packages.into_iter().chain(self.conda_packages) {
+        for (identifier, package_record) in self.packages.into_iter().chain(self.conda_packages) {
             records.push(RepoDataRecord {
                 url: compute_package_url(
                     &channel
@@ -272,13 +375,44 @@ impl RepoData {
                         .join(&package_record.subdir)
                         .expect("cannot join channel base_url and subdir"),
                     base_url.as_deref(),
-                    &filename,
+                    &identifier.to_file_name(),
                 ),
                 channel: Some(channel.base_url.as_str().to_string()),
                 package_record,
-                file_name: filename,
+                identifier,
             });
         }
+
+        // Determine the base_url of the channel
+        for (
+            identifier,
+            WhlPackageRecord {
+                url,
+                package_record,
+            },
+        ) in self.experimental_whl_packages
+        {
+            let url = match url {
+                UrlOrPath::Path(path) => compute_package_url(
+                    &channel
+                        .base_url
+                        .url()
+                        .join(&package_record.subdir)
+                        .expect("cannot join channel base_url and subdir"),
+                    base_url.as_deref(),
+                    &path,
+                ),
+                UrlOrPath::Url(url) => url,
+            };
+
+            records.push(RepoDataRecord {
+                url,
+                channel: Some(channel.base_url.as_str().to_string()),
+                package_record,
+                identifier,
+            });
+        }
+
         records
     }
 }
@@ -430,20 +564,20 @@ pub struct SubdirRunExportsJson {
     info: Option<ChannelInfo>,
 
     #[serde(default, serialize_with = "sort_map_alphabetically")]
-    packages: ahash::HashMap<String, PackageRunExports>,
+    packages: ahash::HashMap<DistArchiveIdentifier, PackageRunExports>,
 
     #[serde(
         default,
         rename = "packages.conda",
         serialize_with = "sort_map_alphabetically"
     )]
-    conda_packages: ahash::HashMap<String, PackageRunExports>,
+    conda_packages: ahash::HashMap<DistArchiveIdentifier, PackageRunExports>,
 }
 
 impl SubdirRunExportsJson {
     /// Get package [`RunExportsJson`] based on the package file name.
     pub fn get(&self, record: &RepoDataRecord) -> Option<&RunExportsJson> {
-        let file_name = &record.file_name;
+        let file_name = &record.identifier;
         self.packages
             .get(file_name)
             .or_else(|| self.conda_packages.get(file_name))
@@ -577,8 +711,8 @@ impl PackageRecord {
     }
 }
 
-fn sort_set_alphabetically<S: serde::Serializer>(
-    value: &ahash::HashSet<String>,
+fn sort_set_alphabetically<K: Ord + Serialize, S: serde::Serializer>(
+    value: &ahash::HashSet<K>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     value.iter().collect::<BTreeSet<_>>().serialize(serializer)
@@ -589,6 +723,7 @@ mod test {
     use indexmap::IndexMap;
 
     use crate::{
+        package::DistArchiveIdentifier,
         repo_data::{compute_package_url, determine_subdir},
         Channel, ChannelConfig, PackageRecord, RepoData,
     };
@@ -612,10 +747,19 @@ mod test {
             info: None,
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
-            removed: ["xyz", "foo", "bar", "baz", "qux", "aux", "quux"]
-                .iter()
-                .map(|s| (*s).to_string())
-                .collect(),
+            experimental_whl_packages: IndexMap::default(),
+            removed: [
+                "xyz-1-py.conda",
+                "foo-1-py.conda",
+                "bar-1-py.conda",
+                "baz-1-py.conda",
+                "qux-1-py.tar.bz2",
+                "aux-1-py.tar.bz2",
+                "quux-1-py.conda",
+            ]
+            .iter()
+            .map(|s| DistArchiveIdentifier::try_from_filename(s).unwrap())
+            .collect(),
         };
         insta::assert_yaml_snapshot!(repodata);
     }
@@ -640,10 +784,11 @@ mod test {
 
     #[test]
     fn test_deserialize_no_noarch_empty_str() {
-        // This test covers the case where a repodata entry may contain a "noarch" key set to an empty string.
-        // Packages with such metadata have been observed on private conda channels.
-        // This likely was passed from older versions of conda-build that would pass this key
-        // from the recipe even if it was incorrect.
+        // This test covers the case where a repodata entry may contain a "noarch" key
+        // set to an empty string. Packages with such metadata have been
+        // observed on private conda channels. This likely was passed from older
+        // versions of conda-build that would pass this key from the recipe even
+        // if it was incorrect.
         let repodata =
             deserialize_json_from_test_data("channels/dummy-noarch-str/linux-64/repodata.json");
         insta::assert_yaml_snapshot!(repodata);
@@ -741,15 +886,30 @@ mod test {
 
         let package_depends_only_virtual_package = repodata
             .packages
-            .get("baz-1.0-unix_py36h1af98f8_2.tar.bz2")
+            .get(
+                &DistArchiveIdentifier::try_from_filename("baz-1.0-unix_py36h1af98f8_2.tar.bz2")
+                    .unwrap(),
+            )
             .unwrap();
-        let package_depends = repodata.packages.get("foobar-2.0-bla_1.tar.bz2").unwrap();
+        let package_depends = repodata
+            .packages
+            .get(&DistArchiveIdentifier::try_from_filename("foobar-2.0-bla_1.tar.bz2").unwrap())
+            .unwrap();
         let package_constrains = repodata
             .packages
-            .get("foo-3.0.2-py36h1af98f8_3.conda")
+            .get(
+                &DistArchiveIdentifier::try_from_filename("foo-3.0.2-py36h1af98f8_3.conda")
+                    .unwrap(),
+            )
             .unwrap();
-        let package_bors_1 = repodata.packages.get("bors-1.2.1-bla_1.tar.bz2").unwrap();
-        let package_bors_2 = repodata.packages.get("bors-2.1-bla_1.tar.bz2").unwrap();
+        let package_bors_1 = repodata
+            .packages
+            .get(&DistArchiveIdentifier::try_from_filename("bors-1.2.1-bla_1.tar.bz2").unwrap())
+            .unwrap();
+        let package_bors_2 = repodata
+            .packages
+            .get(&DistArchiveIdentifier::try_from_filename("bors-2.1-bla_1.tar.bz2").unwrap())
+            .unwrap();
 
         assert!(PackageRecord::validate(vec![package_depends_only_virtual_package]).is_ok());
         for packages in [vec![package_depends], vec![package_depends, package_bors_2]] {
@@ -781,7 +941,7 @@ mod test {
 
         // Insert packages in deliberately non-alphabetical order: z, a, m, b
         packages.insert(
-            "zebra-1.0-h123.tar.bz2".to_string(),
+            "zebra-1.0-h123.tar.bz2".parse().unwrap(),
             PackageRecord::new(
                 PackageName::new_unchecked("zebra"),
                 Version::major(1),
@@ -789,7 +949,7 @@ mod test {
             ),
         );
         packages.insert(
-            "apple-2.0-h456.tar.bz2".to_string(),
+            "apple-2.0-h456.tar.bz2".parse().unwrap(),
             PackageRecord::new(
                 PackageName::new_unchecked("apple"),
                 Version::major(2),
@@ -797,7 +957,7 @@ mod test {
             ),
         );
         packages.insert(
-            "mango-1.5-h789.tar.bz2".to_string(),
+            "mango-1.5-h789.tar.bz2".parse().unwrap(),
             PackageRecord::new(
                 PackageName::new_unchecked("mango"),
                 Version::major(1),
@@ -805,7 +965,7 @@ mod test {
             ),
         );
         packages.insert(
-            "banana-3.0-habc.tar.bz2".to_string(),
+            "banana-3.0-habc.tar.bz2".parse().unwrap(),
             PackageRecord::new(
                 PackageName::new_unchecked("banana"),
                 Version::major(3),
@@ -815,7 +975,7 @@ mod test {
 
         // Insert conda packages in non-alphabetical order too
         conda_packages.insert(
-            "xray-1.0-h111.conda".to_string(),
+            "xray-1.0-h111.conda".parse().unwrap(),
             PackageRecord::new(
                 PackageName::new_unchecked("xray"),
                 Version::major(1),
@@ -823,7 +983,7 @@ mod test {
             ),
         );
         conda_packages.insert(
-            "alpha-2.0-h222.conda".to_string(),
+            "alpha-2.0-h222.conda".parse().unwrap(),
             PackageRecord::new(
                 PackageName::new_unchecked("alpha"),
                 Version::major(2),
@@ -831,7 +991,7 @@ mod test {
             ),
         );
         conda_packages.insert(
-            "omega-3.0-h333.conda".to_string(),
+            "omega-3.0-h333.conda".parse().unwrap(),
             PackageRecord::new(
                 PackageName::new_unchecked("omega"),
                 Version::major(3),
@@ -844,6 +1004,7 @@ mod test {
             info: None,
             packages,
             conda_packages,
+            experimental_whl_packages: IndexMap::default(),
             removed: ahash::HashSet::default(),
         };
 
@@ -874,5 +1035,73 @@ mod test {
                 "packages.conda should be serialized in alphabetical order"
             );
         }
+    }
+
+    #[test]
+    fn test_ordering() {
+        use crate::{PackageName, Version};
+
+        let record = |name: &str,
+                      version: &str,
+                      build: &str,
+                      build_number: u64,
+                      subdir: &str,
+                      timestamp: Option<i64>|
+         -> PackageRecord {
+            let mut r = PackageRecord::new(
+                PackageName::new_unchecked(name),
+                version.parse::<Version>().unwrap(),
+                format!("{build}_{build_number}"),
+            );
+            r.build_number = build_number;
+            r.subdir = subdir.to_string();
+            r.timestamp = timestamp.map(|secs| {
+                crate::utils::TimestampMs::from_datetime_seconds(
+                    chrono::DateTime::from_timestamp(secs, 0).unwrap(),
+                )
+            });
+            r
+        };
+
+        let mut records = vec![
+            // Different versions of the same package
+            record("python", "3.12.0", "hab5_py312", 3, "linux-64", None),
+            record("python", "3.11.0", "hab5_py311", 1, "linux-64", None),
+            record("python", "3.12.0", "hab5_py312", 1, "linux-64", None),
+            // Different build numbers
+            record("numpy", "1.26.0", "hc1_np126", 2, "linux-64", None),
+            record("numpy", "1.26.0", "hc1_np126", 0, "linux-64", None),
+            record("numpy", "1.26.0", "hc1_np126", 1, "linux-64", None),
+            // Different timestamps (same version & build number)
+            record("openssl", "3.1.0", "hlib", 0, "linux-64", Some(1700000000)),
+            record("openssl", "3.1.0", "hlib", 0, "linux-64", Some(1600000000)),
+            record("openssl", "3.1.0", "hlib", 0, "linux-64", Some(1800000000)),
+            // Track features (packages with tracked features sort after those
+            // without)
+            {
+                let mut r = record("scipy", "1.11.0", "hfeature", 0, "linux-64", None);
+                r.track_features = vec!["mkl".to_string()];
+                r
+            },
+            record("scipy", "1.11.0", "hplain", 0, "linux-64", None),
+            // Another package to show name ordering
+            record("curl", "8.4.0", "hdns", 0, "linux-64", None),
+        ];
+
+        records.sort();
+
+        let formatted: Vec<String> = records
+            .iter()
+            .map(|r| {
+                format!(
+                    "{}/{}-{}-{}",
+                    r.subdir,
+                    r.name.as_normalized(),
+                    r.version,
+                    r.build
+                )
+            })
+            .collect();
+        insta::assert_snapshot!(formatted.join("\n"));
     }
 }

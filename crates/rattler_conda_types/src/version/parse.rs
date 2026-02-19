@@ -511,7 +511,7 @@ mod test {
     }
 
     /// Parse a large number of versions and see if parsing succeeded.
-    /// TODO: This doesnt really verify that the parsing is correct. Maybe we can parse the version
+    /// TODO: This doesn't really verify that the parsing is correct. Maybe we can parse the version
     /// with Conda too and verify that the results match?
     #[test]
     fn test_parse_all() {

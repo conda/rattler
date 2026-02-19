@@ -3,8 +3,17 @@ source: crates/rattler_lock/src/utils/derived_fields.rs
 expression: "../source/win-64/package-1.0.0-0.tar.bz2"
 ---
 LocationDerivedFields {
-    file_name: Some(
-        "package-1.0.0-0.tar.bz2",
+    identifier: Some(
+        DistArchiveIdentifier {
+            identifier: ArchiveIdentifier {
+                name: "package",
+                version: "1.0.0",
+                build_string: "0",
+            },
+            archive_type: Conda(
+                TarBz2,
+            ),
+        },
     ),
     name: Some(
         "package",

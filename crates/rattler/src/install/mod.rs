@@ -43,7 +43,9 @@ pub use apple_codesign::AppleCodeSignBehavior;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
-pub use installer::{result_record::InstallationResultRecord, Installer, InstallerError, Reporter};
+pub use installer::{
+    result_record::InstallationResultRecord, Installer, InstallerError, LinkOptions, Reporter,
+};
 #[cfg(feature = "indicatif")]
 pub use installer::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
@@ -235,7 +237,7 @@ pub struct InstallOptions {
     /// For binaries on macOS (both Intel and Apple Silicon), binaries need to be signed
     /// with an ad-hoc certificate to properly work when their signature has been invalidated
     /// by prefix replacement (modifying binary content). This field controls whether or not to do that.
-    /// Code signing is executed when the target platform is macOS. By default, codesigning
+    /// Code signing is executed when the target platform is macOS. By default, code signing
     /// will fail the installation if it fails. This behavior can be changed by setting
     /// this field to `AppleCodeSignBehavior::Ignore` or
     /// `AppleCodeSignBehavior::DoNothing`.
@@ -1193,7 +1195,7 @@ mod test {
     };
     use futures::{stream, StreamExt};
     use rattler_conda_types::{
-        package::ArchiveIdentifier, ExplicitEnvironmentSpec, Platform, Version,
+        package::CondaArchiveIdentifier, ExplicitEnvironmentSpec, Platform, Version,
     };
     use rattler_lock::LockFile;
     use rattler_networking::LazyClient;
@@ -1280,7 +1282,7 @@ mod test {
                 let prefix_path = prefix_path.clone();
                 async move {
                     // Populate the cache
-                    let package_info = ArchiveIdentifier::try_from_url(&package_url).unwrap();
+                    let package_info = CondaArchiveIdentifier::try_from_url(&package_url).unwrap();
                     let package_cache_lock = package_cache
                         .get_or_fetch_from_url(
                             package_info,

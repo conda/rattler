@@ -1101,6 +1101,7 @@ mod tests {
             .collect::<BTreeMap<_, _>>();
 
         // Remove system specific environment variables.
+        env_diff.remove("CONDA_SHLVL");
         env_diff.remove("CONDA_PREFIX");
         env_diff.remove("Path");
         env_diff.remove("PATH");
@@ -1397,7 +1398,11 @@ mod tests {
             script_contents = script_contents.replace(&prefix, "__PREFIX__");
             // on windows and bash it will be quoted with shlex::try_quote
             if cfg!(windows) && *shell_name == "bash" {
-                let unix_path = native_path_to_unix(&prefix).unwrap();
+                let unix_path = match native_path_to_unix(&prefix) {
+                    Ok(str) => str,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => prefix,
+                    Err(e) => panic!("Failed to convert path to unix: {e}"),
+                };
                 script_contents = script_contents.replace(&unix_path, "__PREFIX__");
                 script_contents = script_contents.replace("=\"__PREFIX__\"", "=__PREFIX__");
             }

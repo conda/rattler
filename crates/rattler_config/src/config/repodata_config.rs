@@ -10,11 +10,6 @@ use crate::edit::ConfigEditError;
 #[derive(Clone, Default, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct RepodataChannelConfig {
-    /// Disable JLAP compression for repodata.
-    #[serde(alias = "disable_jlap")] // BREAK: remove to stop supporting snake_case alias
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub disable_jlap: Option<bool>,
-
     /// Disable bzip2 compression for repodata.
     #[serde(alias = "disable_bzip2")] // BREAK: remove to stop supporting snake_case alias
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -32,15 +27,13 @@ pub struct RepodataChannelConfig {
 
 impl RepodataChannelConfig {
     pub fn is_empty(&self) -> bool {
-        self.disable_jlap.is_none()
-            && self.disable_bzip2.is_none()
+        self.disable_bzip2.is_none()
             && self.disable_zstd.is_none()
             && self.disable_sharded.is_none()
     }
 
     pub fn merge(&self, other: Self) -> Self {
         Self {
-            disable_jlap: self.disable_jlap.or(other.disable_jlap),
             disable_zstd: self.disable_zstd.or(other.disable_zstd),
             disable_bzip2: self.disable_bzip2.or(other.disable_bzip2),
             disable_sharded: self.disable_sharded.or(other.disable_sharded),
@@ -127,16 +120,6 @@ impl Config for RepodataConfig {
 
         let subkey = key.strip_prefix("repodata-config.").unwrap();
         match subkey {
-            "disable-jlap" => {
-                self.default.disable_jlap = value
-                    .map(|v| {
-                        v.parse().map_err(|e| ConfigEditError::BoolParseError {
-                            key: key.to_string(),
-                            source: e,
-                        })
-                    })
-                    .transpose()?;
-            }
             "disable-bzip2" => {
                 self.default.disable_bzip2 = value
                     .map(|v| {

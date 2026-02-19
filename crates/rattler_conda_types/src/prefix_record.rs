@@ -100,7 +100,7 @@ pub struct PathsEntry {
     pub size_in_bytes: Option<u64>,
 
     /// The file mode of the entry. This is used in conjunction with a
-    /// prefix_placeholder
+    /// `prefix_placeholder`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_mode: Option<FileMode>,
 
@@ -224,6 +224,18 @@ pub struct PrefixRecord {
     /// when the package is uninstalled.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub installed_system_menus: Vec<menuinst::Tracker>,
+}
+
+impl PartialOrd for PrefixRecord {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PrefixRecord {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.repodata_record.cmp(&other.repodata_record)
+    }
 }
 
 impl PrefixRecord {

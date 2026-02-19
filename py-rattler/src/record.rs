@@ -1,6 +1,9 @@
+use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
+use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::{
@@ -8,7 +11,7 @@ use pyo3::{
     PyAny, PyErr, PyResult, Python,
 };
 use rattler_conda_types::{
-    package::{IndexJson, PackageFile},
+    package::{DistArchiveIdentifier, IndexJson, PackageFile},
     prefix_record::{Link, LinkType},
     utils::TimestampMs,
     NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
@@ -201,10 +204,17 @@ impl PyRecord {
             ));
         }
 
+        let identifier = DistArchiveIdentifier::try_from_path(&file_name).ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "Invalid archive identifier: {}",
+                file_name.display()
+            ))
+        })?;
+
         Ok(Self {
             inner: RecordInner::RepoData(RepoDataRecord {
                 package_record: package_record.as_package_record().clone(),
-                file_name: file_name.to_string_lossy().to_string(),
+                identifier,
                 url: Url::parse(&url).map_err(PyRattlerError::from)?,
                 channel: channel
                     .map(|channel| Url::parse(&channel).map_err(PyRattlerError::from))
@@ -253,6 +263,21 @@ impl PyRecord {
     /// Returns a string representation of `PackageRecord`.
     pub fn as_str(&self) -> String {
         format!("{}", self.as_package_record())
+    }
+
+    /// Computes the hash of the record based on the underlying `PackageRecord`.
+    fn __hash__(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.as_package_record().hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Performs comparison between this record and another based on
+    /// name, track features, version, build number, and timestamp.
+    pub fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
+        let a = self.as_package_record();
+        let b = other.as_package_record();
+        op.matches(a.cmp(b))
     }
 
     /// Checks whether if the current record is a `PackageRecord`.
@@ -547,12 +572,14 @@ impl PyRecord {
     /// The filename of the package.
     #[getter]
     pub fn file_name(&self) -> PyResult<String> {
-        Ok(self.try_as_repodata_record()?.file_name.clone())
+        Ok(self.try_as_repodata_record()?.identifier.to_file_name())
     }
 
     #[setter]
     pub fn set_file_name(&mut self, file_name: String) -> PyResult<()> {
-        self.try_as_repodata_record_mut()?.file_name = file_name;
+        self.try_as_repodata_record_mut()?.identifier = file_name
+            .parse()
+            .map_err(|e: String| PyValueError::new_err(e))?;
         Ok(())
     }
 

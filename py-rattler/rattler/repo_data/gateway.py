@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+import warnings
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from typing import TYPE_CHECKING, Any, Iterable, List, Optional, Union
 
 from rattler.channel.channel import Channel
 from rattler.match_spec.match_spec import MatchSpec
@@ -12,6 +13,35 @@ from rattler.package.package_name import PackageName
 from rattler.platform.platform import Platform, PlatformLiteral
 from rattler.rattler import PyGateway, PyMatchSpec, PySourceConfig
 from rattler.repo_data.record import RepoDataRecord
+
+if TYPE_CHECKING:
+    from rattler.repo_data.source import RepoDataSource
+
+
+class _RepoDataSourceAdapter:
+    """Adapter that wraps a user's RepoDataSource and converts FFI types.
+
+    This adapter receives raw PyPlatform and PyPackageName from Rust,
+    converts them to the proper Python wrapper types (Platform, PackageName),
+    and calls the user's implementation.
+    """
+
+    def __init__(self, source: RepoDataSource) -> None:
+        self._source = source
+
+    async def fetch_package_records(self, py_platform: Any, py_name: Any) -> List[RepoDataRecord]:
+        """Convert FFI types and delegate to the wrapped source."""
+        # Wrap raw FFI types in Python wrapper classes
+        platform = Platform._from_py_platform(py_platform)
+        name = PackageName._from_py_package_name(py_name)
+
+        # Call the user's implementation with proper Python types
+        return await self._source.fetch_package_records(platform, name)
+
+    def package_names(self, py_platform: Any) -> List[str]:
+        """Convert FFI types and delegate to the wrapped source."""
+        platform = Platform._from_py_platform(py_platform)
+        return self._source.package_names(platform)
 
 
 @dataclass
@@ -23,9 +53,6 @@ class SourceConfig:
     way.
     """
 
-    jlap_enabled: bool = True
-    """Whether the JLAP compression is enabled or not."""
-
     zstd_enabled: bool = True
     """Whether the ZSTD compression is enabled or not."""
 
@@ -35,6 +62,9 @@ class SourceConfig:
     sharded_enabled: bool = True
     """Whether sharded repodata is enabled or not."""
 
+    jlap_enabled: Optional[bool] = None
+    """Deprecated: JLAP support has been removed. This field is ignored."""
+
     cache_action: CacheAction = "cache-or-fetch"
     """How to interact with the cache.
 
@@ -43,6 +73,14 @@ class SourceConfig:
     * `'force-cache-only'`: Only use the cache, ignore whether or not it is up to date.
     * `'no-cache'`: Do not use the cache even if there is an up to date entry
     """
+
+    def __post_init__(self) -> None:
+        if self.jlap_enabled is not None:
+            warnings.warn(
+                "The 'jlap_enabled' option is deprecated and has no effect. JLAP support has been removed.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
     def _into_py(self) -> PySourceConfig:
         """
@@ -57,7 +95,6 @@ class SourceConfig:
         ```
         """
         return PySourceConfig(
-            jlap_enabled=self.jlap_enabled,
             zstd_enabled=self.zstd_enabled,
             bz2_enabled=self.bz2_enabled,
             sharded_enabled=self.sharded_enabled,
@@ -126,12 +163,12 @@ class Gateway:
 
     async def query(
         self,
-        channels: Iterable[Channel | str],
+        sources: Iterable[Union[Channel, str, RepoDataSource]],
         platforms: Iterable[Platform | PlatformLiteral],
         specs: Iterable[MatchSpec | PackageName | str],
         recursive: bool = True,
     ) -> List[List[RepoDataRecord]]:
-        """Queries the gateway for repodata.
+        """Queries the gateway for repodata from channels and custom sources.
 
         If `recursive` is `True` the gateway will recursively fetch the dependencies of the
         encountered records. If `recursive` is `False` only the records with the package names
@@ -143,19 +180,23 @@ class Gateway:
         specified in the spec will be returned, but only the dependencies of the records
         that match the entire spec are recursively fetched.
 
-        The gateway caches the records internally, so if the same channel is queried multiple
-        times the records will only be fetched once. However, the conversion of the records to
-        a python object is done every time the query method is called.
+        The gateway caches records from channels internally, so if the same channel is queried
+        multiple times the records will only be fetched once. However, the conversion of the
+        records to a python object is done every time the query method is called.
+
+        Note: Custom RepoDataSource implementations are **not cached** by the gateway. If caching
+        is needed for custom sources, it must be implemented within the source itself.
 
         Arguments:
-            channels: The channels to query.
+            sources: The sources to query. Can be channels (by name, URL, or Channel object)
+                     or custom RepoDataSource implementations.
             platforms: The platforms to query.
             specs: The specs to query.
             recursive: Whether recursively fetch dependencies or not.
 
         Returns:
             A list of lists of `RepoDataRecord`s. The outer list contains the results for each
-            channel in the same order they are provided in the `channels` argument.
+            source in the same order they are provided in the `sources` argument.
 
         Examples
         --------
@@ -168,9 +209,7 @@ class Gateway:
         ```
         """
         py_records = await self._gateway.query(
-            channels=[
-                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
-            ],
+            sources=_convert_sources(sources),
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
                 for platform in platforms
@@ -186,12 +225,15 @@ class Gateway:
         return [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records]
 
     async def names(
-        self, channels: List[Channel | str], platforms: Iterable[Platform | PlatformLiteral]
+        self,
+        sources: Iterable[Union[Channel, str, RepoDataSource]],
+        platforms: Iterable[Platform | PlatformLiteral],
     ) -> List[PackageName]:
-        """Queries all the names of packages in a channel.
+        """Queries all the names of packages in channels or custom sources.
 
         Arguments:
-            channels: The channels to query.
+            sources: The sources to query. Can be channels (by name, URL, or Channel object)
+                     or custom RepoDataSource implementations.
             platforms: The platforms to query.
 
         Returns:
@@ -210,9 +252,7 @@ class Gateway:
         """
 
         py_package_names = await self._gateway.names(
-            channels=[
-                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
-            ],
+            sources=_convert_sources(sources),
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
                 for platform in platforms
@@ -271,3 +311,35 @@ class Gateway:
         ```
         """
         return f"{type(self).__name__}()"
+
+
+def _convert_sources(sources: Iterable[Any]) -> List[Any]:
+    """Convert an iterable of sources to a list suitable for the Rust gateway.
+
+    Channels are converted to their internal PyChannel representation.
+    Custom RepoDataSource implementations are wrapped in an adapter that
+    converts between FFI types and Python wrapper types.
+
+    Raises:
+        TypeError: If a source doesn't implement the required interface.
+    """
+    from rattler.repo_data.source import RepoDataSource
+
+    converted = []
+    for source in sources:
+        if isinstance(source, str):
+            # String channel name/URL - convert to PyChannel
+            converted.append(Channel(source)._channel)
+        elif isinstance(source, Channel):
+            # Channel object - extract PyChannel
+            converted.append(source._channel)
+        elif isinstance(source, RepoDataSource):
+            # Wrap RepoDataSource in adapter for FFI type conversion
+            converted.append(_RepoDataSourceAdapter(source))
+        else:
+            raise TypeError(
+                f"Expected Channel, str, or object implementing RepoDataSource protocol, "
+                f"got {type(source).__name__}. "
+                f"See rattler.RepoDataSource for the required interface."
+            )
+    return converted

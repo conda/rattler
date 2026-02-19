@@ -5,12 +5,13 @@ expression: repodata
 info: ~
 packages: {}
 packages.conda: {}
+packages.whl: {}
 removed:
-  - aux
-  - bar
-  - baz
-  - foo
-  - quux
-  - qux
-  - xyz
+  - aux-1-py.tar.bz2
+  - bar-1-py.conda
+  - baz-1-py.conda
+  - foo-1-py.conda
+  - quux-1-py.conda
+  - qux-1-py.tar.bz2
+  - xyz-1-py.conda
 repodata_version: 2

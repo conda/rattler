@@ -136,7 +136,12 @@ impl RunExportExtractor {
             .fetch_subdir_run_exports(&record.platform_url(), progress_reporter.clone())
             .await
         {
-            return Ok(subdir_run_exports.get(record).cloned());
+            // If the package is found in the run_exports.json, return its run_exports.
+            // Otherwise, fall through to extracting from the package cache (the
+            // run_exports.json might be out of sync with the actual packages).
+            if let Some(run_exports) = subdir_run_exports.get(record).cloned() {
+                return Ok(Some(run_exports));
+            }
         }
 
         // Otherwise, fall back to extracting from the package cache.

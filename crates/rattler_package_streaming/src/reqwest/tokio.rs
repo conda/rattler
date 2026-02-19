@@ -5,7 +5,7 @@ use std::{path::Path, sync::Arc};
 
 use fs_err::tokio as tokio_fs;
 use futures_util::stream::TryStreamExt;
-use rattler_conda_types::package::ArchiveType;
+use rattler_conda_types::package::CondaArchiveType;
 use rattler_digest::Sha256Hash;
 use reqwest::Response;
 use tokio::io::BufReader;
@@ -16,9 +16,9 @@ use zip::result::ZipError;
 
 use crate::{DownloadReporter, ExtractError, ExtractResult};
 
-/// zipfiles may use data descriptors to signal that the decompressor needs to
+/// zip files may use data descriptors to signal that the decompressor needs to
 /// seek ahead in the buffer to find the compressed data length.
-/// Since we stream the package over a non seekable HTTP connection, this
+/// Since we stream the package over a non seek-able HTTP connection, this
 /// condition will cause an error during decompression. In this case, we
 /// fallback to reading the whole data to a buffer before attempting
 /// decompression. Read more in <https://github.com/conda/rattler/issues/794>
@@ -222,13 +222,13 @@ pub async fn extract(
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
-    match ArchiveType::try_from(Path::new(url.path()))
+    match CondaArchiveType::try_from(Path::new(url.path()))
         .ok_or(ExtractError::UnsupportedArchiveType)?
     {
-        ArchiveType::TarBz2 => {
+        CondaArchiveType::TarBz2 => {
             extract_tar_bz2(client, url, destination, expected_sha256, reporter).await
         }
-        ArchiveType::Conda => {
+        CondaArchiveType::Conda => {
             extract_conda(client, url, destination, expected_sha256, reporter).await
         }
     }

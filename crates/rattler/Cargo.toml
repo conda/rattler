@@ -1,6 +1,6 @@
 [package]
 name = "rattler"
-version = "0.39.7"
+version = "0.39.12"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust library to install conda environments"
@@ -14,7 +14,8 @@ readme.workspace = true
 default = ['rustls-tls']
 native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls', 'rattler_cache/native-tls', 'rattler_networking/native-tls']
 rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls', 'rattler_cache/rustls-tls', 'rattler_networking/rustls-tls']
-cli-tools = ['dep:clap', 'reqwest/blocking']
+oauth = ["dep:openidconnect", "dep:open"]
+cli-tools = ['dep:clap', 'reqwest/blocking', 'oauth']
 indicatif = ['dep:indicatif', 'dep:console']
 
 [package.metadata.docs.rs]
@@ -58,6 +59,9 @@ tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "fast-rng"] }
 console = { workspace = true, optional = true }
+open = { workspace = true, optional = true }
+openidconnect = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 
 [dev-dependencies]

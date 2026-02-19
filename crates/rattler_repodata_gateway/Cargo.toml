@@ -1,6 +1,6 @@
 [package]
 name = "rattler_repodata_gateway"
-version = "0.25.7"
+version = "0.25.12"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to interact with Conda repodata"
@@ -11,6 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+ahash = { workspace = true }
 cfg-if = { workspace = true }
 coalesced_map = { workspace = true }
 fs-err = { workspace = true }
@@ -25,6 +26,7 @@ dashmap = { workspace = true }
 dirs = { workspace = true }
 file_url = { workspace = true }
 futures = { workspace = true }
+hashbrown = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
 http = { workspace = true, optional = true }
 http-cache-semantics = { workspace = true, optional = true, features = ["reqwest", "serde"] }
@@ -80,17 +82,25 @@ wasmtimer = { workspace = true }
 memmap2 = { workspace = true, optional = true }
 
 [dev-dependencies]
+ahash = { workspace = true }
 assert_matches = { workspace = true }
 axum = { workspace = true, features = ["tokio"] }
+criterion = { workspace = true, features = ["html_reports"] }
 fslock = { workspace = true }
 hex-literal = { workspace = true }
+http = { workspace = true }
+http-cache-semantics = { workspace = true, features = ["serde"] }
 insta = { workspace = true, features = ["yaml"] }
 rattler_conda_types = { path = "../rattler_conda_types", default-features = false }
+regex = { workspace = true }
+rmp-serde = { workspace = true }
 rstest = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tools = { path = "../tools" }
 tower-http = { workspace = true, features = ["fs", "compression-gzip", "trace"] }
 tracing-test = { workspace = true }
+url = { workspace = true }
 
 [features]
 default = ['rustls-tls']
@@ -101,3 +111,8 @@ gateway = ["sparse", "http", "http-cache-semantics", "parking_lot", "async-trait
 
 [package.metadata.docs.rs]
 features = ["sparse", "gateway"]
+
+[[bench]]
+name = "gateway_load"
+harness = false
+required-features = ["gateway"]

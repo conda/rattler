@@ -13,9 +13,10 @@ use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpecCondition;
 use rattler_conda_types::{
-    package::ArchiveType, utils::TimestampMs, GenericVirtualPackage, MatchSpec, Matches,
-    NamelessMatchSpec, PackageName, PackageNameMatcher, ParseMatchSpecError, ParseMatchSpecOptions,
-    RepoDataRecord, SolverResult,
+    package::{ArchiveIdentifier, DistArchiveType},
+    utils::TimestampMs,
+    GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec, PackageName, PackageNameMatcher,
+    ParseMatchSpecError, ParseMatchSpecOptions, RepoDataRecord, SolverResult,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -337,7 +338,7 @@ impl<'a> CondaDependencyProvider<'a> {
             // records. This guarantees that the order of records remains the same over
             // runs.
             let mut ordered_repodata = Vec::with_capacity(repo_data.records.len());
-            let mut package_to_type: HashMap<&str, (ArchiveType, usize, bool)> =
+            let mut package_to_type: HashMap<&ArchiveIdentifier, (DistArchiveType, usize, bool)> =
                 HashMap::with_capacity(repo_data.records.len());
 
             for record in repo_data.records {
@@ -358,13 +359,13 @@ impl<'a> CondaDependencyProvider<'a> {
 
                 let excluded = excluded_by_newer || excluded_by_age;
 
-                let (file_name, archive_type) = ArchiveType::split_str(&record.file_name)
-                    .unwrap_or((&record.file_name, ArchiveType::TarBz2));
-                match package_to_type.get_mut(file_name) {
+                let identifier = &record.identifier.identifier;
+                let archive_type = record.identifier.archive_type;
+                match package_to_type.get_mut(identifier) {
                     None => {
                         let idx = ordered_repodata.len();
                         ordered_repodata.push(record);
-                        package_to_type.insert(file_name, (archive_type, idx, excluded));
+                        package_to_type.insert(identifier, (archive_type, idx, excluded));
                     }
                     Some((prev_archive_type, idx, previous_excluded)) => {
                         if *previous_excluded && !excluded {
@@ -379,7 +380,7 @@ impl<'a> CondaDependencyProvider<'a> {
                             // this one will, so we'll keep the previous one
                             // regardless of the type.
                         } else {
-                            match archive_type.cmp(prev_archive_type) {
+                            match archive_type.cmp_preference(*prev_archive_type) {
                                 Ordering::Greater => {
                                     // A previous package has a worse package "type", we'll use the
                                     // current record instead.
@@ -395,7 +396,7 @@ impl<'a> CondaDependencyProvider<'a> {
                                 }
                                 Ordering::Equal => {
                                     return Err(SolveError::DuplicateRecords(
-                                        record.file_name.clone(),
+                                        record.identifier.to_string(),
                                     ));
                                 }
                             }
@@ -661,7 +662,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
         };
 
         // Custom sorter that sorts by name, version, and build
-        // and then by the maximalization of dependency versions
+        // and then by the maximization of dependency versions
         // more information can be found at the struct location
         SolvableSorter::new(solver, strategy, dependency_strategy)
             .sort(solvables, &mut highest_version_spec);
@@ -709,7 +710,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                     tracing::debug!(
                         "{}/{} from {} has invalid dependency '{}': {}, this variant will be ignored",
                         record.package_record.subdir,
-                        record.file_name,
+                        record.identifier,
                         record.channel.as_deref().unwrap_or("unknown"),
                         depends,
                         e
@@ -747,7 +748,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                     tracing::debug!(
                             "{}/{} from {} has invalid constraint '{}': {}, this variant will be ignored",
                             record.package_record.subdir,
-                            record.file_name,
+                            record.identifier,
                             record.channel.as_deref().unwrap_or("unknown"),
                             constrains,
                             e
@@ -782,7 +783,7 @@ impl DependencyProvider for CondaDependencyProvider<'_> {
                     tracing::debug!(
                         "{}/{} from {} has invalid extra dependency '{}': {}, this variant will be ignored",
                         record.package_record.subdir,
-                        record.file_name,
+                        record.identifier,
                         record.channel.as_deref().unwrap_or("unknown"),
                         matchspec,
                         e
@@ -1116,7 +1117,7 @@ fn parse_condition(
             if condition_ids.is_empty() {
                 panic!("match spec condition must have at least one version set");
             } else if condition_ids.len() == 1 {
-                return condition_ids[0];
+                condition_ids[0]
             } else {
                 // Otherwise, create a union of the conditions
                 let mut result = condition_ids[0];
