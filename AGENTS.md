@@ -1,7 +1,3 @@
-# AGENTS.md
-
-This file provides guidance to AI coding agents working with code in this repository.
-
 - Rust monorepo for conda package management (solving, installing, fetching repodata), used by pixi, rattler-build, prefix.dev
 - Build: `pixi run build` | Test: `pixi run test` | Lint all: `pixi run lint`
 - Single test: `pixi run -- cargo nextest run -p <crate_name> <test_name>`
