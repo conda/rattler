@@ -12,18 +12,18 @@
 use std::fmt::{Debug, Formatter};
 use std::str::FromStr;
 
+use crate::UrlOrPath;
+use rattler_conda_types::package::DistArchiveIdentifier;
 use rattler_conda_types::{
-    package::ArchiveIdentifier, BuildNumber, ChannelUrl, NoArchType, PackageName, Platform,
+    package::CondaArchiveIdentifier, BuildNumber, ChannelUrl, NoArchType, PackageName, Platform,
     VersionWithSource,
 };
 use url::Url;
 
-use crate::UrlOrPath;
-
 /// A helper struct that wraps all fields of a [`CondaPackageData`] that can be
 /// derived just from the location of the package.
 pub(crate) struct LocationDerivedFields {
-    pub file_name: Option<String>,
+    pub identifier: Option<DistArchiveIdentifier>,
     pub name: Option<PackageName>,
     pub version: Option<VersionWithSource>,
     pub build: Option<String>,
@@ -34,7 +34,7 @@ pub(crate) struct LocationDerivedFields {
 impl Debug for LocationDerivedFields {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LocationDerivedFields")
-            .field("file_name", &self.file_name)
+            .field("identifier", &self.identifier)
             .field("name", &self.name.as_ref().map(PackageName::as_source))
             .field("version", &self.version.as_ref().map(|s| s.as_str()))
             .field("build", &self.build)
@@ -48,16 +48,16 @@ impl LocationDerivedFields {
     /// Constructs a new instance by deriving all fields from the given
     /// location.
     pub fn new(location: &UrlOrPath) -> Self {
-        let (file_name, archive_identifier) = location
+        let identifier = location
             .file_name()
-            .and_then(|f| ArchiveIdentifier::try_from_filename(f).map(|a| (f.to_string(), a)))
-            .map_or((None, None), |(f, a)| (Some(f), Some(a)));
-        let (name, version, build) = archive_identifier
+            .and_then(DistArchiveIdentifier::try_from_filename);
+        let (name, version, build) = identifier
+            .as_ref()
             .and_then(|a| {
                 Some((
-                    PackageName::new_unchecked(a.name),
-                    VersionWithSource::from_str(&a.version).ok()?,
-                    a.build_string,
+                    PackageName::new_unchecked(a.identifier.name.clone()),
+                    VersionWithSource::from_str(&a.identifier.version).ok()?,
+                    a.identifier.build_string.clone(),
                 ))
             })
             .map_or((None, None, None), |(name, version, build_string)| {
@@ -66,7 +66,7 @@ impl LocationDerivedFields {
         let subdir = derive_subdir_from_location(location).map(ToString::to_string);
         let channel = derive_channel_from_location(location);
         Self {
-            file_name,
+            identifier,
             name,
             version,
             build,
@@ -108,7 +108,7 @@ pub fn derive_subdir_from_url(url: &Url) -> Option<&str> {
 
     // Try to parse the archive string as an archive identifier. If it fails we
     // can't derive the subdir.
-    let _ = ArchiveIdentifier::try_from_filename(archive_str)?;
+    let _ = CondaArchiveIdentifier::try_from_filename(archive_str)?;
 
     // Parse the subdir as a platform, if it fails we can't derive the subdir.
     Platform::from_str(subdir_str).is_ok().then_some(subdir_str)

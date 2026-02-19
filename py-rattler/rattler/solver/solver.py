@@ -1,25 +1,28 @@
 from __future__ import annotations
 
 import datetime
-from typing import List, Literal, Optional, Sequence
+from typing import TYPE_CHECKING, List, Literal, Optional, Sequence, Union
 
 from rattler.channel.channel import Channel
 from rattler.channel.channel_priority import ChannelPriority
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.platform.platform import Platform, PlatformLiteral
-from rattler.rattler import PyMatchSpec, PyPackageFormatSelection, py_solve, py_solve_with_sparse_repodata
-from rattler.repo_data.gateway import Gateway
+from rattler.rattler import PyMatchSpec, py_solve, py_solve_with_sparse_repodata
+from rattler.repo_data.gateway import Gateway, _convert_sources
 from rattler.repo_data.record import RepoDataRecord
-from rattler.repo_data.sparse import SparseRepoData
+from rattler.repo_data.sparse import SparseRepoData, PackageFormatSelection
 from rattler.virtual_package.generic import GenericVirtualPackage
 from rattler.virtual_package.virtual_package import VirtualPackage
+
+if TYPE_CHECKING:
+    from rattler.repo_data.source import RepoDataSource
 
 SolveStrategy = Literal["highest", "lowest", "lowest-direct"]
 """Defines the strategy to use when multiple versions of a package are available during solving."""
 
 
 async def solve(
-    channels: Sequence[Channel | str],
+    sources: Sequence[Union[Channel, str, RepoDataSource]],
     specs: Sequence[MatchSpec | str],
     gateway: Gateway = Gateway(),
     platforms: Optional[Sequence[Platform | PlatformLiteral]] = None,
@@ -37,7 +40,8 @@ async def solve(
     that should be present in the environment.
 
     Arguments:
-        channels: The channels to query for the packages.
+        sources: The sources to query for the packages. Can be channels (by name, URL,
+                 or Channel object) or custom RepoDataSource implementations.
         specs: A list of matchspec to solve.
         platforms: The platforms to query for the packages. If `None` the current platform and
                 `noarch` is used.
@@ -84,9 +88,7 @@ async def solve(
     return [
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in await py_solve(
-            channels=[
-                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
-            ],
+            sources=_convert_sources(sources),
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
                 for platform in platforms
@@ -133,7 +135,7 @@ async def solve_with_sparse_repodata(
     exclude_newer: Optional[datetime.datetime] = None,
     strategy: SolveStrategy = "highest",
     constraints: Optional[Sequence[MatchSpec | str]] = None,
-    use_only_tar_bz2: bool = False,
+    package_format_selection: PackageFormatSelection = PackageFormatSelection.PREFER_CONDA,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -178,12 +180,11 @@ async def solve_with_sparse_repodata(
         constraints: Additional constraints that should be satisfied by the solver.
             Packages included in the `constraints` are not necessarily installed,
             but they must be satisfied by the solution.
-        use_only_tar_bz2: If `True` only `.tar.bz2` packages are used. If `False` `.conda` packages are preferred.
+        package_format_selection: Defines which package formats are selected
 
     Returns:
         Resolved list of `RepoDataRecord`s.
     """
-
     return [
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in await py_solve_with_sparse_repodata(
@@ -202,9 +203,7 @@ async def solve_with_sparse_repodata(
             ],
             channel_priority=channel_priority.value,
             timeout=int(timeout / datetime.timedelta(microseconds=1)) if timeout else None,
-            package_format_selection=PyPackageFormatSelection.OnlyTarBz2
-            if use_only_tar_bz2
-            else PyPackageFormatSelection.PreferConda,
+            package_format_selection=package_format_selection.value,
             exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
             if exclude_newer
             else None,

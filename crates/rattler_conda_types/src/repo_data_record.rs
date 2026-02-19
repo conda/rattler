@@ -5,7 +5,7 @@ use std::{collections::HashMap, str::FromStr, vec::Vec};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{PackageName, PackageRecord, Platform};
+use crate::{package::DistArchiveIdentifier, PackageName, PackageRecord, Platform};
 
 /// Information about a package from repodata. It includes a
 /// [`crate::PackageRecord`] but it also stores the source of the data (like the
@@ -18,7 +18,7 @@ pub struct RepoDataRecord {
 
     /// The filename of the package
     #[serde(rename = "fn")]
-    pub file_name: String,
+    pub identifier: DistArchiveIdentifier,
 
     /// The canonical URL from where to get this package.
     pub url: Url,
@@ -29,6 +29,18 @@ pub struct RepoDataRecord {
     /// the package came from. TODO: Refactor this into `Source` which can
     /// be a "name", "channelurl", or "direct url".
     pub channel: Option<String>,
+}
+
+impl PartialOrd for RepoDataRecord {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RepoDataRecord {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.package_record.cmp(&other.package_record)
+    }
 }
 
 impl RepoDataRecord {

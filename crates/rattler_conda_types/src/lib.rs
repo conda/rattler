@@ -1,8 +1,9 @@
 #![deny(missing_docs)]
 //! `rattler-conda-types` contains data models for types commonly found within
-//! the Conda ecosystem. The library itself doesnt provide any functionality
+//! the Conda ecosystem. The library itself doesn't provide any functionality
 //! besides parsing the data types.
 
+pub mod backup;
 mod build_spec;
 mod channel;
 mod channel_data;
@@ -62,7 +63,7 @@ pub use repo_data::{
     patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},
     sharded::{Shard, ShardedRepodata, ShardedSubdirInfo},
     ChannelInfo, ConvertSubdirError, PackageRecord, RecordFromPath, RepoData, SubdirRunExportsJson,
-    ValidatePackageRecordsError,
+    UrlOrPath, ValidatePackageRecordsError, WhlPackageRecord,
 };
 pub use repo_data_record::{RepoDataRecord, SolverResult};
 pub use run_export::RunExportKind;

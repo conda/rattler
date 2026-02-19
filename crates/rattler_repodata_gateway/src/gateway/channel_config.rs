@@ -9,10 +9,6 @@ use crate::fetch::CacheAction;
 /// repodata for a specific channel.
 #[derive(Debug, Clone)]
 pub struct SourceConfig {
-    /// When enabled repodata can be fetched incrementally using JLAP (defaults
-    /// to true)
-    pub jlap_enabled: bool,
-
     /// When enabled, the zstd variant will be used if available (defaults to
     /// true)
     pub zstd_enabled: bool,
@@ -32,7 +28,6 @@ pub struct SourceConfig {
 impl Default for SourceConfig {
     fn default() -> Self {
         Self {
-            jlap_enabled: true,
             zstd_enabled: true,
             bz2_enabled: true,
             sharded_enabled: true,
@@ -45,7 +40,6 @@ impl Default for SourceConfig {
 impl From<rattler_config::config::repodata_config::RepodataChannelConfig> for SourceConfig {
     fn from(value: rattler_config::config::repodata_config::RepodataChannelConfig) -> Self {
         SourceConfig {
-            jlap_enabled: !value.disable_jlap.unwrap_or(false),
             zstd_enabled: !value.disable_zstd.unwrap_or(false),
             bz2_enabled: !value.disable_bzip2.unwrap_or(false),
             sharded_enabled: !value.disable_sharded.unwrap_or(false),

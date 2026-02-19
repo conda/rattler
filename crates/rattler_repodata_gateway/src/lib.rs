@@ -66,7 +66,7 @@ mod reporter;
 #[cfg(feature = "sparse")]
 pub mod sparse;
 mod utils;
-pub use reporter::{DownloadReporter, JLAPReporter, Reporter};
+pub use reporter::{DownloadReporter, Reporter};
 
 #[cfg(feature = "gateway")]
 mod gateway;
@@ -74,7 +74,7 @@ mod gateway;
 #[cfg(feature = "gateway")]
 pub use gateway::{
     CacheClearMode, ChannelConfig, Gateway, GatewayBuilder, GatewayError, MaxConcurrency, RepoData,
-    SourceConfig, SubdirSelection,
+    RepoDataSource, Source, SourceConfig, SubdirSelection,
 };
 #[cfg(feature = "indicatif")]
 pub use gateway::{IndicatifReporter, IndicatifReporterBuilder};

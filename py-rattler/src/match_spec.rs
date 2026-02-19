@@ -38,6 +38,7 @@ impl Borrow<MatchSpec> for PyMatchSpec {
 impl PyMatchSpec {
     #[new]
     #[pyo3(signature = (spec, strict = false, exact_names_only = true, experimental_extras = false, experimental_conditionals = false))]
+    #[allow(clippy::fn_params_excessive_bools)]
     pub fn __init__(
         spec: &str,
         strict: bool,

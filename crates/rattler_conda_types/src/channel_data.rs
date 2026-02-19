@@ -1,4 +1,4 @@
-//! Datastructures that are present in a `channeldata.json` file. Some channels on anaconda.org
+//! Data-structures that are present in a `channeldata.json` file. Some channels on anaconda.org
 //! contain a `channeldata.json` file which describes the subdirs the channel contains, the packages
 //! stored in the channel and additional data about them like their latest version.
 //!
@@ -100,7 +100,7 @@ pub struct ChannelDataPackage {
     #[serde(rename = "pre_unlink")]
     pub has_pre_unlink_scripts: bool,
 
-    /// Any run_exports contained within the package.
+    /// Any `run_exports` contained within the package.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     #[serde_as(as = "HashMap<DisplayFromStr, _>")]
     pub run_exports: HashMap<Version, RunExportsJson>,

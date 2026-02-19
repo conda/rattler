@@ -4,7 +4,10 @@
 use std::{cmp::Ordering, collections::HashMap};
 
 use chrono::{DateTime, Utc};
-use rattler_conda_types::{package::ArchiveType, GenericVirtualPackage, RepoDataRecord};
+use rattler_conda_types::{
+    package::{ArchiveIdentifier, DistArchiveType},
+    GenericVirtualPackage, RepoDataRecord,
+};
 use rattler_conda_types::{MatchSpec, MatchSpecCondition, ParseMatchSpecOptions};
 use std::collections::HashSet;
 
@@ -105,7 +108,8 @@ pub fn add_repodata_records<'a>(
     let solvable_index_id = pool.intern_str(SOLVABLE_REPODATA_RECORD_INDEX);
 
     // Keeps a mapping from packages added to the repo to the type and solvable
-    let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
+    let mut package_to_type: HashMap<&ArchiveIdentifier, (DistArchiveType, SolvableId)> =
+        HashMap::new();
 
     // Through `data` we can manipulate solvables (see the `Repodata` docs for
     // details)
@@ -163,7 +167,7 @@ pub fn add_repodata_records<'a>(
         data.set_location(
             solvable_id,
             &c_string(&record.subdir),
-            &c_string(&repo_data.file_name),
+            &c_string(repo_data.identifier.to_string()),
         );
 
         // Dependencies
@@ -210,7 +214,7 @@ pub fn add_repodata_records<'a>(
             // Track this extra for synthetic solvable creation
             extras.insert((record.name.as_normalized().to_string(), extra_name.clone()));
 
-            // Create conditional dependencies: dep; if package[extra]
+            // Create conditional dependencies: dep[when="package[extra]"]
             for dep_str in deps.iter() {
                 // Parse the dependency matchspec
                 let dep_id = pool.conda_matchspec(&c_string(dep_str));
@@ -219,7 +223,7 @@ pub fn add_repodata_records<'a>(
                 let extra_name_str = format!("{}[{}]", record.name.as_normalized(), extra_name);
                 let extra_condition_id = pool.intern_str(extra_name_str.as_str()).into();
 
-                // Create a conditional dependency: dep; if package[extra]
+                // Create a conditional dependency: dep[when="package[extra]"]
                 let conditional_dep_id = pool.rel_cond(dep_id, extra_condition_id);
 
                 // Add it as a requirement
@@ -340,43 +344,38 @@ fn add_or_reuse_solvable<'a>(
     pool: &Pool,
     repo: &Repo<'_>,
     data: &Repodata<'_>,
-    package_to_type: &mut HashMap<&'a str, (ArchiveType, SolvableId)>,
+    package_to_type: &mut HashMap<&'a ArchiveIdentifier, (DistArchiveType, SolvableId)>,
     repo_data: &'a RepoDataRecord,
 ) -> Result<Option<SolvableId>, SolveError> {
     // Sometimes we can reuse an existing solvable
-    if let Some((filename, archive_type)) = ArchiveType::split_str(&repo_data.file_name) {
-        if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(filename) {
-            match archive_type.cmp(&other_package_type) {
-                Ordering::Less => {
-                    // A previous package that we already stored is actually a package of a better
-                    // "type" so we'll just use that instead (.conda > .tar.bz)
-                    return Ok(None);
-                }
-                Ordering::Greater => {
-                    // A previous package has a worse package "type", we'll reuse the handle but
-                    // overwrite its attributes
+    let identifier = &repo_data.identifier.identifier;
+    let archive_type = repo_data.identifier.archive_type;
 
-                    // Update the package to the new type mapping
-                    package_to_type.insert(filename, (archive_type, old_solvable_id));
-
-                    // Reset and reuse the old solvable
-                    reset_solvable(pool, repo, data, old_solvable_id);
-                    return Ok(Some(old_solvable_id));
-                }
-                Ordering::Equal => {
-                    return Err(SolveError::DuplicateRecords(filename.to_string()));
-                }
+    if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(identifier) {
+        match archive_type.cmp_preference(other_package_type) {
+            Ordering::Less => {
+                // A previous package that we already stored is actually a package of a better
+                // "type" so we'll just use that instead (.conda > .tar.bz)
+                Ok(None)
             }
-        } else {
-            let solvable_id = repo.add_solvable();
-            package_to_type.insert(filename, (archive_type, solvable_id));
-            return Ok(Some(solvable_id));
+            Ordering::Greater => {
+                // A previous package has a worse package "type", we'll reuse the handle but
+                // overwrite its attributes
+
+                // Update the package to the new type mapping
+                package_to_type.insert(identifier, (archive_type, old_solvable_id));
+
+                // Reset and reuse the old solvable
+                reset_solvable(pool, repo, data, old_solvable_id);
+                Ok(Some(old_solvable_id))
+            }
+            Ordering::Equal => Err(SolveError::DuplicateRecords(identifier.to_string())),
         }
     } else {
-        tracing::warn!("unknown package extension: {}", &repo_data.file_name);
+        let solvable_id = repo.add_solvable();
+        package_to_type.insert(identifier, (archive_type, solvable_id));
+        Ok(Some(solvable_id))
     }
-
-    Ok(Some(repo.add_solvable()))
 }
 
 pub fn add_virtual_packages(pool: &Pool, repo: &Repo<'_>, packages: &[GenericVirtualPackage]) {

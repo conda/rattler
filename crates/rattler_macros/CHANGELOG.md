@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.12](https://github.com/conda/rattler/compare/rattler_macros-v1.0.11...rattler_macros-v1.0.12) - 2025-12-18
+
+### Other
+
+- update README.md with new banner image ([#1926](https://github.com/conda/rattler/pull/1926))
+
 ## [1.0.11](https://github.com/conda/rattler/compare/rattler_macros-v1.0.10...rattler_macros-v1.0.11) - 2025-07-01
 
 ### Fixed

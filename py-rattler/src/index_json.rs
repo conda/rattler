@@ -55,7 +55,7 @@ impl PyIndexJson {
     ///
     /// For example, if the file is in JSON format, this function reads the appropriate file from
     /// the archive, parse the JSON string and return the resulting object. If the file is not in a
-    /// parsable format or if the file could not be read, this function returns an error.
+    /// parse-able format or if the file could not be read, this function returns an error.
     #[staticmethod]
     pub fn from_package_directory(path: PathBuf) -> PyResult<Self> {
         Ok(IndexJson::from_package_directory(path)
@@ -66,7 +66,7 @@ impl PyIndexJson {
     /// Parses the object from a string, using a format appropriate for the file type.
     ///
     /// For example, if the file is in JSON format, this function parses the JSON string and returns
-    /// the resulting object. If the file is not in a parsable format, this function returns an
+    /// the resulting object. If the file is not in a parse-able format, this function returns an
     /// error.
     #[staticmethod]
     pub fn from_str(str: &str) -> PyResult<Self> {
@@ -225,7 +225,7 @@ impl PyIndexJson {
         Ok(())
     }
 
-    /// Track features are nowadays only used to downweigh packages (ie. give them less priority). To
+    /// Track features are nowadays only used to down-weigh packages (ie. give them less priority). To
     /// that effect, the number of track features is counted (number of commas) and the package is downweighted
     /// by the number of track_features.
     #[getter]

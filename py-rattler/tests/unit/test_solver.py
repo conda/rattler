@@ -12,6 +12,7 @@ from rattler import (
     SparseRepoData,
     MatchSpec,
     solve_with_sparse_repodata,
+    PackageFormatSelection,
 )
 
 
@@ -170,7 +171,7 @@ async def test_conditional_root_requirement_satisfied(gateway: Gateway, dummy_ch
 
     solved_data = await solve(
         [dummy_channel],
-        [MatchSpec("foo; if __unix", experimental_conditionals=True)],
+        [MatchSpec('foo[when="__unix"]', experimental_conditionals=True)],
         platforms=["linux-64"],
         gateway=gateway,
         virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), "0")],
@@ -190,7 +191,7 @@ async def test_conditional_root_requirement_not_satisfied(gateway: Gateway, dumm
 
     solved_data = await solve(
         [dummy_channel],
-        [MatchSpec("foo; if __win", experimental_conditionals=True)],
+        [MatchSpec('foo[when="__win"]', experimental_conditionals=True)],
         platforms=["linux-64"],
         gateway=gateway,
         virtual_packages=[GenericVirtualPackage(PackageName("__unix"), Version("0"), "0")],
@@ -209,7 +210,7 @@ async def test_conditional_root_requirement_with_logic(gateway: Gateway, dummy_c
 
     solved_data = await solve(
         [dummy_channel],
-        [MatchSpec("foo; if __unix and __linux", experimental_conditionals=True)],
+        [MatchSpec('foo[when="__unix and __linux"]', experimental_conditionals=True)],
         platforms=["linux-64"],
         gateway=gateway,
         virtual_packages=[
@@ -231,7 +232,7 @@ async def test_solve_with_sparse_repodata_conditional_dependencies() -> None:
 
     This is a regression test for https://github.com/conda/rattler/issues/1917
     The solver should properly resolve packages with conditional dependencies like
-    "osx-dependency; if __osx" when using sparse repodata.
+    `osx-dependency[when="__osx"]` when using sparse repodata.
     """
     from rattler import GenericVirtualPackage, PackageName, Version
 
@@ -244,7 +245,7 @@ async def test_solve_with_sparse_repodata_conditional_dependencies() -> None:
         path=noarch_path,
     )
 
-    # Test 1: Platform-conditional dependency with __linux virtual package
+    # Test: Platform-conditional dependency with __linux virtual package
     solved_data = await solve_with_sparse_repodata(
         [MatchSpec("package")],
         [noarch_data],
@@ -268,7 +269,7 @@ async def test_solve_with_sparse_repodata_version_conditional_dependencies() -> 
 
     This is a regression test for https://github.com/conda/rattler/issues/1917
     The solver should properly resolve conditional dependencies like
-    "package; if side-dependency=0.2" when the condition is satisfied.
+    `package[when="side-dependency=0.2"]` when the condition is satisfied.
     """
     from rattler import GenericVirtualPackage, PackageName, Version
 
@@ -282,7 +283,7 @@ async def test_solve_with_sparse_repodata_version_conditional_dependencies() -> 
     )
 
     # Test: Version-conditional dependency - when side-dependency=0.2 is requested,
-    # "package" should be included due to the conditional "package; if side-dependency=0.2"
+    # "package" should be included due to the conditional `package[when="side-dependency=0.2"]`
     solved_data = await solve_with_sparse_repodata(
         [MatchSpec("conditional-dependency"), MatchSpec("side-dependency=0.2")],
         [noarch_data],
@@ -299,3 +300,53 @@ async def test_solve_with_sparse_repodata_version_conditional_dependencies() -> 
     assert "package" in package_names
     # linux-dependency should also be included because __linux is in virtual packages
     assert "linux-dependency" in package_names
+
+
+@pytest.mark.asyncio
+async def test_solve_with_sparse_repodata_with_wheels() -> None:
+    """
+    Test that solve when repodata includes `packages.whl` works as expected.
+    """
+    from rattler import GenericVirtualPackage, PackageName, Version
+
+    chn = Channel("with-wheels")
+
+    data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
+    noarch_path = os.path.join(data_dir, "channels/with-wheels/noarch/repodata.json")
+    noarch_data = SparseRepoData(
+        channel=chn,
+        subdir="noarch",
+        path=noarch_path,
+    )
+    linux_64_path = os.path.join(data_dir, "channels/with-wheels/linux-64/repodata.json")
+    linux_64_data = SparseRepoData(
+        channel=chn,
+        subdir="linux-64",
+        path=linux_64_path,
+    )
+
+    # Test: Version-conditional dependency - when side-dependency=0.2 is requested,
+    # "package" should be included due to the conditional "package; if side-dependency=0.2"
+    solved_data = await solve_with_sparse_repodata(
+        [MatchSpec("starlette")],
+        [noarch_data, linux_64_data],
+        virtual_packages=[
+            GenericVirtualPackage(PackageName("__unix"), Version("15"), "0"),
+            GenericVirtualPackage(PackageName("__linux"), Version("0"), "0"),
+        ],
+        package_format_selection=PackageFormatSelection.PREFER_CONDA_WITH_WHL,
+    )
+
+    whl_files = sum(r.file_name.endswith(".whl") for r in solved_data)
+    conda_files = sum(r.file_name.endswith(".conda") for r in solved_data)
+    tar_bz2_files = sum(r.file_name.endswith(".tar.bz2") for r in solved_data)
+
+    assert whl_files == 2
+    assert conda_files == 21
+    assert tar_bz2_files == 4
+
+    assert isinstance(solved_data, list)
+    package_names = [r.name.normalized for r in solved_data]
+    # solve needs to include these two packages
+    assert "starlette" in package_names
+    assert "python" in package_names

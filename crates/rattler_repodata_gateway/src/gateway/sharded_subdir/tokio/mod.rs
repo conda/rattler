@@ -11,14 +11,17 @@ use rattler_conda_types::Platform;
 use super::{add_trailing_slash, decode_zst_bytes_async, parse_records};
 use crate::{
     fetch::{CacheAction, FetchRepoDataError},
-    gateway::{error::SubdirNotFoundError, subdir::SubdirClient},
+    gateway::{
+        error::SubdirNotFoundError,
+        subdir::{PackageRecords, SubdirClient},
+    },
     reporter::ResponseReporterExt,
     GatewayError, Reporter,
 };
 use fs_err::tokio as tokio_fs;
 use futures::future::OptionFuture;
 use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
-use rattler_conda_types::{Channel, PackageName, RepoDataRecord, ShardedRepodata};
+use rattler_conda_types::{Channel, PackageName, ShardedRepodata};
 use rattler_networking::LazyClient;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use url::Url;
@@ -162,10 +165,10 @@ impl SubdirClient for ShardedSubdir {
         &self,
         name: &PackageName,
         reporter: Option<&dyn Reporter>,
-    ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
+    ) -> Result<PackageRecords, GatewayError> {
         // Find the shard that contains the package
         let Some(shard) = self.sharded_repodata.shards.get(name.as_normalized()) else {
-            return Ok(vec![].into());
+            return Ok(PackageRecords::default());
         };
 
         // Check if we already have the shard in the cache.
@@ -181,8 +184,7 @@ impl SubdirClient for ShardedSubdir {
                         self.channel.base_url.clone(),
                         self.package_base_url.clone(),
                     )
-                    .await
-                    .map(Arc::from);
+                    .await;
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                     // The file is missing from the cache, we need to download
@@ -246,7 +248,7 @@ impl SubdirClient for ShardedSubdir {
             bytes
         };
 
-        let shard_bytes = decode_zst_bytes_async(shard_bytes).await?;
+        let shard_bytes = decode_zst_bytes_async(shard_bytes, shard_url).await?;
 
         // Create a future to write the cached bytes to disk
         let write_to_cache_fut = write_shard_to_cache(shard_cache_path, shard_bytes.clone());
@@ -261,7 +263,7 @@ impl SubdirClient for ShardedSubdir {
         // Await both futures concurrently.
         let (_, records) = tokio::try_join!(write_to_cache_fut, parse_records_fut)?;
 
-        Ok(records.into())
+        Ok(records)
     }
 
     fn package_names(&self) -> Vec<String> {

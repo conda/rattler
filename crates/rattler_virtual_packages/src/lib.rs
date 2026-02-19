@@ -595,10 +595,10 @@ impl From<Cuda> for VirtualPackage {
 /// Archspec describes the CPU architecture
 #[derive(Clone, Debug)]
 pub enum Archspec {
-    /// A microarchitecture from the archspec library.
+    /// A micro-architecture from the archspec library.
     Microarchitecture(Arc<Microarchitecture>),
 
-    /// An unknown microarchitecture
+    /// An unknown micro-architecture
     Unknown,
 }
 
@@ -682,7 +682,7 @@ impl Archspec {
             Platform::Win32 | Platform::Linux32 => "x86",
             Platform::Win64 | Platform::Osx64 | Platform::Linux64 => "x86_64",
             Platform::LinuxAarch64 | Platform::LinuxArmV6l | Platform::LinuxArmV7l => "aarch64",
-            Platform::LinuxLoong64 => "loong64",
+            Platform::LinuxLoongArch64 => "loongarch64",
             Platform::LinuxPpc64le => "ppc64le",
             Platform::LinuxPpc64 => "ppc64",
             Platform::LinuxPpc => "ppc",

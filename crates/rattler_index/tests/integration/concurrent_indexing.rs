@@ -70,7 +70,7 @@ async fn test_concurrent_index_with_race_condition_and_retry() {
                         // First two stats - wait at barrier
                         tracing::info!("Process {} reached stat barrier", count + 1);
                         stat_barrier.wait().await;
-                        tracing::info!("Both processes statted, continuing");
+                        tracing::info!("Both processes stat-ed, continuing");
                     } else {
                         tracing::info!("Process on retry (stat {}), skipping barrier", count + 1);
                     }

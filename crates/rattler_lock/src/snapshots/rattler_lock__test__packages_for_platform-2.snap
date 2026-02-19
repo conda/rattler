@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_lock/src/lib.rs
-expression: "conda_lock.environment(DEFAULT_ENVIRONMENT_NAME).unwrap().packages(Platform::Osx64).unwrap().map(|p|\n            p.url()).collect::<Vec<_>>()"
+expression: "conda_lock.environment(DEFAULT_ENVIRONMENT_NAME).unwrap().packages(Platform::Osx64).unwrap().map(|p|\np.location().to_string()).collect::<Vec<_>>()"
 ---
 - "https://conda.anaconda.org/conda-forge/osx-64/bzip2-1.0.8-h0d85af4_4.tar.bz2"
 - "https://conda.anaconda.org/conda-forge/osx-64/ca-certificates-2022.12.7-h033912b_0.conda"
@@ -182,4 +182,3 @@ expression: "conda_lock.environment(DEFAULT_ENVIRONMENT_NAME).unwrap().packages(
 - "https://conda.anaconda.org/conda-forge/noarch/sphinx-design-0.3.0-pyhd8ed1ab_0.tar.bz2"
 - "https://conda.anaconda.org/conda-forge/osx-64/fortran-compiler-1.5.2-haad3a49_0.conda"
 - "https://conda.anaconda.org/conda-forge/osx-64/compilers-1.5.2-h694c41f_0.conda"
-

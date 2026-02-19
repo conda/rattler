@@ -5,4 +5,3 @@ expression: link_json
 noarch:
   type: python
 package_metadata_version: 1
-

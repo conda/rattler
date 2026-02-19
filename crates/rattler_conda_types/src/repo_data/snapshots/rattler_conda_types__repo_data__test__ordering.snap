@@ -1,0 +1,17 @@
+---
+source: crates/rattler_conda_types/src/repo_data/mod.rs
+assertion_line: 1109
+expression: "formatted.join(\"\\n\")"
+---
+linux-64/curl-8.4.0-hdns_0
+linux-64/numpy-1.26.0-hc1_np126_0
+linux-64/numpy-1.26.0-hc1_np126_1
+linux-64/numpy-1.26.0-hc1_np126_2
+linux-64/openssl-3.1.0-hlib_0
+linux-64/openssl-3.1.0-hlib_0
+linux-64/openssl-3.1.0-hlib_0
+linux-64/python-3.11.0-hab5_py311_1
+linux-64/python-3.12.0-hab5_py312_1
+linux-64/python-3.12.0-hab5_py312_3
+linux-64/scipy-1.11.0-hplain_0
+linux-64/scipy-1.11.0-hfeature_0

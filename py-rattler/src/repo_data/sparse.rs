@@ -28,6 +28,13 @@ pub struct PySparseRepoData {
     subdir: String,
 }
 
+impl PySparseRepoData {
+    /// Create a new instance without requiring the GIL.
+    pub(crate) fn from_args(channel: PyChannel, subdir: String, path: PathBuf) -> PyResult<Self> {
+        Ok(SparseRepoData::from_file(channel.into(), subdir, path, None)?.into())
+    }
+}
+
 impl From<SparseRepoData> for PySparseRepoData {
     fn from(value: SparseRepoData) -> Self {
         Self {
@@ -43,6 +50,7 @@ pub enum PyPackageFormatSelection {
     OnlyTarBz2,
     OnlyConda,
     PreferConda,
+    PreferCondaWithWhl,
     Both,
 }
 
@@ -58,6 +66,9 @@ impl From<PackageFormatSelection> for PyPackageFormatSelection {
             PackageFormatSelection::OnlyTarBz2 => PyPackageFormatSelection::OnlyTarBz2,
             PackageFormatSelection::OnlyConda => PyPackageFormatSelection::OnlyConda,
             PackageFormatSelection::PreferConda => PyPackageFormatSelection::PreferConda,
+            PackageFormatSelection::PreferCondaWithWhl => {
+                PyPackageFormatSelection::PreferCondaWithWhl
+            }
             PackageFormatSelection::Both => PyPackageFormatSelection::Both,
         }
     }
@@ -69,6 +80,9 @@ impl From<PyPackageFormatSelection> for PackageFormatSelection {
             PyPackageFormatSelection::OnlyTarBz2 => PackageFormatSelection::OnlyTarBz2,
             PyPackageFormatSelection::OnlyConda => PackageFormatSelection::OnlyConda,
             PyPackageFormatSelection::PreferConda => PackageFormatSelection::PreferConda,
+            PyPackageFormatSelection::PreferCondaWithWhl => {
+                PackageFormatSelection::PreferCondaWithWhl
+            }
             PyPackageFormatSelection::Both => PackageFormatSelection::Both,
         }
     }
@@ -84,83 +98,107 @@ impl PyPackageFormatSelection {
 #[pymethods]
 impl PySparseRepoData {
     #[new]
-    pub fn new(channel: PyChannel, subdir: String, path: PathBuf) -> PyResult<Self> {
-        Ok(SparseRepoData::from_file(channel.into(), subdir, path, None)?.into())
+    pub fn new(
+        py: Python<'_>,
+        channel: PyChannel,
+        subdir: String,
+        path: PathBuf,
+    ) -> PyResult<Self> {
+        py.allow_threads(move || Self::from_args(channel, subdir, path))
     }
 
     pub fn package_names(
         &self,
+        py: Python<'_>,
         package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<Vec<String>> {
-        let lock = self.inner.read();
-        let Some(sparse) = lock.as_ref() else {
-            return Err(PyValueError::new_err("I/O operation on closed file."));
-        };
-        Ok(sparse
-            .package_names(package_format_selection.into())
-            .map(Into::into)
-            .collect::<Vec<_>>())
+        let inner = self.inner.clone();
+        py.allow_threads(move || {
+            let lock = inner.read();
+            let Some(sparse) = lock.as_ref() else {
+                return Err(PyValueError::new_err("I/O operation on closed file."));
+            };
+            Ok(sparse
+                .package_names(package_format_selection.into())
+                .map(Into::into)
+                .collect::<Vec<_>>())
+        })
     }
 
     pub fn record_count(
         &self,
+        py: Python<'_>,
         package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<usize> {
-        let lock = self.inner.read();
-        let Some(sparse) = lock.as_ref() else {
-            return Err(PyValueError::new_err("I/O operation on closed file."));
-        };
-        Ok(sparse.record_count(package_format_selection.into()))
+        let inner = self.inner.clone();
+        py.allow_threads(move || {
+            let lock = inner.read();
+            let Some(sparse) = lock.as_ref() else {
+                return Err(PyValueError::new_err("I/O operation on closed file."));
+            };
+            Ok(sparse.record_count(package_format_selection.into()))
+        })
     }
 
     pub fn load_records(
         &self,
+        py: Python<'_>,
         package_name: &PyPackageName,
         package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<Vec<PyRecord>> {
-        let lock = self.inner.read();
-        let Some(sparse) = lock.as_ref() else {
-            return Err(PyValueError::new_err("I/O operation on closed file."));
-        };
-        Ok(sparse
-            .load_records(&package_name.inner, package_format_selection.into())?
-            .into_iter()
-            .map(Into::into)
-            .collect::<Vec<_>>())
+        let inner = self.inner.clone();
+        let name = package_name.inner.clone();
+        py.allow_threads(move || {
+            let lock = inner.read();
+            let Some(sparse) = lock.as_ref() else {
+                return Err(PyValueError::new_err("I/O operation on closed file."));
+            };
+            Ok(sparse
+                .load_records(&name, package_format_selection.into())?
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<_>>())
+        })
     }
 
     pub fn load_all_records(
         &self,
+        py: Python<'_>,
         package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<Vec<PyRecord>> {
-        let lock = self.inner.read();
-        let Some(sparse) = lock.as_ref() else {
-            return Err(PyValueError::new_err("I/O operation on closed file."));
-        };
-        Ok(sparse
-            .load_all_records(package_format_selection.into())?
-            .into_iter()
-            .map(Into::into)
-            .collect::<Vec<_>>())
+        let inner = self.inner.clone();
+        py.allow_threads(move || {
+            let lock = inner.read();
+            let Some(sparse) = lock.as_ref() else {
+                return Err(PyValueError::new_err("I/O operation on closed file."));
+            };
+            Ok(sparse
+                .load_all_records(package_format_selection.into())?
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<_>>())
+        })
     }
 
     pub fn load_matching_records(
         &self,
+        py: Python<'_>,
         specs: Vec<PyRef<'_, PyMatchSpec>>,
         package_format_selection: PyPackageFormatSelection,
     ) -> PyResult<Vec<PyRecord>> {
-        let lock = self.inner.read();
-        let Some(sparse) = lock.as_ref() else {
-            return Err(PyValueError::new_err("I/O operation on closed file."));
-        };
-        Ok(sparse
-            .load_matching_records(
-                specs.iter().map(|spec| &spec.inner),
-                package_format_selection.into(),
-            )?
-            .into_iter()
-            .map(Into::into)
-            .collect::<Vec<_>>())
+        let inner = self.inner.clone();
+        let owned_specs: Vec<_> = specs.iter().map(|s| s.inner.clone()).collect();
+        py.allow_threads(move || {
+            let lock = inner.read();
+            let Some(sparse) = lock.as_ref() else {
+                return Err(PyValueError::new_err("I/O operation on closed file."));
+            };
+            Ok(sparse
+                .load_matching_records(owned_specs.iter(), package_format_selection.into())?
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<_>>())
+        })
     }
 
     #[getter]

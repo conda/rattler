@@ -189,7 +189,10 @@ pub async fn unlink_package(
             Ok(_) => {}
             Err(e) => match e.kind() {
                 // Simply ignore if the file is already gone.
-                ErrorKind::NotFound => {}
+                ErrorKind::NotFound => {
+                    // Another process may have already deleted the file. It
+                    // doesn't matter, gone is gone.
+                }
                 ErrorKind::PermissionDenied => move_to_trash(target_prefix, &p).await?,
                 _ => {
                     return Err(UnlinkError::FailedToDeleteFile(
@@ -206,9 +209,19 @@ pub async fn unlink_package(
         .join("conda-meta")
         .join(prefix_record.file_name());
 
-    tokio_fs::remove_file(&conda_meta_path).await.map_err(|e| {
-        UnlinkError::FailedToDeleteFile(conda_meta_path.to_string_lossy().to_string(), e)
-    })?;
+    match tokio_fs::remove_file(&conda_meta_path).await {
+        Ok(_) => {}
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            // Another process may have already deleted the file. It
+            // doesn't matter, gone is gone.
+        }
+        Err(e) => {
+            return Err(UnlinkError::FailedToDeleteFile(
+                conda_meta_path.to_string_lossy().to_string(),
+                e,
+            ));
+        }
+    }
 
     Ok(())
 }
@@ -268,12 +281,14 @@ mod tests {
             .unwrap();
 
         // check that the environment is completely empty except for the conda-meta
-        // folder
-        let entries = std::fs::read_dir(environment_dir.path())
+        // folder and CACHEDIR.TAG (created by Prefix::create for backup exclusion)
+        let mut entries: Vec<_> = std::fs::read_dir(environment_dir.path())
             .unwrap()
-            .collect::<Vec<_>>();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].as_ref().unwrap().file_name(), "conda-meta");
+            .filter_map(Result::ok)
+            .map(|e| e.file_name())
+            .collect();
+        entries.sort();
+        assert_eq!(entries, vec!["CACHEDIR.TAG", "conda-meta"]);
     }
 
     #[tokio::test]
@@ -333,12 +348,14 @@ mod tests {
             .unwrap();
 
         // check that the environment is completely empty except for the conda-meta
-        // folder
-        let entries = std::fs::read_dir(target_prefix.path())
+        // folder and CACHEDIR.TAG (created by Prefix::create for backup exclusion)
+        let mut entries: Vec<_> = std::fs::read_dir(target_prefix.path())
             .unwrap()
-            .collect::<Vec<_>>();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].as_ref().unwrap().file_name(), "conda-meta");
+            .filter_map(Result::ok)
+            .map(|e| e.file_name())
+            .collect();
+        entries.sort();
+        assert_eq!(entries, vec!["CACHEDIR.TAG", "conda-meta"]);
     }
 
     fn count_trash(trash_dir: &Path) -> usize {

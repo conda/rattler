@@ -34,10 +34,10 @@ features = ["pyo3/extension-module"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py38"
+target-version = "py39"
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 files = ["rattler", "tests", "examples"]
 strict = true
 enable_error_code = ["redundant-expr", "truthy-bool", "ignore-without-code"]

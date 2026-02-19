@@ -1,6 +1,6 @@
 [package]
 name = "rattler_conda_types"
-version = "0.42.3"
+version = "0.43.2"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for common types used within the Conda ecosystem"
@@ -88,4 +88,8 @@ harness = false
 
 [[bench]]
 name = "prefix_record_from_path"
+harness = false
+
+[[bench]]
+name = "matchspec_parse"
 harness = false

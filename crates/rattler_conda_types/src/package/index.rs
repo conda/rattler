@@ -35,7 +35,7 @@ pub struct IndexJson {
     pub constrains: Vec<String>,
 
     /// The dependencies of the package
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub depends: Vec<String>,
 
     /// Extra dependency groups that can be selected using `foobar[extras=["scientific"]]`
@@ -86,7 +86,7 @@ pub struct IndexJson {
     /// Track features are nowadays only used to downweight packages (ie. give
     /// them less priority). To that effect, the number of track features is
     /// counted (number of commas) and the package is downweighted
-    /// by the number of track_features.
+    /// by the number of `track_features`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[serde_as(as = "crate::utils::serde::Features")]
     pub track_features: Vec<String>,

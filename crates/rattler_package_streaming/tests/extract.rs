@@ -287,7 +287,9 @@ fn test_extract_flaky_conda(#[values(0, 1, 13, 50, 74, 150, 8096, 16384, 20000)]
     assert_matches::assert_matches!(result, ExtractError::IoError(_));
 }
 
-#[rstest]
+// Skip on windows as the test package contains symbolic links
+#[cfg_attr(target_os = "windows", ignore)]
+#[test]
 fn test_extract_data_descriptor_package_fails_streaming_and_uses_buffering() {
     let package_path = "tests/resources/ca-certificates-2024.7.4-hbcca054_0.conda";
 

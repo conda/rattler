@@ -3,6 +3,7 @@ use std::{collections::BTreeMap, str::FromStr, time::Instant};
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
+    package::{ArchiveIdentifier, CondaArchiveType, DistArchiveIdentifier, DistArchiveType},
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageName,
     PackageRecord, ParseMatchSpecOptions, ParseStrictness, RepoData, RepoDataRecord, SolverResult,
     Version,
@@ -104,7 +105,14 @@ impl PackageBuilder {
             record: RepoDataRecord {
                 url: Url::from_str("http://example.com").unwrap(),
                 channel: None,
-                file_name: format!("dummy-filename-{name}"),
+                identifier: DistArchiveIdentifier {
+                    identifier: ArchiveIdentifier {
+                        name: name.to_string(),
+                        version: "0.0.0".to_string(),
+                        build_string: "h123456_0".to_string(),
+                    },
+                    archive_type: DistArchiveType::Conda(CondaArchiveType::Conda),
+                },
                 package_record: PackageRecord {
                     name: name.parse().unwrap(),
                     version: Version::from_str("0.0.0").unwrap().into(),
@@ -399,7 +407,10 @@ macro_rules! solver_backend_tests {
             assert_eq!(1, pkgs.records.len());
             let info = &pkgs.records[0];
 
-            assert_eq!("foo-3.0.2-py36h1af98f8_3.conda", info.file_name);
+            assert_eq!(
+                "foo-3.0.2-py36h1af98f8_3.conda",
+                info.identifier.to_string()
+            );
             assert_eq!(
                 "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_3.conda",
                 info.url.to_string()
@@ -448,7 +459,7 @@ macro_rules! solver_backend_tests {
             // The .conda entry is selected for installing
             assert_eq!(operations.records.len(), 1);
             assert_eq!(
-                operations.records[0].file_name,
+                operations.records[0].identifier.to_string(),
                 "foo-3.0.2-py36h1af98f8_1.conda"
             );
         }
@@ -714,7 +725,10 @@ mod libsolv_c {
         assert_eq!(1, pkgs.len());
         let info = &pkgs[0];
 
-        assert_eq!("foo-3.0.2-py36h1af98f8_3.conda", info.file_name);
+        assert_eq!(
+            "foo-3.0.2-py36h1af98f8_3.conda",
+            info.identifier.to_string()
+        );
         assert_eq!(
             "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_3.conda",
             info.url.to_string()
@@ -750,7 +764,8 @@ mod libsolv_c {
 #[cfg(feature = "resolvo")]
 mod resolvo {
     use rattler_conda_types::{
-        MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord, VersionWithSource,
+        package::DistArchiveIdentifier, MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord,
+        VersionWithSource,
     };
     use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
     use url::Url;
@@ -781,7 +796,7 @@ mod resolvo {
             },
         );
 
-        // We expect an error here. `bors` is pinnend to 1, but we try to install `>=2`.
+        // We expect an error here. `bors` is pinned to 1, but we try to install `>=2`.
         insta::assert_snapshot!(result.unwrap_err());
     }
 
@@ -795,7 +810,7 @@ mod resolvo {
             },
         );
 
-        // We expect an error here. `bors` is pinnend to 1, but we try to install `>=2`.
+        // We expect an error here. `bors` is pinned to 1, but we try to install `>=2`.
         insta::assert_snapshot!(result.unwrap_err());
     }
 
@@ -838,7 +853,7 @@ mod resolvo {
         let repo_data: Vec<RepoDataRecord> = vec![RepoDataRecord {
             package_record: package_record.clone(),
             // Mocking the rest of the fields
-            file_name: url_str.to_string(),
+            identifier: DistArchiveIdentifier::try_from_url(&url).unwrap(),
             url: url.clone(),
             channel: None,
         }];
@@ -871,7 +886,7 @@ mod resolvo {
 
         let repo_data: Vec<RepoDataRecord> = vec![RepoDataRecord {
             package_record,
-            file_name: url_str.to_string(),
+            identifier: DistArchiveIdentifier::try_from_url(&url).unwrap(),
             url: Url::from_str("https://false.dont").unwrap(),
             channel: None,
         }];
