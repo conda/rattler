@@ -523,6 +523,12 @@ pip-24.0-pyhd8ed1ab_0
 # conda version: 24.1.0
 # remove specs: ['pip']
 -pip-24.0-pyhd8ed1ab_0
+
+==> 2024-01-18 10:00:00 <==
+# cmd: conda install scipy
+# conda version: 24.1.0
+# neutered specs: ['numpy']
++scipy-1.11.4-py312h1234567_0
 ";
 
     #[test]
@@ -534,7 +540,7 @@ pip-24.0-pyhd8ed1ab_0
     #[test]
     fn parse_revisions() {
         let parsed = History::parse_str(SAMPLE_HISTORY).unwrap();
-        assert_eq!(parsed.len(), 3);
+        assert_eq!(parsed.len(), 4);
 
         let revisions = &parsed.revisions;
 
@@ -555,13 +561,20 @@ pip-24.0-pyhd8ed1ab_0
         assert_eq!(revisions[2].timestamp, "2024-01-17 09:00:00");
         assert_eq!(revisions[2].packages.len(), 1);
         assert!(revisions[2].packages.contains("-pip-24.0-pyhd8ed1ab_0"));
+
+        // Fourth revision: neutered specs.
+        assert_eq!(revisions[3].timestamp, "2024-01-18 10:00:00");
+        assert_eq!(revisions[3].packages.len(), 1);
+        assert!(revisions[3]
+            .packages
+            .contains("+scipy-1.11.4-py312h1234567_0"));
     }
 
     #[test]
     fn parse_user_requests() {
         let parsed = History::parse_str(SAMPLE_HISTORY).unwrap();
         let requests = parsed.user_requests();
-        assert_eq!(requests.len(), 3);
+        assert_eq!(requests.len(), 4);
 
         // First request: create.
         assert_eq!(requests[0].date, "2024-01-15 10:30:00");
@@ -580,6 +593,10 @@ pip-24.0-pyhd8ed1ab_0
         // Third request: remove.
         assert_eq!(requests[2].action.as_deref(), Some("remove"));
         assert_eq!(requests[2].remove_specs, vec!["pip"]);
+
+        // Fourth request: neutered.
+        assert_eq!(requests[3].action.as_deref(), Some("neutered"));
+        assert_eq!(requests[3].neutered_specs, vec!["numpy"]);
     }
 
     #[test]
