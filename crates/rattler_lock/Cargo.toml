@@ -35,3 +35,11 @@ insta = { workspace = true, features = ["yaml"] }
 serde_json = { workspace = true }
 similar-asserts = { workspace = true }
 rstest = { workspace = true }
+criterion = "0.5"
+flate2 = "1"
+tempfile = "3"
+	
+[[bench]]
+name = "lock_file_size"
+harness = false
+
