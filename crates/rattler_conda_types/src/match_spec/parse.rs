@@ -330,6 +330,9 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
     }
 
     /// Parses a value in a bracket string.
+    /// Double-quoted values support `\"` (escaped double-quote) and `\\`
+    /// (escaped backslash), so that string fields such as `license` can safely
+    /// contain a `"` character.
     fn parse_value(input: &str) -> IResult<&str, &str> {
         whitespace_enclosed(context(
             "value",
@@ -464,7 +467,7 @@ fn parse_bracket_vec_into_components(
                         .ok_or(ParseMatchSpecError::InvalidHashDigest)?,
                 );
             }
-            "fn" => match_spec.file_name = Some(value.to_string()),
+            "fn" => match_spec.file_name = Some(unescape_string(value).into_owned()),
             "url" => {
                 // Is the spec an url, parse it as an url
                 let url = if parse_scheme(value).is_some() {
@@ -487,10 +490,11 @@ fn parse_bracket_vec_into_components(
                 match_spec.channel = match_spec.channel.or(channel.map(Arc::new));
                 match_spec.subdir = match_spec.subdir.or(subdir);
             }
-            "license" => match_spec.license = Some(value.to_string()),
+            "license" => match_spec.license = Some(unescape_string(value).into_owned()),
             "track_features" => {
+                let unescaped = unescape_string(value);
                 match_spec.track_features = Some(
-                    value
+                    unescaped
                         .split([',', ' ']) // Split on BOTH comma and space
                         .map(str::trim) // Remove surrounding whitespace
                         .filter(|s| !s.is_empty()) // Filter out empty strings from "a, b"

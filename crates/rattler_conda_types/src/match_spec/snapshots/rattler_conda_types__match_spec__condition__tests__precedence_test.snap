@@ -4,12 +4,8 @@ expression: result
 ---
 Or:
   - And:
-      - MatchSpec:
-          name: a
-      - MatchSpec:
-          name: b
+      - MatchSpec: a
+      - MatchSpec: b
   - And:
-      - MatchSpec:
-          name: c
-      - MatchSpec:
-          name: d
+      - MatchSpec: c
+      - MatchSpec: d

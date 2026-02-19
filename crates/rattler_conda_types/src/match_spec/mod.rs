@@ -8,8 +8,10 @@ use crate::{
 use itertools::Itertools;
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::de::Error as DeError;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{serde_as, skip_serializing_none};
+use std::borrow::Cow;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::str::FromStr;
@@ -135,9 +137,13 @@ use parse::escape_bracket_value;
 /// In the future, the namespace field might be added to this list.
 ///
 /// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
-#[skip_serializing_none]
-#[serde_as]
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+///
+/// # Serialization
+///
+/// `MatchSpec` serializes to and deserializes from its string representation
+/// (e.g. `"conda-forge::numpy >=1.20 py39_0"`). This means `Vec<MatchSpec>` can
+/// be used directly without needing `#[serde_as(as = "Vec<DisplayFromStr>")]`.
+#[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct MatchSpec {
     /// The name of the package
     pub name: Option<PackageNameMatcher>,
@@ -158,10 +164,8 @@ pub struct MatchSpec {
     /// The namespace of the package (currently not used)
     pub namespace: Option<String>,
     /// The md5 hash of the package
-    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub md5: Option<Md5Hash>,
     /// The sha256 hash of the package
-    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub sha256: Option<Sha256Hash>,
     /// The url of the package
     pub url: Option<Url>,
@@ -171,6 +175,22 @@ pub struct MatchSpec {
     pub condition: Option<MatchSpecCondition>,
     /// The track features of the package
     pub track_features: Option<Vec<String>>,
+}
+
+/// Serialize a [`MatchSpec`] as its string representation.
+impl Serialize for MatchSpec {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+/// Deserialize a [`MatchSpec`] from its string representation using lenient
+/// parsing (the default `ParseMatchSpecOptions`).
+impl<'de> Deserialize<'de> for MatchSpec {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = Cow::<'de, str>::deserialize(deserializer)?;
+        Self::from_str(&s, crate::ParseMatchSpecOptions::default()).map_err(DeError::custom)
+    }
 }
 
 impl Display for MatchSpec {
@@ -222,21 +242,22 @@ impl Display for MatchSpec {
         }
 
         if let Some(file_name) = &self.file_name {
-            keys.push(format!("fn=\"{file_name}\""));
+            keys.push(format!("fn=\"{}\"", escape_bracket_value(file_name)));
         }
 
         if let Some(url) = &self.url {
-            keys.push(format!("url=\"{url}\""));
+            keys.push(format!("url=\"{}\"", escape_bracket_value(url.as_str())));
         }
 
         if let Some(license) = &self.license {
-            keys.push(format!("license=\"{license}\""));
+            keys.push(format!("license=\"{}\"", escape_bracket_value(license)));
         }
 
         if let Some(track_features) = &self.track_features {
+            let joined = track_features.iter().format(" ").to_string();
             keys.push(format!(
                 "track_features=\"{}\"",
-                track_features.iter().format(" ")
+                escape_bracket_value(&joined)
             ));
         }
 
@@ -301,7 +322,7 @@ impl From<PackageName> for MatchSpec {
 }
 
 /// Similar to a [`MatchSpec`] but does not include the package name. This is useful in places
-/// where the package name is already known (e.g. `foo = "3.4.1 *cuda"`)
+/// where the package name is already known (e.g. `foo = "3.4.1 *cuda"`).
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
@@ -417,9 +438,6 @@ impl MatchSpec {
     }
 }
 
-/// Deserialize channel from string
-/// TODO: This should be refactored so that the front ends are the one setting the channel config,
-/// and rattler only takes care of the url.
 fn deserialize_channel<'de, D>(deserializer: D) -> Result<Option<Arc<Channel>>, D::Error>
 where
     D: Deserializer<'de>,
@@ -1005,6 +1023,75 @@ mod tests {
             .map(|s| serde_json::to_string(&s).unwrap())
             .format("\n")
             .to_string());
+    }
+
+    /// Verifies that `Vec<MatchSpec>` can round-trip through JSON serialization
+    /// without any `#[serde_as(as = "Vec<DisplayFromStr>")]` wrapper.
+    /// This is the core use-case from <https://github.com/conda/rattler/issues/847>.
+    ///
+    /// Also checks that specs containing key-value bracket fields with quoted
+    /// values (e.g. `sha256="…"`, `fn="…"`) round-trip correctly — the JSON
+    /// encoder escapes the inner double-quotes and the parser accepts them on
+    /// the way back in.
+    #[test]
+    fn test_serde_roundtrip() {
+        let specs: Vec<MatchSpec> = [
+            "numpy >=1.20",
+            "conda-forge::pytest 1.0.* py37_0",
+            "conda-forge/linux-64::pytest ==1.2.3",
+            // Spec with sha256 + md5 — Display emits `sha256="…"` / `md5="…"`
+            // which JSON encodes as `sha256=\"…\"`.  The parser must accept
+            // the escaped double-quotes on deserialization.
+            "conda-forge::pytest ==1.0[sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]",
+        ]
+        .iter()
+        .map(|s| MatchSpec::from_str(s, Strict).expect("valid MatchSpec input"))
+        .collect();
+
+        let json =
+            serde_json::to_string(&specs).expect("MatchSpec should serialize to a JSON string");
+        let deserialized: Vec<MatchSpec> = serde_json::from_str(&json)
+            .expect("MatchSpec should deserialize back from its serialized JSON string");
+        assert_eq!(
+            specs, deserialized,
+            "MatchSpec round-trip failed: serialized as {json}"
+        );
+    }
+
+    /// Verifies that string fields in bracket notation that contain a `"` are
+    /// correctly escaped (`\"`) in `Display` output and unescaped when parsed
+    /// back, so the full `MatchSpec` round-trips without data loss.
+    /// This is the specific concern raised during code review of issue #847.
+    #[test]
+    fn test_escaped_bracket_value_roundtrip() {
+        let mut spec = MatchSpec::from_str("numpy >=1.20", Strict).expect("valid MatchSpec");
+        // A license that contains a double-quote character.
+        spec.license = Some(r#"MIT "compatible""#.to_string());
+
+        // Display must escape the `"` inside the bracket value.
+        let display_str = spec.to_string();
+        assert!(
+            display_str.contains(r#"license="MIT \"compatible\""#),
+            "expected escaped quote in display output, got: {display_str}"
+        );
+
+        // from_str must unescape it back to the original value.
+        let parsed_back = MatchSpec::from_str(&display_str, Strict).unwrap_or_else(|e| {
+            panic!("Display output with escaped quote failed to parse: {e}\n  input: {display_str}")
+        });
+        assert_eq!(
+            spec, parsed_back,
+            "license with embedded `\"` failed Display→parse round-trip: {display_str}"
+        );
+
+        // The JSON serde path must also round-trip correctly.
+        let json = serde_json::to_string(&spec).expect("should serialize to JSON");
+        let from_json: MatchSpec =
+            serde_json::from_str(&json).expect("should deserialize from JSON");
+        assert_eq!(
+            spec, from_json,
+            "license with embedded `\"` failed JSON round-trip"
+        );
     }
 
     #[rstest]
