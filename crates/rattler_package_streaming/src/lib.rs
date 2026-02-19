@@ -80,6 +80,42 @@ impl From<Cancelled> for ExtractError {
     }
 }
 
+impl ExtractError {
+    /// Returns true if this error is transient and the operation should be retried.
+    ///
+    /// This checks for common transient I/O errors like broken pipes,
+    /// connection resets, and unexpected EOF that can occur during
+    /// network streaming operations.
+    pub fn should_retry(&self) -> bool {
+        match self {
+            // Retry only on transient I/O errors - permanent errors should fail fast
+            ExtractError::IoError(err) => match err.kind() {
+                std::io::ErrorKind::WouldBlock
+                | std::io::ErrorKind::Interrupted
+                | std::io::ErrorKind::TimedOut
+                | std::io::ErrorKind::BrokenPipe
+                | std::io::ErrorKind::ConnectionReset
+                | std::io::ErrorKind::ConnectionAborted
+                | std::io::ErrorKind::UnexpectedEof => true,
+                // Permanent errors should not be retried
+                _ => false,
+            },
+            ExtractError::CouldNotCreateDestination(_) => true,
+            #[cfg(feature = "reqwest")]
+            ExtractError::ReqwestError(err) => {
+                // Check if this is a connection error (includes broken pipe during connection)
+                match err {
+                    ::reqwest_middleware::Error::Reqwest(reqwest_err) => {
+                        reqwest_err.is_connect() || reqwest_err.is_timeout()
+                    }
+                    ::reqwest_middleware::Error::Middleware(_) => false,
+                }
+            }
+            _ => false,
+        }
+    }
+}
+
 #[cfg(feature = "reqwest")]
 impl From<::reqwest_middleware::Error> for ExtractError {
     fn from(err: ::reqwest_middleware::Error) -> Self {
@@ -108,4 +144,145 @@ pub trait DownloadReporter: Send + Sync {
     fn on_download_progress(&self, bytes_downloaded: u64, total_bytes: Option<u64>);
     /// Called when the download finishes.
     fn on_download_complete(&self);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_should_retry_io_error_interrupted() {
+        let err = ExtractError::IoError(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "interrupted",
+        ));
+        assert!(err.should_retry());
+    }
+
+    #[test]
+    fn test_should_retry_io_error_broken_pipe() {
+        let err = ExtractError::IoError(std::io::Error::new(
+            std::io::ErrorKind::BrokenPipe,
+            "broken pipe",
+        ));
+        assert!(err.should_retry());
+    }
+
+    #[test]
+    fn test_should_retry_io_error_connection_reset() {
+        let err = ExtractError::IoError(std::io::Error::new(
+            std::io::ErrorKind::ConnectionReset,
+            "connection reset",
+        ));
+        assert!(err.should_retry());
+    }
+
+    #[test]
+    fn test_should_retry_io_error_connection_aborted() {
+        let err = ExtractError::IoError(std::io::Error::new(
+            std::io::ErrorKind::ConnectionAborted,
+            "connection aborted",
+        ));
+        assert!(err.should_retry());
+    }
+
+    #[test]
+    fn test_should_retry_io_error_connection_refused() {
+        let err = ExtractError::IoError(std::io::Error::new(
+            std::io::ErrorKind::ConnectionRefused,
+            "connection refused",
+        ));
+        assert!(err.should_retry());
+    }
+
+    #[test]
+    fn test_should_retry_io_error_not_connected() {
+        let err = ExtractError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotConnected,
+            "not connected",
+        ));
+        assert!(err.should_retry());
+    }
+
+    #[test]
+    fn test_should_retry_io_error_unexpected_eof() {
+        let err = ExtractError::IoError(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "unexpected eof",
+        ));
+        assert!(err.should_retry());
+    }
+
+    #[test]
+    fn test_should_retry_io_error_not_found() {
+        // NotFound is a permanent error and should not be retried
+        let err = ExtractError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "not found",
+        ));
+        assert!(!err.should_retry());
+    }
+
+    #[test]
+    fn test_should_retry_io_error_permission_denied() {
+        // PermissionDenied is a permanent error and should not be retried
+        let err = ExtractError::IoError(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "permission denied",
+        ));
+        assert!(!err.should_retry());
+    }
+
+    #[test]
+    fn test_should_retry_could_not_create_destination() {
+        let err = ExtractError::CouldNotCreateDestination(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "could not create",
+        ));
+        assert!(err.should_retry());
+    }
+
+    #[test]
+    fn test_should_not_retry_hash_mismatch() {
+        let err = ExtractError::HashMismatch {
+            url: String::from("http://test.com"),
+            destination: String::from("/tmp/test"),
+            expected: String::from("abc123"),
+            actual: String::from("def456"),
+            total_size: 100,
+        };
+        assert!(!err.should_retry());
+    }
+
+    #[test]
+    fn test_should_not_retry_zip_error() {
+        let err = ExtractError::ZipError(zip::result::ZipError::InvalidArchive(
+            std::borrow::Cow::Borrowed("invalid"),
+        ));
+        assert!(!err.should_retry());
+    }
+
+    #[test]
+    fn test_should_not_retry_missing_component() {
+        let err = ExtractError::MissingComponent;
+        assert!(!err.should_retry());
+    }
+
+    #[test]
+    fn test_should_not_retry_unsupported_compression() {
+        let err = ExtractError::UnsupportedCompressionMethod;
+        assert!(!err.should_retry());
+    }
+
+    #[test]
+    fn test_should_not_retry_unsupported_archive_type() {
+        let err = ExtractError::UnsupportedArchiveType;
+        assert!(!err.should_retry());
+    }
+
+    #[test]
+    fn test_should_not_retry_cancelled() {
+        let err = ExtractError::Cancelled;
+        assert!(!err.should_retry());
+    }
 }

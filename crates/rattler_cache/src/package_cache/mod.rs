@@ -538,12 +538,12 @@ impl PackageCache {
                         Err(err) => err,
                     };
 
-                    // Only retry on io errors. We assume that the user has
-                    // middleware installed that handles connection retries.
+                    // Check if we should retry this error. We assume that the
+                    // user has middleware installed that handles connection
+                    // retries, but we still need to handle streaming failures
+                    // that occur after a successful response.
 
-                    if !matches!(&err,
-                        ExtractError::IoError(_) | ExtractError::CouldNotCreateDestination(_)
-                    ) {
+                    if !err.should_retry() {
                         return Err(err);
                     }
 
@@ -957,9 +957,68 @@ mod test {
         Ok(response)
     }
 
+    /// A helper middleware function that simulates a broken pipe error
+    /// by returning a stream that errors after sending partial data.
+    #[allow(clippy::type_complexity)]
+    async fn fail_with_broken_pipe(
+        State((count, bytes)): State<(Arc<Mutex<i32>>, Arc<Mutex<usize>>)>,
+        req: Request<Body>,
+        next: Next,
+    ) -> Result<Response, StatusCode> {
+        let count = {
+            let mut count = count.lock().await;
+            *count += 1;
+            *count
+        };
+
+        println!(
+            "Running broken pipe middleware for request #{count} for {}",
+            req.uri()
+        );
+        let response = next.run(req).await;
+
+        if count <= 2 {
+            // Get the full response body
+            let body = response.into_body();
+            let mut body = body.into_data_stream();
+            let mut buffer = Vec::new();
+            while let Some(Ok(chunk)) = body.next().await {
+                buffer.extend(chunk);
+            }
+
+            let byte_count = *bytes.lock().await;
+            // Create a stream that yields partial data then fails with broken pipe
+            let partial_data: Bytes = buffer.into_iter().take(byte_count).collect::<Vec<u8>>().into();
+
+            let stream = stream::unfold(
+                (false, partial_data),
+                |(has_sent, data)| async move {
+                    if has_sent {
+                        // Return broken pipe error on second iteration
+                        return Some((
+                            Err(std::io::Error::new(
+                                std::io::ErrorKind::BrokenPipe,
+                                "stream closed because of a broken pipe",
+                            )),
+                            (true, data),
+                        ));
+                    }
+                    // Return the partial data first
+                    Some((Ok::<_, std::io::Error>(data.clone()), (true, data)))
+                },
+            );
+
+            let body = Body::from_stream(stream);
+            return Ok(Response::new(body));
+        }
+
+        Ok(response)
+    }
+
     enum Middleware {
         FailTheFirstTwoRequests,
         FailAfterBytes(usize),
+        FailWithBrokenPipe(usize),
     }
 
     async fn redirect_to_prefix(
@@ -987,6 +1046,10 @@ mod test {
             Middleware::FailAfterBytes(size) => router.layer(middleware::from_fn_with_state(
                 (request_count.clone(), Arc::new(Mutex::new(size))),
                 fail_with_half_package,
+            )),
+            Middleware::FailWithBrokenPipe(size) => router.layer(middleware::from_fn_with_state(
+                (request_count.clone(), Arc::new(Mutex::new(size))),
+                fail_with_broken_pipe,
             )),
         };
 
@@ -1060,6 +1123,11 @@ mod test {
         test_flaky_package_cache(tar_bz2, Middleware::FailAfterBytes(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailAfterBytes(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailAfterBytes(50)).await;
+
+        // Test broken pipe errors - should retry and succeed on 3rd attempt
+        test_flaky_package_cache(tar_bz2, Middleware::FailWithBrokenPipe(1000)).await;
+        test_flaky_package_cache(conda, Middleware::FailWithBrokenPipe(1000)).await;
+        test_flaky_package_cache(conda, Middleware::FailWithBrokenPipe(50)).await;
     }
 
     #[tokio::test]
