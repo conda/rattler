@@ -8,6 +8,7 @@ mod build_spec;
 mod channel;
 mod channel_data;
 mod explicit_environment_spec;
+pub mod history;
 pub mod match_spec;
 pub mod menuinst;
 mod no_arch_type;
@@ -42,6 +43,7 @@ pub use explicit_environment_spec::{
     ParseExplicitEnvironmentSpecError, ParsePackageArchiveHashError,
 };
 pub use generic_virtual_package::GenericVirtualPackage;
+pub use history::{History, HistoryError, HistoryRevision, UserRequest};
 pub use match_spec::condition::MatchSpecCondition;
 pub use match_spec::package_name_matcher::{PackageNameMatcher, PackageNameMatcherParseError};
 pub use match_spec::{
