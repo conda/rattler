@@ -2,6 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyValueError;
@@ -44,11 +45,10 @@ pub struct PyRecord {
 }
 
 #[derive(Clone)]
-#[allow(clippy::large_enum_variant)]
 pub enum RecordInner {
-    Prefix(PrefixRecord),
-    RepoData(RepoDataRecord),
-    Package(PackageRecord),
+    Prefix(Arc<PrefixRecord>),
+    RepoData(Arc<RepoDataRecord>),
+    Package(Arc<PackageRecord>),
 }
 
 impl PyRecord {
@@ -72,8 +72,8 @@ impl PyRecord {
 
     pub fn try_as_repodata_record_mut(&mut self) -> PyResult<&mut RepoDataRecord> {
         match &mut self.inner {
-            RecordInner::Prefix(r) => Ok(&mut r.repodata_record),
-            RecordInner::RepoData(r) => Ok(r),
+            RecordInner::Prefix(r) => Ok(&mut Arc::make_mut(r).repodata_record),
+            RecordInner::RepoData(r) => Ok(Arc::make_mut(r)),
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
             )),
@@ -94,7 +94,7 @@ impl PyRecord {
 
     pub fn try_as_prefix_record_mut(&mut self) -> PyResult<&mut PrefixRecord> {
         match &mut self.inner {
-            RecordInner::Prefix(r) => Ok(r),
+            RecordInner::Prefix(r) => Ok(Arc::make_mut(r)),
             RecordInner::RepoData(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'RepoDataRecord' as 'PrefixRecord'",
             )),
@@ -161,7 +161,7 @@ impl PyRecord {
     ) -> Self {
         let noarch = noarch.map(Into::into);
         Self {
-            inner: RecordInner::Package(PackageRecord {
+            inner: RecordInner::Package(Arc::new(PackageRecord {
                 name: name.into(),
                 version: VersionWithSource::new(version.0.inner.clone(), version.1),
                 build,
@@ -186,7 +186,7 @@ impl PyRecord {
                 size: None,
                 timestamp: None,
                 track_features: Vec::new(),
-            }),
+            })),
         }
     }
 
@@ -212,7 +212,7 @@ impl PyRecord {
         })?;
 
         Ok(Self {
-            inner: RecordInner::RepoData(RepoDataRecord {
+            inner: RecordInner::RepoData(Arc::new(RepoDataRecord {
                 package_record: package_record.as_package_record().clone(),
                 identifier,
                 url: Url::parse(&url).map_err(PyRattlerError::from)?,
@@ -220,7 +220,7 @@ impl PyRecord {
                     .map(|channel| Url::parse(&channel).map_err(PyRattlerError::from))
                     .transpose()?
                     .map(Into::into),
-            }),
+            })),
         })
     }
 
@@ -245,7 +245,7 @@ impl PyRecord {
 
         #[allow(deprecated)]
         Ok(Self {
-            inner: RecordInner::Prefix(PrefixRecord {
+            inner: RecordInner::Prefix(Arc::new(PrefixRecord {
                 repodata_record: repodata_record.try_as_repodata_record().unwrap().clone(),
                 package_tarball_full_path,
                 extracted_package_dir,
@@ -256,7 +256,7 @@ impl PyRecord {
                 requested_specs: requested_specs.unwrap_or_default(),
                 // TODO wire up support
                 installed_system_menus: Vec::new(),
-            }),
+            })),
         })
     }
 
@@ -697,9 +697,9 @@ impl PyRecord {
 
     pub fn to_json(&self) -> PyResult<String> {
         match &self.inner {
-            RecordInner::Prefix(r) => serde_json::to_string_pretty(&r),
-            RecordInner::RepoData(r) => serde_json::to_string_pretty(&r),
-            RecordInner::Package(r) => serde_json::to_string_pretty(&r),
+            RecordInner::Prefix(r) => serde_json::to_string_pretty(r.as_ref()),
+            RecordInner::RepoData(r) => serde_json::to_string_pretty(r.as_ref()),
+            RecordInner::Package(r) => serde_json::to_string_pretty(r.as_ref()),
         }
         .map_err(|e| PyValueError::new_err(format!("Failed to serialize record to JSON: {e}")))
     }
@@ -708,7 +708,7 @@ impl PyRecord {
 impl From<PrefixRecord> for PyRecord {
     fn from(value: PrefixRecord) -> Self {
         Self {
-            inner: RecordInner::Prefix(value),
+            inner: RecordInner::Prefix(Arc::new(value)),
         }
     }
 }
@@ -717,7 +717,7 @@ impl TryFrom<PyRecord> for PrefixRecord {
     type Error = PyErr;
     fn try_from(value: PyRecord) -> Result<Self, Self::Error> {
         match value.inner {
-            RecordInner::Prefix(r) => Ok(r),
+            RecordInner::Prefix(r) => Ok(Arc::unwrap_or_clone(r)),
             RecordInner::RepoData(_) => Err(PyTypeError::new_err(
                 "cannot use object of type 'RepoDataRecord' as 'PrefixRecord'",
             )),
@@ -748,6 +748,14 @@ impl<'a> TryFrom<Bound<'a, PyAny>> for PyRecord {
 impl From<RepoDataRecord> for PyRecord {
     fn from(value: RepoDataRecord) -> Self {
         Self {
+            inner: RecordInner::RepoData(Arc::new(value)),
+        }
+    }
+}
+
+impl From<Arc<RepoDataRecord>> for PyRecord {
+    fn from(value: Arc<RepoDataRecord>) -> Self {
+        Self {
             inner: RecordInner::RepoData(value),
         }
     }
@@ -757,8 +765,8 @@ impl TryFrom<PyRecord> for RepoDataRecord {
     type Error = PyErr;
     fn try_from(value: PyRecord) -> Result<Self, Self::Error> {
         match value.inner {
-            RecordInner::Prefix(r) => Ok(r.repodata_record),
-            RecordInner::RepoData(r) => Ok(r),
+            RecordInner::Prefix(r) => Ok(Arc::unwrap_or_clone(r).repodata_record),
+            RecordInner::RepoData(r) => Ok(Arc::unwrap_or_clone(r)),
             RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
             )),
@@ -769,7 +777,7 @@ impl TryFrom<PyRecord> for RepoDataRecord {
 impl From<PackageRecord> for PyRecord {
     fn from(value: PackageRecord) -> Self {
         Self {
-            inner: RecordInner::Package(value),
+            inner: RecordInner::Package(Arc::new(value)),
         }
     }
 }
@@ -793,9 +801,9 @@ impl AsRef<PackageRecord> for PyRecord {
 impl AsMut<PackageRecord> for PyRecord {
     fn as_mut(&mut self) -> &mut PackageRecord {
         match &mut self.inner {
-            RecordInner::Prefix(r) => &mut r.repodata_record.package_record,
-            RecordInner::RepoData(r) => &mut r.package_record,
-            RecordInner::Package(r) => r,
+            RecordInner::Prefix(r) => &mut Arc::make_mut(r).repodata_record.package_record,
+            RecordInner::RepoData(r) => &mut Arc::make_mut(r).package_record,
+            RecordInner::Package(r) => Arc::make_mut(r),
         }
     }
 }

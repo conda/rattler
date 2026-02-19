@@ -177,13 +177,12 @@ impl PyGateway {
 
             let repodatas = query.execute().await.map_err(PyRattlerError::from)?;
 
-            // Convert the records into a list of lists
+            // Convert the records into a list of lists (Arc clone, not deep copy)
             Ok(repodatas
                 .into_iter()
                 .map(|r| {
-                    r.into_iter()
-                        .cloned()
-                        .map(PyRecord::from)
+                    r.iter_arc()
+                        .map(|arc| PyRecord::from(arc.clone()))
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>())
@@ -287,7 +286,7 @@ impl<'py> FromPyObject<'py> for Wrap<CacheAction> {
             v => {
                 return Err(PyValueError::new_err(format!(
                     "cache action must be one of {{'cache-or-fetch', 'use-cache-only', 'force-cache-only', 'no-cache'}}, got {v}",
-                )))
+                )));
             }
         };
         Ok(Wrap(parsed))
@@ -343,8 +342,8 @@ impl<'py> FromPyObject<'py> for Wrap<Variant> {
             "current" => Variant::Current,
             v => {
                 return Err(PyValueError::new_err(format!(
-                "variant must be one of {{'after-patches', 'from-packages', 'current'}}, got {v}",
-            )))
+                    "variant must be one of {{'after-patches', 'from-packages', 'current'}}, got {v}",
+                )));
             }
         };
         Ok(Wrap(parsed))

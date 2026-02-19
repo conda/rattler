@@ -89,3 +89,7 @@ harness = false
 [[bench]]
 name = "prefix_record_from_path"
 harness = false
+
+[[bench]]
+name = "matchspec_parse"
+harness = false
