@@ -41,6 +41,12 @@ pixi run fmt                  # format Python code
 pixi run test                 # run Python tests
 ```
 
+## Code Quality
+
+The project enforces strict clippy lints via `.cargo/config.toml` (70+ rules). Key ones: no `todo!()`, no `dbg!()`, no wildcard imports, no `enum_glob_use`, uninlined format args warned.
+
+Always run `pixi run cargo-fmt` and `pixi run cargo-clippy` after doing changes.
+
 ## Workspace Architecture
 
 Monorepo with 25+ crates in `crates/`, Python bindings in `py-rattler/`, and WASM/JS bindings in `js-rattler/`.
@@ -64,12 +70,6 @@ PyO3-based, built with maturin. Async Rust functions are exposed via tokio runti
 
 ### JS/WASM bindings (js-rattler)
 wasm-bindgen based, primarily exposes version comparison for use in mambajs. Located in `js-rattler/`.
-
-## Code Quality
-
-The project enforces strict clippy lints via `.cargo/config.toml` (70+ rules). Key ones: no `todo!()`, no `dbg!()`, no wildcard imports, no `enum_glob_use`, uninlined format args warned.
-
-Always run `pixi run cargo-fmt` and `pixi run cargo-clippy` after doing changes.
 
 ## AI Policy
 
