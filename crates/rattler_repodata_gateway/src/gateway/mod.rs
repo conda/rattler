@@ -1634,6 +1634,92 @@ mod test {
         );
     }
 
+    /// Verify that glob pattern queries discover matching packages across
+    /// multiple channels *and* multiple subdirs, even when each source
+    /// carries a disjoint set of package names.
+    #[tokio::test]
+    async fn test_glob_pattern_across_multiple_channels_and_subdirs() {
+        use rattler_conda_types::ParseStrictnessWithNameMatcher;
+
+        let gateway = Gateway::new();
+
+        // --- Source A: has lib-foo on linux-64 and lib-bar on noarch ----------
+        let mut source_a = MockRepoDataSource::new();
+        source_a.add_record(
+            Platform::Linux64,
+            make_test_record("lib-foo", "1.0.0", "linux-64"),
+        );
+        source_a.add_record(
+            Platform::NoArch,
+            make_test_record("lib-bar", "2.0.0", "noarch"),
+        );
+        // A non-matching package that should be excluded.
+        source_a.add_record(
+            Platform::Linux64,
+            make_test_record("unrelated", "1.0.0", "linux-64"),
+        );
+
+        // --- Source B: has lib-baz on linux-64 and lib-qux on noarch ---------
+        let mut source_b = MockRepoDataSource::new();
+        source_b.add_record(
+            Platform::Linux64,
+            make_test_record("lib-baz", "3.0.0", "linux-64"),
+        );
+        source_b.add_record(
+            Platform::NoArch,
+            make_test_record("lib-qux", "4.0.0", "noarch"),
+        );
+        // Another non-matching package.
+        source_b.add_record(
+            Platform::NoArch,
+            make_test_record("other-pkg", "1.0.0", "noarch"),
+        );
+
+        let src_a: Arc<dyn super::RepoDataSource> = Arc::new(source_a);
+        let src_b: Arc<dyn super::RepoDataSource> = Arc::new(source_b);
+
+        // Glob that matches every "lib-*" package.
+        let matchspec = MatchSpec::from_str(
+            "lib-*",
+            ParseStrictnessWithNameMatcher {
+                parse_strictness: Strict,
+                exact_names_only: false,
+            },
+        )
+        .unwrap();
+
+        let records = gateway
+            .query(
+                vec![
+                    super::Source::Custom(src_a),
+                    super::Source::Custom(src_b),
+                ],
+                vec![Platform::Linux64, Platform::NoArch],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let mut all_records: Vec<_> = records.iter().flat_map(RepoData::iter).collect();
+        all_records.sort();
+
+        // Collect matched names.
+        let matched_names: std::collections::BTreeSet<_> = all_records
+            .iter()
+            .map(|r| r.package_record.name.as_normalized().to_string())
+            .collect();
+
+        assert_eq!(
+            matched_names,
+            ["lib-bar", "lib-baz", "lib-foo", "lib-qux"]
+                .into_iter()
+                .map(String::from)
+                .collect::<std::collections::BTreeSet<_>>(),
+            "glob should find all lib-* packages across both sources and both subdirs"
+        );
+    }
+
     #[tokio::test]
     async fn test_nameless_matchspec_error_without_url() {
         let gateway = Gateway::new();
