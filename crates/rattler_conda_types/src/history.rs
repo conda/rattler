@@ -9,6 +9,7 @@
 //!
 //! This module provides:
 //! - [`History`] — the main entry-point for reading and writing history files.
+//! - [`ParsedHistory`] — the parsed contents of a history file, with query methods.
 //! - [`HistoryRevision`] — a single parsed revision.
 //! - [`UserRequest`] — structured data extracted from revision comments.
 
@@ -79,108 +80,38 @@ pub enum HistoryError {
     ParseError(String),
 }
 
-/// Provides read and write access to a `conda-meta/history` file for a conda
-/// environment prefix.
+/// The parsed contents of a `conda-meta/history` file.
 ///
-/// # Reading
-///
-/// Use [`History::parse`] to parse the file into a list of [`HistoryRevision`]s
-/// and [`History::get_user_requests`] to extract structured [`UserRequest`]s.
-///
-/// # Writing
-///
-/// Use [`History::write_revision`] to append a new revision. Use
-/// [`History::clear`] to empty the file (useful for tools like pixi that do not
-/// maintain a running history).
-#[derive(Debug, Clone)]
-pub struct History {
-    /// Path to the `conda-meta/history` file.
-    path: PathBuf,
+/// This type is returned by [`History::parse`] and provides query methods
+/// over the parsed revisions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedHistory {
+    /// The list of revisions parsed from the file.
+    pub revisions: Vec<HistoryRevision>,
 }
 
-impl History {
-    /// Creates a new `History` pointing at `<prefix>/conda-meta/history`.
-    pub fn new(prefix: impl AsRef<Path>) -> Self {
-        Self {
-            path: prefix.as_ref().join("conda-meta").join("history"),
-        }
+impl ParsedHistory {
+    /// Returns the number of revisions.
+    pub fn len(&self) -> usize {
+        self.revisions.len()
     }
 
-    /// Creates a `History` from an explicit path to a history file.
-    pub fn from_path(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+    /// Returns `true` if there are no revisions.
+    pub fn is_empty(&self) -> bool {
+        self.revisions.is_empty()
     }
 
-    /// Returns the path to the history file.
-    pub fn path(&self) -> &Path {
-        &self.path
+    /// Returns a reference to the latest (most recent) revision, if any.
+    pub fn latest(&self) -> Option<&HistoryRevision> {
+        self.revisions.last()
     }
 
-    // -----------------------------------------------------------------------
-    // Reader
-    // -----------------------------------------------------------------------
-
-    /// Parses the history file into a list of [`HistoryRevision`]s.
-    ///
-    /// Returns an empty list if the file does not exist or is empty. Comments
-    /// appearing before the first revision header are silently ignored, which
-    /// matches conda's behaviour.
-    pub fn parse(&self) -> Result<Vec<HistoryRevision>, HistoryError> {
-        if !self.path.exists() {
-            return Ok(Vec::new());
-        }
-
-        let contents = fs_err::read_to_string(&self.path)?;
-        Self::parse_str(&contents)
-    }
-
-    /// Parses a history file from a reader.
-    pub fn from_reader(mut reader: impl Read) -> Result<Vec<HistoryRevision>, HistoryError> {
-        let mut contents = String::new();
-        reader.read_to_string(&mut contents)?;
-        Self::parse_str(&contents)
-    }
-
-    /// Parses a history string into a list of [`HistoryRevision`]s.
-    pub fn parse_str(s: &str) -> Result<Vec<HistoryRevision>, HistoryError> {
-        let sep_re = Regex::new(r"^==>\s*(.+?)\s*<==$").expect("valid regex");
-
-        let mut revisions = Vec::new();
-
-        for line in s.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            if let Some(caps) = sep_re.captures(line) {
-                let timestamp = caps[1].to_string();
-                revisions.push(HistoryRevision {
-                    timestamp,
-                    packages: BTreeSet::new(),
-                    comments: Vec::new(),
-                });
-            } else if line.starts_with('#') {
-                // Attach comment to the current revision (ignore if before first header).
-                if let Some(rev) = revisions.last_mut() {
-                    rev.comments.push(line.to_string());
-                }
-            } else if let Some(rev) = revisions.last_mut() {
-                rev.packages.insert(line.to_string());
-            }
-            // Lines before the first header are silently ignored.
-        }
-
-        Ok(revisions)
-    }
-
-    /// Extracts structured [`UserRequest`]s from the parsed history.
+    /// Extracts structured [`UserRequest`]s from the parsed revisions.
     ///
     /// A user request is produced for every revision that contains a
     /// `# cmd: ...` comment.
-    pub fn get_user_requests(&self) -> Result<Vec<UserRequest>, HistoryError> {
-        let revisions = self.parse()?;
-        Ok(Self::user_requests_from_revisions(&revisions))
+    pub fn user_requests(&self) -> Vec<UserRequest> {
+        Self::user_requests_from_revisions(&self.revisions)
     }
 
     /// Extracts [`UserRequest`]s from an already-parsed list of revisions.
@@ -235,6 +166,114 @@ impl History {
         }
 
         requests
+    }
+}
+
+/// Provides read and write access to a `conda-meta/history` file for a conda
+/// environment prefix.
+///
+/// # Reading
+///
+/// Use [`History::parse`] to parse the file into a [`ParsedHistory`] and then
+/// use its query methods (e.g. [`ParsedHistory::user_requests`]) to extract
+/// structured data.
+///
+/// # Writing
+///
+/// Use [`History::write_revision`] to append a new revision. Use
+/// [`History::clear`] to empty the file (useful for tools like pixi that do not
+/// maintain a running history).
+#[derive(Debug, Clone)]
+pub struct History {
+    /// Path to the `conda-meta/history` file.
+    path: PathBuf,
+}
+
+impl History {
+    /// Creates a new `History` pointing at `<prefix>/conda-meta/history`.
+    pub fn new(prefix: impl AsRef<Path>) -> Self {
+        Self {
+            path: prefix.as_ref().join("conda-meta").join("history"),
+        }
+    }
+
+    /// Creates a `History` from an explicit path to a history file.
+    pub fn from_path(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+
+    /// Returns the path to the history file.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    // -----------------------------------------------------------------------
+    // Reader
+    // -----------------------------------------------------------------------
+
+    /// Parses the history file into a [`ParsedHistory`].
+    ///
+    /// Returns an empty [`ParsedHistory`] if the file does not exist or is
+    /// empty. Comments appearing before the first revision header are
+    /// silently ignored, which matches conda's behaviour.
+    pub fn parse(&self) -> Result<ParsedHistory, HistoryError> {
+        if !self.path.exists() {
+            return Ok(ParsedHistory {
+                revisions: Vec::new(),
+            });
+        }
+
+        let contents = fs_err::read_to_string(&self.path)?;
+        Self::parse_str(&contents)
+    }
+
+    /// Parses a history file from a reader.
+    pub fn from_reader(mut reader: impl Read) -> Result<ParsedHistory, HistoryError> {
+        let mut contents = String::new();
+        reader.read_to_string(&mut contents)?;
+        Self::parse_str(&contents)
+    }
+
+    /// Parses a history string into a [`ParsedHistory`].
+    pub fn parse_str(s: &str) -> Result<ParsedHistory, HistoryError> {
+        let sep_re = Regex::new(r"^==>\s*(.+?)\s*<==$").expect("valid regex");
+
+        let mut revisions = Vec::new();
+
+        for line in s.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            if let Some(caps) = sep_re.captures(line) {
+                let timestamp = caps[1].to_string();
+                revisions.push(HistoryRevision {
+                    timestamp,
+                    packages: BTreeSet::new(),
+                    comments: Vec::new(),
+                });
+            } else if line.starts_with('#') {
+                // Attach comment to the current revision (ignore if before first header).
+                if let Some(rev) = revisions.last_mut() {
+                    rev.comments.push(line.to_string());
+                }
+            } else if let Some(rev) = revisions.last_mut() {
+                rev.packages.insert(line.to_string());
+            }
+            // Lines before the first header are silently ignored.
+        }
+
+        Ok(ParsedHistory { revisions })
+    }
+
+    /// Extracts structured [`UserRequest`]s from the parsed history.
+    ///
+    /// This is a convenience method that parses the file and then calls
+    /// [`ParsedHistory::user_requests`].
+    pub fn get_user_requests(&self) -> Result<Vec<UserRequest>, HistoryError> {
+        let parsed = self.parse()?;
+        Ok(parsed.user_requests())
     }
 
     // -----------------------------------------------------------------------
@@ -479,14 +518,16 @@ pip-24.0-pyhd8ed1ab_0
 
     #[test]
     fn parse_empty() {
-        let revisions = History::parse_str("").unwrap();
-        assert!(revisions.is_empty());
+        let parsed = History::parse_str("").unwrap();
+        assert!(parsed.is_empty());
     }
 
     #[test]
     fn parse_revisions() {
-        let revisions = History::parse_str(SAMPLE_HISTORY).unwrap();
-        assert_eq!(revisions.len(), 3);
+        let parsed = History::parse_str(SAMPLE_HISTORY).unwrap();
+        assert_eq!(parsed.len(), 3);
+
+        let revisions = &parsed.revisions;
 
         // First revision: initial install (absolute packages).
         assert_eq!(revisions[0].timestamp, "2024-01-15 10:30:00");
@@ -509,8 +550,8 @@ pip-24.0-pyhd8ed1ab_0
 
     #[test]
     fn parse_user_requests() {
-        let revisions = History::parse_str(SAMPLE_HISTORY).unwrap();
-        let requests = History::user_requests_from_revisions(&revisions);
+        let parsed = History::parse_str(SAMPLE_HISTORY).unwrap();
+        let requests = parsed.user_requests();
         assert_eq!(requests.len(), 3);
 
         // First request: create.
@@ -535,10 +576,10 @@ pip-24.0-pyhd8ed1ab_0
     #[test]
     fn parse_ignores_lines_before_first_header() {
         let input = "some random line\n# a comment\n==> 2024-01-01 00:00:00 <==\npkg-1.0-0\n";
-        let revisions = History::parse_str(input).unwrap();
-        assert_eq!(revisions.len(), 1);
-        assert_eq!(revisions[0].packages.len(), 1);
-        assert!(revisions[0].comments.is_empty());
+        let parsed = History::parse_str(input).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed.revisions[0].packages.len(), 1);
+        assert!(parsed.revisions[0].comments.is_empty());
     }
 
     #[test]
@@ -579,11 +620,15 @@ pip-24.0-pyhd8ed1ab_0
             .write_revision("2024-01-15 10:30:00", &removed, &added)
             .unwrap();
 
-        let revisions = history.parse().unwrap();
-        assert_eq!(revisions.len(), 1);
-        assert_eq!(revisions[0].packages.len(), 2);
-        assert!(revisions[0].packages.contains("+pip-24.0-pyhd8ed1ab_0"));
-        assert!(revisions[0].packages.contains("+python-3.12.0-h1234567_0"));
+        let parsed = history.parse().unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed.revisions[0].packages.len(), 2);
+        assert!(parsed.revisions[0]
+            .packages
+            .contains("+pip-24.0-pyhd8ed1ab_0"));
+        assert!(parsed.revisions[0]
+            .packages
+            .contains("+python-3.12.0-h1234567_0"));
     }
 
     #[test]
@@ -607,11 +652,11 @@ pip-24.0-pyhd8ed1ab_0
             )
             .unwrap();
 
-        let revisions = history.parse().unwrap();
-        assert_eq!(revisions.len(), 1);
-        assert!(!revisions[0].comments.is_empty());
+        let parsed = history.parse().unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert!(!parsed.revisions[0].comments.is_empty());
 
-        let requests = History::user_requests_from_revisions(&revisions);
+        let requests = parsed.user_requests();
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].cmd.as_deref(), Some("conda install numpy"));
         assert_eq!(requests[0].conda_version.as_deref(), Some("24.1.0"));
@@ -636,6 +681,13 @@ pip-24.0-pyhd8ed1ab_0
     }
 
     #[test]
+    fn parsed_history_latest() {
+        let parsed = History::parse_str(SAMPLE_HISTORY).unwrap();
+        let latest = parsed.latest().unwrap();
+        assert_eq!(latest.timestamp, "2024-01-17 09:00:00");
+    }
+
+    #[test]
     fn overwrite_replaces_content() {
         let dir = tempfile::tempdir().unwrap();
         let history = History::new(dir.path());
@@ -655,17 +707,17 @@ pip-24.0-pyhd8ed1ab_0
         }];
         history.overwrite(&new_revisions).unwrap();
 
-        let revisions = history.parse().unwrap();
-        assert_eq!(revisions.len(), 1);
-        assert_eq!(revisions[0].timestamp, "2024-06-01 12:00:00");
-        assert!(revisions[0].packages.contains("new-pkg-2.0-0"));
+        let parsed = history.parse().unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed.revisions[0].timestamp, "2024-06-01 12:00:00");
+        assert!(parsed.revisions[0].packages.contains("new-pkg-2.0-0"));
     }
 
     #[test]
     fn parse_nonexistent_file() {
         let history = History::from_path("/nonexistent/path/history");
-        let revisions = history.parse().unwrap();
-        assert!(revisions.is_empty());
+        let parsed = history.parse().unwrap();
+        assert!(parsed.is_empty());
     }
 
     #[test]
@@ -689,7 +741,7 @@ pip-24.0-pyhd8ed1ab_0
             .write_revision("2024-01-02 12:00:00", &removed, &added2)
             .unwrap();
 
-        let revisions = history.parse().unwrap();
-        assert_eq!(revisions.len(), 2);
+        let parsed = history.parse().unwrap();
+        assert_eq!(parsed.len(), 2);
     }
 }
