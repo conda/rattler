@@ -188,6 +188,20 @@ class PackageName:
 
         return self._name != other._name
 
+    def __str__(self) -> str:
+        """
+        Returns the source representation of the package name as a string.
+
+        Examples
+        --------
+        ```python
+        >>> str(PackageName("test-xyz"))
+        'test-xyz'
+        >>>
+        ```
+        """
+        return self.source
+
     def __repr__(self) -> str:
         """
         Returns a representation of the PackageName.
