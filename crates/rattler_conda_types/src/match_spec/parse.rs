@@ -431,11 +431,6 @@ fn strip_package_name(
 
     let rest = rest.trim();
 
-    // Handle asterisk as a wildcard (no package name)
-    if trimmed_package_name == "*" {
-        return Ok((None, rest));
-    }
-
     let package_name = match PackageNameMatcher::from_str(trimmed_package_name)
         .map_err(ParseMatchSpecError::InvalidPackageNameMatcher)?
     {
