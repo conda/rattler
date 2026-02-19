@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/conda/rattler/compare/rattler_config-v0.2.26...rattler_config-v0.3.0) - 2026-02-19
+
+### Other
+
+- [**breaking**] remove support for JLAP ([#2038](https://github.com/conda/rattler/pull/2038))
+
 ## [0.2.26](https://github.com/conda/rattler/compare/rattler_config-v0.2.25...rattler_config-v0.2.26) - 2026-02-04
 
 ### Other

@@ -1,6 +1,6 @@
 [package]
 name = "rattler_lock"
-version = "0.26.13"
+version = "0.26.14"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for conda lock"
