@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0](https://github.com/conda/rattler/compare/rattler_networking-v0.25.33...rattler_networking-v0.26.0) - 2026-02-19
+
+### Added
+
+- add OAuth/OIDC authentication support ([#2049](https://github.com/conda/rattler/pull/2049))
+
+### Fixed
+
+- gracefully handle missing `$HOME` in file backend ([#2065](https://github.com/conda/rattler/pull/2065))
+- cache negative credential lookups in auth middleware ([#2055](https://github.com/conda/rattler/pull/2055))
+
+### Other
+
+- Typo and clippy fixes ([#2047](https://github.com/conda/rattler/pull/2047))
+- [**breaking**] remove support for JLAP ([#2038](https://github.com/conda/rattler/pull/2038))
+
 ## [0.25.33](https://github.com/conda/rattler/compare/rattler_networking-v0.25.32...rattler_networking-v0.25.33) - 2026-02-04
 
 ### Other
