@@ -186,7 +186,7 @@ pub struct InstallOptions {
 
     /// Whether or not to use symbolic links where possible. If this is set to
     /// `Some(false)` symlinks are disabled, if set to `Some(true)` symbolic
-    /// links are always used when specified in the [`info/paths.json`] file
+    /// links are always used when specified in the `info/paths.json` file
     /// even if this is not supported. If the value is set to `None`
     /// symbolic links are only used if they are supported.
     ///
@@ -196,7 +196,7 @@ pub struct InstallOptions {
     /// Whether or not to use hard links where possible. If this is set to
     /// `Some(false)` the use of hard links is disabled, if set to
     /// `Some(true)` hard links are always used when specified
-    /// in the [`info/paths.json`] file even if this is not supported. If the
+    /// in the `info/paths.json` file even if this is not supported. If the
     /// value is set to `None` hard links are only used if they are
     /// supported. A dummy hardlink is created to determine support.
     ///
@@ -207,7 +207,7 @@ pub struct InstallOptions {
     /// Whether or not to use ref links where possible. If this is set to
     /// `Some(false)` the use of hard links is disabled, if set to
     /// `Some(true)` ref links are always used when hard links are specified
-    /// in the [`info/paths.json`] file even if this is not supported. If the
+    /// in the `info/paths.json` file even if this is not supported. If the
     /// value is set to `None` ref links are only used if they are
     /// supported.
     ///

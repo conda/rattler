@@ -15,7 +15,7 @@ requires-pixi = ">=0.62.0"
 
 [workspace.build-variants]
 # Use the same Rust version everywhere
-rust_compiler_version = ["1.88.0"]
+rust_compiler_version = ["1.93.1"]
 
 [tasks]
 build = "cargo build"
@@ -31,11 +31,11 @@ cxx-compiler = "~=1.11.0"
 openssl = "~=3.1"
 make = "~=4.3"
 pkg-config = "~=0.29.2"
-rust = "~=1.88.0"
+rust = "~=1.93.1"
 cmake = "~=3.26.4"
 cargo-nextest = ">=0.9.91,<0.10"
 # for rust-analyzer
-rust-src = "~=1.88.0"
+rust-src = "~=1.93.1"
 
 [target.linux-64.dependencies]
 clang = ">=18.1.8,<19.0"
