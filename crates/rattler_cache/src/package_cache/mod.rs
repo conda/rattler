@@ -1124,7 +1124,6 @@ mod test {
         test_flaky_package_cache(conda, Middleware::FailAfterBytes(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailAfterBytes(50)).await;
 
-        // Test broken pipe errors - should retry and succeed on 3rd attempt
         test_flaky_package_cache(tar_bz2, Middleware::FailWithBrokenPipe(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailWithBrokenPipe(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailWithBrokenPipe(50)).await;

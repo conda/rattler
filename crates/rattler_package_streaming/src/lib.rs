@@ -88,18 +88,11 @@ impl ExtractError {
     /// network streaming operations.
     pub fn should_retry(&self) -> bool {
         match self {
-            // Retry only on transient I/O errors - permanent errors should fail fast
-            ExtractError::IoError(err) => match err.kind() {
-                std::io::ErrorKind::WouldBlock
-                | std::io::ErrorKind::Interrupted
-                | std::io::ErrorKind::TimedOut
-                | std::io::ErrorKind::BrokenPipe
-                | std::io::ErrorKind::ConnectionReset
-                | std::io::ErrorKind::ConnectionAborted
-                | std::io::ErrorKind::UnexpectedEof => true,
-                // Permanent errors should not be retried
-                _ => false,
-            },
+            // Retry on all I/O errors during streaming - these are typically
+            // transient network issues (broken pipe, connection reset, etc.)
+            // The cache layer will clean up partial files on retry.
+            // TODO: Add more specific checks for transient I/O errors
+            ExtractError::IoError(_) => true,
             ExtractError::CouldNotCreateDestination(_) => true,
             #[cfg(feature = "reqwest")]
             ExtractError::ReqwestError(err) => {
@@ -215,22 +208,20 @@ mod tests {
 
     #[test]
     fn test_should_retry_io_error_not_found() {
-        // NotFound is a permanent error and should not be retried
         let err = ExtractError::IoError(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             "not found",
         ));
-        assert!(!err.should_retry());
+        assert!(err.should_retry());
     }
 
     #[test]
     fn test_should_retry_io_error_permission_denied() {
-        // PermissionDenied is a permanent error and should not be retried
         let err = ExtractError::IoError(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             "permission denied",
         ));
-        assert!(!err.should_retry());
+        assert!(err.should_retry());
     }
 
     #[test]
