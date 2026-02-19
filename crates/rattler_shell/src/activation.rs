@@ -1104,7 +1104,7 @@ mod tests {
             .unwrap();
 
         // Diff with the current environment
-        let current_env = std::env::vars().collect::<HashMap<_, _>>();
+        let current_env = ActivationVariables::default().current_env.clone();
 
         let mut env_diff = activation_env
             .into_iter()
@@ -1155,7 +1155,7 @@ mod tests {
             .run_activation(ActivationVariables::default(), None)
             .unwrap();
 
-        let current_env = std::env::vars().collect::<HashMap<_, _>>();
+        let current_env = ActivationVariables::default().current_env.clone();
 
         let mut env_diff = activation_env
             .into_iter()
