@@ -40,6 +40,7 @@ use std::{
 };
 
 pub use apple_codesign::AppleCodeSignBehavior;
+pub use clobber_registry::ClobberMode;
 pub use driver::InstallDriver;
 use fs_err::tokio as tokio_fs;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
