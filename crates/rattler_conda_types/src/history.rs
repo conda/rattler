@@ -15,7 +15,7 @@
 
 use std::{
     collections::BTreeSet,
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -291,8 +291,6 @@ impl History {
         removed: &BTreeSet<String>,
         added: &BTreeSet<String>,
     ) -> Result<(), HistoryError> {
-        use std::io::Write;
-
         if let Some(parent) = self.path.parent() {
             fs_err::create_dir_all(parent)?;
         }
@@ -352,8 +350,6 @@ impl History {
         conda_version: Option<&str>,
         action_specs: Option<(&str, &[String])>,
     ) -> Result<(), HistoryError> {
-        use std::io::Write;
-
         if let Some(parent) = self.path.parent() {
             fs_err::create_dir_all(parent)?;
         }
@@ -406,8 +402,6 @@ impl History {
     /// This completely replaces the file contents. It is the caller's
     /// responsibility to ensure the revisions are well-formed.
     pub fn overwrite(&self, revisions: &[HistoryRevision]) -> Result<(), HistoryError> {
-        use std::io::Write;
-
         if let Some(parent) = self.path.parent() {
             fs_err::create_dir_all(parent)?;
         }
