@@ -1381,15 +1381,19 @@ mod tests {
         // Strip absolute paths to this crate from the channels for testing
         let crate_root = env!("CARGO_MANIFEST_DIR");
         let crate_path = Url::from_directory_path(std::path::Path::new(crate_root)).unwrap();
-        let home = Url::from_directory_path(dirs::home_dir().unwrap()).unwrap();
+
+        let home_str = dirs::home_dir()
+            .and_then(|p| Url::from_directory_path(p).ok())
+            .map_or_else(|| "file:///dummy_home/".to_string(), |u| u.to_string());
+
         insta::with_settings!({filters => vec![
             (crate_path.as_str(), "file://<CRATE>/"),
-            (home.as_str(), "file://<HOME>/"),
+            (home_str.as_str(), "file://<HOME>/"),
         ]}, {
             insta::assert_yaml_snapshot!(
-            format!("test_from_string_{strictness:?}"),
-            evaluated
-        );
+                format!("test_from_string_{strictness:?}"),
+                evaluated
+            );
         });
     }
 
