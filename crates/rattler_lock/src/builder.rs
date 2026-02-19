@@ -590,7 +590,7 @@ mod test {
             // Parse again
             let parsed = LockFile::from_str(&rendered).unwrap();
 
-            // Verify the prerelease mode roundtrips correctly
+            // Verify the prerelease mode round trips correctly
             assert_eq!(
                 parsed
                     .environment("default")

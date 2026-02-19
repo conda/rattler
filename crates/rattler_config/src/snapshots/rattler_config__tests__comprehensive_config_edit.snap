@@ -21,7 +21,6 @@ array_field = []
 "https://repo.continuum.io/" = ["https://fast-mirror.net/"]
 
 [repodata-config]
-disable-jlap = false
 disable-zstd = false
 
 [concurrency]

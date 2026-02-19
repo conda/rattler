@@ -20,7 +20,7 @@ pub enum Mode {
     Overwrite,
 
     /// Verify that the file on disk contains the same content as the generated content. Returns an
-    /// error if thats not the case.
+    /// error if that is not the case.
     Verify,
 }
 
@@ -43,7 +43,7 @@ fn update(path: &Path, contents: &str, mode: Mode) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Reformats the given input with `rustfmt`.
+/// Re-formats the given input with `rustfmt`.
 fn reformat(text: impl std::fmt::Display) -> anyhow::Result<String> {
     let mut rustfmt = Command::new("rustfmt")
         //.arg("--config-path")

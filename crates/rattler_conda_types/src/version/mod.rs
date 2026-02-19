@@ -70,10 +70,10 @@ pub use with_source::VersionWithSource;
 ///   there is no '+', the local version is empty.
 /// * The version part is then split into components at '.' and '_'.
 /// * Each component is split again into runs of numerals and non-numerals
-/// * Subcomponents containing only numerals are converted to integers.
+/// * Sub-components containing only numerals are converted to integers.
 /// * Strings are converted to lower case, with special treatment for 'dev' and
 ///   'post'.
-/// * When a component starts with a letter, the fillvalue 0 is inserted to keep
+/// * When a component starts with a letter, the fill value 0 is inserted to keep
 ///   numbers and strings in phase, resulting in '1.1.a1' == 1.1.0a1'.
 /// * The same is repeated for the local version part.
 ///
@@ -83,14 +83,14 @@ pub use with_source::VersionWithSource;
 /// `1!2.15.1_ALPHA`  =>  `[[1], [2], [15], [1, '_alpha']]`
 ///
 /// The resulting lists are compared lexicographically, where the following
-/// rules are applied to each pair of corresponding subcomponents:
+/// rules are applied to each pair of corresponding sub-components:
 ///
 /// * integers are compared numerically
 /// * strings are compared lexicographically, case-insensitive
 /// * strings are smaller than integers, except
 /// * 'dev' versions are smaller than all corresponding versions of other types
 /// * 'post' versions are greater than all corresponding versions of other types
-/// * if a subcomponent has no correspondent, the missing correspondent is
+/// * if a sub-component has no correspondent, the missing correspondent is
 ///   treated as integer 0 to ensure '1.1' == '1.1.0'.
 ///
 /// The resulting order is:
@@ -291,7 +291,7 @@ impl Version {
     }
 
     /// Tries to extract the major and minor versions from the version. Returns
-    /// None if this instance doesnt appear to contain a major and minor
+    /// None if this instance doesn't appear to contain a major and minor
     /// version.
     pub fn as_major_minor(&self) -> Option<(u64, u64)> {
         let mut segments = self.segments();
@@ -840,7 +840,7 @@ impl Ord for Component {
                 Ordering::Less
             }
 
-            // Compare numbers and identifiers normally amongst themselves.
+            // Compare numbers and identifiers normally among themselves.
             (Component::Numeral(a), Component::Numeral(b)) => a.cmp(b),
             (Component::Iden(a), Component::Iden(b)) => a.cmp(b),
             (Component::Post, Component::Post) => Ordering::Equal,

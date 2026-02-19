@@ -186,7 +186,7 @@ impl S3 {
         }
     }
 
-    /// Generate a presigned S3 `GetObject` request.
+    /// Generate a pre-signed S3 `GetObject` request.
     async fn generate_presigned_s3_url(&self, url: Url, method: &Method) -> MiddlewareResult<Url> {
         let client = self.create_s3_client(url.clone()).await?;
 

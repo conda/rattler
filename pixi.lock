@@ -578,9 +578,9 @@ environments:
       - conda: https://prefix.dev/conda-forge/win-64/vc14_runtime-14.44.35208-h818238b_32.conda
       - conda: https://prefix.dev/conda-forge/win-64/vcomp14-14.44.35208-h818238b_32.conda
       - conda: crates/rattler-bin
-        build: h6eef762_0
+        build: h016700e_0
       - conda: crates/rattler_index
-        build: h6eef762_0
+        build: h016700e_0
   s3:
     channels:
     - url: https://prefix.dev/conda-forge/
@@ -794,9 +794,9 @@ environments:
       - conda: https://prefix.dev/conda-forge/noarch/wcwidth-0.2.14-pyhd8ed1ab_0.conda
       - conda: https://prefix.dev/conda-forge/noarch/win_inet_pton-1.1.0-pyh7428d3b_8.conda
       - conda: crates/rattler-bin
-        build: h6eef762_0
+        build: h016700e_0
       - conda: crates/rattler_index
-        build: h6eef762_0
+        build: h016700e_0
 packages:
 - conda: https://prefix.dev/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2
   sha256: fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726
@@ -4380,6 +4380,20 @@ packages:
 - conda: crates/rattler-bin
   name: rattler
   version: 0.1.0
+  build: h016700e_0
+  subdir: win-64
+  variants:
+    c_compiler: vs2022
+    rust_compiler_version: 1.88.0
+    target_platform: win-64
+  depends:
+  - vc >=14.3,<15
+  - vc14_runtime >=14.44.35208
+  - ucrt >=10.0.20348.0
+  license: BSD-3-Clause
+- conda: crates/rattler-bin
+  name: rattler
+  version: 0.1.0
   build: h1ec88cb_0
   subdir: osx-arm64
   variants:
@@ -4387,15 +4401,6 @@ packages:
     target_platform: osx-arm64
   constrains:
   - __osx >=11.0
-  license: BSD-3-Clause
-- conda: crates/rattler-bin
-  name: rattler
-  version: 0.1.0
-  build: h6eef762_0
-  subdir: win-64
-  variants:
-    rust_compiler_version: 1.88.0
-    target_platform: win-64
   license: BSD-3-Clause
 - conda: crates/rattler-bin
   name: rattler
@@ -4416,12 +4421,28 @@ packages:
   variants:
     rust_compiler_version: 1.88.0
     target_platform: linux-64
+  depends:
+  - libgcc >=15
   constrains:
   - __glibc >=2.17
   license: BSD-3-Clause
 - conda: crates/rattler_index
   name: rattler_index
-  version: 0.27.12
+  version: 0.27.13
+  build: h016700e_0
+  subdir: win-64
+  variants:
+    c_compiler: vs2022
+    rust_compiler_version: 1.88.0
+    target_platform: win-64
+  depends:
+  - vc >=14.3,<15
+  - vc14_runtime >=14.44.35208
+  - ucrt >=10.0.20348.0
+  license: BSD-3-Clause
+- conda: crates/rattler_index
+  name: rattler_index
+  version: 0.27.13
   build: h1ec88cb_0
   subdir: osx-arm64
   variants:
@@ -4432,16 +4453,7 @@ packages:
   license: BSD-3-Clause
 - conda: crates/rattler_index
   name: rattler_index
-  version: 0.27.12
-  build: h6eef762_0
-  subdir: win-64
-  variants:
-    rust_compiler_version: 1.88.0
-    target_platform: win-64
-  license: BSD-3-Clause
-- conda: crates/rattler_index
-  name: rattler_index
-  version: 0.27.12
+  version: 0.27.13
   build: h983c4f9_0
   subdir: osx-64
   variants:
@@ -4452,12 +4464,14 @@ packages:
   license: BSD-3-Clause
 - conda: crates/rattler_index
   name: rattler_index
-  version: 0.27.12
+  version: 0.27.13
   build: hd342602_0
   subdir: linux-64
   variants:
     rust_compiler_version: 1.88.0
     target_platform: linux-64
+  depends:
+  - libgcc >=15
   constrains:
   - __glibc >=2.17
   license: BSD-3-Clause

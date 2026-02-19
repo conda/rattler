@@ -4,7 +4,6 @@ extend-exclude = [
   ".pixi/",
   "*.html",
   "*.json",
-  "*.jlap",
   "*.svg",
   "**/*.snap",
   "**/*.txt",

@@ -227,6 +227,30 @@ pub struct PackageRecord {
     //pub package_type: ?
 }
 
+impl PartialOrd for PackageRecord {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PackageRecord {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.name
+            .cmp(&other.name)
+            .then_with(|| {
+                // Packages with tracked features are sorted after packages
+                // without tracked features.
+                self.track_features
+                    .is_empty()
+                    .cmp(&other.track_features.is_empty())
+                    .reverse()
+            })
+            .then_with(|| self.version.cmp(&other.version))
+            .then_with(|| self.build_number.cmp(&other.build_number))
+            .then_with(|| self.timestamp.cmp(&other.timestamp))
+    }
+}
+
 /// A record in the `packages.whl` section of the `repodata.json`.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Hash)]
 pub struct WhlPackageRecord {
@@ -1011,5 +1035,73 @@ mod test {
                 "packages.conda should be serialized in alphabetical order"
             );
         }
+    }
+
+    #[test]
+    fn test_ordering() {
+        use crate::{PackageName, Version};
+
+        let record = |name: &str,
+                      version: &str,
+                      build: &str,
+                      build_number: u64,
+                      subdir: &str,
+                      timestamp: Option<i64>|
+         -> PackageRecord {
+            let mut r = PackageRecord::new(
+                PackageName::new_unchecked(name),
+                version.parse::<Version>().unwrap(),
+                format!("{build}_{build_number}"),
+            );
+            r.build_number = build_number;
+            r.subdir = subdir.to_string();
+            r.timestamp = timestamp.map(|secs| {
+                crate::utils::TimestampMs::from_datetime_seconds(
+                    chrono::DateTime::from_timestamp(secs, 0).unwrap(),
+                )
+            });
+            r
+        };
+
+        let mut records = vec![
+            // Different versions of the same package
+            record("python", "3.12.0", "hab5_py312", 3, "linux-64", None),
+            record("python", "3.11.0", "hab5_py311", 1, "linux-64", None),
+            record("python", "3.12.0", "hab5_py312", 1, "linux-64", None),
+            // Different build numbers
+            record("numpy", "1.26.0", "hc1_np126", 2, "linux-64", None),
+            record("numpy", "1.26.0", "hc1_np126", 0, "linux-64", None),
+            record("numpy", "1.26.0", "hc1_np126", 1, "linux-64", None),
+            // Different timestamps (same version & build number)
+            record("openssl", "3.1.0", "hlib", 0, "linux-64", Some(1700000000)),
+            record("openssl", "3.1.0", "hlib", 0, "linux-64", Some(1600000000)),
+            record("openssl", "3.1.0", "hlib", 0, "linux-64", Some(1800000000)),
+            // Track features (packages with tracked features sort after those
+            // without)
+            {
+                let mut r = record("scipy", "1.11.0", "hfeature", 0, "linux-64", None);
+                r.track_features = vec!["mkl".to_string()];
+                r
+            },
+            record("scipy", "1.11.0", "hplain", 0, "linux-64", None),
+            // Another package to show name ordering
+            record("curl", "8.4.0", "hdns", 0, "linux-64", None),
+        ];
+
+        records.sort();
+
+        let formatted: Vec<String> = records
+            .iter()
+            .map(|r| {
+                format!(
+                    "{}/{}-{}-{}",
+                    r.subdir,
+                    r.name.as_normalized(),
+                    r.version,
+                    r.build
+                )
+            })
+            .collect();
+        insta::assert_snapshot!(formatted.join("\n"));
     }
 }

@@ -1,5 +1,4 @@
 use std::{
-    collections::{HashMap, HashSet},
     future::{Future, IntoFuture},
     sync::Arc,
 };
@@ -13,7 +12,7 @@ use url::Url;
 
 use super::{
     source::{CustomSourceClient, Source},
-    subdir::{Subdir, SubdirData},
+    subdir::{PackageRecords, Subdir, SubdirData},
     BarrierCell, GatewayError, GatewayInner, RepoData,
 };
 use crate::Reporter;
@@ -58,16 +57,6 @@ enum SourceSpecs {
 
     /// The record is required by a dependency.
     Transitive,
-}
-
-impl SourceSpecs {
-    /// Returns true if this record should be processed for these specs.
-    fn matches(&self, record: &RepoDataRecord) -> bool {
-        match self {
-            SourceSpecs::Input(specs) => specs.iter().any(|spec| spec.matches(record)),
-            SourceSpecs::Transitive => true,
-        }
-    }
 }
 
 /// A spec that references a package by direct URL.
@@ -156,8 +145,9 @@ struct QueryExecutor {
     pattern_names_seen: HashSet<PackageName>,
 
     // Mutable state during execution
-    seen: HashSet<PackageName>,
-    pending_package_specs: HashMap<PackageName, SourceSpecs>,
+    /// Normalized (lowercase) package names we've already queued.
+    seen: hashbrown::HashMap<String, (), ahash::RandomState>,
+    pending_package_specs: ahash::HashMap<PackageName, SourceSpecs>,
 
     // Subdir management
     subdir_handles: Vec<SubdirHandle>,
@@ -183,8 +173,8 @@ impl QueryExecutor {
             reporter,
         } = query;
 
-        let mut seen = HashSet::new();
-        let mut pending_package_specs = HashMap::new();
+        let mut seen = hashbrown::HashMap::with_hasher(ahash::RandomState::new());
+        let mut pending_package_specs = ahash::HashMap::default();
         let mut direct_url_specs = Vec::new();
         let mut pending_pattern_specs = Vec::new();
         let pattern_names_seen = HashSet::new();
@@ -200,12 +190,12 @@ impl QueryExecutor {
                     .ok_or(GatewayError::MatchSpecWithoutExactName(Box::new(
                         spec.clone(),
                     )))?;
-                seen.insert(name.clone());
+                seen.insert(name.as_normalized().to_string(), ());
                 direct_url_specs.push(DirectUrlSpec { spec, url, name });
             } else {
                 match &spec.name {
                     Some(PackageNameMatcher::Exact(name)) => {
-                        seen.insert(name.clone());
+                        seen.insert(name.as_normalized().to_string(), ());
                         let pending = pending_package_specs
                             .entry(name.clone())
                             .or_insert_with(|| SourceSpecs::Input(vec![]));
@@ -325,7 +315,15 @@ impl QueryExecutor {
                 }
 
                 // Push the direct url in the first subdir result for channel priority logic
-                Ok((0, SourceSpecs::Input(vec![spec]), record))
+                let unique_deps = super::subdir::extract_unique_deps(&record);
+                Ok((
+                    0,
+                    SourceSpecs::Input(vec![spec]),
+                    PackageRecords {
+                        records: record,
+                        unique_deps,
+                    },
+                ))
             }));
         }
 
@@ -359,8 +357,8 @@ impl QueryExecutor {
                         Subdir::Found(subdir) => subdir
                             .get_or_fetch_package_records(&package_name, reporter)
                             .await
-                            .map(|records| (result_index, specs, records)),
-                        Subdir::NotFound => Ok((result_index, specs, Arc::from(vec![]))),
+                            .map(|pkg| (result_index, specs, pkg)),
+                        Subdir::NotFound => Ok((result_index, specs, PackageRecords::default())),
                     }
                 }));
             }
@@ -368,29 +366,47 @@ impl QueryExecutor {
     }
 
     /// Extract dependencies from records and queue them if not seen.
-    fn queue_dependencies(&mut self, records: &[RepoDataRecord], request_specs: &SourceSpecs) {
-        for record in records {
-            if !request_specs.matches(record) {
-                continue;
-            }
-
-            for dependency in &record.package_record.depends {
-                let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
-                if self.seen.insert(dependency_name.clone()) {
-                    self.pending_package_specs
-                        .insert(dependency_name, SourceSpecs::Transitive);
+    fn queue_dependencies(&mut self, pkg: &PackageRecords, request_specs: &SourceSpecs) {
+        match request_specs {
+            SourceSpecs::Transitive => {
+                // Use precomputed unique deps — typically ~50-100 strings
+                // instead of iterating all records (~20,000 dep strings).
+                for dep in pkg.unique_deps.iter() {
+                    self.queue_dependency(dep);
                 }
             }
-
-            for (_, dependencies) in record.package_record.experimental_extra_depends.iter() {
-                for dependency in dependencies {
-                    let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
-                    if self.seen.insert(dependency_name.clone()) {
-                        self.pending_package_specs
-                            .insert(dependency_name, SourceSpecs::Transitive);
+            SourceSpecs::Input(specs) => {
+                // For input specs, only process deps from matching records.
+                for record in pkg.records.iter() {
+                    if !specs.iter().any(|s| s.matches(record)) {
+                        continue;
+                    }
+                    for dependency in &record.package_record.depends {
+                        self.queue_dependency(dependency);
+                    }
+                    for (_, dependencies) in record.package_record.experimental_extra_depends.iter()
+                    {
+                        for dependency in dependencies {
+                            self.queue_dependency(dependency);
+                        }
                     }
                 }
             }
+        }
+    }
+
+    /// Queue a single dependency if not already seen.
+    ///
+    /// Uses `entry_ref` for a single hash lookup. Only allocates when the
+    /// name is genuinely new (~500 unique names vs ~1M+ dependency strings).
+    fn queue_dependency(&mut self, dependency: &str) {
+        let normalized = PackageName::normalized_name_from_matchspec_str(dependency);
+        let normalized_str: &str = &normalized;
+        if let hashbrown::hash_map::EntryRef::Vacant(entry) = self.seen.entry_ref(normalized_str) {
+            entry.insert(());
+            let dependency_name = PackageName::from_matchspec_str_unchecked(dependency);
+            self.pending_package_specs
+                .insert(dependency_name, SourceSpecs::Transitive);
         }
     }
 
@@ -398,17 +414,30 @@ impl QueryExecutor {
     fn accumulate_records(
         &mut self,
         result_idx: usize,
-        records: &[RepoDataRecord],
+        records: Arc<[RepoDataRecord]>,
         request_specs: &SourceSpecs,
     ) {
         let result = &mut self.result[result_idx];
 
-        for record in records {
-            if !request_specs.matches(record) {
-                continue;
+        match request_specs {
+            SourceSpecs::Transitive => {
+                // All records match for transitive deps — push the whole Arc
+                // without cloning any records.
+                result.len += records.len();
+                result.shards.push(records);
             }
-            result.len += 1;
-            result.shards.push(Arc::new([record.clone()]));
+            SourceSpecs::Input(specs) => {
+                // Only a subset matches — filter and build one new Arc.
+                let matching: Vec<RepoDataRecord> = records
+                    .iter()
+                    .filter(|r| specs.iter().any(|s| s.matches(*r)))
+                    .cloned()
+                    .collect();
+                result.len += matching.len();
+                if !matching.is_empty() {
+                    result.shards.push(Arc::from(matching));
+                }
+            }
         }
     }
 
@@ -467,13 +496,13 @@ impl QueryExecutor {
 
                 // Handle any records that were fetched
                 records = self.pending_records.select_next_some() => {
-                    let (result_idx, request_specs, records) = records?;
+                    let (result_idx, request_specs, pkg) = records?;
 
                     if self.recursive {
-                        self.queue_dependencies(&records, &request_specs);
+                        self.queue_dependencies(&pkg, &request_specs);
                     }
 
-                    self.accumulate_records(result_idx, &records, &request_specs);
+                    self.accumulate_records(result_idx, pkg.records, &request_specs);
                 }
 
                 // All futures have been handled, all subdirectories have been loaded and all
@@ -506,7 +535,7 @@ fn box_future<T, F: Future<Output = T> + Send + 'static>(future: F) -> BoxFuture
 
 /// Result type for pending record fetches.
 type PendingSubdirResult = Result<Arc<Subdir>, GatewayError>;
-type PendingRecordsResult = Result<(usize, SourceSpecs, Arc<[RepoDataRecord]>), GatewayError>;
+type PendingRecordsResult = Result<(usize, SourceSpecs, PackageRecords), GatewayError>;
 
 impl IntoFuture for RepoDataQuery {
     type Output = Result<Vec<RepoData>, GatewayError>;
@@ -592,7 +621,7 @@ impl NamesQuery {
                 }
             });
         }
-        let mut names: HashSet<String> = HashSet::default();
+        let mut names: std::collections::HashSet<String> = std::collections::HashSet::default();
 
         while let Some(result) = pending_subdirs.next().await {
             let subdir_names = result?;

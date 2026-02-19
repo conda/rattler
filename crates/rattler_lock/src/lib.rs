@@ -27,7 +27,7 @@
 //!   hand, they should be relatively easy to read and understand. So that when
 //!   a lock-file is checked into version control and someone looks at the diff,
 //!   they can understand what changed.
-//! * To be easily parsable. It should be fairly straightforward to create a
+//! * To be easily parse-able. It should be fairly straightforward to create a
 //!   parser for the format so that it can be used in other tools.
 //! * To reduce diff size when the content changes. The order of content in the
 //!   serialized lock-file should be fixed to ensure that the diff size is
