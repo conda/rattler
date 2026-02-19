@@ -30,7 +30,7 @@ class NamelessMatchSpec:
 
         When `experimental_extras` is `True`, extras syntax is enabled (e.g., `[extras=[foo,bar]]`).
 
-        When `experimental_conditionals` is `True`, conditionals syntax is enabled (e.g., `>=1.0; if python >=3.6`).
+        When `experimental_conditionals` is `True`, conditionals syntax is enabled (e.g., `>=1.0[when="python >=3.6"]`).
 
         ```python
         >>> NamelessMatchSpec(">=24.0")
