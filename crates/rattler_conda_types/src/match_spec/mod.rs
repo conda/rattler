@@ -196,8 +196,24 @@ impl<'de> Deserialize<'de> for MatchSpec {
 impl Display for MatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(channel) = &self.channel {
-            let name = channel.name();
-            write!(f, "{name}")?;
+            // For http/https channels whose base URL is not under the default
+            // channel alias (https://conda.anaconda.org), we write the full
+            // base URL so that the server information is preserved during
+            // round-tripping. For channels under the default alias (or for
+            // non-http schemes like file://), the short name is sufficient.
+            let url = channel.base_url.url();
+            let use_full_url = matches!(url.scheme(), "https" | "http")
+                && !channel
+                    .base_url
+                    .as_str()
+                    .starts_with(crate::channel::DEFAULT_CHANNEL_ALIAS);
+
+            if use_full_url {
+                let base_str = channel.base_url.as_str().trim_end_matches('/');
+                write!(f, "{base_str}")?;
+            } else {
+                write!(f, "{}", channel.name())?;
+            }
 
             if let Some(subdir) = &self.subdir {
                 write!(f, "/{subdir}")?;

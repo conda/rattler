@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
-assertion_line: 1268
 expression: evaluated
 ---
 blas *.* mkl: blas * mkl
@@ -18,9 +17,9 @@ pytorch=*=cuda*: pytorch * cuda*
 python ==2.7.*.*|>=3.6: python 2.7.*|>=3.6
 python=3.9: python 3.9.*
 python=*: python *
-"https://software.repos.intel.com/python/conda::python[version=3.9]": "python/conda::python ==3.9"
-"https://c.com/p/conda/linux-64::python[version=3.9]": "p/conda/linux-64::python ==3.9"
-"https://c.com/p/conda::python[version=3.9, subdir=linux-64]": "p/conda/linux-64::python ==3.9"
+"https://software.repos.intel.com/python/conda::python[version=3.9]": "https://software.repos.intel.com/python/conda::python ==3.9"
+"https://c.com/p/conda/linux-64::python[version=3.9]": "https://c.com/p/conda/linux-64::python ==3.9"
+"https://c.com/p/conda::python[version=3.9, subdir=linux-64]": "https://c.com/p/conda/linux-64::python ==3.9"
 "conda-forge/linux-32::python[version=3.9, subdir=linux-64]": "conda-forge/linux-64::python ==3.9"
 "conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]": "conda-forge/linux-64::python ==3.9[build_number=\"==0\"]"
 "python ==3.9[channel=conda-forge]": "conda-forge::python ==3.9"

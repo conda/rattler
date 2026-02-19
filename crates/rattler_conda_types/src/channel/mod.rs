@@ -19,7 +19,7 @@ mod channel_url;
 
 pub use channel_url::ChannelUrl;
 
-const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
+pub(crate) const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
 
 /// The `ChannelConfig` describes properties that are required to resolve
 /// "simple" channel names to channel URLs.
