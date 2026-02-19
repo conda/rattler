@@ -1,0 +1,147 @@
+use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+use crate::PrefixRecord;
+
+/// Internal state for a lazily loaded package record
+struct LazyRecordEntry {
+    path: PathBuf,
+    record: OnceLock<Option<PrefixRecord>>,
+}
+
+/// A lazily populated view of the `conda-meta` directory in a prefix.
+pub struct PrefixData {
+    /// The path to the environment prefix
+    prefix_path: PathBuf,
+    /// A map of package names to their file path and a lazy lock for the parsed record
+    records: HashMap<String, LazyRecordEntry>,
+}
+
+impl PrefixData {
+    /// Returns the path to the environment prefix
+    pub fn prefix_path(&self) -> &Path {
+        &self.prefix_path
+    }
+
+    /// Discovers all packages in the `conda-meta` directory but does not parse the JSON yet.
+    pub fn new(prefix_path: impl Into<PathBuf>) -> Result<Self, std::io::Error> {
+        let prefix_path = prefix_path.into();
+        let meta_dir = prefix_path.join("conda-meta");
+        let mut records = HashMap::new();
+
+        if !meta_dir.exists() {
+            return Ok(Self {
+                prefix_path,
+                records,
+            });
+        }
+
+        for entry in fs::read_dir(meta_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.extension().and_then(|s| s.to_str()) != Some("json") {
+                continue;
+            }
+
+            if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+                if let Some(name) = filename
+                    .strip_suffix(".json")
+                    .and_then(|s| s.rsplitn(3, '-').last())
+                {
+                    records.insert(
+                        name.to_string(),
+                        LazyRecordEntry {
+                            path,
+                            record: OnceLock::new(),
+                        },
+                    );
+                }
+            }
+        }
+        Ok(Self {
+            prefix_path,
+            records,
+        })
+    }
+
+    /// Retrieves a record lazily. Parses the JSON only on the first call.
+    pub fn get(&self, package_name: &str) -> Option<&PrefixRecord> {
+        let entry = self.records.get(package_name)?;
+
+        let record_option = entry
+            .record
+            .get_or_init(|| PrefixRecord::from_path(&entry.path).ok());
+
+        record_option.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_prefix_data_lazy_loading() {
+        let dir = tempdir().unwrap();
+        let meta_dir = dir.path().join("conda-meta");
+        fs::create_dir_all(&meta_dir).unwrap();
+
+        let fake_json_path = meta_dir.join("numpy-1.24.3-py311h_0.json");
+        fs::write(&fake_json_path, "{}").unwrap();
+
+        let prefix_data = PrefixData::new(dir.path()).unwrap();
+        assert!(
+            prefix_data.records.contains_key("numpy"),
+            "Did not extract package name correctly!"
+        );
+    }
+
+    #[test]
+    fn test_prefix_data_strict() {
+        let dir = tempdir().unwrap();
+        let meta_dir = dir.path().join("conda-meta");
+        fs::create_dir_all(&meta_dir).unwrap();
+
+        fs::write(meta_dir.join("numpy-1.24.3-py311h_0.json"), "{}").unwrap();
+
+        fs::write(meta_dir.join("scikit-learn-1.2.2-py311_1.json"), "{}").unwrap();
+
+        fs::write(meta_dir.join("ignore_me.txt"), "some text").unwrap();
+        fs::write(meta_dir.join("not_a_json.yaml"), "{}").unwrap();
+
+        let prefix_data = PrefixData::new(dir.path()).unwrap();
+
+        assert_eq!(
+            prefix_data.records.len(),
+            2,
+            "Should only load the 2 valid .json files"
+        );
+        assert!(
+            prefix_data.records.contains_key("numpy"),
+            "Failed to extract simple package name"
+        );
+        assert!(
+            prefix_data.records.contains_key("scikit-learn"),
+            "Failed to extract package name with hyphens"
+        );
+
+        let numpy_record = prefix_data.get("numpy");
+        assert!(
+            numpy_record.is_none(),
+            "Expected None because the JSON is malformed/empty"
+        );
+
+        let entry = prefix_data.records.get("numpy").unwrap();
+        assert!(
+            entry.record.get().is_some(),
+            "The OnceLock should be populated (with a None value) after the first get() call"
+        );
+
+        assert!(prefix_data.get("does-not-exist").is_none());
+    }
+}
