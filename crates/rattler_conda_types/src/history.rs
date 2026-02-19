@@ -293,61 +293,35 @@ impl History {
     // Writer
     // -----------------------------------------------------------------------
 
-    /// Appends a new revision to the history file.
+    /// Creates a [`HistoryWriter`] that appends to the history file.
     ///
-    /// If the parent directory does not exist it will be created.
-    /// Packages in [`Revision::removed`] and [`Revision::added`] contain
-    /// distribution strings without any `+`/`-` prefix — the prefix is added
-    /// automatically.
-    pub fn write_revision(&self, revision: &Revision) -> Result<(), HistoryError> {
+    /// The file is opened once and kept open for the lifetime of the writer,
+    /// avoiding repeated open/close cycles when writing multiple entries.
+    pub fn writer(&self) -> Result<HistoryWriter, HistoryError> {
         if let Some(parent) = self.path.parent() {
             fs_err::create_dir_all(parent)?;
         }
 
-        let mut file = fs_err::OpenOptions::new()
+        let file = fs_err::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.path)?;
 
-        // Write timestamp header.
-        writeln!(file, "==> {} <==", revision.timestamp)?;
-
-        // Write removed packages.
-        for pkg in &revision.removed {
-            writeln!(file, "-{pkg}")?;
-        }
-
-        // Write added packages.
-        for pkg in &revision.added {
-            writeln!(file, "+{pkg}")?;
-        }
-
-        Ok(())
+        Ok(HistoryWriter { file })
     }
 
-    /// Appends a comment line to the history file.
+    /// Convenience method: appends a single revision to the history file.
     ///
-    /// This is typically used immediately after [`History::write_revision`] to
-    /// record the command, conda version, and/or specs. The caller is
-    /// responsible for formatting the comment correctly (the leading `#` should
-    /// be included).
-    pub fn write_comment(&self, comment: &str) -> Result<(), HistoryError> {
-        let mut file = fs_err::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)?;
-
-        writeln!(file, "{comment}")?;
-
-        Ok(())
+    /// Opens the file, writes, and closes it. For multiple writes consider
+    /// using [`History::writer`] instead.
+    pub fn write_revision(&self, revision: &Revision) -> Result<(), HistoryError> {
+        self.writer()?.write_revision(revision)
     }
 
-    /// Writes a complete revision with comments, command, and conda version
-    /// metadata in one shot.
+    /// Convenience method: writes a full revision with metadata.
     ///
-    /// This is a convenience wrapper around [`History::write_revision`] and
-    /// [`History::write_comment`]. The `cmd`, `conda_version`, and `specs`
-    /// parameters are optional and only written if `Some`.
+    /// Opens the file, writes, and closes it. For multiple writes consider
+    /// using [`History::writer`] instead.
     pub fn write_full_revision(
         &self,
         revision: &Revision,
@@ -355,38 +329,8 @@ impl History {
         conda_version: Option<&str>,
         action_specs: Option<(&str, &[String])>,
     ) -> Result<(), HistoryError> {
-        if let Some(parent) = self.path.parent() {
-            fs_err::create_dir_all(parent)?;
-        }
-
-        let mut file = fs_err::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)?;
-
-        // Revision header.
-        writeln!(file, "==> {} <==", revision.timestamp)?;
-
-        // Comment metadata.
-        if let Some(cmd) = cmd {
-            writeln!(file, "# cmd: {cmd}")?;
-        }
-        if let Some(version) = conda_version {
-            writeln!(file, "# conda version: {version}")?;
-        }
-        if let Some((action, specs)) = action_specs {
-            writeln!(file, "# {action} specs: {specs:?}")?;
-        }
-
-        // Package diffs.
-        for pkg in &revision.removed {
-            writeln!(file, "-{pkg}")?;
-        }
-        for pkg in &revision.added {
-            writeln!(file, "+{pkg}")?;
-        }
-
-        Ok(())
+        self.writer()?
+            .write_full_revision(revision, cmd, conda_version, action_specs)
     }
 
     /// Clears (truncates) the history file.
@@ -421,6 +365,74 @@ impl History {
             for pkg in &rev.packages {
                 writeln!(file, "{pkg}")?;
             }
+        }
+
+        Ok(())
+    }
+}
+
+/// A writer that keeps the history file open for efficient batch writes.
+///
+/// Obtain an instance via [`History::writer`].
+pub struct HistoryWriter {
+    file: fs_err::File,
+}
+
+impl HistoryWriter {
+    /// Appends a revision entry to the history file.
+    ///
+    /// Packages in [`Revision::removed`] and [`Revision::added`] are written
+    /// with the appropriate `+`/`-` prefix.
+    pub fn write_revision(&mut self, revision: &Revision) -> Result<(), HistoryError> {
+        writeln!(self.file, "==> {} <==", revision.timestamp)?;
+
+        for pkg in &revision.removed {
+            writeln!(self.file, "-{pkg}")?;
+        }
+        for pkg in &revision.added {
+            writeln!(self.file, "+{pkg}")?;
+        }
+
+        Ok(())
+    }
+
+    /// Appends a comment line to the history file.
+    ///
+    /// The caller is responsible for formatting the comment correctly (the
+    /// leading `#` should be included).
+    pub fn write_comment(&mut self, comment: &str) -> Result<(), HistoryError> {
+        writeln!(self.file, "{comment}")?;
+        Ok(())
+    }
+
+    /// Writes a complete revision with optional metadata comments.
+    pub fn write_full_revision(
+        &mut self,
+        revision: &Revision,
+        cmd: Option<&str>,
+        conda_version: Option<&str>,
+        action_specs: Option<(&str, &[String])>,
+    ) -> Result<(), HistoryError> {
+        // Revision header.
+        writeln!(self.file, "==> {} <==", revision.timestamp)?;
+
+        // Comment metadata.
+        if let Some(cmd) = cmd {
+            writeln!(self.file, "# cmd: {cmd}")?;
+        }
+        if let Some(version) = conda_version {
+            writeln!(self.file, "# conda version: {version}")?;
+        }
+        if let Some((action, specs)) = action_specs {
+            writeln!(self.file, "# {action} specs: {specs:?}")?;
+        }
+
+        // Package diffs.
+        for pkg in &revision.removed {
+            writeln!(self.file, "-{pkg}")?;
+        }
+        for pkg in &revision.added {
+            writeln!(self.file, "+{pkg}")?;
         }
 
         Ok(())
