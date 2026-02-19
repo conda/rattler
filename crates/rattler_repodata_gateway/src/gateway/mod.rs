@@ -552,7 +552,7 @@ mod test {
 
         // Test if the first repodata subdir contains only the direct url package.
         let first_subdir = records.first().unwrap();
-        assert_eq!(first_subdir.len, 1);
+        assert_eq!(first_subdir.len(), 1);
         let openssl_record = first_subdir
             .iter()
             .find(|record| record.package_record.name.as_normalized() == "openssl")
@@ -1254,13 +1254,13 @@ mod test {
             &self,
             platform: Platform,
             name: &PackageName,
-        ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
+        ) -> Result<Vec<Arc<RepoDataRecord>>, GatewayError> {
             let records = self
                 .records
                 .get(&(platform, name.clone()))
                 .cloned()
                 .unwrap_or_default();
-            Ok(Arc::from(records))
+            Ok(records.into_iter().map(Arc::new).collect())
         }
 
         fn package_names(&self, platform: Platform) -> Vec<String> {
