@@ -8,12 +8,6 @@ Rattler is a Rust library for conda package management — installing environmen
 
 ## Build & Development Commands
 
-Development requires [pixi](https://github.com/prefix-dev/pixi) (>= 0.62.0). First-time setup:
-```sh
-git submodule update --init
-pixi install
-```
-
 Common commands:
 ```sh
 pixi run build                # cargo build
@@ -70,7 +64,3 @@ PyO3-based, built with maturin. Async Rust functions are exposed via tokio runti
 
 ### JS/WASM bindings (js-rattler)
 wasm-bindgen based, primarily exposes version comparison for use in mambajs. Located in `js-rattler/`.
-
-## AI Policy
-
-All AI usage must be disclosed. Contributors must fully understand all AI-generated code. See `AI_POLICY.md`.
