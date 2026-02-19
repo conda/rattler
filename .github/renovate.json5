@@ -25,12 +25,6 @@
       versioning: "regex:^v?(?<major>\\d+)(\\.(?<minor>\\d+)\\.(?<patch>\\d+))?$",
     },
     {
-      description: "We run multiple macOS runner versions on purpose since 13 runs on x86_64",
-      matchPackageNames: "macos",
-      matchManagers: ["github-actions"],
-      enabled: false,
-    },
-    {
       "groupName": "Pixi-Lock",
       "matchManagers": ["pixi"],
       "matchUpdateTypes": ["lockFileMaintenance"]
