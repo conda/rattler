@@ -226,10 +226,8 @@ mod tests {
 
     #[test]
     fn test_should_retry_could_not_create_destination() {
-        let err = ExtractError::CouldNotCreateDestination(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "could not create",
-        ));
+        let err =
+            ExtractError::CouldNotCreateDestination(std::io::Error::other("could not create"));
         assert!(err.should_retry());
     }
 

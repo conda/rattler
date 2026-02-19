@@ -988,25 +988,26 @@ mod test {
 
             let byte_count = *bytes.lock().await;
             // Create a stream that yields partial data then fails with broken pipe
-            let partial_data: Bytes = buffer.into_iter().take(byte_count).collect::<Vec<u8>>().into();
+            let partial_data: Bytes = buffer
+                .into_iter()
+                .take(byte_count)
+                .collect::<Vec<u8>>()
+                .into();
 
-            let stream = stream::unfold(
-                (false, partial_data),
-                |(has_sent, data)| async move {
-                    if has_sent {
-                        // Return broken pipe error on second iteration
-                        return Some((
-                            Err(std::io::Error::new(
-                                std::io::ErrorKind::BrokenPipe,
-                                "stream closed because of a broken pipe",
-                            )),
-                            (true, data),
-                        ));
-                    }
-                    // Return the partial data first
-                    Some((Ok::<_, std::io::Error>(data.clone()), (true, data)))
-                },
-            );
+            let stream = stream::unfold((false, partial_data), |(has_sent, data)| async move {
+                if has_sent {
+                    // Return broken pipe error on second iteration
+                    return Some((
+                        Err(std::io::Error::new(
+                            std::io::ErrorKind::BrokenPipe,
+                            "stream closed because of a broken pipe",
+                        )),
+                        (true, data),
+                    ));
+                }
+                // Return the partial data first
+                Some((Ok::<_, std::io::Error>(data.clone()), (true, data)))
+            });
 
             let body = Body::from_stream(stream);
             return Ok(Response::new(body));
@@ -1015,6 +1016,7 @@ mod test {
         Ok(response)
     }
 
+    #[allow(clippy::enum_variant_names)]
     enum Middleware {
         FailTheFirstTwoRequests,
         FailAfterBytes(usize),
