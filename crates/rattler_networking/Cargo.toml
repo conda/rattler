@@ -1,6 +1,6 @@
 [package]
 name = "rattler_networking"
-version = "0.25.33"
+version = "0.26.0"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Authenticated requests in the conda ecosystem"
