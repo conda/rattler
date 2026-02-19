@@ -462,7 +462,11 @@ impl QueryExecutor {
 
             for (matcher, spec) in &self.pending_pattern_specs {
                 if matcher.matches(&name) {
-                    if self.seen.insert(name.as_normalized().to_string(), ()).is_none() {
+                    if self
+                        .seen
+                        .insert(name.as_normalized().to_string(), ())
+                        .is_none()
+                    {
                         let pending = self
                             .pending_package_specs
                             .entry(name.clone())
