@@ -19,8 +19,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use regex::Regex;
-
 /// A single revision in a conda history file.
 ///
 /// Each revision starts with a header line `==> <datetime> <==`, followed by
@@ -116,9 +114,9 @@ impl ParsedHistory {
 
     /// Extracts [`UserRequest`]s from an already-parsed list of revisions.
     pub fn user_requests_from_revisions(revisions: &[HistoryRevision]) -> Vec<UserRequest> {
-        let cmd_re = Regex::new(r"^#\s*cmd:\s*(.+)$").expect("valid regex");
-        let conda_v_re = Regex::new(r"^#\s*conda version:\s*(.+)$").expect("valid regex");
-        let spec_re = Regex::new(r"^#\s*(\w+)\s*specs:\s*(.+)?$").expect("valid regex");
+        let cmd_re = lazy_regex::regex!(r"^#\s*cmd:\s*(.+)$");
+        let conda_v_re = lazy_regex::regex!(r"^#\s*conda version:\s*(.+)$");
+        let spec_re = lazy_regex::regex!(r"^#\s*(\w+)\s*specs:\s*(.+)?$");
 
         let mut requests = Vec::new();
 
@@ -236,7 +234,7 @@ impl History {
 
     /// Parses a history string into a [`ParsedHistory`].
     pub fn parse_str(s: &str) -> Result<ParsedHistory, HistoryError> {
-        let sep_re = Regex::new(r"^==>\s*(.+?)\s*<==$").expect("valid regex");
+        let sep_re = lazy_regex::regex!(r"^==>\s*(.+?)\s*<==$");
 
         let mut revisions = Vec::new();
 
@@ -458,7 +456,7 @@ fn parse_specs_string(s: &str) -> Vec<String> {
     // Older comma-separated format.
     // A version qualifier (>=, <=, etc.) after a comma belongs to the previous
     // spec, not a new one.
-    let version_start_re = Regex::new(r"^[><=!]").expect("valid regex");
+    let version_start_re = lazy_regex::regex!(r"^[><=!]");
 
     let mut specs = Vec::new();
     for part in s.split(',') {
