@@ -972,6 +972,12 @@ impl ShellEnum {
                 )
             } else if parent_process_name.contains("cmd.exe") {
                 Some(CmdExe.into())
+            } else if parent_process_name.contains("dash")
+                || parent_process_name.contains("ksh")
+                || parent_process_name == "sh"
+                || parent_process_name == "busybox"
+            {
+                Some(Bash.into())
             } else {
                 None
             };
@@ -1010,6 +1016,7 @@ impl FromStr for ShellEnum {
             "cmd" => Ok(CmdExe.into()),
             "nu" | "nushell" => Ok(NuShell.into()),
             "powershell" | "powershell_ise" => Ok(PowerShell::default().into()),
+            "sh" | "dash" | "busybox" | "ksh" => Ok(Bash.into()),
             _ => Err(ParseShellEnumError(format!(
                 "'{s}' is an unknown shell variant"
             ))),
