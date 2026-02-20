@@ -146,9 +146,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.101"
+version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f0e0fee31ef5ed1ba1316088939cea399010ed7731dba877ed44aeb407a75ea"
+checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "arbitrary"
@@ -1130,9 +1130,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.20.1"
+version = "3.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c6f81257d10a0f602a294ae4182251151ff97dbb504ef9afcdda4a64b24d9b4"
+checksum = "5d20789868f4b01b2f2caec9f5c4e0213b41e3e5702a50157d699ae31ced2fcb"
 
 [[package]]
 name = "byteorder"
@@ -1303,9 +1303,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.59"
+version = "4.5.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5caf74d17c3aec5495110c34cc3f78644bfa89af6c8993ed4de2790e49b6499"
+checksum = "2797f34da339ce31042b27d23607e051786132987f595b02ba4f6a6dffb7030a"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1324,9 +1324,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.59"
+version = "4.5.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "370daa45065b80218950227371916a1633217ae42b2715b2287b606dcd618e24"
+checksum = "24a241312cea5059b13574bb9b3861cabf758b879c15190b37b6d6fd63ab6876"
 dependencies = [
  "anstream",
  "anstyle",
@@ -3402,7 +3402,7 @@ dependencies = [
  "log",
  "secret-service",
  "security-framework 2.11.1",
- "security-framework 3.6.0",
+ "security-framework 3.7.0",
  "windows-sys 0.60.2",
  "zbus",
  "zeroize",
@@ -3743,7 +3743,7 @@ dependencies = [
  "openssl-probe",
  "openssl-sys",
  "schannel",
- "security-framework 3.6.0",
+ "security-framework 3.7.0",
  "security-framework-sys",
  "tempfile",
 ]
@@ -4790,7 +4790,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.39.13"
+version = "0.39.14"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -4879,7 +4879,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.6.12"
+version = "0.6.13"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4918,7 +4918,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.43.3"
+version = "0.43.4"
 dependencies = [
  "ahash",
  "assert_matches",
@@ -4969,7 +4969,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_config"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "console 0.16.2",
  "fs-err",
@@ -5009,7 +5009,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.27.14"
+version = "0.27.15"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5060,7 +5060,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.26.14"
+version = "0.26.15"
 dependencies = [
  "ahash",
  "chrono",
@@ -5097,7 +5097,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_menuinst"
-version = "0.2.47"
+version = "0.2.48"
 dependencies = [
  "chrono",
  "configparser",
@@ -5127,7 +5127,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -5165,7 +5165,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.24.0"
+version = "0.24.1"
 dependencies = [
  "assert_matches",
  "astral-tokio-tar",
@@ -5225,7 +5225,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5298,7 +5298,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_s3"
-version = "0.1.23"
+version = "0.1.24"
 dependencies = [
  "aws-config",
  "aws-credential-types",
@@ -5314,7 +5314,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_sandbox"
-version = "0.2.12"
+version = "0.2.13"
 dependencies = [
  "birdcage",
  "clap",
@@ -5325,7 +5325,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "anyhow",
  "enum_dispatch",
@@ -5346,7 +5346,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "4.2.4"
+version = "4.2.5"
 dependencies = [
  "chrono",
  "criterion",
@@ -5374,7 +5374,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_upload"
-version = "0.4.13"
+version = "0.4.14"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -5409,7 +5409,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "2.3.9"
+version = "2.3.10"
 dependencies = [
  "archspec",
  "libloading 0.9.0",
@@ -5927,7 +5927,7 @@ dependencies = [
  "openssl-probe",
  "rustls-pki-types",
  "schannel",
- "security-framework 3.6.0",
+ "security-framework 3.7.0",
 ]
 
 [[package]]
@@ -5955,7 +5955,7 @@ dependencies = [
  "rustls-native-certs",
  "rustls-platform-verifier-android",
  "rustls-webpki",
- "security-framework 3.6.0",
+ "security-framework 3.7.0",
  "security-framework-sys",
  "webpki-root-certs",
  "windows-sys 0.61.2",
@@ -6131,9 +6131,9 @@ dependencies = [
 
 [[package]]
 name = "security-framework"
-version = "3.6.0"
+version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d17b898a6d6948c3a8ee4372c17cb384f90d2e6e912ef00895b14fd7ab54ec38"
+checksum = "b7f4bc775c73d9a02cde8bf7b2ec4c9d12743edf609006c7facc23998404cd1d"
 dependencies = [
  "bitflags",
  "core-foundation 0.10.1",
@@ -6144,9 +6144,9 @@ dependencies = [
 
 [[package]]
 name = "security-framework-sys"
-version = "2.16.0"
+version = "2.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "321c8673b092a9a42605034a9879d73cb79101ed5fd117bc9a597b89b4e9e61a"
+checksum = "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3"
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -6793,9 +6793,9 @@ checksum = "b7401a30af6cb5818bb64852270bb722533397edcfc7344954a38f420819ece2"
 
 [[package]]
 name = "syn"
-version = "2.0.116"
+version = "2.0.117"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3df424c70518695237746f84cede799c9c58fcb37450d7b23716568cc8bc69cb"
+checksum = "e665b8803e7b1d2a727f4023456bbbbe74da67099c585258af0ad9c5013b9b99"
 dependencies = [
  "proc-macro2",
  "quote",
