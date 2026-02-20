@@ -1,3 +1,4 @@
+//! Lazily populated view of the 'conda-meta' directory
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -8,7 +9,7 @@ use crate::PrefixRecord;
 /// Internal state for a lazily loaded package record
 struct LazyRecordEntry {
     path: PathBuf,
-    record: OnceLock<Option<PrefixRecord>>,
+    record: OnceLock<Result<PrefixRecord, std::io::Error>>,
 }
 
 /// A lazily populated view of the `conda-meta` directory in a prefix.
@@ -68,14 +69,17 @@ impl PrefixData {
     }
 
     /// Retrieves a record lazily. Parses the JSON only on the first call.
-    pub fn get(&self, package_name: &str) -> Option<&PrefixRecord> {
+    pub fn get(&self, package_name: &str) -> Option<Result<&PrefixRecord, &std::io::Error>> {
+        // 1. Check if the file path exists in our initial scan
         let entry = self.records.get(package_name)?;
 
-        let record_option = entry
+        // 2. Parse the file if we haven't already.
+        let record_result = entry
             .record
-            .get_or_init(|| PrefixRecord::from_path(&entry.path).ok());
+            .get_or_init(|| PrefixRecord::from_path(&entry.path));
 
-        record_option.as_ref()
+        // 3. .as_ref() elegantly converts &Result<T, E> into Result<&T, &E>
+        Some(record_result.as_ref())
     }
 }
 
@@ -108,7 +112,6 @@ mod tests {
         fs::create_dir_all(&meta_dir).unwrap();
 
         fs::write(meta_dir.join("numpy-1.24.3-py311h_0.json"), "{}").unwrap();
-
         fs::write(meta_dir.join("scikit-learn-1.2.2-py311_1.json"), "{}").unwrap();
 
         fs::write(meta_dir.join("ignore_me.txt"), "some text").unwrap();
@@ -132,16 +135,19 @@ mod tests {
 
         let numpy_record = prefix_data.get("numpy");
         assert!(
-            numpy_record.is_none(),
-            "Expected None because the JSON is malformed/empty"
+            numpy_record.unwrap().is_err(),
+            "Expected Some(Err) because the JSON is malformed/empty"
         );
 
         let entry = prefix_data.records.get("numpy").unwrap();
         assert!(
             entry.record.get().is_some(),
-            "The OnceLock should be populated (with a None value) after the first get() call"
+            "The OnceLock should be populated (with an Err value) after the first get() call"
         );
 
-        assert!(prefix_data.get("does-not-exist").is_none());
+        assert!(
+            prefix_data.get("does-not-exist").is_none(),
+            "Expected None because the package is not in the directory at all"
+        );
     }
 }

@@ -27,7 +27,6 @@ pub mod minimal_prefix_record;
 pub mod package;
 mod package_name;
 pub mod prefix;
-/// Lazily populated view of the 'conda-meta' directory.
 pub mod prefix_data;
 pub mod prefix_record;
 mod record_traits;
