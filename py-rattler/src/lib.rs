@@ -35,10 +35,9 @@ use std::ops::Deref;
 use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use error::{
-    CacheDirError, EnvironmentCreationError,
-    InvalidChannelError, InvalidMatchSpecError,
-    InvalidUrlError, InvalidVersionError, InvalidVersionSpecError, IoError,
-    LinkError, PyRattlerError, SolverError,
+    CacheDirError, EnvironmentCreationError, InvalidChannelError, InvalidMatchSpecError,
+    InvalidUrlError, InvalidVersionError, InvalidVersionSpecError, IoError, LinkError,
+    PyRattlerError, SolverError,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -189,10 +188,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyExplicitEnvironmentEntry>()?;
 
     // Exceptions
-    m.add(
-        "InvalidVersionError",
-        py.get_type::<InvalidVersionError>(),
-    )?;
+    m.add("InvalidVersionError", py.get_type::<InvalidVersionError>())?;
     m.add(
         "InvalidVersionSpecError",
         py.get_type::<InvalidVersionSpecError>(),
@@ -202,10 +198,7 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
         py.get_type::<InvalidMatchSpecError>(),
     )?;
     m.add("InvalidUrlError", py.get_type::<InvalidUrlError>())?;
-    m.add(
-        "InvalidChannelError",
-        py.get_type::<InvalidChannelError>(),
-    )?;
+    m.add("InvalidChannelError", py.get_type::<InvalidChannelError>())?;
     m.add("SolverError", py.get_type::<SolverError>())?;
     m.add("LinkError", py.get_type::<LinkError>())?;
     m.add("IoError", py.get_type::<IoError>())?;

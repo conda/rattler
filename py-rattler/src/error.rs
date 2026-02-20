@@ -122,21 +122,15 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::PackageNameMatcherParseError(err) => {
                 PyValueError::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::InvalidUrl(err) => {
-                InvalidUrlError::new_err(pretty_print_error(&err))
-            }
+            PyRattlerError::InvalidUrl(err) => InvalidUrlError::new_err(pretty_print_error(&err)),
             PyRattlerError::InvalidChannel(err) => {
                 InvalidChannelError::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::ActivationError(err) => {
-                PyValueError::new_err(pretty_print_error(&err))
-            }
+            PyRattlerError::ActivationError(err) => PyValueError::new_err(pretty_print_error(&err)),
             PyRattlerError::ParsePlatformError(err) => {
                 PyValueError::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::ParseArchError(err) => {
-                PyValueError::new_err(pretty_print_error(&err))
-            }
+            PyRattlerError::ParseArchError(err) => PyValueError::new_err(pretty_print_error(&err)),
             PyRattlerError::FetchRepoDataError(err) => {
                 PyValueError::new_err(pretty_print_error(&err))
             }
@@ -164,19 +158,11 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::ParseCondaLockError(err) => {
                 PyValueError::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::ConversionError(err) => {
-                PyValueError::new_err(pretty_print_error(&err))
-            }
+            PyRattlerError::ConversionError(err) => PyValueError::new_err(pretty_print_error(&err)),
             PyRattlerError::RequirementError(err) => RequirementError::new_err(err),
-            PyRattlerError::EnvironmentCreationError(err) => {
-                EnvironmentCreationError::new_err(err)
-            }
-            PyRattlerError::ExtractError(err) => {
-                PyValueError::new_err(pretty_print_error(&err))
-            }
-            PyRattlerError::GatewayError(err) => {
-                PyValueError::new_err(pretty_print_error(&err))
-            }
+            PyRattlerError::EnvironmentCreationError(err) => EnvironmentCreationError::new_err(err),
+            PyRattlerError::ExtractError(err) => PyValueError::new_err(pretty_print_error(&err)),
+            PyRattlerError::GatewayError(err) => PyValueError::new_err(pretty_print_error(&err)),
             PyRattlerError::InstallerError(err) => {
                 InstallerError::new_err(pretty_print_error(&err))
             }
@@ -216,11 +202,7 @@ create_exception!(exceptions, LinkError, PyException);
 create_exception!(exceptions, RequirementError, PyException);
 create_exception!(exceptions, EnvironmentCreationError, PyException);
 create_exception!(exceptions, ActivationScriptFormatError, PyException);
-create_exception!(
-    exceptions,
-    ParseExplicitEnvironmentSpecError,
-    PyException
-);
+create_exception!(exceptions, ParseExplicitEnvironmentSpecError, PyException);
 create_exception!(exceptions, InstallerError, PyException);
 create_exception!(exceptions, ShellError, PyException);
 create_exception!(exceptions, InvalidHeaderNameError, PyException);
