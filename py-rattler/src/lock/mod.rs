@@ -8,23 +8,18 @@ use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
 use rattler_conda_types::RepoDataRecord;
 use rattler_lock::{
     Channel, CondaPackageData, Environment, LockFile, LockedPackage, OwnedEnvironment,
-    OwnedPlatform, PackageHashes, PlatformData, PlatformName, PypiPackageData,
-    PypiPackageEnvironmentData, UrlOrPath, Verbatim, DEFAULT_ENVIRONMENT_NAME,
+    OwnedPlatform, PackageHashes, PlatformData, PlatformName, PypiPackageData, UrlOrPath, Verbatim,
+    DEFAULT_ENVIRONMENT_NAME,
 };
-use std::{
-    collections::{BTreeSet, HashMap},
-    path::PathBuf,
-    str::FromStr,
-    sync::Mutex,
-};
+use std::{collections::HashMap, path::PathBuf, str::FromStr, sync::Mutex};
 
 /// State for building a lock file incrementally.
 #[derive(Clone, Default)]
 struct LockFileBuildState {
     platforms: Vec<PlatformData>,
     conda_packages: Vec<(String, String, CondaPackageData)>, // (env, platform_name, data)
-    pypi_packages: Vec<(String, String, PypiPackageData, PypiPackageEnvironmentData)>, // (env, platform_name, data, env_data)
-    channels: HashMap<String, Vec<Channel>>, // env -> channels
+    pypi_packages: Vec<(String, String, PypiPackageData)>,   // (env, platform_name, data, env_data)
+    channels: HashMap<String, Vec<Channel>>,                 // env -> channels
 }
 
 impl LockFileBuildState {
@@ -44,9 +39,9 @@ impl LockFileBuildState {
                 .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?;
         }
 
-        for (env, platform_name, pkg, env_data) in &self.pypi_packages {
+        for (env, platform_name, pkg) in &self.pypi_packages {
             builder
-                .add_pypi_package(env, platform_name, pkg.clone(), env_data.clone())
+                .add_pypi_package(env, platform_name, pkg.clone())
                 .map_err(|e| PyRattlerError::LockFileError(e.to_string()))?;
         }
 
@@ -220,11 +215,9 @@ impl PyLockFile {
                 requires_dist: Vec::new(),
                 requires_python: None,
             };
-            let env_data = PypiPackageEnvironmentData::default();
-
             state
                 .pypi_packages
-                .push((environment, platform_name, pkg_data, env_data));
+                .push((environment, platform_name, pkg_data));
             Ok(())
         })
     }
@@ -547,12 +540,7 @@ impl PyEnvironment {
             .pypi_packages_by_platform()
             .map(|(platform, data_vec)| {
                 let data = data_vec
-                    .map(|(pkg_data, pkg_env_data)| {
-                        PyLockedPackage::from(LockedPackage::Pypi(
-                            pkg_data.clone(),
-                            pkg_env_data.clone(),
-                        ))
-                    })
+                    .map(|pkg_data| PyLockedPackage::from(LockedPackage::Pypi(pkg_data.clone())))
                     .collect::<Vec<_>>();
                 (platform.name().to_string(), data)
             })
@@ -603,10 +591,8 @@ impl PyEnvironment {
         self.as_ref()
             .pypi_packages(platform.platform())
             .map(|data| {
-                data.map(|(pkg, env)| {
-                    PyLockedPackage::from(LockedPackage::Pypi(pkg.clone(), env.clone()))
-                })
-                .collect()
+                data.map(|pkg| PyLockedPackage::from(LockedPackage::Pypi(pkg.clone())))
+                    .collect()
             })
     }
 }
@@ -677,11 +663,7 @@ impl PyLockedPackage {
     }
 
     fn as_pypi(&self) -> &PypiPackageData {
-        self.inner.as_pypi().expect("must be pypi").0
-    }
-
-    fn as_pypi_env(&self) -> &PypiPackageEnvironmentData {
-        self.inner.as_pypi().expect("must be pypi").1
+        self.inner.as_pypi().expect("must be pypi")
     }
 }
 
@@ -705,7 +687,7 @@ impl PyLockedPackage {
     pub fn name(&self) -> String {
         match &self.inner {
             LockedPackage::Conda(data) => data.record().name.as_source().to_string(),
-            LockedPackage::Pypi(data, _) => data.name.to_string(),
+            LockedPackage::Pypi(data) => data.name.to_string(),
         }
     }
 
@@ -713,7 +695,7 @@ impl PyLockedPackage {
     pub fn location(&self) -> String {
         match &self.inner {
             LockedPackage::Conda(data) => data.location().to_string(),
-            LockedPackage::Pypi(data, _) => data.location.to_string(),
+            LockedPackage::Pypi(data) => data.location.to_string(),
         }
     }
 
@@ -740,7 +722,7 @@ impl PyLockedPackage {
                     (None, None) => None,
                 }
             }
-            LockedPackage::Pypi(data, _) => data.hash.clone(),
+            LockedPackage::Pypi(data) => data.hash.clone(),
         };
         hash.map(Into::into)
     }
@@ -763,15 +745,6 @@ impl PyLockedPackage {
             return Some(specifier.to_string());
         }
         None
-    }
-
-    #[getter]
-    pub fn pypi_extras(&self) -> BTreeSet<String> {
-        self.as_pypi_env()
-            .extras
-            .iter()
-            .map(std::string::ToString::to_string)
-            .collect()
     }
 
     pub fn pypi_satisfies(&self, spec: &str) -> PyResult<bool> {
@@ -880,38 +853,6 @@ impl PyPypiPackageData {
             return Some(specifier.to_string());
         }
         None
-    }
-}
-
-#[pyclass]
-#[repr(transparent)]
-#[derive(Clone)]
-pub struct PyPypiPackageEnvironmentData {
-    pub(crate) inner: PypiPackageEnvironmentData,
-}
-
-impl From<PypiPackageEnvironmentData> for PyPypiPackageEnvironmentData {
-    fn from(value: PypiPackageEnvironmentData) -> Self {
-        Self { inner: value }
-    }
-}
-
-impl From<PyPypiPackageEnvironmentData> for PypiPackageEnvironmentData {
-    fn from(value: PyPypiPackageEnvironmentData) -> Self {
-        value.inner
-    }
-}
-
-#[pymethods]
-impl PyPypiPackageEnvironmentData {
-    /// The extras enabled for the package. Note that the order doesn't matter.
-    #[getter]
-    pub fn extras(&self) -> BTreeSet<String> {
-        self.inner
-            .extras
-            .iter()
-            .map(std::string::ToString::to_string)
-            .collect()
     }
 }
 
