@@ -1,4 +1,4 @@
-//! Python bindings for rattler_pty::unix::PtySession
+//! Python bindings for `rattler_pty::unix::PtySession`
 //!
 //! This module provides the higher-level interactive PTY session API.
 
@@ -7,10 +7,10 @@ use std::process::Command;
 
 /// A pseudoterminal (PTY) session for interactive shell use.
 ///
-/// This is the higher-level PTY API built on top of PtyProcess.
+/// This is the higher-level PTY API built on top of `PtyProcess`.
 /// It provides convenient methods for interactive shell sessions with:
-/// - Easy command sending via send_line()
-/// - Interactive mode with wait_until pattern matching
+/// - Easy command sending via `send_line()`
+/// - Interactive mode with `wait_until` pattern matching
 /// - Automatic buffering and flushing
 ///
 /// Use this for interactive shell sessions where you want to send commands
@@ -33,10 +33,10 @@ impl PyPtySession {
     ///              The first element is the executable, subsequent elements are arguments.
     ///
     /// Returns:
-    ///     A new PtySession instance.
+    ///     A new `PtySession` instance.
     ///
     /// Raises:
-    ///     RuntimeError: If the PTY session could not be created.
+    ///     `RuntimeError`: If the PTY session could not be created.
     ///
     /// Examples
     /// --------
@@ -66,7 +66,7 @@ impl PyPtySession {
 
         // Create the PTY session
         let session = rattler_pty::unix::PtySession::new(cmd)
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to create PTY session: {}", e)))?;
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to create PTY session: {e}")))?;
 
         Ok(PyPtySession { inner: session })
     }
@@ -83,7 +83,7 @@ impl PyPtySession {
     ///     The number of bytes written.
     ///
     /// Raises:
-    ///     RuntimeError: If the write operation fails.
+    ///     `RuntimeError`: If the write operation fails.
     ///
     /// Examples
     /// --------
@@ -95,12 +95,12 @@ impl PyPtySession {
     pub fn send_line(&mut self, line: &str) -> PyResult<usize> {
         self.inner
             .send_line(line)
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to send line: {}", e)))
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to send line: {e}")))
     }
 
     /// Send a string to the PTY session without adding a newline.
     ///
-    /// Note: You'll need to call flush() to ensure the data is sent.
+    /// Note: You'll need to call `flush()` to ensure the data is sent.
     ///
     /// Arguments:
     ///     data: The string to send.
@@ -109,7 +109,7 @@ impl PyPtySession {
     ///     The number of bytes written.
     ///
     /// Raises:
-    ///     RuntimeError: If the write operation fails.
+    ///     `RuntimeError`: If the write operation fails.
     ///
     /// Examples
     /// --------
@@ -123,16 +123,16 @@ impl PyPtySession {
     pub fn send(&mut self, data: &str) -> PyResult<usize> {
         self.inner
             .send(data)
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to send data: {}", e)))
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to send data: {e}")))
     }
 
     /// Flush any pending output to the PTY.
     ///
-    /// This is automatically called by send_line(), but can be called manually
-    /// if you use send().
+    /// This is automatically called by `send_line()`, but can be called manually
+    /// if you use `send()`.
     ///
     /// Raises:
-    ///     RuntimeError: If the flush operation fails.
+    ///     `RuntimeError`: If the flush operation fails.
     ///
     /// Examples
     /// --------
@@ -144,19 +144,19 @@ impl PyPtySession {
     pub fn flush(&mut self) -> PyResult<()> {
         self.inner
             .flush()
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to flush PTY: {}", e)))
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to flush PTY: {e}")))
     }
 
     /// Exit the process gracefully by sending SIGTERM.
     ///
     /// This method blocks until the process has exited. Useful for cleaning up
-    /// PTY sessions when you're done sending commands but don't want to use interact().
+    /// PTY sessions when you're done sending commands but don't want to use `interact()`.
     ///
     /// Returns:
     ///     A string describing the exit status.
     ///
     /// Raises:
-    ///     RuntimeError: If the process could not be terminated.
+    ///     `RuntimeError`: If the process could not be terminated.
     ///
     /// Examples
     /// --------
@@ -171,20 +171,20 @@ impl PyPtySession {
         let status = self
             .inner
             .exit()
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to exit PTY session: {}", e)))?;
-        Ok(format!("{:?}", status))
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to exit PTY session: {e}")))?;
+        Ok(format!("{status:?}"))
     }
 
     /// Start an interactive session, optionally waiting for a pattern first.
     ///
     /// This method:
     /// 1. Sets the terminal to raw mode
-    /// 2. If wait_until is provided, buffers output until that pattern appears
+    /// 2. If `wait_until` is provided, buffers output until that pattern appears
     /// 3. Then forwards all I/O between the user's terminal and the PTY
     /// 4. Returns when the shell process exits
     ///
     /// Arguments:
-    ///     wait_until: Optional pattern to wait for before showing output.
+    ///     `wait_until`: Optional pattern to wait for before showing output.
     ///                 Useful for waiting for shell initialization to complete.
     ///                 If not found within 1 second, a warning is shown and
     ///                 interaction begins anyway.
@@ -193,7 +193,7 @@ impl PyPtySession {
     ///     The exit code of the shell process, or None if terminated by signal.
     ///
     /// Raises:
-    ///     RuntimeError: If interaction fails.
+    ///     `RuntimeError`: If interaction fails.
     ///
     /// Examples
     /// --------
@@ -216,6 +216,6 @@ impl PyPtySession {
     pub fn interact(&mut self, wait_until: Option<&str>) -> PyResult<Option<i32>> {
         self.inner
             .interact(wait_until)
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to interact with PTY: {}", e)))
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to interact with PTY: {e}")))
     }
 }
