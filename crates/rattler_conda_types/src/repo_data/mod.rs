@@ -238,12 +238,11 @@ impl Ord for PackageRecord {
         self.name
             .cmp(&other.name)
             .then_with(|| {
-                // Packages with tracked features are sorted after packages
+                // Packages with tracked features are sorted before packages
                 // without tracked features.
                 self.track_features
                     .is_empty()
                     .cmp(&other.track_features.is_empty())
-                    .reverse()
             })
             .then_with(|| self.version.cmp(&other.version))
             .then_with(|| self.build_number.cmp(&other.build_number))
@@ -1076,7 +1075,7 @@ mod test {
             record("openssl", "3.1.0", "hlib", 0, "linux-64", Some(1700000000)),
             record("openssl", "3.1.0", "hlib", 0, "linux-64", Some(1600000000)),
             record("openssl", "3.1.0", "hlib", 0, "linux-64", Some(1800000000)),
-            // Track features (packages with tracked features sort after those
+            // Track features (packages with tracked features sort before those
             // without)
             {
                 let mut r = record("scipy", "1.11.0", "hfeature", 0, "linux-64", None);
@@ -1103,5 +1102,32 @@ mod test {
             })
             .collect();
         insta::assert_snapshot!(formatted.join("\n"));
+    }
+
+    #[test]
+    fn test_ordering_track_features_vs_version() {
+        use crate::{PackageName, Version};
+
+        let record =
+            |version: &str, build: &str, build_number: u64, track_features: Vec<String>| {
+                let mut r = PackageRecord::new(
+                    PackageName::new_unchecked("polars"),
+                    version.parse::<Version>().unwrap(),
+                    format!("{build}_{build_number}"),
+                );
+                r.build_number = build_number;
+                r.subdir = "linux-64".to_string();
+                r.track_features = track_features;
+                r
+            };
+
+        let with_track = record("1.33.0", "withtrack", 0, vec!["u64_idx".to_string()]);
+        let no_track_old = record("0.28.0", "plain", 0, vec![]);
+        let no_track_same = record("1.33.0", "plain", 0, vec![]);
+        let no_track_new = record("1.38.0", "plain", 0, vec![]);
+
+        assert!(with_track < no_track_old);
+        assert!(no_track_old < no_track_same);
+        assert!(no_track_same < no_track_new);
     }
 }
