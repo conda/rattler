@@ -7,7 +7,7 @@ use rattler_conda_types::{
     package::{CondaArchiveIdentifier, DistArchiveIdentifier, IndexJson, PackageFile},
     ConvertSubdirError, PackageRecord, RepoDataRecord,
 };
-use rattler_digest::{HashingReader, Md5, Md5Hash, Sha256, Sha256Hash};
+use rattler_digest::{Md5Hash, Sha256Hash};
 use rattler_networking::LazyClient;
 use rattler_package_streaming::ExtractError;
 use url::Url;
@@ -71,40 +71,20 @@ impl DirectUrlQuery {
                 ));
             };
 
-            let index_json: IndexJson =
-                match rattler_package_streaming::seek::read_package_file(&file_path) {
-                    Ok(index_json) => index_json,
-                    Err(ExtractError::IoError(io)) => {
-                        return Err(DirectUrlQueryError::IndexJson(io))
-                    }
-                    Err(ExtractError::UnsupportedArchiveType) => {
-                        return Err(DirectUrlQueryError::InvalidFilename(
-                            file_path.display().to_string(),
-                        ));
-                    }
-                    Err(e) => {
-                        return Err(DirectUrlQueryError::IndexJson(std::io::Error::other(
-                            e.to_string(),
-                        )));
-                    }
-                };
-
-            // Compute sha256, md5, and file size in a single pass
-            let file = std::fs::File::open(&file_path)?;
-            let file_size = file.metadata()?.len();
-            let sha256_reader = HashingReader::<_, Sha256>::new(file);
-            let mut md5_reader = HashingReader::<_, Md5>::new(sha256_reader);
-            std::io::copy(&mut md5_reader, &mut std::io::sink())?;
-            let (sha256_reader, md5_hash) = md5_reader.finalize();
-            let (_, sha256_hash) = sha256_reader.finalize();
-
-            (
-                index_json,
-                archive_type,
-                Some(sha256_hash),
-                Some(md5_hash),
-                Some(file_size),
-            )
+            match rattler_package_streaming::seek::read_package_file(&file_path) {
+                Ok(index_json) => (index_json, archive_type, None, None, None),
+                Err(ExtractError::IoError(io)) => return Err(DirectUrlQueryError::IndexJson(io)),
+                Err(ExtractError::UnsupportedArchiveType) => {
+                    return Err(DirectUrlQueryError::InvalidFilename(
+                        file_path.display().to_string(),
+                    ));
+                }
+                Err(e) => {
+                    return Err(DirectUrlQueryError::IndexJson(std::io::Error::other(
+                        e.to_string(),
+                    )));
+                }
+            }
         } else {
             // Convert the url to an archive identifier.
             let Some(archive_identifier) = CondaArchiveIdentifier::try_from_url(&self.url) else {
@@ -249,9 +229,6 @@ mod test {
         let record = &repodata_record.first().unwrap().package_record;
         assert_eq!(record.name.as_normalized(), "zlib");
         assert_eq!(record.version.as_str(), "1.2.8");
-        assert!(record.sha256.is_some(), "sha256 should be populated");
-        assert!(record.md5.is_some(), "md5 should be populated");
-        assert!(record.size.is_some(), "size should be populated");
     }
 
     #[tokio::test]
@@ -282,9 +259,6 @@ mod test {
         let record = &repodata_record.first().unwrap().package_record;
         assert_eq!(record.name.as_normalized(), "empty");
         assert_eq!(record.version.as_str(), "0.1.0");
-        assert!(record.sha256.is_some(), "sha256 should be populated");
-        assert!(record.md5.is_some(), "md5 should be populated");
-        assert!(record.size.is_some(), "size should be populated");
     }
 
     #[tokio::test]
@@ -317,8 +291,5 @@ mod test {
         let record = &repodata_record.first().unwrap().package_record;
         assert_eq!(record.name.as_normalized(), "test-package");
         assert_eq!(record.version.as_str(), "0.1");
-        assert!(record.sha256.is_some(), "sha256 should be populated");
-        assert!(record.md5.is_some(), "md5 should be populated");
-        assert!(record.size.is_some(), "size should be populated");
     }
 }

@@ -177,6 +177,7 @@ impl PackageCacheLayer {
             fn(PathBuf) -> _,
             Pin<Box<dyn Future<Output = Result<(), _>> + Send>>,
             std::io::Error,
+            (),
         >(
             cache_path,
             cache_entry.last_revision,
@@ -187,7 +188,7 @@ impl PackageCacheLayer {
         )
         .await
         {
-            Ok(cache_metadata) => {
+            Ok((cache_metadata, _)) => {
                 cache_entry.last_revision = Some(cache_metadata.revision);
                 cache_entry.last_sha256 = cache_metadata.sha256;
                 Ok(cache_metadata)
@@ -197,15 +198,15 @@ impl PackageCacheLayer {
     }
 
     /// Validate the package, and fetch it if invalid.
-    pub async fn validate_or_fetch<F, Fut, E>(
+    pub async fn validate_or_fetch<F, Fut, E, T>(
         &self,
         fetch: F,
         cache_key: &CacheKey,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<CacheMetadata, PackageCacheLayerError>
+    ) -> Result<(CacheMetadata, Option<T>), PackageCacheLayerError>
     where
         F: (Fn(PathBuf) -> Fut) + Send + 'static,
-        Fut: Future<Output = Result<(), E>> + Send + 'static,
+        Fut: Future<Output = Result<T, E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
         let entry = self
@@ -227,10 +228,10 @@ impl PackageCacheLayer {
         )
         .await
         {
-            Ok(cache_metadata) => {
+            Ok((cache_metadata, fetch_result)) => {
                 cache_entry.last_revision = Some(cache_metadata.revision);
                 cache_entry.last_sha256 = cache_metadata.sha256;
-                Ok(cache_metadata)
+                Ok((cache_metadata, fetch_result))
             }
             Err(e) => Err(e),
         }
@@ -354,6 +355,24 @@ impl PackageCache {
         Fut: Future<Output = Result<(), E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
+        self.get_or_fetch_with_result(pkg, fetch, reporter)
+            .await
+            .map(|(metadata, _)| metadata)
+    }
+
+    /// Like [`get_or_fetch`](Self::get_or_fetch), but also returns the value
+    /// produced by the fetch closure (if it was called).
+    async fn get_or_fetch_with_result<F, Fut, E, T>(
+        &self,
+        pkg: impl Into<CacheKey>,
+        fetch: F,
+        reporter: Option<Arc<dyn CacheReporter>>,
+    ) -> Result<(CacheMetadata, Option<T>), PackageCacheError>
+    where
+        F: (Fn(PathBuf) -> Fut) + Send + 'static,
+        Fut: Future<Output = Result<T, E>> + Send + 'static,
+        E: std::error::Error + Send + Sync + 'static,
+    {
         let cache_key = pkg.into();
         let (_, writable_layers) = self.split_layers();
 
@@ -363,7 +382,7 @@ impl PackageCache {
             if cache_path.exists() {
                 match layer.try_validate(&cache_key).await {
                     Ok(lock) => {
-                        return Ok(lock);
+                        return Ok((lock, None));
                     }
                     Err(PackageCacheLayerError::InvalidPackage) => {
                         // Log and continue to the next layer
@@ -388,7 +407,7 @@ impl PackageCache {
         tracing::debug!("no matches in all layers. writing to first writable layer");
         if let Some(layer) = writable_layers.first() {
             return match layer.validate_or_fetch(fetch, &cache_key, reporter).await {
-                Ok(cache_metadata) => Ok(cache_metadata),
+                Ok((cache_metadata, fetch_result)) => Ok((cache_metadata, fetch_result)),
                 Err(e) => Err(e.into()),
             };
         }
@@ -476,18 +495,12 @@ impl PackageCache {
         let md5 = cache_key.md5();
         let download_reporter = reporter.clone();
 
-        // Capture the extract result so we can populate md5/size on CacheMetadata
-        let extract_result_capture: Arc<Mutex<Option<rattler_package_streaming::ExtractResult>>> =
-            Arc::new(Mutex::new(None));
-        let extract_result_inner = extract_result_capture.clone();
-
         // Get or fetch the package, using the specified fetch function
-        let mut cache_metadata = self.get_or_fetch(cache_key, move |destination| {
+        let (mut cache_metadata, extract_result) = self.get_or_fetch_with_result(cache_key, move |destination| {
             let url = url.clone();
             let client = client.clone();
             let retry_policy = retry_policy.clone();
             let download_reporter = download_reporter.clone();
-            let extract_result_inner = extract_result_inner.clone();
             async move {
                 let mut current_try = 0;
                 // Retry until the retry policy says to stop
@@ -541,10 +554,7 @@ impl PackageCache {
                                 }
                             }
 
-                            // Capture the extract result for later use
-                            *extract_result_inner.lock() = Some(result);
-
-                            return Ok(());
+                            return Ok(result);
                         }
                         Err(err) => err,
                     };
@@ -581,8 +591,8 @@ impl PackageCache {
         }, reporter)
             .await?;
 
-        // Populate md5 and size from the captured extract result
-        if let Some(extract_result) = extract_result_capture.lock().take() {
+        // Populate md5 and size from the extract result
+        if let Some(extract_result) = extract_result {
             if cache_metadata.sha256.is_none() {
                 cache_metadata.sha256 = Some(extract_result.sha256);
             }
@@ -595,17 +605,17 @@ impl PackageCache {
 }
 
 /// Shared logic for validating a package.
-async fn validate_package_common<F, Fut, E>(
+async fn validate_package_common<F, Fut, E, T>(
     path: PathBuf,
     known_valid_revision: Option<u64>,
     given_sha: Option<&Sha256Hash>,
     fetch: Option<F>,
     reporter: Option<Arc<dyn CacheReporter>>,
     validation_mode: ValidationMode,
-) -> Result<CacheMetadata, PackageCacheLayerError>
+) -> Result<(CacheMetadata, Option<T>), PackageCacheLayerError>
 where
     F: Fn(PathBuf) -> Fut + Send,
-    Fut: Future<Output = Result<(), E>> + 'static,
+    Fut: Future<Output = Result<T, E>> + 'static,
     E: Error + Send + Sync + 'static,
 {
     // Open the cache metadata file to read/write revision and hash information.
@@ -649,15 +659,18 @@ where
             if let Some((reporter, index)) = reporter {
                 reporter.on_validate_complete(index);
             }
-            return Ok(CacheMetadata {
-                revision: cache_revision,
-                sha256: locked_sha256,
-                md5: None,
-                size: None,
-                path: path_inner,
-                index_json: None,
-                paths_json: None,
-            });
+            return Ok((
+                CacheMetadata {
+                    revision: cache_revision,
+                    sha256: locked_sha256,
+                    md5: None,
+                    size: None,
+                    path: path_inner,
+                    index_json: None,
+                    paths_json: None,
+                },
+                None,
+            ));
         }
 
         // Validate the package directory.
@@ -673,15 +686,18 @@ where
         match validation_result {
             Ok(Ok((index_json, paths_json))) => {
                 tracing::debug!("validation succeeded");
-                return Ok(CacheMetadata {
-                    revision: cache_revision,
-                    sha256: locked_sha256,
-                    md5: None,
-                    size: None,
-                    path,
-                    index_json: Some(index_json),
-                    paths_json: Some(paths_json),
-                });
+                return Ok((
+                    CacheMetadata {
+                        revision: cache_revision,
+                        sha256: locked_sha256,
+                        md5: None,
+                        size: None,
+                        path,
+                        index_json: Some(index_json),
+                        paths_json: Some(paths_json),
+                    },
+                    None,
+                ));
             }
             Ok(Err(e)) => {
                 tracing::warn!("validation for {path:?} failed: {e}");
@@ -748,7 +764,7 @@ where
 
         // Handle fetch result
         match fetch_result {
-            Ok(()) => {
+            Ok(result) => {
                 // Take ownership of the temp directory path so it won't be auto-deleted
                 let temp_path = temp_dir.keep();
 
@@ -777,15 +793,18 @@ where
 
                 // After fetching, return the cache metadata with the new revision.
                 // We don't need to re-validate since we just fetched it.
-                Ok(CacheMetadata {
-                    revision: new_revision,
-                    sha256: given_sha.copied(),
-                    md5: None,
-                    size: None,
-                    path,
-                    index_json: None,
-                    paths_json: None,
-                })
+                Ok((
+                    CacheMetadata {
+                        revision: new_revision,
+                        sha256: given_sha.copied(),
+                        md5: None,
+                        size: None,
+                        path,
+                        index_json: None,
+                        paths_json: None,
+                    },
+                    Some(result),
+                ))
             }
             Err(e) => {
                 // temp_dir is dropped here, automatically cleaning up the directory
