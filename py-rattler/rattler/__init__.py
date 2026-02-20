@@ -28,8 +28,8 @@ from rattler.package import (
     NoArchLiteral,
 )
 from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, Link, LinkType
-from rattler.platform import Platform
 from rattler.explicit_environment import ExplicitEnvironmentEntry, ExplicitEnvironmentSpec
+from rattler.platform import Platform
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
 from rattler.install import install
 from rattler.index import index
