@@ -7,7 +7,7 @@ use rattler_conda_types::{
     package::{CondaArchiveIdentifier, DistArchiveIdentifier, IndexJson, PackageFile},
     ConvertSubdirError, PackageRecord, RepoDataRecord,
 };
-use rattler_digest::{Md5Hash, Sha256Hash};
+use rattler_digest::{HashingReader, Md5, Md5Hash, Sha256, Sha256Hash};
 use rattler_networking::LazyClient;
 use rattler_package_streaming::ExtractError;
 use url::Url;
@@ -57,9 +57,13 @@ impl DirectUrlQuery {
     /// Execute the Repodata query using the cache as a source for the
     /// index.json
     pub async fn execute(self) -> Result<Vec<Arc<RepoDataRecord>>, DirectUrlQueryError> {
-        let (index_json, archive_type): (IndexJson, CondaArchiveType) = if let Ok(file_path) =
-            self.url.to_file_path()
-        {
+        let (index_json, archive_type, computed_sha256, computed_md5, computed_size): (
+            IndexJson,
+            CondaArchiveType,
+            Option<Sha256Hash>,
+            Option<Md5Hash>,
+            Option<u64>,
+        ) = if let Ok(file_path) = self.url.to_file_path() {
             // Determine the type of the archive
             let Some(archive_type) = CondaArchiveType::try_from(&file_path) else {
                 return Err(DirectUrlQueryError::InvalidFilename(
@@ -67,20 +71,40 @@ impl DirectUrlQuery {
                 ));
             };
 
-            match rattler_package_streaming::seek::read_package_file(&file_path) {
-                Ok(index_json) => (index_json, archive_type),
-                Err(ExtractError::IoError(io)) => return Err(DirectUrlQueryError::IndexJson(io)),
-                Err(ExtractError::UnsupportedArchiveType) => {
-                    return Err(DirectUrlQueryError::InvalidFilename(
-                        file_path.display().to_string(),
-                    ));
-                }
-                Err(e) => {
-                    return Err(DirectUrlQueryError::IndexJson(std::io::Error::other(
-                        e.to_string(),
-                    )));
-                }
-            }
+            let index_json: IndexJson =
+                match rattler_package_streaming::seek::read_package_file(&file_path) {
+                    Ok(index_json) => index_json,
+                    Err(ExtractError::IoError(io)) => {
+                        return Err(DirectUrlQueryError::IndexJson(io))
+                    }
+                    Err(ExtractError::UnsupportedArchiveType) => {
+                        return Err(DirectUrlQueryError::InvalidFilename(
+                            file_path.display().to_string(),
+                        ));
+                    }
+                    Err(e) => {
+                        return Err(DirectUrlQueryError::IndexJson(std::io::Error::other(
+                            e.to_string(),
+                        )));
+                    }
+                };
+
+            // Compute sha256, md5, and file size in a single pass
+            let file = std::fs::File::open(&file_path)?;
+            let file_size = file.metadata()?.len();
+            let sha256_reader = HashingReader::<_, Sha256>::new(file);
+            let mut md5_reader = HashingReader::<_, Md5>::new(sha256_reader);
+            std::io::copy(&mut md5_reader, &mut std::io::sink())?;
+            let (sha256_reader, md5_hash) = md5_reader.finalize();
+            let (_, sha256_hash) = sha256_reader.finalize();
+
+            (
+                index_json,
+                archive_type,
+                Some(sha256_hash),
+                Some(md5_hash),
+                Some(file_size),
+            )
         } else {
             // Convert the url to an archive identifier.
             let Some(archive_identifier) = CondaArchiveIdentifier::try_from_url(&self.url) else {
@@ -98,7 +122,7 @@ impl DirectUrlQuery {
 
             // TODO: Optimize this by only parsing the index json from stream.
             // Get package on system
-            let cache_lock = self
+            let cache_metadata = self
                 .package_cache
                 .get_or_fetch_from_url(
                     cache_key,
@@ -109,10 +133,17 @@ impl DirectUrlQuery {
                 )
                 .await?;
 
+            let computed_sha256 = cache_metadata.sha256().cloned();
+            let computed_md5 = cache_metadata.md5().cloned();
+            let computed_size = cache_metadata.size();
+
             // Extract package record from index json
             (
-                IndexJson::from_package_directory(cache_lock.path())?,
+                IndexJson::from_package_directory(cache_metadata.path())?,
                 archive_type,
+                computed_sha256,
+                computed_md5,
+                computed_size,
             )
         };
 
@@ -129,9 +160,9 @@ impl DirectUrlQuery {
 
         let package_record = PackageRecord::from_index_json(
             index_json,
-            None, // size is unknown for direct urls
-            self.sha256,
-            self.md5,
+            computed_size,
+            computed_sha256.or(self.sha256),
+            computed_md5.or(self.md5),
         )?;
 
         tracing::debug!("Package record build from direct url: {:?}", package_record);
@@ -183,24 +214,12 @@ mod test {
 
         let repodata_record = query.await.unwrap();
 
-        assert_eq!(
-            repodata_record
-                .first()
-                .unwrap()
-                .package_record
-                .name
-                .as_normalized(),
-            "boltons"
-        );
-        assert_eq!(
-            repodata_record
-                .first()
-                .unwrap()
-                .package_record
-                .version
-                .as_str(),
-            "24.0.0"
-        );
+        let record = &repodata_record.first().unwrap().package_record;
+        assert_eq!(record.name.as_normalized(), "boltons");
+        assert_eq!(record.version.as_str(), "24.0.0");
+        assert!(record.sha256.is_some(), "sha256 should be populated");
+        assert!(record.md5.is_some(), "md5 should be populated");
+        assert!(record.size.is_some(), "size should be populated");
     }
 
     #[tokio::test]
@@ -227,24 +246,12 @@ mod test {
         assert_eq!(query.url.clone(), url);
 
         let repodata_record = query.await.unwrap();
-        assert_eq!(
-            repodata_record
-                .first()
-                .unwrap()
-                .package_record
-                .name
-                .as_normalized(),
-            "zlib"
-        );
-        assert_eq!(
-            repodata_record
-                .first()
-                .unwrap()
-                .package_record
-                .version
-                .as_str(),
-            "1.2.8"
-        );
+        let record = &repodata_record.first().unwrap().package_record;
+        assert_eq!(record.name.as_normalized(), "zlib");
+        assert_eq!(record.version.as_str(), "1.2.8");
+        assert!(record.sha256.is_some(), "sha256 should be populated");
+        assert!(record.md5.is_some(), "md5 should be populated");
+        assert!(record.size.is_some(), "size should be populated");
     }
 
     #[tokio::test]
@@ -272,24 +279,12 @@ mod test {
         );
 
         let repodata_record = query.await.unwrap();
-        assert_eq!(
-            repodata_record
-                .first()
-                .unwrap()
-                .package_record
-                .name
-                .as_normalized(),
-            "empty"
-        );
-        assert_eq!(
-            repodata_record
-                .first()
-                .unwrap()
-                .package_record
-                .version
-                .as_str(),
-            "0.1.0"
-        );
+        let record = &repodata_record.first().unwrap().package_record;
+        assert_eq!(record.name.as_normalized(), "empty");
+        assert_eq!(record.version.as_str(), "0.1.0");
+        assert!(record.sha256.is_some(), "sha256 should be populated");
+        assert!(record.md5.is_some(), "md5 should be populated");
+        assert!(record.size.is_some(), "size should be populated");
     }
 
     #[tokio::test]
@@ -319,23 +314,11 @@ mod test {
         );
 
         let repodata_record = query.await.unwrap();
-        assert_eq!(
-            repodata_record
-                .first()
-                .unwrap()
-                .package_record
-                .name
-                .as_normalized(),
-            "test-package"
-        );
-        assert_eq!(
-            repodata_record
-                .first()
-                .unwrap()
-                .package_record
-                .version
-                .as_str(),
-            "0.1"
-        );
+        let record = &repodata_record.first().unwrap().package_record;
+        assert_eq!(record.name.as_normalized(), "test-package");
+        assert_eq!(record.version.as_str(), "0.1");
+        assert!(record.sha256.is_some(), "sha256 should be populated");
+        assert!(record.md5.is_some(), "md5 should be populated");
+        assert!(record.size.is_some(), "size should be populated");
     }
 }
