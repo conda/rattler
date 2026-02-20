@@ -5064,6 +5064,7 @@ version = "0.26.14"
 dependencies = [
  "ahash",
  "chrono",
+ "criterion",
  "file_url",
  "indexmap 2.13.0",
  "insta",
@@ -5081,9 +5082,11 @@ dependencies = [
  "serde_with",
  "serde_yaml",
  "similar-asserts",
+ "tempfile",
  "thiserror 2.0.18",
  "typed-path",
  "url",
+ "zstd",
 ]
 
 [[package]]

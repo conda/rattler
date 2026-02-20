@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Criterion benchmarks for lock-file parse and render throughput, raw/compressed
+  size reporting, and serialisation-stability verification (proxy for git
+  history size) ([#765](https://github.com/conda/rattler/issues/765))
+
 ## [0.26.14](https://github.com/conda/rattler/compare/rattler_lock-v0.26.13...rattler_lock-v0.26.14) - 2026-02-19
 
 ### Other
