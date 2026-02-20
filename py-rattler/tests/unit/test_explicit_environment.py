@@ -26,11 +26,11 @@ def test_parse_explicit_environment_from_str() -> None:
 
     assert (
         spec.packages[0].url
-        == "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2#d7c89558ba9fa0495403155b64376d81"
+        == "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2#d7c89558ba9fa0495403155b64376d81"  # noqa: E501
     )
     assert (
         spec.packages[1].url
-        == "https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-ng-9.3.0-h2ae2ef3_17.tar.bz2#342f3c931d0a3a209ab09a522469d20c"
+        == "https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-ng-9.3.0-h2ae2ef3_17.tar.bz2#342f3c931d0a3a209ab09a522469d20c"  # noqa: E501
     )
 
 
@@ -63,7 +63,9 @@ def test_parse_invalid_explicit_environment() -> None:
 
 
 def test_explicit_environment_constructor() -> None:
-    entry = ExplicitEnvironmentEntry("https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash")
+    entry = ExplicitEnvironmentEntry(
+        "https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash"
+    )
     spec = ExplicitEnvironmentSpec(packages=[entry], platform=Platform("linux-64"))
 
     assert spec.platform == Platform("linux-64")
@@ -72,7 +74,9 @@ def test_explicit_environment_constructor() -> None:
 
 
 def test_explicit_environment_to_spec_string() -> None:
-    entry = ExplicitEnvironmentEntry("https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash")
+    entry = ExplicitEnvironmentEntry(
+        "https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash"
+    )
     spec = ExplicitEnvironmentSpec(packages=[entry], platform=Platform("linux-64"))
 
     spec_str = spec.to_spec_string()
@@ -82,7 +86,9 @@ def test_explicit_environment_to_spec_string() -> None:
 
 
 def test_explicit_environment_to_path(tmp_path: Path) -> None:
-    entry = ExplicitEnvironmentEntry("https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash")
+    entry = ExplicitEnvironmentEntry(
+        "https://conda.anaconda.org/conda-forge/linux-64/package.tar.bz2#hash"
+    )
     spec = ExplicitEnvironmentSpec(packages=[entry], platform=Platform("win-64"))
 
     path = tmp_path / "explicit_env.txt"
