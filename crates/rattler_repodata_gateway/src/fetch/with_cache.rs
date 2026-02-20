@@ -479,9 +479,7 @@ pub async fn fetch_repo_data(
         // persisting the new file does not fail on Windows (see comment above).
         if repo_data_destination_path.exists() {
             let deprecated = deprecated_repodata_path(&repo_data_destination_path);
-            if let Err(err) =
-                std::fs::rename(&repo_data_destination_path, &deprecated)
-            {
+            if let Err(err) = std::fs::rename(&repo_data_destination_path, &deprecated) {
                 tracing::warn!(
                     "failed to move existing repodata cache aside before \
                      replacing it ({}); attempting an in-place replace instead",
@@ -493,7 +491,10 @@ pub async fn fetch_repo_data(
         let file = temp_file
             .persist(repo_data_destination_path.clone())
             .map_err(|e| {
-                FetchRepoDataError::FailedToPersistTemporaryFile(e, repo_data_destination_path.clone())
+                FetchRepoDataError::FailedToPersistTemporaryFile(
+                    e,
+                    repo_data_destination_path.clone(),
+                )
             })?;
 
         // Attempt a best-effort cleanup of deprecated files once more now that
@@ -789,11 +790,7 @@ fn cleanup_deprecated_repodata_files(json_path: &std::path::Path) {
     match std::fs::read_dir(dir) {
         Ok(entries) => {
             for entry in entries.flatten() {
-                if entry
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with(&prefix)
-                {
+                if entry.file_name().to_string_lossy().starts_with(&prefix) {
                     if let Err(err) = std::fs::remove_file(entry.path()) {
                         tracing::debug!(
                             "could not remove deprecated repodata cache file {:?}: {}",
@@ -1671,7 +1668,8 @@ mod test {
 
         // After all fetches, the cache should contain exactly the canonical JSON
         // file and no leftover deprecated files.
-        let cache_key = crate::utils::url_to_cache_filename(&server_url.join("repodata.json").unwrap());
+        let cache_key =
+            crate::utils::url_to_cache_filename(&server_url.join("repodata.json").unwrap());
         let json_path = cache_path.join(format!("{cache_key}.json"));
         assert!(
             json_path.exists(),
