@@ -806,7 +806,7 @@ async fn index_subdir_inner(
         }),
         packages,
         conda_packages,
-        experimental_whl_packages: IndexMap::default(),
+
         removed: HashSet::default(),
         version: Some(2),
     };
@@ -1295,7 +1295,7 @@ pub async fn ensure_channel_initialized(op: &Operator) -> anyhow::Result<()> {
         }),
         packages: IndexMap::default(),
         conda_packages: IndexMap::default(),
-        experimental_whl_packages: IndexMap::default(),
+
         removed: HashSet::default(),
         version: Some(2),
     };

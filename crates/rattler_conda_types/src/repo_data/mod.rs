@@ -57,15 +57,6 @@ pub struct RepoData {
     )]
     pub conda_packages: IndexMap<DistArchiveIdentifier, PackageRecord, ahash::RandomState>,
 
-    /// The wheel packages contained in the repodata.json file
-    #[serde(
-        default,
-        rename = "packages.whl",
-        serialize_with = "sort_index_map_alphabetically"
-    )]
-    pub experimental_whl_packages:
-        IndexMap<DistArchiveIdentifier, WhlPackageRecord, ahash::RandomState>,
-
     /// removed packages (files are still accessible, but they are not
     /// installable like regular packages)
     #[serde(
@@ -377,36 +368,6 @@ impl RepoData {
                     base_url.as_deref(),
                     &identifier.to_file_name(),
                 ),
-                channel: Some(channel.base_url.as_str().to_string()),
-                package_record,
-                identifier,
-            });
-        }
-
-        // Determine the base_url of the channel
-        for (
-            identifier,
-            WhlPackageRecord {
-                url,
-                package_record,
-            },
-        ) in self.experimental_whl_packages
-        {
-            let url = match url {
-                UrlOrPath::Path(path) => compute_package_url(
-                    &channel
-                        .base_url
-                        .url()
-                        .join(&package_record.subdir)
-                        .expect("cannot join channel base_url and subdir"),
-                    base_url.as_deref(),
-                    &path,
-                ),
-                UrlOrPath::Url(url) => url,
-            };
-
-            records.push(RepoDataRecord {
-                url,
                 channel: Some(channel.base_url.as_str().to_string()),
                 package_record,
                 identifier,
@@ -747,7 +708,7 @@ mod test {
             info: None,
             packages: IndexMap::default(),
             conda_packages: IndexMap::default(),
-            experimental_whl_packages: IndexMap::default(),
+
             removed: [
                 "xyz-1-py.conda",
                 "foo-1-py.conda",
@@ -1004,7 +965,7 @@ mod test {
             info: None,
             packages,
             conda_packages,
-            experimental_whl_packages: IndexMap::default(),
+
             removed: ahash::HashSet::default(),
         };
 
