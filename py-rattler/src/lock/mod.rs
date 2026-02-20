@@ -679,14 +679,14 @@ impl PyLockedPackage {
     }
 
     #[getter]
-    pub fn package_record(&self) -> PyRecord {
-        self.as_conda().record().clone().into()
+    pub fn package_record(&self) -> Option<PyRecord> {
+        self.as_conda().record().cloned().map(Into::into)
     }
 
     #[getter]
     pub fn name(&self) -> String {
         match &self.inner {
-            LockedPackage::Conda(data) => data.record().name.as_source().to_string(),
+            LockedPackage::Conda(data) => data.name().as_source().to_string(),
             LockedPackage::Pypi(data) => data.name.to_string(),
         }
     }
@@ -700,8 +700,10 @@ impl PyLockedPackage {
     }
 
     #[getter]
-    pub fn conda_version(&self) -> PyVersion {
-        self.as_conda().record().version.version().clone().into()
+    pub fn conda_version(&self) -> Option<PyVersion> {
+        self.as_conda()
+            .record()
+            .map(|r| r.version.version().clone().into())
     }
 
     #[getter]
@@ -714,7 +716,7 @@ impl PyLockedPackage {
     pub fn hashes(&self) -> Option<PyPackageHashes> {
         let hash = match &self.inner {
             LockedPackage::Conda(pkg) => {
-                let record = pkg.record();
+                let record = pkg.record()?;
                 match (record.md5, record.sha256) {
                     (Some(md5), Some(sha256)) => Some(PackageHashes::Md5Sha256(md5, sha256)),
                     (Some(md5), None) => Some(PackageHashes::Md5(md5)),

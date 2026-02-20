@@ -111,16 +111,24 @@ class CondaLockedPackage(LockedPackage, ABC):
     """
 
     @property
-    def package_record(self) -> PackageRecord:
+    def package_record(self) -> Optional[PackageRecord]:
         """
         Returns the metadata of the package as recorded in the lock-file.
+
+        For binary packages, this always returns a value. For source packages,
+        the record may not be present if the metadata hasn't been evaluated yet.
         """
-        return PackageRecord._from_py_record(self._package.package_record)
+        py_record = self._package.package_record
+        if py_record is None:
+            return None
+        return PackageRecord._from_py_record(py_record)
 
     @property
-    def version(self) -> Version:
+    def version(self) -> Optional[Version]:
         """
         Returns the version of the package as recorded in the lock-file.
+
+        For source packages without evaluated metadata, this may return None.
 
         Examples
         --------
@@ -135,7 +143,10 @@ class CondaLockedPackage(LockedPackage, ABC):
         >>>
         ```
         """
-        return Version._from_py_version(self._package.conda_version)
+        py_version = self._package.conda_version
+        if py_version is None:
+            return None
+        return Version._from_py_version(py_version)
 
     def satisfies(self, spec: MatchSpec | str) -> bool:
         """
